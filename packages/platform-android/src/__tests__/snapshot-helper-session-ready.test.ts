@@ -1,142 +1,173 @@
+// Readiness for a persistent helper session (#4519). A session becomes ready only on one complete
+// status record that names this protocol and the abstract socket this host launched the helper with.
+// A record naming anything else is not this launch's session, and readiness answers nothing about
+// what the helper build can do — the host decided that from the artifact before launching it (#4519).
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
 import { recordInstrumentationProcess } from '../instrumentation-helper.ts';
-import {
-  SESSION_TRANSPORT_UNSUPPORTED_REASON,
-  waitForAndroidSnapshotHelperSessionReady,
-} from '../snapshot-helper-session-protocol.ts';
-import { FakeAndroidProcess } from './snapshot-helper-session.fixtures.ts';
+import { waitForAndroidSnapshotHelperSessionReady } from '../snapshot-helper-session-protocol.ts';
+import type { AndroidAdbProcess } from '../adb-executor.ts';
 
-const LAUNCHED_PORT = 18093;
+const LAUNCHED_SOCKET_NAME = 'agentdevice-snapshot-helper-18093';
+const PROTOCOL = 'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1';
+const COMMANDS = 'INSTRUMENTATION_STATUS: sessionCommands=input,snapshot-immediate';
+const SOCKET = `INSTRUMENTATION_STATUS: sessionSocket=${LAUNCHED_SOCKET_NAME}`;
+const READY = 'INSTRUMENTATION_STATUS: sessionReady=true';
+const READY_CODE = 'INSTRUMENTATION_STATUS_CODE: 2';
+const MALFORMED = 'android_snapshot_helper_session_ready_malformed';
 
-const READY_HEAD = [
-  'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-  'INSTRUMENTATION_STATUS: sessionCommands=input,snapshot-immediate',
-  'INSTRUMENTATION_STATUS: sessionPort=18093',
-].join('\n');
+class FakeHelperProcess extends EventEmitter implements AndroidAdbProcess {
+  stdin = new PassThrough();
+  stdout = new PassThrough();
+  stderr = new PassThrough();
+  killed = false;
 
-function waitForReady(process: FakeAndroidProcess) {
+  kill(): boolean {
+    this.killed = true;
+    this.emit('exit', null, 'SIGTERM');
+    return true;
+  }
+}
+
+function waitForReady(process: FakeHelperProcess) {
   return waitForAndroidSnapshotHelperSessionReady(
     process,
     5_000,
     undefined,
     recordInstrumentationProcess(process),
-    LAUNCHED_PORT,
+    LAUNCHED_SOCKET_NAME,
   );
 }
 
-test('an adb warning on stderr between two halves of the transport line keeps the record whole', async () => {
-  const process = new FakeAndroidProcess();
+/** Writes `record` to a helper process and reports what readiness decided: commands, or the reason. */
+async function readinessOutcome(record: string): Promise<ReadonlySet<string> | unknown> {
+  const process = new FakeHelperProcess();
+  const ready = waitForAndroidSnapshotHelperSessionReady(
+    process,
+    1_000,
+    undefined,
+    recordInstrumentationProcess(process),
+    LAUNCHED_SOCKET_NAME,
+  ).catch((error: unknown) => error);
+  process.stdout.write(record);
+  return ready;
+}
+
+function reasonOf(outcome: unknown): unknown {
+  return typeof outcome === 'object' && outcome !== null
+    ? (outcome as { details?: { reason?: unknown } }).details?.reason
+    : undefined;
+}
+
+test('readiness is the launched socket, and a helper naming another socket is refused', async () => {
+  const process = new FakeHelperProcess();
   const ready = waitForReady(process);
-  process.stdout.write(`${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionTrans`);
+  process.stdout.write([PROTOCOL, COMMANDS, SOCKET, READY, READY_CODE, ''].join('\n'));
+
+  assert.deepEqual([...(await ready)], ['input', 'snapshot-immediate']);
+
+  // The same record, naming a socket this host did not launch: another helper's readiness, or a
+  // stale one, and the host must refuse it rather than send commands through the wrong forward.
+  const other = await readinessOutcome(
+    [
+      PROTOCOL,
+      COMMANDS,
+      'INSTRUMENTATION_STATUS: sessionSocket=agentdevice-snapshot-helper-18094',
+      READY,
+      READY_CODE,
+      '',
+    ].join('\n'),
+  );
+  assert.equal(reasonOf(other), MALFORMED);
+});
+
+test('an adb warning between two halves of the socket line keeps the record whole', async () => {
+  const process = new FakeHelperProcess();
+  const ready = waitForReady(process);
+  // The split lands in the middle of the socket value: an adb warning on the other stream must not
+  // turn one status record into two.
+  process.stdout.write(`${PROTOCOL}\n${COMMANDS}\nINSTRUMENTATION_STATUS: sessionSocket=agent`);
   process.stderr.write('adb: warning: stdout is not a tty\n');
   process.stdout.write(
-    'port=localabstract-peer-uid-v1\nINSTRUMENTATION_STATUS: sessionReady=true\nINSTRUMENTATION_STATUS_CODE: 2\n',
+    'device-snapshot-helper-18093\nINSTRUMENTATION_STATUS: sessionReady=true\nINSTRUMENTATION_STATUS_CODE: 2\n',
   );
 
   assert.deepEqual([...(await ready)], ['input', 'snapshot-immediate']);
 });
 
-test('a complete readiness record without the transport line is an unsupported transport', async () => {
-  const process = new FakeAndroidProcess();
-  const ready = waitForReady(process).catch((error: unknown) => error);
-  process.stdout.write(
-    `${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionReady=true\nINSTRUMENTATION_STATUS_CODE: 2\n`,
+test('fields of an earlier record never complete a later ready record', async () => {
+  // Positive control first: the same fields inside one record are what makes a session ready.
+  assert.ok(
+    (await readinessOutcome(
+      [PROTOCOL, COMMANDS, SOCKET, READY, READY_CODE, ''].join('\n'),
+    )) instanceof Set,
   );
 
-  const error = await ready;
-  assert.ok(error instanceof AppError);
-  assert.equal(error.details?.reason, SESSION_TRANSPORT_UNSUPPORTED_REASON);
-});
-
-const MALFORMED = 'android_snapshot_helper_session_ready_malformed';
-const TRANSPORT = 'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1';
-const READY_TAIL = 'INSTRUMENTATION_STATUS: sessionReady=true\nINSTRUMENTATION_STATUS_CODE: 2\n';
-
-async function readinessReason(stdout: string): Promise<unknown> {
-  const process = new FakeAndroidProcess();
+  // The socket line belongs to a record that INSTRUMENTATION_CODE ended. The ready record after it
+  // has no socket line, and the protocol line of an earlier status record does not count.
+  const process = new FakeHelperProcess();
   const ready = waitForAndroidSnapshotHelperSessionReady(
     process,
     1_000,
     undefined,
     recordInstrumentationProcess(process),
-    LAUNCHED_PORT,
+    LAUNCHED_SOCKET_NAME,
   ).catch((error: unknown) => error);
-  process.stdout.write(stdout);
-  const outcome = await ready;
-  return outcome instanceof AppError ? outcome.details?.reason : outcome;
-}
+  process.stdout.write(`${SOCKET}\nINSTRUMENTATION_CODE: -1\n`);
+  process.stdout.write(`${PROTOCOL}\nINSTRUMENTATION_STATUS_CODE: 1\n`);
+  process.stdout.write(`${READY}\n${READY_CODE}\n`);
 
-test.each([
-  {
-    label: 'another protocol',
-    stdout: `${READY_HEAD.replace('android-snapshot-helper-v1', 'some-other-protocol')}\n${TRANSPORT}\n${READY_TAIL}`,
-  },
-  {
-    label: 'an empty transport',
-    stdout: `${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionTransport=\n${READY_TAIL}`,
-  },
-  {
-    label: 'an unknown transport',
-    stdout: `${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionTransport=tcp-token-v0\n${READY_TAIL}`,
-  },
-  {
-    label: 'a conflicting duplicate transport',
-    stdout: `${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionTransport=tcp-token-v0\n${TRANSPORT}\n${READY_TAIL}`,
-  },
-  {
-    label: 'a repeated field',
-    stdout: `${READY_HEAD}\n${TRANSPORT}\n${TRANSPORT}\n${READY_TAIL}`,
-  },
-  {
-    label: 'an unparsed status line',
-    stdout: `${READY_HEAD}\nINSTRUMENTATION_STATUS: sessionTransport\n${READY_TAIL}`,
-  },
-  ...['18094', '0', '65536', '018093'].flatMap((port) => [
-    {
-      label: `session port ${port} and the transport`,
-      stdout: `${READY_HEAD.replace('sessionPort=18093', `sessionPort=${port}`)}\n${TRANSPORT}\n${READY_TAIL}`,
-    },
-    {
-      label: `session port ${port} and no transport`,
-      stdout: `${READY_HEAD.replace('sessionPort=18093', `sessionPort=${port}`)}\n${READY_TAIL}`,
-    },
-  ]),
-  {
-    label: 'a missing session port',
-    stdout: `${READY_HEAD.replace('INSTRUMENTATION_STATUS: sessionPort=18093\n', '').replace('\nINSTRUMENTATION_STATUS: sessionPort=18093', '')}\n${TRANSPORT}\n${READY_TAIL}`,
-  },
-])('a ready record with $label is malformed, not an unsupported transport', async ({ stdout }) => {
-  assert.equal(await readinessReason(stdout), MALFORMED);
+  assert.equal(reasonOf(await ready), MALFORMED);
 });
 
-test('fields from an earlier record never complete a later ready record', async () => {
-  const process = new FakeAndroidProcess();
-  const ready = waitForAndroidSnapshotHelperSessionReady(
-    process,
-    1_000,
-    undefined,
-    recordInstrumentationProcess(process),
-    LAUNCHED_PORT,
-  ).catch((error: unknown) => error);
-  // The transport line belongs to a record that INSTRUMENTATION_CODE ended. The ready record after
-  // it has no transport line, and the protocol line of an earlier status record does not count.
-  process.stdout.write(`${TRANSPORT}\nINSTRUMENTATION_CODE: -1\n`);
-  process.stdout.write(
-    'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1\nINSTRUMENTATION_STATUS_CODE: 1\n',
+test('a record that disagrees about the socket, or repeats a field, is a failed start', async () => {
+  // Positive control: one socket line naming the launch is enough.
+  assert.ok(
+    (await readinessOutcome(
+      [PROTOCOL, COMMANDS, SOCKET, READY, READY_CODE, ''].join('\n'),
+    )) instanceof Set,
   );
-  process.stdout.write(`INSTRUMENTATION_STATUS: sessionPort=18093\n${READY_TAIL}`);
 
-  const outcome = await ready;
-  assert.ok(outcome instanceof AppError);
-  assert.equal(outcome.details?.reason, MALFORMED);
+  for (const fields of [
+    [PROTOCOL, COMMANDS, SOCKET, SOCKET],
+    [PROTOCOL, COMMANDS, SOCKET, 'INSTRUMENTATION_STATUS: sessionSocket='],
+    [
+      PROTOCOL,
+      COMMANDS,
+      'INSTRUMENTATION_STATUS: sessionSocket=agentdevice-snapshot-helper-18094',
+      SOCKET,
+    ],
+    [PROTOCOL, COMMANDS, SOCKET, 'INSTRUMENTATION_STATUS: sessionSocket'],
+  ]) {
+    const outcome = await readinessOutcome([...fields, READY, READY_CODE, ''].join('\n'));
+    assert.equal(reasonOf(outcome), MALFORMED, `expected ${fields.join(' | ')} to be refused`);
+  }
 });
 
-test('a terminal record ends its fields before the next ready record', async () => {
-  // Every readiness field but sessionReady arrives in a record that INSTRUMENTATION_CODE ends.
-  const reason = await readinessReason(
-    `${READY_HEAD}\n${TRANSPORT}\nINSTRUMENTATION_CODE: -1\n${READY_TAIL}`,
+test('a helper that announces no socket is a failed start, not a capability answer', async () => {
+  // Positive control: with the socket named, this exact record makes the session ready.
+  assert.ok(
+    (await readinessOutcome(
+      [PROTOCOL, COMMANDS, SOCKET, READY, READY_CODE, ''].join('\n'),
+    )) instanceof Set,
   );
-  assert.equal(reason, MALFORMED);
+
+  // A build that predates the session mode is never launched into it, so readiness never has to
+  // classify it: a record without the socket is a start failure, and the caller's finite start
+  // backoff is the only thing that follows. The fields an older helper reported do not rescue it.
+  for (const fields of [
+    [PROTOCOL, COMMANDS],
+    [PROTOCOL, COMMANDS, 'INSTRUMENTATION_STATUS: sessionPort=18093'],
+    [
+      PROTOCOL,
+      COMMANDS,
+      'INSTRUMENTATION_STATUS: sessionPort=18093',
+      'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1',
+    ],
+  ]) {
+    const outcome = await readinessOutcome([...fields, READY, READY_CODE, ''].join('\n'));
+    assert.equal(reasonOf(outcome), MALFORMED, `expected ${fields.join(' | ')} to be refused`);
+  }
 });

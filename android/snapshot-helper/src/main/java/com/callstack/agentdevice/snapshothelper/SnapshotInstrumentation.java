@@ -57,7 +57,6 @@ public final class SnapshotInstrumentation extends Instrumentation {
     int maxNodes = readIntArgument(arguments, "maxNodes", DEFAULT_MAX_NODES);
     String outputPath = readStringArgument(arguments, "outputPath");
     boolean emitChunks = readBooleanArgument(arguments, "emitChunks", true);
-    int sessionPort = readIntArgument(arguments, "sessionPort", 0);
     String mode = readStringArgument(arguments, "mode");
     Bundle result = new Bundle();
     putBaseMetadata(result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
@@ -71,16 +70,28 @@ public final class SnapshotInstrumentation extends Instrumentation {
         runOneShotGesture(result, readStringArgument(arguments, "payloadBase64"));
         return;
       }
-      if (mode != null && !"snapshot".equals(mode)) {
-        throw new IllegalArgumentException("Unsupported mode: " + mode);
-      }
-      if (sessionPort > 0) {
+      // Versioned activation (#4519): the host names this transport in argv, so a helper that does
+      // not implement it rejects the launch instead of serving an unauthenticated listener. This
+      // helper reads no `sessionPort`, so it cannot be talked into the old TCP session either.
+      if (SessionPeerPolicy.AUTHENTICATED_SESSION_MODE.equals(mode)) {
+        String sessionSocket = readStringArgument(arguments, "sessionSocket");
+        if (sessionSocket == null) {
+          throw new IllegalArgumentException("authenticated-session-v1 requires sessionSocket");
+        }
         runSnapshotSession(
-            sessionPort, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+            sessionSocket,
+            waitForIdleQuietMs,
+            waitForIdleTimeoutMs,
+            timeoutMs,
+            maxDepth,
+            maxNodes);
         result.putString("ok", "true");
         result.putString("sessionEnded", "true");
         finishSafely(0, result);
         return;
+      }
+      if (mode != null && !"snapshot".equals(mode)) {
+        throw new IllegalArgumentException("Unsupported mode: " + mode);
       }
       String xml =
           captureInto(
@@ -169,27 +180,26 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   private void runSnapshotSession(
-      int sessionPort,
+      String launchedSocketName,
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,
       long timeoutMs,
       int maxDepth,
       int maxNodes)
       throws IOException {
-    // Android's LocalServerSocket(String) binds in the abstract namespace. The host reaches it through
-    // `adb forward tcp:<port> localabstract:<name>`; the forwarded peer is adbd, and its uid is
-    // checked before any command byte is read. The name is derived from the port and carries no
-    // secret — admission is the peer uid, not name secrecy.
+    // Android's LocalServerSocket(String) binds in the abstract namespace. The host reaches it
+    // through `adb forward tcp:<port> localabstract:<name>`; the forwarded peer is adbd, and its uid
+    // is checked before any command byte is read. The name comes from the host's `sessionSocket`
+    // argument and carries no secret — admission is the peer uid, not name secrecy.
     try (LocalServerSocket server =
-        new LocalServerSocket(SessionPeerPolicy.sessionSocketName(sessionPort))) {
+        new LocalServerSocket(SessionPeerPolicy.sessionSocketName(launchedSocketName))) {
       Bundle ready = new Bundle();
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
-      ready.putString("sessionTransport", "localabstract-peer-uid-v1");
+      ready.putString("sessionSocket", launchedSocketName);
       ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate,snapshot-short-idle"
           + (android.os.Build.VERSION.SDK_INT >= 31 ? ",app" : ""));
-      ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
       while (!Thread.currentThread().isInterrupted()) {
@@ -204,9 +214,10 @@ public final class SnapshotInstrumentation extends Instrumentation {
           try {
             // An expired, incomplete or failed read closes the connection without a reply: a peer
             // that never reads could otherwise hold the only accept loop with the reply.
-            LocalSocketSessionChannel channel = new LocalSocketSessionChannel(socket);
-            String command =
-                SessionPeerPolicy.readSessionCommandLine(
+            LocalSocketSessionChannel channel =
+                new LocalSocketSessionChannel(socket, SystemClock::elapsedRealtime);
+            SessionPeerPolicy.CommandFrame command =
+                SessionPeerPolicy.readSessionCommand(
                     channel,
                     SystemClock::elapsedRealtime,
                     baseDeadlineAtMs,
@@ -218,19 +229,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
                     SystemClock::elapsedRealtime,
                     SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS,
                     SESSION_RESPONSE_MIN_BYTES_PER_SECOND);
-            SessionPeerPolicy.LineDecision lineDecision =
-                SessionPeerPolicy.commandLineDecision(command, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
-            if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
+            if (command.decision() == SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
               sink.write(SessionResponseWriter.errorFrame("", new EOFException("empty command")));
               continue;
             }
-            if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+            if (command.decision() == SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
               sink.write(
                   SessionResponseWriter.errorFrame(
                       "", new IllegalArgumentException("session command over the byte limit")));
               continue;
             }
-            String[] parts = command.trim().split("\\s+", 3);
+            String[] parts = command.line().trim().split("\\s+", 3);
             String action = parts.length > 0 ? parts[0] : "";
             String requestId = parts.length > 1 ? parts[1] : "";
             if ("quit".equals(action)) {
@@ -286,9 +295,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   /**
-   * Reads the peer's kernel credentials and admits only adbd. A credential read that fails for any
-   * reason is a peer that cannot be positively identified, so it is rejected: the session never
-   * serves a peer it could not verify.
+   * Reads the peer's kernel credentials and admits only adbd. A credential read that fails, or that
+   * answers with nothing, is a peer that cannot be positively identified, so it is rejected: the
+   * session never serves a peer it could not verify.
    */
   private static boolean admitSessionPeer(LocalSocket socket) {
     Credentials credentials;
@@ -297,7 +306,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
     } catch (Throwable error) {
       return false;
     }
-    return SessionPeerPolicy.admitPeer(credentials.getUid()) == SessionPeerPolicy.Admission.ADMITTED;
+    return credentials != null
+        && SessionPeerPolicy.admitPeer(credentials.getUid())
+            == SessionPeerPolicy.Admission.ADMITTED;
   }
 
   private static void writeSessionOkQuietly(

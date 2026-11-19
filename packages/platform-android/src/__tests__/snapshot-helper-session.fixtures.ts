@@ -18,6 +18,10 @@ import type {
 } from '../adb-executor.ts';
 import { ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER } from '../snapshot-helper-retirement.ts';
 import type { AndroidSnapshotHelperRuntimeRelease } from '../snapshot-helper-retirement.ts';
+import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX,
+} from '../snapshot-helper-types.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import { bindAndroidAdbTestHost } from './test-utils/android-host-test-setup.ts';
 
@@ -84,7 +88,8 @@ export function createPersistentSnapshotHelperProvider(
       const sessionIndex = options.spawnArgs.length;
       const process = new FakeAndroidProcess();
       options.processes.push(process);
-      const port = readSessionPort(args);
+      const launch = readAndroidSessionLaunch(args);
+      const port = launch.port;
       let snapshotCount = 0;
       const server = net.createServer((socket) => {
         socket.once('data', (chunk) => {
@@ -153,15 +158,11 @@ export function createPersistentSnapshotHelperProvider(
       server.listen(port, '127.0.0.1', () => {
         setTimeout(() => {
           process.stdout.write(
-            [
-              'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-              `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionCommands?.join(',') ?? `${options.sessionInput ? 'input,' : ''}snapshot-immediate`}`,
-              'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1',
-              `INSTRUMENTATION_STATUS: sessionPort=${port}`,
-              'INSTRUMENTATION_STATUS: sessionReady=true',
-              'INSTRUMENTATION_STATUS_CODE: 2',
-              '',
-            ].join('\n'),
+            sessionReadyRecord(
+              launch,
+              options.sessionCommands?.join(',') ??
+                `${options.sessionInput ? 'input,' : ''}snapshot-immediate`,
+            ),
           );
         }, options.sessionReadyDelayMs ?? 0);
       });
@@ -183,7 +184,8 @@ export type SessionProviderOptions = {
   spawnArgs?: (readonly string[])[];
   responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
   responseDelayMs?: number;
-  legacySessionTransport?: boolean;
+  /** What the fake helper prints as its readiness record, to steer malformed readiness. */
+  readyRecord?: (launch: { socketName: string; port: number }) => string;
   forceStopDelayMs?: number;
   recoveryFailure?: boolean;
   stalledCleanup?: boolean;
@@ -225,7 +227,8 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
     exec: createSessionExec(options),
     spawn: (args) => {
       options.spawnArgs?.push(args);
-      const port = readSessionPort(args);
+      const launch = readAndroidSessionLaunch(args);
+      const port = launch.port;
       const process = new FakeAndroidProcess();
       options.processes?.push(process);
       spawnedHelpers += 1;
@@ -303,17 +306,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
       });
       server.listen(port, '127.0.0.1', () => {
         process.stdout.write(
-          [
-            'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-            'INSTRUMENTATION_STATUS: sessionCommands=snapshot-immediate',
-            ...(options.legacySessionTransport
-              ? []
-              : ['INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1']),
-            `INSTRUMENTATION_STATUS: sessionPort=${port}`,
-            'INSTRUMENTATION_STATUS: sessionReady=true',
-            'INSTRUMENTATION_STATUS_CODE: 2',
-            '',
-          ].join('\n'),
+          options.readyRecord?.(launch) ?? sessionReadyRecord(launch, 'snapshot-immediate'),
         );
       });
       process.onKill = () => {
@@ -563,10 +556,38 @@ function sessionResponse(params: {
     .join('\n')}\n\n${params.body}`;
 }
 
-function readSessionPort(args: readonly string[]): number {
-  const index = args.indexOf('sessionPort');
-  assert.notEqual(index, -1);
-  return Number(args[index + 1]);
+/**
+ * What the fake device reads out of a session launch: the abstract socket name the host declared in
+ * argv, and the host port its `adb forward` points at. The fake listens there so the host's socket
+ * connects. A launch that carries no session arguments gets no socket: readiness has nothing to
+ * report, and the host's start fails like any other failed start.
+ */
+export function readAndroidSessionLaunch(args: readonly string[]): {
+  socketName: string;
+  port: number;
+} {
+  const socketIndex = args.indexOf('sessionSocket');
+  assert.notEqual(socketIndex, -1, 'expected a session launch to name its socket');
+  const socketName = args[socketIndex + 1]!;
+  assert.equal(args[socketIndex - 3], 'mode');
+  assert.equal(args[socketIndex - 2], ANDROID_SNAPSHOT_HELPER_SESSION_MODE);
+  assert.equal(args.includes('sessionPort'), false);
+  return {
+    socketName,
+    port: Number(socketName.slice(ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX.length)),
+  };
+}
+
+/** The status record a session helper prints once its socket is bound. */
+export function sessionReadyRecord(launch: { socketName: string }, commands: string): string {
+  return [
+    'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+    `INSTRUMENTATION_STATUS: sessionCommands=${commands}`,
+    `INSTRUMENTATION_STATUS: sessionSocket=${launch.socketName}`,
+    'INSTRUMENTATION_STATUS: sessionReady=true',
+    'INSTRUMENTATION_STATUS_CODE: 2',
+    '',
+  ].join('\n');
 }
 
 /** A capture holding only system-UI chrome: the helper answered, but no app content. */

@@ -20,6 +20,7 @@ public final class SessionFrameWriterTest {
     tricklingPeerCannotExtendTheDeadlinePerSend();
     zeroProgressSendThatUsesTheBudgetNeverPolls();
     pollWaitsOnlyForWhatIsLeft();
+    pauseBeforeTheWaitNeverPollsPastTheDeadline();
     stalledReaderUnderRealBackpressureClosesAtTheDeadline();
     readingPeerReceivesTheWholeFrame();
   }
@@ -40,7 +41,7 @@ public final class SessionFrameWriterTest {
       }
 
       @Override
-      public void awaitWritable(long timeoutMs) {
+      public void awaitWritable(long deadlineAtMs) {
         throw new AssertionError("The trickle always takes a byte");
       }
     };
@@ -67,8 +68,8 @@ public final class SessionFrameWriterTest {
       }
 
       @Override
-      public void awaitWritable(long timeoutMs) {
-        throw new AssertionError("Polled for " + timeoutMs + " ms after the deadline at " + nowMs[0]);
+      public void awaitWritable(long deadlineAtMs) {
+        throw new AssertionError("Polled until " + deadlineAtMs + " after the deadline at " + nowMs[0]);
       }
     };
     try {
@@ -82,7 +83,7 @@ public final class SessionFrameWriterTest {
   /** A slow zero-progress send leaves less to wait for; the poll gets only the remainder. */
   private static void pollWaitsOnlyForWhatIsLeft() throws Exception {
     long[] nowMs = {0};
-    java.util.List<Long> waits = new java.util.ArrayList<>();
+    final java.util.List<Long> waits = new java.util.ArrayList<>();
     SessionFrameWriter.Channel slow = new SessionFrameWriter.Channel() {
       @Override
       public int send(byte[] data, int offset, int length) {
@@ -91,9 +92,11 @@ public final class SessionFrameWriterTest {
       }
 
       @Override
-      public void awaitWritable(long timeoutMs) {
-        waits.add(timeoutMs);
-        nowMs[0] += timeoutMs;
+      public void awaitWritable(long deadlineAtMs) throws IOException {
+        // The wait derives its own duration from the deadline it was given, which is what the real
+        // channel does before Os.poll.
+        waits.add(SessionPeerPolicy.remainingBeforeDeadline(() -> nowMs[0], deadlineAtMs));
+        nowMs[0] = deadlineAtMs;
       }
     };
     try {
@@ -102,6 +105,46 @@ public final class SessionFrameWriterTest {
     } catch (SocketTimeoutException expected) {
       if (!waits.equals(java.util.Arrays.asList(600L)) || nowMs[0] > 1_400) {
         throw new AssertionError("Expected one 600 ms wait, got " + waits + " ending at " + nowMs[0]);
+      }
+    }
+  }
+
+  /**
+   * The write wait takes the absolute deadline, not a duration measured before the wait, and it
+   * re-checks the deadline when it starts. A socket that pauses between the deadline check and its
+   * poll must not poll at all once the deadline has gone (#4519 review, item 2).
+   */
+  private static void pauseBeforeTheWaitNeverPollsPastTheDeadline() throws Exception {
+    long[] nowMs = {0};
+    final long[] waitedUntilMs = {-1};
+    final boolean[] polled = {false};
+    SessionFrameWriter.Channel pausing = new SessionFrameWriter.Channel() {
+      @Override
+      public int send(byte[] data, int offset, int length) {
+        nowMs[0] = 900;
+        return 0;
+      }
+
+      @Override
+      public void awaitWritable(long deadlineAtMs) throws IOException {
+        waitedUntilMs[0] = deadlineAtMs;
+        // A pause before polling. The time left has to be measured here, and a poll may only start
+        // when the deadline still allows it.
+        nowMs[0] = 5_000;
+        SessionPeerPolicy.remainingBeforeDeadline(() -> nowMs[0], deadlineAtMs);
+        polled[0] = true;
+      }
+    };
+    try {
+      new SessionFrameWriter(pausing, () -> nowMs[0], 1_000, Integer.MAX_VALUE).write(frame(10));
+      throw new AssertionError("Expected the expired deadline to end the write");
+    } catch (SocketTimeoutException expected) {
+      if (waitedUntilMs[0] != 1_000) {
+        throw new AssertionError(
+            "Expected the wait to be given the deadline, got " + waitedUntilMs[0]);
+      }
+      if (polled[0]) {
+        throw new AssertionError("A poll ran with a stale duration after the deadline expired");
       }
     }
   }
@@ -179,7 +222,7 @@ public final class SessionFrameWriterTest {
     return new SessionResponseWriter.Frame(new byte[] {'\n'}, new byte[bodyBytes]);
   }
 
-  /** The JVM counterpart of LocalSocketFrameChannel: nonblocking sends and a select for room. */
+  /** The JVM counterpart of LocalSocketSessionChannel: nonblocking sends and a select for room. */
   private static final class NioChannel implements SessionFrameWriter.Channel {
     private final SocketChannel socket;
     private final Selector selector;
@@ -199,8 +242,10 @@ public final class SessionFrameWriterTest {
     }
 
     @Override
-    public void awaitWritable(long timeoutMs) throws IOException {
-      selector.select(Math.max(1, timeoutMs));
+    public void awaitWritable(long deadlineAtMs) throws IOException {
+      long remainingMs =
+          SessionPeerPolicy.remainingBeforeDeadline(SessionFrameWriterTest::nowMs, deadlineAtMs);
+      selector.select(Math.max(1, remainingMs));
       selector.selectedKeys().clear();
     }
   }

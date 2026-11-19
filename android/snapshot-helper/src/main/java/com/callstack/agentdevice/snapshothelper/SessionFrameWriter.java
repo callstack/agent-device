@@ -18,8 +18,12 @@ final class SessionFrameWriter implements SessionResponseWriter.FrameSink {
     /** Sends up to length bytes without blocking. Answers 0 when there is no room. */
     int send(byte[] data, int offset, int length) throws IOException;
 
-    /** Waits up to timeoutMs for send room. A closed or failed peer throws. */
-    void awaitWritable(long timeoutMs) throws IOException;
+    /**
+     * Waits until the absolute deadline for send room. The implementation re-checks the deadline
+     * when the wait starts, so a pause cannot make it poll with a stale duration. A closed or
+     * failed peer throws.
+     */
+    void awaitWritable(long deadlineAtMs) throws IOException;
   }
 
   private final Channel channel;
@@ -58,6 +62,8 @@ final class SessionFrameWriter implements SessionResponseWriter.FrameSink {
         offset += count;
         continue;
       }
+      // The wait gets the deadline itself, so a pause before it cannot make it poll with a
+      // duration measured before the pause.
       SessionPeerPolicy.awaitBeforeDeadline(clock, deadlineAtMs, channel::awaitWritable);
     }
   }

@@ -13,6 +13,7 @@ import {
 import {
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
+  ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX,
   type AndroidSnapshotHelperCaptureOptions,
   type AndroidSnapshotHelperMetadata,
   type AndroidSnapshotHelperOutput,
@@ -36,32 +37,37 @@ export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
   });
 }
 
-/**
- * The abstract device socket a session helper binds for a host port. The name derives from the
- * port and carries no secret — the helper admits a connection only after reading the forwarded
- * peer's adbd uid via `LocalSocket.getPeerCredentials()`, before any command byte is read — so the
- * name is a routing label, not a credential, and nothing sensitive travels in argv. The helper
- * derives the same name from its `sessionPort` argument; the two must stay in lockstep.
- */
-const SESSION_SOCKET_PREFIX = 'agentdevice-snapshot-helper-';
-
 // The host checks the command before opening a connection. The APK enforces the same byte limit.
 // A 64 KiB `fill --text-stdin` value of JSON-escaped control characters encodes to 524,368 Base64
 // bytes, and the action and request id follow; SessionPeerPolicy.java owns the full derivation.
 export const ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES = 513 * 1024;
 
+/** The abstract socket name a session helper binds for a host port. */
 export function androidSnapshotHelperSessionSocketName(port: number): string {
-  return `${SESSION_SOCKET_PREFIX}${port}`;
+  return `${ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX}${port}`;
+}
+
+/**
+ * What this host launched one session with: the abstract socket name the helper was told to bind.
+ * Readiness has to report the same name for the session to be this launch's session.
+ */
+export type AndroidSnapshotHelperSessionLaunch = {
+  socketName: string;
+};
+
+/** The launch arguments for a persistent session, in the shape `buildAndroidSnapshotHelperArgs` takes. */
+export function androidSnapshotHelperSessionLaunchArgs(
+  port: number,
+): AndroidSnapshotHelperSessionLaunch {
+  return { socketName: androidSnapshotHelperSessionSocketName(port) };
 }
 
 /** The device-side end of the session forward: the helper's abstract socket, not a device TCP port. */
-export function androidSnapshotHelperSessionForwardTarget(port: number): `localabstract:${string}` {
-  return `localabstract:${androidSnapshotHelperSessionSocketName(port)}`;
+export function androidSnapshotHelperSessionForwardTarget(
+  launch: AndroidSnapshotHelperSessionLaunch,
+): `localabstract:${string}` {
+  return `localabstract:${launch.socketName}`;
 }
-
-export const SESSION_TRANSPORT_UNSUPPORTED_REASON =
-  'android_snapshot_helper_session_transport_unsupported';
-
 const SESSION_REQUEST_TIMEOUT_REASON = 'android_snapshot_helper_session_request_timeout';
 
 /** The helper accepted the session request but sent no answer before the command deadline. */
@@ -143,7 +149,6 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   return parseAndroidSnapshotHelperSessionSnapshotResponse(response, requestId);
 }
 
-const SESSION_TRANSPORT = 'localabstract-peer-uid-v1';
 const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';
 const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exited_before_ready';
 const SESSION_READY_MALFORMED_REASON = 'android_snapshot_helper_session_ready_malformed';
@@ -170,45 +175,30 @@ function addStatusLine(record: StatusRecord, line: string): void {
 }
 
 /**
- * Classifies one complete status record. A ready record decides capability only when it is well
- * formed: this protocol, the session port this host launched, no duplicate or unparsed line. Then the
- * authenticated transport makes it ready, and no transport field means the helper predates that
- * transport. Any other ready record is malformed and takes the transient path. A record that is
- * not readiness is ignored, so the wait goes on.
+ * Classifies one complete status record. A ready record decides readiness only when it is well
+ * formed: this protocol, the socket name this host launched, no duplicate or unparsed line. Anything
+ * else is a start failure, not a capability answer — the host already knows what the artifact it
+ * launched can do (#4519). A record that is not readiness is ignored, so the wait goes on.
  */
 function classifyReadinessRecord(
   statusLine: string,
   record: StatusRecord,
-  launchedPort: number,
+  launchedSocketName: string,
 ): ReadinessOutcome | undefined {
   const { fields } = record;
   if (statusLine !== 'INSTRUMENTATION_STATUS_CODE: 2' || fields.get('sessionReady') !== 'true') {
     return undefined;
   }
-  const transport = fields.get('sessionTransport');
   if (
     record.malformed ||
     fields.get('agentDeviceProtocol') !== ANDROID_SNAPSHOT_HELPER_PROTOCOL ||
-    fields.get('sessionPort') !== String(launchedPort) ||
-    (transport !== undefined && transport !== SESSION_TRANSPORT)
+    fields.get('sessionSocket') !== launchedSocketName
   ) {
     return {
       kind: 'failed',
       error: new AppError('COMMAND_FAILED', 'Android snapshot helper readiness is malformed', {
         reason: SESSION_READY_MALFORMED_REASON,
       }),
-    };
-  }
-  if (transport === undefined) {
-    return {
-      kind: 'failed',
-      error: new AppError(
-        'COMMAND_FAILED',
-        'Android snapshot helper lacks authenticated sessions',
-        {
-          reason: SESSION_TRANSPORT_UNSUPPORTED_REASON,
-        },
-      ),
     };
   }
   return {
@@ -231,15 +221,15 @@ function settleAfterDrain(record: AndroidInstrumentationProcessRecord): Promise<
 }
 
 /**
- * Waits for the helper's readiness record. `launchedPort` is the session port this host launched
- * the helper with; a record that reports any other port is not this helper's readiness.
+ * Waits for the helper's readiness record. `launchedSocketName` is the session socket this host
+ * launched the helper with; a record that reports any other socket is not this helper's readiness.
  */
 export function waitForAndroidSnapshotHelperSessionReady(
   childProcess: AndroidAdbProcess,
   timeoutMs: number,
   signal: AbortSignal | undefined,
   record: AndroidInstrumentationProcessRecord,
-  launchedPort: number,
+  launchedSocketName: string,
 ): Promise<ReadonlySet<string>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -268,7 +258,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       for (const rawLine of lines) {
         const line = rawLine.replace(/\r$/, '');
         if (line.startsWith('INSTRUMENTATION_STATUS_CODE: ')) {
-          const outcome = classifyReadinessRecord(line, statusRecord, launchedPort);
+          const outcome = classifyReadinessRecord(line, statusRecord, launchedSocketName);
           statusRecord = newStatusRecord();
           if (outcome) {
             settle(outcome);

@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
@@ -6,6 +5,8 @@ import type { AndroidAdbProcess, AndroidAdbProvider } from '../adb-executor.ts';
 import {
   androidHelperRuntimeProbeResult,
   isAndroidHelperRuntimeProbe,
+  readAndroidSessionLaunch,
+  sessionReadyRecord,
   type FakeAndroidHelperRuntimeRelease,
 } from './snapshot-helper-session.fixtures.ts';
 
@@ -29,12 +30,6 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
 }
 
 export type TouchSessionCommandHandler = (command: string, requestId: string) => string | undefined;
-
-function readSessionPort(args: readonly string[]): number {
-  const index = args.indexOf('sessionPort');
-  assert.notEqual(index, -1);
-  return Number(args[index + 1]);
-}
 
 export function sessionHeaderResponse(headers: Record<string, string>): string {
   return `${Object.entries(headers)
@@ -88,7 +83,8 @@ export function createFakeTouchHelperSessionProvider(
       return { exitCode: 0, stdout: '', stderr: '' };
     },
     spawn: (args) => {
-      const port = readSessionPort(args);
+      const launch = readAndroidSessionLaunch(args);
+      const port = launch.port;
       const process = new FakeAndroidProcess();
       const server = net.createServer((socket) => {
         socket.once('data', (chunk) => {
@@ -111,15 +107,7 @@ export function createFakeTouchHelperSessionProvider(
       });
       server.listen(port, '127.0.0.1', () => {
         process.stdout.write(
-          [
-            'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-            'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
-            'INSTRUMENTATION_STATUS: sessionTransport=localabstract-peer-uid-v1',
-            `INSTRUMENTATION_STATUS: sessionPort=${port}`,
-            'INSTRUMENTATION_STATUS: sessionReady=true',
-            'INSTRUMENTATION_STATUS_CODE: 2',
-            '',
-          ].join('\n'),
+          sessionReadyRecord(launch, 'input,screenshot,focus,snapshot-immediate'),
         );
       });
       process.onKill = () => {

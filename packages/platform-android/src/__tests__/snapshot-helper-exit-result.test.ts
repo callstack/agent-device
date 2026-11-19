@@ -9,7 +9,10 @@ import {
 } from '../snapshot-helper-capture.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
-import { waitForAndroidSnapshotHelperSessionReady } from '../snapshot-helper-session-protocol.ts';
+import {
+  androidSnapshotHelperSessionSocketName,
+  waitForAndroidSnapshotHelperSessionReady,
+} from '../snapshot-helper-session-protocol.ts';
 import { recordInstrumentationProcess } from '../instrumentation-helper.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
@@ -17,7 +20,10 @@ import { snapshotAndroid } from '../snapshot.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
+import {
+  type AndroidAdbExecutor,
+  ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
+} from '../snapshot-helper-types.ts';
 import type { AndroidAdbProvider } from '../adb-executor.ts';
 import {
   androidHelperRuntimeProbeResult,
@@ -162,6 +168,7 @@ async function sessionExit(
       captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
+        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: 'android:emulator-5556',
       });
     await inScope(logPath, async () => {
@@ -463,7 +470,7 @@ test('a startup failure attaches no raw helper stream to its details or the log'
       timeoutMs,
       undefined,
       recordInstrumentationProcess(process),
-      18093,
+      androidSnapshotHelperSessionSocketName(18093),
     );
 
   const exited = new FakeAndroidProcess();
@@ -501,6 +508,7 @@ test('a startup failure attaches no raw helper stream to its details or the log'
       await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
+        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: 'android:emulator-5556',
       });
     });
@@ -700,6 +708,7 @@ test('a session that exits before it is ready records its exit status and the ou
       const output = await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
+        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: 'android:emulator-5556',
       });
       assert.equal(output, undefined);
@@ -733,6 +742,7 @@ test('a session exit result includes output that arrives after the exit event', 
       captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
+        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: 'android:emulator-5556',
       });
     await inScope(logPath, async () => {
@@ -761,6 +771,7 @@ test('a session that is stopped while it is still running records no invented ca
       await captureAndroidSnapshotWithHelperSession({
         adb: provider.exec,
         adbProvider: provider,
+        helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
         deviceKey: 'android:emulator-5556',
       });
       await resetAndroidSnapshotHelperSessions();
@@ -814,7 +825,13 @@ test('a ready timeout in the middle of a record leaves the final fields intact',
   const child = new FakeAndroidProcess();
   const record = recordInstrumentationProcess(child);
   const failure = rejection(
-    waitForAndroidSnapshotHelperSessionReady(child, 30, undefined, record, 18093),
+    waitForAndroidSnapshotHelperSessionReady(
+      child,
+      30,
+      undefined,
+      record,
+      androidSnapshotHelperSessionSocketName(18093),
+    ),
   );
   child.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation fai');
   const timedOut = await failure;
@@ -885,7 +902,7 @@ test('a session that exits while its streams stay open still fails startup promp
       5_000,
       controller.signal,
       recordInstrumentationProcess(child),
-      18093,
+      androidSnapshotHelperSessionSocketName(18093),
     ),
   );
   child.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');
@@ -911,6 +928,7 @@ test('a failed live session is retired without waiting on a timer for an exit', 
     const output = await captureAndroidSnapshotWithHelperSession({
       adb: provider.exec,
       adbProvider: provider,
+      helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
       deviceKey: 'android:emulator-5556',
     });
     assert.equal(output, undefined);

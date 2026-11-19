@@ -18,17 +18,17 @@ public final class SessionPeerPolicyTest {
     incompleteCommandAtDeadlineCannotStartAnotherRead();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
+    overLimitFrameIsDecidedFromRawBytesBeforeTheNewline();
+    malformedUtf8AtTheCapIsRejectedNotDecoded();
+    aCompleteFrameWithMalformedUtf8NeverReachesTheParser();
     silentPeerIsWaitedForOnlyUntilTheDeadline();
     pauseBeforeTheWaitNeverPollsPastTheDeadline();
+    waitTakesTheDeadlineNotAnEarlierDuration();
     maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline();
     frameBelowTheFloorRateExpires();
     bytesAfterTheNewlineEarnNoReadTime();
-    eofBeforeTheNewlineIsAnIncompleteFrame();
-    socketNameIsDerivedFromThePortAndCarriesNoSecret();
-    acceptsCommandLinesUpToTheByteLimit();
-    rejectsEmptyCommandLines();
-    rejectsCommandLinesOverTheByteLimit();
-    countsUtf8BytesNotChars();
+    lateBytesEarnNoTimeBeforeTheExpiryCheck();
+    socketNameComesFromTheLaunchedSocketName();
   }
 
   private static void admitsTheAdbdUids() {
@@ -54,7 +54,7 @@ public final class SessionPeerPolicyTest {
         return super.read(data, offset, length);
       }
     };
-    String command = SessionPeerPolicy.readSessionCommandLine(source(input), () -> nowMs[0], 110, 8);
+    String command = read(source(input), () -> nowMs[0], 110, 8);
     if (!"ab".equals(command)) {
       throw new AssertionError("Expected a complete command returned at the deadline");
     }
@@ -70,7 +70,7 @@ public final class SessionPeerPolicyTest {
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(source(input), () -> nowMs[0], 110, 8);
+      read(source(input), () -> nowMs[0], 110, 8);
       throw new AssertionError("Expected the deadline to stop an unfinished command");
     } catch (SocketTimeoutException expected) {
     }
@@ -86,23 +86,89 @@ public final class SessionPeerPolicyTest {
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(source(drip), () -> nowMs[0], 110, 8);
+      read(source(drip), () -> nowMs[0], 110, 8);
       throw new AssertionError("A command completed after its absolute deadline was accepted");
     } catch (SocketTimeoutException expected) {
     }
   }
 
   private static void readHonorsTheByteLimitAndEof() throws Exception {
-    String atLimit = readFixture("abcd\nignored", 4);
-    if (!"abcd".equals(atLimit)
-        || SessionPeerPolicy.commandLineDecision(atLimit, 4) != SessionPeerPolicy.LineDecision.ACCEPTED) {
+    if (!"abcd".equals(readFixture("abcd\nignored", 4))) {
       throw new AssertionError("Expected a newline after exactly maxBytes to be accepted");
     }
-    String overLimit = readFixture("abcdef\n", 4);
-    if (!"abcde".equals(overLimit)
-        || SessionPeerPolicy.commandLineDecision(overLimit, 4)
-            != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError("Expected the reader to stop and reject maxBytes + 1");
+    // The cap is reached before the newline, so no decode of the capped prefix decides anything.
+    if (decideFixture("abcde\n", 4) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+      throw new AssertionError("Expected the reader to reject maxBytes + 1 raw bytes");
+    }
+    if (decideFixture("abcdefg\n", 4) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+      throw new AssertionError("Expected a longer over-cap frame to be rejected too");
+    }
+    if (decideFixture("\n", 4) != SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
+      throw new AssertionError("Expected an empty line to be rejected as empty");
+    }
+    if (decideFixture("snapshot req-1\n", 64) != SessionPeerPolicy.LineDecision.ACCEPTED) {
+      throw new AssertionError("Expected a command at the limit to be accepted");
+    }
+    // Two '€' chars are two chars but six UTF-8 bytes: the cap counts the bytes.
+    if (decideFixture("€€\n", 6) != SessionPeerPolicy.LineDecision.ACCEPTED) {
+      throw new AssertionError("Expected six bytes at a limit of six to be accepted");
+    }
+    if (decideFixture("€€\n", 5) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+      throw new AssertionError("Expected six bytes at a limit of five to be rejected");
+    }
+  }
+
+  /**
+   * The frame cap is a raw-byte rule. A capped, unterminated prefix must never be decoded to decide
+   * it: on Android 6.0.1 and 7.0, malformed UTF-8 decodes to fewer characters than it occupies, so
+   * re-encoding a decoded prefix can read as within the cap and dispatch a truncated command.
+   */
+  private static void overLimitFrameIsDecidedFromRawBytesBeforeTheNewline() throws Exception {
+    byte[] frame = new byte[5];
+    Arrays.fill(frame, (byte) 'a');
+    SessionPeerPolicy.CommandFrame overLimit =
+        SessionPeerPolicy.readSessionCommand(
+            source(new ByteArrayInputStream(frame)), () -> 100, 110, 4);
+    if (overLimit.decision() != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+      throw new AssertionError("Expected the raw byte count to decide an over-cap frame");
+    }
+    // The reader stopped as soon as the cap was crossed, without waiting for the newline, and keeps
+    // nothing that could be decoded and dispatched.
+    try {
+      overLimit.line();
+      throw new AssertionError("Expected an over-cap frame to carry nothing to decode");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  /** Malformed UTF-8 that pushes the raw count past the cap is rejected, not decoded shorter. */
+  private static void malformedUtf8AtTheCapIsRejectedNotDecoded() throws Exception {
+    // '€' is three bytes; each broken sequence below is one byte that no platform decodes to a
+    // whole character. Six raw bytes at a cap of five is over the cap whatever decoding does.
+    byte[] frame = new byte[] {'a', 'b', (byte) 0xC3, (byte) 0x28, (byte) 0xA0, 0x00, '\n'};
+    SessionPeerPolicy.CommandSource input = source(new ByteArrayInputStream(frame));
+    SessionPeerPolicy.CommandFrame frameResult =
+        SessionPeerPolicy.readSessionCommand(input, () -> 100, 110, 5);
+    if (frameResult.decision() != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+      throw new AssertionError(
+          "Expected a capped malformed frame to be over the limit, got " + frameResult.decision());
+    }
+  }
+
+  /** A complete frame whose bytes are not UTF-8 fails closed instead of reaching the parser. */
+  private static void aCompleteFrameWithMalformedUtf8NeverReachesTheParser() throws Exception {
+    byte[] frame = new byte[] {'s', 'n', (byte) 0xC3, (byte) 0x28, '\n'};
+    SessionPeerPolicy.CommandFrame decoded =
+        SessionPeerPolicy.readSessionCommand(
+            source(new ByteArrayInputStream(frame)), () -> 100, 110, 64);
+    if (decoded.decision() != SessionPeerPolicy.LineDecision.ACCEPTED) {
+      throw new AssertionError("Expected a frame within the cap to be accepted for decoding");
+    }
+    try {
+      decoded.line();
+      throw new AssertionError("Expected malformed bytes to be refused instead of replaced");
+    } catch (java.io.IOException expected) {
+      // The connection closes without dispatch.
     }
   }
 
@@ -155,10 +221,31 @@ public final class SessionPeerPolicyTest {
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(source(late), () -> nowMs[0], 100, 100_000);
+      read(source(late), () -> nowMs[0], 100, 100_000);
       throw new AssertionError("Bytes after the newline extended the read deadline");
     } catch (SocketTimeoutException expected) {
       // Only the command bytes earned time.
+    }
+  }
+
+  /**
+   * A receive that lands after the deadline, carrying a whole command: the expiry check runs before
+   * its bytes are credited, so they never buy the read more time.
+   */
+  private static void lateBytesEarnNoTimeBeforeTheExpiryCheck() throws Exception {
+    long[] nowMs = {100};
+    ByteArrayInputStream late = new ByteArrayInputStream("snapshot req-1\n".getBytes(StandardCharsets.UTF_8)) {
+      @Override
+      public int read(byte[] data, int offset, int length) {
+        nowMs[0] = 5_100;
+        return super.read(data, offset, length);
+      }
+    };
+    try {
+      read(source(late), () -> nowMs[0], 2_000, 4_096);
+      throw new AssertionError("A late receive extended the read deadline");
+    } catch (SocketTimeoutException expected) {
+      // The read closed on the deadline it already had.
     }
   }
 
@@ -175,7 +262,7 @@ public final class SessionPeerPolicyTest {
         return super.read(data, offset, Math.min(chunkBytes, length));
       }
     };
-    return SessionPeerPolicy.readSessionCommandLine(source(paced), () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+    return read(source(paced), () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
   }
 
   /** A peer that sends nothing: one wait, for exactly what the deadline has left. */
@@ -189,13 +276,13 @@ public final class SessionPeerPolicyTest {
       }
 
       @Override
-      public void awaitReadable(long timeoutMs) {
-        waits.add(timeoutMs);
-        nowMs[0] += timeoutMs;
+      public void awaitReadable(long deadlineAtMs) {
+        waits.add(deadlineAtMs - nowMs[0]);
+        nowMs[0] = deadlineAtMs;
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(silent, () -> nowMs[0], 2_100, 64);
+      readSession(silent, () -> nowMs[0], 2_100, 64);
       throw new AssertionError("Expected a silent peer to expire");
     } catch (SocketTimeoutException expected) {
       if (!waits.equals(Arrays.asList(2_000L)) || nowMs[0] != 2_100) {
@@ -215,15 +302,48 @@ public final class SessionPeerPolicyTest {
       }
 
       @Override
-      public void awaitReadable(long timeoutMs) {
-        throw new AssertionError("Waited " + timeoutMs + " ms after the deadline, at " + nowMs[0]);
+      public void awaitReadable(long deadlineAtMs) {
+        throw new AssertionError(
+            "Waited until " + deadlineAtMs + " after the deadline, at " + nowMs[0]);
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(paused, () -> nowMs[0], 2_100, 64);
+      readSession(paused, () -> nowMs[0], 2_100, 64);
       throw new AssertionError("Expected the used-up deadline to end the read");
     } catch (SocketTimeoutException expected) {
       // The read closed without waiting.
+    }
+  }
+
+  /**
+   * The wait gets the deadline, not a duration measured before the wait. A connection that pauses
+   * between the deadline check and Os.poll must still derive its own duration from the deadline.
+   */
+  private static void waitTakesTheDeadlineNotAnEarlierDuration() throws Exception {
+    long[] nowMs = {1_000};
+    long[] askedToWaitUntil = {0};
+    SessionPeerPolicy.CommandSource pausing = new SessionPeerPolicy.CommandSource() {
+      @Override
+      public int receive(byte[] data, int offset, int length) {
+        return 0;
+      }
+
+      @Override
+      public void awaitReadable(long deadlineAtMs) throws java.io.IOException {
+        askedToWaitUntil[0] = deadlineAtMs;
+        // A pause before the poll would make a duration sampled earlier wait past the deadline.
+        nowMs[0] += 3_000;
+        long remainingMs = SessionPeerPolicy.remainingBeforeDeadline(() -> nowMs[0], deadlineAtMs);
+        throw new IllegalStateException("Expected the deadline to have expired, left " + remainingMs);
+      }
+    };
+    try {
+      readSession(pausing, () -> nowMs[0], 2_000, 64);
+      throw new AssertionError("Expected the expired deadline to end the wait");
+    } catch (SocketTimeoutException expected) {
+      if (askedToWaitUntil[0] != 2_000) {
+        throw new AssertionError("Expected the wait to be given the deadline: " + askedToWaitUntil[0]);
+      }
     }
   }
 
@@ -236,64 +356,66 @@ public final class SessionPeerPolicyTest {
       }
 
       @Override
-      public void awaitReadable(long timeoutMs) {
+      public void awaitReadable(long deadlineAtMs) {
         throw new AssertionError("A stream fixture always has data or EOF");
       }
     };
   }
 
+  private static String read(
+      SessionPeerPolicy.CommandSource source,
+      SessionPeerPolicy.MonotonicClock clock,
+      long baseDeadlineAtMs,
+      int maxBytes)
+      throws Exception {
+    return readSession(source, clock, baseDeadlineAtMs, maxBytes).line();
+  }
+
+  private static SessionPeerPolicy.CommandFrame readSession(
+      SessionPeerPolicy.CommandSource source,
+      SessionPeerPolicy.MonotonicClock clock,
+      long baseDeadlineAtMs,
+      int maxBytes)
+      throws Exception {
+    return SessionPeerPolicy.readSessionCommand(source, clock, baseDeadlineAtMs, maxBytes);
+  }
+
   private static String readFixture(String input, int maxBytes) throws Exception {
-    return SessionPeerPolicy.readSessionCommandLine(
-        source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))),
-        () -> 100, 110, maxBytes);
+    return read(source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))), () -> 100, 110, maxBytes);
   }
 
-  private static void socketNameIsDerivedFromThePortAndCarriesNoSecret() {
-    if (!"agentdevice-snapshot-helper-18093".equals(SessionPeerPolicy.sessionSocketName(18_093))) {
-      throw new AssertionError("Expected the socket name to derive from the session port");
-    }
-    if (!SessionPeerPolicy.sessionSocketName(1).equals(SessionPeerPolicy.sessionSocketName(1))) {
-      throw new AssertionError("Expected the socket name derivation to be deterministic");
-    }
-    if (SessionPeerPolicy.sessionSocketName(1).equals(SessionPeerPolicy.sessionSocketName(2))) {
-      throw new AssertionError("Expected distinct ports to name distinct sockets");
-    }
+  private static SessionPeerPolicy.LineDecision decideFixture(String input, int maxBytes)
+      throws Exception {
+    return readSession(
+            source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))),
+            () -> 100,
+            110,
+            maxBytes)
+        .decision();
   }
 
-  private static void acceptsCommandLinesUpToTheByteLimit() {
-    if (SessionPeerPolicy.commandLineDecision("snapshot req-1", 64) != SessionPeerPolicy.LineDecision.ACCEPTED) {
-      throw new AssertionError("Expected a short command line to be accepted");
+  private static void socketNameComesFromTheLaunchedSocketName() {
+    // The host owns the name; the helper binds it unchanged.
+    if (!"agentdevice-snapshot-helper-18093".equals(
+        SessionPeerPolicy.sessionSocketName("agentdevice-snapshot-helper-18093"))) {
+      throw new AssertionError("Expected the launched socket name to be bound unchanged");
     }
-    String atLimit = repeat('a', 64);
-    if (SessionPeerPolicy.commandLineDecision(atLimit, 64) != SessionPeerPolicy.LineDecision.ACCEPTED) {
-      throw new AssertionError("Expected a line of exactly the limit to be accepted");
+    // A name outside the helper's own namespace is refused: the session cannot bind a socket that
+    // belongs to something else on the device.
+    for (String refused : new String[] {"abstract-socket", "", "agentdevice"}) {
+      try {
+        SessionPeerPolicy.sessionSocketName(refused);
+        throw new AssertionError("Expected a name outside the namespace to be refused: " + refused);
+      } catch (IllegalArgumentException expected) {
+      }
     }
-  }
-
-  private static void rejectsEmptyCommandLines() {
-    if (SessionPeerPolicy.commandLineDecision("", 64) != SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
-      throw new AssertionError("Expected an empty line to be rejected as empty");
+    try {
+      SessionPeerPolicy.sessionSocketName(null);
+      throw new AssertionError("Expected a missing socket name to be refused");
+    } catch (IllegalArgumentException expected) {
     }
-  }
-
-  private static void rejectsCommandLinesOverTheByteLimit() {
-    String overLimit = repeat('a', 65);
-    if (SessionPeerPolicy.commandLineDecision(overLimit, 64) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError("Expected a line over the limit to be rejected");
-    }
-  }
-
-  private static void countsUtf8BytesNotChars() {
-    // Two '€' chars are two chars but six UTF-8 bytes.
-    String multibyte = "€€";
-    if (multibyte.getBytes(StandardCharsets.UTF_8).length != 6) {
-      throw new AssertionError("Expected the multibyte fixture to be six bytes");
-    }
-    if (SessionPeerPolicy.commandLineDecision(multibyte, 6) != SessionPeerPolicy.LineDecision.ACCEPTED) {
-      throw new AssertionError("Expected six bytes at a limit of six to be accepted");
-    }
-    if (SessionPeerPolicy.commandLineDecision(multibyte, 5) != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-      throw new AssertionError("Expected six bytes at a limit of five to be rejected");
+    if (!"authenticated-session-v1".equals(SessionPeerPolicy.AUTHENTICATED_SESSION_MODE)) {
+      throw new AssertionError("Expected the activation mode the host launches with");
     }
   }
 
@@ -301,13 +423,5 @@ public final class SessionPeerPolicyTest {
     if (SessionPeerPolicy.admitPeer(uid) != SessionPeerPolicy.Admission.ADMITTED) {
       throw new AssertionError("Expected uid " + uid + " to be admitted");
     }
-  }
-
-  private static String repeat(char value, int count) {
-    StringBuilder builder = new StringBuilder(count);
-    for (int i = 0; i < count; i += 1) {
-      builder.append(value);
-    }
-    return builder.toString();
   }
 }

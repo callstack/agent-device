@@ -35,6 +35,7 @@ const manifest: AndroidSnapshotHelperManifest = {
   targetSdk: 36,
   outputFormat: 'uiautomator-xml',
   statusProtocol: 'android-snapshot-helper-v1',
+  sessionMode: 'authenticated-session-v1',
 };
 
 beforeEach(() => {

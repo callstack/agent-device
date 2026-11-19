@@ -1,4 +1,5 @@
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-executor.ts';
+import type { AndroidSnapshotHelperManifest } from './helper-artifacts.ts';
 
 export type AndroidSnapshotHelperTransport = 'instrumentation' | 'persistent-session';
 export type AndroidSnapshotCaptureMode = 'interactive-windows' | 'active-window';
@@ -23,6 +24,22 @@ export const ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_QUIET_MS = 100;
 export const ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS = 5_000;
 export const ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 export const ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS = 30_000;
+/**
+ * The `mode` argument that starts a persistent session, and the only one the host ever sends for one.
+ * A helper build that does not implement it rejects the launch instead of serving a session, which is
+ * what keeps an unverified build off the session path (#4519). `SessionPeerPolicy.java` and the
+ * packaged artifact manifest carry the same value.
+ */
+export const ANDROID_SNAPSHOT_HELPER_SESSION_MODE = 'authenticated-session-v1';
+/**
+ * Prefix of the abstract device socket a session helper binds. The host owns the whole name and
+ * declares it in the launch (`-e sessionSocket <name>`), so the helper binds what it is told and the
+ * two ends cannot drift apart. The name carries no secret: the helper admits a connection only after
+ * reading the forwarded peer's adbd uid via `LocalSocket.getPeerCredentials()`, before any command
+ * byte is read, so the name is a routing label, not a credential, and nothing sensitive travels in
+ * argv beyond it.
+ */
+export const ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX = 'agentdevice-snapshot-helper-';
 
 /**
  * Who releases the helper's persistent instrumentation session.
@@ -72,6 +89,12 @@ export type AndroidSnapshotHelperCaptureOptions = {
   helperSha256?: string;
   packageName?: string;
   instrumentationRunner?: string;
+  /**
+   * The persistent-session transport the helper artifact declares (`AndroidSnapshotHelperManifest.sessionMode`).
+   * Only an artifact that declares the authenticated mode may be started as a session; anything else
+   * is one-shot (#4519).
+   */
+  helperSessionMode?: AndroidSnapshotHelperManifest['sessionMode'];
   waitForIdleTimeoutMs?: number;
   waitForIdleQuietMs?: number;
   timeoutMs?: number;

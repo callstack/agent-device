@@ -12,7 +12,6 @@ import {
   type AndroidInstrumentationProcessRecord,
 } from './instrumentation-helper.ts';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
-import { forgetAndroidSnapshotHelperInstall } from './snapshot-helper-install.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -33,11 +32,12 @@ import {
 import {
   allocateAndroidSnapshotHelperSessionPort,
   androidSnapshotHelperSessionForwardTarget,
+  androidSnapshotHelperSessionLaunchArgs,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
-  SESSION_TRANSPORT_UNSUPPORTED_REASON,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
+import { androidSnapshotHelperSessionModeSupportsSession } from './snapshot-helper-artifact.ts';
 import {
   type AndroidSnapshotHelperProcessExit,
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
@@ -109,9 +109,9 @@ const sessionsSlot = Symbol('androidSnapshotHelperSessions');
 const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
   runtimeSlot(sessionsSlot, () => new Map<string, AndroidSnapshotHelperSession>());
 /**
- * Session identity, or a helper build alone, → when this process may spawn that helper build again
- * after a failed start or a failed session capture. An unsupported session transport is a property
- * of the build, so it backs off under the build alone; every entry here is timed.
+ * Capture identity → when this process may start that helper again after a failed start or a failed
+ * session capture. Every entry here is timed, except a build whose live session went silent, which
+ * stays one-shot until reset.
  */
 const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
 const failedSessions = (): Map<string, number> =>
@@ -142,6 +142,11 @@ export async function acquireAndroidSnapshotHelperSession(
     return undefined;
   }
   const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
+  // Capability comes from the artifact, never from the running helper: a build that does not declare
+  // the authenticated session mode is not asked to start one (#4519).
+  if (!androidSnapshotHelperSessionModeSupportsSession(options.helperSessionMode)) {
+    return undefined;
+  }
   const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions(callerResolved);
   const build = {
     deviceKey,
@@ -154,7 +159,6 @@ export async function acquireAndroidSnapshotHelperSession(
   const session = await resolveAndroidSnapshotHelperSession({
     deviceKey,
     identity: createSessionIdentity(build, resolved),
-    buildIdentity: createHelperBuildIdentity(build),
     options,
     resolved,
     startBudgetMs: resolveAndroidSnapshotHelperSessionBudgetMs(callerResolved.commandTimeoutMs),
@@ -180,15 +184,11 @@ export async function getLiveAndroidSnapshotHelperSession(
 async function resolveAndroidSnapshotHelperSession(params: {
   deviceKey: string;
   identity: string;
-  buildIdentity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
-  if (
-    isAndroidSnapshotHelperSessionBackedOff(params.buildIdentity) ||
-    isAndroidSnapshotHelperSessionBackedOff(params.identity)
-  ) {
+  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) {
     return undefined;
   }
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
@@ -211,15 +211,14 @@ async function retireUnusableAndroidSnapshotHelperSession(
 
 /**
  * Starts the helper, or answers `undefined` for a start that failed. A start that failed is not a
- * command that failed — the caller answers with the one-shot transport. A transient failure earns
- * a timed backoff under the capture identity. An unsupported transport earns the same timed
- * backoff under the helper build, so other capture settings do not respawn it, and drops the
- * install memo. No answer marks a build for good.
+ * command that failed — the caller answers with the one-shot transport. Any failure earns the same
+ * timed backoff under the capture identity, so a burst of commands does not re-pay a slow failure.
+ * Nothing here decides what the helper build can do: that came from the artifact before launch, and
+ * no answer from the device marks a build for good.
  */
 async function tryStartAndroidSnapshotHelperSession(params: {
   deviceKey: string;
   identity: string;
-  buildIdentity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
@@ -230,36 +229,10 @@ async function tryStartAndroidSnapshotHelperSession(params: {
   } catch (error) {
     params.options.signal?.throwIfAborted();
     const reason = error instanceof AppError ? error.details?.reason : undefined;
-    const retryAtMs =
-      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs);
-    if (reason === SESSION_TRANSPORT_UNSUPPORTED_REASON) {
-      // A digest checked before launch does not prove which APK answered, so no answer is final.
-      // The build backs off for a while whatever capture settings ask next, and the install memo
-      // is dropped so the next install check inspects the device.
-      failedSessions().set(params.buildIdentity, retryAtMs);
-      if (params.options.helperVersionCode !== undefined) {
-        forgetAndroidSnapshotHelperInstall({
-          deviceKey: params.deviceKey,
-          packageName: params.resolved.packageName,
-          versionCode: params.options.helperVersionCode,
-        });
-      }
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'android_snapshot_helper_session_transport_unsupported',
-        data: {
-          deviceKey: params.deviceKey,
-          packageName: params.resolved.packageName,
-          runner: params.resolved.runner,
-          helperVersion: params.options.helperVersion,
-          helperVersionCode: params.options.helperVersionCode,
-          helperSha256: params.options.helperSha256,
-          retryAfterMs: retryAtMs - Date.now(),
-        },
-      });
-      return undefined;
-    }
-    failedSessions().set(params.identity, retryAtMs);
+    failedSessions().set(
+      params.identity,
+      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
+    );
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_session_start_failed',
@@ -359,10 +332,11 @@ async function startAndroidSnapshotHelperSession(params: {
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession> {
   const port = await allocateAndroidSnapshotHelperSessionPort();
-  // The device end of the forward is the helper's abstract socket, not a device TCP port, so the
-  // helper can check the forwarded peer's adbd uid before reading any command byte (#4519).
+  // The host names the abstract socket the helper binds, so the forward and the helper cannot end up
+  // describing different sockets, and nothing is left for a helper to derive (#4519).
+  const launch = androidSnapshotHelperSessionLaunchArgs(port);
   await params.options.adb(
-    ['forward', `tcp:${port}`, androidSnapshotHelperSessionForwardTarget(port)],
+    ['forward', `tcp:${port}`, androidSnapshotHelperSessionForwardTarget(launch)],
     {
       allowFailure: false,
       timeoutMs: FORWARD_TIMEOUT_MS,
@@ -371,7 +345,7 @@ async function startAndroidSnapshotHelperSession(params: {
   );
   const sessionArgs = buildAndroidSnapshotHelperArgs(
     { ...params.resolved, emitChunks: false },
-    { sessionPort: port },
+    launch,
   );
   const childProcess = params.options.adbProvider!.spawn!(sessionArgs, {
     allowFailure: true,
@@ -406,7 +380,7 @@ async function startAndroidSnapshotHelperSession(params: {
       params.startBudgetMs,
       params.options.signal,
       processRecord,
-      port,
+      launch.socketName,
     );
     sessions().set(params.deviceKey, session);
     failedSessions().delete(params.identity);
@@ -472,16 +446,6 @@ function createSessionIdentity(
     maxDepth: resolved.maxDepth,
     maxNodes: resolved.maxNodes,
   });
-}
-
-/**
- * The key for a decision that belongs to the helper build rather than to one command's budgets: what
- * a build can or cannot do does not change with the traversal limits it was asked to capture under.
- */
-function createHelperBuildIdentity(
-  build: { deviceKey: string } & AndroidSnapshotHelperSessionHelperIdentity,
-): string {
-  return JSON.stringify(build);
 }
 
 /**

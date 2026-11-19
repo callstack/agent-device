@@ -91,7 +91,11 @@ case "$HELPER" in
 
     node - "$VERSION" "$RELEASE_TAG" "$APK_BASENAME" "$APK_URL" "$SHA256" "$CHECKSUM_BASENAME" "$PACKAGE_NAME" "$VERSION_CODE" "$MIN_SDK" "$TARGET_SDK" > "$MANIFEST_PATH" <<'NODE'
 const [version, releaseTag, assetName, apkUrl, sha256, checksumName, packageName, versionCode, minSdk, targetSdk] = process.argv.slice(2);
-console.log(JSON.stringify({ name: 'android-snapshot-helper', version, releaseTag, assetName, apkUrl: apkUrl || null, sha256, checksumName, packageName, versionCode: Number(versionCode), instrumentationRunner: `${packageName}/.SnapshotInstrumentation`, minSdk: Number(minSdk), targetSdk: Number(targetSdk), outputFormat: 'uiautomator-xml', statusProtocol: 'android-snapshot-helper-v1' }, null, 2));
+// The session mode this APK implements, declared so a host knows whether it may start a session for
+// this artifact instead of asking a running helper what it happens to be (#4519). Keep in step with
+// SessionPeerPolicy.AUTHENTICATED_SESSION_MODE.
+const sessionMode = 'authenticated-session-v1';
+console.log(JSON.stringify({ name: 'android-snapshot-helper', version, releaseTag, assetName, apkUrl: apkUrl || null, sha256, checksumName, packageName, versionCode: Number(versionCode), instrumentationRunner: `${packageName}/.SnapshotInstrumentation`, minSdk: Number(minSdk), targetSdk: Number(targetSdk), outputFormat: 'uiautomator-xml', statusProtocol: 'android-snapshot-helper-v1', sessionMode }, null, 2));
 NODE
     ;;
   ime)

@@ -7,11 +7,14 @@ import android.system.OsConstants;
 import android.system.StructPollfd;
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 
 /**
  * Nonblocking reads and sends on an accepted LocalSocket, with poll for readiness. API 21 and later.
- * The socket timeout is not used: Android 7.0 and 7.1.0 set only SO_SNDTIMEO for it, and where it
- * is set it bounds each blocking call, not the command.
+ * Every wait takes the absolute deadline and derives its own poll duration when it starts: a
+ * duration sampled earlier would let a pause between the deadline check and the poll wait past the
+ * deadline. The socket timeout is not used: Android 7.0 and 7.1.0 set only SO_SNDTIMEO for it, and
+ * where it is set it bounds each blocking call, not the command.
  */
 final class LocalSocketSessionChannel
     implements SessionPeerPolicy.CommandSource, SessionFrameWriter.Channel {
@@ -21,9 +24,11 @@ final class LocalSocketSessionChannel
   private static final int MSG_NOSIGNAL = 0x4000;
 
   private final FileDescriptor fd;
+  private final SessionPeerPolicy.MonotonicClock clock;
 
-  LocalSocketSessionChannel(LocalSocket socket) {
+  LocalSocketSessionChannel(LocalSocket socket, SessionPeerPolicy.MonotonicClock clock) {
     this.fd = socket.getFileDescriptor();
+    this.clock = clock;
   }
 
   @Override
@@ -38,9 +43,9 @@ final class LocalSocketSessionChannel
   }
 
   @Override
-  public void awaitReadable(long timeoutMs) throws IOException {
+  public void awaitReadable(long deadlineAtMs) throws IOException {
     // A closed peer is readable: the next receive reports the end of the stream.
-    poll(OsConstants.POLLIN, timeoutMs, OsConstants.POLLERR | OsConstants.POLLNVAL);
+    pollUntil(OsConstants.POLLIN, deadlineAtMs, OsConstants.POLLERR | OsConstants.POLLNVAL);
   }
 
   @Override
@@ -54,19 +59,25 @@ final class LocalSocketSessionChannel
   }
 
   @Override
-  public void awaitWritable(long timeoutMs) throws IOException {
-    poll(
+  public void awaitWritable(long deadlineAtMs) throws IOException {
+    pollUntil(
         OsConstants.POLLOUT,
-        timeoutMs,
+        deadlineAtMs,
         OsConstants.POLLERR | OsConstants.POLLHUP | OsConstants.POLLNVAL);
   }
 
-  private void poll(int events, long timeoutMs, int failures) throws IOException {
+  private void pollUntil(int events, long deadlineAtMs, int failures) throws IOException {
+    // Sample the clock here, not at the caller: the duration must be what the deadline has left
+    // when Os.poll starts, or a pause before this call would extend it.
+    long remainingMs = deadlineAtMs - clock.nowMs();
+    if (remainingMs <= 0) {
+      throw new SocketTimeoutException("session socket deadline exceeded");
+    }
     StructPollfd pollfd = new StructPollfd();
     pollfd.fd = fd;
     pollfd.events = (short) events;
     try {
-      Os.poll(new StructPollfd[] {pollfd}, (int) Math.min(timeoutMs, Integer.MAX_VALUE));
+      Os.poll(new StructPollfd[] {pollfd}, (int) Math.min(remainingMs, Integer.MAX_VALUE));
     } catch (ErrnoException error) {
       if (error.errno == OsConstants.EINTR) return;
       throw new IOException("session socket poll failed", error);

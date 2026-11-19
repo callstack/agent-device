@@ -11,6 +11,7 @@ import {
   createSessionProvider,
   type SessionProviderOptions,
 } from './snapshot-helper-session.fixtures.ts';
+import { ANDROID_SNAPSHOT_HELPER_SESSION_MODE } from '../snapshot-helper-types.ts';
 
 // Two daemon runtimes in one process each own their helper sessions, failed starts and pending
 // retirements; closing one stops its helpers and leaves the other's warm.
@@ -31,6 +32,7 @@ function runtimeOnDevice(deviceKey: string, options: Partial<SessionProviderOpti
           await captureAndroidSnapshotWithHelperSession({
             adb: provider.exec,
             adbProvider: provider,
+            helperSessionMode: ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
             deviceKey,
           }),
       ),
