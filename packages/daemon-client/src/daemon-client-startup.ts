@@ -31,6 +31,7 @@ import {
   type DaemonObservationSettings,
   type DaemonObservationOptions,
   observedDaemonIdentityOf,
+  formatDaemonTakeoverNotice,
   readDaemonInfo,
   type DaemonInfo,
 } from './daemon-client-metadata.ts';
@@ -271,13 +272,6 @@ function emitDaemonTakeoverNotice(notice: DaemonTakeoverNotice): void {
   try {
     process.stderr.write(escapeTerminalText(formatDaemonTakeoverNotice(notice)));
   } catch {}
-}
-
-/** One line saying which daemon is replaced, where, and why. */
-function formatDaemonTakeoverNotice(notice: DaemonTakeoverNotice): string {
-  const { pid, version } = notice.previous;
-  const identity = version ? `pid ${pid}, v${version}` : `pid ${pid}`;
-  return `Replacing daemon (${identity}) in ${notice.stateDir}: ${notice.reason}\n`;
 }
 
 type FailedDaemonStartup = {

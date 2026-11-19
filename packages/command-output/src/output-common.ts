@@ -141,9 +141,12 @@ export function routeResponseWarnings(
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
 export function collapseWarningText(warning: string): string {
   // Escaped too, so a warning stays safe inside text a formatter marks `terminalSafe`.
-  return escapeTerminalText(
-    warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace)),
-  );
+  return escapeTerminalText(foldWarningText(warning));
+}
+
+/** A warning folded onto one line, its text otherwise exact: for files and structured output. */
+export function foldWarningText(warning: string): string {
+  return warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace));
 }
 
 /**

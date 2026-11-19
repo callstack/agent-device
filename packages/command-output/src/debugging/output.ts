@@ -1,6 +1,11 @@
 import type { CommandName } from '@agent-device/command-surface';
 import type { DebugSymbolsResult } from '@agent-device/contracts/observability';
-import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
+import {
+  appendWarningLinesText,
+  resultOutput,
+  type CliOutputFormatter,
+  type CliOutput,
+} from '../output-common.ts';
 
 function debugSymbolsCliOutput(result: DebugSymbolsResult): CliOutput {
   const lines = [result.outPath, result.message];
@@ -8,10 +13,11 @@ function debugSymbolsCliOutput(result: DebugSymbolsResult): CliOutput {
   for (const image of result.matchedImages) {
     lines.push(`Matched: ${image.name} ${image.uuid}${image.arch ? ` ${image.arch}` : ''}`);
   }
-  for (const warning of result.warnings ?? []) {
-    lines.push(`Warning: ${warning}`);
-  }
-  return { data: result, text: lines.join('\n') };
+  // One folded `Warning:` line per warning, like every other response warning.
+  return {
+    data: result,
+    text: appendWarningLinesText(lines.join('\n'), { warnings: result.warnings ?? [] }),
+  };
 }
 
 export const debuggingCliOutputFormatters = {

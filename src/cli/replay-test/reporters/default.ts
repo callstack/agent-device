@@ -6,6 +6,7 @@ import {
 } from '../progress.ts';
 import { formatDurationSeconds } from '../duration-format.ts';
 import { colorize, supportsColor } from '@agent-device/command-output';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import type {
   ReplayTestReporter,
@@ -13,7 +14,6 @@ import type {
   ReplayTestReporterProgressEvent,
 } from './types.ts';
 import {
-  escapeReporterInput,
   getReplayTestExitCode,
   isDefinedString,
   isFailedReplayTestResult,
@@ -85,19 +85,19 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     name: 'default',
     onSuiteStart: (suite, context) => {
       hideCursor(context);
-      renderProgress({ type: 'suite-start', suite: escapeReporterInput(suite) }, context);
+      renderProgress({ type: 'suite-start', suite }, context);
     },
     onTestStep: (test, context) => {
-      renderProgress({ type: 'test-step', test: escapeReporterInput(test) }, context);
+      renderProgress({ type: 'test-step', test }, context);
     },
     onTestResult: (test, context) => {
-      renderProgress({ type: 'test-result', test: escapeReporterInput(test) }, context);
+      renderProgress({ type: 'test-result', test }, context);
     },
     onSuiteEnd: (suite, context) => {
       stopLiveProgressInterval();
       latestLiveProgressEvent = undefined;
       showCursor(context);
-      renderReplayTestSummary(escapeReporterInput(suite), context);
+      renderReplayTestSummary(suite, context);
     },
     getExitCode: getReplayTestExitCode,
   };
@@ -109,6 +109,14 @@ function shouldUseLiveProgress(context: ReplayTestReporterContext): boolean {
 
 function terminalReflowsOnResize(): boolean {
   return !process.env.TMUX && !process.env.STY;
+}
+
+/**
+ * A summary line built from run values: written through the CLI escape. The reporter's own color codes are written
+ * outside it, so they are the only control characters that reach the terminal raw.
+ */
+function writeText(stream: ReplayTestReporterContext['stdout'], text: string): void {
+  stream.write(escapeTerminalText(text));
 }
 
 function renderReplayTestSummary(
@@ -137,7 +145,7 @@ function renderWarningsSection(
   context.stdout.write('Warnings:\n');
   for (const { result, lines } of warned) {
     for (const line of lines) {
-      context.stdout.write(`  ${replayTestDisplayNameWithFile(result)}: ${line}\n`);
+      writeText(context.stdout, `  ${replayTestDisplayNameWithFile(result)}: ${line}\n`);
     }
   }
 }
@@ -191,15 +199,18 @@ function renderFlakyTestSummary(
   context.stdout.write('\n');
   context.stdout.write('Flaky tests:\n');
   for (const result of results) {
-    context.stdout.write(
-      `  ${replayFlakyStatusIcon()} ${replayTestDisplayNameWithFile(result)} after ${result.attempts} attempts${formatFlakyReplayDurationSuffix(result)}\n`,
+    context.stdout.write(`  ${replayFlakyStatusIcon()} `);
+    writeText(
+      context.stdout,
+      `${replayTestDisplayNameWithFile(result)} after ${result.attempts} attempts${formatFlakyReplayDurationSuffix(result)}\n`,
     );
     for (const failure of result.attemptFailures ?? []) {
       const attemptDuration =
         typeof failure.durationMs === 'number'
           ? ` (${formatDurationSeconds(failure.durationMs)})`
           : '';
-      context.stdout.write(
+      writeText(
+        context.stdout,
         `    attempt ${failure.attempt} failed${attemptDuration}: ${failure.message}\n`,
       );
     }
@@ -214,7 +225,7 @@ function renderFailureDetails(
   context.stdout.write('\n');
   context.stdout.write('Failures:\n');
   for (const result of results) {
-    context.stdout.write(`  ${replayTestDisplayNameWithFile(result)}\n`);
+    writeText(context.stdout, `  ${replayTestDisplayNameWithFile(result)}\n`);
     renderReplayFailureBody(result, context, '    ');
   }
 }
@@ -225,15 +236,15 @@ function renderReplayFailureBody(
   indent: string,
 ): void {
   const fileLine = replayTestFailureFileLine(result);
-  if (fileLine) context.stdout.write(`${indent}${fileLine}\n`);
-  context.stdout.write(`${indent}${result.error?.message ?? 'Unknown test failure'}\n`);
+  if (fileLine) writeText(context.stdout, `${indent}${fileLine}\n`);
+  writeText(context.stdout, `${indent}${result.error?.message ?? 'Unknown test failure'}\n`);
   for (const line of replayFailureConsoleLines(result)) {
-    context.stdout.write(`${indent}${line}\n`);
+    writeText(context.stdout, `${indent}${line}\n`);
   }
   renderReplayFailureDivergence(result, context, indent);
   if (!context.debug) return;
   for (const line of replayTestFailureStepLines(result)) {
-    context.stdout.write(`${indent}${line}\n`);
+    writeText(context.stdout, `${indent}${line}\n`);
   }
 }
 
@@ -247,7 +258,7 @@ function renderReplayFailureDivergence(
   const divergence = formatReplayDivergenceReport(result.error?.details);
   if (!divergence) return;
   for (const line of divergence.split('\n')) {
-    context.stdout.write(`${indent}${line}\n`);
+    writeText(context.stdout, `${indent}${line}\n`);
   }
 }
 

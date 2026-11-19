@@ -36,6 +36,7 @@ import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export type { DaemonRequest, DaemonResponse };
 export { readRegisteredDaemon };
+export { formatDaemonTakeoverNotice } from './daemon-client-metadata.ts';
 
 /** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(

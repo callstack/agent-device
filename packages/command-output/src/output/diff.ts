@@ -21,8 +21,9 @@ export function formatSnapshotDiffText(
   const removals = toNumber(summaryRaw.removals);
   const unchanged = toNumber(summaryRaw.unchanged);
   const useColor = supportsColor(env, stdout);
-  // This text is written through the raw path to keep its colors, so every value in it is escaped here.
-  const notices = readSnapshotWarnings(data).map(escapeTerminalText);
+  // This text is written through the raw path to keep its colors, so every value in it is escaped; the notices come
+  // escaped from readSnapshotWarnings.
+  const notices = readSnapshotWarnings(data);
   const noticesBlock = notices.length > 0 ? `${notices.join('\n')}\n` : '';
   if (baselineInitialized) {
     return `${noticesBlock}Baseline initialized (${unchanged} lines).\n`;

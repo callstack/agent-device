@@ -5,7 +5,7 @@ import {
   buildDaemonHttpBaseUrl,
   normalizeDaemonPublicOrigin,
 } from '@agent-device/contracts/daemon-http';
-import { ensureProxyUpstreamDaemon } from '@agent-device/daemon-client';
+import { ensureProxyUpstreamDaemon, formatDaemonTakeoverNotice } from '@agent-device/daemon-client';
 import { AppError } from '@agent-device/kernel/errors';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { colorize, supportsColor } from '@agent-device/command-output';
@@ -133,14 +133,8 @@ function formatProxyOutputValue(
 }
 
 /** The daemon ensuring is about to retire, written through the escaping CLI writer. */
-function writeDaemonTakeoverNotice(notice: {
-  stateDir: string;
-  previous: { pid: number; version?: string };
-  reason: string;
-}): void {
-  const { pid, version } = notice.previous;
-  const identity = version ? `pid ${pid}, v${version}` : `pid ${pid}`;
-  writeStderr(`Replacing daemon (${identity}) in ${notice.stateDir}: ${notice.reason}\n`);
+function writeDaemonTakeoverNotice(notice: Parameters<typeof formatDaemonTakeoverNotice>[0]): void {
+  writeStderr(formatDaemonTakeoverNotice(notice));
 }
 
 function waitForever(): Promise<never> {

@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 import { formatDurationSeconds } from './duration-format.ts';
-import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
 type ReplayActionStartTrace = {
   type: 'replay_action_start';
@@ -43,8 +42,7 @@ export function replayTestFailureStepLines(
   const window = stops.slice(Math.max(0, failedIndex - 2), failedIndex + 1);
   return [
     result.attempts > 1 ? `steps (attempt ${result.attempts}):` : 'steps:',
-    // Trace records come from the run, so a rendered line is escaped before a reporter prints it.
-    ...window.map(({ stop, start }) => escapeTerminalText(renderReplayStepTrace(stop, start))),
+    ...window.map(({ stop, start }) => renderReplayStepTrace(stop, start)),
   ];
 }
 

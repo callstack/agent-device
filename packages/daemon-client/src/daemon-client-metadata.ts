@@ -203,3 +203,14 @@ function readDaemonPort(value: unknown): number | undefined {
 export function isRemoteDaemon(info: DaemonInfo): boolean {
   return typeof info.baseUrl === 'string' && info.baseUrl.length > 0;
 }
+
+/** One line saying which daemon is replaced, where, and why. */
+export function formatDaemonTakeoverNotice(notice: {
+  stateDir: string;
+  previous: { pid: number; version?: string };
+  reason: string;
+}): string {
+  const { pid, version } = notice.previous;
+  const identity = version ? `pid ${pid}, v${version}` : `pid ${pid}`;
+  return `Replacing daemon (${identity}) in ${notice.stateDir}: ${notice.reason}\n`;
+}

@@ -3,7 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { writeStdoutRaw, writeStderrRaw } from '../process-exit.ts';
+import { writeStderr, writeStdout } from '../process-exit.ts';
 
 const AGENT_CDP_VERSION = '1.6.1';
 export const AGENT_CDP_PACKAGE = `agent-cdp@${AGENT_CDP_VERSION}`;
@@ -88,11 +88,13 @@ export async function runAgentCdpCommand(
     cwd: options.cwd,
     env: options.env,
     allowFailure: true,
+    // The child prints page-controlled text (target titles, console messages), so its output is escaped like every CLI
+    // write. Chunks arrive decoded by the stream's UTF-8 decoder, so a sequence split across chunks stays whole.
     onStdoutChunk: (chunk) => {
-      writeStdoutRaw(chunk);
+      writeStdout(chunk);
     },
     onStderrChunk: (chunk) => {
-      writeStderrRaw(chunk);
+      writeStderr(chunk);
     },
   });
   return result.exitCode;

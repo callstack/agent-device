@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { appendWarningLinesText, routeResponseWarnings } from './output-common.ts';
-import { collapseWarningText } from './index.ts';
+import {
+  appendWarningLinesText,
+  collapseWarningText,
+  routeResponseWarnings,
+} from './output-common.ts';
 
 const WARNING = 'The session app was not foreground when this command arrived.';
 

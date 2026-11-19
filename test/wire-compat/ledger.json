@@ -624,7 +624,7 @@
     {
       "declaration": "packages/contracts/src/request-progress.ts#CommandProgressEvent",
       "digest": "sha256:5ed7aee1157326d6ed99232c4b14375640ca7aef829131eb6c98bb54f3b1aed0",
-      "rationale": "Adds the optional marker field (pass, fail, warn or skip) to a command progress event, set on a doctor check line. A new daemon sends the line uncolored with its marker, and a new CLI colors the marker after escaping the text. A released CLI ignores the unknown field and prints the message, which is a complete uncolored line. A released daemon never sends the field, and a new CLI then prints its message escaped and uncolored. The event type, status and message are unchanged, and no route, status or framing changes."
+      "rationale": "Adds the optional marker field (pass, fail, warn or skip) to a command progress event, set on a doctor check line. A new daemon sends the line uncolored with its marker, and a new CLI colors the marker after escaping the text. A released CLI ignores the unknown field and prints the message, which is a complete uncolored line. A released daemon never sends the field, and colored its doctor lines itself when its stderr was a TTY or FORCE_COLOR was set: against a new CLI those colored lines now print with their color codes shown escaped (for example \\u001b[32m), and uncolored lines print as before. The event type, status and message are unchanged, and no route, status or framing changes."
     }
   ]
 }

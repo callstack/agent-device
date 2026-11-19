@@ -49,3 +49,26 @@ describe('recordCliOutput', () => {
     });
   });
 });
+
+test.each([
+  {
+    name: 'a single recording',
+    data: { outPath: '/tmp/r.mp4', warning: 'Overlay skipped\nfor this run' },
+  },
+  {
+    name: 'chunked recordings',
+    data: {
+      outPath: '/tmp/r.mp4',
+      chunks: [
+        { index: 1, path: '/tmp/r.mp4' },
+        { index: 2, path: '/tmp/r.part-002.mp4' },
+      ],
+      warning: 'Overlay skipped\nfor this run',
+    },
+  },
+])('record folds a multi-line warning onto one Warning line ($name)', ({ data }) => {
+  const output = recordCliOutput(data);
+
+  expect(output.text).toContain('Warning: Overlay skipped for this run');
+  expect(output.text).not.toContain('Overlay skipped\nfor');
+});

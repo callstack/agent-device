@@ -1,6 +1,12 @@
 import type { CommandName } from '@agent-device/command-surface';
 import type { CommandRequestResult } from '@agent-device/contracts/client';
-import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
+import {
+  appendWarningLinesText,
+  collapseWarningText,
+  resultOutput,
+  type CliOutputFormatter,
+  type CliOutput,
+} from '../output-common.ts';
 
 export function recordCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
@@ -17,13 +23,7 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
   if (typeof data.telemetryPath === 'string') {
     lines.push(`Telemetry: ${data.telemetryPath}`);
   }
-  if (typeof data.warning === 'string') {
-    lines.push(`Warning: ${data.warning}`);
-  }
-  if (typeof data.overlayWarning === 'string') {
-    lines.push(`Overlay warning: ${data.overlayWarning}`);
-  }
-  return { data, text: lines.join('\n') };
+  return { data, text: withRecordWarnings(lines, data) };
 }
 
 export const recordingCliOutputFormatters = {
@@ -35,10 +35,15 @@ function formatRecordSingleOutput(data: Record<string, unknown>, outPath: string
   if (outPath) lines.push(outPath);
   if (typeof data.sessionStateDir === 'string')
     lines.push(`Session state: ${data.sessionStateDir}`);
-  if (typeof data.warning === 'string') lines.push(`Warning: ${data.warning}`);
-  if (typeof data.overlayWarning === 'string')
-    lines.push(`Overlay warning: ${data.overlayWarning}`);
-  return lines.join('\n');
+  return withRecordWarnings(lines, data);
+}
+
+/** The record warning as one folded `Warning:` line, like every other response warning, then the overlay warning. */
+function withRecordWarnings(lines: string[], data: Record<string, unknown>): string {
+  const text = appendWarningLinesText(lines.join('\n'), { warning: data.warning }) ?? '';
+  if (typeof data.overlayWarning !== 'string') return text;
+  const overlay = `Overlay warning: ${collapseWarningText(data.overlayWarning)}`;
+  return text ? `${text}\n${overlay}` : overlay;
 }
 
 function readRecordingChunks(

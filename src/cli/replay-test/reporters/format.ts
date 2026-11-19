@@ -1,6 +1,5 @@
 import path from 'node:path';
-import { collapseWarningText } from '@agent-device/command-output';
-import { escapeTerminalText } from '@agent-device/kernel/redaction';
+import { foldWarningText } from '@agent-device/command-output';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 export type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;
@@ -110,7 +109,7 @@ export function appendReplayTestShardMetadata(
 
 export function replayTestWarningLines(result: ReplaySuiteTestResult): string[] {
   const warnings = 'warnings' in result ? result.warnings : undefined;
-  return (warnings ?? []).map((warning) => `warning: ${collapseWarningText(warning)}`);
+  return (warnings ?? []).map((warning) => `warning: ${foldWarningText(warning)}`);
 }
 
 export function appendOptionalLine(lines: string[], line: string | undefined): void {
@@ -142,17 +141,4 @@ function replayTestShardDeviceName(result: ReplaySuiteTestResult): string | unde
   if (name) return name;
   const id = 'deviceId' in result ? result.deviceId?.trim() : undefined;
   return id || undefined;
-}
-
-/**
- * A copy of reporter input with every string escaped (`escapeTerminalText`). The built-in reporter writes raw to keep
- * its own cursor and color codes, so the titles, messages and warnings it composes from are escaped first.
- */
-export function escapeReporterInput<T>(value: T): T {
-  if (typeof value === 'string') return escapeTerminalText(value) as T;
-  if (Array.isArray(value)) return value.map(escapeReporterInput) as T;
-  if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [key, escapeReporterInput(entry)]),
-  ) as T;
 }

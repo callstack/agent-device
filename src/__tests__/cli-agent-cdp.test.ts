@@ -7,6 +7,7 @@ vi.mock('@agent-device/host-kit/command', () => ({
 }));
 
 import { runCmdStreaming } from '@agent-device/host-kit/command';
+import { withCapturedOutput } from '@agent-device/test-kit';
 import {
   AGENT_CDP_PACKAGE,
   buildAgentCdpNpmExecArgs,
@@ -185,4 +186,19 @@ test('cdp passes injected remote target url to npm exec', async () => {
     '--url',
     'http://127.0.0.1:8081',
   ]);
+});
+
+test('cdp escapes control characters in the child output it forwards', async () => {
+  vi.mocked(runCmdStreaming).mockImplementationOnce(async (_cmd, _args, options) => {
+    options?.onStdoutChunk?.('Target: Page \u001b[8mhidden\u009b\n');
+    options?.onStderrChunk?.('console: \u001b]0;title\u0007\n');
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+
+  const { stdout, stderr } = await withCapturedOutput(() =>
+    runAgentCdpCommand(['list'], { cwd: '/tmp/project', env: {} }),
+  );
+
+  assert.equal(stdout, String.raw`Target: Page \u001b[8mhidden\u009b` + '\n');
+  assert.equal(stderr, String.raw`console: \u001b]0;title\u0007` + '\n');
 });

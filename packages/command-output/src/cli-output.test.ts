@@ -352,3 +352,17 @@ test('doctor keeps its colored status markers and escapes the check text', async
     vi.unstubAllEnvs();
   }
 });
+
+test('debug folds a multi-line warning onto one Warning line', async () => {
+  const output = await render('debug', {
+    outPath: '/tmp/debug.crash',
+    message: 'Crash read',
+    crash: { topFrames: [], findings: [] },
+    matchedImages: [],
+    warnings: ['Symbols missing\nfor one image'],
+  });
+
+  const rendered = `${output.text ?? ''}${output.stderr ?? ''}`;
+  expect(rendered.split('Warning: Symbols missing for one image').length - 1).toBe(1);
+  expect(rendered).not.toContain('Symbols missing\nfor');
+});
