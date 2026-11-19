@@ -151,6 +151,49 @@ test('an unsupported build starts once unverified and once verified, then waits 
   assert.equal(spawnArgs.length, 2);
 });
 
+test('an unsupported start no check could verify stays finite, so a restored session-capable APK starts', async () => {
+  const spawnArgs: (readonly string[])[] = [];
+  // A higher-version helper without the transport is installed: the install check calls it current
+  // without reading its digest, so no command is verified.
+  const legacy = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });
+  const startedAtMs = Date.now();
+  const now = vi.spyOn(Date, 'now').mockReturnValue(startedAtMs);
+  const unverified = {
+    deviceKey: 'android:emulator-5554',
+    helperVersionCode: 21040,
+    helperSha256: 'selected-session-build',
+  };
+  assert.equal(
+    await captureAndroidSnapshotWithHelperSession({
+      ...unverified,
+      adb: legacy.exec,
+      adbProvider: legacy,
+    }),
+    undefined,
+  );
+  now.mockReturnValue(startedAtMs + 1_000);
+  assert.equal(
+    await captureAndroidSnapshotWithHelperSession({
+      ...unverified,
+      adb: legacy.exec,
+      adbProvider: legacy,
+    }),
+    undefined,
+  );
+  assert.equal(spawnArgs.length, 1, 'the unverified result still backs off');
+
+  // The selected, session-capable APK is back on the device.
+  const restored = createSessionProvider({ calls: [], spawnArgs });
+  now.mockReturnValue(startedAtMs + 61_000);
+  const output = await captureAndroidSnapshotWithHelperSession({
+    ...unverified,
+    adb: restored.exec,
+    adbProvider: restored,
+  });
+  assert.equal(output?.metadata.transport, 'persistent-session');
+  assert.equal(spawnArgs.length, 2);
+});
+
 test('a fresh on-device verification of a reinstalled APK clears the unsupported mark', async () => {
   const spawnArgs: (readonly string[])[] = [];
   const legacy = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });
