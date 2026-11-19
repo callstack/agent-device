@@ -48,19 +48,27 @@ type ScriptRecord = Readonly<{
   destination: string;
   force: boolean;
   revision: number;
-  /** The entry the newest version was committed to. A repeated version is answered with it. */
-  entry?: string;
+  /**
+   * The entry a commit created, with the revision that created it. A repeated version is answered with it only
+   * while that revision is still the committed one: a released client advances `revision` and leaves this as it
+   * was, and such a record answers its destination.
+   */
+  entry?: Readonly<{ revision: number; path: string }>;
   publishing?: Readonly<{ revision: number; file: string; staging: string }>;
   staging?: readonly string[];
   retired?: true;
 }>;
 
 /**
- * A published destination, `undefined` when no record matches, or a typed delivery failure. `repeatedRevision`
- * marks a version answered from the record alone, without looking at the file.
+ * A published destination, `undefined` when no record matches, or a typed delivery failure. `repeat` marks a
+ * version answered from the record alone, without looking at the file: the revision asked for, and the revision
+ * the record committed, which is newer when the version asked for was superseded.
  */
 type PublishOutcome =
-  | Readonly<{ published: string | undefined; repeatedRevision?: number }>
+  | Readonly<{
+      published: string | undefined;
+      repeat?: Readonly<{ requested: number; committed: number }>;
+    }>
   | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
@@ -298,14 +306,24 @@ function noteRepeatedVersion(
   closing: boolean,
 ): void {
   if (!('published' in outcome) || outcome.published === undefined) return;
-  if (outcome.repeatedRevision === undefined) return;
+  const { repeat } = outcome;
+  if (repeat === undefined) return;
   const recovery = closing
     ? 'record again with open --save-script --force.'
     : 'the next recorded action writes it again.';
   data.warnings = [
     ...readResponseWarnings(data),
-    `Revision ${outcome.repeatedRevision} of the recording was already saved to ${outcome.published} and is not checked again. If that file is missing, ${recovery}`,
+    `${repeatedVersionText(repeat, outcome.published)} It is not checked again. If that file is missing, ${recovery}`,
   ];
+}
+
+function repeatedVersionText(
+  repeat: Readonly<{ requested: number; committed: number }>,
+  published: string,
+): string {
+  return repeat.requested === repeat.committed
+    ? `Revision ${repeat.requested} of the recording was already saved to ${published}.`
+    : `Revision ${repeat.requested} of the recording is superseded; the file holds revision ${repeat.committed} at ${published}.`;
 }
 
 /**
@@ -618,19 +636,21 @@ function publishStaged(
     pending.named = false;
     throw error;
   }
-  writeRecord(file, { ...current, revision, entry });
+  writeRecord(file, { ...current, revision, entry: { revision, path: entry } });
   pending.named = false;
   return { published: entry };
 }
 
 /**
- * Answers a version the record already committed with the entry it was committed to, without touching the
- * filesystem, or nothing when the version is newer. A record from before entries were kept answers its
- * destination.
+ * Answers a version the record already committed with the entry the committed revision was created at, without
+ * touching the filesystem, or nothing when the version is newer. A record whose entry does not belong to its
+ * committed revision answers its destination.
  */
 function committedRepeat(record: ScriptRecord, revision: number): PublishOutcome | undefined {
   if (revision > record.revision) return undefined;
-  return { published: record.entry ?? record.destination, repeatedRevision: revision };
+  const published =
+    record.entry?.revision === record.revision ? record.entry.path : record.destination;
+  return { published, repeat: { requested: revision, committed: record.revision } };
 }
 
 /**
@@ -687,7 +707,8 @@ function settlePublishing(record: ScriptRecord, entry: string): ScriptRecord {
   if (!publishing) return record;
   const settled = withoutPublishing(record);
   if (fileIdentity(entry) !== publishing.file) return settled;
-  return { ...settled, revision: Math.max(settled.revision, publishing.revision), entry };
+  const revision = Math.max(settled.revision, publishing.revision);
+  return { ...settled, revision, entry: { revision, path: entry } };
 }
 
 function withoutPublishing(record: ScriptRecord): ScriptRecord {
@@ -815,7 +836,7 @@ function parseRecord(file: string): ScriptRecord | undefined {
     typeof record.destination === 'string' &&
     typeof record.force === 'boolean' &&
     Number.isSafeInteger(record.revision) &&
-    (record.entry === undefined || typeof record.entry === 'string') &&
+    (record.entry === undefined || isEntry(record.entry)) &&
     (record.publishing === undefined || isPublishing(record.publishing)) &&
     (record.retired === undefined || record.retired === true) &&
     (record.staging === undefined ||
@@ -826,6 +847,10 @@ function parseRecord(file: string): ScriptRecord | undefined {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isEntry(entry: unknown): boolean {
+  return isObject(entry) && Number.isSafeInteger(entry.revision) && typeof entry.path === 'string';
 }
 
 function isPublishing(publishing: unknown): boolean {

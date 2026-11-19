@@ -18,6 +18,7 @@ vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/file')>();
   return {
     ...actual,
+    confirmScriptDestination: vi.fn(actual.confirmScriptDestination),
     prepareScriptDestination: vi.fn(actual.prepareScriptDestination),
     withProcessLock: vi.fn(actual.withProcessLock),
   };
@@ -37,11 +38,14 @@ function caller() {
   return { root, stateDir: path.join(root, 'state'), directory: path.join(root, 'caller') };
 }
 
-/** Another delivery commits version 2: its file renamed into place and its revision recorded. */
-function otherDeliveryCommits(stateDir: string, destination: string): void {
-  fs.writeFileSync(destination, 'v2\n');
+/** Another delivery commits `revision`: its file renamed into place and its revision recorded. */
+function otherDeliveryCommits(stateDir: string, destination: string, revision = 2): void {
+  fs.writeFileSync(destination, `v${revision}\n`);
   const { file: recordFile, record } = soleRecord(stateDir);
-  fs.writeFileSync(recordFile, JSON.stringify({ ...record, revision: 2, entry: destination }));
+  fs.writeFileSync(
+    recordFile,
+    JSON.stringify({ ...record, revision, entry: { revision, path: destination } }),
+  );
 }
 
 test('a failed download after another delivery commits the same version reports the file', async () => {
@@ -74,28 +78,95 @@ test('a commit that lands while a failed download cleans up its staging is still
   const baseUrl = await artifactServer(served);
   const { id } = await open(baseUrl, stateDir, destination);
   delete served.v2;
+  const { file: recordFile } = soleRecord(stateDir);
+  // Numbers each record-lock acquisition, so the cleanup and the reread that decides can be placed in one.
+  let acquisitions = 0;
+  let active: number | undefined;
+  vi.mocked(file.withProcessLock).mockImplementation((options) =>
+    actual.withProcessLock({
+      ...options,
+      task: async () => {
+        active = ++acquisitions;
+        try {
+          return await options.task();
+        } finally {
+          active = undefined;
+        }
+      },
+    }),
+  );
+  let cleanup: number | undefined;
+  const rereads: Array<number | undefined> = [];
   const rm = fs.rmSync.bind(fs) as (...args: unknown[]) => void;
-  let landed = false;
-  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((...args: unknown[]) => {
-    const target = String(args[0]);
-    if (!landed && path.basename(target).startsWith('.agent-device-script-')) {
-      landed = true;
-      otherDeliveryCommits(stateDir, destination);
-    }
-    rm(...args);
-  }) as typeof fs.rmSync);
+  const read = fs.readFileSync.bind(fs) as (...args: unknown[]) => string | Buffer;
+  const spies = [
+    vi.spyOn(fs, 'rmSync').mockImplementation(((...args: unknown[]) => {
+      if (
+        cleanup === undefined &&
+        path.basename(String(args[0])).startsWith('.agent-device-script-')
+      ) {
+        otherDeliveryCommits(stateDir, destination);
+        cleanup = active;
+      }
+      rm(...args);
+    }) as typeof fs.rmSync),
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((...args: unknown[]) => {
+      if (cleanup !== undefined && args[0] === recordFile) rereads.push(active);
+      return read(...args);
+    }) as typeof fs.readFileSync),
+  ];
 
   try {
     const late = await answer(baseUrl, stateDir, request('click'), {
       artifacts: [script('v2', 2, id)],
     });
 
-    expect(landed).toBe(true);
+    expect(cleanup).toBeDefined();
+    // The staging release and the decision both reread the record, inside the cleanup's own acquisition.
+    expect(rereads).toEqual([cleanup, cleanup]);
     expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
     expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
   } finally {
-    spy.mockRestore();
+    for (const spy of spies) spy.mockRestore();
   }
+});
+
+test('a held download that loses to a newer commit reports it superseded and overwrites nothing', async () => {
+  // Version 3 is committed by another delivery while this client still holds the download of version 2.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' } };
+  Object.defineProperty(served, 'v2', {
+    enumerable: true,
+    get: () => {
+      otherDeliveryCommits(stateDir, destination, 3);
+      return { body: 'v2\n' };
+    },
+  });
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+  vi.mocked(file.confirmScriptDestination).mockClear();
+
+  const late = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  // Answered from the record before the destination is walked again.
+  expect(file.confirmScriptDestination).not.toHaveBeenCalled();
+
+  expect(late).toMatchObject({
+    ok: true,
+    data: {
+      savedScript: destination,
+      warnings: [
+        `Revision 2 of the recording is superseded; the file holds revision 3 at ${destination}. It is not checked again. If that file is missing, the next recorded action writes it again.`,
+      ],
+    },
+  });
+  expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v3\n');
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 3, staging: [] });
+  expect(fs.readdirSync(directory)).toEqual(['journey.ad']);
 });
 
 test('a transient failure acquiring the final record lock still releases staging', async () => {

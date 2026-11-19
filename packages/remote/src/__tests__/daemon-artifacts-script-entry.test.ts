@@ -253,41 +253,47 @@ test('a version delivered again is answered from the record without touching the
     data: {
       savedScript: entry,
       warnings: [
-        `Revision 1 of the recording was already saved to ${entry} and is not checked again. If that file is missing, the next recorded action writes it again.`,
+        `Revision 1 of the recording was already saved to ${entry}. It is not checked again. If that file is missing, the next recorded action writes it again.`,
       ],
     },
   });
   expect(again.ok && again.data).not.toHaveProperty('scriptDeliveryFailure');
 });
 
-/** Records every synchronous `fs` call that names a path under `root`, and restores the spies at test end. */
+/**
+ * Records every `fs` call, synchronous or through `fs.promises`, that names a path under `root`, and restores
+ * the spies at test end.
+ */
 function spyOnPathsUnder(root: string): () => string[] {
   const touched: string[] = [];
-  const methods = [
-    'accessSync',
-    'existsSync',
-    'linkSync',
-    'lstatSync',
-    'mkdirSync',
-    'mkdtempSync',
-    'openSync',
-    'readFileSync',
-    'readdirSync',
-    'realpathSync',
-    'renameSync',
-    'rmSync',
-    'statSync',
-    'writeFileSync',
-  ] as const;
-  const target = fs as unknown as Record<(typeof methods)[number], (...args: unknown[]) => unknown>;
-  for (const method of methods) {
-    const original = target[method].bind(fs);
-    const spy = vi.spyOn(target, method).mockImplementation((...args: unknown[]) => {
-      if (String(args[0]).startsWith(root)) touched.push(`${method} ${String(args[0])}`);
-      return original(...args);
-    });
-    onTestFinished(() => spy.mockRestore());
-  }
+  const spyOn = (owner: object, label: string, methods: readonly string[]) => {
+    const target = owner as Record<string, (...args: unknown[]) => unknown>;
+    for (const method of methods) {
+      const original = target[method]!.bind(owner);
+      const spy = vi.spyOn(target, method).mockImplementation((...args: unknown[]) => {
+        if (String(args[0]).startsWith(root)) touched.push(`${label}${method} ${String(args[0])}`);
+        return original(...args);
+      });
+      onTestFinished(() => spy.mockRestore());
+    }
+  };
+  const operations = [
+    'access',
+    'link',
+    'lstat',
+    'mkdir',
+    'mkdtemp',
+    'open',
+    'readFile',
+    'readdir',
+    'realpath',
+    'rename',
+    'rm',
+    'stat',
+    'writeFile',
+  ];
+  spyOn(fs, '', [...operations.map((name) => `${name}Sync`), 'existsSync']);
+  spyOn(fs.promises, 'promises.', operations);
   return () => touched;
 }
 
@@ -339,7 +345,10 @@ test('a record that still carries a content digest parses, and a repeat ignores 
   expect(again).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(next).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
-  expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, entry: destination });
+  expect(soleRecord(stateDir).record).toMatchObject({
+    revision: 2,
+    entry: { revision: 2, path: destination },
+  });
 });
 
 test.skipIf(process.platform === 'win32')(
@@ -433,6 +442,79 @@ test('re-offering a version an interrupted commit already put in place needs no 
   expect(reoffered).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(reoffered.ok && reoffered.data).not.toHaveProperty('scriptDeliveryFailure');
   expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
-  expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, entry: destination });
+  expect(soleRecord(stateDir).record).toMatchObject({
+    revision: 2,
+    entry: { revision: 2, path: destination },
+  });
   expect(soleRecord(stateDir).record).not.toHaveProperty('publishing');
+});
+
+/** A recording opened through a linked parent, so its destination and its committed entry are spelled apart. */
+async function linkedRecording() {
+  const { stateDir, directory } = caller();
+  const real = path.join(directory, 'real');
+  fs.mkdirSync(real, { recursive: true, mode: 0o700 });
+  fs.symlinkSync(real, path.join(directory, 'linked'));
+  const destination = path.join(directory, 'linked', 'journey.ad');
+  const entry = path.join(real, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  return { stateDir, directory, destination, entry, baseUrl, id };
+}
+
+test.skipIf(process.platform === 'win32')(
+  'a record without an entry answers a repeat with its destination',
+  async () => {
+    const { stateDir, destination, baseUrl, id } = await linkedRecording();
+    const { file: recordFile, record } = soleRecord(stateDir);
+    const { entry: _entry, ...legacy } = record;
+    fs.writeFileSync(recordFile, JSON.stringify(legacy));
+
+    const again = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v1', 1, id)],
+    });
+
+    expect(again).toMatchObject({ ok: true, data: { savedScript: destination } });
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'an entry left behind by a later revision the record committed answers with the destination',
+  async () => {
+    // A released client committed revision 2 and kept the entry it does not know, still naming revision 1.
+    const { stateDir, destination, entry, baseUrl, id } = await linkedRecording();
+    const { file: recordFile, record } = soleRecord(stateDir);
+    expect(record.entry).toEqual({ revision: 1, path: entry });
+    fs.writeFileSync(recordFile, JSON.stringify({ ...record, revision: 2 }));
+
+    const again = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v2', 2, id)],
+    });
+
+    expect(again).toMatchObject({ ok: true, data: { savedScript: destination } });
+  },
+);
+
+test('a recorded entry is only reported: a newer version is written to the authorized destination', async () => {
+  const { root, stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const decoy = path.join(root, 'decoy.ad');
+  fs.writeFileSync(decoy, 'decoy\n');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file: recordFile, record } = soleRecord(stateDir);
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, entry: { revision: 1, path: decoy } }));
+
+  const repeated = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v1', 1, id)],
+  });
+  const next = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(repeated).toMatchObject({ ok: true, data: { savedScript: decoy } });
+  expect(next).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+  expect(fs.readFileSync(decoy, 'utf8')).toBe('decoy\n');
+  expect(soleRecord(stateDir).record.entry).toEqual({ revision: 2, path: destination });
 });
