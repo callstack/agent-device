@@ -89,6 +89,18 @@ const EXPECTED_STANDALONE_SOURCE_BUDGET_MS = 600_000;
 // deadline less the deploy-ledger reserve (#4441, decisions 6827686874/6856998913).
 const MAX_DAEMON_SOURCE_MATERIALIZATION_MS =
   INSTALL_SOURCE_DAEMON_DEADLINE_MS - INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS;
+// The worst readiness (cold boot included) any recorded route spends before its transfer; the
+// cold-booting simulator routes are the high-water mark at about 145 s. The daemon derives the
+// materialization cutoff only after readiness has run, so the reserve must not charge this share.
+const READINESS_WORST_CASE_MS = 150_000;
+// The worst post-materialization deploy ledger any recorded route runs (identity reads,
+// extraction, upload, install): the Android AAB route at 314,993 ms. This is what the reserve may
+// cover; the rest of the old combined 450 s ledger is readiness.
+const DEPLOY_ONLY_WORST_CASE_MS = 320_000;
+// The cutoff a worst-case-readiness route must still receive. A zero cutoff fails a URL install
+// to a cold-booting device before a byte is fetched.
+const MATERIALIZATION_CUTOFF_FLOOR_MS =
+  INSTALL_SOURCE_DAEMON_DEADLINE_MS - READINESS_WORST_CASE_MS - DEPLOY_ONLY_WORST_CASE_MS;
 let nextAppleScenarioId = 0;
 
 for (const route of [
@@ -106,6 +118,7 @@ for (const route of [
         assertInstallLedgerPhaseCoverage(route, daemonCommand, scenario.ledger.calls);
         if (command === 'install_source URL') {
           assert.ok(scenario.ledger.calls.some((call) => call.tool === 'download'));
+          assertMaterializationCutoffSplit(route, scenario.ledger.calls);
         }
         assertLedgerFitsEnvelope(route, daemonCommand, scenario.ledger.calls);
       });
@@ -476,6 +489,58 @@ function assertLedgerFitsEnvelope(
     `${route} ${command} ledger worst case (${virtualElapsedMs}ms) + ` +
       `${REQUIRED_DAEMON_RESULT_MARGIN_MS}ms margin exceeds the ${envelopeMs}ms envelope.\n` +
       `Ledger:\n${JSON.stringify(ledger, null, 2)}`,
+  );
+}
+
+/**
+ * #4726: the daemon derives the materialization cutoff after `ensureReady` has run, so the
+ * deploy-ledger reserve must cover only the phases after materialization. The recorded per-phase
+ * sums prove the two shares split the ledger honestly, and the download's armed timer proves a
+ * cold-booting route still gets a positive cutoff — a zero cutoff fails a URL install before a
+ * byte is fetched.
+ */
+function assertMaterializationCutoffSplit(
+  route: string,
+  ledger: readonly InstallLedgerCall[],
+): void {
+  // The reserve is the deploy ledger's worst case without readiness, and the cutoff floor is what
+  // a worst-case cold boot must still leave: the two shares plus the daemon deadline and the
+  // result margin are the whole envelope.
+  assert.ok(
+    INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS <= DEPLOY_ONLY_WORST_CASE_MS,
+    `${route}: the deploy reserve (${INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS}ms) must not charge ` +
+      `readiness again; the recorded post-materialization deploy worst case is only ` +
+      `${DEPLOY_ONLY_WORST_CASE_MS}ms`,
+  );
+  assert.ok(
+    MATERIALIZATION_CUTOFF_FLOOR_MS > 0,
+    `a ${READINESS_WORST_CASE_MS}ms cold boot must leave a positive cutoff, got ` +
+      `${MATERIALIZATION_CUTOFF_FLOOR_MS}ms`,
+  );
+  const downloadAt = ledger.findIndex((call) => call.tool === 'download');
+  assert.ok(downloadAt >= 0, `${route}: no recorded download call`);
+  const elapsed = (calls: readonly InstallLedgerCall[]) =>
+    calls.reduce((total, call) => total + Math.max(0, call.timeoutMs - 1), 0);
+  const readinessMs = elapsed(ledger.slice(0, downloadAt));
+  const deployMs = elapsed(ledger.slice(downloadAt + 1));
+  assert.ok(
+    readinessMs <= READINESS_WORST_CASE_MS,
+    `${route}: readiness used ${readinessMs}ms, over the ${READINESS_WORST_CASE_MS}ms share the ` +
+      `reserve excludes`,
+  );
+  assert.ok(
+    deployMs <= INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS,
+    `${route}: post-materialization deploy used ${deployMs}ms, over the ` +
+      `${INSTALL_SOURCE_DEPLOY_LEDGER_RESERVE_MS}ms reserve`,
+  );
+  // The armed download timer is the cutoff production derived for this route at this readiness.
+  // A cold-booting route keeping >= the floor is the regression: charging readiness to the reserve
+  // too armed a cutoff below the floor (and 0ms at a >= 120s cold boot).
+  const armedDownloadMs = ledger[downloadAt]!.timeoutMs;
+  assert.ok(
+    armedDownloadMs >= MATERIALIZATION_CUTOFF_FLOOR_MS,
+    `${route}: after ${readinessMs}ms of readiness the download must keep a cutoff of at least ` +
+      `${MATERIALIZATION_CUTOFF_FLOOR_MS}ms, got ${armedDownloadMs}ms`,
   );
 }
 
