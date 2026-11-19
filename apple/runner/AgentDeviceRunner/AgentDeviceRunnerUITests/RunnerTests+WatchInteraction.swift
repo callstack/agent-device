@@ -11,6 +11,8 @@ extension RunnerTests {
   static let watchInputSheetTimeout: TimeInterval = 3.0
   /// The input sheet's commit button. The sheet exposes no identifier for it.
   static let watchInputSheetDoneLabel = "Done"
+  /// How long a back-button press may take to change the navigation bar before it is unconfirmed.
+  static let watchBackConfirmationTimeout: TimeInterval = 1.0
   /// How long a crown scroll waits for its deceleration. A tap sent while the list still moves is
   /// absorbed by the scroll view instead of reaching its target.
   static let watchCrownSettleInterval: TimeInterval = 0.35
@@ -62,13 +64,45 @@ extension RunnerTests {
         hint: "A root screen has nothing to go back to. Otherwise press the screen's close control by its ref from a fresh snapshot."
       ))
     }
+    let before = watchNavigationBarIdentity(app: app)
     let frame = button.frame
     switch try tapAt(app: app, x: frame.midX, y: frame.midY) {
     case .performed:
-      return .performed
+      break
     case .unsupported(let message, let hint), .notDispatched(let message, let hint):
       return .refused(ErrorPayload(code: RunnerWireErrorCode.backSwipeNotDispatched, message: message, hint: hint))
     }
+    // A pop changes the navigation bar: its title, or the back button leaves at the root.
+    let deadline = Date().addingTimeInterval(Self.watchBackConfirmationTimeout)
+    repeat {
+      if let before, let after = watchNavigationBarIdentity(app: app), after != before {
+        return .performed
+      }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    } while Date() < deadline
+    return .unconfirmed(ErrorPayload(
+      code: RunnerWireErrorCode.backSwipeUnverified,
+      message: "back pressed the navigation bar back button, but the navigation bar did not change within 1 s. This is an unknown outcome.",
+      hint: "Take a snapshot to see where the app is."
+    ))
+  }
+
+  /// The navigation bars' identities and the back button's presence, read from one snapshot so a
+  /// vanishing element cannot record an XCTest failure. Free text is left out, so a ticking clock or
+  /// timer cannot read as a pop. `nil` when the tree cannot be read.
+  private func watchNavigationBarIdentity(app: XCUIApplication) -> [String]? {
+    guard let root = try? app.snapshot() else { return nil }
+    var identity: [String] = []
+    func visit(_ node: any XCUIElementSnapshot) {
+      if node.elementType == .navigationBar {
+        identity.append("bar|\(node.identifier)|\(node.label)")
+      } else if node.identifier == Self.navigationBarBackButtonIdentifier {
+        identity.append("back")
+      }
+      node.children.forEach(visit)
+    }
+    visit(root)
+    return identity
   }
 
   /// A one-finger planned gesture through the private synthesizer, which keeps the plan's timing. A
