@@ -10,6 +10,7 @@ import {
   answer,
   artifactServer,
   open,
+  records,
   request,
   script,
   soleRecord,
@@ -590,10 +591,40 @@ test.each([
     expect(soleRecord(stateDir).record.staging).toEqual(victims);
   } else {
     await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
-    // The record stays, retired, so no later retirement or sweep removes those paths either.
-    expect(soleRecord(stateDir).record).toMatchObject({ retired: true, staging: victims });
+    // Retirement forgets the paths that are not its own staging, so the record is removed with them untouched.
+    expect(records(stateDir)).toEqual([]);
   }
   for (const victim of victims) {
     expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe('keep\n');
   }
+});
+
+test('a retired record listing a foreign staging path is swept once and never revisited', async () => {
+  const { root, stateDir, directory } = caller();
+  const victim = path.join(root, 'victim');
+  fs.mkdirSync(victim);
+  fs.writeFileSync(path.join(victim, 'keep.txt'), 'keep\n');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  await open(baseUrl, stateDir, path.join(directory, 'first.ad'));
+  const { file: retiredFile, record } = soleRecord(stateDir);
+  const own = path.join(directory, '.agent-device-script-leftover');
+  fs.mkdirSync(own);
+  fs.writeFileSync(
+    retiredFile,
+    JSON.stringify({ ...record, retired: true, staging: [victim, own] }),
+  );
+
+  await open(baseUrl, stateDir, path.join(directory, 'second.ad'));
+  expect(fs.existsSync(retiredFile)).toBe(false);
+  expect(fs.existsSync(own)).toBe(false);
+  const remove = vi.spyOn(fs, 'rmSync');
+  onTestFinished(() => remove.mockRestore());
+  await open(baseUrl, stateDir, path.join(directory, 'third.ad'));
+
+  const revisited = remove.mock.calls.filter(([target]) =>
+    [retiredFile, victim].includes(String(target)),
+  );
+  expect(revisited).toEqual([]);
+  expect(records(stateDir)).toHaveLength(2);
+  expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe('keep\n');
 });

@@ -560,8 +560,7 @@ function releaseStaging(file: string, staging: string): void {
 
 /**
  * Whether a staging path read back from the record has the shape this client allocates: absolute, normalized, and
- * named with the staging prefix, directly inside `directory`. A recorded path that does not is never removed, and
- * stays listed.
+ * named with the staging prefix, directly inside `directory`. A recorded path that does not is never removed.
  */
 function isOwnStaging(staging: string, directory: string): boolean {
   return (
@@ -574,8 +573,8 @@ function isOwnStaging(staging: string, directory: string): boolean {
 
 /**
  * Retirement and the sweep hold no judgment, so a listed staging directory is removed only directly inside the
- * destination's directory as spelled or as it resolves now; one left in a directory a link has since moved stays
- * listed, which is safe.
+ * destination's directory as spelled or as it resolves now. Any other listed path is forgotten with the record and
+ * left on disk untouched, including one left in a directory a link has since moved.
  */
 function isRetirableStaging(record: ScriptRecord, staging: string): boolean {
   const parent = path.dirname(path.resolve(record.destination));
@@ -592,7 +591,7 @@ function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
 }
 
 /**
- * Ends a record, then removes every staging directory it lists and the record itself. The record is
+ * Ends a record, then removes every staging directory it lists that is its own, and the record itself. The record is
  * first written retired, so it authorizes nothing more even when a staging directory cannot be
  * removed; the sweep finishes the cleanup later. Writing it retired also stops it naming an
  * interrupted version, so no anchor is removed while the record names its inode. A record that
@@ -614,8 +613,8 @@ function removeRecord(file: string): void {
   for (const staging of owned) {
     fs.rmSync(staging, { recursive: true, force: true });
   }
-  // A record that lists a path that is not its own staging stays, retired, so nothing ever removes that path.
-  if (owned.length === listed.length) fs.rmSync(file, { force: true });
+  // A listed path that is not this record's own staging was never ours to remove: it is forgotten with the record.
+  fs.rmSync(file, { force: true });
 }
 
 /**
