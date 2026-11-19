@@ -111,11 +111,12 @@ final class SessionPeerPolicy {
       if (count < 0) {
         throw new EOFException("session command ended before its newline");
       }
-      if (clock.nowMs() > readDeadlineAtMs(baseDeadlineAtMs, bytes.size() + count)) {
-        throw new SocketTimeoutException("session command read deadline exceeded");
-      }
       int end = 0;
       while (end < count && chunk[end] != '\n') end++;
+      // Only command bytes earn read time; bytes after the newline are never part of the frame.
+      if (clock.nowMs() > readDeadlineAtMs(baseDeadlineAtMs, bytes.size() + end)) {
+        throw new SocketTimeoutException("session command read deadline exceeded");
+      }
       bytes.write(chunk, 0, end);
       if (end < count) break;
     }

@@ -20,6 +20,7 @@ public final class SessionPeerPolicyTest {
     readHonorsTheByteLimitAndEof();
     maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline();
     frameBelowTheFloorRateExpires();
+    bytesAfterTheNewlineEarnNoReadTime();
     eofBeforeTheNewlineIsAnIncompleteFrame();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
     acceptsCommandLinesUpToTheByteLimit();
@@ -142,6 +143,29 @@ public final class SessionPeerPolicyTest {
       throw new AssertionError("Expected a frame below the floor rate to expire");
     } catch (SocketTimeoutException expected) {
       // The read deadline closed the connection.
+    }
+  }
+
+  /** A full chunk whose command ends early: the trailing bytes must not extend the deadline. */
+  private static void bytesAfterTheNewlineEarnNoReadTime() throws Exception {
+    byte[] chunk = new byte[8 * 1024];
+    Arrays.fill(chunk, (byte) 'A');
+    chunk[2] = '\n';
+    long[] nowMs = {0};
+    ByteArrayInputStream late = new ByteArrayInputStream(chunk) {
+      @Override
+      public int read(byte[] data, int offset, int length) {
+        // The chunk lands 50 ms after the base deadline: inside a whole chunk's credit (125 ms),
+        // outside the credit of the two command bytes.
+        nowMs[0] = 150;
+        return super.read(data, offset, length);
+      }
+    };
+    try {
+      SessionPeerPolicy.readSessionCommandLine(late, ignored -> {}, () -> nowMs[0], 100, 100_000);
+      throw new AssertionError("Bytes after the newline extended the read deadline");
+    } catch (SocketTimeoutException expected) {
+      // Only the command bytes earned time.
     }
   }
 

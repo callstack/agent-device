@@ -117,10 +117,10 @@ trust boundary; any other uid (or an unreadable credential) is closed without a 
 name derives from the port and carries no secret, and no token travels in argv.
 
 Each connection gets a command read deadline from acceptance, independent of the capture
-`timeoutMs`. The deadline is two seconds, plus one second for each 64 KiB that has arrived, so the
-largest frame can take about 10 s over a slow remote adb link (at least ~0.5 Mbit/s). A silent
-peer closes at two seconds, and a drip-feeding peer cannot hold the command reader past its
-deadline. A
+`timeoutMs`. The deadline is two seconds, plus one second for each 64 KiB of command bytes that
+has arrived, so the largest frame can take about 10 s over a slow remote adb link (at least
+~0.5 Mbit/s). Bytes after the newline earn no time. A silent peer closes at two seconds, and a
+drip-feeding peer cannot hold the command reader past its deadline. A
 command ends with a newline. A connection whose read expires, or whose stream ends before the
 newline, closes without a response, so a peer that never reads cannot hold the accept loop with a
 reply. The line is capped at 513 KiB, a bound derived from the largest supported producer of this
@@ -128,8 +128,12 @@ channel. A 10 s two-contact gesture carries 1,252 densified samples, at most ~13
 documented 64 KiB `fill --text-stdin` contract is larger in the worst case: JSON escapes an accepted
 control character such as U+001E from one byte to six, so the value encodes to 524,368 Base64 bytes
 before the action and request id. A line over the cap receives a session error and closes. Each
-response is one frame of bounded writes with no flush, and the connection then closes. A response
-write failure closes that connection without another frame. The session keeps serving the next connection:
+response is one frame. The helper builds it inside the command's failure boundary, so a failure
+while encoding, such as an out-of-memory on a large snapshot, returns a minimal error frame with
+no success payload. The frame goes out in nonblocking sends under one deadline, fixed when the
+write starts: eight seconds plus the frame size at 64 KiB/s. A peer that stops reading is closed
+at that deadline, and the connection then closes. A response write failure closes that connection
+without another frame. The session keeps serving the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling

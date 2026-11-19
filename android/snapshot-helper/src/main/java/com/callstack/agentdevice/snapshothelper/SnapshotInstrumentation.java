@@ -16,7 +16,6 @@ import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -27,7 +26,10 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final int CHUNK_SIZE = 2 * 1024;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
   private static final int SESSION_COMMAND_READ_BASE_TIMEOUT_MS = 2_000;
-  private static final int SESSION_RESPONSE_WRITE_TIMEOUT_MS = 8_000;
+  private static final int SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS = 8_000;
+  // A response deadline grows with the frame at this floor rate, like the command read deadline.
+  private static final int SESSION_RESPONSE_MIN_BYTES_PER_SECOND =
+      SessionPeerPolicy.MIN_COMMAND_BYTES_PER_SECOND;
   private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
@@ -214,26 +216,30 @@ public final class SnapshotInstrumentation extends Instrumentation {
                     SystemClock::elapsedRealtime,
                     baseDeadlineAtMs,
                     SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
-            // LocalSocket applies setSoTimeout to both directions.
-            socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);
+            // Each response goes out in nonblocking sends under one deadline from its first byte.
+            SessionResponseWriter.FrameSink sink =
+                new SessionFrameWriter(
+                    new LocalSocketFrameChannel(socket),
+                    SystemClock::elapsedRealtime,
+                    SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS,
+                    SESSION_RESPONSE_MIN_BYTES_PER_SECOND);
             SessionPeerPolicy.LineDecision lineDecision =
                 SessionPeerPolicy.commandLineDecision(command, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_EMPTY) {
-              SessionResponseWriter.writeSessionError(
-                  socket.getOutputStream(), "", new EOFException("empty command"));
+              sink.write(SessionResponseWriter.errorFrame("", new EOFException("empty command")));
               continue;
             }
             if (lineDecision == SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
-              SessionResponseWriter.writeSessionError(
-                  socket.getOutputStream(), "",
-                  new IllegalArgumentException("session command over the byte limit"));
+              sink.write(
+                  SessionResponseWriter.errorFrame(
+                      "", new IllegalArgumentException("session command over the byte limit")));
               continue;
             }
             String[] parts = command.trim().split("\\s+", 3);
             String action = parts.length > 0 ? parts[0] : "";
             String requestId = parts.length > 1 ? parts[1] : "";
             if ("quit".equals(action)) {
-              writeSessionOkQuietly(socket, requestId);
+              writeSessionOkQuietly(sink, requestId);
               return;
             }
             boolean automationCommand =
@@ -244,32 +250,30 @@ public final class SnapshotInstrumentation extends Instrumentation {
               try {
                 automation = getConnectedUiAutomationUnchecked();
               } catch (RuntimeException error) {
-                SessionResponseWriter.writeSessionError(socket.getOutputStream(), requestId, error);
+                sink.write(SessionResponseWriter.errorFrame(requestId, error));
                 continue;
               }
               if (automationCommand) {
                 AutomationCommandHandler.writeSessionResponse(
-                    socket.getOutputStream(), requestId, action,
+                    sink, requestId, action,
                     parts.length > 2 ? parts[2] : "", automation, getContext());
               } else if ("viewport".equals(action)) {
-                TouchCommandHandler.writeSessionViewport(
-                    socket.getOutputStream(), requestId, automation);
+                TouchCommandHandler.writeSessionViewport(sink, requestId, automation);
               } else {
                 TouchCommandHandler.writeSessionGesture(
-                    socket.getOutputStream(), requestId, parts.length > 2 ? parts[2] : "", automation);
+                    sink, requestId, parts.length > 2 ? parts[2] : "", automation);
               }
               continue;
             }
             if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
                 && !"snapshot-short-idle".equals(action)) {
-              SessionResponseWriter.writeSessionError(
-                  socket.getOutputStream(),
-                  requestId,
-                  new IllegalArgumentException("unknown session command"));
+              sink.write(
+                  SessionResponseWriter.errorFrame(
+                      requestId, new IllegalArgumentException("unknown session command")));
               continue;
             }
             writeSessionSnapshot(
-                socket.getOutputStream(),
+                sink,
                 requestId,
                 waitForIdleQuietMs,
                 "snapshot-immediate".equals(action) ? 0
@@ -301,17 +305,22 @@ public final class SnapshotInstrumentation extends Instrumentation {
     return SessionPeerPolicy.admitPeer(credentials.getUid()) == SessionPeerPolicy.Admission.ADMITTED;
   }
 
-  private static void writeSessionOkQuietly(LocalSocket socket, String requestId) {
+  private static void writeSessionOkQuietly(
+      SessionResponseWriter.FrameSink sink, String requestId) {
     try {
-      SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
+      sink.write(SessionResponseWriter.okFrame(requestId));
     } catch (IOException ignored) {
       // A quit the peer never read still ends the session; the host reads release from the
       // process exit, not from this acknowledgement.
     }
   }
 
+  /**
+   * Captures and encodes a snapshot inside the command failure boundary, so an out-of-memory while
+   * the frame is built fails only this request. The XML is encoded once, as the frame body.
+   */
   private void writeSessionSnapshot(
-      OutputStream output,
+      SessionResponseWriter.FrameSink sink,
       String requestId,
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,
@@ -319,26 +328,26 @@ public final class SnapshotInstrumentation extends Instrumentation {
       int maxDepth,
       int maxNodes)
       throws IOException {
-    Bundle result = new Bundle();
-    putBaseMetadata(result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
-    result.putString("requestId", requestId);
-    String xml;
-    try {
-      long startedAtMs = System.currentTimeMillis();
-      DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
-      AccessibilityTreeCapture.Result capture =
-          captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
-      DisplayExtent.Extent display =
-          DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
-      result.putString("ok", "true");
-      putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
-      xml = capture.xml;
-      result.putString("byteLength", Integer.toString(xml.getBytes(StandardCharsets.UTF_8).length));
-    } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error);
-      return;
-    }
-    SessionResponseWriter.writeSessionResponse(output, result, xml);
+    SessionResponseWriter.respondOnce(
+        sink,
+        () -> {
+          Bundle result = new Bundle();
+          putBaseMetadata(
+              result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
+          result.putString("requestId", requestId);
+          long startedAtMs = System.currentTimeMillis();
+          DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
+          AccessibilityTreeCapture.Result capture =
+              captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+          DisplayExtent.Extent display =
+              DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
+          result.putString("ok", "true");
+          putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
+          byte[] body = capture.xml.getBytes(StandardCharsets.UTF_8);
+          result.putString("byteLength", Integer.toString(body.length));
+          return SessionResponseWriter.encodeSessionResponse(result, body);
+        },
+        error -> SessionResponseWriter.errorFrame(requestId, error));
   }
 
   private static String readStringArgument(Bundle arguments, String key) {

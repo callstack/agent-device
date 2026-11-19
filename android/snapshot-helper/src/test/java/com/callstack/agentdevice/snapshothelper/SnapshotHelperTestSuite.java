@@ -13,6 +13,7 @@ public final class SnapshotHelperTestSuite {
     BoundedUiAutomationConnectionTest.run();
     SessionPeerPolicyTest.run();
     SessionResponseWriterTest.run();
+    SessionFrameWriterTest.run();
     GestureViewportReaderTest.run();
     DisplayExtentTest.run();
     ScreenshotDisplayTest.run();
