@@ -113,23 +113,29 @@ export async function receiveResumableUploadChunk(params: {
   onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
-  return await runExclusive(entry, 'receive', params.req, async () => {
-    const { appended, ...result } = await receiveResumableTransfer({
-      entry,
-      req: params.req,
-      signal: params.signal,
-      invalidate: async () => await terminateEntry(entry),
-      onAcceptedBytes: (bytes) => {
-        // Accepted (flushed) body bytes renew the ticket's idle lifetime during
-        // actual progress, not only when a whole chunk completes (#4441).
-        if (!entry.closed) refreshResumableUploadTimer(entry);
-        params.onAcceptedBytes?.(bytes);
-      },
-      onBodyComplete: params.onBodyComplete,
-    });
-    if (appended && !entry.closed) refreshResumableUploadTimer(entry);
-    return result;
-  });
+  return await runExclusive(
+    entry,
+    'receive',
+    params.req,
+    async () => {
+      const { appended, ...result } = await receiveResumableTransfer({
+        entry,
+        req: params.req,
+        signal: params.signal,
+        invalidate: async () => await terminateEntry(entry),
+        onAcceptedBytes: (bytes) => {
+          // Accepted (flushed) body bytes renew the ticket's idle lifetime during
+          // actual progress, not only when a whole chunk completes (#4441).
+          if (!entry.closed) refreshResumableUploadTimer(entry);
+          params.onAcceptedBytes?.(bytes);
+        },
+        onBodyComplete: params.onBodyComplete,
+      });
+      if (appended && !entry.closed) refreshResumableUploadTimer(entry);
+      return result;
+    },
+    params.signal,
+  );
 }
 
 /**
@@ -271,27 +277,49 @@ async function runExclusive<T>(
   action: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const operation = entry.tail
-    .catch(() => {})
-    .then(async () => {
-      if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
-      // A pending finalize admission whose ingress owner fired while queued rejects
-      // with the owner's typed reason. The close check above runs first, so a
-      // close/cancel race keeps the close side's typed expiry error, and the entry's
-      // ownership is untouched either way (#4441).
-      throwIfIngressAborted(signal);
-      if (kind === 'receive') entry.activeReceive = req;
-      try {
-        return await action();
-      } finally {
-        if (kind === 'receive') entry.activeReceive = undefined;
-      }
-    });
-  entry.tail = operation.then(
-    () => {},
-    () => {},
-  );
+  const predecessor = entry.tail;
+  const operation = (async () => {
+    // Admission is abortable: an expired or disconnected waiter leaves the queue with the
+    // owner's typed reason and never waits for a predecessor it does not own (#4441).
+    await admitAfter(predecessor, signal);
+    if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
+    // The close check above runs first, so a close/cancel race keeps the close side's
+    // typed expiry error, and the entry's ownership is untouched either way (#4441).
+    throwIfIngressAborted(signal);
+    if (kind === 'receive') entry.activeReceive = req;
+    try {
+      return await action();
+    } finally {
+      if (kind === 'receive') entry.activeReceive = undefined;
+    }
+  })();
+  // Later work waits for both the predecessor and this operation, so a released
+  // waiter never lets its successor overlap the work still running ahead of it.
+  entry.tail = Promise.allSettled([predecessor, operation]).then(() => {});
   return await operation;
+}
+
+function admitAfter(predecessor: Promise<void>, signal: AbortSignal | undefined): Promise<void> {
+  const turn = predecessor.catch(() => {});
+  if (!signal) return turn;
+  return new Promise<void>((resolve, reject) => {
+    const abandon = () => {
+      try {
+        throwIfIngressAborted(signal);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    if (signal.aborted) {
+      abandon();
+      return;
+    }
+    signal.addEventListener('abort', abandon, { once: true });
+    void turn.then(() => {
+      signal.removeEventListener('abort', abandon);
+      resolve();
+    });
+  });
 }
 
 async function materializeFinalArtifact(

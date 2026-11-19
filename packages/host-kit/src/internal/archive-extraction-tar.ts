@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar-stream';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ArchiveBudget,
   archiveError,
@@ -56,7 +57,7 @@ export async function extractTarArchive(options: TarOptions): Promise<void> {
   } catch (error) {
     extractor.destroy();
     await extraction.catch(() => {});
-    throw error;
+    throw cancellationOwnedFailure(options.signal, error);
   }
   if (manifest.length !== 0) {
     throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
@@ -94,20 +95,32 @@ async function inspectTar(
   } catch (error) {
     extractor.destroy();
     await inspection.catch(() => {});
-    throw error;
+    throw cancellationOwnedFailure(options.signal, error);
   }
   return manifest;
 }
 
+/**
+ * Starts the archive pipeline with its outcome observed at once: a cancellation can reject it
+ * while the entry loop still awaits a filesystem operation, before the loop joins it.
+ */
 function streamTar(
   archivePath: string,
   gzip: boolean,
   extractor: tar.Extract,
   signal?: AbortSignal,
 ): Promise<void> {
-  return gzip
+  const stream = gzip
     ? pipeline(createReadStream(archivePath), createGunzip(), extractor, { signal })
     : pipeline(createReadStream(archivePath), extractor, { signal });
+  stream.catch(() => {});
+  return stream;
+}
+
+/** A cancelled walk reports the signal's typed reason; a classified archive failure stays. */
+function cancellationOwnedFailure(signal: AbortSignal | undefined, error: unknown): unknown {
+  if (!signal?.aborted || error instanceof AppError) return error;
+  return signal.reason;
 }
 
 function readTarKind(type: tar.Headers['type']): 'directory' | 'file' {

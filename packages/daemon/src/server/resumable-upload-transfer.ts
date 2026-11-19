@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { createByteLimitStream } from '@agent-device/host-kit/archive';
 import { parseUploadContentLength, parseUploadContentRange } from './resumable-upload-range.ts';
-import { resolveIngressFailure } from './upload-ingress.ts';
+import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
 
 export type ResumableTransferEntry = {
   payloadPath: string;
@@ -46,6 +46,7 @@ export async function receiveResumableTransfer(params: {
   });
   const payloadStream = fs.createWriteStream(params.entry.payloadPath, { flags: 'a' });
   observeAcceptedWrites(payloadStream, params.onAcceptedBytes);
+  let offset: number;
   try {
     await pipeline(params.req, limiter, payloadStream, { signal: params.signal });
     if (range && limiter.bytesSeen !== range.span) {
@@ -57,6 +58,10 @@ export async function receiveResumableTransfer(params: {
     // The body is complete: inactivity no longer applies to this request, so valid
     // post-body work observes only the owner's aggregate (#4441).
     params.onBodyComplete?.();
+    // The final offset check and the owner's last cancellation check stay inside the
+    // rollback boundary: a cancelled chunk never commits its offset (#4441).
+    offset = await currentOffset(params.entry);
+    throwIfIngressAborted(params.signal);
   } catch (error) {
     // An aborted ingress signal owns the failure with its typed reason; an earlier
     // classified failure (limiter, ticket expiry) is preserved unchanged (#4441).
@@ -64,7 +69,6 @@ export async function receiveResumableTransfer(params: {
     await rollback(params.entry.payloadPath, oldSize, failure, params.invalidate);
     throw failure;
   }
-  const offset = await currentOffset(params.entry);
   return { complete: offset === params.entry.sizeBytes, offset, appended: offset > oldSize };
 }
 

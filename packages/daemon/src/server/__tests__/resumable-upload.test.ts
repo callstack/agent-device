@@ -368,7 +368,12 @@ test('an ingress owner aborted while finalize waits in the admission queue owns 
   blocker.write('A');
   await flushIO();
   const controller = new AbortController();
-  const finalizing = finalizeResumableUpload(uploadId, undefined, { signal: controller.signal });
+  const finalizing = finalizeResumableUpload(uploadId, undefined, {
+    signal: controller.signal,
+  }).then(
+    () => null,
+    (error: unknown) => error,
+  );
   await flushIO();
   // The synthetic owner fires while the finalize is still pending admission.
   controller.abort(
@@ -380,10 +385,7 @@ test('an ingress owner aborted while finalize waits in the admission queue owns 
   );
   blocker.end('B');
   assert.deepEqual(await receiving, { complete: true, offset: 2 });
-  const error = (await finalizing.then(
-    () => null,
-    (error: unknown) => error,
-  )) as AppError | null;
+  const error = (await finalizing) as AppError | null;
   assert.equal(error instanceof AppError, true);
   assert.equal(error?.details?.reason, 'transfer_ingress_deadline_exceeded');
   // Ownership is preserved: the aborted admission did not close the ticket, so a
