@@ -11,6 +11,7 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
 Both script publishers stage and commit inside the judged directory.
 Remote script delivery caps bytes as they arrive.
+The remote script publication record is owner-private client state. Cleanup trusts its staging list.
 
 ## Proposed in #4669
 

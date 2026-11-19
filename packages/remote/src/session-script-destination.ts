@@ -34,8 +34,6 @@ const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
 /** A record untouched for this long is removed the next time a record is created. */
 const STALE_RECORD_MS = 7 * 24 * 60 * 60 * 1000;
 const RECORD_LOCK_TIMEOUT_MS = 30_000;
-/** Every staging directory this client allocates starts with this name, directly inside the destination's directory. */
-const STAGING_PREFIX = '.agent-device-script-';
 
 /**
  * This client's record of one remote `open --save-script`, keyed by the endpoint, tenant, session
@@ -534,7 +532,7 @@ function stageOrAnswer(
   const current = settleNamedInterruption(file, record, revision, prepared);
   const promoted = committedRepeat(current, revision);
   if (promoted) return promoted;
-  const staging = fs.mkdtempSync(path.join(prepared.directory, STAGING_PREFIX));
+  const staging = fs.mkdtempSync(path.join(prepared.directory, '.agent-device-script-'));
   try {
     writeRecord(file, { ...current, staging: [...(current.staging ?? []), staging] });
   } catch (error) {
@@ -558,40 +556,12 @@ function releaseStaging(file: string, staging: string): void {
   if (record) writeRecord(file, withoutStaging(record, staging));
 }
 
-/**
- * Whether a staging path read back from the record has the shape this client allocates: absolute, normalized, and
- * named with the staging prefix, directly inside `directory`. A recorded path that does not is never removed.
- */
-function isOwnStaging(staging: string, directory: string): boolean {
-  return (
-    path.isAbsolute(staging) &&
-    path.normalize(staging) === staging &&
-    path.basename(staging).startsWith(STAGING_PREFIX) &&
-    path.dirname(staging) === directory
-  );
-}
-
-/**
- * Retirement and the sweep hold no judgment, so a listed staging directory is removed only directly inside the
- * destination's directory as spelled or as it resolves now. Any other listed path is forgotten with the record and
- * left on disk untouched, including one left in a directory a link has since moved.
- */
-function isRetirableStaging(record: ScriptRecord, staging: string): boolean {
-  const parent = path.dirname(path.resolve(record.destination));
-  if (isOwnStaging(staging, parent)) return true;
-  try {
-    return isOwnStaging(staging, fs.realpathSync(parent));
-  } catch {
-    return false;
-  }
-}
-
 function withoutStaging(record: ScriptRecord, staging: string): ScriptRecord {
   return { ...record, staging: (record.staging ?? []).filter((listed) => listed !== staging) };
 }
 
 /**
- * Ends a record, then removes every staging directory it lists that is its own, and the record itself. The record is
+ * Ends a record, then removes every staging directory it lists and the record itself. The record is
  * first written retired, so it authorizes nothing more even when a staging directory cannot be
  * removed; the sweep finishes the cleanup later. Writing it retired also stops it naming an
  * interrupted version, so no anchor is removed while the record names its inode. A record that
@@ -608,12 +578,9 @@ function removeRecord(file: string): void {
       throw error;
     }
   }
-  const listed = record?.staging ?? [];
-  const owned = record ? listed.filter((staging) => isRetirableStaging(record, staging)) : [];
-  for (const staging of owned) {
+  for (const staging of record?.staging ?? []) {
     fs.rmSync(staging, { recursive: true, force: true });
   }
-  // A listed path that is not this record's own staging was never ours to remove: it is forgotten with the record.
   fs.rmSync(file, { force: true });
 }
 
@@ -624,7 +591,7 @@ function removeRecord(file: string): void {
 function removeUnretirableRecord(file: string, record: ScriptRecord): void {
   const kept = removeQuietly(file) ? undefined : record.publishing?.staging;
   for (const staging of record.staging ?? []) {
-    if (staging !== kept && isRetirableStaging(record, staging)) removeQuietly(staging);
+    if (staging !== kept) removeQuietly(staging);
   }
 }
 
@@ -788,9 +755,7 @@ function settleInterrupted(file: string, record: ScriptRecord, entry: string): S
   // Write the settled commit before releasing its inode anchor. Keep staging listed until removal succeeds.
   writeRecord(file, settled);
   // Best effort once the commit is recorded: a directory that stays listed is removed by retirement or the sweep.
-  // Only a directory the record could have allocated in the judged directory is removed.
-  const { staging } = record.publishing;
-  if (isOwnStaging(staging, path.dirname(entry))) releaseStagingQuietly(file, staging);
+  releaseStagingQuietly(file, record.publishing.staging);
   return readRecord(file) ?? settled;
 }
 

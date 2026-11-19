@@ -10,7 +10,6 @@ import {
   answer,
   artifactServer,
   open,
-  records,
   request,
   script,
   soleRecord,
@@ -560,71 +559,4 @@ test('a closing repeat names the file to record again to, quoted for a shell', a
       ],
     },
   });
-});
-
-test.each([
-  { name: 'retiring the record', settles: false },
-  { name: 'settling an interrupted commit', settles: true },
-])('an edited staging path is left untouched when $name', async ({ settles }) => {
-  const { root, stateDir, directory } = caller();
-  const destination = path.join(directory, 'journey.ad');
-  const victims = [
-    path.join(root, 'victim'),
-    path.join(root, 'elsewhere', '.agent-device-script-victim'),
-  ];
-  for (const victim of victims) {
-    fs.mkdirSync(victim, { recursive: true });
-    fs.writeFileSync(path.join(victim, 'keep.txt'), 'keep\n');
-  }
-  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
-  const { id } = await open(baseUrl, stateDir, destination);
-  const { file: recordFile, record } = soleRecord(stateDir);
-  const publishing = { revision: 2, file: '0:0', staging: victims[1] };
-  fs.writeFileSync(
-    recordFile,
-    JSON.stringify({ ...record, staging: victims, ...(settles ? { publishing } : {}) }),
-  );
-
-  if (settles) {
-    await answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] });
-    expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
-    expect(soleRecord(stateDir).record.staging).toEqual(victims);
-  } else {
-    await answer(baseUrl, stateDir, request('close'), { scriptPublicationId: id });
-    // Retirement forgets the paths that are not its own staging, so the record is removed with them untouched.
-    expect(records(stateDir)).toEqual([]);
-  }
-  for (const victim of victims) {
-    expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe('keep\n');
-  }
-});
-
-test('a retired record listing a foreign staging path is swept once and never revisited', async () => {
-  const { root, stateDir, directory } = caller();
-  const victim = path.join(root, 'victim');
-  fs.mkdirSync(victim);
-  fs.writeFileSync(path.join(victim, 'keep.txt'), 'keep\n');
-  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
-  await open(baseUrl, stateDir, path.join(directory, 'first.ad'));
-  const { file: retiredFile, record } = soleRecord(stateDir);
-  const own = path.join(directory, '.agent-device-script-leftover');
-  fs.mkdirSync(own);
-  fs.writeFileSync(
-    retiredFile,
-    JSON.stringify({ ...record, retired: true, staging: [victim, own] }),
-  );
-
-  await open(baseUrl, stateDir, path.join(directory, 'second.ad'));
-  expect(fs.existsSync(retiredFile)).toBe(false);
-  expect(fs.existsSync(own)).toBe(false);
-  const remove = vi.spyOn(fs, 'rmSync');
-  onTestFinished(() => remove.mockRestore());
-  await open(baseUrl, stateDir, path.join(directory, 'third.ad'));
-
-  const revisited = remove.mock.calls.filter(([target]) =>
-    [retiredFile, victim].includes(String(target)),
-  );
-  expect(revisited).toEqual([]);
-  expect(records(stateDir)).toHaveLength(2);
-  expect(fs.readFileSync(path.join(victim, 'keep.txt'), 'utf8')).toBe('keep\n');
 });
