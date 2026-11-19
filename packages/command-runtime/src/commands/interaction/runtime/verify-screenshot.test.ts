@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { PNG } from '@agent-device/capture-kit/png';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createInteractionDevice, selectorSnapshot } from './__tests__/test-utils/index.ts';
 
@@ -82,3 +87,34 @@ test.each([
     );
   },
 );
+
+test('the coordinate dispatch keeps the backend receiver for methods that read this', async () => {
+  // An in-process backend whose tap is a real method: the dispatch must invoke
+  // it with the backend as its receiver, the way a bare call would not.
+  const taps: Array<{ receiver: unknown; point: { x: number; y: number } }> = [];
+  const backend: AgentDeviceBackend = {
+    platform: 'ios',
+    captureSnapshot: async () => ({ snapshot: selectorSnapshot() }),
+    async tap(context, point) {
+      taps.push({ receiver: this, point });
+      void context;
+      return { ok: true };
+    },
+  } satisfies AgentDeviceBackend;
+  const device = createAgentDevice({
+    backend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: selectorSnapshot() }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.interactions.press(
+    { kind: 'point', x: 200, y: 25 },
+    { verify: false },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.equal(taps.length, 1);
+  assert.equal(taps[0]?.receiver, backend);
+  assert.deepEqual(taps[0]?.point, { x: 200, y: 25 });
+});

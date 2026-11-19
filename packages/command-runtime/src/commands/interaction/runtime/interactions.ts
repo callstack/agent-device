@@ -181,7 +181,10 @@ async function tapCommand(
   const pointObservation = pointObservationOf(atRest);
   const dispatchTap = runtime.backend.tap;
   const dispatch = () =>
-    dispatchTap(toBackendContext(runtime, options), point, {
+    // The backend method keeps its receiver: an in-process backend method
+    // that reads `this` breaks under a bare call, and the adapter's closure
+    // exposes none.
+    dispatchTap.call(runtime.backend, toBackendContext(runtime, options), point, {
       button: options.button,
       count: options.count,
       intervalMs: options.intervalMs,

@@ -221,6 +221,35 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 }
 @end
 
+
+// `--agent-device-custom-drawn-canvas` adds a plain drawn view the accessibility tree never
+// exposes: a tap toggles its fill, and the point over it names no element but the window. The
+// screenshot-diff verification needs exactly this shape — custom-drawn content whose only answer
+// is pixels, at a point no hittable or semantic node covers.
+@interface AgentDeviceCustomDrawnCanvas : UIView
+@end
+
+@implementation AgentDeviceCustomDrawnCanvas
+- (instancetype)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.isAccessibilityElement = NO;
+    self.backgroundColor = UIColor.systemGray5Color;
+    UITapGestureRecognizer *tap =
+        [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(toggled:)];
+    [self addGestureRecognizer:tap];
+  }
+  return self;
+}
+
+- (void)toggled:(UITapGestureRecognizer *)recognizer {
+  (void)recognizer;
+  self.backgroundColor = [self.backgroundColor isEqual:UIColor.systemRedColor]
+      ? UIColor.systemGray5Color
+      : UIColor.systemRedColor;
+}
+@end
+
 @interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate, UITextFieldDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
@@ -1464,6 +1493,18 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
     popupTitle.text = @"Relaunch to continue";
     popupTitle.accessibilityIdentifier = @"agent-device-alert-title";
     [self.view addSubview:popupTitle];
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-custom-drawn-canvas"]) {
+    UIView *canvas = [[AgentDeviceCustomDrawnCanvas alloc] initWithFrame:CGRectMake(120, 300, 160, 160)];
+    canvas.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:canvas];
+    [NSLayoutConstraint activateConstraints:@[
+      [canvas.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [canvas.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:120],
+      [canvas.widthAnchor constraintEqualToConstant:160],
+      [canvas.heightAnchor constraintEqualToConstant:160],
+    ]];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-crowded-screen"]) {
