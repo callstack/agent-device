@@ -476,6 +476,8 @@ test.skipIf(process.platform === 'win32').each([
   {
     name: 'grows past the delivery cap',
     change: (staged: string) => fs.truncateSync(staged, 8 * 1024 * 1024 + 1),
+    // A file already over the cap is refused from its size, before any of it is read.
+    reads: 0,
   },
   {
     name: 'is swapped for a symbolic link',
@@ -486,7 +488,7 @@ test.skipIf(process.platform === 'win32').each([
       fs.symlinkSync(elsewhere, staged);
     },
   },
-])('a staged script that $name after its download is not committed', async ({ change }) => {
+])('a staged script that $name after its download is not committed', async ({ change, reads }) => {
   const { stateDir, directory } = caller();
   const destination = path.join(directory, 'journey.ad');
   const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
@@ -497,9 +499,12 @@ test.skipIf(process.platform === 'win32').each([
     change(path.join(prepared.directory, staging!, 'script.ad'));
     return actual.confirmScriptDestination(spelled, prepared);
   });
+  const readSync = vi.spyOn(fs, 'readSync');
+  onTestFinished(() => readSync.mockRestore());
 
   const { response } = await open(baseUrl, stateDir, destination);
 
+  if (reads !== undefined) expect(readSync).toHaveBeenCalledTimes(reads);
   expect(response).toMatchObject({
     ok: true,
     data: { scriptDeliveryFailure: { cause: 'script_download_failed' } },
@@ -563,12 +568,25 @@ test('a closing repeat names the file to record again to, quoted for a shell', a
 
 // Windows refuses a control character in the final name, so the first version never commits there.
 test.skipIf(process.platform === 'win32').each([
-  { name: 'a newline', file: 'line\nbreak.ad' },
-  { name: 'a C1 next-line character', file: 'line\u0085break.ad' },
-  { name: 'a C1 control sequence introducer', file: 'line\u009bbreak.ad' },
+  { name: 'a newline', file: 'line\nbreak.ad', shown: String.raw`line\x0abreak.ad` },
+  {
+    name: 'a C1 next-line character',
+    file: 'line\u0085break.ad',
+    shown: String.raw`line\x85break.ad`,
+  },
+  {
+    name: 'a C1 control sequence introducer',
+    file: 'line\u009bbreak.ad',
+    shown: String.raw`line\x9bbreak.ad`,
+  },
+  {
+    name: 'an SGR conceal sequence',
+    file: 'line\u001b[8mbreak.ad',
+    shown: String.raw`line\x1b[8mbreak.ad`,
+  },
 ])(
-  'a closing repeat whose path holds $name names no command that a text line would change',
-  async ({ file }) => {
+  'a closing repeat whose path holds $name shows it escaped and names no command a text line would change',
+  async ({ file, shown }) => {
     const { stateDir, directory } = caller();
     const destination = path.join(directory, file);
     const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
@@ -579,14 +597,19 @@ test.skipIf(process.platform === 'win32').each([
       artifacts: [script('v1', 1, id)],
     });
 
+    // savedScript stays exact; only the warning text escapes the control characters it would otherwise print.
     expect(closed).toMatchObject({
       ok: true,
       data: {
         savedScript: destination,
         warnings: [
-          `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, reuse your original open command with --save-script=<path> --force, with the path quoted for your shell.`,
+          `Revision 1 of the recording was already saved to ${path.join(directory, shown)}. It is not checked again. If that file is missing, reuse your original open command with --save-script=<path> --force, with the path quoted for your shell.`,
         ],
       },
     });
+    const [warning] = (closed.ok && (closed.data?.warnings as string[])) || [];
+    expect(
+      [...(warning ?? '')].filter((char) => char < ' ' || (char >= '\u007f' && char <= '\u009f')),
+    ).toEqual([]);
   },
 );

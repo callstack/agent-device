@@ -319,17 +319,30 @@ function noteRepeatedVersion(
  * C0 or C1 control character cannot survive a rendered text line, so they name a placeholder for it instead.
  */
 function recordAgainArguments(destination: string): string {
-  const control = (char: string) => char < ' ' || (char >= '\u007f' && char <= '\u009f');
-  if ([...destination].some(control)) {
+  if ([...destination].some(isControlCharacter)) {
     return '--save-script=<path> --force, with the path quoted for your shell';
   }
   return `--save-script=${shellQuoteIfNeeded(destination)} --force`;
 }
 
+function isControlCharacter(char: string): boolean {
+  return char < ' ' || (char >= '\u007f' && char <= '\u009f');
+}
+
+/** A destination as warning text shows it: C0, DEL and C1 characters escaped, so none can reach a terminal raw. */
+function displayedPath(destination: string): string {
+  return [...destination]
+    .map((char) =>
+      isControlCharacter(char) ? `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}` : char,
+    )
+    .join('');
+}
+
 function repeatedVersionText(
   repeat: Readonly<{ requested: number; committed: number; pending?: number }>,
-  published: string,
+  destination: string,
 ): string {
+  const published = displayedPath(destination);
   const answer =
     repeat.requested === repeat.committed
       ? `Revision ${repeat.requested} of the recording was already saved to ${published}.`
@@ -716,13 +729,17 @@ function settleNamedInterruption(
 
 /**
  * The identity of a staged script that is a readable regular file within the delivery cap and stayed unchanged
- * while it was read through one verified descriptor; anything else is not committed. Nothing is stored.
+ * while it was read through one verified descriptor; anything else is not committed. No content digest is kept; the
+ * identity returned is the pending file identity the record names until the commit settles.
  */
 function verifiedStagedIdentity(staged: string): string {
   const descriptor = openVerifiedFileForRead(staged);
   if (descriptor === undefined) throw new Error('The staged script is missing.');
   try {
     const opened = fs.fstatSync(descriptor, { bigint: true });
+    if (opened.size > BigInt(MAX_SCRIPT_BYTES)) {
+      throw new Error('The staged script is not within the delivery cap.');
+    }
     const chunk = Buffer.allocUnsafe(64 * 1024);
     let total = 0;
     for (let read = -1; read !== 0 && total <= MAX_SCRIPT_BYTES; total += read) {
