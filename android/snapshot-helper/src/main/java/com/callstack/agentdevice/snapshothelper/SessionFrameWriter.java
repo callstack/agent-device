@@ -58,12 +58,7 @@ final class SessionFrameWriter implements SessionResponseWriter.FrameSink {
         offset += count;
         continue;
       }
-      // The send may have taken time, so the wait uses what is left now, not before the send.
-      long waitMs = deadlineAtMs - clock.nowMs();
-      if (waitMs <= 0) {
-        throw new SocketTimeoutException("session response write deadline exceeded");
-      }
-      channel.awaitWritable(waitMs);
+      SessionPeerPolicy.awaitBeforeDeadline(clock, deadlineAtMs, channel::awaitWritable);
     }
   }
 }

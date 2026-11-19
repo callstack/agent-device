@@ -119,7 +119,9 @@ name derives from the port and carries no secret, and no token travels in argv.
 Each connection gets a command read deadline from acceptance, independent of the capture
 `timeoutMs`. The deadline is two seconds, plus one second for each 64 KiB of command bytes that
 has arrived, so the largest frame can take about 10 s over a slow remote adb link (at least
-~0.5 Mbit/s). Bytes after the newline earn no time. A silent peer closes at two seconds, and a
+~0.5 Mbit/s). Bytes after the newline earn no time. Reads are nonblocking, and the helper waits
+for data with poll only as long as the deadline has left; it does not use the socket timeout,
+which Android 7.0 and 7.1.0 apply to sends only. A silent peer closes at two seconds, and a
 drip-feeding peer cannot hold the command reader past its deadline. A
 command ends with a newline. A connection whose read expires, or whose stream ends before the
 newline, closes without a response, so a peer that never reads cannot hold the accept loop with a

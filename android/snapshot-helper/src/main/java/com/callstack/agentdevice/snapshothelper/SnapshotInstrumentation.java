@@ -204,17 +204,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
           try {
             // An expired, incomplete or failed read closes the connection without a reply: a peer
             // that never reads could otherwise hold the only accept loop with the reply.
+            LocalSocketSessionChannel channel = new LocalSocketSessionChannel(socket);
             String command =
                 SessionPeerPolicy.readSessionCommandLine(
-                    socket.getInputStream(),
-                    socket::setSoTimeout,
+                    channel,
                     SystemClock::elapsedRealtime,
                     baseDeadlineAtMs,
                     SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             // Each response goes out in nonblocking sends under one deadline from its first byte.
             SessionResponseWriter.FrameSink sink =
                 new SessionFrameWriter(
-                    new LocalSocketFrameChannel(socket),
+                    channel,
                     SystemClock::elapsedRealtime,
                     SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS,
                     SESSION_RESPONSE_MIN_BYTES_PER_SECOND);

@@ -18,6 +18,8 @@ public final class SessionPeerPolicyTest {
     incompleteCommandAtDeadlineCannotStartAnotherRead();
     dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
     readHonorsTheByteLimitAndEof();
+    silentPeerIsWaitedForOnlyUntilTheDeadline();
+    pauseBeforeTheWaitNeverPollsPastTheDeadline();
     maximumFrameAboveTheFloorRateArrivesAfterTheBaseDeadline();
     frameBelowTheFloorRateExpires();
     bytesAfterTheNewlineEarnNoReadTime();
@@ -52,8 +54,7 @@ public final class SessionPeerPolicyTest {
         return super.read(data, offset, length);
       }
     };
-    String command = SessionPeerPolicy.readSessionCommandLine(
-        input, ignored -> {}, () -> nowMs[0], 110, 8);
+    String command = SessionPeerPolicy.readSessionCommandLine(source(input), () -> nowMs[0], 110, 8);
     if (!"ab".equals(command)) {
       throw new AssertionError("Expected a complete command returned at the deadline");
     }
@@ -61,7 +62,6 @@ public final class SessionPeerPolicyTest {
 
   private static void incompleteCommandAtDeadlineCannotStartAnotherRead() throws Exception {
     long[] nowMs = {100};
-    List<Integer> timeouts = new ArrayList<>();
     ByteArrayInputStream input = new ByteArrayInputStream("a\n".getBytes(StandardCharsets.UTF_8)) {
       @Override
       public int read(byte[] data, int offset, int length) {
@@ -70,18 +70,14 @@ public final class SessionPeerPolicyTest {
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(input, timeouts::add, () -> nowMs[0], 110, 8);
+      SessionPeerPolicy.readSessionCommandLine(source(input), () -> nowMs[0], 110, 8);
       throw new AssertionError("Expected the deadline to stop an unfinished command");
     } catch (SocketTimeoutException expected) {
-      if (!timeouts.equals(Arrays.asList(10))) {
-        throw new AssertionError("Expected one bounded read and no zero timeout: " + timeouts);
-      }
     }
   }
 
   private static void dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline() throws Exception {
     long[] nowMs = {100};
-    List<Integer> timeouts = new ArrayList<>();
     ByteArrayInputStream drip = new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
       @Override
       public int read(byte[] data, int offset, int length) {
@@ -90,12 +86,9 @@ public final class SessionPeerPolicyTest {
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(drip, timeouts::add, () -> nowMs[0], 110, 8);
+      SessionPeerPolicy.readSessionCommandLine(source(drip), () -> nowMs[0], 110, 8);
       throw new AssertionError("A command completed after its absolute deadline was accepted");
     } catch (SocketTimeoutException expected) {
-      if (!timeouts.equals(Arrays.asList(10, 6, 2))) {
-        throw new AssertionError("The timeout must shrink before each read: " + timeouts);
-      }
     }
   }
 
@@ -162,7 +155,7 @@ public final class SessionPeerPolicyTest {
       }
     };
     try {
-      SessionPeerPolicy.readSessionCommandLine(late, ignored -> {}, () -> nowMs[0], 100, 100_000);
+      SessionPeerPolicy.readSessionCommandLine(source(late), () -> nowMs[0], 100, 100_000);
       throw new AssertionError("Bytes after the newline extended the read deadline");
     } catch (SocketTimeoutException expected) {
       // Only the command bytes earned time.
@@ -182,14 +175,77 @@ public final class SessionPeerPolicyTest {
         return super.read(data, offset, Math.min(chunkBytes, length));
       }
     };
-    return SessionPeerPolicy.readSessionCommandLine(
-        paced, ignored -> {}, () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+    return SessionPeerPolicy.readSessionCommandLine(source(paced), () -> nowMs[0], 2_000, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+  }
+
+  /** A peer that sends nothing: one wait, for exactly what the deadline has left. */
+  private static void silentPeerIsWaitedForOnlyUntilTheDeadline() throws Exception {
+    long[] nowMs = {100};
+    List<Long> waits = new ArrayList<>();
+    SessionPeerPolicy.CommandSource silent = new SessionPeerPolicy.CommandSource() {
+      @Override
+      public int receive(byte[] data, int offset, int length) {
+        return 0;
+      }
+
+      @Override
+      public void awaitReadable(long timeoutMs) {
+        waits.add(timeoutMs);
+        nowMs[0] += timeoutMs;
+      }
+    };
+    try {
+      SessionPeerPolicy.readSessionCommandLine(silent, () -> nowMs[0], 2_100, 64);
+      throw new AssertionError("Expected a silent peer to expire");
+    } catch (SocketTimeoutException expected) {
+      if (!waits.equals(Arrays.asList(2_000L)) || nowMs[0] != 2_100) {
+        throw new AssertionError("Expected one 2,000 ms wait ending at the deadline: " + waits);
+      }
+    }
+  }
+
+  /** The reader is paused after a receive that found nothing, past the deadline: no wait may start. */
+  private static void pauseBeforeTheWaitNeverPollsPastTheDeadline() throws Exception {
+    long[] nowMs = {100};
+    SessionPeerPolicy.CommandSource paused = new SessionPeerPolicy.CommandSource() {
+      @Override
+      public int receive(byte[] data, int offset, int length) {
+        nowMs[0] = 4_100;
+        return 0;
+      }
+
+      @Override
+      public void awaitReadable(long timeoutMs) {
+        throw new AssertionError("Waited " + timeoutMs + " ms after the deadline, at " + nowMs[0]);
+      }
+    };
+    try {
+      SessionPeerPolicy.readSessionCommandLine(paused, () -> nowMs[0], 2_100, 64);
+      throw new AssertionError("Expected the used-up deadline to end the read");
+    } catch (SocketTimeoutException expected) {
+      // The read closed without waiting.
+    }
+  }
+
+  /** Adapts a test stream: each receive returns what the stream gives, and never waits. */
+  private static SessionPeerPolicy.CommandSource source(java.io.InputStream input) {
+    return new SessionPeerPolicy.CommandSource() {
+      @Override
+      public int receive(byte[] data, int offset, int length) throws java.io.IOException {
+        return input.read(data, offset, length);
+      }
+
+      @Override
+      public void awaitReadable(long timeoutMs) {
+        throw new AssertionError("A stream fixture always has data or EOF");
+      }
+    };
   }
 
   private static String readFixture(String input, int maxBytes) throws Exception {
     return SessionPeerPolicy.readSessionCommandLine(
-        new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),
-        ignored -> {}, () -> 100, 110, maxBytes);
+        source(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))),
+        () -> 100, 110, maxBytes);
   }
 
   private static void socketNameIsDerivedFromThePortAndCarriesNoSecret() {
