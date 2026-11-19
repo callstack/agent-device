@@ -10,6 +10,7 @@ import {
   type DeviceRotation,
 } from '@agent-device/contracts/device';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
   type ScrollContainerTarget,
@@ -17,7 +18,9 @@ import {
   DEFAULT_MOBILE_SCROLL_DURATION_MS,
 } from '@agent-device/contracts/scroll-command';
 import {
+  type PullRefreshGesturePlan,
   type ScrollDirection,
+  type ScrollGesturePlan,
   buildPullRefreshGesturePlan,
   buildScrollGesturePlan,
   clipScrollViewportAboveKeyboard,
@@ -333,28 +336,7 @@ export async function scrollAndroid(
     helperSessionScope: options?.helperSessionScope,
   });
   const swipeSurface = resolveAndroidScrollSurface(direction, viewport, keyboard);
-  // A pull-to-refresh anchors its lane just inside the TOP of the container instead of running the
-  // centred lane: a pull that starts above the list lands on the header and moves nothing.
-  const anchorTop = options?.anchorTop === true && direction === 'up';
-  const relativePlan =
-    anchorTop && options?.containerRect !== undefined
-      ? buildPullRefreshGesturePlan({
-          amount: options?.amount,
-          pixels: options?.pixels,
-          container: relativeToViewport(options.containerRect, swipeSurface.viewport),
-          referenceWidth: swipeSurface.viewport.width,
-          referenceHeight: swipeSurface.viewport.height,
-        })
-      : buildScrollGesturePlan({
-          direction,
-          amount: options?.amount,
-          pixels: options?.pixels,
-          referenceWidth: swipeSurface.viewport.width,
-          referenceHeight: swipeSurface.viewport.height,
-          ...(options?.containerRect === undefined
-            ? {}
-            : { container: relativeToViewport(options.containerRect, swipeSurface.viewport) }),
-        });
+  const relativePlan = androidScrollLane(direction, options, swipeSurface.viewport);
   const scrollPlan = {
     ...relativePlan,
     // Injected coordinates are absolute, so their zero-origin reference frame
@@ -386,23 +368,7 @@ export async function scrollAndroid(
     swipeSurface.viewport,
     'android',
   );
-  const gesturePlan =
-    holdMs > 0
-      ? {
-          ...panPlan,
-          durationMs: durationMs + holdMs,
-          pointers: [
-            {
-              pointerId: 0,
-              samples: [
-                { offsetMs: 0, point: { x: scrollPlan.x1, y: scrollPlan.y1 } },
-                { offsetMs: durationMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
-                { offsetMs: durationMs + holdMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
-              ],
-            },
-          ],
-        }
-      : panPlan;
+  const gesturePlan = withHoldBeforeRelease(panPlan, scrollPlan, durationMs, holdMs);
   const backend = await executeAndroidTouchPlan(device, {
     ...gesturePlan,
     releaseBehavior: options?.releaseBehavior ?? 'controlled',
@@ -420,6 +386,68 @@ export async function scrollAndroid(
 /** The planner works in the swipe surface's zero-origin frame; snapshot rects are absolute. */
 function relativeToViewport(rect: Rect, viewport: Rect): Rect {
   return { ...rect, x: rect.x - viewport.x, y: rect.y - viewport.y };
+}
+
+type ScrollAndroidOptions = NonNullable<Parameters<typeof scrollAndroid>[2]>;
+
+/**
+ * The lane one Android scroll runs, in the swipe surface's zero-origin frame. A pull-to-refresh
+ * anchors its lane just inside the TOP of the container instead of running the centred lane: a
+ * pull that starts above the list lands on the header and moves nothing.
+ */
+function androidScrollLane(
+  direction: ScrollDirection,
+  options: ScrollAndroidOptions | undefined,
+  viewport: Rect,
+): ScrollGesturePlan | PullRefreshGesturePlan {
+  const container =
+    options?.containerRect === undefined
+      ? undefined
+      : relativeToViewport(options.containerRect, viewport);
+  if (options?.anchorTop === true && direction === 'up' && container !== undefined) {
+    return buildPullRefreshGesturePlan({
+      amount: options?.amount,
+      pixels: options?.pixels,
+      container,
+      referenceWidth: viewport.width,
+      referenceHeight: viewport.height,
+    });
+  }
+  return buildScrollGesturePlan({
+    direction,
+    amount: options?.amount,
+    pixels: options?.pixels,
+    referenceWidth: viewport.width,
+    referenceHeight: viewport.height,
+    ...(container === undefined ? {} : { container }),
+  });
+}
+
+/**
+ * The injector lifts the contact at the last sample's offset, so a stationary final sample at
+ * `durationMs + holdMs` is the hold before release a pull-to-refresh needs to commit.
+ */
+function withHoldBeforeRelease(
+  panPlan: GesturePlan,
+  scrollPlan: Readonly<{ x1: number; y1: number; x2: number; y2: number }>,
+  durationMs: number,
+  holdMs: number,
+): GesturePlan {
+  if (holdMs <= 0 || panPlan.topology !== 'single') return panPlan;
+  return {
+    ...panPlan,
+    durationMs: durationMs + holdMs,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, point: { x: scrollPlan.x1, y: scrollPlan.y1 } },
+          { offsetMs: durationMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
+          { offsetMs: durationMs + holdMs, point: { x: scrollPlan.x2, y: scrollPlan.y2 } },
+        ],
+      },
+    ],
+  };
 }
 
 /**

@@ -61,6 +61,18 @@ extension RunnerTests {
     return try JSONDecoder().decode(ScrollGestureFixture.self, from: Data(contentsOf: fixtureURL))
   }
 
+  private func assertPlan(
+    _ plan: RunnerScrollGesturePlan,
+    matches expected: ScrollGestureFixture.Expected,
+    _ name: String
+  ) {
+    XCTAssertEqual(plan.x1, expected.x1, name)
+    XCTAssertEqual(plan.y1, expected.y1, name)
+    XCTAssertEqual(plan.x2, expected.x2, name)
+    XCTAssertEqual(plan.y2, expected.y2, name)
+    XCTAssertEqual(plan.travelPixels, expected.pixels, name)
+  }
+
   func testRunnerScrollGesturePlanMatchesParityTable() throws {
     let fixture = try loadScrollGestureFixture()
     XCTAssertFalse(fixture.cases.isEmpty, "parity table must not be empty")
@@ -75,11 +87,7 @@ extension RunnerTests {
         ),
         testCase.name
       )
-      XCTAssertEqual(plan.x1, testCase.expected.x1, testCase.name)
-      XCTAssertEqual(plan.y1, testCase.expected.y1, testCase.name)
-      XCTAssertEqual(plan.x2, testCase.expected.x2, testCase.name)
-      XCTAssertEqual(plan.y2, testCase.expected.y2, testCase.name)
-      XCTAssertEqual(plan.travelPixels, testCase.expected.pixels, testCase.name)
+      assertPlan(plan, matches: testCase.expected, testCase.name)
     }
   }
 
@@ -99,11 +107,7 @@ extension RunnerTests {
         ),
         testCase.name
       )
-      XCTAssertEqual(plan.x1, testCase.expected.x1, testCase.name)
-      XCTAssertEqual(plan.y1, testCase.expected.y1, testCase.name)
-      XCTAssertEqual(plan.x2, testCase.expected.x2, testCase.name)
-      XCTAssertEqual(plan.y2, testCase.expected.y2, testCase.name)
-      XCTAssertEqual(plan.travelPixels, testCase.expected.pixels, testCase.name)
+      assertPlan(plan, matches: testCase.expected, testCase.name)
     }
   }
 

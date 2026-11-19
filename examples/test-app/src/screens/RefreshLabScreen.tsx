@@ -39,8 +39,8 @@ export function RefreshLabScreen() {
       </View>
       <FlatList
         data={items}
-        keyExtractor={(id) => String(id)}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        keyExtractor={String}
+        refreshControl={<RefreshControl onRefresh={onRefresh} refreshing={refreshing} />}
         renderItem={({ item }) => (
           <View style={styles.rowItem}>
             <Text style={styles.itemText}>{`Item ${item}`}</Text>

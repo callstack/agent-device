@@ -277,17 +277,9 @@ export function formatScrollEdgeMessage(params: {
   movement?: ScrollMovementObservation | undefined;
 }): string {
   const { direction, edge, refresh, passes, amount, pixels, honoredPixels, movement } = params;
-  if (refresh === true) {
-    // The pull ran at the top edge by construction, so the message names the pull, not a distance:
-    // `at-edge` is never the answer for this mode, and an unchanged surface says so plainly.
-    if (movement === 'moved') return 'Pulled to refresh at the top edge; the surface changed';
-    if (movement === 'unchanged') {
-      return 'Pulled to refresh at the top edge; the visible content did not change';
-    }
-    return 'Pulled to refresh at the top edge';
-  }
+  if (refresh === true) return formatRefreshEdgeMessage(movement);
   if (edge && passes === 0) {
-    return `Already at ${edge}; no hidden content ${edge === 'bottom' ? 'below' : 'above'} detected`;
+    return `Already at ${edge}; no hidden content ${edgeSideWord(edge)} detected`;
   }
   if (edge) return `Scrolled to ${edge} with ${passes} ${direction} passes`;
   const verticalEdge = verticalEdgeFor(direction);
@@ -295,9 +287,7 @@ export function formatScrollEdgeMessage(params: {
     // The same honesty the zero-pass branch above holds: the analyzer reports no hidden content
     // DETECTED, which is not a claim that the content provably ends here. A horizontal scroll has
     // no edge signal to report, so it falls through to the distance it was asked for.
-    return `Scrolled ${direction} and no hidden content ${
-      verticalEdge === 'bottom' ? 'below' : 'above'
-    } was detected`;
+    return `Scrolled ${direction} and no hidden content ${edgeSideWord(verticalEdge)} was detected`;
   }
   if (movement === 'unchanged') {
     return `Scrolled ${direction} and the visible content did not change`;
@@ -309,6 +299,23 @@ export function formatScrollEdgeMessage(params: {
       : `Scrolled ${direction} by ${amount} of the viewport (${honoredPixels}px)`;
   }
   return `Scrolled ${direction}`;
+}
+
+/** Which side of the screen an edge's hidden content lies on, in the message's own words. */
+function edgeSideWord(edge: ScrollEdge): string {
+  return edge === 'bottom' ? 'below' : 'above';
+}
+
+/**
+ * The pull ran at the top edge by construction, so its message names the pull, not a distance:
+ * `at-edge` is never the answer for this mode, and an unchanged surface says so plainly.
+ */
+function formatRefreshEdgeMessage(movement: ScrollMovementObservation | undefined): string {
+  if (movement === 'moved') return 'Pulled to refresh at the top edge; the surface changed';
+  if (movement === 'unchanged') {
+    return 'Pulled to refresh at the top edge; the visible content did not change';
+  }
+  return 'Pulled to refresh at the top edge';
 }
 
 function buildScrollEdgeNoProgressError(edge: ScrollEdge, passes: number): AppError {
