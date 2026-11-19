@@ -7,6 +7,7 @@ import {
   type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { readCurrentOwnerIdentity, writePersistedOwner } from '@agent-device/host-kit/process';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../core/session-store.ts';
@@ -105,6 +106,20 @@ test('a lifecycle request is answered at the seam and never reaches the handler 
   await settled();
   assert.equal(drained.mock.calls.length, 1);
   assert.equal(served.mock.calls.length, 0);
+});
+
+test('a quiesce fence carrying the published legacy value is admitted', async () => {
+  const identity = readCurrentOwnerIdentity();
+  const record = writePersistedOwner(identity);
+  assert.ok(identity.startTime);
+  assert.ok(record.startTime);
+  const seam = makeSeam({ identity: { pid: identity.pid, processStartTime: identity.startTime } });
+  assert.deepEqual(
+    await seam.admit(seam.served)(
+      lifecycleRequest({ fence: { pid: record.pid, processStartTime: record.startTime } }),
+    ),
+    { ok: true, data: { outcome: 'draining' } },
+  );
 });
 
 test('a host-owned runtime refuses quiesce and keeps serving', async () => {
