@@ -27,8 +27,13 @@ export const REVYL_ALLOCATION_TIMEOUT_MS =
   REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS + READY_ANSWER_MARGIN_MS;
 /** Revyl's worker answers `health` with 503 until the device is attached; the CLI polls on that beat. */
 const READY_POLL_INTERVAL_MS = 2_000;
-/** Revyl releases an idle session on its own; this is the lease the runtime asks for. */
-const DEFAULT_IDLE_TIMEOUT_SECONDS = 30 * 60;
+/**
+ * Revyl releases a session that sees no device action for this long. The runtime refreshes that clock
+ * while it holds the lease, so the timeout ends only a device whose holder is gone without `/stop`.
+ */
+const DEFAULT_IDLE_TIMEOUT_SECONDS = 5 * 60;
+/** How often a held session refreshes Revyl's idle clock: well inside `DEFAULT_IDLE_TIMEOUT_SECONDS`. */
+export const REVYL_KEEP_ALIVE_INTERVAL_MS = 60_000;
 /** Revyl answers a device-proxy action the worker cannot serve yet with these. */
 const NOT_READY_STATUSES = new Set([503, 409]);
 
@@ -450,6 +455,28 @@ async function sleepBefore(deadline: RevylDeadline, signal?: AbortSignal): Promi
     undefined,
     signal === undefined ? {} : { signal },
   ).catch(() => undefined);
+}
+
+/**
+ * Refreshes a held session's idle clock on a timer, with a read that changes nothing on the device:
+ * the worker counts a state read as device use and `health` as not. A failed refresh is not reported,
+ * since the next one or any command refreshes the clock again; only a holder gone for the whole idle
+ * timeout loses the device. The timer never keeps the process alive.
+ */
+export function keepRevylSessionAlive(client: RevylClient, runId: string): () => void {
+  let refreshing = false;
+  const timer = setInterval(() => {
+    if (refreshing) return;
+    refreshing = true;
+    void client
+      .workerAction(runId, 'appearance')
+      .catch(() => undefined)
+      .finally(() => {
+        refreshing = false;
+      });
+  }, REVYL_KEEP_ALIVE_INTERVAL_MS);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 /**
