@@ -675,7 +675,7 @@ test('formatSnapshotText suppresses noisy system scroll-container labels', () =>
   assert.doesNotMatch(text, /Vertical scroll bar, 2 pages/);
 });
 
-test('formatSnapshotText prints snapshot warnings ahead of empty output', () => {
+test('formatSnapshotText leaves response warnings to the dispatcher', () => {
   const text = withNoColor(() =>
     formatSnapshotText({
       nodes: [],
@@ -684,7 +684,7 @@ test('formatSnapshotText prints snapshot warnings ahead of empty output', () => 
     }),
   );
   assert.match(text, /Snapshot: 0 nodes/);
-  assert.match(text, /Interactive snapshot is empty after filtering 42 raw Android nodes/);
+  assert.doesNotMatch(text, /Interactive snapshot is empty/);
 });
 
 test('formatSnapshotText hints to use plain screenshot for sparse snapshots', () => {

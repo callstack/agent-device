@@ -273,7 +273,8 @@ function buildSnapshotNotices(
   options: SnapshotTextOptions,
   helperPresentation: AndroidHelperPresentationInput = { nodes, filteredCount: 0 },
 ): string[] {
-  const notices = [...readSnapshotWarnings(data), ...fallbackScreenshotNotices(data)];
+  // Response warnings are printed once by the dispatcher, after the snapshot.
+  const notices = [...fallbackScreenshotNotices(data)];
   // The structured snapshot quality verdict already carries a sharper version of this hint.
   if (shouldRenderLegacySparseSnapshotHint(data)) {
     const sparseSnapshotHint = formatSparseSnapshotHint(nodes, options);

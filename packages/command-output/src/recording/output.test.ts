@@ -1,5 +1,21 @@
 import { describe, expect, test } from 'vitest';
+import { dispatchCliOutput } from '../cli-output.ts';
 import { recordCliOutput } from './output.ts';
+
+/**
+ * The record output as the CLI prints it. Its stdout is the path a caller parses, so the dispatcher prints the response
+ * warning on stderr.
+ */
+async function printRecord(result: Record<string, unknown>) {
+  const output = await dispatchCliOutput({
+    env: {},
+    stderrIsTTY: false,
+    name: 'record',
+    input: {},
+    result,
+  });
+  return output!;
+}
 
 describe('recordCliOutput', () => {
   test('prints session state directory for record-created sessions', () => {
@@ -16,8 +32,8 @@ describe('recordCliOutput', () => {
     );
   });
 
-  test('prints chunked Android recording paths clearly for human stdout', () => {
-    const output = recordCliOutput({
+  test('prints chunked Android recording paths clearly for human stdout', async () => {
+    const output = await printRecord({
       recording: 'stopped',
       outPath: '/tmp/recording.mp4',
       telemetryPath: '/tmp/recording.gesture-telemetry.json',
@@ -37,9 +53,11 @@ describe('recordCliOutput', () => {
         '  1: /tmp/recording.mp4',
         '  2: /tmp/recording.part-002.mp4',
         'Telemetry: /tmp/recording.gesture-telemetry.json',
-        'Warning: Android adb screenrecord is capped at 180s, so this recording was split into multiple MP4 chunks.',
         'Overlay warning: touch overlay burn-in is skipped for chunked Android recordings; returning raw chunks plus gesture telemetry',
       ].join('\n'),
+    );
+    expect(output.stderr).toBe(
+      'Warning: Android adb screenrecord is capped at 180s, so this recording was split into multiple MP4 chunks.\n',
     );
     expect(output.data).toMatchObject({
       chunks: [
@@ -66,18 +84,19 @@ test.each([
       warning: 'Overlay skipped\nfor this run',
     },
   },
-])('record folds a multi-line warning onto one Warning line ($name)', ({ data }) => {
-  const output = recordCliOutput(data);
+])('record folds a multi-line warning onto one Warning line ($name)', async ({ data }) => {
+  const output = await printRecord(data);
 
-  expect(output.text).toContain('Warning: Overlay skipped for this run');
-  expect(output.text).not.toContain('Overlay skipped\nfor');
+  expect(output.stderr).toBe('Warning: Overlay skipped for this run\n');
+  expect(output.text).not.toContain('Overlay skipped');
 });
 
-test('record keeps a warning whose text also appears inside a path', () => {
-  const output = recordCliOutput({
-    outPath: '/tmp/Overlay skipped/recording.mp4',
-    warning: 'Overlay skipped',
-  });
+test.each([
+  { name: 'inside a path segment', outPath: '/tmp/Overlay skipped/recording.mp4' },
+  { name: 'as a whole line of the path', outPath: '/tmp/clip\nOverlay skipped' },
+])('record prints its warning even when the warning text appears $name', async ({ outPath }) => {
+  const output = await printRecord({ outPath, warning: 'Overlay skipped' });
 
-  expect(output.text).toBe('/tmp/Overlay skipped/recording.mp4\nWarning: Overlay skipped');
+  expect(output.text).toBe(outPath);
+  expect(output.stderr).toBe('Warning: Overlay skipped\n');
 });

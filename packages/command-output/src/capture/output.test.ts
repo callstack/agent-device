@@ -119,13 +119,17 @@ test('a repaired capture renders the disclosure and keeps the structured fact', 
     priorState: 'runningBackground',
     otherActiveApplicationPid: 4562,
   } as const;
-  const output = await snapshotCliOutput({
+  const output = (await dispatchCliOutput({
+    env: process.env,
+    stderrIsTTY: false,
+    name: 'snapshot',
+    input: {},
     result: {
       ...buildResult(REPEATED_CHAIN),
       warnings: [iosTargetActivationDisclosure(fact)],
       targetActivation: fact,
-    } as CaptureSnapshotResult,
-  });
+    },
+  }))!;
 
   assert.match(String(output.text), /prior state runningBackground/);
   assert.match(String(output.text), /drive the other app in its own session/);

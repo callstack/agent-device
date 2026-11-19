@@ -2,7 +2,7 @@ import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCustomReplayTestReporter } from './custom.ts';
-import { createDefaultReplayTestReporter } from './default.ts';
+import { createDefaultReplayTestReporter, readCommandProgressWriter } from './default.ts';
 import { getReplayTestExitCode } from './format.ts';
 import { createJunitReplayTestReporter } from './junit.ts';
 import { toReplayTestReporterProgressEvent } from './progress.ts';
@@ -63,6 +63,30 @@ export function runReplayTestReporterProgress(
       }
     } catch (error) {
       reportReplayTestReporterHookError(reporter, hookName, context, error);
+    }
+  }
+}
+
+/**
+ * A command progress line during the run, such as an upload. The built-in default reporter writes it on its own row;
+ * without one it goes to stderr escaped, as it does for every other command. A failure to write it is reported and
+ * never fails the run.
+ */
+export function runReplayTestCommandProgress(
+  reporters: ReplayTestReporter[],
+  message: string,
+  context: ReplayTestReporterContext,
+): void {
+  const writer = reporters.map(readCommandProgressWriter).find((found) => found !== undefined);
+  try {
+    if (writer) writer(message, context);
+    else context.stderr.write(escapeTerminalText(`${message}\n`));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    try {
+      context.stderr.write(escapeTerminalText(`Command progress failed: ${reason}\n`));
+    } catch {
+      // A stderr that cannot be written has nowhere left to report to.
     }
   }
 }

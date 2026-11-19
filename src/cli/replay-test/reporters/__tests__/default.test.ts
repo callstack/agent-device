@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import assert from 'node:assert/strict';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { createDefaultReplayTestReporter } from '../default.ts';
+import { createDefaultReplayTestReporter, readCommandProgressWriter } from '../default.ts';
 import type { ReplayTestReporterContext } from '../types.ts';
 
 function createReporterContext(options: { stderrIsTty: boolean }): {
@@ -422,7 +423,7 @@ test('default replay test reporter keeps every live-row field on one line', () =
     reporter.onTestStep?.(
       {
         file: '/tmp/checkout.yaml',
-        title: 'Checkout',
+        title: 'Checkout '.repeat(10),
         index: 1,
         total: 1,
         stepIndex: 1,
@@ -486,34 +487,48 @@ test('default replay test reporter shows malformed daemon counters as placeholde
   });
 });
 
-test('a command progress line clears the drawn live row, and the next row starts fresh', () => {
-  withEnv('CI', undefined, () => {
-    const reporter = createDefaultReplayTestReporter();
-    const { context, stderr } = createReporterContext({ stderrIsTty: true });
-    context.stderr.columns = 200;
-    const step = {
-      file: '/tmp/checkout.yaml',
-      title: 'Checkout',
-      index: 1,
-      total: 1,
-      stepIndex: 1,
-      stepTotal: 2,
-      stepCommand: 'tapOn',
-    };
-    reporter.onSuiteStart?.(
-      { total: 1, runnable: 1, skipped: 0, artifactsDir: '/tmp/replay' },
-      context,
-    );
-    reporter.onTestStep?.(step, context);
-    reporter.onCommandProgress?.('Uploading app.apk (10 B) via direct upload', context);
-    reporter.onTestStep?.({ ...step, stepIndex: 2 }, context);
-    reporter.onSuiteEnd?.(emptySuite(), context);
+// After the terminal narrows, the drawn row wraps: the progress line clears every wrapped row, and a redraw that
+// still counted the old row would move the cursor up over the progress line.
+test.each([200, 20])(
+  'a command progress line clears the drawn live row, and the next row starts fresh (then %i columns)',
+  (columns) => {
+    withEnv('CI', undefined, () => {
+      const reporter = createDefaultReplayTestReporter();
+      const { context, stderr } = createReporterContext({ stderrIsTty: true });
+      context.stderr.columns = 200;
+      const step = {
+        file: '/tmp/checkout.yaml',
+        title: 'Checkout',
+        index: 1,
+        total: 1,
+        stepIndex: 1,
+        stepTotal: 2,
+        stepCommand: 'tapOn',
+      };
+      reporter.onSuiteStart?.(
+        { total: 1, runnable: 1, skipped: 0, artifactsDir: '/tmp/replay' },
+        context,
+      );
+      reporter.onTestStep?.(step, context);
+      context.stderr.columns = columns;
+      readCommandProgressWriter(reporter)?.('Uploading app.apk (10 B) via direct upload', context);
+      reporter.onTestStep?.({ ...step, stepIndex: 2 }, context);
+      reporter.onSuiteEnd?.(emptySuite(), context);
 
-    const progressIndex = stderr.findIndex((text) => text.includes('Uploading'));
-    assert.equal(stderr[progressIndex], '\r\u001B[2KUploading app.apk (10 B) via direct upload\n');
-    // The redraw clears only its own fresh row, never the progress line above it.
-    const redraw = stderr[progressIndex + 1] ?? '';
-    assert.ok(redraw.includes('2/2'), redraw);
-    assert.equal(redraw.includes('\u001B[1A'), false);
-  });
-});
+      const progressIndex = stderr.findIndex((text) => text.includes('Uploading'));
+      const drawn = stripVTControlCharacters(
+        stderr.find((text) => text.includes('Checkout')) ?? '',
+      ).replace('\r', '');
+      const wrappedRows = Math.ceil(drawn.length / columns);
+      assert.equal(wrappedRows > 1, columns < drawn.length, drawn);
+      assert.equal(
+        stderr[progressIndex],
+        `\r\u001B[2K${'\u001B[1A\r\u001B[2K'.repeat(wrappedRows - 1)}Uploading app.apk (10 B) via direct upload\n`,
+      );
+      // The redraw clears only its own fresh row, never the progress line above it.
+      const redraw = stderr[progressIndex + 1] ?? '';
+      assert.ok(redraw.includes('2/2'), redraw);
+      assert.equal(redraw.includes('\u001B[1A'), false);
+    });
+  },
+);

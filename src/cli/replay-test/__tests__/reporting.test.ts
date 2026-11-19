@@ -113,3 +113,33 @@ test('in a terminal, a test run writes command progress on its own row after a d
     if (previousCi !== undefined) process.env.CI = previousCi;
   }
 });
+
+test('a custom reporter never receives command progress, so its hook cannot fail the run', async () => {
+  const root = await mkdtempForTest('agent-device-reporter-progress-');
+  const reporter = path.join(root, 'reporter.mjs');
+  await fs.writeFile(
+    reporter,
+    "export default { name: 'thrower', onCommandProgress() { throw new Error('hook failed'); } };\n",
+  );
+  const runtime = await createReplayTestReporterRuntime({ reporter: [reporter] });
+
+  const stderr = withCapturedStderr(() => {
+    runtime.onProgress({ type: 'command', status: 'progress', message: 'Uploading app.apk' });
+  });
+
+  assert.equal(stderr, 'Uploading app.apk\n');
+});
+
+test('a command progress line that cannot be written is reported and does not fail the run', async () => {
+  const runtime = await createReplayTestReporterRuntime({});
+  const written: string[] = [];
+  runtime.context.stderr.write = (text) => {
+    if (text.includes('Uploading')) throw new Error('write\u001b[8m failed');
+    written.push(text);
+    return true;
+  };
+
+  runtime.onProgress({ type: 'command', status: 'progress', message: 'Uploading app.apk' });
+
+  assert.deepEqual(written, [String.raw`Command progress failed: write\u001b[8m failed` + '\n']);
+});

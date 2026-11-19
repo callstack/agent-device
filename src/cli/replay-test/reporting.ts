@@ -1,9 +1,9 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import {
   getReplayTestReporterExitCode,
   resolveReplayTestReporters,
+  runReplayTestCommandProgress,
   runReplayTestReporterProgress,
   runReplayTestReporters,
 } from './reporters/registry.ts';
@@ -67,15 +67,9 @@ export async function createReplayTestReporterRuntime(options: {
     reporters,
     context,
     onProgress(event) {
-      // A command progress line (an upload, for one) is not a reporter event: the reporter that draws the live row
-      // writes it on its own row, and without one it goes to stderr as it does for every other command, escaped.
-      if (event.type === 'command') {
-        const owner = reporters.find((reporter) => reporter.onCommandProgress);
-        if (owner?.onCommandProgress) owner.onCommandProgress(event.message, context);
-        else context.stderr.write(escapeTerminalText(`${event.message}\n`));
-        return;
-      }
-      runReplayTestReporterProgress(reporters, event, context);
+      // A command progress line (an upload, for one) is not a reporter event.
+      if (event.type === 'command') runReplayTestCommandProgress(reporters, event.message, context);
+      else runReplayTestReporterProgress(reporters, event, context);
     },
   };
 }

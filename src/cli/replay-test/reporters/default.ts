@@ -33,6 +33,19 @@ const ANSI_ESCAPE_PREFIX = `${String.fromCharCode(27)}[`;
 const HIDE_CURSOR = `${ANSI_ESCAPE_PREFIX}?25l`;
 const SHOW_CURSOR = `${ANSI_ESCAPE_PREFIX}?25h`;
 
+type CommandProgressWriter = (message: string, context: ReplayTestReporterContext) => void;
+
+// Command progress belongs to the built-in reporter that draws the live row. It stays off the public reporter type,
+// so a custom reporter never receives raw command progress.
+const commandProgressWriters = new WeakMap<ReplayTestReporter, CommandProgressWriter>();
+
+/** The command progress writer of a built-in default reporter, or undefined for any other reporter. */
+export function readCommandProgressWriter(
+  reporter: ReplayTestReporter,
+): CommandProgressWriter | undefined {
+  return commandProgressWriters.get(reporter);
+}
+
 export function createDefaultReplayTestReporter(): ReplayTestReporter {
   let progressRenderer: ReturnType<typeof createReplayTestProgressRenderer> | undefined;
   let latestLiveProgressEvent: ReplayTestReporterProgressEvent | undefined;
@@ -81,7 +94,7 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     context.stderr.write(SHOW_CURSOR);
     cursorHidden = false;
   };
-  return {
+  const reporter: ReplayTestReporter = {
     name: 'default',
     onSuiteStart: (suite, context) => {
       hideCursor(context);
@@ -99,13 +112,14 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
       showCursor(context);
       renderReplayTestSummary(suite, context);
     },
-    // Written on its own row: a drawn live row is cleared first, and the renderer starts the next one on a fresh line.
-    onCommandProgress: (message, context) => {
-      const clear = progressRenderer?.clearLiveRow() ?? '';
-      context.stderr.write(`${clear}${escapeTerminalText(message)}\n`);
-    },
     getExitCode: getReplayTestExitCode,
   };
+  // Written on its own row: a drawn live row is cleared first, and the renderer starts the next one on a fresh line.
+  commandProgressWriters.set(reporter, (message, context) => {
+    const clear = progressRenderer?.clearLiveRow() ?? '';
+    context.stderr.write(`${clear}${escapeTerminalText(message)}\n`);
+  });
+  return reporter;
 }
 
 function shouldUseLiveProgress(context: ReplayTestReporterContext): boolean {

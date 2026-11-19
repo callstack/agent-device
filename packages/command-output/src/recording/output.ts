@@ -1,7 +1,6 @@
 import type { CommandName } from '@agent-device/command-surface';
 import type { CommandRequestResult } from '@agent-device/contracts/client';
 import {
-  appendWarningLinesText,
   collapseWarningText,
   resultOutput,
   type CliOutputFormatter,
@@ -38,12 +37,12 @@ function formatRecordSingleOutput(data: Record<string, unknown>, outPath: string
   return withRecordWarnings(lines, data);
 }
 
-/** The record warning as one folded `Warning:` line, like every other response warning, then the overlay warning. */
+/** The overlay warning, which is not a response warning; the dispatcher prints the response warning once. */
 function withRecordWarnings(lines: string[], data: Record<string, unknown>): string {
-  const text = appendWarningLinesText(lines.join('\n'), { warning: data.warning }) ?? '';
-  if (typeof data.overlayWarning !== 'string') return text;
-  const overlay = `Overlay warning: ${collapseWarningText(data.overlayWarning)}`;
-  return text ? `${text}\n${overlay}` : overlay;
+  if (typeof data.overlayWarning === 'string') {
+    lines.push(`Overlay warning: ${collapseWarningText(data.overlayWarning)}`);
+  }
+  return lines.join('\n');
 }
 
 function readRecordingChunks(
