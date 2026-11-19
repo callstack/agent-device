@@ -68,3 +68,44 @@ test.each([
     'includesKeyboard' in scenario ? scenario.includesKeyboard : undefined,
   );
 });
+
+test('a held pan is admitted through the target-authored-drag tier and records holdMs', async () => {
+  // With the plain plan cell unavailable, only a held pan can be admitted: the hold exists only in
+  // intermediate plan samples, so it needs the tier whose fact promises hold-preserving execution.
+  const run = async (input: Record<string, unknown>) => {
+    const sessionName = `held-pan-${input.holdMs ?? 'none'}`;
+    const sessionStore = makeSessionStore();
+    const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
+    sessionStore.publish(sessionName, session);
+    const gestures = gestureRuntimeBindingsFixture({ unavailable: ['performGesturePlan'] });
+    const response = await handleInteractionCommands({
+      createCommandSurface: touchCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'gesture',
+        positionals: [],
+        flags: {},
+        input,
+      },
+      sessionName,
+      sessionStore,
+      captureSnapshotForSession: async ({ session: s }) => s.snapshot!,
+      contextFromFlags: () => ({}),
+      inspectFacts: gestures.inspectFacts,
+      bindDevice: gestures.bindDevice,
+    });
+    return { response, session };
+  };
+
+  const held = await run({ ...pan, holdMs: 800 });
+  expect(held.response).toMatchObject({ ok: true });
+  expect(held.session.actions[0]?.flags).toMatchObject({ holdMs: 800 });
+
+  const unheld = await run(pan);
+  expect(unheld.response?.ok).toBe(false);
+  if (unheld.response && !unheld.response.ok) {
+    expect(unheld.response.error.code).toBe('UNSUPPORTED_OPERATION');
+  }
+});

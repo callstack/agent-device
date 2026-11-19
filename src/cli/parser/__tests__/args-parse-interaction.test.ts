@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
+import { readInputFromCli } from '@agent-device/command-surface';
 import { parseArgs } from '../args.ts';
 
 test('parseArgs accepts clipboard subcommands', () => {
@@ -455,6 +456,43 @@ test('parseArgs accepts --hold-ms on gesture pan and tap, and refuses it on othe
     strictFlags: true,
   });
   assert.equal(tap.flags.holdMs, 40);
+});
+
+test('parseArgs reads a gesture pan hold only from a typed --hold-ms, never from config defaults', () => {
+  const configHold = { holdMs: 300 };
+
+  const plain = parseArgs(['gesture', 'pan', '200', '420', '0', '160', '500'], {
+    strictFlags: true,
+    defaultFlags: configHold,
+  });
+  assert.equal(plain.flags.holdMs, undefined);
+  assert.equal(readInputFromCli('gesture', plain.positionals, plain.flags).holdMs, undefined);
+
+  const typed = parseArgs(['gesture', 'pan', '200', '420', '0', '160', '500', '--hold-ms', '800'], {
+    strictFlags: true,
+    defaultFlags: configHold,
+  });
+  assert.equal(typed.flags.holdMs, 800);
+  assert.equal(readInputFromCli('gesture', typed.positionals, typed.flags).holdMs, 800);
+
+  const twoFinger = parseArgs(
+    ['gesture', 'pan', '200', '420', '0', '160', '500', '--pointer-count', '2'],
+    { strictFlags: true, defaultFlags: configHold },
+  );
+  assert.equal(twoFinger.flags.pointerCount, 2);
+  assert.equal(twoFinger.flags.holdMs, undefined);
+  assert.doesNotThrow(() => readInputFromCli('gesture', twoFinger.positionals, twoFinger.flags));
+  assert.equal(
+    readInputFromCli('gesture', twoFinger.positionals, twoFinger.flags).holdMs,
+    undefined,
+  );
+
+  // A config holdMs still applies to the kind it was requested for.
+  const tap = parseArgs(['gesture', 'tap', '80', '300', '200', '450'], {
+    strictFlags: true,
+    defaultFlags: configHold,
+  });
+  assert.equal(tap.flags.holdMs, 300);
 });
 
 test('parseArgs refuses a gesture option the chosen kind never reads', () => {

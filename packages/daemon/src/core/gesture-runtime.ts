@@ -193,7 +193,8 @@ async function bindGestureTier(
           await runtime.operations.performTargetAuthoredDrag(
             gesturePlanInput(gesturePlan, context),
           ),
-        ...selectGestureFrame(runtime),
+        // A held pan reaches this tier too, and a pan's frame read includes the keyboard.
+        ...selectGestureFrame(runtime, includesKeyboard),
         ...(runtime.operations.querySelector
           ? { querySelector: runtime.operations.querySelector }
           : {}),

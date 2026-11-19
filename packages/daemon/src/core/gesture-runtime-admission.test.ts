@@ -1,4 +1,5 @@
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
@@ -6,6 +7,14 @@ import { daemonPlatformServicesFixture } from '../__tests__/support/platform-ser
 import { resolveBoundGestureRuntime } from './gesture-runtime.ts';
 
 const multiTouchInput = { intent: 'pinch', scale: 1.2 } as const;
+
+const heldPanInput = {
+  intent: 'pan',
+  origin: { x: 100, y: 200 },
+  delta: { x: 0, y: 160 },
+  durationMs: 500,
+  holdMs: 800,
+} as const;
 
 const refusalCases = [
   {
@@ -113,6 +122,75 @@ test.each(refusalCases)(
       expect(resolved.response.error.code).toBe('UNSUPPORTED_OPERATION');
       expect(resolved.response.error.message).toBe(message);
       expect(resolved.response.error.hint).toMatch(hint);
+    }
+    expect(inspectFacts).toHaveBeenCalledOnce();
+    expect(bindDevice).not.toHaveBeenCalled();
+  },
+);
+
+// Endpoint-only plan lowering (Linux, macOS, tvOS, HarmonyOS) drops the intermediate hold samples,
+// so a held pan is admitted through the target-authored-drag tier and refused before dispatch.
+const heldPanRefusalCases = [
+  {
+    name: 'Linux desktop',
+    device: {
+      platform: 'linux',
+      id: 'linux-desktop',
+      name: 'Linux Desktop',
+      kind: 'device',
+      target: 'desktop',
+    },
+    message: 'gesture pan is not supported on linux',
+  },
+  {
+    name: 'macOS desktop',
+    device: {
+      platform: 'apple',
+      appleOs: 'macos',
+      id: 'mac',
+      name: 'Mac',
+      kind: 'device',
+      target: 'desktop',
+    },
+    message: 'gesture pan is not supported on macos',
+  },
+] as const;
+
+test.each(heldPanRefusalCases)(
+  '$name refuses a held pan with UNSUPPORTED_OPERATION and the drag hint before binding',
+  async ({ device, message }) => {
+    const target = device as DeviceInfo;
+    const owner = localRuntimeOwner(target.platform);
+    const base = createUnavailableRuntimeFactsForTest(target, owner);
+    const inspectFacts = vi.fn(async () => ({
+      ...base,
+      operations: {
+        ...base.operations,
+        captureSnapshot: { available: true } as const,
+        performTargetAuthoredDrag: {
+          available: false,
+          reason: 'unsupported-platform-leaf',
+          hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+        },
+      },
+    }));
+    const bindDevice = vi.fn(async () => {
+      throw new Error('unavailable drag tier must be refused before bind');
+    });
+
+    const resolved = await resolveBoundGestureRuntime({
+      device: target,
+      input: heldPanInput,
+      inspectFacts,
+      bindDevice,
+      platformServices: daemonPlatformServicesFixture(),
+    });
+
+    expect(resolved.ok).toBe(false);
+    if (!resolved.ok) {
+      expect(resolved.response.error.code).toBe('UNSUPPORTED_OPERATION');
+      expect(resolved.response.error.message).toBe(message);
+      expect(resolved.response.error.hint).toMatch(/preserves source hold/);
     }
     expect(inspectFacts).toHaveBeenCalledOnce();
     expect(bindDevice).not.toHaveBeenCalled();
