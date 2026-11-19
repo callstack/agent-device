@@ -70,11 +70,11 @@
 //     `super(...)`) may not name a value the file did not publish at the merge-base; typed internal
 //     `reason` properties are not wire vocabulary and are not measured (R89).
 //   - Over PRODUCTION SOURCES: `Promise.race(` occurrences per package (workspace package or root
-//     `src`) may only shrink against the merge-base (R87) — deadline races go through host-kit's
+//     `src`) may only shrink against the merge-base (R88) — deadline races go through host-kit's
 //     `settleWithin`, which clears its own timer on every settle path.
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
-// R6, R9, the R10 R7 counts, and the R87 race counts are ratchets with no written-down reference:
+// R6, R9, the R10 R7 counts, and the R88 race counts are ratchets with no written-down reference:
 // each is the same measurement taken over the merge-base with origin/main (`ratchet-reference.ts`),
 // so growth fails, a shrink needs no edit, and no change can bank headroom.
 // `(root)` holds the executables and ranks above the spine. The retired `src/utils` zone is
@@ -481,7 +481,7 @@ function report(
         `${packageExportSurfaceSummary(ratchets.testOnlyExports, reference.testOnlyExports)}; ` +
         `${testColocationSummary(ratchets.unmatchedTests, reference.unmatchedTests)}; ` +
         `\`Promise.race(\` counts per package hold at or under the merge-base ` +
-        `${reference.ref.slice(0, 10)} (R87, ${remainingRaces} remaining); and ` +
+        `${reference.ref.slice(0, 10)} (R88, ${remainingRaces} remaining); and ` +
         `the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +

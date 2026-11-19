@@ -50,7 +50,7 @@ export type LayeringRatchets = Readonly<{
   unmatchedTests: readonly string[];
   /** R89: untyped `reason: '<literal>'` sites per file, each group sorted by line. */
   untypedReasonLiterals: UntypedReasonLiterals;
-  /** R87: `Promise.race(` occurrences per package, production sources. */
+  /** R88: `Promise.race(...)` calls per package, production sources. */
   promiseRaces: Readonly<Record<string, number>>;
 }>;
 
