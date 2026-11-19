@@ -68,48 +68,6 @@ test('an active emulator shuts down through the owning adb command', async () =>
   );
 });
 
-test.each(['changed', 'unobserved'] as const)(
-  'retains an emulator whose generation is %s after the IME wait',
-  async (outcome) => {
-    const device = androidDevice();
-    seedRestoreMark(device.id, 0);
-    const settling = deferred();
-    sleep.mockImplementationOnce(() => settling.promise);
-    let generation: 'same' | 'changed' | 'unobserved' = 'same';
-    const verify = vi.fn(async () => generation);
-    const pending = createAndroidShutdownRuntime({ commands }).shutdownTarget(
-      device,
-      signal(),
-      verify,
-    );
-    await drainMicrotasks();
-    expect(verify).not.toHaveBeenCalled();
-    generation = outcome;
-    settling.resolve();
-    await expect(pending).resolves.toEqual({ retained: outcome });
-    expect(run).not.toHaveBeenCalled();
-  },
-);
-
-test('a verified generation reaches the shutdown command', async () => {
-  const verify = vi.fn(async () => 'same' as const);
-  await expect(
-    createAndroidShutdownRuntime({ commands }).shutdownTarget(androidDevice(), signal(), verify),
-  ).resolves.toEqual(success());
-  expect(verify).toHaveBeenCalledOnce();
-  expect(run).toHaveBeenCalledOnce();
-});
-
-test('a failed generation verification retains the emulator', async () => {
-  const verify = async (): Promise<'same'> => {
-    throw new Error('probe failed');
-  };
-  await expect(
-    createAndroidShutdownRuntime({ commands }).shutdownTarget(androidDevice(), signal(), verify),
-  ).resolves.toEqual({ retained: 'unobserved' });
-  expect(run).not.toHaveBeenCalled();
-});
-
 test('only Android emulators are available', () => {
   expect(canShutdownTarget(androidDevice())).toBe(true);
   expect(canShutdownTarget({ ...androidDevice(), kind: 'device' })).toBe(false);

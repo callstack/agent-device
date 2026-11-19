@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -17,6 +17,20 @@ import {
   clearDeviceClaim,
   inspectDeviceClaims,
 } from '@agent-device/daemon-contracts/device-claims';
+import {
+  launchedEmulatorProcess,
+  resetLaunchedEmulatorProcess,
+} from '../../../../__tests__/support/launched-emulator-process-fixture.ts';
+
+// The host's answers about the emulator process an `open` launched are modelled, so an Android case
+// can settle its close without touching the real process table.
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const { launchedEmulatorProcessHost } =
+    await import('../../../../__tests__/support/launched-emulator-process-fixture.ts');
+  return launchedEmulatorProcessHost(
+    await importOriginal<typeof import('@agent-device/host-kit/process')>(),
+  );
+});
 
 bindTestCommandHost();
 
@@ -31,7 +45,10 @@ const {
   resetSessionCloseShutdownMocks,
 } = sessionCloseShutdownFixture;
 
-beforeEach(resetSessionCloseShutdownMocks);
+beforeEach(() => {
+  resetSessionCloseShutdownMocks();
+  resetLaunchedEmulatorProcess();
+});
 
 const iosSimulator: SessionState['device'] = {
   platform: 'apple',
@@ -70,7 +87,11 @@ async function closeSession(params: {
   const sessionStore = makeSessionStore();
   const session = makeSession(sessionName, device);
   if (bootedByOpen) session.bootedByOpen = bootedByOpen;
-  session.androidLaunchIdentity = { pid: 42, startTime: 'start' };
+  if (device.platform === 'android')
+    session.androidLaunchIdentity = {
+      pid: launchedEmulatorProcess.pid,
+      startTime: launchedEmulatorProcess.startTime,
+    };
   if (bootedByOpen) {
     const claimInput = {
       env: host.env,
@@ -107,7 +128,6 @@ async function closeSession(params: {
     platformServices: daemonPlatformServicesFixture({
       deviceBootObservation: {
         observeBootTimeMs: async () => ({ observed: false, reason: 'unobserved' }),
-        assessShutdownGeneration: async () => 'same' as const,
       },
     }),
     ...(params.lifecycleOperationsLoader

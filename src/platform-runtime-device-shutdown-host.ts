@@ -1,7 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
-  AndroidShutdownTarget,
-  AndroidShutdownVerification,
   DeviceShutdownCloseCapability,
   DeviceShutdownRuntimeDependencies,
   DeviceShutdownRuntimeHost,
@@ -37,17 +35,10 @@ export function createDeviceShutdownRuntimeHost(
     },
   });
   const android = Object.freeze({
-    shutdownTarget: (async (
-      device: DeviceInfo,
-      signal: AbortSignal,
-      verify?: AndroidShutdownVerification,
-    ) => {
+    shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) => {
       assertShutdownAllowed();
-      const runtime = await loadAndroid();
-      return verify
-        ? await runtime.shutdownTarget(device, signal, verify)
-        : await runtime.shutdownTarget(device, signal);
-    }) as AndroidShutdownTarget,
+      return await (await loadAndroid()).shutdownTarget(device, signal);
+    },
   });
   const close: DeviceShutdownCloseCapability = Object.freeze({
     canShutdownTarget: async (device) => await canShutdownTarget(device, loadApple, loadAndroid),

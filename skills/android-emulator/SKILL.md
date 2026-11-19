@@ -21,7 +21,7 @@ agent-device open <app-or-package-id> --platform android --foreground
 
 Follow the initial interactive snapshot and corrective error hints. If the shell reports that `agent-device` is unavailable, stop and ask the user to install it or expose their existing installation on `PATH`.
 
-When you finish, run `agent-device close`. Plain close stops a local emulator your open booted and leaves one that was already running. If the daemon policy denies `device-shutdown`, inspect the warning for the local emulator that stays running. Pass `--shutdown` to explicitly stop a local emulator regardless of boot ownership; a denied explicit stop fails with `UNAUTHORIZED` and `details.reason: DAEMON_POLICY_DENIED`. If an Android emulator reports a later boot, plain close leaves it running and warns.
+When you finish, run `agent-device close`. Plain close stops a local emulator your open booted and leaves one that was already running. If the daemon policy denies `device-shutdown`, inspect the warning for the local emulator that stays running. Pass `--shutdown` to explicitly stop a local emulator regardless of boot ownership; a denied explicit stop fails with `UNAUTHORIZED` and `details.reason: DAEMON_POLICY_DENIED`. When the emulator process its own open launched is gone or cannot be verified, plain close leaves the emulator running and warns.
 
 Only when the task is specialized or a command shape is unclear, read the relevant version-matched help topic:
 

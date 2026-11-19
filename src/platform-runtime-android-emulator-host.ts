@@ -1,10 +1,5 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
-import {
-  ANDROID_EMULATOR_GENERATION_BUDGET_MS,
-  inspectAndroidEmulatorGeneration,
-  readAndroidEmulatorLaunchStartTime,
-} from '@agent-device/platform-android/device-boot';
-import { Deadline } from '@agent-device/host-kit/retry';
+import { readAndroidEmulatorLaunchStartTime } from '@agent-device/platform-android/device-boot';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -88,33 +83,13 @@ export function createAndroidEmulatorHost(
       if (frontmostPid !== undefined) returnFocusAfterLaunch(pid, frontmostPid, bootBudgetMs);
       return pid;
     },
-    bindLaunchedEmulator: async (pid, device) => {
+    bindLaunchedEmulator: async (pid) => {
+      // Binding is recording what this launch was: the pid this process spawned and when the host
+      // says it started. Close proves the emulator answering the serial is still that process.
       const record = launched.get(pid);
       if (!record) return undefined;
-      const unbound = (cause: string) => {
-        // Close reads this as "open recorded no identity", so the miss is named where it happened.
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'android_launch_identity_unbound',
-          data: { step: 'bind', cause, pid, serial: device.id },
-        });
-        return undefined;
-      };
-      try {
-        const startTime = await record.startTime;
-        if (!startTime) return unbound('launch-start-time-unread');
-        const deadline = Deadline.fromTimeoutMs(ANDROID_EMULATOR_GENERATION_BUDGET_MS);
-        for (const read of ['first', 'second'] as const) {
-          const reading = await inspectAndroidEmulatorGeneration(device, { deadline });
-          if (!('identity' in reading)) return unbound(`${read}-${reading.miss}`);
-          if (reading.identity.pid !== pid || reading.identity.startTime !== startTime) {
-            return unbound(`${read}-launch-mismatch`);
-          }
-        }
-        return { pid, startTime };
-      } catch {
-        return unbound('bind-failed');
-      }
+      const startTime = await record.startTime;
+      return startTime ? { pid, startTime } : undefined;
     },
     terminate,
   });
