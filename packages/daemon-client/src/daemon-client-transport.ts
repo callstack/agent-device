@@ -28,6 +28,7 @@ import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
   refuseOversizedDaemonRequest,
+  withCaptureStartGrant,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
@@ -557,7 +558,9 @@ async function sendRequestWithTransport(
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   return transport === 'http'
-    ? await sendHttpRequestWithCaptureGrant(info, req, statePaths, timeoutMs, options)
+    ? await withCaptureStartGrant(info, req, statePaths.baseDir, (request, delivery) =>
+        sendHttpRequest(info, request, statePaths, timeoutMs, options, delivery),
+      )
     : await sendSocketRequest(info, req, timeoutMs, options);
 }
 
@@ -790,34 +793,6 @@ function isRemoteInstanceMismatchResponse(
   headers: Record<string, string | string[] | undefined>,
 ): boolean {
   return statusCode === 409 && headers[DAEMON_HTTP_INSTANCE_MISMATCH_HEADER] === 'true';
-}
-
-async function sendHttpRequestWithCaptureGrant(
-  info: DaemonInfo,
-  req: DaemonWireRequest,
-  statePaths: DaemonPaths,
-  timeoutMs: number | undefined,
-  options: SendRequestOptions,
-): Promise<DaemonResponse> {
-  if (!info.baseUrl || req.command !== 'record' || !req.meta?.clientArtifactPaths?.outPath) {
-    return await sendHttpRequest(info, req, statePaths, timeoutMs, options);
-  }
-
-  refuseAbortedRequest(options.signal, req.meta?.requestId);
-  const grants = await import('@agent-device/remote/daemon-artifacts');
-  const grantId = await grants.admitCaptureStartGrant(req, info, statePaths.baseDir);
-  if (grantId === undefined)
-    return await sendHttpRequest(info, req, statePaths, timeoutMs, options);
-
-  const start = { ...req, meta: { ...req.meta, captureGrantId: grantId } };
-  // Once a socket connects, the daemon might receive the request even if the answer is lost.
-  const delivery = { possible: false };
-  try {
-    return await sendHttpRequest(info, start, statePaths, timeoutMs, options, delivery);
-  } catch (error) {
-    if (!delivery.possible) await grants.noteFailedCaptureStart(info, start, statePaths.baseDir);
-    throw error;
-  }
 }
 
 async function sendHttpRequest(
