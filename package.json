@@ -294,9 +294,6 @@
     "maestro",
     "detox"
   ],
-  "dependencies": {
-    "oxc-parser": "^0.146.0"
-  },
   "peerDependencies": {
     "ai": "^6.0.0 || ^7.0.0"
   },
@@ -308,6 +305,8 @@
   "devDependencies": {
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/apple-runner": "workspace:*",
+    "@agent-device/aws-device-farm": "workspace:*",
+    "@agent-device/browserstack": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/client": "workspace:*",
     "@agent-device/command-output": "workspace:*",
@@ -336,10 +335,14 @@
     "@agent-device/react-native": "workspace:*",
     "@agent-device/remote": "workspace:*",
     "@agent-device/replay-port": "workspace:*",
+    "@agent-device/revyl": "workspace:*",
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
+    "@agent-device/testmu": "workspace:*",
+    "@agent-device/tizen": "workspace:*",
     "@agent-device/tv-cdp": "workspace:*",
+    "@agent-device/webos": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",
@@ -363,6 +366,7 @@
     "fallow": "3.34.0",
     "fast-check": "^4.9.0",
     "jscpd": "5.4.2",
+    "oxc-parser": "^0.146.0",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.79.0",
     "publint": "^0.3.24",
@@ -372,12 +376,6 @@
     "unrun": "0.3.1",
     "vite": "^8.3.5",
     "vitest": "5.0.4",
-    "yaml": "^2.9.0",
-    "@agent-device/testmu": "workspace:*",
-    "@agent-device/aws-device-farm": "workspace:*",
-    "@agent-device/browserstack": "workspace:*",
-    "@agent-device/revyl": "workspace:*",
-    "@agent-device/webos": "workspace:*",
-    "@agent-device/tizen": "workspace:*"
+    "yaml": "^2.9.0"
   }
 }
