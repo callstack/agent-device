@@ -1,9 +1,11 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { AppleApplicationToolsForProvider } from '@agent-device/contracts/application-lifecycle-runtime';
 import { availableAppleApplicationToolsForProvider } from '@agent-device/contracts/application-lifecycle-runtime';
 import type {
+  ProviderAndroidAdbProvider,
   ProviderAndroidExecutor,
   ProviderAndroidExecutorOptions,
   ProviderAndroidHost,
@@ -15,6 +17,47 @@ type PlatformAdbExecutor = Parameters<
   typeof import('@agent-device/platform-android/mechanics').runAdbShell
 >[0];
 type PlatformAdbExecutorOptions = NonNullable<Parameters<PlatformAdbExecutor>[1]>;
+
+/** The provider the Android family installs its own scope over, read from the same mechanics. */
+type PlatformAdbProvider = import('@agent-device/platform-android/mechanics').AndroidAdbProvider;
+
+/**
+ * The Android interactor operation this composition adds to the published facet: the family's own
+ * factory, read while the capabilities are built so the operation can answer synchronously. Naming
+ * the factory rather than spelling a signature keeps the device, provider and interactor types the
+ * platform's own, so the value crosses unchanged.
+ */
+type AndroidInteractorFactory =
+  typeof import('./core/interactors/android.ts').createAndroidInteractor;
+
+/**
+ * The Android facet as this composition builds and hands it over: the published contract's mechanics
+ * plus the interactor operation. The operation is named here and not in the published contract
+ * because an interactor cannot cross that surface: a plugin package bundles the contract into its own
+ * declaration, and the snapshot answer the interactor produces carries a `unique symbol` brand no
+ * other copy of that declaration answers to. A plugin reads the published mechanics; the root adapters
+ * that answer `getInteractor` are composed in this process and read this operation from the value they
+ * are handed, so a facet built by a composition that serves only the published contract is checked at
+ * use.
+ */
+export type ProviderAndroidHostWithInteractor = ProviderAndroidHost &
+  Readonly<{
+    /**
+     * Builds the Android interactor for `device`, with every one of its commands answered through
+     * `adb`, which the platform scopes for `device.id` while the interactor runs. Returns
+     * synchronously because the caller that needs it cannot await: `getInteractor` is synchronous, so
+     * the factory was read while these capabilities were built and the value is assembled here with
+     * no promise and no device state.
+     */
+    createInteractor(
+      device: DeviceInfo,
+      adb: ProviderAndroidAdbProvider | ProviderAndroidExecutor,
+    ): ReturnType<AndroidInteractorFactory>;
+  }>;
+
+/** The capabilities this composition builds: the published facets with its own Android addition. */
+export type ProviderHostCapabilitiesWithInteractor = ProviderHostCapabilities &
+  Readonly<{ android: ProviderAndroidHostWithInteractor }>;
 
 /**
  * The host capabilities the provider plugin registry adds to every plugin `setup` host, built by
@@ -34,15 +77,19 @@ type PlatformAdbExecutorOptions = NonNullable<Parameters<PlatformAdbExecutor>[1]
  */
 export async function createProviderHostCapabilities(
   host: HostEnvironment,
-): Promise<ProviderHostCapabilities> {
+): Promise<ProviderHostCapabilitiesWithInteractor> {
   // The host adb port refuses an unbound host; this wiring binds it once and loads no device state.
   await import('./platform-runtime-android-adb-host.ts');
+  // `getInteractor` is synchronous, so the family's interactor factory is read here, once, while
+  // this host is wired. The Android family's mechanics are already in this process by then; nothing
+  // is probed and no device state is read.
+  const { createAndroidInteractor } = await import('./core/interactors/android.ts');
   const runOnHost = <T>(task: () => Promise<T>) =>
     withCommandHost({ host, requestEnv: undefined }, task);
   return Object.freeze({
-    android: createProviderAndroidHost(runOnHost),
+    android: createProviderAndroidHost(runOnHost, createAndroidInteractor),
     apple: await createProviderAppleHost(host, runOnHost),
-  } satisfies ProviderHostCapabilities);
+  } satisfies ProviderHostCapabilitiesWithInteractor);
 }
 
 async function createProviderAppleHost(
@@ -66,7 +113,8 @@ async function createProviderAppleHost(
 
 function createProviderAndroidHost(
   runOnHost: <T>(task: () => Promise<T>) => Promise<T>,
-): ProviderAndroidHost {
+  buildInteractor: AndroidInteractorFactory,
+): ProviderAndroidHostWithInteractor {
   return Object.freeze({
     runAdb: async (invocation, options) => {
       const { runAndroidHostAdb } = await import('@agent-device/platform-android/mechanics');
@@ -86,13 +134,9 @@ function createProviderAndroidHost(
     },
     withAdbProvider: async (provider, serial, task) => {
       const { withAndroidAdbProvider } = await import('@agent-device/platform-android/mechanics');
-      // The facet mirror is a structural subset of the platform provider; the platform
-      // normalizes a bare executor exactly as a provider carrying only `exec`.
-      const scoped =
-        typeof provider === 'function'
-          ? asPlatformAdbExecutor(provider)
-          : { ...provider, exec: asPlatformAdbExecutor(provider.exec) };
-      return await runOnHost(() => withAndroidAdbProvider(scoped, { serial }, task));
+      return await runOnHost(
+        async () => await withAndroidAdbProvider(asPlatformAdbProvider(provider), { serial }, task),
+      );
     },
     runShell: async (adb, words, options) => {
       const { runAdbShell } = await import('@agent-device/platform-android/mechanics');
@@ -122,7 +166,16 @@ function createProviderAndroidHost(
         await import('@agent-device/platform-android/mechanics');
       return await dismissAndroidKeyboardWithAdb(asPlatformAdbExecutor(adb));
     },
-  } satisfies ProviderAndroidHost);
+    // The factory is already loaded, so this method assembles the value and reaches for no module.
+    // The scope wrapper is the one the Apple facet uses for the same reason: every command the
+    // interactor runs re-enters this host's command scope, and the provider scope the factory
+    // installed keeps those answers on the caller's executor for `device.id`.
+    createInteractor: (device, adb) =>
+      withMethodScope(
+        buildInteractor(device, asPlatformAdbProvider(adb)),
+        async (task) => await runOnHost(task),
+      ),
+  } satisfies ProviderAndroidHostWithInteractor);
 }
 
 /**
@@ -139,6 +192,20 @@ function asPlatformAdbOptions(
     ...rest,
     ...(stdin === undefined ? {} : { stdin: Buffer.isBuffer(stdin) ? stdin : Buffer.from(stdin) }),
   };
+}
+
+/**
+ * Hands a plugin's provider to the platform's mechanics. Only `exec` needs converting, for the
+ * binary-answer reason below; the reverse manager and the text injector are the shapes the platform
+ * reads them as, so they reach it as they are. The platform normalizes a bare executor exactly as a
+ * provider carrying only `exec`.
+ */
+function asPlatformAdbProvider(
+  provider: ProviderAndroidAdbProvider | ProviderAndroidExecutor,
+): PlatformAdbProvider {
+  return typeof provider === 'function'
+    ? { exec: asPlatformAdbExecutor(provider) }
+    : { ...provider, exec: asPlatformAdbExecutor(provider.exec) };
 }
 
 /**

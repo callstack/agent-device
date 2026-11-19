@@ -3,12 +3,24 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import type {
+  ProviderAndroidAdbProvider,
   ProviderAndroidExecutor,
   ProviderAndroidExecutorOptions,
   ProviderAndroidExecutorResult,
   ProviderAndroidHost,
   ProviderHostCapabilities,
 } from '@agent-device/plugins/host';
+import type { ProviderAndroidHostWithInteractor } from '../provider-plugin-host-capabilities.ts';
+
+/**
+ * The facet the composing root hands this adapter: the published mechanics plus the interactor
+ * operation it adds. The operation is optional here because the caller's contract allows any
+ * published facet — the plugin contract cannot name an interactor, since its snapshot answer carries
+ * a brand no second copy of that declaration answers to — so the value is read where it is used and a
+ * facet without it takes the embedded path.
+ */
+type AndroidFacet = ProviderAndroidHost &
+  Partial<Pick<ProviderAndroidHostWithInteractor, 'createInteractor'>>;
 
 type LimrunAndroidAdapter = LimrunRuntimeDependencies['android'];
 /**
@@ -45,7 +57,8 @@ export function createLimrunRuntimeDependencies(
 ): LimrunRuntimeDependencies {
   const runOnHost = <T>(task: () => Promise<T>) =>
     withCommandHost({ host, requestEnv: undefined }, task);
-  const android: ProviderAndroidHost | undefined = capabilities?.android;
+  const android: AndroidFacet | undefined = capabilities?.android;
+  const buildInteractor = android?.createInteractor;
   /**
    * Hands one of this adapter's executors to the capability boundary. The contract names a stdin
    * payload a plain byte array while this adapter's executors take a Node buffer, so a foreign
@@ -55,6 +68,15 @@ export function createLimrunRuntimeDependencies(
   const toProviderExecutor = (adb: LimrunAdbExecutor): ProviderAndroidExecutor => {
     return async (args, options) => await adb(args, asLimrunAdbOptions(options));
   };
+  /**
+   * Hands one of this adapter's providers to the capability boundary. Only `exec` needs converting,
+   * for the executor reason above; the reverse manager and the text injector are the shapes the
+   * boundary reads them as, so they cross as they are.
+   */
+  const toProviderAdbProvider = (adb: LimrunAdbProvider): ProviderAndroidAdbProvider => ({
+    ...adb,
+    exec: toProviderExecutor(adb.exec),
+  });
   /** Scopes platform adb internals to `adb` for `serial` while `task` runs, under this host. */
   const withProviderScope = <T>(
     serial: string,
@@ -63,9 +85,7 @@ export function createLimrunRuntimeDependencies(
   ): Promise<T> =>
     android
       ? android.withAdbProvider(
-          typeof adb === 'function'
-            ? toProviderExecutor(adb)
-            : { ...adb, exec: toProviderExecutor(adb.exec) },
+          typeof adb === 'function' ? toProviderExecutor(adb) : toProviderAdbProvider(adb),
           serial,
           task,
         )
@@ -96,6 +116,9 @@ export function createLimrunRuntimeDependencies(
         );
       },
       createInteractor: (device, adb) =>
+        buildInteractor?.(device, toProviderAdbProvider(adb)) ??
+        // Without the capability facet, this adapter keeps its own deliberate static edge to the
+        // same factory, under the same host scope and with the same provider scope installed.
         withMethodScope(createAndroidInteractor(device, adb), runOnHost),
       createPortReverse: (adb, options) =>
         android?.createPortReverse(toProviderExecutor(adb), options) ??

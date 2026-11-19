@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
 import type { ProviderAndroidHost, ProviderHostCapabilities } from '@agent-device/plugins/host';
+import type { ProviderAndroidHostWithInteractor } from '../provider-plugin-host-capabilities.ts';
+
+/**
+ * The facet shape this adapter reads: the published mechanics, with the interactor operation the
+ * composing root adds. The operation is optional exactly as the adapter reads it.
+ */
+type AndroidFacet = ProviderAndroidHost &
+  Partial<Pick<ProviderAndroidHostWithInteractor, 'createInteractor'>>;
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import {
   androidAdbHostTarget,
   androidAdbInvocation,
@@ -18,7 +27,12 @@ const device = {
 
 type Call = { name: string; args: unknown[] };
 
-function recordingAndroid(calls: Call[]): ProviderAndroidHost {
+/** The value a recording facet's synchronous `createInteractor` answers with, so a test can trace it. */
+const FACET_INTERACTOR = { marker: 'facet-interactor' } as unknown as ReturnType<
+  NonNullable<AndroidFacet['createInteractor']>
+>;
+
+function recordingAndroid(calls: Call[]): AndroidFacet {
   const record =
     (name: string) =>
     async (...args: unknown[]): Promise<never> => {
@@ -35,6 +49,10 @@ function recordingAndroid(calls: Call[]): ProviderAndroidHost {
     readLogs: record('readLogs') as ProviderAndroidHost['readLogs'],
     keyboardState: record('keyboardState') as ProviderAndroidHost['keyboardState'],
     dismissKeyboard: record('dismissKeyboard') as ProviderAndroidHost['dismissKeyboard'],
+    createInteractor: ((...args: unknown[]) => {
+      calls.push({ name: 'createInteractor', args });
+      return FACET_INTERACTOR;
+    }) as NonNullable<AndroidFacet['createInteractor']>,
   };
 }
 
@@ -86,6 +104,61 @@ test('the Android adapter serves shared operations through the host capabilities
     dependencies.android.deviceAdbInvocation('127.0.0.1:62001', ['get-state']).command,
     ['get-state'],
   );
+});
+
+test('the Android adapter hands an interactor request to the capability facet synchronously', async () => {
+  const calls: Call[] = [];
+  const dependencies = createLimrunRuntimeDependencies(
+    { env: process.env, cwd: process.cwd() },
+    { android: recordingAndroid(calls) },
+  );
+  const entered: unknown[] = [];
+  const stdinSeen: unknown[] = [];
+  const adb = {
+    exec: async (_args: readonly string[], options?: { stdin?: unknown }) => {
+      stdinSeen.push(options?.stdin);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    text: async (request: unknown) => {
+      entered.push(request);
+    },
+  };
+  // `ProviderDeviceRuntime.getInteractor` is synchronous, so the adapter may not await the facet:
+  // the value it hands back is the facet's own, not a promise for it.
+  const interactor = dependencies.android.createInteractor(device, adb);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.name, 'createInteractor');
+  assert.equal(calls[0]?.args[0], device);
+  assert.equal(interactor, FACET_INTERACTOR);
+  // The provider the facet is handed is this adapter's own, read through the boundary's shapes. The
+  // text route is the caller's, so a provider with native text entry keeps it through the facet, and
+  // the executor converts the contract's byte-array payload to the Buffer this adapter reads.
+  const handed = calls[0]?.args[1] as {
+    exec: (args: readonly string[], options?: { stdin?: Uint8Array }) => Promise<unknown>;
+    text?: (request: unknown) => Promise<void>;
+  };
+  await handed.text?.({ action: 'type', text: 'hello' });
+  assert.deepEqual(entered, [{ action: 'type', text: 'hello' }]);
+  await handed.exec(['shell', 'input', 'text', 'hi'], { stdin: new Uint8Array([104, 105]) });
+  assert.ok(Buffer.isBuffer(stdinSeen[0]));
+  assert.deepEqual([...(stdinSeen[0] as Buffer)], [104, 105]);
+});
+
+test('without capabilities the adapter builds its own Android interactor synchronously', async () => {
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const seen: Array<readonly string[]> = [];
+  const adb = {
+    exec: async (args: readonly string[]) => {
+      seen.push(args);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  };
+  const interactor = dependencies.android.createInteractor(device, adb);
+  // The embedded path keeps the same synchronous contract, and the provider scope is installed for
+  // this device: the command the interactor runs reaches adb through the caller's own executor.
+  assert.equal('then' in interactor, false);
+  assert.equal(await interactor.readClipboard!(), '');
+  assert.deepEqual(seen, [deviceShellArgv('adb', 'shell', ['cmd', 'clipboard', 'get', 'text'])]);
 });
 
 test('a binary stdout answer from the capabilities reaches the provider as a buffer', async () => {

@@ -15,6 +15,14 @@ export type RunHostCommand = (
 // declaration would exist twice as two unrelated copies and a branded or Node-primitive type would
 // never match across them. Every mirror stays structurally identical to its platform original, so
 // the composing root hands the same values to the platform's mechanics unchanged.
+//
+// Keeping the closure structural is what makes two plugin packages sharing one installed core still
+// typecheck: each bundles this contract into its own declaration, and a consumer that hands such a
+// plugin to `startAgentDevice` compares the bundled copy of `setup` against core's, member by member.
+// An interactor cannot be named here for that reason. Its snapshot answer reaches
+// `SnapshotViewportSize`, branded with a `unique symbol`, and no answer written by one copy of this
+// contract answers to the other copy's brand. The composing root builds that operation and names it
+// on its own facet type, which no plugin package imports.
 type ProviderAdbWaitTransport = '' | 'usb-' | 'local-' | 'any-';
 type ProviderAdbWaitState = 'device' | 'recovery' | 'bootloader' | 'sideload' | 'sideload-window';
 
@@ -109,10 +117,25 @@ export type ProviderAndroidPortReverse = Readonly<{
   list?(options?: ProviderAndroidPortReverseOptions): Promise<ProviderAndroidPortReverseMapping[]>;
 }>;
 
-/** The provider-scoped executor the facet scopes, mirrored from the platform's provider minus its optional extras. */
+/** One text-entry request adb or the helper would have performed, mirrored from the platform's typed grammar. */
+export type ProviderAndroidTextInjectionRequest = Readonly<{
+  /** Whether this is a plain entry or a replace-the-target's-text fill. */
+  action: 'type' | 'fill';
+  text: string;
+  delayMs?: number;
+  /** Present exactly for `fill`: the input the entry must land in, which the provider must focus first. */
+  target?: Readonly<{ x: number; y: number }>;
+}>;
+
+/**
+ * The provider-scoped executor the facet scopes, mirrored from the platform's provider minus its
+ * optional extras. `text` is carried because the Android family reads it off the provider it installs
+ * its scope over: a provider that can enter text natively keeps that route.
+ */
 export type ProviderAndroidAdbProvider = Readonly<{
   exec: ProviderAndroidExecutor;
   reverse?: ProviderAndroidPortReverse;
+  text?: (request: ProviderAndroidTextInjectionRequest) => Promise<void>;
 }>;
 
 /**

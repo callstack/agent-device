@@ -133,7 +133,7 @@ void appleTools.detachRunnerSessionsForShutdown;
 // @ts-expect-error stopping every runner session this process holds is not a plugin's authority.
 void appleTools.finalizeRunnerSessionsForShutdown;
 
-// The binary contract is nameable without a Node buffer in either direction.
+// The Android facet's binary contract is nameable without a Node buffer in either direction.
 declare const android: ProviderAndroidHost;
 const invocation = {
   target: { selector: { kind: 'unspecified' as const }, server: { kind: 'ambient' as const } },
@@ -147,6 +147,13 @@ async function capture() {
   return bytes;
 }
 void capture();
+
+// The published facet carries no interactor operation. A plugin package bundles this declaration into
+// its own copy, and an interactor's snapshot answer carries a brand no second copy answers to, so
+// naming one here would make two plugin packages sharing one installed core stop typechecking. The
+// composing root builds the interactor and names it on its own facet type, which no plugin imports.
+// @ts-expect-error the published contract stays structural.
+void android.createInteractor;
 `,
     );
 

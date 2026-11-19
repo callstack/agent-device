@@ -117,6 +117,112 @@ describe('provider host capabilities', () => {
     ]);
   });
 
+  test('createInteractor answers synchronously with an interactor bound to its executor', async () => {
+    const { android } = await createProviderHostCapabilities({
+      env: process.env,
+      cwd: process.cwd(),
+    });
+    const serialSeen: string[][] = [];
+    const adb = async (args: readonly string[]) => {
+      serialSeen.push([...args]);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    };
+    const device = {
+      platform: 'android' as const,
+      id: 'capability-interactor-serial',
+      name: 'Capability Pixel',
+      kind: 'emulator' as const,
+      target: 'mobile' as const,
+      booted: true,
+    };
+    // The caller that needs this value cannot await it, so the facet must hand over the interactor
+    // itself and not a promise for one.
+    const interactor = android!.createInteractor(device, adb);
+    expect(interactor).not.toBeInstanceOf(Promise);
+    expect(Object.keys(interactor).length).toBeGreaterThan(0);
+    // The provider scope is the facet's own installation, not the caller's: the command the
+    // interactor runs arrives at the executor the caller handed the facet.
+    await interactor.keyboardStatus!();
+    expect(serialSeen).toEqual([
+      Array.from(deviceShellArgv('adb', 'shell', ['dumpsys', 'input_method'])),
+    ]);
+  });
+
+  test('createInteractor keeps every interactor command on the host it was built for', async () => {
+    const root = mkdtempForTestSync('provider-interactor-capabilities-');
+    const bin = path.join(root, 'bin');
+    mkdirSync(bin);
+    // A provider's executor is provider code, and it may reach for a tool of its own. The facet
+    // wraps every command the interactor runs in its host's command scope, so that tool resolves
+    // from the host the facet was built for — never the ambient process, nor an enclosing request.
+    const evidence = path.join(root, 'commands.jsonl');
+    writeFileSync(
+      path.join(bin, 'provider-route'),
+      `#!${process.execPath}\n` +
+        `import { appendFileSync } from 'node:fs';\n` +
+        `appendFileSync(process.env.CAPABILITY_EVIDENCE, JSON.stringify({args:process.argv.slice(2),owner:process.env.CAPABILITY_OWNER}) + '\\n');\n`,
+    );
+    chmodSync(path.join(bin, 'provider-route'), 0o755);
+    const hostFor = (owner: string) => ({
+      env: { ...process.env, PATH: bin, CAPABILITY_OWNER: owner, CAPABILITY_EVIDENCE: evidence },
+      cwd: root,
+    });
+    const { android } = await createProviderHostCapabilities(hostFor('supplied'));
+    const device = {
+      platform: 'android' as const,
+      id: 'capability-scoped-serial',
+      name: 'Capability Pixel',
+      kind: 'emulator' as const,
+      target: 'mobile' as const,
+      booted: true,
+    };
+    const interactor = android!.createInteractor(device, {
+      exec: async (args, options) => {
+        const { runCmd } = await import('@agent-device/host-kit/command');
+        // The provider's own route is an ordinary command: it resolves its tool, and therefore this
+        // host, the way every other command the facet serves does.
+        const result = await runCmd('provider-route', [...args], {
+          allowFailure: true,
+          signal: options?.signal,
+        });
+        return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+      },
+    });
+    // Every observed command, in arrival order, with the environment it was given.
+    const observed = () =>
+      readFileSync(evidence, 'utf8')
+        .split('\n')
+        .filter((line) => line !== '')
+        .map((line) => JSON.parse(line) as { args: string[]; owner: string });
+    const previous = { PATH: process.env.PATH, CAPABILITY_OWNER: process.env.CAPABILITY_OWNER };
+    process.env.PATH = '/usr/bin:/bin';
+    process.env.CAPABILITY_OWNER = 'ambient';
+    try {
+      await interactor.keyboardStatus!();
+      const standalone = observed();
+      await withCommandHost(
+        { host: hostFor('foreign'), requestEnv: { CAPABILITY_OWNER: 'foreign-request' } },
+        async () => {
+          await interactor.keyboardStatus!();
+        },
+      );
+      expect(standalone.map((entry) => entry.owner)).toEqual(['supplied']);
+      expect(
+        observed()
+          .slice(standalone.length)
+          .map((entry) => entry.owner),
+      ).toEqual(['supplied']);
+      expect(observed()[0]?.args).toEqual(
+        Array.from(deviceShellArgv('adb', 'shell', ['dumpsys', 'input_method'])),
+      );
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   test('the apple facet carries the root-composed application tools', async () => {
     const capabilities = await createProviderHostCapabilities({ env: {}, cwd: '/' });
     expect(capabilities.apple?.applicationTools.resolveOpenTarget).toBeTypeOf('function');
