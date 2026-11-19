@@ -14,10 +14,15 @@ type RegisteredDaemonPaths = Readonly<{ baseDir: string; sessionsDir: string; in
 
 /** Per-child behavior switches, bound into this child's entry script at write time. */
 type RegisteredDaemonFixtureOptions = Readonly<{
-  /** Record `lock-acquired` after acquisition, as the daemon runtime does, for this child only. */
-  emitStartupMarker?: boolean;
-  /** Record `modules-loaded` before acquisition, as the daemon entry does, for this child only. */
-  emitStartupMarkerBeforeAcquisition?: boolean;
+  /** Report `lock-acquired` over the launch channel after acquisition, as the daemon runtime does. */
+  emitStartupPhase?: boolean;
+  /** Report `modules-loaded` before acquisition, as the daemon entry does, for this child only. */
+  emitStartupPhaseBeforeAcquisition?: boolean;
+  /**
+   * Poll an `emit-phase` file in the state dir and report each phase it names over the launch
+   * channel, so a test can schedule phases on its own clock.
+   */
+  emitPhaseFromGate?: boolean;
 }>;
 
 /**
@@ -28,7 +33,7 @@ type RegisteredDaemonFixtureOptions = Readonly<{
 export type RegisteredDaemonComposition<TInfo extends { pid: number }> = Readonly<{
   /** Module URL exporting `DAEMON_STARTUP_EXIT_CODES` and `tryAcquireDaemonRegistration`. */
   registrationOwnerUrl: string;
-  /** Module URL exporting the daemon startup-phase marker functions. */
+  /** Module URL exporting the daemon startup-phase channel opener. */
   startupPhasesUrl: string;
   /** Launches a child process without any mock the test installed on process launching. */
   launch: typeof runCmdDetachedMonitored;
@@ -115,20 +120,29 @@ export function createRegisteredDaemonFixtures<
       `import fs from 'node:fs';
 import path from 'node:path';
 import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration } from ${JSON.stringify(composition.registrationOwnerUrl)};
-import { removeDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(composition.startupPhasesUrl)};
+import { DAEMON_PROGRESS_CHANNEL_ENV, openDaemonStartupProgress } from ${JSON.stringify(composition.startupPhasesUrl)};
+const progress = openDaemonStartupProgress({ [DAEMON_PROGRESS_CHANNEL_ENV]: '1' }, process);
+const reportDaemonStartupPhase = (phase) => progress.report(phase);
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
-const emitBefore = ${fixtureOptions?.emitStartupMarkerBeforeAcquisition ? 'true' : 'false'};
-const emitAfter = ${fixtureOptions?.emitStartupMarker ? 'true' : 'false'};
+const emitBefore = ${fixtureOptions?.emitStartupPhaseBeforeAcquisition ? 'true' : 'false'};
+const emitAfter = ${fixtureOptions?.emitStartupPhase ? 'true' : 'false'};
+const emitFromGate = ${fixtureOptions?.emitPhaseFromGate ? 'true' : 'false'};
 if (barrier) {
   fs.writeFileSync(barrier + '.ready-' + process.pid, 'ready');
   while (!fs.existsSync(barrier)) await new Promise(resolve => setTimeout(resolve, 10));
 }
-if (emitBefore) { const own = resolveDaemonStartupPhasesPath(paths.baseDir, process.pid); removeDaemonStartupPhasesFile(own); recordDaemonStartupMarker(own, 'modules-loaded'); }
+if (emitBefore) reportDaemonStartupPhase('modules-loaded');
 const acquired = await tryAcquireDaemonRegistration(paths);
 if (acquired.status !== 'acquired') process.exit(DAEMON_STARTUP_EXIT_CODES[acquired.status]);
-if (emitAfter)
-  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(paths.baseDir, process.pid), 'lock-acquired');
+if (emitAfter) reportDaemonStartupPhase('lock-acquired');
+if (emitFromGate) setInterval(() => {
+  const gate = path.join(paths.baseDir, 'emit-phase');
+  if (!fs.existsSync(gate)) return;
+  const phase = fs.readFileSync(gate, 'utf8').trim();
+  fs.rmSync(gate, { force: true });
+  reportDaemonStartupPhase(phase);
+}, 10);
 process.on('SIGTERM', async () => {
   if (fs.existsSync(path.join(paths.baseDir, 'ignore-sigterm'))) return;
   const deferred = path.join(paths.baseDir, 'repair-on-shutdown.json');

@@ -444,6 +444,64 @@ test('edge swipe is classified as a back-swipe telemetry event', () => {
   assert.equal(event.durationMs, 320);
 });
 
+test('a no-snapshot tap keeps its telemetry event without a reference frame (#4448)', () => {
+  const session = makeSession();
+  session.snapshot = undefined;
+
+  recordTouchVisualizationEvent(session, 'press', ['220', '700'], { x: 220, y: 700 }, {}, 1_500);
+
+  const events = session.screenRecording?.handle.inspect().gestureEvents;
+  assert.equal(events?.length, 1, 'the telemetry event is preserved when no reference exists');
+  const event = events?.[0];
+  assert.equal(event?.kind, 'tap');
+  assert.equal(event?.x, 220);
+  assert.equal(event?.y, 700);
+  assert.equal(event?.referenceWidth, undefined);
+  assert.equal(event?.referenceHeight, undefined);
+  assert.ok(event && !('referenceWidth' in event), 'no plausible reference is attached');
+  assert.ok(event && !('referenceHeight' in event), 'no plausible reference is attached');
+});
+
+test('a no-snapshot edge swipe classifies as swipe, never back-swipe, without a reference (#4448)', () => {
+  const session = makeSession();
+  session.snapshot = undefined;
+
+  recordTouchVisualizationEvent(
+    session,
+    'swipe',
+    ['10', '400', '250', '400', '250'],
+    { x1: 10, y1: 400, x2: 250, y2: 400, durationMs: 250 },
+    {},
+    1_500,
+    1_900,
+  );
+
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
+  // Without a reference width there is no edge inset to measure against, so the truthful
+  // classification is a plain swipe; the renderer then omits the marker for lack of a basis.
+  assert.equal(event?.kind, 'swipe');
+  assert.equal(event?.referenceWidth, undefined);
+  assert.equal(event?.referenceHeight, undefined);
+});
+
+test('a non-positive explicit reference is not adopted and the snapshot frame still applies (#4448)', () => {
+  const session = makeSession();
+
+  recordTouchVisualizationEvent(
+    session,
+    'press',
+    ['100', '200'],
+    { x: 100, y: 200, referenceWidth: 0, referenceHeight: 874 },
+    {},
+    1_500,
+  );
+
+  const event = session.screenRecording?.handle.inspect().gestureEvents[0];
+  assert.equal(event?.kind, 'tap');
+  assert.equal(event?.referenceWidth, 402);
+  assert.equal(event?.referenceHeight, 874);
+});
+
 test('a multi-finger tap records one touch overlay per contact', () => {
   const session = makeSession();
 

@@ -147,6 +147,7 @@ import {
 } from './package-export-surface.ts';
 import { checkPackageEntrySurfaces } from './package-entry-surface.ts';
 import { checkTestColocation, testColocationSummary } from './test-colocation.ts';
+import { uniqueExportedTypeNamesViolations } from './unique-exported-type-names.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
@@ -549,6 +550,7 @@ export const LAYERING_RULE_IDS = [
   'package-export-surface',
   'plugin-framework-independence',
   'test-colocation',
+  'unique-exported-type-names',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -641,6 +643,11 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ),
   'test-colocation': (context) =>
     checkTestColocation(context.ratchets.unmatchedTests, context.reference.unmatchedTests),
+  'unique-exported-type-names': (context) =>
+    uniqueExportedTypeNamesViolations(
+      [...context.sources].map(([path, source]) => ({ path, source })),
+      workspaceSpecifierTargets(repoRoot),
+    ),
 };
 
 export function main(): number {

@@ -92,12 +92,23 @@ export function script(
   };
 }
 
+function recordsDirectory(stateDir: string): string {
+  return path.join(stateDir, 'remote-connections', 'session-scripts');
+}
+
 /** The publication records the client has written for this state directory. */
 export function records(stateDir: string): string[] {
-  const directory = path.join(stateDir, 'remote-connections', 'session-scripts');
+  const directory = recordsDirectory(stateDir);
   return fs.existsSync(directory)
     ? fs.readdirSync(directory).filter((n) => n.endsWith('.json'))
     : [];
+}
+
+export function soleRecord(stateDir: string) {
+  const entries = records(stateDir);
+  if (entries.length !== 1) throw new Error(`Expected one script record, got ${entries.length}`);
+  const file = path.join(recordsDirectory(stateDir), entries[0]!);
+  return { file, record: JSON.parse(fs.readFileSync(file, 'utf8')) };
 }
 
 /** Answers a request the way the daemon does and materializes the answer like the client. */

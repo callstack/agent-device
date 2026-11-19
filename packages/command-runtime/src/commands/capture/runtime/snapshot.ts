@@ -197,6 +197,7 @@ export const auditSnapshotCommand: RuntimeCommand<
   const capture = await captureRuntimeSnapshot(runtime, options);
   const audit = auditSnapshot(capture.snapshot.nodes, {
     platform: runtime.backend.platform,
+    producer: capture.snapshot.producer,
     target: options.target,
     pixelDensity: capture.annotations.androidSnapshot?.pixelDensity,
     truncated: snapshotTruncationForResult(capture.snapshot),

@@ -52,6 +52,7 @@
     { "path": "../../packages/daemon-contracts" },
     { "path": "../../packages/device-selection" },
     { "path": "../../packages/host-kit" },
+    { "path": "../../packages/host-swift" },
     { "path": "../../packages/kernel" },
     { "path": "../../packages/maestro" },
     { "path": "../../packages/platform-android" },

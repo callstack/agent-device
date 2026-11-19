@@ -1,6 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { InteractionTarget } from '@agent-device/contracts/interaction';
+import type { InteractionRequestTarget } from '@agent-device/contracts/interaction';
 import {
   buttonTag,
   getClickButtonValidationError,
@@ -51,7 +51,7 @@ export type AdmittedTargetedTouch = {
   commandLabel: TargetedTouchCommand;
   clickButton: ReturnType<typeof resolveClickButton>;
   resultButtonTag: ReturnType<typeof buttonTag>;
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   durationMs: number | undefined;
   staleRefsWarning: string | undefined;
   refContext: RefAdmissionContext | undefined;

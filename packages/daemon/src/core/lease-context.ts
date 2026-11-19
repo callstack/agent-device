@@ -4,6 +4,7 @@ import {
   AppError,
   BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
 } from '@agent-device/kernel/errors';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { DeviceLease } from '@agent-device/contracts/device';
@@ -31,7 +32,14 @@ export function refuseBoundedCompositeResourceOperation(req: DaemonRequest, shap
 }
 
 export function isBoundedCompositeRequest(req: DaemonRequest): boolean {
-  return getRequestExecutionDeadlineMs(req.meta?.requestId) !== undefined;
+  if (getRequestExecutionDeadlineMs(req.meta?.requestId) === undefined) return false;
+  if (
+    req.command === INTERNAL_COMMANDS.installSource ||
+    req.command === PUBLIC_COMMANDS.installFromSource
+  ) {
+    return req.internal?.executionPlan !== undefined || req.internal?.replayPlanStep === true;
+  }
+  return true;
 }
 
 export type SessionLease = {

@@ -51,7 +51,7 @@ const LEAF_LANES: Readonly<Record<Leaf, readonly CheckId[]>> = {
 };
 
 // Directory segments that tag a path with a family. Apple's leaves are separate tags so a
-// macOS-only tree does not own the iOS lane; a tree tagged `apple` (or `tvos`/`visionos`/
+// macOS-only tree does not own the iOS lane; a tree tagged `apple` (or `tvos`/`visionos`/`watchos`/
 // `xcuitest`, whose only lanes today are the Apple family's, or `apple-runner`, the Apple-family
 // runner engine package) owns every Apple lane.
 const APPLE_LEAF_TAGS: Readonly<Record<string, 'ios' | 'macos' | 'apple'>> = {
@@ -62,6 +62,7 @@ const APPLE_LEAF_TAGS: Readonly<Record<string, 'ios' | 'macos' | 'apple'>> = {
   'apple-runner': 'apple',
   tvos: 'apple',
   visionos: 'apple',
+  watchos: 'apple',
   xcuitest: 'apple',
 };
 
@@ -137,6 +138,8 @@ const RUNTIME_SURFACE: ReadonlyArray<{ root: string; owns: (file: string) => boo
   { root: 'apple/', owns: () => true },
   { root: 'android/', owns: () => true },
   { root: 'linux/', owns: () => true },
+  // macOS host Swift helpers that recording post-processing compiles on the daemon host.
+  { root: 'packages/host-swift/swift/', owns: () => true },
   // TS/Swift golden tables (own:golden-table in model.ts): the parity XCTest runs on the lane.
   { root: 'contracts/fixtures/', owns: () => true },
 ];

@@ -23,7 +23,7 @@ export function createAppleShutdownRuntime(
 }
 
 export function canShutdownTarget(device: DeviceInfo): boolean {
-  return isIosFamily(device) && device.appleOs !== 'watchos' && device.kind === 'simulator';
+  return isIosFamily(device) && device.kind === 'simulator';
 }
 
 async function shutdownAppleTarget(

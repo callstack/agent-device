@@ -3,6 +3,8 @@ import { parseTimeout } from './parse-timeout.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
+  INSTALL_SOURCE_DAEMON_DEADLINE_MS,
+  INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
   LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
   MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
 } from './timeout-policy.ts';
@@ -22,6 +24,17 @@ export const PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 export const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
+};
+
+/**
+ * The one source-install timeout policy shared by `install-from-source` and `install_source`
+ * (#4441, decision 6856998913): the 600 s client envelope, with the daemon enforcing the
+ * envelope less the result margin (570 s) from admission through the descriptor/router path.
+ */
+export const INSTALL_SOURCE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...INSTALL_TIMEOUT_POLICY,
+  envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
+  daemonDeadlineMs: INSTALL_SOURCE_DAEMON_DEADLINE_MS,
 };
 
 // Lease-route commands act on billed cloud sessions the daemon owns; resetting

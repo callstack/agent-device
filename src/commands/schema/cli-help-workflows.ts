@@ -53,7 +53,7 @@ Recovery:
   Network/typeahead result missing: wait text "Expected result" or wait <selector>.
   A target that should be gone/disappear: use wait absent <selector>; wait exists ... is rejected in favor of the plain selector wait.
   Keyboard visible over the next target: a tap point under a measured keyboard frame returns tap_keyboard_occludes_target. Press a visible Hide Keyboard key or the app's dismissal control. In apps that support drag dismissal, use gesture pan from inside the scrollable content. Use keyboard enter only to send Return. Missing keyboard nodes never prove absence. A raw coordinate behind the keys taps anyway and reports a warning.
-  Target covered by other visible UI: refused with target_covered. When the occlusion scan identified the covering element, error.details.coveredBy and the hint name it (role, label, rect) so you know what to dismiss; the cover is diagnosis only -- never target its ref. Dismiss/close it or scroll the target clear, then retry.
+  Target covered by other visible UI: refused with target_covered. When the occlusion scan identified the covering element, error.details.coveredBy and the hint name it (role, label, rect); the cover is diagnosis only -- never target its ref. Follow the hint's recovery: dismiss or close the cover only when it is dismissible (sheet, dialog, alert); under a persistent bar (tab bar, toolbar, navigation bar, bottom navigation) use a different visible target or inspect with snapshot/screenshot before retrying.
   Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
   Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.
 
@@ -77,7 +77,7 @@ Logs:
   Do not cat a full stale log into agent context. Open or grep only the relevant window when needed.
   logs clear --restart is the compact command to clear old logs and start a fresh capture; do not split it into logs stop, logs clear, logs start.
   On iOS simulators, logs scope by bundle id and resolved app executable, so use this instead of raw simctl log stream predicates.
-  On iOS physical devices, logs clear --restart relaunches the session app through devicectl process launch --console so stdout/stderr can be captured.
+  On iOS physical devices, logs start and logs clear --restart relaunch the session app through devicectl process launch --console so stdout/stderr can be captured; logs start reports relaunched: true. logs stop ends the app.
   For iOS simulator launch-time stdout/stderr, use --launch-console on the direct app launch:
     agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
   --launch-console is only for local or Limrun iOS simulator app launches, not URL opens.
@@ -206,15 +206,17 @@ export const qaReportHelpTopics = {
 Use this when asked for an accessibility review, a11y audit, or a screen-reader or touch-target check of an app.
 
 Scope:
-  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, and covered controls.
+  Audit findings are advisory heuristics. Audit checks touch-target size, missing accessible names, controls of one role that share one accessible name, and covered controls.
   This tool does not measure color contrast or focus order, and does not give a compliance verdict. Do not claim compliance.
 
 Loop for each screen:
   1. Open the app: agent-device open <app>. Run mkdir -p ./a11y-output once.
   2. Run agent-device audit, then agent-device snapshot -i. Audit captures the screen itself, so it goes first.
-  3. Record each finding with its kind, role, and size. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
+  3. Record each finding with its kind, role, element name, and size. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot.
      To act on a finding, use the ref from that snapshot -i. The ref numbers can differ, so do not match by ref number.
-     Find the element in the snapshot by role and position. To compare positions, use the rect from agent-device audit --json and from agent-device snapshot -i --json.
+     Use the element name or identifier that audit prints only when it matches exactly one element in the snapshot. Snapshot -i text prints an identifier only for an element with no label or value, so read identifiers from agent-device snapshot -i --json.
+     When the name matches more than one element, or the finding line shows only a role, match by role and by the rect from agent-device audit --json and agent-device snapshot -i --json.
+     Act only on a unique element. If no element is unique, report the finding and do not act.
   4. Capture evidence: agent-device screenshot ./a11y-output/<screen>.png --overlay-refs
 
 Coverage:
@@ -229,7 +231,7 @@ Checks audit cannot do:
     At the end, set the noted mode again. For example, if the noted mode was light, run agent-device settings appearance light.
   If settings refuses on this device, such as a physical iPhone, list large text and dark mode as not done.
   Screen reader order and labels: read agent-device snapshot (without -i) from top to bottom. The order must match the visual order.
-    A label must be specific and unique: "Save Lemon Herb Rice", not "Save". A control must expose its state (selected, checked, disabled).
+    Audit reports a name that controls of one role share. Check by hand that each label names its target ("Save Lemon Herb Rice", not "Save"), even when it is unique, and that controls of different roles do not share one name. A control must expose its state (selected, checked, disabled).
   Gesture-only actions: every swipe or long-press action needs another way to reach it, such as a visible control or an accessibility action.
     On the iOS simulator, agent-device snapshot -i --actions names the custom actions that a merged element hides.
 
@@ -238,7 +240,7 @@ Fix loop (only when the user asks to fix):
   Run audit again on the same screen and confirm the finding is gone. Report the before and after audit output.
 
 Report:
-  Group findings by screen. For each finding, give the kind, element name, ref, screenshot path, and suggested fix.
+  Group findings by screen. For each finding, give the kind, element name or identifier when shown, ref, screenshot path, and suggested fix.
   List the checks you could not do. Include audit's limitation lines in that list.`,
   },
   dogfood: {
@@ -261,7 +263,7 @@ Loop:
   Keep stateful commands serial within the same session. Parallel runs can pollute text fields, focus, alerts, and navigation state.
 
 Platform checks:
-  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i. Find the element by role and position, not by ref number. Report audit's findings as accessibility findings.
+  On the first screen, and after a screen changes meaningfully, run audit, then snapshot -i. Audit captures the screen itself, so it goes first. Audit's pinned refs (@eN~sG) stay valid only until the next snapshot. To act on a finding, use the ref from that snapshot -i. Match the finding by the element name or identifier that audit prints, only when it matches exactly one snapshot element, not by ref number. Otherwise use role and rect from the JSON output. Act only on a unique element. Report audit's findings as accessibility findings.
   For a whole-app accessibility review, read help accessibility.
   On iOS, test Back and the edge-back swipe where a screen was pushed. On Android, test system Back and applicable sheet dismissal.
   Where a sheet is dismissible, swipe it down with no edits and expect dismiss. Dismiss it after an edit and expect confirm or save. Then press explicit Cancel.

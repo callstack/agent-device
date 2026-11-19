@@ -2,9 +2,13 @@ import { describe, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
-import { publishFileSync } from './atomic-file.ts';
+import {
+  isAtomicPublishTemporaryPath,
+  publishFileSync,
+  withAtomicPublishTempPathSync,
+} from './atomic-publish.ts';
 
-const directory = mkdtempForTestSync('host-kit-atomic-file-');
+const directory = mkdtempForTestSync('host-kit-atomic-publish-');
 
 function destination(name: string): string {
   return path.join(directory, name);
@@ -123,4 +127,51 @@ describe('publishFileSync', () => {
       chmod.mockRestore();
     }
   });
+});
+
+test('a temp sibling belongs to its own destination even when another name shares its first 64 bytes', () => {
+  const shared = 'a'.repeat(64);
+  const first = path.join('/recordings', `${shared}-first.ad`);
+  const second = path.join('/recordings', `${shared}-second.ad`);
+  const sibling = withAtomicPublishTempPathSync(first, (temporaryPath) => temporaryPath);
+
+  expect(isAtomicPublishTemporaryPath(sibling, first)).toBe(true);
+  expect(isAtomicPublishTemporaryPath(sibling, second)).toBe(false);
+  expect(Buffer.byteLength(path.basename(sibling))).toBeLessThan(128);
+});
+
+test('a short name keeps its temp sibling no longer than the release format made it', () => {
+  // The release format was `.<name>.<pid>-<uuid>.tmp`; a deep directory near PATH_MAX left no room for more.
+  const destination = path.join('/recordings', 'x.png');
+  const release = `.x.png.${process.pid}-${'0'.repeat(36)}.tmp`;
+  const sibling = withAtomicPublishTempPathSync(destination, (temporaryPath) => temporaryPath);
+
+  expect(Buffer.byteLength(path.basename(sibling))).toBeLessThanOrEqual(Buffer.byteLength(release));
+});
+
+test('a temp sibling repeats at most 32 bytes of a long name', () => {
+  const sibling = withAtomicPublishTempPathSync(
+    path.join('/recordings', `${'a'.repeat(64)}.ad`),
+    (temporaryPath) => temporaryPath,
+  );
+
+  expect(path.basename(sibling).split('.')[1]).toBe('a'.repeat(32));
+});
+
+test('two names whose hashes agree in their first 12 hex digits keep separate temp siblings', () => {
+  const first = path.join('/recordings', `${'a'.repeat(32)}001b3611.ad`);
+  const second = path.join('/recordings', `${'a'.repeat(32)}013aae72.ad`);
+  const sibling = withAtomicPublishTempPathSync(first, (temporaryPath) => temporaryPath);
+
+  expect(isAtomicPublishTemporaryPath(sibling, first)).toBe(true);
+  expect(isAtomicPublishTemporaryPath(sibling, second)).toBe(false);
+});
+
+test('a temp stem counts bytes, keeping 16 two-byte characters of a long name', () => {
+  const sibling = withAtomicPublishTempPathSync(
+    path.join('/recordings', `${'é'.repeat(32)}.ad`),
+    (temporaryPath) => temporaryPath,
+  );
+
+  expect(path.basename(sibling).split('.')[1]).toBe('é'.repeat(16));
 });

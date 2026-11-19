@@ -7,8 +7,9 @@ import { vi } from 'vitest';
  * Ownership is judged against this process's own uid, so naming a fixed id only makes an entry foreign while the
  * suite stands somewhere else: CI runs a suite as `nobody` (65534), and there a hard-coded 65534 makes every
  * "foreign" case this user's own directory, so the ownership boundary is asserted nowhere at all. The same rule
- * is written in host-kit's `internal/atomic-file-host.fixtures.ts`; host-kit's tests may not reach test-kit, and
- * one package may not publish test support to another (R83), so each keeps its own copy — change both together.
+ * is written in host-kit's `internal/script-destination-host.fixtures.ts` and in host-swift's
+ * `swift-cache-trust.test.ts`; packages test-kit depends on may not reach it, and one package may not
+ * publish test support to another (R83), so each keeps its own copy — change all three together.
  */
 export const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;
 

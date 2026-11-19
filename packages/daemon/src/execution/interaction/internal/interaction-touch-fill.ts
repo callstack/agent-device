@@ -1,7 +1,10 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { FillCommandResult, InteractionTarget } from '@agent-device/contracts/interaction';
+import type {
+  FillCommandResult,
+  InteractionRequestTarget,
+} from '@agent-device/contracts/interaction';
 import { issueSettleRefs, resolveRefStalenessWarning } from '../../session-snapshot.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
@@ -175,7 +178,7 @@ async function prepareFillRefTarget(
     refSnapshotFlagGuardResponse: RefSnapshotFlagGuardResponse;
   },
   session: SessionState,
-  target: InteractionTarget,
+  target: InteractionRequestTarget,
   refGeneration: number | undefined,
 ): Promise<{ response?: DaemonResponse; staleRefsWarning?: string }> {
   if (target.kind !== 'ref') return {};

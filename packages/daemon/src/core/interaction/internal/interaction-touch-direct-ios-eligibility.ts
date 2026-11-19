@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { InteractionTarget } from '@agent-device/contracts/interaction';
+import type { InteractionRequestTarget } from '@agent-device/contracts/interaction';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
@@ -20,7 +20,7 @@ import type { SessionState } from '../../session-state.ts';
 export function readDirectIosSelectorTapTarget(params: {
   session: SessionState;
   commandLabel: string;
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   flags: CommandFlags | undefined;
   tapElementSelectorAvailable: boolean;
 }): DirectIosSelectorTarget | null {

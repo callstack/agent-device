@@ -46,6 +46,16 @@ test('parseSelectorChain parses fallback and boolean terms', () => {
   assert.equal(chain.selectors[1]!.terms[2]!.key, 'visible');
 });
 
+test('parseSelectorChain parses the checked boolean key in bare and key=value forms', () => {
+  assert.deepEqual(chainTerms('role=switch checked')[0], [
+    { key: 'role', value: 'switch' },
+    { key: 'checked', value: true },
+  ]);
+  assert.deepEqual(chainTerms('checked=true')[0], [{ key: 'checked', value: true }]);
+  assert.deepEqual(chainTerms('checked=false')[0], [{ key: 'checked', value: false }]);
+  assert.throws(() => parseSelectorChain('checked=maybe'), /Invalid boolean value for checked/);
+});
+
 test('parseSelectorChain rejects unknown keys and malformed quotes', () => {
   assert.throws(() => parseSelectorChain('foo=bar'), /Unknown selector key/i);
   assert.throws(() => parseSelectorChain('label="unclosed'), /Unclosed quote/i);

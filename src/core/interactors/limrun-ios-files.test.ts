@@ -162,9 +162,11 @@ test('binary installed metadata uses shared Expo launch hints and explicit URL p
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: f.directory,
-    runtimeHints: { metroHost: 'localhost', metroPort: '8081' },
+    runtimeHints: {
+      values: { metroHost: 'localhost', metroPort: '8081' },
+      apply: async () => {},
+    },
     execution: {},
-    applyRuntimeHints: async () => {},
   };
   expect(await lifecycle.openApplication(input)).toMatchObject({ appBundleId: 'com.example.app' });
   expect(vi.mocked(f.session.client.simctl).mock.calls.map(([args]) => args)).toContainEqual([

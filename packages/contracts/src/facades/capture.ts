@@ -3,6 +3,7 @@ export type {
   AuditContext,
   AuditFinding,
   AuditFindingKind,
+  AuditNameDetail,
   AuditResult,
   AuditSeverity,
   AuditSizeDetail,

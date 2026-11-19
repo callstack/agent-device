@@ -8,7 +8,9 @@ import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
   isScrollableNodeLike,
-  normalizeType,
+  type SnapshotProducer,
+  snapshotBarKind,
+  snapshotNodeKindIncludesAny as nodeKindIncludesAny,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
 
@@ -25,7 +27,6 @@ const OVERLAY_KIND_FRAGMENTS = [
   'popover',
   'menu',
 ];
-const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
 const FLOATING_BAR_CONTAINER_ROLE = '_UIFloatingBarContainerView';
 /**
  * How far below the viewport top a full-viewport chrome container may start, before the 0.5pt rect
@@ -97,6 +98,7 @@ function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): Neighbour
 }
 
 export type SnapshotOcclusionOptions = {
+  producer?: SnapshotProducer;
   /** Backend-declared overlay roots that use the shared geometric scan (for example Android IME). */
   isAdditionalOverlayNode?: (node: RawSnapshotNode) => boolean;
 };
@@ -133,7 +135,10 @@ export function annotateCoveredSnapshotNodes(
     if (!isCandidateTouchNode(node)) continue;
     const coveringNode = findCoveringNode(scan, position, node, options);
     if (!coveringNode) continue;
-    const coveredBy = describeCoveringNode(coveringNode);
+    const coveredBy = describeCoveringNode(
+      coveringNode,
+      snapshotBarKind(coveringNode, options.producer),
+    );
     coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
@@ -141,6 +146,22 @@ export function annotateCoveredSnapshotNodes(
 
 /** Presented roles that name a box rather than a surface a reader would recognize and dismiss. */
 const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
+
+const VIEWPORT_CHROME_KIND_FRAGMENTS = [
+  ...TAB_BAR_KIND_FRAGMENTS,
+  ...TOOLBAR_HOST_KIND_FRAGMENTS,
+  ...NAVIGATION_BAR_KIND_FRAGMENTS,
+];
+
+/** Viewport hosts can expose internal classes such as UIKit tab platters. */
+function isViewportChromeBarNode(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+): boolean {
+  return (
+    !nodeKindIncludesAny(node, ['bottomnavigation']) &&
+    nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)
+  );
+}
 
 /**
  * The bounded, non-actionable description of the cover the scan found, or nothing when the cover has
@@ -152,22 +173,31 @@ const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
  * the surface to dismiss. Strip that label and the same node would say `the group at (...)`, which
  * points at a box nobody would recognize; an anonymous container of that shape therefore publishes
  * no cover, and the refusal keeps its generic recovery. A named kind (`dialog`, `tab-bar`, `sheet`)
- * still describes itself with no label to lean on.
+ * still describes itself with no label to lean on. Persistent bars always publish their canonical
+ * bar kind, including when the type is generic and only the role or subrole identifies the bar.
  */
-function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode | null {
+function describeCoveringNode(
+  node: CoveringNodeEvidence,
+  barKind?: ReturnType<typeof snapshotBarKind>,
+): SnapshotCoveringNode | null {
   const label = node.label?.trim();
-  const kind = formatRole(node.type ?? 'Element');
-  if (!label && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
+  const typeKind = formatRole(node.type ?? 'Element');
+  const anonymous = ANONYMOUS_CONTAINER_KINDS.has(typeKind);
+  if (!label && !barKind && anonymous) return null;
   const rect = positiveRect(node.rect);
   return {
-    kind,
+    kind: barKind ?? typeKind,
     ...(label ? { label: label.slice(0, SNAPSHOT_COVERING_LABEL_MAX_LENGTH) } : {}),
     ...(rect ? { rect } : {}),
+    ...(barKind ? { persistentBar: true } : {}),
   };
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */
-export type CoveringNodeEvidence = Pick<RawSnapshotNode, 'type' | 'label' | 'rect'>;
+export type CoveringNodeEvidence = Pick<
+  RawSnapshotNode,
+  'type' | 'role' | 'subrole' | 'label' | 'rect'
+>;
 
 /**
  * Applies backend-owned covered decisions through the same publication annotation contract. A
@@ -380,7 +410,7 @@ function isSiblingSizedChromeContainer(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  if (!isViewportChromeBarNode(node)) return false;
   if (typeof node.parentIndex !== 'number') return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
@@ -539,7 +569,7 @@ function isNavigationBarAround(bar: RawSnapshotNode, rect: Rect): boolean {
 /** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
 function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
   const isHostedRegion =
-    nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS) ||
+    isViewportChromeBarNode(node) ||
     (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
   const nodeRect = positiveRect(node.rect);
   return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
@@ -549,7 +579,7 @@ function isFullViewportChromeContainer(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  if (!isViewportChromeBarNode(node)) return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
 
@@ -663,24 +693,6 @@ function isRenderableAdditionalOverlayNode(
 
 function isSemanticTouchNode(node: RawSnapshotNode): boolean {
   return nodeKindIncludesAny(node, SEMANTIC_TOUCH_KIND_FRAGMENTS);
-}
-
-function nodeKindIncludesAny(
-  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
-  fragments: readonly string[],
-): boolean {
-  const normalized = normalizeNodeKind(node);
-  return fragments.some((fragment) => normalized.includes(fragment));
-}
-
-// Mutation-lane note: the `?? ''` fallback's exact replacement text is not
-// observable through this module's public API — every caller only checks
-// substring membership against a fixed, known fragment list, and no
-// plausible filler text coincides with any of them, so no test can
-// distinguish `''` from another non-matching filler here without reaching
-// into this private function directly.
-function normalizeNodeKind(node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>): string {
-  return [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? '')).join(' ');
 }
 
 function areRelatedSnapshotNodes(

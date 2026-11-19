@@ -17,6 +17,7 @@ const PLATFORM_LABELS = new Map([
   ['macos', 'macOS'],
   ['tvos', 'tvOS'],
   ['visionos', 'visionOS'],
+  ['watchos', 'watchOS'],
 ]);
 const requested = platforms.length > 0 ? platforms : [...PLATFORM_LABELS.keys()];
 const MAX_SUMMARY_ENTRY_NAMES = 3;

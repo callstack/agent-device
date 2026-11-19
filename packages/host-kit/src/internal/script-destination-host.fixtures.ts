@@ -2,11 +2,19 @@
 // directories it builds them on. The ancestry rule reads the real host for its own identity, so a test that
 // leaves that alone is asserting against whatever account the machine it runs on happens to have.
 
-import { expect } from 'vitest';
+import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
-import { publishScriptFileSync } from './atomic-file.ts';
+import { publishScriptFileSync } from './script-destination.ts';
+
+/** A test that needs POSIX ownership or POSIX path rules, skipped on Windows. */
+export const skipOnWindows: typeof test.skip = process.platform === 'win32' ? test.skip : test;
+
+/** Every entry under `directory`, so a refusal can show it created nothing anywhere below it. */
+export function tree(directory: string): string[] {
+  return fs.readdirSync(directory, { recursive: true }).map(String).sort();
+}
 
 /** This process's uid. Windows has none, and every test that uses it is skipped there. */
 export const currentUid = process.getuid?.() ?? -1;
@@ -22,7 +30,7 @@ export const currentGid = process.getgid?.() ?? -1;
  * "foreign" case this user's own directory, so the ownership boundary is asserted nowhere at all. The same rule
  * is written in `@agent-device/test-kit`'s `host-ownership.fixtures.ts`; a package's tests may not reach
  * test-kit, and one package may not publish test support to another (R83), so each keeps its own copy — change
- * both together.
+ * all three together: this one, test-kit's, and host-swift's `swift-cache-trust.test.ts`.
  */
 export const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;
 

@@ -11,7 +11,7 @@ import {
   type FillCommandResult,
   type HoverCommandOptions,
   type HoverCommandResult,
-  type InteractionTarget,
+  type InteractionRequestTarget,
   type LongPressCommandOptions,
   type LongPressCommandResult,
   type PressCommandOptions,
@@ -69,24 +69,24 @@ export type BoundSelectorCommands = {
 
 export type BoundInteractionCommands = {
   click: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<ClickCommandOptions, 'target'>,
   ) => Promise<PressCommandResult>;
   press: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<PressCommandOptions, 'target'>,
   ) => Promise<PressCommandResult>;
   fill: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     text: string,
     options?: Omit<FillCommandOptions, 'target' | 'text'>,
   ) => Promise<FillCommandResult>;
   longPress: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<LongPressCommandOptions, 'target'>,
   ) => Promise<LongPressCommandResult>;
   hover: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<HoverCommandOptions, 'target'>,
   ) => Promise<HoverCommandResult>;
   gesture: BoundRuntimeCommand<GestureCommandOptions, GestureCommandResult>;

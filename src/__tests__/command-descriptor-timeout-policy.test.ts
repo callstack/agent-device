@@ -13,8 +13,11 @@ import {
 import { OVERLAY_BUDGET_MS } from '@agent-device/capture-kit/recording-overlay';
 import {
   DEFAULT_TIMEOUT_POLICY,
+  INSTALL_SOURCE_DAEMON_DEADLINE_MS,
+  INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
   MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
   resolveCommandDaemonBudgetMs,
+  resolveCommandDaemonTimeoutMs,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
 
@@ -162,6 +165,42 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
       `${descriptor.name}: unexpected request envelope`,
     );
   }
+});
+
+// #4441 (decision 6856998913): both source-install commands carry the one source-install
+// timeout policy — a 600 s client envelope with a 570 s daemon deadline derived from the
+// 30 s result margin — enforced through the descriptor/request-router path.
+test('install-from-source and install_source share the one source-install timeout policy', () => {
+  const base = { positionals: [] as string[], flags: {} };
+  assert.equal(INSTALL_SOURCE_REQUEST_TIMEOUT_MS, 600_000);
+  assert.equal(INSTALL_SOURCE_DAEMON_DEADLINE_MS, 570_000);
+  assert.equal(INSTALL_SOURCE_REQUEST_TIMEOUT_MS - INSTALL_SOURCE_DAEMON_DEADLINE_MS, 30_000);
+  for (const command of ['install-from-source', 'install_source']) {
+    const policy = resolveCommandTimeoutPolicy(command);
+    assert.equal(policy.envelopeMs, INSTALL_SOURCE_REQUEST_TIMEOUT_MS, command);
+    assert.equal(
+      resolveCommandDaemonTimeoutMs(policy, base),
+      INSTALL_SOURCE_DAEMON_DEADLINE_MS,
+      command,
+    );
+    assert.equal(
+      resolveCommandDaemonBudgetMs(policy, base),
+      INSTALL_SOURCE_DAEMON_DEADLINE_MS,
+      command,
+    );
+    assert.equal(resolveCommandRequestTimeoutMs(policy, base), 600_000, command);
+    assert.equal(policy.onTimeout, 'reset-daemon', command);
+  }
+  // The normal install route keeps its own ledger-proven envelope and no daemon deadline.
+  for (const command of ['install', 'reinstall', 'uninstall']) {
+    const policy = resolveCommandTimeoutPolicy(command);
+    assert.equal(policy.envelopeMs, 480_000, command);
+    assert.equal(resolveCommandDaemonTimeoutMs(policy, base), undefined, command);
+  }
+  // Unrelated commands keep the default policy untouched.
+  const fallback = resolveCommandTimeoutPolicy('snapshot');
+  assert.equal(fallback.envelopeMs, 90_000);
+  assert.equal(resolveCommandDaemonTimeoutMs(fallback, base), undefined);
 });
 
 test('commands outside the registry fall back to the explicit default policy', () => {

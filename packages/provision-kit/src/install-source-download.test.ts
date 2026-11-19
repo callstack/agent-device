@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
-import { Readable } from 'node:stream';
-import { test, vi } from 'vitest';
+import { PassThrough, Readable } from 'node:stream';
+import { afterEach, beforeEach, test, vi } from 'vitest';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
+  TRANSFER_CONNECT_TIMEOUT_MS,
+  isTransferPhaseTimeoutError,
+} from '@agent-device/host-kit/transport';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { downloadInstallSource } from './install-source-download.ts';
 import { isTrustedInstallSourceUrl } from './install-source.ts';
@@ -241,16 +247,174 @@ test('download rejects non-identity content encoding and malformed lengths', asy
 
 function response(
   statusCode: number,
-  body: Buffer = Buffer.alloc(0),
+  body: Buffer | Readable = Buffer.alloc(0),
   headers: Record<string, string> = {},
 ): networkTransport.InstallSourceNetworkResponse {
   return {
     statusCode,
     headers,
-    body: Readable.from(body),
+    body: Buffer.isBuffer(body) ? Readable.from(body) : body,
     close: async () => {},
   };
 }
+
+// The watchdog's deadline clock is faked while real stream/IO work runs on real macrotasks, so
+// phase expiry below is driven by an independent control clock, not by wall time.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function flushRealIOMacrotasks(rounds = 10): Promise<void> {
+  for (let index = 0; index < rounds; index += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+function mockApprovedLookup(): () => void {
+  const lookup = vi
+    .spyOn(dns, 'lookup')
+    .mockImplementation(
+      async () =>
+        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+          ReturnType<typeof dns.lookup>
+        >,
+    );
+  return () => lookup.mockRestore();
+}
+
+function assertPhaseTimeout(error: unknown, phase: string, timeoutMs: number): void {
+  assert.ok(error instanceof AppError, 'phase expiry must stay a typed AppError');
+  assert.ok(isTransferPhaseTimeoutError(error), 'phase expiry must keep its typed reason');
+  assert.equal(isRequestCanceledError(error), false, 'a phase timeout is not caller cancellation');
+  assert.deepEqual(error.details, {
+    reason: 'transfer_phase_timeout',
+    transferPhase: phase,
+    timeoutMs,
+  });
+}
+
+test('a connect that never completes expires at the adopted connect ceiling with typed evidence', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-connect-stall-');
+  const restoreLookup = mockApprovedLookup();
+  const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
+    (args) =>
+      new Promise<never>((_resolve, reject) => {
+        args.signal.addEventListener('abort', () => reject(args.signal.reason), {
+          once: true,
+        });
+      }),
+  );
+  try {
+    const outcome = downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/app.apk',
+      signal: new AbortController().signal,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    await flushRealIOMacrotasks();
+    await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS + 1);
+    const error = await outcome;
+    assertPhaseTimeout(error, 'connect', TRANSFER_CONNECT_TIMEOUT_MS);
+  } finally {
+    requestMock.mockRestore();
+    restoreLookup();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a stalled response body expires at the inactivity ceiling even without caller cancellation', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-body-stall-');
+  const restoreLookup = mockApprovedLookup();
+  const requestMock = vi
+    .spyOn(networkTransport, 'requestApprovedUrl')
+    .mockImplementation(async () => response(200, new Readable({ read() {} })));
+  try {
+    const outcome = downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/app.apk',
+      signal: new AbortController().signal,
+      environment: process.env,
+    }).catch((error: unknown) => error);
+    await flushRealIOMacrotasks();
+    await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 1);
+    const error = await outcome;
+    assertPhaseTimeout(error, 'response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+  } finally {
+    requestMock.mockRestore();
+    restoreLookup();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('accepted body bytes rearm the inactivity ceiling so a slow progressing download finishes', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-progress-');
+  const restoreLookup = mockApprovedLookup();
+  const body = new PassThrough();
+  const requestMock = vi
+    .spyOn(networkTransport, 'requestApprovedUrl')
+    .mockImplementation(async () => response(200, body));
+  try {
+    const promise = downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/app.apk',
+      signal: new AbortController().signal,
+      environment: process.env,
+    });
+    await flushRealIOMacrotasks();
+    // Three progress windows of 100s each: past the retired fixed 120s transfer ceiling, while
+    // every gap stays under the 120s inactivity ceiling.
+    for (const chunk of ['first-', 'second-', 'third']) {
+      body.write(chunk);
+      await flushRealIOMacrotasks();
+      await vi.advanceTimersByTimeAsync(100_000);
+    }
+    body.end();
+    const result = await promise;
+    assert.equal(await fs.readFile(result, 'utf8'), 'first-second-third');
+  } finally {
+    requestMock.mockRestore();
+    restoreLookup();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('redirect hops rearm phase timers on one shared aggregate signal', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-redirect-aggregate-');
+  const restoreLookup = mockApprovedLookup();
+  const requestMock = vi
+    .spyOn(networkTransport, 'requestApprovedUrl')
+    .mockResolvedValueOnce(
+      response(302, Buffer.alloc(0), { location: 'https://cdn.example.net/app.apk' }),
+    )
+    .mockResolvedValueOnce(response(200, Buffer.from('apk')));
+  try {
+    const result = await downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/start',
+      signal: new AbortController().signal,
+      environment: process.env,
+    });
+    assert.equal(await fs.readFile(result, 'utf8'), 'apk');
+    assert.equal(requestMock.mock.calls.length, 2);
+    const first = requestMock.mock.calls[0]![0];
+    const second = requestMock.mock.calls[1]![0];
+    assert.equal(
+      second.signal,
+      first.signal,
+      'a redirect hop must not start a fresh aggregate, only a fresh phase timer',
+    );
+    assert.equal(typeof first.onConnected, 'function');
+    assert.equal(typeof second.onConnected, 'function');
+  } finally {
+    requestMock.mockRestore();
+    restoreLookup();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
 
 test('download and the trusted-source check refuse an unparsable source alike', async () => {
   const source = '/abs/path/app.zip';

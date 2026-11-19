@@ -810,9 +810,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
   if (!written.written) return;
   const savedScript = fs.readFileSync(written.path, 'utf8');
   expect(savedScript).toContain('# agent-device:target-v1');
-  expect(savedScript).toContain(
-    String.raw`click "id=\"unfollow\" || role=\"button\" label=\"Unfollow\" || label=\"Unfollow\""`,
-  );
+  expect(savedScript).toContain(`${String.raw`click "id=\"unfollow\""`}\n`);
 
   recording = false;
   const replaySessionName = 'ios-replayed-tap';

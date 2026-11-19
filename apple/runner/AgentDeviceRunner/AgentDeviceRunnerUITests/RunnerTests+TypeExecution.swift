@@ -22,6 +22,9 @@ extension RunnerTests {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }
+#if os(watchOS)
+    return try watchTypeCommandResponse(activeApp: activeApp, command: command, text: text)
+#endif
     let delaySeconds = Double(max(command.delayMs ?? 0, 0)) / 1000.0
     let textEntryMode = resolveTextEntryMode(command)
     let target: TextEntryTarget
@@ -58,7 +61,7 @@ extension RunnerTests {
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
       // text would reach the app-level first responder, so an empty point and a lookup that cannot
       // answer both refuse here, each under its own reason.
-      let contentTranslation = liveContentTranslation(app: activeApp)
+      let contentTranslation = liveContentTranslation(app: activeApp, reusing: treeContext)
       let inputAtPoint: TextInputAtPoint
       let inputsAtPoint: [ResolvedTextEntryInput]
       switch try coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {

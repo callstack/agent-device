@@ -12,16 +12,8 @@ import {
   errorMessage,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
-import { findProjectRoot } from '@agent-device/host-kit/version';
-import {
-  buildSwiftToolEnv,
-  compileSwiftSourceFile,
-  resolveRecordingScriptPath,
-} from './swift-cache.ts';
+import { runSwiftHelper, compileSwiftSources } from '@agent-device/host-swift/swift-cache';
 
-const FRAMES_SCRIPT = 'recording-frames.swift';
-const SHARED_SUPPORT_SCRIPT = 'RecordingExportSupport.swift';
 const EXTRACTION_TIMEOUT_MS = 90_000;
 const COMPILATION_TIMEOUT_MS = 120_000;
 
@@ -95,7 +87,8 @@ export async function extractRecordingFrames(
 
   let result;
   try {
-    result = await runCmd(
+    result = await runSwiftHelper(
+      input.host,
       executablePath,
       [
         '--input',
@@ -109,7 +102,6 @@ export async function extractRecordingFrames(
       ],
       {
         timeoutMs: EXTRACTION_TIMEOUT_MS,
-        env: buildSwiftToolEnv(input.host.env),
         allowFailure: true,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
@@ -267,12 +259,13 @@ async function compileDecoder(input: {
   videoPath: string;
   signal?: AbortSignal;
 }): Promise<string> {
-  const { cwd } = input.host;
   try {
-    return await compileSwiftSourceFile({
+    // The shipped sources, loaded only when a contact sheet is built.
+    const { RECORDING_FRAMES_SOURCES } =
+      await import('@agent-device/host-swift/recording-swift-sources');
+    return await compileSwiftSources({
       host: input.host,
-      sourcePath: resolveRecordingScriptPath(FRAMES_SCRIPT, findProjectRoot(), cwd),
-      extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT, findProjectRoot(), cwd)],
+      sources: RECORDING_FRAMES_SOURCES,
       cacheName: 'recording-frames',
       timeoutMs: COMPILATION_TIMEOUT_MS,
     });

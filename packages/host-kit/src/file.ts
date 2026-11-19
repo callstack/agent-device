@@ -1,15 +1,20 @@
 export {
-  confirmScriptDestination,
   isAtomicPublishTemporaryPath,
-  prepareScriptDestination,
   publishDurableFileSync,
   publishFileSync,
-  publishScriptFileSync,
-  scriptAncestryReason,
   type DurableFilePublishMode,
-  type ScriptDestination,
-} from './internal/atomic-file.ts';
+} from './internal/atomic-publish.ts';
 export {
+  confirmScriptDestination,
+  prepareScriptDestination,
+  publishScriptFileSync,
+  type ScriptDestination,
+  type ScriptDestinationOptions,
+} from './internal/script-destination.ts';
+export { scriptAncestryReason } from './internal/script-destination-refusal.ts';
+export { resolveScriptDestination } from './internal/entry-name.ts';
+export {
+  assertScriptTargetVacant,
   lstatIfPresent,
   NOT_REGULAR_FILE_HINT,
   openVerifiedFileForAppend,

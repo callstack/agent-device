@@ -6,6 +6,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import { recordedSelectorExpression } from '@agent-device/selectors';
 import {
   inferFillText,
   appendScriptSeriesFlags,
@@ -18,8 +19,12 @@ import {
   isTouchTargetCommand,
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
-import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
-import { publishFileSync, publishScriptFileSync } from '@agent-device/host-kit/file';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
+import {
+  publishFileSync,
+  publishScriptFileSync,
+  resolveScriptDestination,
+} from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -147,7 +152,7 @@ export class SessionScriptWriter {
       // (`effectiveWriteForce` — a live flag or the per-target grant), not
       // read from `session` directly here, so this stays a pure
       // formatting+publish step.
-      publishHealedScriptAtomically({
+      const committedPath = publishHealedScriptAtomically({
         scriptPath,
         script: prepared.script,
         force: options?.force,
@@ -160,7 +165,7 @@ export class SessionScriptWriter {
           session.scriptPublication ?? NO_SCRIPT_PUBLICATION,
         );
       }
-      return { written: true, path: scriptPath, actionCount: prepared.actionCount };
+      return { written: true, path: committedPath, actionCount: prepared.actionCount };
     } catch (error) {
       return handleSessionScriptWriteFailure({
         session,
@@ -187,7 +192,7 @@ export class SessionScriptWriter {
   private resolveScriptPath(session: SessionState): string {
     const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
     if (targetPath) {
-      return expandSessionPath(targetPath, this.hostCwd);
+      return resolveScriptDestination(targetPath, { cwd: this.hostCwd });
     }
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');
@@ -311,19 +316,18 @@ function publishHealedScriptAtomically(params: {
   force?: boolean;
   mode?: number;
   callerOwnsDestination: boolean;
-}): void {
+}): string {
   const { scriptPath, script, force, mode, callerOwnsDestination } = params;
   try {
     if (callerOwnsDestination) {
       // host-kit owns this route's whole sequence (#4565): it walks the destination's chain, refuses a
       // destination another local user can steer BEFORE creating anything, creates what is missing one level
       // at a time at 0700 inside the directory it judged, and writes the script itself at 0600.
-      publishScriptFileSync({
+      return publishScriptFileSync({
         destination: scriptPath,
         contents: script,
         publish: force ? 'replace' : 'link-exclusive',
       });
-      return;
     }
     publishFileSync({
       destination: scriptPath,
@@ -331,6 +335,7 @@ function publishHealedScriptAtomically(params: {
       publish: force ? 'replace' : 'link-exclusive',
       ...(mode === undefined ? {} : { mode }),
     });
+    return scriptPath;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     throw new AppError(
@@ -431,7 +436,7 @@ function readSelectorChainExpression(action: SessionAction): string | undefined 
     action.result.selectorChain.every((entry) => typeof entry === 'string')
       ? (action.result.selectorChain as string[])
       : [];
-  return selectorChain.length > 0 ? selectorChain.join(' || ') : undefined;
+  return recordedSelectorExpression(selectorChain);
 }
 
 function isSelectorTargetingCommand(command: string): boolean {

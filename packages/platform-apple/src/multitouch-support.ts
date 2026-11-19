@@ -7,12 +7,14 @@ import {
 import { APPLE_OS_DISPLAY_NAMES } from '@agent-device/contracts/gesture-admission';
 import { AppError } from '@agent-device/kernel/errors';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
+import { WATCH_OS_MULTI_TOUCH_UNSUPPORTED_HINT } from './os/watchos/facts.ts';
 
 export const APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS: Partial<Record<AppleOS, string>> = {
   visionos: 'visionOS uses spatial input and does not support two-finger touch synthesis.',
   tvos: 'tvOS has no touch input — this gesture is supported on Android, iOS, and iPadOS.',
   macos:
     'macOS automation has no multi-touch input — this gesture is supported on Android, iOS, and iPadOS.',
+  watchos: WATCH_OS_MULTI_TOUCH_UNSUPPORTED_HINT,
 };
 
 /** One policy shared by command admission and the defensive Apple adapter check. */

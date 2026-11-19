@@ -6,11 +6,7 @@ import {
   settingsRefFrameEffect,
   NO_PLATFORM_EXECUTION,
 } from '../descriptor-request-policy.ts';
-import {
-  DEFAULT_TIMEOUT_POLICY,
-  FOLD_TIMEOUT_POLICY,
-  INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
-} from '../timeout-policy.ts';
+import { DEFAULT_TIMEOUT_POLICY, FOLD_TIMEOUT_POLICY } from '../timeout-policy.ts';
 import {
   FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
   GENERIC_MUTATING_COMMAND_TRAITS,
@@ -23,6 +19,7 @@ import {
 } from '../descriptor-traits.ts';
 import {
   ALERT_TIMEOUT_POLICY,
+  INSTALL_SOURCE_TIMEOUT_POLICY,
   PRESERVE_DAEMON_TIMEOUT_POLICY,
   SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
   postActionObservationTimeoutPolicy,
@@ -629,7 +626,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       recordsSessionAction: true,
       recordingEffect: 'mutates-app',
       platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
-      timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS },
+      timeoutPolicy: INSTALL_SOURCE_TIMEOUT_POLICY,
       batchable: true,
       compositeResource: 'none',
     },

@@ -1,5 +1,6 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotProducer } from './snapshot-producers.ts';
 
 export function normalizeType(type: string): string {
   let normalized = type
@@ -12,6 +13,75 @@ export function normalizeType(type: string): string {
     normalized = normalized.slice(lastSeparator + 1);
   }
   return normalized;
+}
+
+const APPLE_BAR_KINDS = [
+  ['TabBar', 'tab-bar'],
+  ['Toolbar', 'toolbar'],
+  ['NavigationBar', 'navigation-bar'],
+] as const;
+
+const ANDROID_BAR_KINDS = [
+  ['com.google.android.material.bottomnavigation.BottomNavigationView', 'bottom-navigation'],
+  ['android.widget.Toolbar', 'toolbar'],
+  ['androidx.appcompat.widget.Toolbar', 'toolbar'],
+] as const;
+
+type SnapshotBarNode = Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>;
+type SnapshotBarKind = (typeof APPLE_BAR_KINDS | typeof ANDROID_BAR_KINDS)[number][1];
+
+/** Reads native bar identity only from captures that publish native type or class names. */
+export function snapshotBarKind(
+  node: SnapshotBarNode,
+  producer: SnapshotProducer | undefined,
+): SnapshotBarKind | undefined {
+  if (
+    producer === 'apple-runner' ||
+    producer === 'simulator-ax-bridge' ||
+    producer === 'macos-helper'
+  ) {
+    const names = [node.type, node.role, node.subrole].map((name) =>
+      name
+        ?.trim()
+        .replace(/^UIKit\./, '')
+        .replace(/^(?:XCUIElementType|UI|AX)/, ''),
+    );
+    return APPLE_BAR_KINDS.find(([name]) => names.includes(name))?.[1];
+  }
+  if (producer === 'android-uiautomator') {
+    const names = [node.type, node.role, node.subrole];
+    return ANDROID_BAR_KINDS.find(([name]) => names.includes(name))?.[1];
+  }
+  return undefined;
+}
+
+/** Identifies native iOS bars whose direct items use platform sizing. */
+export function isNativeIosSnapshotBarNode(
+  node: SnapshotBarNode,
+  producer: SnapshotProducer | undefined,
+): boolean {
+  return (
+    (producer === 'apple-runner' || producer === 'simulator-ax-bridge') &&
+    snapshotBarKind(node, producer) !== undefined
+  );
+}
+
+export function snapshotNodeKindIncludesAny(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+  fragments: readonly string[],
+): boolean {
+  const normalized = normalizeNodeKind(node);
+  return fragments.some((fragment) => normalized.includes(fragment));
+}
+
+// Mutation-lane note: the `?? ''` fallback's exact replacement text is not
+// observable through this module's public API — every caller only checks
+// substring membership against a fixed, known fragment list, and no
+// plausible filler text coincides with any of them, so no test can
+// distinguish `''` from another non-matching filler here without reaching
+// into this private function directly.
+function normalizeNodeKind(node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>): string {
+  return [node.type, node.role, node.subrole].map((value) => normalizeType(value ?? '')).join(' ');
 }
 
 export function isFillableType(type: string, platform: Platform | PublicPlatform): boolean {

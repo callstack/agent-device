@@ -34,7 +34,7 @@ import {
   resolveMaestroTargetFromSnapshot,
   hasMaestroRecursiveRelations,
   type MaestroTargetFailureReason,
-  type MaestroTargetQuery as MaestroSnapshotTargetQuery,
+  type MaestroSnapshotTargetQuery,
   type MaestroTargetResolution,
 } from './runtime-targets.ts';
 

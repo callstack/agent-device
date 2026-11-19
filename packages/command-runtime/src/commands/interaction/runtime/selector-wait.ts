@@ -19,14 +19,14 @@ export type WaitCommandContext = {
   metadata?: Record<string, unknown>;
 };
 
-export type SelectorSnapshotOptions = {
+export type SelectorWaitSnapshotOptions = {
   depth?: number;
   scope?: string;
   raw?: boolean;
 };
 
 export type WaitCommandOptions = WaitCommandContext &
-  SelectorSnapshotOptions & {
+  SelectorWaitSnapshotOptions & {
     target: DaemonWaitTarget;
   };
 
@@ -79,7 +79,7 @@ type StableCaptureResult = {
 export type SelectorWaitOperations<Runtime extends SelectorWaitRuntime> = {
   captureSnapshot: (
     runtime: Runtime,
-    options: WaitCommandContext & SelectorSnapshotOptions,
+    options: WaitCommandContext & SelectorWaitSnapshotOptions,
     captureOptions: {
       updateSession: boolean;
       scope?: string;
@@ -98,7 +98,7 @@ export type SelectorWaitOperations<Runtime extends SelectorWaitRuntime> = {
     tinyTreeNodeCount: number;
     capture: (
       runtime: Runtime,
-      options: WaitCommandContext & SelectorSnapshotOptions,
+      options: WaitCommandContext & SelectorWaitSnapshotOptions,
       params: { quietMs: number; timeoutMs: number },
     ) => Promise<StableCaptureResult>;
   };

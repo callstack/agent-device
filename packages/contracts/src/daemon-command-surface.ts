@@ -23,11 +23,11 @@ import type {
 } from './gesture-plan-types.ts';
 import type { FindLocator } from './snapshot-types.ts';
 import type {
-  ElementTarget,
+  InteractionElementTarget,
   FillCommandResult,
   FindReadResult,
   HoverCommandResult,
-  InteractionTarget,
+  InteractionRequestTarget,
   LongPressCommandResult,
   PressCommandResult,
   PreresolvedInteractionTarget,
@@ -120,8 +120,8 @@ export type DaemonGetOptions = CommandContext &
   Readonly<{
     property: 'text' | 'attrs';
     // `get` reads an element, never a coordinate: the implementation's options take an
-    // ElementTarget, and contravariant checking only holds while the port agrees.
-    target: ElementTarget;
+    // InteractionElementTarget, and contravariant checking only holds while the port agrees.
+    target: InteractionElementTarget;
     /** ADR 0012 step 4: replay-only post-resolution guard. */
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
   }>;
@@ -206,7 +206,7 @@ export type DaemonPressOptions = CommandContext &
   RepeatedInput &
   DaemonPostActionOptions &
   Readonly<{
-    target: InteractionTarget;
+    target: InteractionRequestTarget;
     button?: ClickButton;
     /**
      * Multi-ref press plan (`press @e13,@e14,...`): every member in dispatch
@@ -224,7 +224,7 @@ export type DaemonPressOptions = CommandContext &
 export type DaemonFillOptions = CommandContext &
   DaemonPostActionOptions &
   Readonly<{
-    target: InteractionTarget;
+    target: InteractionRequestTarget;
     text: string;
     delayMs?: number;
     /** Internal Maestro replay policy, forwarded only to the platform action. */
@@ -235,7 +235,7 @@ export type DaemonFillOptions = CommandContext &
 
 export type DaemonLongPressOptions = CommandContext &
   Readonly<{
-    target: InteractionTarget;
+    target: InteractionRequestTarget;
     durationMs?: number;
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
     settle?: SettleParams;
@@ -243,7 +243,7 @@ export type DaemonLongPressOptions = CommandContext &
 
 export type DaemonHoverOptions = CommandContext &
   Readonly<{
-    target: InteractionTarget;
+    target: InteractionRequestTarget;
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
     settle?: SettleParams;
   }>;
@@ -338,24 +338,24 @@ export type DaemonCommandSurfaceSelectors = Readonly<{
  * properties for the same contravariance reason as {@link DaemonCommandSurfaceCapture}. */
 export type DaemonCommandSurfaceInteractions = Readonly<{
   click: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<DaemonPressOptions, 'target'>,
   ) => Promise<PressCommandResult>;
   press: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<DaemonPressOptions, 'target'>,
   ) => Promise<PressCommandResult>;
   fill: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     text: string,
     options?: Omit<DaemonFillOptions, 'target' | 'text'>,
   ) => Promise<FillCommandResult>;
   longPress: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<DaemonLongPressOptions, 'target'>,
   ) => Promise<LongPressCommandResult>;
   hover: (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options?: Omit<DaemonHoverOptions, 'target'>,
   ) => Promise<HoverCommandResult>;
   gesture: (options: DaemonGestureOptions) => Promise<DaemonGestureResult>;

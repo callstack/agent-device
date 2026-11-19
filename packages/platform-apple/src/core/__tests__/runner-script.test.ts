@@ -45,7 +45,7 @@ test('resolveRunnerScriptDevice refuses a destination that leaves the SDK to the
 test('isRunnerXcuitestScriptPlatform accepts only the platforms the build script knows', () => {
   assert.equal(isRunnerXcuitestScriptPlatform('ios'), true);
   assert.equal(isRunnerXcuitestScriptPlatform('visionos'), true);
-  assert.equal(isRunnerXcuitestScriptPlatform('watchos'), false);
+  assert.equal(isRunnerXcuitestScriptPlatform('watchos'), true);
   assert.equal(isRunnerXcuitestScriptPlatform('iOS'), false);
   assert.equal(isRunnerXcuitestScriptPlatform(''), false);
 });

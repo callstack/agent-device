@@ -347,6 +347,43 @@ test('the text predicate never consults the visibility index', () => {
   assert.deepEqual(materialized, { nodeMap: 0, viewportRects: 0 });
 });
 
+test('checked predicate passes only on an explicitly checked node', () => {
+  const base: SnapshotNode = {
+    index: 0,
+    ref: 'e1',
+    type: 'android.widget.Switch',
+    kind: formatRole('android.widget.Switch'),
+    label: 'Wi-Fi',
+  };
+  const evaluate = (node: SnapshotNode) =>
+    evaluateIsPredicate({
+      predicate: 'checked',
+      node,
+      visibility: createSnapshotVisibility([node]),
+      platform: 'android',
+    });
+
+  const on = evaluate({ ...base, checked: true });
+  assert.equal(on.pass, true);
+  assert.match(on.details, /"checked":true/);
+
+  // Closest negatives: an explicitly unchecked switch, the iOS 'mixed' state
+  // (ios-node-interpretation.ts), and an Android node without a `checked` fact
+  // (not checkable) all fail `is checked`.
+  assert.equal(evaluate({ ...base, checked: false }).pass, false);
+  assert.equal(evaluate({ ...base, checked: 'mixed' as unknown as boolean }).pass, false);
+  assert.equal(evaluate(base).pass, false);
+});
+
+test('normalizeIsPositionals rotates a trailing checked token into the predicate slot', () => {
+  assert.deepEqual(normalizeIsPositionals(['role=switch', 'checked']), ['checked', 'role=switch']);
+  // Inside the selector it stays a boolean filter term.
+  assert.deepEqual(normalizeIsPositionals(['checked', 'role=switch checked=false']), [
+    'checked',
+    'role=switch checked=false',
+  ]);
+});
+
 test('an unsupported is predicate always carries the usage hint', () => {
   const refused = checkIsPredicate('nope');
   expect(refused).toEqual({
@@ -360,4 +397,5 @@ test('an unsupported is predicate always carries the usage hint', () => {
 test('is predicates are admitted case-insensitively, matching what the daemon executes', () => {
   expect(checkIsPredicate('TEXT')).toEqual({ ok: true, predicate: 'text' });
   expect(checkIsPredicate('Visible')).toEqual({ ok: true, predicate: 'visible' });
+  expect(checkIsPredicate('CHECKED')).toEqual({ ok: true, predicate: 'checked' });
 });

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import type { DaemonRequestMeta } from '@agent-device/kernel/contracts';
 import {
@@ -209,7 +210,17 @@ export async function downloadRemoteArtifactFromUrl(
       clearTimeout(timeoutHandle);
       params.signal?.removeEventListener('abort', onCallerAbort);
       if (error) {
-        void destination.cleanupOnError().finally(() => reject(error));
+        // A cleanup that fails is reported on its own; the caller still receives the download's own error.
+        void destination
+          .cleanupOnError()
+          .catch((cleanupError: unknown) =>
+            emitDiagnostic({
+              level: 'warn',
+              phase: 'remote_artifact_cleanup_failed',
+              data: { artifactId: params.artifactId, error: String(cleanupError) },
+            }),
+          )
+          .finally(() => reject(error));
         return;
       }
       resolve(result ?? params.destinationPath);

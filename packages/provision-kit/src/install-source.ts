@@ -14,11 +14,6 @@ import {
 import { approveDownloadSourceUrl } from './install-source-network.ts';
 import { downloadInstallSource, invalidSourceUrlError } from './install-source-download.ts';
 
-type MaterializeLocalSourceResult = {
-  localPath: string;
-  cleanup: () => Promise<void>;
-};
-
 export type MaterializeInstallableOptions = {
   source: LocalInstallSource;
   isInstallablePath: (
@@ -26,7 +21,14 @@ export type MaterializeInstallableOptions = {
     stat: { isFile(): boolean; isDirectory(): boolean },
   ) => boolean;
   installableLabel: string;
+  /** Request cancellation. The materialization deadline is a separate, self-armed timer. */
   signal?: AbortSignal;
+  /**
+   * The epoch-ms cutoff the daemon derived for this transfer (#4441). This call arms one timer for
+   * it and reports its expiry as `source_materialization_deadline_exceeded` with the armed
+   * timeout. It never extends the standalone aggregate.
+   */
+  materializationDeadlineMs?: number;
   /** The host environment whose proxy settings apply to a network download. */
   environment: NodeJS.ProcessEnv;
 };
@@ -45,29 +47,120 @@ const INTERNAL_ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz'] as const
  * @public Archive extensions accepted by install-source resolution.
  */
 export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS] as const);
-const DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * The finite aggregate a standalone source-materialization call spends from entry, covering
+ * download and extraction. A caller's own earlier deadline always wins over this one: the daemon
+ * hands the request's cutoff (its earliest registered deadline less the deploy-ledger reserve) to
+ * `options.materializationDeadlineMs`, and any standalone caller may pass its own signal. The
+ * aggregate only keeps the API from silently becoming an unbounded download (#4441).
+ */
+export const SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS = 600_000;
+
+const SOURCE_MATERIALIZATION_DEADLINE_REASON = 'source_materialization_deadline_exceeded';
+
+/** The error of an expired materialization deadline, labeled with the timeout actually armed. */
+function sourceMaterializationDeadlineError(timeoutMs: number, cause?: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `App source materialization timed out after ${timeoutMs}ms`,
+    {
+      reason: SOURCE_MATERIALIZATION_DEADLINE_REASON,
+      transferPhase: 'materialization',
+      timeoutMs,
+    },
+    cause,
+  );
+}
+
+/** The timer that ends materialization: the armed budget and the error its expiry reports. */
+type MaterializationDeadline = {
+  signal: AbortSignal;
+  /** The timeout this deadline armed, which its expiry must report. */
+  timeoutMs: number;
+  /** Whether an abort reason is this deadline's own expiry, not a caller cancellation. */
+  isDeadlineAbort(reason: unknown): boolean;
+  deadlineError(cause?: unknown): AppError;
+};
+
+function createMaterializationDeadline(
+  aggregateSignal: AbortSignal,
+  aggregateTimeoutMs: number,
+  materializationDeadlineMs: number | undefined,
+): MaterializationDeadline {
+  if (materializationDeadlineMs === undefined) {
+    return {
+      signal: aggregateSignal,
+      timeoutMs: aggregateTimeoutMs,
+      isDeadlineAbort: (reason) => aggregateSignal.aborted && reason === aggregateSignal.reason,
+      deadlineError: (cause) => sourceMaterializationDeadlineError(aggregateTimeoutMs, cause),
+    };
+  }
+  // One timer the materializer owns, armed at the daemon's remaining budget and never longer than
+  // the standalone aggregate. Its expiry is classified by identity against this signal's own
+  // reason, so the reported timeout is the armed value wherever the abort surfaces (#4726).
+  const timeoutMs = Math.min(
+    aggregateTimeoutMs,
+    Math.max(0, materializationDeadlineMs - Date.now()),
+  );
+  if (timeoutMs <= 0) {
+    // The cutoff already passed (a cold boot consumed the budget). Fail at once through an
+    // already-aborted signal instead of racing a zero timer against the first IO.
+    const spent = new AbortController();
+    const reason = sourceMaterializationDeadlineError(0);
+    spent.abort(reason);
+    return {
+      signal: AbortSignal.any([aggregateSignal, spent.signal]),
+      timeoutMs: 0,
+      isDeadlineAbort: (candidate) => candidate === spent.signal.reason,
+      deadlineError: (cause) => sourceMaterializationDeadlineError(0, cause),
+    };
+  }
+  const deadlineSignal = AbortSignal.timeout(timeoutMs);
+  return {
+    signal: AbortSignal.any([aggregateSignal, deadlineSignal]),
+    timeoutMs,
+    isDeadlineAbort: (reason) => deadlineSignal.aborted && reason === deadlineSignal.reason,
+    deadlineError: (cause) => sourceMaterializationDeadlineError(timeoutMs, cause),
+  };
+}
 
 export async function materializeInstallablePath(
   options: MaterializeInstallableOptions,
 ): Promise<MaterializedInstallable> {
+  const aggregateSignal = AbortSignal.timeout(SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS);
+  const deadline = createMaterializationDeadline(
+    aggregateSignal,
+    SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS,
+    options.materializationDeadlineMs,
+  );
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, deadline.signal])
+    : deadline.signal;
+  const deadlineAt = performance.now() + deadline.timeoutMs;
   const cleanupTasks: Array<() => Promise<void>> = [];
+  const registerCleanup = (cleanup: () => Promise<void>): void => {
+    cleanupTasks.push(cleanup);
+  };
   try {
-    const localSource = await materializeLocalSource(options.source, {
-      signal: options.signal,
+    signal.throwIfAborted();
+    const localPath = await materializeLocalSource(options.source, {
+      signal,
       environment: options.environment,
+      registerCleanup,
     });
-    cleanupTasks.push(localSource.cleanup);
-    const resolved = await resolveInstallableCandidate(localSource.localPath, {
+    const resolved = await resolveInstallableCandidate(localPath, {
       archivePath: undefined,
       isInstallablePath: options.isInstallablePath,
       installableLabel: options.installableLabel,
-      registerCleanup: (cleanup) => {
-        cleanupTasks.push(cleanup);
-      },
+      registerCleanup,
       budget: (installArtifactArchiveBudget() as ArchiveBudget | undefined) ?? new ArchiveBudget(),
       archiveDepth: 0,
       onArchiveAccepted: noteInstallArtifactArchiveDepth,
+      signal,
     });
+    signal.throwIfAborted();
+    if (performance.now() >= deadlineAt) throw deadline.deadlineError();
     return {
       archivePath: resolved.archivePath,
       ...(resolved.containingArchivePath
@@ -79,8 +172,9 @@ export async function materializeInstallablePath(
       },
     };
   } catch (error) {
+    const failure = await classifyMaterializationError(error, signal, deadline);
     await runCleanupTasks(cleanupTasks);
-    throw error;
+    throw failure;
   }
 }
 
@@ -90,78 +184,47 @@ function expandSourcePath(inputPath: string, env: NodeJS.ProcessEnv): string {
 
 async function materializeLocalSource(
   source: LocalInstallSource,
-  options: { signal?: AbortSignal; environment: NodeJS.ProcessEnv },
-): Promise<MaterializeLocalSourceResult> {
-  if (source.kind === 'path') {
-    return {
-      localPath: expandSourcePath(source.path, options.environment),
-      cleanup: async () => {},
-    };
-  }
+  options: {
+    signal: AbortSignal;
+    environment: NodeJS.ProcessEnv;
+    registerCleanup: (cleanup: () => Promise<void>) => void;
+  },
+): Promise<string> {
+  if (source.kind === 'path') return expandSourcePath(source.path, options.environment);
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-source-'));
-  try {
-    const downloadedPath = await downloadToTempFile(tempDir, source.url, source.headers, options);
-    return {
-      localPath: downloadedPath,
-      cleanup: async () => {
-        await fs.rm(tempDir, { recursive: true, force: true });
-      },
-    };
-  } catch (error) {
+  options.registerCleanup(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
-    throw error;
-  }
+  });
+  options.signal.throwIfAborted();
+  return await downloadInstallSource({
+    tempDir,
+    url: source.url,
+    headers: source.headers,
+    signal: options.signal,
+    environment: options.environment,
+  });
 }
 
-async function downloadToTempFile(
-  tempDir: string,
-  url: string,
-  headers: Record<string, string> | undefined,
-  options: { signal?: AbortSignal; environment: NodeJS.ProcessEnv },
-): Promise<string> {
-  const requestSignal = options.signal;
-  if (requestSignal?.aborted) {
-    throw createRequestCanceledError();
-  }
-  const timeoutSignal = AbortSignal.timeout(DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS);
-  const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
-  try {
-    return await downloadInstallSource({
-      tempDir,
-      url,
-      headers,
-      signal,
-      environment: options.environment,
-    });
-  } catch (error) {
-    throw classifyDownloadError(
-      error,
-      requestSignal,
-      timeoutSignal,
-      DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS,
-    );
-  }
-}
-
-function classifyDownloadError(
+async function classifyMaterializationError(
   error: unknown,
-  requestSignal: AbortSignal | undefined,
-  timeoutSignal: AbortSignal,
-  timeoutMs: number,
-): unknown {
-  if (requestSignal?.aborted) {
-    return createRequestCanceledError(undefined, error);
-  }
-  if (timeoutSignal.aborted) {
-    return new AppError(
-      'COMMAND_FAILED',
-      `App source download timed out after ${timeoutMs}ms`,
-      { timeoutMs },
-      error,
-    );
-  }
-  return error;
+  signal: AbortSignal,
+  deadline: MaterializationDeadline,
+): Promise<unknown> {
+  // Keep the transport owner outside the CLI's eager import closure (ADR 0027).
+  const { isTransferPhaseTimeoutError } = await import('@agent-device/host-kit/transport');
+  if (isTransferPhaseTimeoutError(error)) return error;
+  if (!signal.aborted) return error;
+  // Only an abort-shaped failure (the signal's own reason, or an error caused by it) is
+  // relabeled; a typed failure that merely raced an abort during cleanup stays itself.
+  const reason = signal.reason;
+  const abortShaped = error === reason || (error instanceof Error && error.cause === reason);
+  if (!abortShaped) return error;
+  // Any timer-driven materialization abort — the standalone aggregate or the daemon cutoff — is
+  // the deadline, labeled with the timeout actually armed. Only a real request cancellation, whose
+  // reason is a distinct signal's, reports `request_canceled` (#4726).
+  if (deadline.isDeadlineAbort(reason)) return deadline.deadlineError(error);
+  return createRequestCanceledError(undefined, error);
 }
 
 export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {

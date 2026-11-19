@@ -19,6 +19,9 @@ export function createAndroidAppDeploymentExecutor(
       const { prepareAndroidInstallArtifact } = await loadAndroidMechanics();
       return await prepareAndroidInstallArtifact(input.source, {
         ...options,
+        ...(input.materializationDeadlineMs !== undefined
+          ? { materializationDeadlineMs: input.materializationDeadlineMs }
+          : {}),
         environment: env,
       });
     },

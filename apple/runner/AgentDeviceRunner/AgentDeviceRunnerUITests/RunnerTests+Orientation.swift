@@ -45,7 +45,7 @@ extension RunnerTests {
   }
 
   private func rotateDevice(to orientationName: String) -> String? {
-#if os(macOS) || os(tvOS) || os(visionOS)
+#if os(macOS) || os(tvOS) || os(visionOS) || os(watchOS)
     return nil
 #else
     switch orientationName {
@@ -72,7 +72,7 @@ extension RunnerTests {
   }
 
   private func observedDeviceOrientation() -> String? {
-#if os(macOS) || os(tvOS) || os(visionOS)
+#if os(macOS) || os(tvOS) || os(visionOS) || os(watchOS)
     return nil
 #else
     switch XCUIDevice.shared.orientation {

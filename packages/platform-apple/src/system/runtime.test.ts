@@ -24,9 +24,7 @@ function appleDevice(
  * The R55 parity cell table, restated as facts. The retired admission was the `clipboard`
  * capability bucket (`{ simulator: true, device: true }`) intersected with the Apple plugin's
  * `supportsHostOrSimulatorSurface` closure — `macos || simulator`. Every row below is that
- * verdict; the one deliberate narrowing is watchOS, which the bucket admitted as a simulator but
- * for which no XCUITest interactor can be constructed at all (the same reading `appleBackFact`
- * takes).
+ * verdict. watchOS refuses clipboard in its own leaf (`os/watchos/facts.ts`).
  */
 test.each([
   { appleOs: 'ios', kind: 'simulator', expected: true },
@@ -38,7 +36,6 @@ test.each([
   { appleOs: 'visionos', kind: 'simulator', expected: true },
   { appleOs: 'visionos', kind: 'device', expected: false },
   { appleOs: 'macos', kind: 'device', expected: true },
-  { appleOs: 'watchos', kind: 'simulator', expected: false },
 ] as const)(
   'clipboard on an Apple $appleOs $kind is available: $expected',
   ({ appleOs, kind, expected }) => {
@@ -58,7 +55,6 @@ test.each([
   { appleOs: 'ios', kind: 'device', expected: true },
   { appleOs: 'macos', kind: 'device', expected: true },
   { appleOs: 'tvos', kind: 'simulator', expected: true },
-  { appleOs: 'watchos', kind: 'simulator', expected: false },
 ] as const)(
   'trigger-app-event on an Apple $appleOs $kind is available: $expected',
   ({ appleOs, kind, expected }) => {
@@ -70,7 +66,7 @@ test.each([
  * `settings` shares clipboard's exact reading, and that sharing is the parity claim: the retired
  * admission intersected the `settings` bucket (`{ simulator: true, device: true }`) with the same
  * `supportsHostOrSimulatorSurface` closure. Only the refusal wording differs, so the table is
- * clipboard's verbatim — including the watchOS narrowing.
+ * clipboard's verbatim.
  */
 test.each([
   { appleOs: 'ios', kind: 'simulator', expected: true },
@@ -82,7 +78,6 @@ test.each([
   { appleOs: 'visionos', kind: 'simulator', expected: true },
   { appleOs: 'visionos', kind: 'device', expected: false },
   { appleOs: 'macos', kind: 'device', expected: true },
-  { appleOs: 'watchos', kind: 'simulator', expected: false },
 ] as const)(
   'settings on an Apple $appleOs $kind is available: $expected',
   ({ appleOs, kind, expected }) => {
@@ -127,7 +122,6 @@ test.each([
   { appleOs: 'visionos', kind: 'simulator', expected: false },
   { appleOs: 'visionos', kind: 'device', expected: false },
   { appleOs: 'macos', kind: 'device', expected: false },
-  { appleOs: 'watchos', kind: 'simulator', expected: false },
 ] as const)(
   'reading a setting on an Apple $appleOs $kind is available: $expected',
   ({ appleOs, kind, expected }) => {
@@ -184,13 +178,6 @@ test('a setting outside the handheld simulators names the leaf that serves it', 
   });
 });
 
-test('watchOS closes the read leg for the reason it closes every interactor-backed operation', () => {
-  expect(appleSystemFacts(appleDevice('watchos', 'simulator')).readSetting).toEqual({
-    available: false,
-    reason: 'unsupported-platform-leaf',
-  });
-});
-
 test('a leaf that can set a setting can be refused the right to read one back', () => {
   // The asymmetry the two-leg split exists for: tvOS keeps `settings wifi on` and loses the read.
   const facts = appleSystemFacts(appleDevice('tvos', 'simulator'));
@@ -201,7 +188,7 @@ test('a leaf that can set a setting can be refused the right to read one back', 
 /**
  * `alert`'s retired admission was the host-or-simulator closure widened by one leaf: physical
  * iOS, whose XCTest alert path is device-verified. Every other physical Apple leaf stays closed
- * exactly as `supportsAlertSurface` left it, and watchOS narrows for want of an interactor.
+ * exactly as `supportsAlertSurface` left it.
  */
 test.each([
   { appleOs: 'ios', kind: 'simulator', expected: true },
@@ -213,7 +200,6 @@ test.each([
   { appleOs: 'visionos', kind: 'simulator', expected: true },
   { appleOs: 'visionos', kind: 'device', expected: false },
   { appleOs: 'macos', kind: 'device', expected: true },
-  { appleOs: 'watchos', kind: 'simulator', expected: false },
 ] as const)(
   'alert on an Apple $appleOs $kind is available: $expected',
   ({ appleOs, kind, expected }) => {

@@ -202,6 +202,47 @@ test('simulator start cancelled before the stream launches terminates the proces
   expect(fixture.outputDisposed()).toBe(true);
 });
 
+test.each([
+  {
+    name: 'a CoreDevice physical iOS device',
+    device: appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' }),
+    relaunched: true,
+  },
+  { name: 'a host macOS target', device: appleDevice({ appleOs: 'macos', kind: 'device' }) },
+])('start on $name reports relaunched only for devicectl console capture', async (scenario) => {
+  const fixture = hostFixture({
+    appleToolRun: async () => ({
+      stdout: 'USAGE: devicectl device process launch --console --terminate-existing',
+      stderr: '',
+      exitCode: 0,
+    }),
+  });
+
+  const started = await startAppleAppLogs(
+    fixture.host,
+    scenario.device,
+    startInput(),
+    localRuntimeOwner('apple'),
+  );
+
+  expect(started.relaunched).toBe(scenario.relaunched);
+  if (scenario.relaunched) expect(fixture.backgroundCommands[0]).toContain('--terminate-existing');
+});
+
+test('simulator start does not report relaunched', async () => {
+  const stream = launchingStream({ exited: true });
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
+
+  const started = await startAppleAppLogs(
+    fixture.host,
+    appleDevice(),
+    startInput(),
+    localRuntimeOwner('apple'),
+  );
+
+  expect(started.relaunched).toBeUndefined();
+});
+
 function startInput() {
   return {
     sessionId: 'session',

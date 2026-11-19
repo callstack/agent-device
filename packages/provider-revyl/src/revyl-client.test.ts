@@ -215,6 +215,21 @@ test('a hierarchy read that Revyl answers with a 500 is replayed', async () => {
   assert.equal(attempts, 1, 'only the hierarchy read opts into replaying a 500');
 });
 
+test('an install status read that Revyl answers with a 500 is replayed', async () => {
+  let attempts = 0;
+  const client = clientResponding(() => {
+    attempts += 1;
+    return attempts === 1
+      ? jsonError(500, 'Internal server error')
+      : jsonResponse({ install_id: 'install-1', status: 'running' });
+  });
+  assert.deepEqual(await client.getInstallStatus('run-1', 'install-1'), {
+    install_id: 'install-1',
+    status: 'running',
+  });
+  assert.equal(attempts, 2);
+});
+
 test('a readiness read answers the polling loop on its first attempt', async () => {
   // The readiness loop owns the poll beat and the deadline, so a transport replay in front of these
   // two would hide Revyl's not-ready answer and stall the very wait being polled for.

@@ -112,6 +112,8 @@ export function zoneRank(zone: string): number | null {
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'kernel',
   'host-kit',
+  // macOS host Swift helpers, composed by capture-kit's recording post-processing.
+  'host-swift',
   'capture-kit',
   'provision-kit',
   // The Apple-family runner engine: composed by platform-apple, below it in the package graph.

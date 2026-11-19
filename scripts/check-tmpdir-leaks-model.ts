@@ -225,3 +225,83 @@ export function reportPrunedRunDirectories(pruned: readonly string[]): void {
     `[tmpdir] pruned ${pruned.length} abandoned ${TEST_RUN_TMP_PREFIX}* director${pruned.length === 1 ? 'y' : 'ies'} left by an earlier killed run\n`,
   );
 }
+
+/** What the checkout-local sweep did: swept, with what it pruned, or skipped and why. */
+export type UnsharedSweep =
+  | Readonly<{ swept: true; pruned: readonly string[] }>
+  | Readonly<{ swept: false; reason: string }>;
+
+/**
+ * Readies and sweeps the checkout-local root for state a sticky shared directory such as /tmp must not hold, the
+ * Swift helper cache's among them. Every level from `checkout` down to `root` must be a real directory this uid
+ * owns that the group and other users cannot write, or nothing is touched: a missing level is created 0700, and
+ * a run directory whose name carries no pid is kept, so this sweep never deletes on doubt.
+ */
+export function sweepUnsharedRunDirectories(
+  checkout: string,
+  root: string,
+  liveness: RunDirectoryLiveness = {},
+): UnsharedSweep {
+  const untrusted = untrustedLevelBetween(checkout, root);
+  if (untrusted) return { swept: false, reason: untrusted };
+  const pruned = prunableRunDirectories(root, liveness);
+  for (const name of pruned) fs.rmSync(path.join(root, name), { recursive: true, force: true });
+  return { swept: true, pruned };
+}
+
+/**
+ * Why the chain from `checkout` down to `root` is not this user's private ground, or `undefined` when it is.
+ * A missing level below `checkout` is created 0700 before it is judged.
+ */
+function untrustedLevelBetween(checkout: string, root: string): string | undefined {
+  const untrustedAncestor = untrustedAncestorOf(checkout);
+  if (untrustedAncestor) return untrustedAncestor;
+  const levels = path.relative(checkout, root).split(path.sep).filter(Boolean);
+  if (levels.includes('..') || path.isAbsolute(levels[0] ?? '')) {
+    return `${root} is not inside ${checkout}`;
+  }
+  let level = checkout;
+  for (const name of ['', ...levels]) {
+    level = path.join(level, name);
+    if (name) createMissingLevel(level);
+    if (!isPrivateOwnedDirectory(fs.lstatSync(level))) {
+      return `${level} is not a real directory this user owns that only they can write`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Why an ancestor of the checkout lets another user swap the checkout's path, or `undefined` when none does:
+ * every ancestor up to `/` must be a real directory this uid or root owns that the group and others cannot
+ * write, sticky or not, which is the rule the Swift helper cache applies to its own ancestry.
+ */
+function untrustedAncestorOf(checkout: string): string | undefined {
+  for (let ancestor = path.dirname(checkout); ; ancestor = path.dirname(ancestor)) {
+    const stats = fs.lstatSync(ancestor);
+    const owner = stats.uid === 0 || stats.uid === process.getuid?.();
+    if (!stats.isDirectory() || !owner || stats.mode & 0o022) {
+      return `${ancestor} is not a real directory owned by this user or root that only its owner can write`;
+    }
+    if (ancestor === path.dirname(ancestor)) return undefined;
+  }
+}
+
+function createMissingLevel(level: string): void {
+  if (fs.lstatSync(level, { throwIfNoEntry: false }) !== undefined) return;
+  try {
+    fs.mkdirSync(level, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+}
+
+/** A real directory, not a link, that this uid owns and the group and other users cannot write. */
+function isPrivateOwnedDirectory(stats: fs.Stats): boolean {
+  return stats.isDirectory() && stats.uid === process.getuid?.() && (stats.mode & 0o022) === 0;
+}
+
+/** The abandoned run directories this sweep may remove: only those whose name carries a pid, never on doubt. */
+function prunableRunDirectories(root: string, liveness: RunDirectoryLiveness): string[] {
+  return findLeakedRunDirectories(root, liveness).filter((name) => PID_SUFFIX.test(name));
+}

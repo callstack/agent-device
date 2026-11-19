@@ -393,7 +393,11 @@ test('a receipt close with a failed final version still retires the record and d
   expect(response.ok).toBe(true);
   const data = (response as Extract<DaemonResponse, { ok: true }>).data ?? {};
   expect(data.scriptDeliveryFailure).toEqual(failure);
-  expect(data.warnings).toEqual([expect.stringContaining(failure.hint)]);
+  // The final version is the one already saved, so it is answered from the record with its recovery hint.
+  expect(data.warnings).toEqual([
+    expect.stringContaining(failure.hint),
+    `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, reuse your original open command with --save-script=${destination} --force.`,
+  ]);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(records(stateDir)).toEqual([]);
 });

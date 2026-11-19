@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createTestHost } from '../../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
+import { mkdtempUnsharedForTestSync } from '../../unshared-tmp-dir.fixtures.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const fs = await import('node:fs');
@@ -10,7 +10,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
     runCmd: vi.fn(async (cmd: string, args: string[]) => {
-      if (cmd === 'xcrun') {
+      if (cmd === '/usr/bin/xcrun') {
         const outputPath = args[args.indexOf('-o') + 1]!;
         fs.writeFileSync(outputPath, 'compiled');
         fs.chmodSync(outputPath, 0o755);
@@ -38,23 +38,24 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { waitForPlayableVideo } from '../video.ts';
 
 function helperScriptArgs(): string[] {
-  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== '/usr/bin/xcrun');
   return (helperCall?.[1] as string[] | undefined) ?? [];
 }
 
 const mockRunCmd = vi.mocked(runCmd);
 
-let tmpDir: string;
+let tmpDir = '';
 
-beforeEach(() => {
-  tmpDir = mkdtempForTestSync('agent-device-overlay-test-');
+beforeEach((context) => {
+  tmpDir = mkdtempUnsharedForTestSync('agent-device-overlay-test-', context);
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', path.join(tmpDir, 'swift-cache'));
   vi.clearAllMocks();
 });
 
 afterEach(() => {
   vi.useRealTimers();
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  tmpDir = '';
 });
 
 test('overlay burns touches through a cached helper and same-directory temp output', async () => {
@@ -78,9 +79,9 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   });
 
   const compileCalls = mockRunCmd.mock.calls.filter(([cmd, args]) => {
-    return cmd === 'xcrun' && args[0] === 'swiftc';
+    return cmd === '/usr/bin/xcrun' && args.includes('swiftc');
   });
-  const helperCalls = mockRunCmd.mock.calls.filter(([cmd]) => cmd !== 'xcrun');
+  const helperCalls = mockRunCmd.mock.calls.filter(([cmd]) => cmd !== '/usr/bin/xcrun');
 
   expect(compileCalls).toHaveLength(1);
   expect(helperCalls).toHaveLength(2);
@@ -94,9 +95,11 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   expect(path.basename(outputPath)).toMatch(/^\.recording\.agent-device-/);
   expect(fs.existsSync(outputPath)).toBe(false);
   expect(fs.readFileSync(videoPath, 'utf8')).toBe(`processed ${path.basename(helperCmd)}`);
-  expect(helperOptions?.env?.HOME).toBe(path.join(tmpDir, 'swift-cache', 'home'));
+  // Launched through runSwiftHelper: the constructed helper environment, with its fixed PATH.
+  expect(helperOptions?.env?.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
+  expect(helperOptions?.env?.HOME).toBe(path.join(tmpDir, 'swift-cache', 'v3', 'home'));
   expect(helperOptions?.env?.CLANG_MODULE_CACHE_PATH).toBe(
-    path.join(tmpDir, 'swift-cache', 'module-cache'),
+    path.join(tmpDir, 'swift-cache', 'v3', 'module-cache'),
   );
 });
 
@@ -203,8 +206,8 @@ test('overlay hands the helper what is left of its budget, inside the record req
     deadline: startRecordingOverlayBudget(),
   });
 
-  const compileCall = mockRunCmd.mock.calls.find(([cmd]) => cmd === 'xcrun');
-  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  const compileCall = mockRunCmd.mock.calls.find(([cmd]) => cmd === '/usr/bin/xcrun');
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== '/usr/bin/xcrun');
   const args = helperScriptArgs();
   const exportMs = Number(args[args.indexOf('--timeout-ms') + 1]);
   expect(exportMs).toBeGreaterThan(0);
@@ -227,7 +230,7 @@ test('overlay hands the helper only what the finalization left of the budget', a
 
   await overlayRecordingTouches({ host: createTestHost(), videoPath, telemetryPath, deadline });
 
-  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== '/usr/bin/xcrun');
   expect(helperCall?.[2]?.timeoutMs).toBe(OVERLAY_BUDGET_MS - spentMs);
 });
 
@@ -257,7 +260,7 @@ test('overlay leaves the video as recorded when compiling the helper spent its b
     code: 'COMMAND_FAILED',
     message: 'Failed to add touch overlays to the recording',
   });
-  expect(mockRunCmd.mock.calls.filter(([cmd]) => cmd !== 'xcrun')).toHaveLength(0);
+  expect(mockRunCmd.mock.calls.filter(([cmd]) => cmd !== '/usr/bin/xcrun')).toHaveLength(0);
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
 });
 
@@ -367,4 +370,46 @@ test('overlay keeps the video as recorded when verifying the export spent its bu
   });
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
   expect(fs.readdirSync(tmpDir).filter((name) => name.includes('agent-device-'))).toEqual([]);
+});
+
+test('the overlay compiles its shipped source, never one planted at the checkout path of an installed package', async () => {
+  // An installed agent-device package whose top-level checkout path another user could write, used as the
+  // host's working directory: neither location is a source the overlay may compile.
+  const installed = path.join(tmpDir, 'node_modules', 'agent-device');
+  const planted = path.join(installed, 'packages/host-swift/swift/recording-overlay.swift');
+  fs.mkdirSync(path.dirname(planted), { recursive: true });
+  fs.writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: 'agent-device' }));
+  fs.writeFileSync(planted, 'print("planted")\n');
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  const compiled: Record<string, string> = {};
+  const outsideStaging: string[] = [];
+  const defaultRunCmd = mockRunCmd.getMockImplementation()!;
+  mockRunCmd.mockImplementationOnce(async (cmd, args, options) => {
+    // Every Swift input the compiler is handed must be a file in this compile's private staging directory,
+    // the directory its output is written to; any path elsewhere is a source read from disk.
+    const stagingDirectory = path.dirname(args[args.indexOf('-o') + 1]!);
+    for (const sourcePath of args.filter((arg) => arg.endsWith('.swift'))) {
+      if (path.dirname(sourcePath) !== stagingDirectory) outsideStaging.push(sourcePath);
+      // The bytes the compiler would read, while the staging directory still exists.
+      compiled[path.basename(sourcePath)] = fs.readFileSync(sourcePath, 'utf8');
+    }
+    return await defaultRunCmd(cmd, args, options);
+  });
+
+  await overlayRecordingTouches({
+    host: { ...createTestHost(), cwd: installed },
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
+
+  const { RECORDING_OVERLAY_SOURCES } =
+    await import('@agent-device/host-swift/recording-swift-sources');
+  expect(outsideStaging).toEqual([]);
+  expect(compiled).toEqual(
+    Object.fromEntries(RECORDING_OVERLAY_SOURCES.map(({ fileName, text }) => [fileName, text])),
+  );
 });

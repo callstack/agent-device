@@ -51,8 +51,8 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/remote/src/daemon-artifacts.ts#RecordingDestinationWarning':
     "The CLIENT'S OWN report of a recording file it wrote to cwd. The client adds it to its local response and error details; it never crosses the wire to the daemon.",
-  'packages/remote/src/session-script-destination.ts#PublishOutcome':
-    "The CLIENT'S OWN result of one publish attempt: the published path, or a failure plus the local error object behind it. Neither half crosses the wire as this shape: both are transformations into client-local output, the path into the listed `data.savedScript` string and a failure into the listed packages/kernel/src/contracts.ts#ScriptDeliveryFailure. The `error` member is a local unknown thrown value that never reaches the peer.",
+  'packages/remote/src/script-version-publisher.ts#PublishOutcome':
+    "The CLIENT'S OWN result of one publish attempt: the published path with the revisions of a repeat answered from the record, or a failure plus the local error object behind it. Neither half crosses the wire as this shape: both are transformations into client-local output, the path into the listed `data.savedScript` string, a repeat into an entry of the listed `warnings` array, and a failure into the listed packages/kernel/src/contracts.ts#ScriptDeliveryFailure. The `error` member is a local unknown thrown value that never reaches the peer.",
   'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
   'packages/remote/src/upload-progress.ts#UploadProgressSink':

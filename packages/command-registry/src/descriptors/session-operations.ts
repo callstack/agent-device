@@ -8,7 +8,6 @@ import {
 import {
   COMPOSITE_TIMEOUT_POLICIES,
   DEFAULT_TIMEOUT_POLICY,
-  INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from '../timeout-policy.ts';
 import {
@@ -18,7 +17,10 @@ import {
   ownerFilesEnabled,
   type RawCommandDescriptor,
 } from '../descriptor-traits.ts';
-import { INSTALL_TIMEOUT_POLICY } from '../descriptor-timeout-policies.ts';
+import {
+  INSTALL_SOURCE_TIMEOUT_POLICY,
+  INSTALL_TIMEOUT_POLICY,
+} from '../descriptor-timeout-policies.ts';
 import {
   deployAppUse,
   readyMaterializeAndDeployAppUse,
@@ -317,7 +319,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
       androidAvdSelection: 'include-stopped',
     },
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
-    timeoutPolicy: { ...INSTALL_TIMEOUT_POLICY, envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS },
+    timeoutPolicy: INSTALL_SOURCE_TIMEOUT_POLICY,
     batchable: false,
   },
   {

@@ -3,6 +3,16 @@ import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+  func testKeyboardDismissRefusalNamesKeyboardEnterOnlyWhereReturnEndsTheEdit() {
+    let search = keyboardDismissRefusal(returnKey: .search)
+    XCTAssertEqual(search.code, RunnerWireErrorCode.keyboardDismissUnavailable)
+    XCTAssertTrue(search.hint?.hasPrefix("To submit this search, run keyboard enter.") == true)
+    XCTAssertTrue(keyboardDismissRefusal(returnKey: .send).hint?.contains("run it only to send") == true)
+    for key: RunnerKeyboardReturnKey? in [nil, .unknown, .enter, .next] {
+      XCTAssertFalse(keyboardDismissRefusal(returnKey: key).hint?.contains("keyboard enter") == true)
+    }
+  }
+
   func testKeyboardStatusRequiresMeasuredDisplayBounds() {
     let keyboard = CGRect(x: 0, y: 925, width: 834, height: 282)
     XCTAssertNil(RunnerKeyboardStatus.observed(

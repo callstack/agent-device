@@ -7,6 +7,7 @@
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
+    "@agent-device/host-swift": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
   "exports": {

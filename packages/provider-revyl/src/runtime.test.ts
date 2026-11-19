@@ -58,7 +58,7 @@ test('a lease start waits for the worker and the device, and reports the rented 
     // The session id is the runtime's own, derived from the lease, so a later process can still
     // name this session from the lease alone.
     session_id: revylSessionIdForLease('lease-1'),
-    idle_timeout_seconds: 1800,
+    idle_timeout_seconds: 300,
     app_url: 'https://apps.test/app.zip',
     device_model: 'iPhone 16',
     // The lease context's flags outrank what the runtime was built with.

@@ -31,7 +31,12 @@ import {
 } from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { runCmdBackground, withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { beforeEach, type TestContext } from 'vitest';
+import {
+  createTestHostEnvironment,
+  requireUnsharedTestRunDir,
+  unsharedTestRunDir,
+} from '@agent-device/test-kit';
 import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
@@ -100,10 +105,28 @@ type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRout
     env?: Readonly<Record<string, string>>;
   };
 
+// The test the harness serves, so a scenario that needs the Swift cache can skip itself from inside a command.
+// Each test file evaluates this module on its own, so the hook is registered once per file.
+let scenarioTest: TestContext | undefined;
+beforeEach((context) => {
+  scenarioTest = context;
+});
+
 export async function createProviderScenarioHarness(
   deps: ProviderScenarioDependencies,
 ): Promise<ProviderScenarioHarness> {
   const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-scenario-'));
+  // Only a path: the Swift helper cache creates it, privately, the first time a scenario compiles a helper, so a
+  // scenario that never does needs nothing from the run's checkout-local directory. That directory is the place
+  // the cache accepts, since it refuses a sticky shared one such as /tmp; without it, a compile there is refused.
+  const swiftCacheRoot = path.join(
+    unsharedTestRunDir() ?? testRoot,
+    `provider-scenario-swift-cache-${path.basename(testRoot)}`,
+  );
+  const removeScenarioDirs = async () => {
+    fs.rmSync(swiftCacheRoot, { recursive: true, force: true });
+    await removeProviderScenarioTempDir(testRoot);
+  };
   const stateDir = path.join(testRoot, 'state');
   const daemonPaths = resolveDaemonPaths(stateDir);
   const env: NodeJS.ProcessEnv = {
@@ -113,7 +136,7 @@ export async function createProviderScenarioHarness(
     // A scenario that seeds claims for its daemon names the directory through the process.
     AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
     AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
-    AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(testRoot, 'swift-cache'),
+    AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCacheRoot,
     ...deps.env,
     // Set last: the harness reads its own state dir and transport back from these.
     AGENT_DEVICE_STATE_DIR: stateDir,
@@ -218,11 +241,11 @@ export async function createProviderScenarioHarness(
       composeDeps,
     });
   } catch (error) {
-    await removeProviderScenarioTempDir(testRoot);
+    await removeScenarioDirs();
     throw error;
   }
   if (!runtime?.httpPort) {
-    await removeProviderScenarioTempDir(testRoot);
+    await removeScenarioDirs();
     throw new Error('Provider scenario daemon did not start an HTTP server');
   }
   const httpPort = runtime.httpPort;
@@ -241,12 +264,15 @@ export async function createProviderScenarioHarness(
 
   return {
     callCommand: async (command, positionals = [], flags = {}, options = {}) => {
-      if (command === 'record') {
+      // The validator compiles only on macOS hosts; elsewhere record stop keeps container-only MP4 completion.
+      // The warm compile needs the run's checkout-local directory; without one, a scenario that compiles answers
+      // for it below, and every other recording scenario runs.
+      if (command === 'record' && process.platform === 'darwin' && unsharedTestRunDir()) {
         await withCommandExecutorOverride(
           (command, args) => {
             if (
-              command !== 'xcrun' ||
-              args[0] !== 'swiftc' ||
+              command !== '/usr/bin/xcrun' ||
+              !args.includes('swiftc') ||
               !args.some((arg) => path.basename(arg).startsWith('video-validator-'))
             )
               return undefined;
@@ -270,7 +296,16 @@ export async function createProviderScenarioHarness(
       });
       const envelope = JSON.parse(body) as JsonRpcResponseEnvelope;
       if (envelope.result) assertNoInternalChromeProvenance(envelope.result);
-      return envelopeToRpcResult(envelope, payload.id, statusCode);
+      const result = envelopeToRpcResult(envelope, payload.id, statusCode);
+      // A command that really compiled through the cache, in a run without the checkout-local directory.
+      if (
+        scenarioTest &&
+        !unsharedTestRunDir() &&
+        result.json?.error?.data?.details?.reason === 'swift_cache_untrusted'
+      ) {
+        requireUnsharedTestRunDir(scenarioTest);
+      }
+      return result;
     },
     client: () => client,
     hasSession: async (name = 'default') =>
@@ -283,14 +318,17 @@ export async function createProviderScenarioHarness(
     close: async () => {
       if (closed) return;
       closed = true;
-      if (scopedAppleToolProvider) {
-        const { withAppleToolProvider } =
-          await import('@agent-device/platform-apple/tool-provider');
-        await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.close());
-      } else {
-        await runtime?.close();
+      try {
+        if (scopedAppleToolProvider) {
+          const { withAppleToolProvider } =
+            await import('@agent-device/platform-apple/tool-provider');
+          await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.close());
+        } else {
+          await runtime?.close();
+        }
+      } finally {
+        await removeScenarioDirs();
       }
-      await removeProviderScenarioTempDir(testRoot);
     },
   };
 }

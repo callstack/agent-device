@@ -1,3 +1,4 @@
+import type { AuditSnapshotCommandResult } from '@agent-device/contracts/capture';
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { describe, expect, test } from 'vitest';
 import { findCommandMetadata, listCommandMetadata } from '@agent-device/command-surface';
@@ -102,10 +103,11 @@ const RESPONSE_FIXTURES: Partial<Record<CommandName, unknown>> = {
   apps: ['com.example.app'],
   artifacts: { source: 'daemon', artifacts: [], message: 'No daemon artifacts.' },
   audit: {
+    guidance: {},
     findings: [],
     checks: { snapshot: 'complete' },
     limitations: [],
-  },
+  } satisfies AuditSnapshotCommandResult,
   batch: { executed: 0, total: 0, totalDurationMs: 5, results: [] },
   capabilities: { device: { name: 'iPhone' }, availableCommands: [] },
   debug: {

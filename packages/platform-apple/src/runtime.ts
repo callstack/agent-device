@@ -34,12 +34,7 @@ import { type SelectorObservationRuntimeOperations } from '@agent-device/contrac
 import { bindLocalTypeTextInteractor } from '@agent-device/contracts/type-text-runtime';
 import { bindLocalTouchInteractor } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
-import {
-  isIosFamily,
-  isMacOs,
-  resolveDeviceAppleOs,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
@@ -66,6 +61,7 @@ import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
 import { macOsHelperSurface, type MacOsAppBackend } from '@agent-device/contracts/session';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
+import { applyWatchOsOperationFacts, bindWatchOsOperations } from './os/watchos/facts.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
@@ -95,15 +91,6 @@ const headlessUnavailable = unavailableFact(
   'Headless boot is supported only for local Android emulators.',
 );
 
-const watchOpenTargetUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'watchOS open is not supported because XCUITest cannot drive watchOS UI.',
-);
-
-const watchCloseTargetUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'watchOS close is not supported because XCUITest cannot drive watchOS UI.',
-);
 const runtimeHintsUnavailable = unavailableFact(
   'unsupported-device-kind',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
@@ -125,10 +112,6 @@ const shutdownKindUnavailable = unavailableFact(
   'shutdown is supported only for Apple simulators and Android emulators.',
 );
 
-const screenshotWatchOsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'screenshot is not supported on watchOS because XCUITest cannot drive watchOS UI.',
-);
 const screenshotKindUnavailable = unsupportedAppleDeviceKind(
   'screenshot is supported only for Apple simulators and devices.',
 );
@@ -138,7 +121,7 @@ function unsupportedAppleDeviceKind(hint: string) {
 }
 
 function shutdownFact(device: DeviceInfo) {
-  if (!isIosFamily(device) || device.appleOs === 'watchos') return unavailable;
+  if (!isIosFamily(device)) return unavailable;
   return device.kind === 'simulator' ? available : shutdownKindUnavailable;
 }
 
@@ -161,31 +144,22 @@ function appleApplicationLifecycleFacts(device: DeviceInfo) {
 }
 
 function appleOpenTargetFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchOpenTargetUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : appleOpenTargetKindUnavailable;
 }
 
 function appleCloseTargetFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchCloseTargetUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : appleCloseTargetKindUnavailable;
 }
 
 function appleRuntimeHintsFact(device: DeviceInfo) {
-  return resolveDeviceAppleOs(device) !== 'watchos' &&
-    isIosFamily(device) &&
-    device.kind === 'simulator'
-    ? available
-    : runtimeHintsUnavailable;
+  return isIosFamily(device) && device.kind === 'simulator' ? available : runtimeHintsUnavailable;
 }
 
 function appInventoryFacts(device: DeviceInfo) {
-  if (device.appleOs === 'watchos') {
-    return unavailableFact('unsupported-platform-leaf', 'watchOS app inventory is not supported.');
-  }
   if (device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest') {
     return unavailableFact(
       'unsupported-device-backend',
@@ -216,12 +190,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       leafRecordingFacts.available && hostAvailability?.available === false
         ? unavailableFact('unsupported-provider-mode', hostAvailability.hint)
         : leafRecordingFacts;
-    const readiness = device.appleOs === 'watchos' ? unavailable : available;
-    const boot = isMacOs(device) || device.appleOs === 'watchos' ? unavailable : available;
+    const boot = isMacOs(device) ? unavailable : available;
     const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
-      operations: {
+      operations: applyWatchOsOperationFacts(device, {
         ...logs.operations,
         ...deployment,
         networkDump: available,
@@ -238,14 +211,14 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           query: audioQueryUnavailable,
         }),
         ...perfRuntimeOperationFacts(applePerfFacts(device)),
-        ensureReady: readiness,
+        ensureReady: available,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),
         shutdownTarget: shutdownFact(device),
         ...macOsNativeBackendFacts(device, macOsAppBackend(device)),
-      },
+      }),
     });
   };
   return Object.freeze({
@@ -438,7 +411,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         device: logs.device,
         owner,
         facts,
-        operations: Object.freeze(operations),
+        operations: Object.freeze(
+          bindWatchOsOperations(request.device, facts.operations, operations),
+        ),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },
@@ -455,8 +430,7 @@ function applePerfFacts(device: DeviceInfo): Readonly<{
   nativeCapture: RuntimeOperationFact;
   profileReport: RuntimeOperationFact;
 }> {
-  const supported =
-    device.iosPhysicalDeviceBackend !== 'xctest' && resolveDeviceAppleOs(device) !== 'watchos';
+  const supported = device.iosPhysicalDeviceBackend !== 'xctest';
   const fact = supported ? available : perfUnavailable;
   return {
     frames: fact,
@@ -473,7 +447,6 @@ function applePerfFacts(device: DeviceInfo): Readonly<{
  * snapshot, whose desktop surfaces come from a separate host port.
  */
 function appleScreenshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return screenshotWatchOsUnavailable;
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : screenshotKindUnavailable;

@@ -40,6 +40,8 @@ export type RevylFixtureOptions = Readonly<{
   withoutScreen?: boolean;
   /** Reports `supports_explicit_drag_duration: true`, which a newer worker does. */
   dragDuration?: boolean;
+  /** Reports `supports_precise_orientation: true`, which an Android worker does. */
+  preciseOrientation?: boolean;
   /** The body every `hierarchy` answer carries: iOS JSON or Android XML. */
   hierarchy?: string;
   /** The start response body; a run id is generated when absent. */
@@ -251,6 +253,7 @@ export async function startRevylFixtureBackend(
             ? {}
             : { screen_width: screen.width, screen_height: screen.height }),
           ...(options.dragDuration ? { supports_explicit_drag_duration: true } : {}),
+          ...(options.preciseOrientation ? { supports_precise_orientation: true } : {}),
         },
       };
     }

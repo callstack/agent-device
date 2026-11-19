@@ -47,12 +47,6 @@ describe('Apple app-log runtime', () => {
       available: true,
       hint: undefined,
     },
-    {
-      name: 'watchOS sentinel',
-      device: appleDevice({ appleOs: 'watchos' }),
-      available: false,
-      hint: 'watchOS app logs are not supported',
-    },
   ])('classifies the $name leaf explicitly', async ({ device, available, hint }) => {
     const binding = await createAppleAppLogRuntime(hostFixture().host).bind({
       device,
@@ -82,26 +76,6 @@ describe('Apple app-log runtime', () => {
       'hint',
       expect.stringContaining('CoreDevice-backed physical iOS device'),
     );
-  });
-
-  test('fails closed for the reserved watchOS leaf', async () => {
-    const binding = await createAppleAppLogRuntime(hostFixture().host).bind({
-      device: appleDevice({ appleOs: 'watchos' }),
-      intent: { kind: 'ordinary' },
-      scope,
-    });
-    expect(binding.facts.operations.appLogInspect).toMatchObject({
-      available: false,
-      reason: 'unsupported-platform-leaf',
-    });
-    await expect(
-      binding.operations.appLogStart?.({
-        sessionId: 'session',
-        appBundleId: 'com.example.app',
-        outputPath: '/tmp/app.log',
-        fence: { token: 'fence', generation: 1 },
-      }),
-    ).rejects.toMatchObject({ code: 'UNSUPPORTED_PLATFORM' });
   });
 
   test('rolls back the output sink if simulator process startup fails', async () => {

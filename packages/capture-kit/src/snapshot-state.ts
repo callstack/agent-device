@@ -109,7 +109,10 @@ export function buildSnapshotState(
     snapshotRaw
       ? scopedNodes
       : annotateUnmeasuredSnapshotNodes(
-          annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
+          annotateCoveredSnapshotNodes(scopedNodes, {
+            ...overlayOptionsForBackend(data?.backend),
+            producer: data?.producer,
+          }),
         ),
     snapshotRefMinting(data),
   );

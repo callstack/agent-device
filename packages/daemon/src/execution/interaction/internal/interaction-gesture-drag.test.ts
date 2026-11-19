@@ -128,8 +128,8 @@ test('recorded ref drag dispatches once and stores portable selectors with both 
 
   const recorded = session.actions[0];
   expect(recorded?.positionals?.[0]).toBe('drag');
-  expect(recorded?.positionals?.[1]?.split(' || ')[0]).toBe('id="drag-source"');
-  expect(recorded?.positionals?.[2]?.split(' || ')[0]).toBe('id="drop-target"');
+  expect(recorded?.positionals?.[1]).toBe('id="drag-source"');
+  expect(recorded?.positionals?.[2]).toBe('id="drop-target"');
   expect(recorded?.positionals?.slice(3)).toEqual(['700', '600', '200']);
   expect(recorded?.result).toMatchObject({
     selectorChain: expect.arrayContaining(['id="drag-source"']),

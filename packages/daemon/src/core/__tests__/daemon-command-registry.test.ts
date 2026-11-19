@@ -16,6 +16,8 @@ import {
   shouldPreferExplicitDeviceOverExistingSession,
   shouldValidateSessionSelector,
   resolveProviderDeviceResolutionIntent,
+  resolveDaemonRequestResultDeadlineMs,
+  resolveDaemonRequestTimeoutMs,
   usesSessionlessDefaultProviderDevice,
 } from '../daemon-command-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
@@ -327,6 +329,45 @@ function makeRequest(command: string, positionals: string[] = []): DaemonRequest
     flags: {},
   };
 }
+
+// #4441 (decision 6856998913): the router's daemon request timeout for both source-install
+// commands is the one 570 s source work budget; the admitting transport registers the same
+// result deadline (admittedAt + 570 s), and unrelated commands keep no daemon deadline.
+test('source-install requests resolve the 570 s daemon deadline and result deadline', () => {
+  const request = (command: string) =>
+    ({
+      token: 't',
+      session: 'default',
+      command,
+      positionals: [],
+      flags: {},
+    }) as DaemonRequest;
+  for (const command of [PUBLIC_COMMANDS.installFromSource, INTERNAL_COMMANDS.installSource]) {
+    assert.equal(resolveDaemonRequestTimeoutMs(request(command)), 570_000, command);
+    const admittedAt = 1_000_000;
+    assert.equal(
+      resolveDaemonRequestResultDeadlineMs(request(command), admittedAt),
+      admittedAt + 570_000,
+      command,
+    );
+  }
+  for (const command of [PUBLIC_COMMANDS.install, PUBLIC_COMMANDS.snapshot]) {
+    assert.equal(resolveDaemonRequestTimeoutMs(request(command)), undefined, command);
+  }
+});
+
+test('batch and replay transport deadlines match their resolved execution budgets', () => {
+  const admittedAt = 1_000_000;
+  for (const command of [PUBLIC_COMMANDS.batch, PUBLIC_COMMANDS.replay]) {
+    const request = makeRequest(command);
+    const executionBudgetMs = resolveDaemonRequestTimeoutMs(request);
+    assert.notEqual(executionBudgetMs, undefined, command);
+    assert.equal(
+      resolveDaemonRequestResultDeadlineMs(request, admittedAt),
+      admittedAt + executionBudgetMs!,
+    );
+  }
+});
 
 // The fact the transports stamp on each admitted request: only a request with no action in any of
 // its steps may let a resend loop spend its deadline.

@@ -19,6 +19,8 @@ const SDK_DIRECTORY_NAMES = [
   'MacOSX',
   'XRSimulator',
   'XROS',
+  'WatchSimulator',
+  'WatchOS',
 ];
 
 function plist(entries: Record<string, string>): string {

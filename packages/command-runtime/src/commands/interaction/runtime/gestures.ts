@@ -12,6 +12,7 @@ import {
   singlePointerPlanEndpoints,
 } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
+import { recordedSelectorExpression } from '@agent-device/selectors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
@@ -31,7 +32,7 @@ import {
 import {
   assertSupportedInteractionSurface,
   resolveInteractionTarget,
-  type InteractionTarget,
+  type InteractionRequestTarget,
   type ResolvedInteractionTarget,
 } from './resolution.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
@@ -90,7 +91,7 @@ export async function resolveGestureViewport(
 }
 
 export type LongPressCommandOptions = CommandContext & {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   durationMs?: number;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
@@ -99,7 +100,7 @@ export type LongPressCommandOptions = CommandContext & {
 export type { LongPressCommandResult };
 
 export type HoverCommandOptions = CommandContext & {
-  target: InteractionTarget;
+  target: InteractionRequestTarget;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
 } & SettlePostActionObservationOptions;
@@ -301,8 +302,8 @@ function dragRecordingDetails(
 }
 
 function selectorExpression(target: ResolvedInteractionTarget): string | undefined {
-  return 'selectorChain' in target && target.selectorChain?.length
-    ? target.selectorChain.join(' || ')
+  return 'selectorChain' in target && target.selectorChain
+    ? recordedSelectorExpression(target.selectorChain)
     : undefined;
 }
 

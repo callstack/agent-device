@@ -6,7 +6,7 @@ PROJECT_PATH="apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj"
 SCHEME="AgentDeviceRunner"
 
 if [ -z "$PLATFORM" ]; then
-  echo "AGENT_DEVICE_XCUITEST_PLATFORM is required (ios, macos, tvos, visionos)" >&2
+  echo "AGENT_DEVICE_XCUITEST_PLATFORM is required (ios, macos, tvos, visionos, watchos)" >&2
   exit 1
 fi
 
@@ -34,6 +34,9 @@ resolve_default_destination() {
       ;;
     visionos)
       resolve_simulator_destination 'visionOS' 'Apple Vision' || printf '%s\n' 'generic/platform=visionOS Simulator'
+      ;;
+    watchos)
+      resolve_simulator_destination 'watchOS' 'Apple Watch' || printf '%s\n' 'generic/platform=watchOS Simulator'
       ;;
     *)
       echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2
@@ -89,6 +92,9 @@ resolve_default_derived_path() {
       ;;
     visionos)
       printf '%s\n' "$HOME/.agent-device/apple-runner/derived/visionos"
+      ;;
+    watchos)
+      printf '%s\n' "$HOME/.agent-device/apple-runner/derived/watchos"
       ;;
     *)
       echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2

@@ -8,14 +8,14 @@ type PathResolutionOptions = {
   env?: EnvMap;
 };
 
-function resolveHomeDirectory(env?: EnvMap): string {
+export function resolveHomeDirectory(env?: EnvMap): string {
   return env?.HOME?.trim() || os.homedir();
 }
 
 export function expandUserHomePath(inputPath: string, options: PathResolutionOptions = {}): string {
   if (inputPath === '~') return resolveHomeDirectory(options.env);
   if (inputPath.startsWith('~/')) {
-    return path.join(resolveHomeDirectory(options.env), inputPath.slice(2));
+    return hostPathRules().join(resolveHomeDirectory(options.env), inputPath.slice(2));
   }
   return inputPath;
 }
@@ -25,8 +25,14 @@ export function resolveUserPath(
   options: PathResolutionOptions & { cwd: string },
 ): string {
   const expandedPath = expandUserHomePath(inputPath, options);
-  if (path.isAbsolute(expandedPath)) return expandedPath;
-  return path.resolve(options.cwd, expandedPath);
+  const rules = hostPathRules();
+  if (rules.isAbsolute(expandedPath)) return expandedPath;
+  return rules.resolve(options.cwd, expandedPath);
+}
+
+/** The path rules of the host this runs on, read when asked, the way the destination rule reads its platform. */
+export function hostPathRules(): path.PlatformPath {
+  return process.platform === 'win32' ? path.win32 : path.posix;
 }
 
 /**

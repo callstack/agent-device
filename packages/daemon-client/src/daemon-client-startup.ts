@@ -15,9 +15,7 @@ import {
   type DaemonStartupLaunch,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  readDaemonStartupPhaseMarkers,
-  removeDaemonStartupPhasesFile,
-  resolveDaemonStartupPhasesPath,
+  parseDaemonStartupProgressMessage,
   type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import type {
@@ -57,7 +55,8 @@ type DaemonStartupWaitResult =
 
 type StartupPhaseObservation = {
   spawnedAtMs: number;
-  markers: Partial<Record<DaemonStartupPhase, number>>;
+  /** Receipt time of each phase on this launcher's clock, keeping the first receipt per phase. */
+  receipts: Partial<Record<DaemonStartupPhase, number>>;
 };
 
 /** The ceiling on one local daemon startup; `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides it. */
@@ -88,7 +87,6 @@ const LIVE_DAEMON_PROBE_RETRIES = 3;
 const LIVE_DAEMON_PROBE_RETRY_DELAY_MS = 200;
 const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
-const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 
 /** Judges the registered daemon against this client, changing nothing. */
 export async function observeLocalDaemon(
@@ -328,21 +326,22 @@ async function attemptLocalDaemonStartup(
   } catch (error) {
     return await recoverFailedDaemonLaunch(settings, error);
   }
-  const observation: StartupPhaseObservation = { spawnedAtMs, markers: {} };
+  const observation: StartupPhaseObservation = { spawnedAtMs, receipts: {} };
+  // Only this launch's own child can reach its channel. Each phase's first receipt on this
+  // launcher's clock resets the stall window.
+  launch.channel?.onMessage((message) => {
+    const phase = parseDaemonStartupProgressMessage(message);
+    if (phase && observation.receipts[phase] === undefined)
+      observation.receipts[phase] = Date.now();
+  });
   const startup = await waitForDaemonStartup(deadline, settings, launch, observation);
   if (startup.kind === 'ready') {
-    // Winner readiness (startedByClient false) is only reachable after this launch exited busy:
-    // its own record is this client's to sweep before the handoff.
-    if (!startup.daemon.startedByClient) await discardExitedLaunchRecord(settings, launch);
     return { daemon: startup.daemon };
   }
-  refreshStartupPhaseMarkers(settings, launch.pid, observation);
   if (startup.kind === 'retry') {
-    await discardExitedLaunchRecord(settings, launch);
     return { retry: true, phases: observation };
   }
   if (startup.kind === 'unproven') {
-    await discardExitedLaunchRecord(settings, launch);
     const startupError = normalizeError(startup.error);
     return {
       retry: false,
@@ -409,11 +408,6 @@ async function retireStartupAttempt(
     lockTimeoutMs: 0,
   });
   const joined = await joinStartup(launch);
-  // A joined exit is what licenses removing the record; without it the file stays.
-  if (joined)
-    removeDaemonStartupPhasesFile(
-      resolveDaemonStartupPhasesPath(settings.paths.baseDir, launch.pid),
-    );
   return { cleanup, joined };
 }
 
@@ -428,18 +422,6 @@ async function joinStartup(launch: DaemonStartupLaunch): Promise<boolean> {
     ]);
   } finally {
     clearTimeout(timer);
-  }
-}
-
-/** Sweeps a proven-exited launch's own record after joining that exact child. */
-async function discardExitedLaunchRecord(
-  settings: DaemonClientSettings,
-  launch: DaemonStartupLaunch,
-): Promise<void> {
-  if (await joinStartup(launch)) {
-    removeDaemonStartupPhasesFile(
-      resolveDaemonStartupPhasesPath(settings.paths.baseDir, launch.pid),
-    );
   }
 }
 
@@ -529,7 +511,6 @@ async function observeLiveDaemonStartup(
 ): Promise<DaemonStartupWaitResult | null> {
   const info = await readReadyLaunchedDaemon(settings, launch, deadline);
   if (info) return { kind: 'ready', daemon: { info, startedByClient: true } };
-  refreshStartupPhaseMarkers(settings, launch.pid, observation);
   if (
     isProcessAlive(launch.pid) &&
     Date.now() - lastStartupProgressMs(observation) >= DAEMON_STARTUP_STALL_WINDOW_MS
@@ -539,25 +520,8 @@ async function observeLiveDaemonStartup(
   return null;
 }
 
-function refreshStartupPhaseMarkers(
-  settings: DaemonClientSettings,
-  launchPid: number,
-  observation: StartupPhaseObservation,
-): void {
-  const tail = readRecentFileTail(
-    resolveDaemonStartupPhasesPath(settings.paths.baseDir, launchPid),
-    DAEMON_STARTUP_MARKER_TAIL_BYTES,
-  );
-  if (!tail) return;
-  for (const [phase, timestampMs] of Object.entries(readDaemonStartupPhaseMarkers(tail)) as Array<
-    [DaemonStartupPhase, number]
-  >) {
-    observation.markers[phase] = timestampMs;
-  }
-}
-
 function lastStartupProgressMs(observation: StartupPhaseObservation): number {
-  return Object.values(observation.markers).reduce(
+  return Object.values(observation.receipts).reduce(
     (latest, timestampMs) => Math.max(latest, timestampMs),
     observation.spawnedAtMs,
   );
@@ -565,7 +529,7 @@ function lastStartupProgressMs(observation: StartupPhaseObservation): number {
 
 function describeStartupPhaseTimings(observation: StartupPhaseObservation): Record<string, number> {
   const timings: Record<string, number> = { spawned: 0 };
-  for (const [phase, timestampMs] of Object.entries(observation.markers)) {
+  for (const [phase, timestampMs] of Object.entries(observation.receipts)) {
     timings[phase] = Math.max(0, timestampMs - observation.spawnedAtMs);
   }
   return timings;

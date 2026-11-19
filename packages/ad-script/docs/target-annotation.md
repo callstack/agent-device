@@ -94,6 +94,8 @@ An id may identify the target and lead its selector chain only if it is unique i
 The writer counts matches for the id independently of ancestry.
 If multiple nodes carry that id, the writer demotes it to role+label, as for an unrecorded id.
 The rule uses capture-time uniqueness, not an `android:id/*` namespace heuristic.
+A unique id is the whole recorded selector expression, with no `||` alternatives.
+An alternative after it could bind only a node without that id, and verification refuses that node.
 
 ## Identity-empty pressed containers
 
