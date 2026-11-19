@@ -518,7 +518,7 @@ test.each([200, 20])(
       const progressIndex = stderr.findIndex((text) => text.includes('Uploading'));
       const drawn = stripVTControlCharacters(
         stderr.find((text) => text.includes('Checkout')) ?? '',
-      ).replace('\r', '');
+      ).replaceAll('\r', '');
       const wrappedRows = Math.ceil(drawn.length / columns);
       assert.equal(wrappedRows > 1, columns < drawn.length, drawn);
       assert.equal(
