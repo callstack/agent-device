@@ -290,14 +290,16 @@ export async function withRequestDeadline(
     : registerRequestAbort(requestId);
   const controller = requestAbortControllers().get(requestId)!;
   if (ownedRegistration) controller.deadlineRegistration = ownedRegistration;
+  const startedAtMs = Date.now();
   const deadlineMs = Math.min(
-    Date.now() + timeoutMs,
+    startedAtMs + timeoutMs,
     controller.resultDeadlineMs ?? Number.POSITIVE_INFINITY,
   );
   const expire = () => {
     if (controller.signal.aborted) return;
-    controller.executionDeadlineCancellation = { timeoutMs, requestId };
-    controller.abort(createRequestCanceledError({ timeoutMs, requestId }));
+    const cancellation = { timeoutMs: Math.max(0, deadlineMs - startedAtMs), requestId };
+    controller.executionDeadlineCancellation = cancellation;
+    controller.abort(createRequestCanceledError(cancellation));
   };
   const ownedDeadline = { deadlineMs, expire };
   const deadlines = (controller.executionDeadlines ??= new Set());

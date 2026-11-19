@@ -356,6 +356,19 @@ test('source-install requests resolve the 570 s daemon deadline and result deadl
   }
 });
 
+test('batch and replay transport deadlines match their resolved execution budgets', () => {
+  const admittedAt = 1_000_000;
+  for (const command of [PUBLIC_COMMANDS.batch, PUBLIC_COMMANDS.replay]) {
+    const request = makeRequest(command);
+    const executionBudgetMs = resolveDaemonRequestTimeoutMs(request);
+    assert.notEqual(executionBudgetMs, undefined, command);
+    assert.equal(
+      resolveDaemonRequestResultDeadlineMs(request, admittedAt),
+      admittedAt + executionBudgetMs!,
+    );
+  }
+});
+
 // The fact the transports stamp on each admitted request: only a request with no action in any of
 // its steps may let a resend loop spend its deadline.
 test('isReadOnlyRequest marks reads, and never a request that dispatches an action', () => {

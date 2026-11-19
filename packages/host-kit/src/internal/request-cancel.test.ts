@@ -783,7 +783,7 @@ test('withRequestDeadline refuses task entry when an earlier registered result d
       (error: unknown) =>
         error instanceof AppError &&
         error.details?.reason === 'daemon_request_timeout' &&
-        error.details.timeoutMs === 570_000 &&
+        error.details.timeoutMs === 0 &&
         error.details.requestId === requestId,
     );
     assert.equal(entered, false, 'the expired request entered its task');

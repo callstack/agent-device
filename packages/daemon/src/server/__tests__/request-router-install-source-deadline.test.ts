@@ -500,7 +500,7 @@ test('an install_source whose earlier registered result deadline already passed 
     if (response.ok) return;
     assert.equal(response.error.code, 'COMMAND_FAILED');
     assert.equal(response.error.details?.reason, 'daemon_request_timeout');
-    assert.equal(response.error.details?.timeoutMs, SOURCE_DEADLINE_MS);
+    assert.equal(response.error.details?.timeoutMs, 0);
     assert.equal(
       spies.inspectFacts.mock.calls.length,
       0,
@@ -549,6 +549,7 @@ test('an earlier result deadline aborts a running source install before deployme
     assert.equal(response.ok, false);
     if (response.ok) return;
     assert.equal(response.error.details?.reason, 'daemon_request_timeout');
+    assert.equal(response.error.details?.timeoutMs, resultBudgetMs);
     assert.equal(spies.deployMaterializedApp.mock.calls.length, 0);
   } finally {
     markRequestCanceled(requestId);
