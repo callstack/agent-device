@@ -43,7 +43,7 @@ A remote daemon needs its own installation. A local plugin store does not make a
 
 Maestro YAML replay requires `@agent-device/maestro` on both client and daemon hosts. Maestro suites also need `@agent-device/replay` on the daemon host. `replay export` needs the Maestro plugin on the client only.
 
-A missing installation returns `plugin-not-installed` with the package and installation command. Selected package failures keep `plugin_load_failed`, `invalid_plugin`, `incompatible_plugin` or `plugin_setup_failed`; repair or update that selected package. `daemon-plugin-set-stale` requires restarting the daemon after sessions finish. For an embedded daemon, its host closes and recreates the runtime. No recovery installs packages or ends sessions automatically.
+A missing installation returns `plugin-not-installed` with the package and installation command. Selected package failures keep `plugin_load_failed`, `invalid_plugin`, `incompatible-plugin-api` or `plugin_setup_failed`; repair or update that selected package. `daemon-plugin-set-stale` requires restarting the daemon after sessions finish. For an embedded daemon, its host closes and recreates the runtime. No recovery installs packages or ends sessions automatically.
 
 ## See which providers are registered
 
@@ -86,6 +86,8 @@ The interface is experimental. A plugin package exports a factory at `./agent-de
 {
   "name": "@example/agent-device-provider",
   "type": "module",
+  "engines": { "node": ">=22.12" },
+  "agent-device": { "apiVersion": 3, "provider": "example" },
   "exports": {
     "./agent-device": { "import": "./dist/plugin.mjs" }
   }
@@ -98,17 +100,24 @@ import type { AgentDevicePluginFactory } from 'agent-device/plugins';
 type ExampleOptions = { credentials?: { username: string; accessKey: string } };
 
 const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
-  apiVersion: 2,
-  provider: 'example',
-  credentials: {
-    // Variables the daemon reads credentials from; none when the caller passes them as options.
-    variables: options.credentials ? [] : ['EXAMPLE_USERNAME', 'EXAMPLE_ACCESS_KEY'],
-  },
-  setup: async (host) => ({ runtime, platformModule }),
+  apiVersion: 3,
+  contributes: [
+    {
+      kind: 'provider',
+      provider: 'example',
+      credentials: {
+        // Variables the daemon reads credentials from; none when the caller passes them as options.
+        variables: options.credentials ? [] : ['EXAMPLE_USERNAME', 'EXAMPLE_ACCESS_KEY'],
+      },
+      setup: async (host) => ({ runtime, platformModule }),
+    },
+  ],
 });
 
 export default example;
 ```
+
+The `agent-device` field in `package.json` declares the contract version and the static claim keys (`provider`, `replayBackend`, `replayExecution`). Before any import, the host checks the package identity, that the resolved entry stays inside the package, the `apiVersion`, the Node floor from `engines.node`, and that the declared claims are unique and unreserved. After the factory runs with its options, the returned claim keys must equal the declared ones, in any order; a mismatch invalidates the package.
 
 The factory is called with the package's `options` from `config.json` (`plugins["<package>"].options`; leave `installation` unchanged). A JavaScript host that imports the package calls the same factory directly with its own options.
 
@@ -123,7 +132,7 @@ The host checks required runtime methods and owner metadata when it sets the plu
 
 Keep the factory and `setup` fast, with no network I/O or device allocation; a stalled plugin delays daemon startup. Load platform mechanics through `platformModule.loadRuntime` and perform remote work in request-bound operations.
 
-Incompatible contract changes require a new `apiVersion`. Plugins can't replace bundled providers or register arbitrary commands.
+Incompatible contract changes require a new `apiVersion`; there is no compatibility shim. A version 2 plugin is listed as `failed` with reason `incompatible-plugin-api`. Plugins can't replace bundled providers or register arbitrary commands.
 
 ### Credentials
 
@@ -131,23 +140,30 @@ List the environment variables the provider reads in `credentials.variables`. A 
 
 ### Connect
 
-To support `agent-device connect example`, add a `connection` to the plugin:
+To support `agent-device connect example`, add a `connection` to the provider contribution:
 
 ```ts
-connection: {
-  capabilities: {
-    leaseKind: 'direct-device-provider',
-    requiresAppAttachment: false,
-    requiresRemoteDaemon: false,
-    supportsArtifacts: false,
-    supportsDeferredAppSelection: true,
-    supportsDirectPortReverse: false,
-    usesCloudWebDriverLease: false,
-    holdsCloudDevice: false,
+contributes: [
+  {
+    kind: 'provider',
+    provider: 'example',
+    credentials: { variables: ['EXAMPLE_API_KEY'] },
+    connection: {
+      capabilities: {
+        leaseKind: 'direct-device-provider',
+        requiresAppAttachment: false,
+        requiresRemoteDaemon: false,
+        supportsArtifacts: false,
+        supportsDeferredAppSelection: true,
+        supportsDirectPortReverse: false,
+        usesCloudWebDriverLease: false,
+        holdsCloudDevice: false,
+      },
+      resolve: async ({ flags, env, cwd, stateDir, host }) => ({ profile }),
+      verify: async ({ flags, env, host }) => verification,
+    },
   },
-  resolve: async ({ flags, env, cwd, stateDir, host }) => ({ profile }),
-  verify: async ({ flags, env, host }) => verification,
-},
+],
 ```
 
 `resolve` validates provider flags and returns `{ profile, extraFlags? }`; `profile.leaseProvider` must match the plugin's `provider`. The host supplies connection identity, session defaults, Metro settings, and persists the profile. `verify` returns the provider verification result. Both also receive `host`, the same `ProviderPluginHost` that `setup` gets, built from the `env` of that call. Both run without allocating a device or setting up a runtime. `agent-device` loads installed plugins' factories, not their `setup`, to read these capabilities. Set the optional `holdsCloudDevice: true` when the provider leases a cloud-hosted device. Each command that uses the lease then requests a five-minute lease window, the same as a proxy or cloud WebDriver lease, not the 60-second daemon default. A daemon whose `AGENT_DEVICE_LEASE_MAX_TTL_MS` is below five minutes refuses that request with `INVALID_ARGS`.
@@ -156,40 +172,57 @@ connection: {
 
 Bundle the plugin implementation and ship ready-to-run ESM: installation disables lifecycle scripts. Bundle shared helpers with the plugin; `AppError` carries a shared brand so the host preserves its code and details across package copies. Import types with `import type` to keep them out of the runtime dependency graph. A published plugin package names `./agent-device` in its `exports`: that is the subpath the host's loader and the publish checks read, so don't ship a plugin only through the root export or `main`.
 
-## Migrating from a version 1 manifest
+## Migrating from the version 2 contract
 
-Earlier plugin packages declared `agentDevicePlugin` with `apiVersion: 1` in `package.json`, and the host read `provider`, `entry`, `connection`, and `credentialVariables` from it before loading any code. That form is no longer supported: a store package is loaded only through its exports, and everything it declares comes from the object its factory returns.
+Version 2 returned `{ apiVersion: 2, provider, credentials, connection?, setup }` from the factory. Version 3 wraps each contribution in `contributes` and declares the static claim keys in the package's `agent-device` field. There is no compatibility shim: a version 2 package is listed as `failed` with reason `incompatible-plugin-api`.
 
 To move a package:
 
-1. Export the factory from `./agent-device` instead of naming an entry file in the manifest, and drop `agentDevicePlugin` from `package.json`.
-2. Return the manifest's values from the factory: `provider` stays `provider`, `credentialVariables` becomes `credentials: { variables: [...] }`, and the manifest's `connection` becomes `connection.capabilities`, with the `resolve` and `verify` the v1 entry returned for `connection` moved into that same `connection` object next to `setup`.
-3. Return `apiVersion: 2` and keep the default export a function; the host calls it with the selection's options and `setup` receives the `ProviderPluginHost` the v1 entry used to receive first.
+1. Return `apiVersion: 3` with `contributes: [{ kind: 'provider', provider, credentials, connection?, setup }]`; the default export stays a function the host calls with the selection's options.
+2. Add `"agent-device": { "apiVersion": 3, "provider": "example" }` and `"engines": { "node": ">=22.12" }` to `package.json`, with the same claim keys the factory returns.
 
 ```diff
--{"agentDevicePlugin": {"apiVersion": 1, "provider": "example", "entry": "./dist/plugin.mjs"}}
-+{"exports": {"./agent-device": { "import": "./dist/plugin.mjs" }}}
+ export default () => ({
+-  apiVersion: 2,
+-  provider: 'example',
+-  credentials: { variables: ['EXAMPLE_API_KEY'] },
+-  setup: async (host) => ({ runtime, platformModule }),
++  apiVersion: 3,
++  contributes: [{
++    kind: 'provider',
++    provider: 'example',
++    credentials: { variables: ['EXAMPLE_API_KEY'] },
++    setup: async (host) => ({ runtime, platformModule }),
++  }],
+ });
 ```
 
 ```diff
--export default async (host) => ({ runtime, platformModule });
-+export default () => ({
-+  apiVersion: 2,
-+  provider: 'example',
-+  credentials: { variables: ['EXAMPLE_API_KEY'] },
-+  setup: async (host) => ({ runtime, platformModule }),
-+});
++{"engines": {"node": ">=22.12"}, "agent-device": {"apiVersion": 3, "provider": "example"}}
 ```
 
-A package that still ships the old manifest loads when it also exports `./agent-device`, and the manifest is then ignored. A plugin object with an `apiVersion` other than 2 is listed as `failed` with `incompatible_plugin`, and a default export that is not a plugin factory with `invalid_plugin`; the daemon starts without either.
+A plugin object with an `apiVersion` other than 3 is listed as `failed` with `incompatible-plugin-api`, and a default export that is not a plugin factory with `invalid_plugin`; the daemon starts without either.
 
-## Create a replay backend plugin
+## Create a replay plugin
 
-A replay engine uses the same managed `./agent-device` factory entry and `apiVersion: 2`. Return a `ReplayEnginePlugin` from the type-only `agent-device/plugins` contract with `kind: 'replay-backend'`, a `backend` id, and `setup(host)`. Keep setup engine-free; `create` may asynchronously import the engine when a replay capability is selected.
+A replay plugin uses the same managed `./agent-device` factory entry and `apiVersion: 3`. Return a declaration whose `contributes` lists the replay kind: `replay-backend` for a format backend such as `maestro`, or `replay-execution` with `id: 'ad'` for native replay and test. Declare the claim statically in `package.json` as `"agent-device": { "apiVersion": 3, "replayBackend": "maestro" }` or `{ "apiVersion": 3, "replayExecution": true }`. Keep setup engine-free; `create` may asynchronously import the engine when a replay capability is selected.
 
-For a format backend such as `maestro`, setup returns `{ replayBackend: { create(host) }, dispose? }`. The backend implements source collection, source inspection, replay execution, and export. Its `ReplayBackendHost` supplies dispatch-related services and request cancellation; each replay command supplies its host environment, session access, and `invoke`.
+```ts
+{
+  apiVersion: 3,
+  contributes: [
+    {
+      kind: 'replay-backend',
+      backend: 'maestro',
+      setup: (host) => ({ replayBackend: { create(host) }, dispose? }),
+    },
+  ],
+}
+```
 
-For the native `ad` backend, setup returns `{ execution: { create() }, dispose? }`. The object returned by `create()` implements `inspectAdReplay`, `runAdReplay`, and `runReplayTestSuite`. Return only the factory for your backend: the host rejects a native setup that provides `replayBackend`, or a format setup that provides `execution`.
+Replay setup receives the `ReplaySetupHost`: only `clientVersion` and `createError`. For a format backend, setup returns `{ replayBackend: { create(host) }, dispose? }`. The backend implements source collection, source inspection, replay execution, and export. Its `ReplayBackendHost` supplies dispatch-related services and request cancellation; each replay command supplies its host environment, session access, and `invoke`.
+
+For the native `replay-execution` contribution (`id: 'ad'`), setup returns `{ execution: { create() }, dispose? }`. The object returned by `create()` implements `inspectAdReplay`, `runAdReplay`, and `runReplayTestSuite`. The id `ad` is reserved: a `replay-backend` contribution cannot claim it. Return only the factory for your kind: the host rejects a native setup that provides `replayBackend`, or a format setup that provides `execution`.
 
 The daemon owns sessions, policy, selector/ref authority, and device cleanup. `dispose` runs once after requests drain. Client-side source collection and export dispose their scoped plugin registry when the operation ends.
 
