@@ -720,6 +720,9 @@ function stateChain(
     // `mkdir`, which is what this host has always done and which forces nothing on a level that stands.
     return createWindowsStateDirectory(target, create);
   }
+  // The SAME trust the script rule asks, asked from the owner of that rule. The state rule's extra strictness
+  // — a sticky shared level refused on the route, sticky bit included — is the policy below and is asked of
+  // every level of this route, so it is not paid for by loosening or tightening what the walk itself accepts.
   const trust = scriptTrust({});
   // The state root's own name, counted from the route the walk takes: from that name down the walk refuses a
   // link and refuses ground other local users can add a name to, and a refusal about it or below it is the only
