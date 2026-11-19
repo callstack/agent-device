@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { readLimrunCredentials } from './provider-limrun-credentials.ts';
+import { readLimrunCredentials } from './credentials.ts';
 
 const IOS_ENV = {
   LIM_IOS_INSTANCE_URL: ' https://region.limrun.example/v1/ios_x/api ',

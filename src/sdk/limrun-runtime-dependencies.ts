@@ -129,7 +129,13 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
               await import('../core/interactors/limrun-ios-runner.ts');
             const { createAppleApplicationTools } =
               await import('../platform-runtime-apple-application-tools.ts');
-            return createLimrunIosRunner(session, host, createAppleApplicationTools(host.env));
+            const { resolveOpenTarget, applyRuntimeHints, clearRuntimeHints } =
+              createAppleApplicationTools(host.env);
+            return createLimrunIosRunner(session, host, {
+              resolveOpenTarget,
+              applyRuntimeHints,
+              clearRuntimeHints,
+            });
           },
           readBundleAppName: async (appPath) => {
             const { readIosBundleInfo } =

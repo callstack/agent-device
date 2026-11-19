@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
+import { buildConnectClientId } from '../cli/connection/client-id.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
@@ -11,8 +12,7 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { verifyLimrunConnection } from '@agent-device/provider-limrun';
+import { normalizeError } from '@agent-device/kernel/errors';
 import {
   mkdtempForTestSync,
   bindTestCommandHost,
@@ -22,40 +22,51 @@ import {
 
 bindTestCommandHost();
 
+// The Limrun SDK is the boundary this suite stubs: the provider's own connection verification is
+// what `connect limrun` runs, and nothing here may reach the provider's API. Both routes in are
+// answered — the account client's list, and the attached instance's client — and neither network.
+const limrunSdk = vi.hoisted(() => {
+  const accountClients: Array<Record<string, unknown>> = [];
+  const attachedClients: Array<Record<string, unknown>> = [];
+  return {
+    accountClients,
+    attachedClients,
+    accountList: vi.fn(async () => ({ getPaginatedItems: () => [] })),
+    connectAttached: vi.fn(async (options: Record<string, unknown>) => {
+      attachedClients.push(options);
+      return { disconnect: () => undefined };
+    }),
+  };
+});
+
+vi.mock('@limrun/api', () => ({
+  default: class MockLimrun {
+    readonly androidInstances = { list: limrunSdk.accountList };
+    readonly iosInstances = { list: limrunSdk.accountList };
+
+    constructor(options: Record<string, unknown>) {
+      limrunSdk.accountClients.push(options);
+    }
+  },
+}));
+
+vi.mock('@limrun/api/ios-client', () => ({ createInstanceClient: limrunSdk.connectAttached }));
+vi.mock('@limrun/api/instance-client', () => ({ createInstanceClient: limrunSdk.connectAttached }));
+
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
   resolveCloudAccessForConnect: vi.fn(),
 }));
 
-vi.mock('@agent-device/provider-limrun', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/provider-limrun')>()),
-  verifyLimrunConnection: vi.fn(),
-}));
-
 afterEach(() => {
+  limrunSdk.accountClients.length = 0;
+  limrunSdk.attachedClients.length = 0;
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
 const mockedResolveCloudAccessForConnect = vi.mocked(resolveCloudAccessForConnect);
-const mockedVerifyLimrunConnection = vi.mocked(verifyLimrunConnection);
-
-beforeEach(() => {
-  mockedVerifyLimrunConnection.mockResolvedValue({
-    provider: 'limrun',
-    service: 'Limrun',
-    verificationMessage: 'Credentials and Android instance access verified.',
-    device: {
-      status: 'deferred',
-      name: 'Provider-selected Android emulator',
-      platform: 'android',
-    },
-    app: {
-      status: 'missing',
-      message: 'Run apps to choose an uploaded asset before allocation.',
-    },
-  });
-});
 
 test('connect without remote config generates one from cloud connection profile', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-');
@@ -131,6 +142,8 @@ test('connect limrun generates a local daemon remote profile', async () => {
           tenant: 'team-a',
           runId: 'run-a',
           session: 'limrun-android',
+          providerNetworkLogs: true,
+          providerNetworkHosts: 'api.example',
         },
         client: {} as AgentDeviceClient,
       });
@@ -148,11 +161,15 @@ test('connect limrun generates a local daemon remote profile', async () => {
       state.remoteConfigPath,
       /remote-connections\/generated\/limrun-[a-f0-9]{16}\.json$/,
     );
+    // The capture opt-in is read when the lease is allocated, so it must survive into the file
+    // later commands resolve, not stop at this call's flags.
     assert.deepEqual(readGeneratedConfigKeys(state.remoteConfigPath), [
       'daemonTransport',
       'leaseBackend',
       'leaseProvider',
       'platform',
+      'providerNetworkHosts',
+      'providerNetworkLogs',
       'runId',
       'session',
       'sessionIsolation',
@@ -160,6 +177,9 @@ test('connect limrun generates a local daemon remote profile', async () => {
       'target',
       'tenant',
     ]);
+    const generated = readGeneratedConfig(state.remoteConfigPath);
+    assert.equal(generated.providerNetworkLogs, true);
+    assert.equal(generated.providerNetworkHosts, 'api.example');
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -184,7 +204,11 @@ test('connect limrun attaches to an existing instance without storing its token'
   const state = readRequiredActiveState(stateDir);
   assert.equal(state.leaseBackend, 'ios-instance');
   assert.doesNotMatch(fs.readFileSync(state.remoteConfigPath, 'utf8'), /ios-instance-token/);
-  assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances?.ios, ios);
+  // Verification went to the instance named by the scoped variables, and not to the account API.
+  assert.deepEqual(limrunSdk.attachedClients, [
+    { ...ios, logLevel: 'none', maxReconnectAttempts: 0 },
+  ]);
+  assert.deepEqual(limrunSdk.accountClients, []);
 });
 
 test('connect limrun persists deferred Metro bridge settings', async () => {
@@ -238,6 +262,78 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
       target: 'mobile',
       tenant: 'team-a',
     });
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect limrun reconnects to the saved named session and profile', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-repeat-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const session = 'limrun-repeat';
+  const savedRunId = `limrun-${buildConnectClientId('limrun', stateDir, session)}`;
+  const connect = async (runId?: string) =>
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        host: createTestHostEnvironment(),
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'android',
+          session,
+          ...(runId === undefined ? {} : { runId }),
+        },
+        client: {} as AgentDeviceClient,
+      });
+    });
+
+  try {
+    vi.setSystemTime(1_000);
+    await connect(savedRunId);
+    const first = readRequiredActiveState(stateDir);
+    // Time passes between the two connects; the connection identity must not depend on it.
+    vi.setSystemTime(90_000);
+    await connect();
+    const second = readRequiredActiveState(stateDir);
+
+    assert.equal(second.runId, first.runId);
+    assert.equal(second.remoteConfigPath, first.remoteConfigPath);
+    assert.deepEqual(fs.readdirSync(path.join(stateDir, 'remote-connections', 'generated')), [
+      path.basename(first.remoteConfigPath),
+    ]);
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('separate unscoped connect limrun calls get separate run ids', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-unscoped-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+  const connect = async () => {
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        host: createTestHostEnvironment(),
+        positionals: ['limrun'],
+        flags: { json: true, help: false, version: false, stateDir, platform: 'android' },
+        client: {} as AgentDeviceClient,
+      });
+    });
+    return readRequiredActiveState(stateDir);
+  };
+
+  try {
+    const first = await connect();
+    const second = await connect();
+
+    assert.notEqual(second.session, first.session);
+    assert.notEqual(second.runId, first.runId);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -407,9 +503,9 @@ test('connect does not activate provider state when verification fails', async (
   const tempRoot = mkdtempForTestSync('agent-device-connect-verify-fail-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', 'lim_bad_key');
-  mockedVerifyLimrunConnection.mockRejectedValueOnce(
-    new AppError('UNAUTHORIZED', 'Limrun rejected connection verification.'),
-  );
+  // The account answers the read-only check as it answers a rejected key, and the provider turns
+  // that into its typed refusal.
+  limrunSdk.accountList.mockRejectedValueOnce(Object.assign(new Error('invalid'), { status: 401 }));
 
   try {
     await assert.rejects(
@@ -427,6 +523,7 @@ test('connect does not activate provider state when verification fails', async (
       }),
       (error: unknown) => {
         assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
+        assert.doesNotMatch(JSON.stringify(error), /lim_bad_key/);
         return true;
       },
     );
@@ -515,6 +612,8 @@ function readGeneratedConfig(configPath: string): {
   providerOsVersion?: string;
   providerProject?: string;
   providerBuild?: string;
+  providerNetworkLogs?: boolean;
+  providerNetworkHosts?: string;
   awsProjectArn?: string;
   awsDeviceArn?: string;
   awsAppArn?: string;
@@ -529,6 +628,8 @@ function readGeneratedConfig(configPath: string): {
     providerOsVersion?: string;
     providerProject?: string;
     providerBuild?: string;
+    providerNetworkLogs?: boolean;
+    providerNetworkHosts?: string;
     awsProjectArn?: string;
     awsDeviceArn?: string;
     awsAppArn?: string;
