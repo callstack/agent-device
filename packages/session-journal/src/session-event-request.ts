@@ -5,6 +5,7 @@ import type { DaemonRequest, DaemonResponseData } from '@agent-device/kernel/con
 const EVENT_LIST_PREVIEW_LIMIT = 5;
 const EVENT_LIST_SUMMARY_LIMIT = 3;
 const EVENT_LABEL_MAX_LENGTH = 120;
+const EVENT_NOTE_MAX_LENGTH = 300;
 const DEVICE_IDENTIFIER_KEYS = [
   'id',
   'deviceId',
@@ -293,17 +294,25 @@ function pluralize(noun: string, count: number): string {
   return count === 1 ? noun : `${noun}s`;
 }
 
-function readBoundedString(value: unknown): string | undefined {
+function readBoundedString(
+  value: unknown,
+  maxLength: number = EVENT_LABEL_MAX_LENGTH,
+): string | undefined {
   const rawText = readSessionEventString(value);
   if (!rawText) return undefined;
   const text = rawText.trim();
   const characters = Array.from(text);
-  if (characters.length <= EVENT_LABEL_MAX_LENGTH) return text;
-  return `${characters.slice(0, EVENT_LABEL_MAX_LENGTH - 1).join('')}…`;
+  if (characters.length <= maxLength) return text;
+  return `${characters.slice(0, maxLength - 1).join('')}…`;
 }
 
 export function readBoundedSessionEventString(value: unknown): string | undefined {
   return readBoundedString(value);
+}
+
+/** A client-written note about a request, bounded separately from labels. */
+export function readSessionEventNote(value: unknown): string | undefined {
+  return readBoundedString(value, EVENT_NOTE_MAX_LENGTH);
 }
 
 export function readSessionEventBoolean(value: unknown): boolean | undefined {

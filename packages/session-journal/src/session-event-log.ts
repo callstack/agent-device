@@ -10,7 +10,7 @@ import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contrac
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import {
   buildRequestSuccessEventPresentation,
-  readBoundedSessionEventString,
+  readSessionEventNote,
 } from './session-event-request.ts';
 import { scanEventLogLines } from './session-event-log-lines.ts';
 import {
@@ -199,13 +199,13 @@ export function appendActionEvent(
 
 export function buildRequestStartedEvent(params: { req: DaemonRequest }): SessionEventLogInput {
   const { req } = params;
-  const reason = readBoundedSessionEventString(req.meta?.reason);
+  const note = readSessionEventNote(req.meta?.note);
   return {
     kind: 'request.started',
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
-    ...(reason ? { details: { reason } } : {}),
+    ...(note ? { details: { note } } : {}),
   };
 }
 
@@ -215,7 +215,7 @@ export function buildRequestFinishedEvent(params: {
   durationMs: number;
 }): SessionEventLogInput {
   const { req, response, durationMs } = params;
-  const reason = readBoundedSessionEventString(req.meta?.reason);
+  const note = readSessionEventNote(req.meta?.note);
   if (response.ok) {
     const presentation = buildRequestSuccessEventPresentation(req, response.data);
     return {
@@ -224,7 +224,7 @@ export function buildRequestFinishedEvent(params: {
       command: req.command,
       status: 'ok',
       summary: presentation.summary ?? `Finished ${req.command}`,
-      details: { durationMs, ...presentation.details, ...(reason ? { reason } : {}) },
+      details: { durationMs, ...presentation.details, ...(note ? { note } : {}) },
     };
   }
   return {
@@ -237,7 +237,7 @@ export function buildRequestFinishedEvent(params: {
       durationMs,
       code: response.error.code,
       diagnosticId: response.error.diagnosticId,
-      ...(reason ? { reason } : {}),
+      ...(note ? { note } : {}),
     },
   };
 }

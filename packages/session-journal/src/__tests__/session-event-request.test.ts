@@ -330,13 +330,13 @@ test('request lifecycle events omit internal diagnostic paths', () => {
   assert.equal(JSON.stringify([started, failed]).includes('private failure message'), false);
 });
 
-function buildReasonEvents(reason: unknown) {
+function buildNoteEvents(note: unknown) {
   const req: DaemonRequest = {
     token: 'test-token',
     session: 'public-session',
     command: 'snapshot',
     positionals: [],
-    meta: { requestId: 'req-1', reason: reason as string },
+    meta: { requestId: 'req-1', note: note as string },
   };
   return {
     started: buildRequestStartedEvent({ req }),
@@ -349,37 +349,41 @@ function buildReasonEvents(reason: unknown) {
   };
 }
 
-test('request lifecycle events record the client-stated reason', () => {
-  const { started, finished, failed } = buildReasonEvents('  Check the login form  ');
+test('request lifecycle events record the client-written note', () => {
+  const note = 'Open settings to check the order notifications. The toggle should be on.';
+  const { started, finished, failed } = buildNoteEvents(`  ${note}  `);
 
-  assert.deepEqual(started.details, { reason: 'Check the login form' });
-  assert.deepEqual(finished.details, { durationMs: 5, reason: 'Check the login form' });
+  assert.deepEqual(started.details, { note });
+  assert.deepEqual(finished.details, { durationMs: 5, note });
   assert.deepEqual(failed.details, {
     durationMs: 7,
     code: 'COMMAND_FAILED',
     diagnosticId: undefined,
-    reason: 'Check the login form',
+    note,
   });
 });
 
-test('request lifecycle events omit an absent, blank, or non-string reason', () => {
-  for (const reason of [undefined, '', '   \n', 42, { text: 'not a string' }]) {
-    const { started, finished, failed } = buildReasonEvents(reason);
+test('request lifecycle events omit an absent, blank, or non-string note', () => {
+  for (const note of [undefined, '', '   \n', 42, { text: 'not a string' }]) {
+    const { started, finished, failed } = buildNoteEvents(note);
 
     assert.equal(started.details, undefined);
     assert.deepEqual(finished.details, { durationMs: 5 });
-    assert.equal(Object.hasOwn(failed.details ?? {}, 'reason'), false);
+    assert.equal(Object.hasOwn(failed.details ?? {}, 'note'), false);
   }
 });
 
-test('request event reasons are bounded without splitting a code point', () => {
-  const { started, finished, failed } = buildReasonEvents(`${'a'.repeat(118)}😀 and more text`);
-  const bounded = `${'a'.repeat(118)}😀…`;
+test('request event notes keep 300 code points without splitting one', () => {
+  const fitting = 'a'.repeat(300);
+  assert.equal(buildNoteEvents(fitting).started.details?.note, fitting);
 
-  assert.equal(Array.from(bounded).length, 120);
-  assert.equal(started.details?.reason, bounded);
-  assert.equal(finished.details?.reason, bounded);
-  assert.equal(failed.details?.reason, bounded);
+  const { started, finished, failed } = buildNoteEvents(`${'a'.repeat(298)}😀 and more text`);
+  const bounded = `${'a'.repeat(298)}😀…`;
+
+  assert.equal(Array.from(bounded).length, 300);
+  assert.equal(started.details?.note, bounded);
+  assert.equal(finished.details?.note, bounded);
+  assert.equal(failed.details?.note, bounded);
 });
 
 test('unknown commands keep the existing generic completion event', () => {

@@ -272,8 +272,8 @@ test('request timeline records thrown request failures after scope creation', as
   ]);
 });
 
-test('request timeline records the client-stated reason on start and finish', async () => {
-  const sessionStore = makeSessionStore('agent-device-router-events-reason-');
+test('request timeline records the client-written note on start and finish', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-note-');
   sessionStore.publish('events-session', makeIosSession('events-session'));
 
   const handler = createRequestHandler({
@@ -293,7 +293,7 @@ test('request timeline records the client-stated reason on start and finish', as
     command: 'click',
     positionals: ['10', '20'],
     flags: { platform: 'android' },
-    meta: { requestId: 'req-reason', reason: 'Open the cart to check the total' },
+    meta: { requestId: 'req-note', note: 'Open the cart to check the total' },
   });
 
   await sessionStore.flushEvents('events-session');
@@ -301,13 +301,13 @@ test('request timeline records the client-stated reason on start and finish', as
   expect(page.events).toEqual([
     expect.objectContaining({
       kind: 'request.started',
-      requestId: 'req-reason',
-      details: { reason: 'Open the cart to check the total' },
+      requestId: 'req-note',
+      details: { note: 'Open the cart to check the total' },
     }),
     expect.objectContaining({
       kind: 'request.finished',
-      requestId: 'req-reason',
-      details: expect.objectContaining({ reason: 'Open the cart to check the total' }),
+      requestId: 'req-note',
+      details: expect.objectContaining({ note: 'Open the cart to check the total' }),
     }),
   ]);
 });
