@@ -99,6 +99,7 @@ test('supported Android evidence applies stable clickableFirst ordering across a
         [3, true],
         [4, false],
       ]),
+      longClickableByNodeIndex: new Map<number, boolean | undefined>(),
     },
   );
 
@@ -130,6 +131,7 @@ test('authored index bypasses clickableFirst and keeps y/x ordering', () => {
         [0, true],
         [1, false],
       ]),
+      longClickableByNodeIndex: new Map<number, boolean | undefined>(),
     },
   );
 

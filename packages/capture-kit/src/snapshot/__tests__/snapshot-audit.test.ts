@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import type { AuditContext, AuditFinding } from '@agent-device/contracts/capture';
+import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/snapshot-private-evidence';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { annotateCoveredSnapshotNodes } from '../../snapshot-occlusion.ts';
-import { auditSnapshot } from '../snapshot-audit.ts';
+import { auditSnapshot, auditSnapshotState } from '../snapshot-audit.ts';
 
 const IOS: AuditContext = { platform: 'ios', producer: 'apple-runner', truncated: false };
 const ANDROID: AuditContext = { platform: 'android', pixelDensity: 2, truncated: false };
@@ -475,6 +477,83 @@ describe('android role-less clickables', () => {
     );
     expect(findings).toEqual([]);
   });
+
+  test('does not share-name two clickable containers that only match on their first child text', () => {
+    // TalkBack reads each row by joining its descendants, so these two announce different names
+    // even though `accessibleName` resolves both to "Sponsored".
+    const row = (index: number, body: string): SnapshotNode[] => [
+      node(index, {
+        type: 'android.view.ViewGroup',
+        clickable: true,
+        rect: dp48,
+      }),
+      node(index + 1, {
+        parentIndex: index,
+        type: 'android.widget.TextView',
+        label: 'Sponsored',
+      }),
+      node(index + 2, {
+        parentIndex: index,
+        type: 'android.widget.TextView',
+        label: body,
+      }),
+    ];
+    const { findings } = audit(
+      [...row(1, 'The quiet river'), ...row(4, 'Twelve ways to fold linen')],
+      ANDROID,
+    );
+    expect(findings).toEqual([]);
+  });
+});
+
+describe('auditSnapshotState with retained tap facts', () => {
+  // 30dp at the test density of 2. The nodes carry no tap fact: a regular Android capture
+  // strips them, and only the retained helper evidence restores them for the audit.
+  const dp30 = { x: 0, y: 0, width: 60, height: 60 };
+
+  function stateWithoutTapFacts(nodes: SnapshotNode[]): SnapshotState {
+    return { nodes, createdAt: 0 };
+  }
+
+  test('restores exact android-helper evidence and reports the touchable as small-target', () => {
+    const state = stateWithoutTapFacts([
+      node(1, { type: 'android.view.View', label: 'Custom action', rect: dp30 }),
+    ]);
+    attachSnapshotClickabilityEvidence(state, {
+      kind: 'exact',
+      provider: 'android-helper',
+      clickableByNodeIndex: new Map([[1, true]]),
+      longClickableByNodeIndex: new Map([[1, false]]),
+    });
+    const { findings } = auditSnapshotState(state, ANDROID);
+    expect(findings).toEqual([
+      expect.objectContaining({
+        kind: 'small-target',
+        ref: '@e1',
+        role: 'clickable',
+        detail: { unit: 'dp', width: 30, height: 30, recommendedSize: 48 },
+      }),
+    ]);
+  });
+
+  test('reports nothing when the capture retained no clickability evidence', () => {
+    const state = stateWithoutTapFacts([
+      node(1, { type: 'android.view.View', label: 'Custom action', rect: dp30 }),
+    ]);
+    expect(auditSnapshotState(state, ANDROID).findings).toEqual([]);
+  });
+
+  test('reports nothing on divergence evidence, which names no clickable node', () => {
+    const state = stateWithoutTapFacts([
+      node(1, { type: 'android.view.View', label: 'Custom action', rect: dp30 }),
+    ]);
+    attachSnapshotClickabilityEvidence(state, {
+      kind: 'divergence',
+      provider: 'apple-xctest',
+      reason: 'maestro-clickable-not-exposed-by-provider',
+    });
+    expect(auditSnapshotState(state, ANDROID).findings).toEqual([]);
+  });
 });
 
 describe('covered-control', () => {
@@ -493,6 +572,21 @@ describe('covered-control', () => {
       node(2, { type: 'StaticText', label: 'Title', ...covered }),
     ]);
     expect(findings).toEqual([]);
+  });
+
+  test('reports a covered role-less clickable Android view as a clickable control', () => {
+    const { findings } = audit(
+      [node(1, { type: 'android.view.View', label: 'Custom action', clickable: true, ...covered })],
+      ANDROID,
+    );
+    expect(findings).toEqual([
+      expect.objectContaining({
+        kind: 'covered-control',
+        severity: 'observation',
+        ref: '@e1',
+        role: 'clickable',
+      }),
+    ]);
   });
 
   test('collapses the only child of a covered row, but keeps a child that has siblings', () => {

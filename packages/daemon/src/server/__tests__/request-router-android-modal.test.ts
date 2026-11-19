@@ -44,6 +44,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
           kind: 'exact',
           provider: 'android-helper',
           clickableByNodeIndex: new Map(),
+          longClickableByNodeIndex: new Map(),
         },
       },
     );

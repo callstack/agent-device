@@ -11,11 +11,8 @@ export type SnapshotClickabilityEvidence =
       kind: 'exact';
       provider: 'android-helper';
       clickableByNodeIndex: ReadonlyMap<number, boolean | undefined>;
-      /**
-       * Long-press fact from the same helper report, keyed like `clickableByNodeIndex`. Absent
-       * when the helper that served the capture did not expose it.
-       */
-      longClickableByNodeIndex?: ReadonlyMap<number, boolean | undefined>;
+      /** Long-press fact from the same helper report, keyed like `clickableByNodeIndex`. */
+      longClickableByNodeIndex: ReadonlyMap<number, boolean | undefined>;
     }
   | {
       kind: 'divergence';

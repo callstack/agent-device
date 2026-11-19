@@ -117,7 +117,12 @@ function evaluateControl(node: SnapshotNode, facts: AuditFacts): EvaluatedContro
   return { role, ownership, name: accessibleName(node, role, facts) };
 }
 
-/** Counts logical controls per name group: one control exposed twice counts once. */
+/**
+ * Counts logical controls per name group: one control exposed twice counts once. A role-less
+ * Android touchable never joins a group: its name comes from its first named descendant, while
+ * TalkBack announces it by joining every descendant's text, so two containers with an equal first
+ * child can announce different names and a shared first child proves nothing.
+ */
 function countSharedNames(
   nodes: readonly SnapshotNode[],
   evaluated: ReadonlyMap<number, EvaluatedControl>,
@@ -126,8 +131,8 @@ function countSharedNames(
   const counts = new Map<string, number>();
   for (const node of nodes) {
     const control = evaluated.get(node.index);
-    if (control?.name === undefined || isDuplicateExposure(node, control.role, facts, evaluated))
-      continue;
+    if (control?.name === undefined || control.role === ANDROID_TOUCHABLE_ROLE) continue;
+    if (isDuplicateExposure(node, control.role, facts, evaluated)) continue;
     const group = nameGroupKey(control.role, control.name);
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
@@ -150,7 +155,7 @@ function withRetainedTapFacts(snapshot: SnapshotState): readonly SnapshotNode[] 
   }
   return snapshot.nodes.map((node) => {
     const clickable = evidence.clickableByNodeIndex.get(node.index);
-    const longClickable = evidence.longClickableByNodeIndex?.get(node.index);
+    const longClickable = evidence.longClickableByNodeIndex.get(node.index);
     if (clickable === undefined && longClickable === undefined) return node;
     return {
       ...node,
@@ -425,25 +430,25 @@ function ambiguousNameFinding(
  * The occlusion pass already decided this node is covered. Only controls and rows are reported,
  * and the sole child of a covered control or row collapses into that parent, which reports.
  */
-function coveredFinding(node: SnapshotNode, scan: AuditFacts): AuditFinding | undefined {
-  const role = coveredRole(node);
+function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | undefined {
+  const role = coveredRole(node, scan);
   if (node.interactionBlocked !== 'covered' || role === undefined) return undefined;
   if (isOnlyChildOfReportedCover(node, scan)) return undefined;
   return { ...findingBase(node, role), kind: 'covered-control', severity: 'observation' };
 }
 
-function coveredRole(node: SnapshotNode): string | undefined {
+function coveredRole(node: SnapshotNode, scan: AuditScan): string | undefined {
   if (node.interactionBlocked !== 'covered') return undefined;
-  return controlRole(node) ?? (isRow(node) ? 'cell' : undefined);
+  return auditRole(node, scan) ?? (isRow(node) ? 'cell' : undefined);
 }
 
 function isRow(node: SnapshotNode): boolean {
   return normalizeType(node.type ?? '').endsWith('cell');
 }
 
-function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditFacts): boolean {
+function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditScan): boolean {
   const parent = parentOf(node, scan);
-  if (!parent || parent.ref === undefined || coveredRole(parent) === undefined) return false;
+  if (!parent || parent.ref === undefined || coveredRole(parent, scan) === undefined) return false;
   return scan.children.get(parent.index)?.length === 1;
 }
 
