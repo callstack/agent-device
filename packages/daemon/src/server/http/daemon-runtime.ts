@@ -794,8 +794,6 @@ async function startDaemonRuntimeOnHost(
       },
     );
     expiredProviderLeaseReleaser.shutdown();
-    let ownerFailed = false;
-    let ownerFailure: unknown;
     try {
       const ownerClose = await settleWithin(
         () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
@@ -804,12 +802,8 @@ async function startDaemonRuntimeOnHost(
       platformOwners = ownerClose.kind === 'deadline' ? 'pending' : 'closed';
     } catch (error) {
       platformOwners = 'failed';
-      ownerFailed = true;
-      ownerFailure = error;
-    }
-    if (ownerFailed) {
       await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
-        error: normalizeError(ownerFailure),
+        error: normalizeError(error),
       });
     }
     const plugins = await pluginClose.close();
