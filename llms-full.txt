@@ -2355,7 +2355,7 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 * `longpress` is supported on iOS and Android. `hover` is web only: it moves the pointer over a target without pressing so hover-gated UI appears, and `--settle` returns what it revealed. Touch platforms reject it; use `longpress` for the hold gesture.
 * `swipe` is a quick, fixed-duration throw. `gesture pan x y dx dy [durationMs]` is a deliberate timed drag with one pointer, or two with `--pointer-count 2`. Repeated swipes allow at most 200 repetitions, 10000ms pauses, and 60000ms in total.
 * `gesture fling up|down|left|right x y [distance]` is a fast directional throw. Neither `swipe` nor `gesture fling` takes a duration, and `gesture rotate` takes no velocity; see [Rewrite old gesture commands](/docs/migrating-gestures) to update old scripts.
-* `gesture drag source destination [sourceHoldMs] [moveMs] [destinationHoldMs]` holds one pointer down from source to destination. Endpoints are selectors or refs, resolved before dispatch and recorded as selector chains. Defaults are 800, 500, and 0ms, capped at 10000ms in total. It works on Android touch devices and iOS/iPadOS; other backends refuse it before touching the screen.
+* `gesture drag source destination [sourceHoldMs] [moveMs] [destinationHoldMs]` holds one pointer down from source to destination. Endpoints are selectors or refs, resolved before dispatch and recorded as selectors, the same way as other recorded steps. Defaults are 800, 500, and 0ms, capped at 10000ms in total. It works on Android touch devices and iOS/iPadOS; other backends refuse it before touching the screen.
 * `gesture pinch <scale> [x] [y]`, `gesture rotate <degrees> [x] [y]` (the sign sets direction), `gesture transform x y dx dy scale degrees [durationMs]`, and two-finger `gesture pan` work in Android, iOS, and iPadOS app sessions, on simulators and physical devices. On Apple they use the XCTest runner, so iOS sessions reached through a WebDriver provider refuse them. One-finger `gesture pan` works wherever coordinate drags do. A path that does not fit the viewport fails before injection instead of being clamped. Use `orientation` to rotate the device.
 * `gesture tap x1 y1 x2 y2 [... x5 y5]` touches 2 to 5 distinct points and holds them for `--hold-ms` (default 50ms, at least 16ms) before lifting. `--count` repeats the same contacts up to 200 times with `--pause-ms` between repetitions; the series must fit in 60000ms, counting about 500ms of overhead per repetition. It works in Android and iOS/iPadOS app sessions; WebDriver providers refuse it unless they declare `tapGesture` support. On iOS the contacts touch down and lift together; on Android they touch down up to 8ms apart and lift 8ms apart in reverse order. Three or more fingers can trigger iOS system gestures such as undo, so verify app state afterwards. Use `press` for one finger.
 * Cancelled `gesture` and `swipe` requests return `COMMAND_FAILED` with `details.reason=request_canceled` and record no action. Repetition pauses are interruptible.
@@ -2417,12 +2417,15 @@ agent-device is absent 'label="Loading..."'
 agent-device is hidden 'text="Loading..."'
 agent-device is editable 'id="email"'
 agent-device is selected 'label="Wi-Fi"'
+agent-device is checked 'role=switch label="Wi-Fi"'
 agent-device is text 'id="greeting"' "Welcome back"
 ```
 
 * `is` evaluates UI predicates against a selector expression and exits non-zero on failure. It takes selectors, not refs like `@e3`, and the same snapshot flags as `click`, `fill`, `get`, and `wait`.
 
-* Supported predicates are `visible`, `hidden`, `exists`, `absent`, `editable`, `selected`, `focused`, and `text`.
+* Supported predicates are `visible`, `hidden`, `exists`, `absent`, `editable`, `selected`, `checked`, `focused`, and `text`.
+
+* `is checked` passes only on a checkable control (switch, checkbox, radio) whose snapshot state is explicitly checked; an iOS `mixed` state or a control with no checked state fails it.
 
 * `is visible` passes when the element is in the visible viewport, or has no rect of its own but sits inside a visible ancestor. `is exists` only checks that the selector matches.
 
@@ -4957,6 +4960,8 @@ By default, the script goes to:
 ~/.agent-device/sessions/<session>-<timestamp>.ad
 ```
 
+Each recorded element step writes its target as a selector. When the element’s id is unique on the recorded screen, the step writes only that id, for example `press 'id="submit"'`. Otherwise, it writes alternatives such as role and label, joined with `||`, for example `press 'role="button" label="Submit" || label="Submit"'`.
+
 To choose the output file, pass a path to `--save-script`:
 
 ```bash
@@ -5705,7 +5710,11 @@ Text keys:
 
 Text values match the whole field, ignoring case and extra whitespace: `label="sign in"` matches `Sign In` but not `Sign In Now`. For partial matches, use `find`.
 
-Boolean keys: `visible`, `hidden`, `editable`, `selected`, `focused`, `enabled`, `hittable`. Write `visible=true` or `visible=false`; a bare `visible` means `visible=true`.
+On Android, `id=` matches the element’s full resource-id, which keeps its `pkg:id/name` form for native XML ids, while a React Native `testID` arrives bare (`id="login"`). A Jetpack Compose `Modifier.testTag` is exposed to agent-device only when the app sets `semantics { testTagsAsResourceId = true }`; then `id="<tag>"` matches it.
+
+Boolean keys: `visible`, `hidden`, `editable`, `selected`, `checked`, `focused`, `enabled`, `hittable`. Write `visible=true` or `visible=false`; a bare `visible` means `visible=true`.
+
+`checked` (and `is checked`) reads the state of a checkable control (switch, checkbox, radio). `checked=true` matches only an explicitly checked control and `checked=false` only an explicitly unchecked one; an iOS `mixed` state and a control with no checked state match neither.
 
 `editable` (and `is editable`) uses the node’s native `editable` fact when the snapshot carries one, so a custom text view can match and a read-only field cannot. Without the fact it is inferred from the element type. A disabled element is never editable.
 
