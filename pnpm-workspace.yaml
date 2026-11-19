@@ -9,6 +9,10 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@chenglou/freerange@0.0.4'
   - '@limrun/api@0.64.1 || 0.69.1'
+packageExtensions:
+  '@ai-sdk/provider@4':
+    dependencies:
+      '@types/json-schema': '^7.0.15'
 overrides:
   brace-expansion@5: '^5.0.12'
   fast-uri: 3.1.9
