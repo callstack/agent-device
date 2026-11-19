@@ -1,6 +1,7 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { createDaemonHttpServer } from '../http/http-server.ts';
@@ -55,6 +56,14 @@ async function withIO<T>(pending: Promise<T>): Promise<T> {
   } finally {
     realClearTimeout(timeout);
   }
+}
+
+function ioBarrier(): { promise: Promise<void>; resolve: () => void } {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, resolve: release };
 }
 
 async function flushIO(): Promise<void> {
@@ -218,6 +227,122 @@ test('client cancellation mid-chunk aborts the receive, rolls back, and the tick
     assert.equal(finalized.status, 404);
     assert.match(finalized.body, /not found or expired/i);
   } finally {
+    vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('stalled PUT rolls back at 120 s and finalize can spend longer on its hash', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const partialWritten = ioBarrier();
+  const hashStarted = ioBarrier();
+  const releaseHash = ioBarrier();
+  const createWriteStream = fs.createWriteStream;
+  const createReadStream = fs.createReadStream;
+  let payloadPath: fs.PathLike | undefined;
+  const writers = vi.spyOn(fs, 'createWriteStream').mockImplementation((path, options) => {
+    if (typeof options !== 'object' || options.flags !== 'a') {
+      return createWriteStream(path, options);
+    }
+    payloadPath = path;
+    return createWriteStream(path, {
+      ...options,
+      fs: {
+        open: fs.open,
+        close: fs.close,
+        write(fd, buffer, offset, length, position, callback) {
+          fs.write(fd, buffer, offset, length, position, (error, written, data) => {
+            callback(error, written, data);
+            if (!error) partialWritten.resolve();
+          });
+        },
+      },
+    });
+  });
+  const readers = vi.spyOn(fs, 'createReadStream').mockImplementation((path, options) => {
+    if (path !== payloadPath || typeof options !== 'object') {
+      return createReadStream(path, options);
+    }
+    return createReadStream(path, {
+      ...options,
+      fs: {
+        open: fs.open,
+        close: fs.close,
+        read(...args) {
+          hashStarted.resolve();
+          void releaseHash.promise.then(() => Reflect.apply(fs.read, fs, args));
+        },
+      },
+    });
+  });
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const auth = { authorization: 'Bearer daemon-secret' };
+    const json = { ...auth, 'content-type': 'application/json' };
+    const bytes = Buffer.from('ABCD');
+    const preflight = await withIO(
+      routeRequest(port, { method: 'POST', path: '/upload/preflight', headers: json }, (req) =>
+        req.end(preflightBody(bytes)),
+      ),
+    );
+    assert.equal(preflight.status, 200);
+    const { uploadId } = JSON.parse(preflight.body) as { uploadId: string };
+    const put: http.RequestOptions = {
+      method: 'PUT',
+      path: `/upload/direct/${uploadId}`,
+      headers: { ...auth, 'content-range': 'bytes 0-3/4' },
+    };
+    const socketClosed = ioBarrier();
+    let stalledSettled = false;
+    const closed = routeRequest(
+      port,
+      { ...put, headers: { ...put.headers, connection: 'close', 'content-length': 4 } },
+      (req) => {
+        req.once('socket', (socket) => socket.once('close', () => socketClosed.resolve()));
+        req.write('AB');
+      },
+    )
+      .then(
+        ({ status, body }) => {
+          assert.equal(status, 500);
+          assert.equal(JSON.parse(body).reason, 'transfer_phase_timeout');
+        },
+        (error) => assert.equal(error.code, 'ECONNRESET'),
+      )
+      .finally(() => {
+        stalledSettled = true;
+      });
+    void closed.catch(() => {});
+    await withIO(partialWritten.promise);
+    await vi.advanceTimersByTimeAsync(119_999);
+    assert.equal(stalledSettled, false);
+    await vi.advanceTimersByTimeAsync(1);
+    await withIO(Promise.all([closed, socketClosed.promise]));
+
+    const retry = await withIO(routeRequest(port, put, (req) => req.end(bytes)));
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body, 'ok');
+
+    const finalize = routeRequest(
+      port,
+      { method: 'POST', path: '/upload/finalize', headers: json },
+      (req) => req.end(JSON.stringify({ uploadId })),
+    );
+    void finalize.catch(() => {});
+    // Hold the real hash read after body completion, independent of disk speed.
+    await withIO(hashStarted.promise);
+    await vi.advanceTimersByTimeAsync(150_000);
+    releaseHash.resolve();
+    const finalized = await withIO(finalize);
+    assert.equal(finalized.status, 200);
+    const artifact = JSON.parse(finalized.body) as { ok: boolean; uploadId: string };
+    assert.equal(artifact.ok, true);
+    cleanupUploadedArtifact(artifact.uploadId);
+  } finally {
+    releaseHash.resolve();
+    readers.mockRestore();
+    writers.mockRestore();
     vi.useRealTimers();
     await closeLoopbackServer(server);
   }
