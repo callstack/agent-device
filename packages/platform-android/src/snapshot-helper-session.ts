@@ -116,6 +116,8 @@ export function discloseHelperTouchDispatch(
   return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
 }
 
+const SESSION_COMMAND_TOO_LARGE_REASON = 'android_snapshot_helper_session_command_too_large';
+
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;
   action: AndroidTouchHelperAction;
@@ -147,7 +149,21 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   const command = params.payloadBase64
     ? `${params.action} ${requestId} ${params.payloadBase64}`
     : `${params.action} ${requestId}`;
-  if (Buffer.byteLength(command) > ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES) {
+  const commandBytes = Buffer.byteLength(command);
+  if (commandBytes > ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES) {
+    // The caller's one-shot path is correct for this frame alone: the session stays live for the
+    // commands that fit. Record the decline so the fallback is visible in the request diagnostics.
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_snapshot_helper_session_command_declined',
+      data: {
+        deviceKey: params.deviceKey,
+        action: params.action,
+        commandBytes,
+        maxCommandBytes: ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
+        reason: SESSION_COMMAND_TOO_LARGE_REASON,
+      },
+    });
     return undefined;
   }
   let headers: Record<string, string>;
