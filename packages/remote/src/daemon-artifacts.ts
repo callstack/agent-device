@@ -782,7 +782,8 @@ function localFileName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const name = value.trim().split(/[\\/]/).pop() ?? '';
   if (name === '' || name === '.' || name === '..' || name.length > 255) return undefined;
-  if (/[:\u0000-\u001f<>"|?*]/.test(name) || /[. ]$/.test(name)) return undefined;
+  if (/[:<>"|?*]/.test(name) || /[. ]$/.test(name)) return undefined;
+  if ([...name].some((char) => char.charCodeAt(0) < 0x20)) return undefined;
   return RESERVED_DEVICE_NAME.test(name) ? undefined : name;
 }
 

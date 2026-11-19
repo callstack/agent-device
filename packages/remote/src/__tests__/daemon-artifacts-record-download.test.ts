@@ -216,7 +216,9 @@ test.for(['C:foo.mp4', 'CON.mp4', 'clip.mp4:stream', 'nul', '..', 'clip.mp4.'])(
       expect(name).toMatch(/^outPath-\d+$/);
       // The chosen name stays one component under Windows rules too.
       expect(path.win32.basename(name)).toBe(name);
-      expect(path.win32.resolve('D:\\work', name)).toBe(`D:\\work\\${name}`);
+      expect(path.win32.resolve(String.raw`D:\work`, name)).toBe(
+        String.raw`D:\work` + path.win32.sep + name,
+      );
     });
   },
 );
