@@ -4,7 +4,7 @@ import {
   createReplayTestProgressRenderer,
   REPLAY_TEST_PROGRESS_SPINNER_INTERVAL_MS,
 } from '../progress.ts';
-import { formatDurationSeconds } from '../duration-format.ts';
+import { formatDurationSeconds, formatReplayCount } from '../duration-format.ts';
 import { colorize, supportsColor } from '@agent-device/command-output';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
@@ -99,6 +99,11 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
       showCursor(context);
       renderReplayTestSummary(suite, context);
     },
+    // Written on its own row: a drawn live row is cleared first, and the renderer starts the next one on a fresh line.
+    onCommandProgress: (message, context) => {
+      const clear = progressRenderer?.clearLiveRow() ?? '';
+      context.stderr.write(`${clear}${escapeTerminalText(message)}\n`);
+    },
     getExitCode: getReplayTestExitCode,
   };
 }
@@ -155,7 +160,8 @@ function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number
   const useColor = supportsColor(process.env, process.stdout);
   const passed = formatReplaySummaryPassed(data.passed, { useColor });
   const total = formatReplaySummaryTotal(data.total, { useColor });
-  const failedSuffix = data.failed > 0 ? `, ${data.failed} failed` : '';
+  const failed = formatReplayCount(data.failed);
+  const failedSuffix = failed !== '0' ? `, ${failed} failed` : '';
   const flakySuffix = flakyCount > 0 ? `, ${flakyCount} flaky` : '';
   const durationSuffix =
     durationMs !== undefined ? ` in ${formatReplayDuration(durationMs, { useColor })}` : '';
@@ -163,12 +169,12 @@ function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number
 }
 
 function formatReplaySummaryPassed(passed: number, options: { useColor?: boolean } = {}): string {
-  const text = `${passed} passed`;
+  const text = `${formatReplayCount(passed)} passed`;
   return options.useColor ? colorize(text, 'green') : text;
 }
 
 function formatReplaySummaryTotal(total: number, options: { useColor?: boolean } = {}): string {
-  const text = `(${total})`;
+  const text = `(${formatReplayCount(total)})`;
   return options.useColor ? colorize(text, 'dim') : text;
 }
 

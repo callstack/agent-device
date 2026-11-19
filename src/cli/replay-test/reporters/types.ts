@@ -74,6 +74,11 @@ export type ReplayTestReporter = {
   onTestStep?(test: ReplayTestStep, context: ReplayTestReporterContext): void;
   onTestResult?(test: ReplayTestResult, context: ReplayTestReporterContext): void;
   onSuiteEnd?(suite: ReplaySuiteResult, context: ReplayTestReporterContext): void | Promise<void>;
+  /**
+   * A command progress line during the run, such as an upload. A reporter that draws a live row clears it first. With
+   * no reporter that takes it, the line goes to stderr as it does for other commands.
+   */
+  onCommandProgress?(message: string, context: ReplayTestReporterContext): void;
   /** Return an integer from 0 to 255, or undefined; a reporter can only raise the suite exit code. */
   getExitCode?(suite: ReplaySuiteResult): number | undefined;
 };

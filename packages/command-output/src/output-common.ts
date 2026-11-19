@@ -86,19 +86,27 @@ function collectResponseWarnings(result: Record<string, unknown>): string[] {
 
 /**
  * One `Warning:` line per response warning, after text a formatter rendered itself. A warning the
- * text already carries is skipped: a report builder may render the channel inside its own text, and
- * the dispatcher must then say it once, not twice.
+ * text already shows on a line of its own (bare, or as a `Warning:` line) is skipped: a report builder
+ * may render the channel inside its own text, and the dispatcher must then say it once, not twice. A
+ * warning that only appears inside another line, such as a path, still gets its line.
  */
 export function appendWarningLinesText(
   text: string | null | undefined,
   result: Record<string, unknown>,
 ): string | null {
   const rendered = text ?? '';
+  const shown = renderedWarningLines(rendered);
   const lines = collectResponseWarnings(result)
-    .filter((warning) => !rendered.includes(warning))
+    .filter((warning) => !shown(warning))
     .map((warning) => `Warning: ${warning}`);
   if (lines.length === 0) return text ?? null;
   return [...(rendered === '' ? [] : [rendered]), ...lines].join('\n');
+}
+
+/** Whether `text` already shows a warning on a line of its own: the bare warning, or its `Warning:` line. */
+function renderedWarningLines(text: string): (warning: string) => boolean {
+  const lines = new Set(text.split('\n').map((line) => line.trim()));
+  return (warning) => lines.has(warning) || lines.has(`Warning: ${warning}`);
 }
 
 /**
@@ -126,9 +134,9 @@ export function routeResponseWarnings(
   // (`close`, `devices`) would otherwise be able to swallow the warnings channel with it.
   const data = (response ?? {}) as Record<string, unknown>;
   if (route === 'text') return { ...output, text: appendWarningLinesText(output.text, data) };
-  const rendered = `${output.text ?? ''}\n${output.stderr ?? ''}`;
+  const shown = renderedWarningLines(`${output.text ?? ''}\n${output.stderr ?? ''}`);
   const lines = collectResponseWarnings(data)
-    .filter((warning) => !rendered.includes(warning))
+    .filter((warning) => !shown(warning))
     .map((warning) => `Warning: ${warning}`);
   if (lines.length === 0) return output;
   const stderr = output.stderr ?? '';

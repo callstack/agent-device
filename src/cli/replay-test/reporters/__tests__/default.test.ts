@@ -444,3 +444,76 @@ test('default replay test reporter keeps every live-row field on one line', () =
     assert.equal(/[\n\t]/.test(live), false);
   });
 });
+
+test('default replay test reporter shows malformed daemon counters as placeholders', () => {
+  withEnv('CI', undefined, () => {
+    const reporter = createDefaultReplayTestReporter();
+    const { context, stderr, stdout } = createReporterContext({ stderrIsTty: true });
+    context.stderr.columns = 200;
+    reporter.onSuiteStart?.(
+      { total: 1, runnable: 1, skipped: 0, artifactsDir: '/tmp/replay' },
+      context,
+    );
+    reporter.onTestStep?.(
+      {
+        file: '/tmp/checkout.yaml',
+        title: 'Checkout',
+        index: 1,
+        total: 1,
+        stepIndex: '\u001b[8m1' as unknown as number,
+        stepTotal: Number.NaN,
+        stepCommand: 'tapOn',
+        shardIndex: -1,
+      },
+      context,
+    );
+    reporter.onSuiteEnd?.(
+      {
+        ...emptySuite(),
+        passed: '\u001b[2J' as unknown as number,
+        total: 1.5,
+        failed: '9' as unknown as number,
+        durationMs: Number.NaN,
+      },
+      context,
+    );
+
+    const live = stderr.find((text) => text.includes('Checkout')) ?? '';
+    assert.ok(live.includes('?/?'), live);
+    assert.equal(live.includes('\u001b[8m'), false);
+    assert.equal(live.includes('[0/'), false);
+    assert.equal(stdout[0], 'Test summary: ? passed (?), ? failed in ?\n');
+  });
+});
+
+test('a command progress line clears the drawn live row, and the next row starts fresh', () => {
+  withEnv('CI', undefined, () => {
+    const reporter = createDefaultReplayTestReporter();
+    const { context, stderr } = createReporterContext({ stderrIsTty: true });
+    context.stderr.columns = 200;
+    const step = {
+      file: '/tmp/checkout.yaml',
+      title: 'Checkout',
+      index: 1,
+      total: 1,
+      stepIndex: 1,
+      stepTotal: 2,
+      stepCommand: 'tapOn',
+    };
+    reporter.onSuiteStart?.(
+      { total: 1, runnable: 1, skipped: 0, artifactsDir: '/tmp/replay' },
+      context,
+    );
+    reporter.onTestStep?.(step, context);
+    reporter.onCommandProgress?.('Uploading app.apk (10 B) via direct upload', context);
+    reporter.onTestStep?.({ ...step, stepIndex: 2 }, context);
+    reporter.onSuiteEnd?.(emptySuite(), context);
+
+    const progressIndex = stderr.findIndex((text) => text.includes('Uploading'));
+    assert.equal(stderr[progressIndex], '\r\u001B[2KUploading app.apk (10 B) via direct upload\n');
+    // The redraw clears only its own fresh row, never the progress line above it.
+    const redraw = stderr[progressIndex + 1] ?? '';
+    assert.ok(redraw.includes('2/2'), redraw);
+    assert.equal(redraw.includes('\u001B[1A'), false);
+  });
+});

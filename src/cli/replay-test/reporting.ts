@@ -67,10 +67,12 @@ export async function createReplayTestReporterRuntime(options: {
     reporters,
     context,
     onProgress(event) {
-      // A command progress line (an upload, for one) is not a reporter event, so it goes to stderr as it does for every
-      // other command, escaped like every CLI write.
+      // A command progress line (an upload, for one) is not a reporter event: the reporter that draws the live row
+      // writes it on its own row, and without one it goes to stderr as it does for every other command, escaped.
       if (event.type === 'command') {
-        context.stderr.write(escapeTerminalText(`${event.message}\n`));
+        const owner = reporters.find((reporter) => reporter.onCommandProgress);
+        if (owner?.onCommandProgress) owner.onCommandProgress(event.message, context);
+        else context.stderr.write(escapeTerminalText(`${event.message}\n`));
         return;
       }
       runReplayTestReporterProgress(reporters, event, context);

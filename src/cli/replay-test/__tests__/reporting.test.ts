@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
-import { mkdtempForTest, withCapturedStderr } from '@agent-device/test-kit';
+import {
+  mkdtempForTest,
+  withCapturedStderr,
+  withCapturedStderrAsync,
+} from '@agent-device/test-kit';
 import { createReplayTestReporterRuntime } from '../reporting.ts';
 
 test.each([false, true])('CLI refuses a wrapping reporter exit code (json=%s)', async (json) => {
@@ -65,4 +69,47 @@ test('a test run prints command progress, such as an upload, to stderr escaped',
   });
 
   assert.equal(stderr, String.raw`Uploading app\u001b[8m.apk (10 B) via direct upload` + '\n');
+});
+
+test('in a terminal, a test run writes command progress on its own row after a drawn live row', async () => {
+  const previousCi = process.env.CI;
+  delete process.env.CI;
+  try {
+    const stderr = await withCapturedStderrAsync(
+      async () => {
+        const runtime = await createReplayTestReporterRuntime({});
+        runtime.onProgress({
+          type: 'replay-test',
+          file: '/tmp/checkout.yaml',
+          title: 'Checkout',
+          status: 'progress',
+          index: 1,
+          total: 1,
+          stepIndex: 1,
+          stepTotal: 2,
+          stepCommand: 'tapOn',
+        });
+        runtime.onProgress({ type: 'command', status: 'progress', message: 'Uploading app.apk' });
+        await runtime.reporters[0]?.onSuiteEnd?.(
+          {
+            total: 0,
+            executed: 0,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+            notRun: 0,
+            durationMs: 0,
+            failures: [],
+            tests: [],
+          },
+          runtime.context,
+        );
+      },
+      { interactive: true },
+    );
+
+    assert.ok(stderr.includes('\r\u001B[2KUploading app.apk\n'), JSON.stringify(stderr));
+  } finally {
+    if (previousCi !== undefined) process.env.CI = previousCi;
+  }
 });

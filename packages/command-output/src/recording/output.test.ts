@@ -72,3 +72,12 @@ test.each([
   expect(output.text).toContain('Warning: Overlay skipped for this run');
   expect(output.text).not.toContain('Overlay skipped\nfor');
 });
+
+test('record keeps a warning whose text also appears inside a path', () => {
+  const output = recordCliOutput({
+    outPath: '/tmp/Overlay skipped/recording.mp4',
+    warning: 'Overlay skipped',
+  });
+
+  expect(output.text).toBe('/tmp/Overlay skipped/recording.mp4\nWarning: Overlay skipped');
+});

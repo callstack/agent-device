@@ -10,7 +10,7 @@ import {
   formatCliStatusMarker,
   shouldColorStatusMarkers,
 } from '@agent-device/host-kit/status-markers';
-import { formatDurationSeconds } from './duration-format.ts';
+import { formatDurationSeconds, formatReplayCount } from './duration-format.ts';
 import { colorize, supportsColor } from '@agent-device/command-output';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
@@ -30,6 +30,8 @@ export type ReplayTestProgressRender = {
 
 export type ReplayTestProgressRenderer = {
   render(event: ReplayTestReporterProgressEvent): ReplayTestProgressRender | undefined;
+  /** The codes that clear a drawn live row, or '' when none is drawn; the next live row starts on a fresh line. */
+  clearLiveRow(): string;
 };
 
 const REPLAY_TEST_PROGRESS_SPINNER = {
@@ -101,6 +103,17 @@ export function createReplayTestProgressRenderer(
       if (event.type === 'test-step') return renderLiveStep(event);
       return event.type === 'test-result' ? renderTestResult(event) : undefined;
     },
+    clearLiveRow() {
+      if (!hasLiveProgressLine) return '';
+      const clear = clearLiveProgressPrefix(
+        liveProgressWidth,
+        options.columns,
+        options.terminalReflowsOnResize !== false,
+      );
+      hasLiveProgressLine = false;
+      liveProgressWidth = 0;
+      return clear;
+    },
   };
 }
 
@@ -167,9 +180,9 @@ function formatReplayTestLiveProgressStepSuffix(
   event: ReplayTestStep,
   options: { useColor?: boolean } = {},
 ): string {
-  const stepIndex = event.stepIndex ?? 0;
-  const stepTotal = event.stepTotal ?? 0;
-  const stepMarker = `${stepIndex}/${stepTotal}`;
+  const stepMarker = display(
+    `${formatReplayCount(event.stepIndex ?? 0)}/${formatReplayCount(event.stepTotal ?? 0)}`,
+  );
   const command = event.stepCommand ? display(event.stepCommand).trim() : undefined;
   const value = event.stepValue ? display(event.stepValue).trim() : undefined;
   if (!options.useColor) {
@@ -266,10 +279,12 @@ function formatReplayTestProgressShardSuffix(
   event: ReplayTestResult | ReplayTestStep,
   options: { useColor?: boolean } = {},
 ): string {
-  if (typeof event.shardIndex !== 'number') return '';
-  const shardCount = typeof event.shardCount === 'number' ? event.shardCount : '?';
+  const { shardIndex } = event;
+  if (typeof shardIndex !== 'number' || !Number.isSafeInteger(shardIndex) || shardIndex < 0)
+    return '';
+  const shardCount = formatReplayCount(event.shardCount);
   const device = replayTestProgressShardDeviceName(event);
-  const suffix = ` [${event.shardIndex + 1}/${shardCount}${device ? ` ${device}` : ''}]`;
+  const suffix = ` [${shardIndex + 1}/${shardCount}${device ? ` ${device}` : ''}]`;
   return options.useColor ? colorizeProgressMarker(suffix, 'dim') : suffix;
 }
 
