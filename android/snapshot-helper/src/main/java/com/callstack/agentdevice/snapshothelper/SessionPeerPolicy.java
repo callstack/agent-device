@@ -96,8 +96,10 @@ final class SessionPeerPolicy {
 
   /**
    * Reads one newline-terminated command using the deadline fixed at accept and at most
-   * maxBytes + 1 bytes. A read that expires or reaches EOF before the newline throws
-   * {@link SessionReadClosed}; a line over the cap returns its first maxBytes + 1 bytes.
+   * maxBytes + 1 bytes. A read past the deadline or EOF before the newline throws
+   * {@link SessionReadClosed}; a line over the cap returns its first maxBytes + 1 bytes. Android's
+   * LocalSocket reports an SO_TIMEOUT expiry as a plain IOException (EAGAIN), not as
+   * SocketTimeoutException, so the caller closes the connection on any IOException from here.
    */
   static String readSessionCommandLine(
       InputStream input, ReadTimeout timeout, MonotonicClock clock, long deadlineAtMs, int maxBytes)
