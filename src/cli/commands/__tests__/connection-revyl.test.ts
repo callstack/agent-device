@@ -171,7 +171,7 @@ test('connect revyl without an app URL points the next steps at install before o
     assert.equal(output.app.status, 'missing');
     assert.equal(output.device.status, 'deferred');
     assert.deepEqual(output.nextSteps, [
-      `agent-device install <bundle-id> <app-path-or-url> --session ${output.session}`,
+      `agent-device install <bundle-id> <app-path> --session ${output.session}`,
       `agent-device open <bundle-id> --relaunch --session ${output.session}`,
     ]);
   } finally {
