@@ -359,6 +359,124 @@ describe('duplicate wrappers', () => {
   });
 });
 
+describe('android role-less clickables', () => {
+  // 30dp at the test density of 2: 60px against the 48dp (96px) recommendation.
+  const dp30 = { x: 0, y: 0, width: 60, height: 60 };
+  const dp48 = { x: 0, y: 0, width: 96, height: 96 };
+
+  test('reports a role-less clickable 30dp view as small-target', () => {
+    const { findings } = audit(
+      [node(1, { type: 'android.view.View', clickable: true, label: 'Custom action', rect: dp30 })],
+      ANDROID,
+    );
+    expect(findings).toEqual([
+      expect.objectContaining({
+        kind: 'small-target',
+        severity: 'warning',
+        ref: '@e1',
+        role: 'clickable',
+        detail: { unit: 'dp', width: 30, height: 30, recommendedSize: 48 },
+      }),
+    ]);
+  });
+
+  test('reports a role-less long-clickable view with no accessible name as missing-name', () => {
+    const { findings } = audit(
+      [node(1, { type: 'android.view.ViewGroup', longClickable: true, rect: dp48 })],
+      ANDROID,
+    );
+    expect(summarize(findings)).toEqual(['missing-name @e1']);
+  });
+
+  test('a clickable container wrapping a button reports once, on the container', () => {
+    const { findings } = audit(
+      [
+        node(1, { type: 'android.view.ViewGroup', clickable: true, rect: dp30 }),
+        node(2, { parentIndex: 1, type: 'Button', rect: dp30 }),
+      ],
+      ANDROID,
+    );
+    expect(summarize(findings)).toEqual(['small-target @e1', 'missing-name @e1']);
+  });
+
+  test('collapses a role-less clickable that is the only child of a clickable container', () => {
+    const { findings } = audit(
+      [
+        node(1, { type: 'android.view.ViewGroup', clickable: true, label: 'Outer', rect: dp30 }),
+        node(2, {
+          parentIndex: 1,
+          type: 'android.view.View',
+          clickable: true,
+          label: 'Inner',
+          rect: dp30,
+        }),
+      ],
+      ANDROID,
+    );
+    expect(summarize(findings)).toEqual(['small-target @e1']);
+  });
+
+  test('accepts a role-less clickable named by a text descendant, and keeps its size check', () => {
+    const { findings } = audit(
+      [
+        node(1, { type: 'android.view.ViewGroup', clickable: true, rect: dp48 }),
+        node(2, { parentIndex: 1, type: 'android.widget.TextView', label: 'Read more' }),
+      ],
+      ANDROID,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('a clickable node with a control class keeps its class role', () => {
+    const { findings } = audit(
+      [
+        node(1, {
+          type: 'android.widget.Button',
+          clickable: true,
+          label: 'Go',
+          rect: dp30,
+        }),
+      ],
+      ANDROID,
+    );
+    expect(findings).toEqual([
+      expect.objectContaining({ kind: 'small-target', role: 'button', ref: '@e1' }),
+    ]);
+  });
+
+  test('a clickable container with two actionable descendants reports each control', () => {
+    const { findings } = audit(
+      [
+        node(1, { type: 'android.view.ViewGroup', clickable: true, label: 'Row', rect: dp30 }),
+        node(2, { parentIndex: 1, type: 'Button', label: 'A', rect: dp30 }),
+        node(3, { parentIndex: 1, type: 'Button', label: 'B', rect: dp30 }),
+      ],
+      ANDROID,
+    );
+    expect(summarize(findings)).toEqual([
+      'small-target @e1',
+      'small-target @e2',
+      'small-target @e3',
+    ]);
+  });
+
+  test('does not evaluate a role-less Android view that is not clickable', () => {
+    const { findings } = audit(
+      [node(1, { type: 'android.view.View', rect: { x: 0, y: 0, width: 20, height: 20 } })],
+      ANDROID,
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test('keeps a clickable node without a role unevaluated on iOS', () => {
+    const { findings } = audit(
+      [node(1, { type: 'Other', clickable: true, rect: { x: 0, y: 0, width: 20, height: 20 } })],
+      IOS,
+    );
+    expect(findings).toEqual([]);
+  });
+});
+
 describe('covered-control', () => {
   const covered = { interactionBlocked: 'covered', hittable: false } as const;
 

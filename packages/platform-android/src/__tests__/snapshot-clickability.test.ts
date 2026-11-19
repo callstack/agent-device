@@ -62,6 +62,16 @@ test('retains Android helper clickable facts from the same hierarchy projection'
       [2, false],
     ],
   );
+  const longClickableByNodeIndex = evidence.longClickableByNodeIndex;
+  assert.ok(longClickableByNodeIndex);
+  assert.deepEqual(
+    [...longClickableByNodeIndex.entries()],
+    [
+      [0, true],
+      [1, false],
+      [2, undefined],
+    ],
+  );
   assert.equal(publicSnapshot.nodes[1]?.hittable, true);
   assert.deepEqual(
     publicSnapshot.nodes.map((node) => [node.clickable, node.focusable, node.scrollable]),
