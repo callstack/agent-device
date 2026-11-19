@@ -1,4 +1,4 @@
-import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
+import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 
 /**
  * Request-scoped options shared across daemon routing and Apple runner adapters.
