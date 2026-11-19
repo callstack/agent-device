@@ -19,6 +19,15 @@ export const INSTALL_SOURCE_REQUEST_TIMEOUT_MS = 600_000;
 const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
 
 /**
+ * The source-install work budget the daemon enforces from admission (#4441,
+ * decisions 6827686874/6856998913): readiness, download, extraction and
+ * installation share one remaining budget, so the daemon deadline is the
+ * 600 s client envelope less the result margin.
+ */
+export const INSTALL_SOURCE_DAEMON_DEADLINE_MS =
+  INSTALL_SOURCE_REQUEST_TIMEOUT_MS - REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
+
+/**
  * The longest `alert wait` window the request envelope can be armed for.
  *
  * The client arms its envelope with a timer whose delay ceiling is 2^31-1 ms; past it Node does not
