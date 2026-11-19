@@ -1,3 +1,4 @@
+import { HOSTED_WEBDRIVER_CONNECTION } from '@agent-device/provider-webdriver/providers';
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 
 export type TestmuOptions = {
@@ -41,26 +42,28 @@ function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
     apiVersion: 2,
     provider: 'testmu',
     credentials: { variables: environmentVariables },
-    connection: {
-      capabilities: {
-        leaseKind: 'direct-device-provider',
-        requiresAppAttachment: false,
-        requiresRemoteDaemon: false,
-        supportsArtifacts: true,
-        supportsDeferredAppSelection: false,
-        supportsDirectPortReverse: false,
-        usesCloudWebDriverLease: true,
-      },
-      resolve: async (context) =>
-        (await loadConnection(withCredentials(context.host))).resolve(context),
-      verify: async (context) =>
-        await (await loadConnection(withCredentials(context.host))).verify(context),
-    },
+    connection: testmuConnection(withCredentials),
     setup: async (host) => ({
       webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
         withCredentials(host),
       ),
     }),
+  };
+}
+
+function testmuConnection(
+  withCredentials: (host: ProviderPluginHost) => ProviderPluginHost,
+): NonNullable<AgentDevicePlugin['connection']> {
+  return {
+    capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
+    async resolve(context) {
+      const connection = await loadConnection(withCredentials(context.host));
+      return connection.resolve(context);
+    },
+    async verify(context) {
+      const connection = await loadConnection(withCredentials(context.host));
+      return connection.verify(context);
+    },
   };
 }
 
