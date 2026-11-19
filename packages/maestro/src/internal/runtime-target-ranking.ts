@@ -11,7 +11,10 @@ import {
   type MaestroResolutionProbe,
   type MaestroSnapshotResolver,
 } from './runtime-selector-resolution.ts';
-import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
+import {
+  filterVisibleMaestroMatches,
+  type MaestroRuntimePlatform,
+} from './runtime-target-policy.ts';
 import {
   orderMaestroClickableFirst,
   resolveMaestroClickability,
@@ -31,7 +34,7 @@ export type MaestroCandidateMatches = Pick<MaestroRankedCandidates, 'matches' | 
 export function rankMaestroCandidates(
   snapshot: SnapshotState,
   selector: MaestroSelector,
-  platform: MaestroPlatform,
+  platform: MaestroRuntimePlatform,
   probe: MaestroResolutionProbe = {},
 ): MaestroRankedCandidates {
   const clickability = resolveMaestroClickability(snapshot, platform);
@@ -83,7 +86,7 @@ export function createMaestroResolver(
 export function rankVisibleMaestroMatches(
   matches: SnapshotNode[],
   selector: MaestroSelector,
-  platform: MaestroPlatform,
+  platform: MaestroRuntimePlatform,
   visibility: SnapshotVisibility,
   clickability?: MaestroClickabilityDecision,
 ): SnapshotNode[] {

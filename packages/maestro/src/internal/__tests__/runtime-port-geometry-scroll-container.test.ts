@@ -3,7 +3,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveMaestroScrollableGesture } from '../runtime-port-geometry.ts';
 // The snapshot-facing platform union ('android' | 'ios'), not program-ir's,
 // which also carries 'web'.
-import type { MaestroPlatform } from '../runtime-target-policy.ts';
+import type { MaestroRuntimePlatform } from '../runtime-target-policy.ts';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { isMaestroNodeVisible } from '../snapshot-policy.ts';
 import { formatRole } from '@agent-device/kernel/snapshot';
@@ -62,7 +62,7 @@ function snapshotWithContainer(containerType: string) {
 }
 
 /** True when the container clips the target, i.e. it is the effective viewport. */
-function clips(containerType: string, platform: MaestroPlatform): boolean {
+function clips(containerType: string, platform: MaestroRuntimePlatform): boolean {
   const { nodes } = snapshotWithContainer(containerType);
   // The target sits outside the container rect but inside the Application rect,
   // so it reads as hidden exactly when the container is the viewport.
@@ -70,7 +70,7 @@ function clips(containerType: string, platform: MaestroPlatform): boolean {
 }
 
 /** True when scrollUntilVisible swipes inside the container instead of the screen. */
-function swipes(containerType: string, platform: MaestroPlatform): boolean {
+function swipes(containerType: string, platform: MaestroRuntimePlatform): boolean {
   const gesture = resolveMaestroScrollableGesture(
     snapshotWithContainer(containerType),
     { id: 'target' },

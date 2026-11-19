@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/backend';
 import type {
   InteractionEvidence,
-  InteractionTarget,
+  InteractionRequestTarget,
   PreresolvedInteractionTarget,
   ResolvedInteractionTarget,
   SettleObservation,
@@ -203,7 +203,7 @@ function touchInteractions(
   rules: Rules,
 ): DaemonCommandSurface['interactions'] {
   const press = async (
-    target: InteractionTarget,
+    target: InteractionRequestTarget,
     options: CommandOptions & { button?: unknown; [key: string]: unknown } = {},
   ) => {
     const resolved = await resolveTarget(config, rules, target, options, undefined, 'tapTarget');
@@ -343,7 +343,7 @@ const resolvedTreeQuality = new WeakMap<object, SnapshotQualityVerdict | undefin
 async function resolveTarget(
   config: AgentDeviceRuntimeConfig,
   rules: Rules,
-  target: InteractionTarget,
+  target: InteractionRequestTarget,
   options: CommandOptions,
   captureOptions: BackendSnapshotOptions = { interactiveOnly: true },
   nativeRefRoute?: 'tapTarget' | 'fillTarget' | 'hoverTarget',
@@ -435,7 +435,7 @@ function selectorChainFor(
 
 function resolvedFromNode(
   config: AgentDeviceRuntimeConfig,
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  target: Extract<InteractionRequestTarget, { kind: 'ref' }>,
   node: SnapshotNode,
   tree: Pick<SnapshotState, 'nodes' | 'snapshotQuality'>,
   action?: 'click' | 'fill',

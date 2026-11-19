@@ -9,26 +9,26 @@ import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
 import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 
-export type SelectorTarget = {
+export type InteractionSelectorTarget = {
   kind: 'selector';
   selector: string;
 };
 
-export type RefTarget = {
+export type InteractionRefTarget = {
   kind: 'ref';
   ref: string;
   fallbackLabel?: string;
 };
 
-export type ElementTarget = SelectorTarget | RefTarget;
+export type InteractionElementTarget = InteractionSelectorTarget | InteractionRefTarget;
 
-export type PointTarget = {
+export type InteractionPointTarget = {
   kind: 'point';
   x: number;
   y: number;
 };
 
-export type InteractionTarget = ElementTarget | PointTarget;
+export type InteractionRequestTarget = InteractionElementTarget | InteractionPointTarget;
 
 export type ResolvedTarget =
   | {

@@ -57,7 +57,7 @@ export type MaestroDispatchSelector = {
 
 export type MaestroSelectorEvidence = MaestroObservationEvidence;
 
-export type MaestroTargetResolution = MaestroTargetMatch & {
+export type MaestroInputTargetResolution = MaestroTargetMatch & {
   readonly kind: 'selector';
   readonly selector: MaestroSelector;
   readonly query: MaestroTargetQuery;
@@ -75,7 +75,7 @@ export type MaestroTargetQuery = {
 export type MaestroInputTarget = {
   readonly authored: MaestroGestureTarget;
   readonly point?: Point;
-  readonly resolution?: MaestroTargetResolution;
+  readonly resolution?: MaestroInputTargetResolution;
 };
 
 export type MaestroSwipeOperation = {
@@ -83,7 +83,7 @@ export type MaestroSwipeOperation = {
   readonly authored: MaestroSwipeGesture;
   /** The normalized contract consumed by the shared input runtime. */
   readonly gesture: MaestroSinglePointerGestureInput;
-  readonly target?: MaestroTargetResolution;
+  readonly target?: MaestroInputTargetResolution;
   readonly viewport?: Rect;
 };
 
