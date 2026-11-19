@@ -171,7 +171,7 @@ test.each(heldPanRefusalCases)(
           available: false,
           reason: 'unsupported-platform-leaf',
           hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
-        },
+        } as const,
       },
     }));
     const bindDevice = vi.fn(async () => {
