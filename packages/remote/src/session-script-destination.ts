@@ -499,10 +499,7 @@ function releaseStagingQuietly(file: string, staging: string): void {
   } catch {}
 }
 
-/**
- * Removes a staging directory the record can no longer name, then unlists it, so a directory that
- * cannot be removed stays listed for retirement or the sweep.
- */
+/** Unlists staging only after removal succeeds. */
 function releaseStaging(file: string, staging: string): void {
   fs.rmSync(staging, { recursive: true, force: true });
   const record = readRecord(file);
@@ -640,11 +637,7 @@ function settledRepeat(
   return { published: committedVersionEntry(settled.current, settled.entry) };
 }
 
-/**
- * Runs under the record lock, for a repeat and for a commit alike: re-reads the record, judges its destination,
- * and settles an interrupted version against the entry judged, writing the settled record. A repeat's judgment
- * is classified as a repeat's is. Nothing, when the record went away.
- */
+/** Judges the destination and settles interrupted publication under the record lock. */
 function settleUnderLock(
   file: string,
   revision: number,
@@ -657,10 +650,18 @@ function settleUnderLock(
   const { entry } = repeat ? judgeRepeat(judged, revision <= record.revision) : judged();
   let current = settlePublishing(record, entry);
   if (record.publishing) {
-    // Once the settled record is written, its staging directory can no longer be named.
+    // Write the settled commit before releasing its inode anchor. Keep staging listed until removal succeeds.
     writeRecord(file, current);
-    releaseStaging(file, record.publishing.staging);
-    current = withoutStaging(current, record.publishing.staging);
+    const { staging } = record.publishing;
+    try {
+      fs.rmSync(staging, { recursive: true, force: true });
+    } catch (error) {
+      if (isWindowsShareUnavailable(staging, error))
+        throw new CommittedVersionUnverified('changed');
+      throw error;
+    }
+    current = withoutStaging(current, staging);
+    writeRecord(file, current);
   }
   return { current, entry };
 }

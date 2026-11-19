@@ -362,6 +362,9 @@ test.each([
   { spelled: 'C:\\new\\a b.c.ad', name: 'a b.c.ad' },
   { spelled: `C:\\dir\\${'a'.repeat(256)}`, name: undefined },
   { spelled: `C:\\dir\\${'é'.repeat(255)}`, name: 'é'.repeat(255) },
+  { spelled: '~\\', name: undefined },
+  { spelled: String.raw`~/\/`, name: undefined },
+  { spelled: 'dir\\~', name: '~' },
 ])('Windows rules name $name for $spelled', ({ spelled, name }) => {
   expect(scriptEntryName(spelled, path.win32)).toBe(name);
 });
@@ -373,6 +376,7 @@ test.each([
   { spelled: '~/.', name: undefined },
   { spelled: './missing/.', name: undefined },
   { spelled: 'dir/~', name: '~' },
+  { spelled: '~\\', name: '~\\' },
   { spelled: '~/journey.ad', name: 'journey.ad' },
   { spelled: 'journey.ad/', name: 'journey.ad' },
   { spelled: 'script\uD800.ad', name: undefined },

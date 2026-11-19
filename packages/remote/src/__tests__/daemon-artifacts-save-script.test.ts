@@ -251,6 +251,13 @@ async function expectRefusedBeforeAnything(
   }
 }
 
+test.each(['~\\', String.raw`~/\/`])(
+  'remote open refuses the bare Windows home spelling %j',
+  async (saveScript) => {
+    await expectRefusedBeforeAnything({ saveScript });
+  },
+);
+
 const withForce = <T extends object>(cases: readonly T[]) =>
   cases.flatMap((entry) => [false, true].map((force) => ({ ...entry, force })));
 

@@ -408,7 +408,8 @@ function holdsColonAfterRoot(normalized: string, rules: path.PlatformPath): bool
  */
 export function scriptEntryName(spelled: string, rules: path.PlatformPath): string | undefined {
   // A lone surrogate is written as U+FFFD, so the file created would be another name than the one judged.
-  if (spelled.includes('\0') || /\p{Surrogate}/u.test(spelled) || /^~\/*$/.test(spelled)) {
+  const bareHome = rules.sep === '\\' ? /^~[\\/]*$/ : /^~\/*$/;
+  if (spelled.includes('\0') || /\p{Surrogate}/u.test(spelled) || bareHome.test(spelled)) {
     return undefined;
   }
   // The raw last segment first: a normalization folds a final `.` or `..` away.
