@@ -141,7 +141,10 @@ extension RunnerTests {
   func watchTypeCommandResponse(activeApp: XCUIApplication, command: Command, text: String) throws -> Response {
     var point: CGPoint?
     if let x = command.x, let y = command.y {
-      if case .unsupported(let message, let hint) = try tapAt(app: activeApp, x: x, y: y) {
+      switch try tapAt(app: activeApp, x: x, y: y) {
+      case .performed:
+        break
+      case .unsupported(let message, let hint), .notDispatched(let message, let hint):
         return Response(ok: false, error: ErrorPayload(message: message, hint: hint))
       }
       point = CGPoint(x: x, y: y)
