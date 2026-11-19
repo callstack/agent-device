@@ -91,7 +91,6 @@ import {
 import {
   closeDaemonStartupProgressChannel,
   reportDaemonStartupPhase,
-  type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
@@ -556,10 +555,7 @@ async function startDaemonRuntimeOnHost(
       close: { retainRegistration: false },
     });
   });
-  // Each phase goes to the launcher over the IPC channel it opened at spawn; without one (embedded
-  // or manual start) reporting is a no-op, and a failed send never affects startup.
-  const recordStartupPhase = (phase: DaemonStartupPhase): void => reportDaemonStartupPhase(phase);
-  recordStartupPhase('lock-acquired');
+  reportDaemonStartupPhase('lock-acquired');
 
   rollback.onRollback(() => {
     stopMetadataLossWatch();
@@ -624,7 +620,7 @@ async function startDaemonRuntimeOnHost(
       error: error instanceof Error ? error.message : String(error),
     }).catch(() => undefined);
   });
-  recordStartupPhase('recovery-finished');
+  reportDaemonStartupPhase('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
     await import('./server-startup.ts');
   const { servers, socketPort, httpPort } = await openDaemonServers(
@@ -664,9 +660,9 @@ async function startDaemonRuntimeOnHost(
     },
     rollback,
   );
-  recordStartupPhase('listening');
+  reportDaemonStartupPhase('listening');
   publishDaemonInfo(socketPort, httpPort);
-  recordStartupPhase('registered');
+  reportDaemonStartupPhase('registered');
   closeDaemonStartupProgressChannel();
   stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);

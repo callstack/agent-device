@@ -6,7 +6,7 @@
  * test fixture that spawns the daemon directly, a manual start) reports nothing: sending is a
  * no-op, and a failed send (launcher gone) never affects startup.
  */
-export const DAEMON_STARTUP_PHASES = Object.freeze([
+const DAEMON_STARTUP_PHASES = Object.freeze([
   'modules-loaded',
   'composition-loaded',
   'lock-acquired',
@@ -19,42 +19,30 @@ export type DaemonStartupPhase = (typeof DAEMON_STARTUP_PHASES)[number];
 
 const DAEMON_STARTUP_PHASE_SET: ReadonlySet<string> = new Set<string>(DAEMON_STARTUP_PHASES);
 
-export const DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE = 'daemon-startup-phase';
+const DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE = 'daemon-startup-phase';
 
 /**
- * One phase report from a daemon child to its launcher. `pid` lets the receiver attribute the
- * message to the exact child it spawned; only that child's messages count for its launch.
+ * One phase report from a daemon child to its launcher. The IPC channel connects exactly one
+ * launcher to the child it spawned, so the message needs no sender identity.
  */
-export type DaemonStartupProgressMessage = Readonly<{
+type DaemonStartupProgressMessage = Readonly<{
   type: typeof DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE;
-  pid: number;
   phase: DaemonStartupPhase;
 }>;
 
-/** This process's phase message, stamped with its own pid. */
-export function createDaemonStartupProgressMessage(
-  phase: DaemonStartupPhase,
-): DaemonStartupProgressMessage {
-  return { type: DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE, pid: process.pid, phase };
-}
-
 /**
- * Parses one channel message. Anything unknown or malformed parses to null, so a receiver never
- * fails a startup over a message it does not recognize.
+ * The phase one channel message reports. Anything unknown or malformed parses to null, so a
+ * receiver never fails a startup over a message it does not recognize.
  */
-export function parseDaemonStartupProgressMessage(
-  message: unknown,
-): DaemonStartupProgressMessage | null {
+export function parseDaemonStartupProgressMessage(message: unknown): DaemonStartupPhase | null {
   if (typeof message !== 'object' || message === null) return null;
-  const record = message as Record<string, unknown>;
-  if (record.type !== DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE) return null;
-  const { pid, phase } = record;
-  if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) return null;
-  if (typeof phase !== 'string' || !DAEMON_STARTUP_PHASE_SET.has(phase)) return null;
-  return { type: DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE, pid, phase: phase as DaemonStartupPhase };
+  const { type, phase } = message as Record<string, unknown>;
+  if (type !== DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE) return null;
+  return typeof phase === 'string' && DAEMON_STARTUP_PHASE_SET.has(phase)
+    ? (phase as DaemonStartupPhase)
+    : null;
 }
 
-let channelUnrefed = false;
 let reportedSendFailure = false;
 
 /**
@@ -75,14 +63,15 @@ export function reportDaemonStartupPhase(phase: DaemonStartupPhase): void {
   if (process.env[DAEMON_PROGRESS_CHANNEL_ENV] !== '1') return;
   const channel = process.channel;
   if (!channel || typeof process.send !== 'function' || !process.connected) return;
-  if (!channelUnrefed) {
-    channelUnrefed = true;
-    channel.unref();
-  }
+  channel.unref();
   try {
     // The callback form routes a closed-channel error to it instead of throwing asynchronously,
     // which an uncaughtException handler would otherwise turn into a daemon exit.
-    process.send(createDaemonStartupProgressMessage(phase), (error) => {
+    const message: DaemonStartupProgressMessage = {
+      type: DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE,
+      phase,
+    };
+    process.send(message, (error) => {
       if (error && !reportedSendFailure) {
         reportedSendFailure = true;
         process.stderr.write(`Daemon startup phase report failed: ${error.message}\n`);

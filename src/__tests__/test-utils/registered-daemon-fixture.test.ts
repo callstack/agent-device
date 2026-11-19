@@ -83,7 +83,7 @@ test('args built before any launch keep their own entry script under a concurren
     });
     second.channel?.onMessage((message) => secondMessages.push(message));
     assert.equal((await second.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-    const firstPhases = firstMessages.map((m) => parseDaemonStartupProgressMessage(m)?.phase);
+    const firstPhases = firstMessages.map((m) => parseDaemonStartupProgressMessage(m));
     assert.deepEqual(firstPhases, ['modules-loaded']);
     assert.equal(
       firstPhases.includes('lock-acquired'),
@@ -91,7 +91,7 @@ test('args built before any launch keep their own entry script under a concurren
       'child 1 must run the script built for it, not child 2’s',
     );
     assert.deepEqual(
-      secondMessages.map((m) => parseDaemonStartupProgressMessage(m)?.phase),
+      secondMessages.map((m) => parseDaemonStartupProgressMessage(m)),
       [],
       'the busy child exits before its post-acquisition phase',
     );

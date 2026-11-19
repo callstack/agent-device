@@ -5,8 +5,6 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
   DAEMON_PROGRESS_CHANNEL_ENV,
-  DAEMON_STARTUP_PHASES,
-  createDaemonStartupProgressMessage,
   parseDaemonStartupProgressMessage,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -14,33 +12,23 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 /** A spawn environment that marks the child as a launcher-spawned detached daemon. */
 const progressChannelEnv = { ...process.env, [DAEMON_PROGRESS_CHANNEL_ENV]: '1' };
 
-test('the phase vocabulary keeps exactly the six runtime phases', () => {
-  expect([...DAEMON_STARTUP_PHASES]).toEqual([
-    'modules-loaded',
-    'composition-loaded',
-    'lock-acquired',
-    'recovery-finished',
-    'listening',
-    'registered',
-  ]);
-});
-
-test('a phase message is stamped with the sending pid and parses back', () => {
-  const message = createDaemonStartupProgressMessage('lock-acquired');
-  assert.equal(message.type, 'daemon-startup-phase');
-  assert.equal(message.pid, process.pid);
-  expect(parseDaemonStartupProgressMessage(message)).toEqual(message);
+test.each([
+  'modules-loaded',
+  'composition-loaded',
+  'lock-acquired',
+  'recovery-finished',
+  'listening',
+  'registered',
+] as const)('the %s phase message parses', (phase) => {
+  expect(parseDaemonStartupProgressMessage({ type: 'daemon-startup-phase', phase })).toBe(phase);
 });
 
 test.each([
   ['null', null],
   ['a string', 'daemon-startup-phase'],
-  ['an unknown type', { type: 'heartbeat', pid: 1, phase: 'listening' }],
-  ['an unknown phase', { type: 'daemon-startup-phase', pid: 1, phase: 'heartbeat' }],
-  ['a non-string phase', { type: 'daemon-startup-phase', pid: 1, phase: 7 }],
-  ['a missing pid', { type: 'daemon-startup-phase', phase: 'listening' }],
-  ['a non-integer pid', { type: 'daemon-startup-phase', pid: 1.5, phase: 'listening' }],
-  ['a zero pid', { type: 'daemon-startup-phase', pid: 0, phase: 'listening' }],
+  ['an unknown type', { type: 'heartbeat', phase: 'listening' }],
+  ['an unknown phase', { type: 'daemon-startup-phase', phase: 'heartbeat' }],
+  ['a non-string phase', { type: 'daemon-startup-phase', phase: 7 }],
 ])('parsing ignores %s', (_name, message) => {
   expect(parseDaemonStartupProgressMessage(message)).toBeNull();
 });
@@ -147,10 +135,6 @@ closeDaemonStartupProgressChannel();
   assert.equal(stderr, '');
   assert.deepEqual(
     messages.map((message) => parseDaemonStartupProgressMessage(message)),
-    [
-      { type: 'daemon-startup-phase', pid: child.pid, phase: 'modules-loaded' },
-      { type: 'daemon-startup-phase', pid: child.pid, phase: 'lock-acquired' },
-      { type: 'daemon-startup-phase', pid: child.pid, phase: 'lock-acquired' },
-    ],
+    ['modules-loaded', 'lock-acquired', 'lock-acquired'],
   );
 });

@@ -327,14 +327,12 @@ async function attemptLocalDaemonStartup(
     return await recoverFailedDaemonLaunch(settings, error);
   }
   const observation: StartupPhaseObservation = { spawnedAtMs, receipts: {} };
-  // Only this launch's own child can reach this channel, and only its well-formed phase messages
-  // count: each phase's first receipt on this launcher's clock is the one that resets the stall
-  // window, and an unknown or malformed message is ignored.
+  // Only this launch's own child can reach its channel. Each phase's first receipt on this
+  // launcher's clock resets the stall window.
   launch.channel?.onMessage((message) => {
-    const progress = parseDaemonStartupProgressMessage(message);
-    if (!progress || progress.pid !== launch.pid) return;
-    if (observation.receipts[progress.phase] === undefined)
-      observation.receipts[progress.phase] = Date.now();
+    const phase = parseDaemonStartupProgressMessage(message);
+    if (phase && observation.receipts[phase] === undefined)
+      observation.receipts[phase] = Date.now();
   });
   const startup = await waitForDaemonStartup(deadline, settings, launch, observation);
   if (startup.kind === 'ready') {

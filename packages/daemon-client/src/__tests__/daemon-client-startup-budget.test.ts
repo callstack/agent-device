@@ -209,14 +209,9 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
     assert.equal(http.rpcRequests.length, 1);
     assert.ok(spawned.child && isProcessAlive(spawned.child.pid), 'the client must not retire it');
     // The wait survived on four distinct phases the child really sent over its own channel.
-    const reportedPhases = reported.map(
-      (message) => parseDaemonStartupProgressMessage(message)?.phase,
-    );
+    const reportedPhases = reported.map((message) => parseDaemonStartupProgressMessage(message));
     for (const phase of phases) {
       assert.ok(reportedPhases.includes(phase), `the ${phase} phase was never reported`);
-    }
-    for (const message of reported) {
-      assert.equal(parseDaemonStartupProgressMessage(message)?.pid, spawned.child?.pid);
     }
     assert.deepEqual(
       startupPhaseFileEntries(paths),

@@ -7,7 +7,6 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { KNOWN_APP_ERROR_CODES } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { DAEMON_STARTUP_PHASES } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
@@ -636,13 +635,19 @@ launch.channel?.onMessage((message) => {
     assert.ok(daemonPid, 'the launcher must have reported its child pid');
     const messages = lines
       .filter((line) => line.startsWith('phase '))
-      .map((line) => JSON.parse(line.slice('phase '.length)) as { pid?: unknown; phase?: unknown });
+      .map((line) => JSON.parse(line.slice('phase '.length)) as { phase?: unknown });
     assert.deepEqual(
       messages.map((message) => message.phase),
-      [...DAEMON_STARTUP_PHASES],
+      [
+        'modules-loaded',
+        'composition-loaded',
+        'lock-acquired',
+        'recovery-finished',
+        'listening',
+        'registered',
+      ],
       'every startup phase must reach the launcher over the channel, in order',
     );
-    for (const message of messages) assert.equal(message.pid, daemonPid);
     // The daemon registered and serves.
     const info = await readPublishedInfo(paths);
     assert.ok(info, 'the daemon must publish its registration');
