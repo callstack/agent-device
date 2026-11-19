@@ -1067,6 +1067,46 @@ test('drops the covered-control finding for a RecyclerView row under a BottomNav
   expect(summarize(audit(nodes, ANDROID).findings)).toEqual([]);
 });
 
+test('keeps the finding when the strip above the bottom bar is shorter than the covered row', () => {
+  // The list scrolls, but only 31dp of it sits above the bar, so no scroll can bring the 72dp row
+  // fully into view: the scan publishes no `scrollCanReveal` and the audit keeps the finding.
+  const raw: RawSnapshotNode[] = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'androidx.recyclerview.widget.RecyclerView',
+      scrollable: true,
+      hiddenContentBelow: true,
+      rect: { x: 0, y: 760, width: 402, height: 114 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'android.widget.Button',
+      label: 'Grilled asparagus salad',
+      clickable: true,
+      rect: { x: 16, y: 800, width: 370, height: 72 },
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
+      clickable: true,
+      rect: { x: 0, y: 791, width: 402, height: 83 },
+    },
+  ];
+  const nodes = annotateCoveredSnapshotNodes(raw, { producer: 'android-uiautomator' }).map(
+    (scanned) => ({ ...scanned, ref: `e${scanned.index}` }),
+  );
+  expect(nodes[1]).toMatchObject({
+    interactionBlocked: 'covered',
+    coveredBy: { persistentBar: true },
+  });
+  expect(nodes[1]?.coveredBy?.scrollCanReveal).toBeUndefined();
+  expect(summarize(audit(nodes, ANDROID).findings)).toEqual(['covered-control @e1']);
+});
+
 test.for<CoverPublication>([
   { name: 'sheet', type: 'Sheet' },
   { name: 'dialog', type: 'Dialog', label: 'Tab Bar' },

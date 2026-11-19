@@ -213,14 +213,18 @@ function scrollCanRevealTarget(
   cover: RawSnapshotNode,
 ): boolean {
   const coverRect = positiveRect(cover.rect);
-  if (!coverRect) return false;
+  const targetRect = positiveRect(target.rect);
+  if (!coverRect || !targetRect) return false;
   for (const scroller of scrollableAncestorsOf(target, scan.byIndex)) {
     const scrollerRect = positiveRect(scroller.rect);
     if (!scrollerRect) continue;
-    const revealsFromAbove = scroller.hiddenContentBelow === true && scrollerRect.y < coverRect.y;
+    // The clear strip on the side the content scrolls toward must be tall enough to hold the target.
+    const stripAbove = coverRect.y - scrollerRect.y;
+    const stripBelow = scrollerRect.y + scrollerRect.height - (coverRect.y + coverRect.height);
+    const revealsFromAbove =
+      scroller.hiddenContentBelow === true && stripAbove >= targetRect.height;
     const revealsFromBelow =
-      scroller.hiddenContentAbove === true &&
-      scrollerRect.y + scrollerRect.height > coverRect.y + coverRect.height;
+      scroller.hiddenContentAbove === true && stripBelow >= targetRect.height;
     if (revealsFromAbove || revealsFromBelow) return true;
   }
   return false;
