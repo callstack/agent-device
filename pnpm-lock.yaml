@@ -21,9 +21,6 @@ importers:
 
   .:
     devDependencies:
-      '@agent-device/ad-replay':
-        specifier: workspace:*
-        version: link:packages/ad-replay
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:packages/ad-script
@@ -78,9 +75,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
-      '@agent-device/maestro':
-        specifier: workspace:*
-        version: link:packages/maestro
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:packages/platform-android
@@ -123,9 +117,6 @@ importers:
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:packages/replay-port
-      '@agent-device/replay-test':
-        specifier: workspace:*
-        version: link:packages/replay-test
       '@agent-device/revyl':
         specifier: workspace:*
         version: link:packages/provider-revyl
@@ -239,10 +230,16 @@ importers:
         version: 3.2.0
       tsdown:
         specifier: ^0.22.14
-        version: 0.22.14(@arethetypeswrong/core@0.18.5)(@volar/typescript@2.4.30(typescript@7.0.2))(publint@0.3.24)(typescript@7.0.2)
+        version: 0.22.14(@arethetypeswrong/core@0.18.5)(@volar/typescript@2.4.30(typescript@7.0.2))(publint@0.3.24)(typescript@7.0.2)(unrun@0.3.1)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      undici:
+        specifier: 7.30.1
+        version: 7.30.1
+      unrun:
+        specifier: 0.3.1
+        version: 0.3.1
       vite:
         specifier: ^8.3.5
         version: 8.3.8(@types/node@22.20.1)(yaml@2.9.1)
@@ -524,9 +521,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/maestro':
-        specifier: workspace:*
-        version: link:../maestro
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:../platform-android
@@ -539,9 +533,6 @@ importers:
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:../replay-port
-      '@agent-device/replay-test':
-        specifier: workspace:*
-        version: link:../replay-test
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
@@ -555,9 +546,18 @@ importers:
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:../apple-runner
+      '@agent-device/maestro':
+        specifier: workspace:*
+        version: link:../maestro
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy
+      '@agent-device/replay':
+        specifier: workspace:*
+        version: link:../replay
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
@@ -690,7 +690,7 @@ importers:
   packages/kernel: {}
 
   packages/maestro:
-    dependencies:
+    devDependencies:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -712,7 +712,12 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
-    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
       undici:
         specifier: 7.30.1
         version: 7.30.1
@@ -1124,11 +1129,26 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
 
-  packages/replay-port:
-    dependencies:
+  packages/replay:
+    devDependencies:
       '@agent-device/ad-replay':
         specifier: workspace:*
         version: link:../ad-replay
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+
+  packages/replay-port:
+    dependencies:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -1150,12 +1170,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/maestro':
+      '@agent-device/plugins':
         specifier: workspace:*
-        version: link:../maestro
-      '@agent-device/replay-test':
-        specifier: workspace:*
-        version: link:../replay-test
+        version: link:../plugins
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
@@ -5567,6 +5584,16 @@ packages:
   unist-util-visit@5.1.0:
     resolution: {integrity: sha512-m+vIdyeCOpdr/QeQCu2EzxX/ohgS8KbnPDgFni4dQsfSCtpz8UqDyY5GjRru8PDKuYn7Fq19j1CQ+nJSsGKOzg==}
 
+  unrun@0.3.1:
+    resolution: {integrity: sha512-onIck/oNnCaytwths1ZVp1LK2Gq2hPoyFhiHebObuUXqR3S0uHuLLaBK8K6mRRgV7Ptip8AnNvaUsgzwWwBZuA==}
+    engines: {node: ^22.13.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      synckit: ^0.11.11
+    peerDependenciesMeta:
+      synckit:
+        optional: true
+
   unstorage@1.17.6:
     resolution: {integrity: sha512-gjKtcmn/KwZuJZO9o2sc0esAQnhmTw0LviDHwevTXbJMYs0dRTp8ZEEWXHU0vTpzbN3cA0yxlTeyXssMp3zDqw==}
     peerDependencies:
@@ -5797,16 +5824,22 @@ packages:
     resolution: {integrity: sha512-9K2k72s4n7rV9s4bX0MyjbX9iBribvKZbBJKuEmTCZfeWJXs6Yh7bGpY4eoc7UufAjvpheBqwyZCOIPBvxCv0A==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
+      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
+        optional: true
+      typescript:
         optional: true
 
   volar-service-typescript@0.0.71:
     resolution: {integrity: sha512-yTtM/BVT6hoyEYnDtaCyAtNhdNeS/mhTTABlBOdw3NNiRBUin3IznFJpgfjer4c6RYopiPjjQjc9VFhxVl1mLw==}
     peerDependencies:
       '@volar/language-service': ~2.4.0
+      typescript: '*'
     peerDependenciesMeta:
       '@volar/language-service':
+        optional: true
+      typescript:
         optional: true
 
   volar-service-yaml@0.0.71:
@@ -6121,8 +6154,8 @@ snapshots:
       volar-service-emmet: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-html: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       volar-service-prettier: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(prettier@3.9.10)
-      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
-      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
+      volar-service-typescript: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
+      volar-service-typescript-twoslash-queries: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3)
       volar-service-yaml: 0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))
       vscode-html-languageservice: 5.6.2
       vscode-uri: 3.2.0
@@ -10143,7 +10176,7 @@ snapshots:
     dependencies:
       typescript: 7.0.2
 
-  tsdown@0.22.14(@arethetypeswrong/core@0.18.5)(@volar/typescript@2.4.30(typescript@7.0.2))(publint@0.3.24)(typescript@7.0.2):
+  tsdown@0.22.14(@arethetypeswrong/core@0.18.5)(@volar/typescript@2.4.30(typescript@7.0.2))(publint@0.3.24)(typescript@7.0.2)(unrun@0.3.1):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0
@@ -10164,6 +10197,7 @@ snapshots:
       '@arethetypeswrong/core': 0.18.5
       publint: 0.3.24
       typescript: 7.0.2
+      unrun: 0.3.1
     transitivePeerDependencies:
       - '@typescript/native-preview'
       - '@volar/typescript'
@@ -10296,6 +10330,10 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
+  unrun@0.3.1:
+    dependencies:
+      rolldown: 1.2.5
+
   unstorage@1.17.6:
     dependencies:
       anymatch: 3.1.3
@@ -10412,13 +10450,14 @@ snapshots:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
       prettier: 3.9.10
 
-  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
+  volar-service-typescript-twoslash-queries@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
     dependencies:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
+      typescript: 5.9.3
 
-  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
+  volar-service-typescript@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3))(typescript@5.9.3):
     dependencies:
       path-browserify: 1.0.1
       semver: 7.8.5
@@ -10428,6 +10467,7 @@ snapshots:
       vscode-uri: 3.2.0
     optionalDependencies:
       '@volar/language-service': 2.4.30(typescript@5.9.3)
+      typescript: 5.9.3
 
   volar-service-yaml@0.0.71(@volar/language-service@2.4.30(typescript@5.9.3)):
     dependencies:
