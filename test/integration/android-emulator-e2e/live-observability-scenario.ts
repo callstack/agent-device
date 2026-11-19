@@ -44,6 +44,7 @@ async function assertMetrics(context: LiveContext): Promise<void> {
 async function assertLogs(context: LiveContext): Promise<void> {
   const started = await runStep(context, 'start Android fixture logcat stream', ['logs', 'start']);
   assert.equal(started.json?.data?.started, true, JSON.stringify(started.json));
+  assert.equal(started.json?.data?.relaunched, undefined, JSON.stringify(started.json));
   assert.ok(fs.existsSync(String(started.json?.data?.path)), JSON.stringify(started.json));
   const inspected = await runStep(context, 'inspect Android fixture logcat stream', [
     'logs',

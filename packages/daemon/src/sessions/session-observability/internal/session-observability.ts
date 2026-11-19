@@ -388,7 +388,10 @@ async function startSessionAppLog(
       envelope: result.envelope,
       throwIfCanceled: params.throwIfCanceled ?? (() => {}),
     });
-    return { ok: true, data: { path: outputPath, started: true } };
+    return {
+      ok: true,
+      data: { path: outputPath, started: true, ...(result.relaunched ? { relaunched: true } : {}) },
+    };
   } catch (error) {
     const normalized = recordSessionAppLogFailure({
       ref: params.ref,

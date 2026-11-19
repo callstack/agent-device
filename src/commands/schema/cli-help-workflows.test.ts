@@ -7,7 +7,11 @@ test('usageForCommand resolves debugging help topic', async () => {
   if (help === null) throw new Error('Expected debugging help text');
   assert.match(help, /^agent-device \S+ — debugging/);
   assert.match(help, /Use logs when you need the lead-up timeline/);
-  assert.match(help, /relaunches the session app through devicectl process launch --console/);
+  assert.match(
+    help,
+    /logs start and logs clear --restart relaunch the session app through devicectl process launch --console/,
+  );
+  assert.match(help, /logs stop ends the app/);
   assert.match(help, /Use debug symbols when you have crash\.ips\/crash\.log/);
   assert.match(help, /Use Xcode\/LLDB when you need live state/);
   assert.match(help, /debug symbols --artifact crash\.ips --search-path \.\/build/);
