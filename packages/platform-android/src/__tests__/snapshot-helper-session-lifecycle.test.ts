@@ -59,7 +59,7 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('an older ready helper stays one-shot across time and capture options until the build changes', async () => {
+test('an older ready helper stays one-shot across time until the build changes', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
@@ -80,10 +80,6 @@ test('an older ready helper stays one-shot across time and capture options until
     assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
     now.mockReturnValue(Date.now() + 61_000);
     assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
-    assert.equal(
-      await captureAndroidSnapshotWithHelperSession({ ...options, waitForIdleTimeoutMs: 40 }),
-      undefined,
-    );
     assert.equal(spawnArgs.length, 1);
     assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 1);
   });
