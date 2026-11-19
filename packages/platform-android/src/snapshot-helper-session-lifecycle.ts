@@ -108,8 +108,10 @@ const sessionsSlot = Symbol('androidSnapshotHelperSessions');
 const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
   runtimeSlot(sessionsSlot, () => new Map<string, AndroidSnapshotHelperSession>());
 /**
- * Capture identity → when this process may spawn that helper build again after a failed start or a
- * failed session capture.
+ * Session identity, or a helper build alone, → when this process may spawn that helper build again
+ * after a failed start or a failed session capture. A verified install of an unsupported transport
+ * is recorded under the build alone, because that is a property of the build and not of the budgets
+ * a command asked it to capture under.
  */
 const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
 const failedSessions = (): Map<string, number> =>
@@ -152,6 +154,7 @@ export async function acquireAndroidSnapshotHelperSession(
   const session = await resolveAndroidSnapshotHelperSession({
     deviceKey,
     identity: createSessionIdentity(build, resolved),
+    buildIdentity: createHelperBuildIdentity(build),
     options,
     resolved,
     startBudgetMs: resolveAndroidSnapshotHelperSessionBudgetMs(callerResolved.commandTimeoutMs),
@@ -177,11 +180,17 @@ export async function getLiveAndroidSnapshotHelperSession(
 async function resolveAndroidSnapshotHelperSession(params: {
   deviceKey: string;
   identity: string;
+  buildIdentity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
-  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
+  if (
+    isAndroidSnapshotHelperSessionBackedOff(params.buildIdentity) ||
+    isAndroidSnapshotHelperSessionBackedOff(params.identity)
+  ) {
+    return undefined;
+  }
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
   return sessions().get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
 }
@@ -203,12 +212,14 @@ async function retireUnusableAndroidSnapshotHelperSession(
 /**
  * Starts the helper, or answers `undefined` for a start that failed. A start that failed is not a
  * command that failed — the caller answers with the one-shot transport. Transient failures earn
- * a timed backoff. A verified install of an unsupported build stays one-shot until the identity
- * changes. An unverified install can differ from the selected APK, so it gets only the timed backoff.
+ * a timed backoff under the capture identity. A verified install of an unsupported build is
+ * remembered under the helper build alone, so no other capture settings can pay for that start
+ * again. An unverified install can differ from the selected APK, so it gets only the timed backoff.
  */
 async function tryStartAndroidSnapshotHelperSession(params: {
   deviceKey: string;
   identity: string;
+  buildIdentity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
@@ -224,8 +235,9 @@ async function tryStartAndroidSnapshotHelperSession(params: {
       params.options.helperSha256Verified &&
       params.options.helperSha256
     ) {
-      // The backoff never runs out, so this identity never starts again and the warning fires once.
-      failedSessions().set(params.identity, Number.POSITIVE_INFINITY);
+      // The backoff never runs out, so this helper build never starts again, whatever capture
+      // settings the next command asks for, and the warning fires once.
+      failedSessions().set(params.buildIdentity, Number.POSITIVE_INFINITY);
       emitDiagnostic({
         level: 'warn',
         phase: 'android_snapshot_helper_session_transport_unsupported',
@@ -455,6 +467,16 @@ function createSessionIdentity(
     maxDepth: resolved.maxDepth,
     maxNodes: resolved.maxNodes,
   });
+}
+
+/**
+ * The key for a decision that belongs to the helper build rather than to one command's budgets: what
+ * a build can or cannot do does not change with the traversal limits it was asked to capture under.
+ */
+function createHelperBuildIdentity(
+  build: { deviceKey: string } & AndroidSnapshotHelperSessionHelperIdentity,
+): string {
+  return JSON.stringify(build);
 }
 
 /**
