@@ -36,9 +36,12 @@ export async function shakeAndroidEmulator(
       await setAcceleration(device, [String(x), rest[1], rest[2]], signal);
       await sleep(SHAKE_SWING_MS, signal);
     }
-  } finally {
-    await setAcceleration(device, rest, undefined);
+  } catch (error) {
+    // The swing failure is the one to report; a restore that also fails must not replace it.
+    await setAcceleration(device, rest, undefined).catch(() => undefined);
+    throw error;
   }
+  await setAcceleration(device, rest, undefined);
 }
 
 async function readRestAcceleration(
@@ -46,7 +49,7 @@ async function readRestAcceleration(
   signal: AbortSignal | undefined,
 ): Promise<Acceleration> {
   const reply = await runEmulatorConsole(device, ['sensor', 'get', 'acceleration'], signal);
-  if (reply.refusal !== undefined) throw consoleRefused(device, reply);
+  if (reply.refusal !== undefined) throw consoleRefused(device, reply, { dispatched: 'no' });
   const reading = /^acceleration\s*=\s*([^:\s]+):([^:\s]+):([^:\s]+)\s*$/m.exec(reply.stdout);
   if (!reading || reading.slice(1).some((axis) => !Number.isFinite(Number(axis)))) {
     throw new AppError('COMMAND_FAILED', 'The emulator console returned no accelerometer reading', {
@@ -75,10 +78,12 @@ async function setAcceleration(
 function consoleRefused(
   device: DeviceInfo,
   reply: Readonly<{ stdout: string; refusal?: string }>,
+  extra: Readonly<{ dispatched?: 'no' }> = {},
 ): AppError {
   return new AppError('COMMAND_FAILED', 'The emulator console refused the shake', {
     deviceId: device.id,
     reason: 'shake-console-refused',
+    ...extra,
     stdout: reply.stdout.trim(),
     ...(reply.refusal ? { consoleReason: reply.refusal } : {}),
     hint: CONSOLE_REFUSED_HINT,

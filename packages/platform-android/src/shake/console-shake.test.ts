@@ -85,3 +85,28 @@ test('a cancelled shake stops swinging and restores the rest reading without the
   ]);
   expect(mockConsole.mock.calls.at(-1)![2]).toBeUndefined();
 });
+
+test('a console that refuses the rest reading fails as not dispatched, before any swing', async () => {
+  mockConsole.mockResolvedValue({ stdout: 'KO: unknown sensor\n', refusal: 'unknown sensor' });
+
+  await expect(shakeAndroidEmulator(ANDROID_EMULATOR, undefined)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'shake-console-refused', dispatched: 'no' },
+  });
+  expect(consoleCommands()).toEqual(['sensor get acceleration']);
+});
+
+test('a restore that also fails does not replace the refusal that stopped the shake', async () => {
+  let sets = 0;
+  mockConsole.mockImplementation(async (_device, command) => {
+    if (command[1] === 'get') return { stdout: REST };
+    sets += 1;
+    if (sets === 1) return { stdout: 'KO: sensor disabled\n', refusal: 'sensor disabled' };
+    throw new Error('adb: device offline');
+  });
+
+  await expect(shakeAndroidEmulator(ANDROID_EMULATOR, undefined)).rejects.toMatchObject({
+    details: { reason: 'shake-console-refused', consoleReason: 'sensor disabled' },
+  });
+  expect(sets).toBe(2);
+});

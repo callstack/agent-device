@@ -299,6 +299,16 @@ test('Android admits the shake fact on emulators and refuses every other kind', 
     });
     expect(binding.operations.shake).toBeUndefined();
   }
+
+  const tv = await bindOrdinary(createAndroidPlatformRuntime(androidNavigationHost()), {
+    ...ANDROID_EMULATOR,
+    target: 'tv' as const,
+  });
+  expect(tv.facts.operations.shake).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(tv.operations.shake).toBeUndefined();
 });
 
 test('Android admits the fold fact on emulators and refuses every other kind', async () => {
