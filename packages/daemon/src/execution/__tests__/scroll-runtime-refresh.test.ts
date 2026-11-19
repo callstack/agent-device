@@ -546,9 +546,9 @@ test('bound scroll refresh starts a nested pull inside the band its ancestor sho
 });
 
 test('bound scroll refresh refuses when the visible band a clipping ancestor leaves is too short', async () => {
-  // Same nesting, but the ancestor shows only 200px of the list. The pull needs 320px to commit, so
-  // dispatching it would report a refresh the pull provably cannot trigger; the raw frame would have
-  // offered 383px of travel that is not on screen.
+  // Same nesting, but the ancestor shows only 200px of the list. A pull needs 320px to commit, so
+  // dispatching it would report a refresh the pull provably cannot trigger: the raw frame would have
+  // offered 383px of travel, 183px of which is on screen.
   const nestedScreen: SnapshotNode[] = [
     {
       ref: 'e1',
