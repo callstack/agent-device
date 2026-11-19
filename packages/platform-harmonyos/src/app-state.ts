@@ -24,9 +24,10 @@ export async function readHarmonyAppState(
 
 /**
  * What one `aa dump -l` output yielded. `no-foreground-mission` is a read that answered: the
- * output parsed as a mission list and no mission holds the foreground, which a system surface
- * (the lock screen is the typical one) produces. `unparseable` output names no mission list at
- * all, or a foreground mission whose own name did not parse.
+ * output parsed as a mission list with no foreground mission, or answered with no mission block
+ * at all, which a system surface that hides the mission list (the lock screen is the typical
+ * one) produces. `unparseable` is an empty output, or a foreground mission whose own name did
+ * not parse.
  */
 export type HarmonyForegroundParse =
   | { kind: 'foreground'; package: string; activity: string }
@@ -46,5 +47,10 @@ export function parseHarmonyForegroundRead(rawOutput: string): HarmonyForeground
     if (!packageName || !activity) return { kind: 'unparseable' };
     return { kind: 'foreground', package: packageName, activity };
   }
-  return sawMission ? { kind: 'no-foreground-mission' } : { kind: 'unparseable' };
+  // A dump that answers with content but no mission block is the keyguard
+  // shape on units whose lock screen hides the mission list: the read read
+  // the device, and only an empty answer is a dead pipe.
+  return sawMission || rawOutput.trim().length > 0
+    ? { kind: 'no-foreground-mission' }
+    : { kind: 'unparseable' };
 }

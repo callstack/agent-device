@@ -53,6 +53,15 @@ suspended state (the poll confirmed on its first read, twice, with a fresh
 PIN, which this evidence session does not handle, so the end-to-end
 `no-foreground` open remains maintainer-runnable.
 
+One wider keyguard shape is pinned in the suite without a live row: a dump
+that answers with content but no `Mission ID #` block at all (a lock
+screen that hides the mission list). The parser classifies it as
+`no-foreground-mission` — the unlock-hint path — and keeps `unparseable`
+for an empty answer, so a locked unit cannot fall through to the
+connection hint. The maintainer-run protocol above also documents this
+shape: the raw dump should show mission blocks with zero `#FOREGROUND`
+lines, or no mission blocks at all.
+
 ## The failed-probe path, live at the head
 
 The second unconfirmed classification uses the maintainer's offered stub:
@@ -97,7 +106,7 @@ ledger.
 
 ## Suite
 
-`packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 31 tests
+`packages/platform-harmonyos/src/__tests__/app-lifecycle.test.ts`: 32 tests
 pass on this branch's build; the full `check:unit` suite is green (20109
 tests, lint clean) with `origin/main` pointed at the upstream base. The
 count includes the clamped probe-failed window case: a deadline about 2s
