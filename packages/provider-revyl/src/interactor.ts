@@ -464,15 +464,18 @@ class RevylInteractor implements Interactor {
   }
 
   /**
-   * `/set_location` moves the device's own coordinates. The worker has no action that switches
-   * location services, so `on` and `off` are refused rather than reported as applied.
+   * `/set_location` moves the device's own coordinates. Revyl starts every device with location
+   * services on and has no action that switches them off, so `on` is already true and is answered
+   * without a request; `off` is refused rather than reported as applied.
    */
   private async setLocation(
     state: string,
     options: SettingOptions | undefined,
-  ): Promise<{ latitude: number; longitude: number }> {
+  ): Promise<{ latitude: number; longitude: number } | { enabled: true }> {
     const latitude = options?.latitude;
     const longitude = options?.longitude;
+    if (state === 'on' && latitude === undefined && longitude === undefined)
+      return { enabled: true };
     if (latitude === undefined || longitude === undefined) {
       throw unsupported(
         'settings',
