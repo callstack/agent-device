@@ -802,6 +802,38 @@ test('typeAndroid refuses to report success when the running helper never acknow
   );
 });
 
+test('typeAndroid fails with no-input-connection when the helper finds no focused editor', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const calls: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    async (args) => {
+      calls.push(args);
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'broadcast') {
+        return {
+          exitCode: 0,
+          stdout: 'Broadcast completed: result=3, data="no-input-connection"\n',
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(typeAndroid(ANDROID_EMULATOR, 'hello'), (error: AppError) => {
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.reason, 'android_ime_helper_dispatch_rejected');
+        assert.equal(error.details?.dispatchKind, 'no-input-connection');
+        return true;
+      });
+    },
+  );
+  assert.equal(
+    calls.filter((args) => args.includes(INPUT_ACTION)).length,
+    1,
+    'type does not retry into a missing editor',
+  );
+});
+
 test('typeAndroid sends KEYCODE_DEL keyevents instead of broadcasting backspaces through the test IME', async () => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   const calls: (readonly string[])[] = [];

@@ -10,6 +10,7 @@ import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.InputBinding;
 import android.view.inputmethod.InputConnection;
 import java.nio.charset.StandardCharsets;
 
@@ -125,7 +126,7 @@ public class TestInputMethodService extends InputMethodService {
     }
 
     if (ACTION_CLEAR_TEXT.equals(action)) {
-      InputConnection clearIc = getCurrentInputConnection();
+      InputConnection clearIc = getFocusedEditorConnection();
       if (clearIc == null) {
         pending.setResult(RESULT_NO_INPUT_CONNECTION, "no-input-connection", null);
         Log.w(TAG, "clearText: no current input connection");
@@ -156,7 +157,7 @@ public class TestInputMethodService extends InputMethodService {
       if (text == null) return; // rejection already reported with a result code
     }
 
-    InputConnection ic = getCurrentInputConnection();
+    InputConnection ic = getFocusedEditorConnection();
     if (ic == null) {
       pending.setResult(RESULT_NO_INPUT_CONNECTION, "no-input-connection", null);
       Log.w(TAG, "handleAction: no current input connection for " + action);
@@ -168,6 +169,23 @@ public class TestInputMethodService extends InputMethodService {
     int code = commitReturn ? RESULT_COMMITTED : RESULT_COMMIT_RETURNED_FALSE;
     pending.setResult(code, "utf16=" + text.length(), null);
     Log.i(TAG, "commitText code=" + code + " length=" + text.length());
+  }
+
+  /**
+   * The focused editor's connection, or null when no editor is focused. commitText returns true
+   * whether or not the text reaches a view, so it cannot prove a focused editor. Two cases have no
+   * editor (measured on API 36): a window that gains focus with no editor starts input on the client
+   * binding's placeholder connection, and an editor that loses focus in the same window leaves its
+   * deactivated connection started. A deactivated connection answers getTextBeforeCursor with
+   * null; a zero length reads no user text.
+   */
+  private InputConnection getFocusedEditorConnection() {
+    InputConnection ic = getCurrentInputConnection();
+    if (ic == null || !getCurrentInputStarted()) return null;
+    InputBinding binding = getCurrentInputBinding();
+    if (binding != null && binding.getConnection() == ic) return null;
+    if (ic.getTextBeforeCursor(0, 0) == null) return null;
+    return ic;
   }
 
   private static boolean isKnownAction(String action) {
