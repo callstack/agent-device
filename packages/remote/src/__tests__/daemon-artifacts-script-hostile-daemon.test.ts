@@ -350,7 +350,6 @@ skipOnWindows(
         destination: world.destination,
         force: false,
         revision: 2,
-        entry: { revision: 2, path: world.destination },
         staging: [],
       },
     ]);
@@ -412,7 +411,6 @@ skipOnWindows(
           destination: world.destination,
           force: false,
           revision: 1,
-          entry: { revision: 1, path: world.destination },
           staging: [],
         },
       ]);

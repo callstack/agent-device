@@ -42,10 +42,7 @@ function caller() {
 function otherDeliveryCommits(stateDir: string, destination: string, revision = 2): void {
   fs.writeFileSync(destination, `v${revision}\n`);
   const { file: recordFile, record } = soleRecord(stateDir);
-  fs.writeFileSync(
-    recordFile,
-    JSON.stringify({ ...record, revision, entry: { revision, path: destination } }),
-  );
+  fs.writeFileSync(recordFile, JSON.stringify({ ...record, revision }));
 }
 
 /** Serves version 1, and counts every fetch of version 2, running `onFetch` first and serving what it returns. */
@@ -202,7 +199,7 @@ test('a held download that loses to a newer commit reports it superseded and ove
     data: {
       savedScript: destination,
       warnings: [
-        `Revision 2 of the recording is superseded; the file holds revision 3 at ${destination}. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
+        `Revision 2 of the recording is superseded: the record last confirmed revision 3 at ${destination}. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
       ],
     },
   });
@@ -243,3 +240,67 @@ test('a transient failure acquiring the final record lock still releases staging
   expect(fs.readdirSync(directory)).toEqual(['journey.ad']);
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
 });
+
+test('a failed fetch after a concurrent close retired the record reports the fetch failure', async () => {
+  // While this client fetches version 2, a close elsewhere retires the publication; then this fetch fails.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const { served } = countedServer(() => {
+    fs.rmSync(soleRecord(stateDir).file);
+    return undefined;
+  });
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+
+  const late = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(late).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_download_failed' } },
+  });
+  expect(late.ok && late.data).not.toHaveProperty('savedScript');
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+});
+
+test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+  'a commit that lands before the locked decision is answered before an unusable parent is judged',
+  async () => {
+    // Another delivery commits version 2 right after this client's first look at the record, and the parent
+    // then becomes shared. The locked decision answers the repeat without preparing the destination.
+    const { stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const { served, fetches } = countedServer();
+    const baseUrl = await artifactServer(served);
+    const { id } = await open(baseUrl, stateDir, destination);
+    const { file: recordFile } = soleRecord(stateDir);
+    const read = fs.readFileSync.bind(fs) as (...args: unknown[]) => string | Buffer;
+    let landed = false;
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((...args: unknown[]) => {
+      const contents = read(...args);
+      if (!landed && args[0] === recordFile) {
+        landed = true;
+        otherDeliveryCommits(stateDir, destination);
+        fs.chmodSync(directory, 0o777);
+      }
+      return contents;
+    }) as typeof fs.readFileSync);
+    vi.mocked(file.prepareScriptDestination).mockClear();
+
+    try {
+      const late = await answer(baseUrl, stateDir, request('click'), {
+        artifacts: [script('v2', 2, id)],
+      });
+
+      expect(landed).toBe(true);
+      expect(file.prepareScriptDestination).not.toHaveBeenCalled();
+      expect(fetches.count).toBe(0);
+      expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
+      expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
+    } finally {
+      spy.mockRestore();
+      fs.chmodSync(directory, 0o700);
+    }
+  },
+);
