@@ -314,12 +314,11 @@ extension RunnerTests {
       }
       let viewport = try resolvedScrollViewport(app: activeApp, context: scrollContext)
       let defaults = runnerDragCommandDefaults(command)
-      let dispatch: ScrollGestureOutcome = viewport.gestureDispatch(
+      switch viewport.gestureDispatch(
         direction: direction,
         amount: defaults.scrollAmount,
         pixels: command.pixels
-      )
-      switch dispatch {
+      ) {
       case .occluded(let occlusionKeyboardMinY, let visibleHeight):
         return scrollKeyboardOccludedResponse(
           direction: direction.rawValue,

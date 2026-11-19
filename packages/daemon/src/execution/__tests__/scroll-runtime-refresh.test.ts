@@ -169,6 +169,31 @@ test('bound scroll refresh admits on iPadOS and dispatches the pull there', asyn
   assert.notEqual(result.movement, 'at-edge');
 });
 
+test('bound scroll refresh refuses where the owner runs no gesture plan, naming that cell', async () => {
+  // The refresh use mixes a capability fact with two execution operations. A leaf that reads the
+  // screen but synthesizes no gesture plan (a provider session that drags through its own proxy)
+  // must not be told it lacks snapshot support.
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh'],
+        {},
+        {
+          ...frozenCaptures([topScreen(false)]),
+          scroll: async () => ({}),
+        },
+        { session: sessionWithStoredScreen(topScreen(false)) },
+      ),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) return false;
+      if (error.code !== 'UNSUPPORTED_OPERATION') return false;
+      assert.match(error.message, /gesture plan/);
+      assert.equal(error.details?.reason, 'scroll_refresh_unsupported_platform');
+      return true;
+    },
+  );
+});
+
 test('bound scroll refresh refuses --until with a typed reason before any device work', async () => {
   await assert.rejects(
     () =>
@@ -271,6 +296,72 @@ test('bound scroll refresh clamps an explicit --pixels into the measured-safe pu
     320,
     'a 100px pull only rubber-bands; the floor is 320px',
   );
+});
+
+test('bound scroll refresh refuses a non-positive amount before any device work', async () => {
+  // The pull planner rejects `scroll refresh 0`, and it runs after the top-edge capture. Answering
+  // the same rule at the input parse keeps it an input refusal, not a post-capture COMMAND_FAILED.
+  let captures = 0;
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh', '0'],
+        {},
+        {
+          captureSnapshot: async () => {
+            captures += 1;
+            return { nodes: topScreen(false), backend: 'xctest', producer: 'apple-runner' };
+          },
+          scroll: async () => ({}),
+          gesture: async () => {
+            throw new Error('an invalid pull must not dispatch');
+          },
+        },
+        { session: sessionWithStoredScreen(topScreen(false)) },
+      ),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+  assert.equal(captures, 0, 'the refusal happens before the pull reads the screen');
+});
+
+test('bound scroll refresh refuses a container too short for a pull that commits', async () => {
+  // The pull stays inside the container, so a short list cannot carry the measured-safe travel.
+  // Reporting `refresh: true` for a pull that provably never triggers the control would be a lie.
+  const shortScreen: SnapshotNode[] = [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'ScrollView',
+      identifier: 'short-list',
+      rect: { x: 18, y: 300, width: 366, height: 180 },
+      hiddenContentBelow: true,
+    },
+  ];
+  const plans: PullPlanCall[] = [];
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh'],
+        {},
+        {
+          ...frozenCaptures([shortScreen]),
+          scroll: async () => ({}),
+          gesture: async (plan) => {
+            plans.push(plan as PullPlanCall);
+            return {};
+          },
+        },
+        { session: sessionWithStoredScreen(shortScreen) },
+      ),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) return false;
+      if (error.details?.reason !== 'scroll_refresh_container_too_short') return false;
+      assert.deepEqual(error.details?.containerRect, { x: 18, y: 300, width: 366, height: 180 });
+      return true;
+    },
+  );
+  assert.equal(plans.length, 0, 'a pull that cannot commit is never dispatched');
 });
 
 test('bound scroll refresh refuses an unreadable capture with its own typed reason, not no_container', async () => {

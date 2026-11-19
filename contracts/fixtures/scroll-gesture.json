@@ -6,8 +6,7 @@
     "defaultScrollAmount": 0.6,
     "defaultEdgePaddingFraction": 0.1,
     "ordinaryScrollReleaseBehavior": "controlled",
-    "edgeScrollReleaseBehavior": "inertial",
-    "defaultRefreshPullAmount": 0.4
+    "edgeScrollReleaseBehavior": "inertial"
   },
   "cases": [
     {
@@ -16,13 +15,7 @@
       "amount": 0.5,
       "referenceWidth": 400,
       "referenceHeight": 800,
-      "expected": {
-        "x1": 200,
-        "y1": 600,
-        "x2": 200,
-        "y2": 200,
-        "pixels": 400
-      }
+      "expected": { "x1": 200, "y1": 600, "x2": 200, "y2": 200, "pixels": 400 }
     },
     {
       "name": "explicit pixels below the safe band cap: 300x600 down 120px -> (150,360)->(150,240)",
@@ -30,13 +23,7 @@
       "pixels": 120,
       "referenceWidth": 300,
       "referenceHeight": 600,
-      "expected": {
-        "x1": 150,
-        "y1": 360,
-        "x2": 150,
-        "y2": 240,
-        "pixels": 120
-      }
+      "expected": { "x1": 150, "y1": 360, "x2": 150, "y2": 240, "pixels": 120 }
     },
     {
       "name": "amount above 1 clamps to the safe band: 400x800 down 2 -> requested 1600 clamps to 640, (200,720)->(200,80)",
@@ -44,13 +31,7 @@
       "amount": 2,
       "referenceWidth": 400,
       "referenceHeight": 800,
-      "expected": {
-        "x1": 200,
-        "y1": 720,
-        "x2": 200,
-        "y2": 80,
-        "pixels": 640
-      }
+      "expected": { "x1": 200, "y1": 720, "x2": 200, "y2": 80, "pixels": 640 }
     },
     {
       "name": "explicit pixels clamp to the vertical safe band: 400x800 down 1000px -> 640, (200,720)->(200,80)",
@@ -58,13 +39,7 @@
       "pixels": 1000,
       "referenceWidth": 400,
       "referenceHeight": 800,
-      "expected": {
-        "x1": 200,
-        "y1": 720,
-        "x2": 200,
-        "y2": 80,
-        "pixels": 640
-      }
+      "expected": { "x1": 200, "y1": 720, "x2": 200, "y2": 80, "pixels": 640 }
     },
     {
       "name": "tiny frame engages every max(1, ...) floor and the .5 rounding both ports must agree on: 2x2 down 10px -> (1,2)->(1,0), travel 1",
@@ -72,13 +47,7 @@
       "pixels": 10,
       "referenceWidth": 2,
       "referenceHeight": 2,
-      "expected": {
-        "x1": 1,
-        "y1": 2,
-        "x2": 1,
-        "y2": 0,
-        "pixels": 1
-      }
+      "expected": { "x1": 1, "y1": 2, "x2": 1, "y2": 0, "pixels": 1 }
     },
     {
       "name": "explicit pixels clamp to the horizontal safe band: 300x600 right 500px -> 240, (270,300)->(30,300)",
@@ -86,13 +55,7 @@
       "pixels": 500,
       "referenceWidth": 300,
       "referenceHeight": 600,
-      "expected": {
-        "x1": 270,
-        "y1": 300,
-        "x2": 30,
-        "y2": 300,
-        "pixels": 240
-      }
+      "expected": { "x1": 270, "y1": 300, "x2": 30, "y2": 300, "pixels": 240 }
     },
     {
       "name": "#1781 A1: a saturated scroll up on a Pixel 7 (1080x2400) touches down at y=240, clear of its 136px cutout status bar; the 5% band started at y=120 and pulled the notification shade",
@@ -100,129 +63,7 @@
       "amount": 3,
       "referenceWidth": 1080,
       "referenceHeight": 2400,
-      "expected": {
-        "x1": 540,
-        "y1": 240,
-        "x2": 540,
-        "y2": 2160,
-        "pixels": 1920
-      }
-    }
-  ],
-  "pullCases": [
-    {
-      "name": "pull anchored at container top: 402x874, container y=205 h=640, 400px -> (201,213)->(201,613)",
-      "container": {
-        "x": 0,
-        "y": 205,
-        "width": 402,
-        "height": 640
-      },
-      "viewport": {
-        "x": 0,
-        "y": 0,
-        "width": 402,
-        "height": 874
-      },
-      "expected": {
-        "x1": 201,
-        "y1": 213,
-        "x2": 201,
-        "y2": 613,
-        "pixels": 400
-      },
-      "pixels": 400
-    },
-    {
-      "name": "pull default amount is 0.4 of container height: 400x800, container y=100 h=600 -> (200,108)->(200,348), travel 240",
-      "container": {
-        "x": 20,
-        "y": 100,
-        "width": 360,
-        "height": 600
-      },
-      "viewport": {
-        "x": 0,
-        "y": 0,
-        "width": 400,
-        "height": 800
-      },
-      "expected": {
-        "x1": 200,
-        "y1": 108,
-        "x2": 200,
-        "y2": 348,
-        "pixels": 240
-      }
-    },
-    {
-      "name": "pull shortens to the container band: 400x800, container y=100 h=200, 500px -> travel 183, (200,108)->(200,291)",
-      "container": {
-        "x": 0,
-        "y": 100,
-        "width": 400,
-        "height": 200
-      },
-      "viewport": {
-        "x": 0,
-        "y": 0,
-        "width": 400,
-        "height": 800
-      },
-      "expected": {
-        "x1": 200,
-        "y1": 108,
-        "x2": 200,
-        "y2": 291,
-        "pixels": 183
-      },
-      "pixels": 500
-    },
-    {
-      "name": "pull starts at the padded frame top when the container reaches into it: 400x800, container y=50 h=700, amount 0.5 -> (200,80)->(200,430)",
-      "container": {
-        "x": 0,
-        "y": 50,
-        "width": 400,
-        "height": 700
-      },
-      "viewport": {
-        "x": 0,
-        "y": 0,
-        "width": 400,
-        "height": 800
-      },
-      "expected": {
-        "x1": 200,
-        "y1": 80,
-        "x2": 200,
-        "y2": 430,
-        "pixels": 350
-      },
-      "amount": 0.5
-    },
-    {
-      "name": "pull in a split-view window keeps the window origin: viewport x=400 y=120 600x900, container (420,240,560,700), 400px -> (700,248)->(700,648)",
-      "container": {
-        "x": 420,
-        "y": 240,
-        "width": 560,
-        "height": 700
-      },
-      "viewport": {
-        "x": 400,
-        "y": 120,
-        "width": 600,
-        "height": 900
-      },
-      "pixels": 400,
-      "expected": {
-        "x1": 700,
-        "y1": 248,
-        "x2": 700,
-        "y2": 648,
-        "pixels": 400
-      }
+      "expected": { "x1": 540, "y1": 240, "x2": 540, "y2": 2160, "pixels": 1920 }
     }
   ]
 }

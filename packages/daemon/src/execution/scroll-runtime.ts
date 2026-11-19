@@ -10,9 +10,9 @@ import {
   type ScrollCommandOptions,
   type ScrollMovementObservation,
 } from '@agent-device/contracts/scroll-command';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { GestureViewportInput } from '@agent-device/contracts/gesture-runtime';
 import {
+  assertScrollGestureInput,
   buildPullRefreshGesturePlan,
   DEFAULT_REFRESH_PULL_AMOUNT,
   inferGestureViewportRect,
@@ -21,11 +21,15 @@ import {
   REFRESH_PULL_MIN_PX,
   type ScrollDirection,
 } from '@agent-device/contracts/scroll-gesture';
+import type {
+  BoundDeviceRuntime,
+  RuntimeOperationKey,
+} from '@agent-device/contracts/platform-runtime';
 import {
   resolveScrollRuntimePlan,
+  type PlatformRuntimeOperations,
   type ScrollRuntimePlan,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type {
   ScrollDirectionInput,
   ScrollDirectionResult,
@@ -103,12 +107,16 @@ function assertScrollCommandInputs(
   amount: number | undefined,
   pixels: number | undefined,
   durationMs: number | undefined,
+  refresh: boolean,
 ): void {
   if (amount !== undefined && !Number.isFinite(amount)) {
     throw new AppError('INVALID_ARGS', 'scroll amount must be a number');
   }
   normalizeScrollDurationMs(durationMs);
   assertExclusiveScrollDistanceInputs({ amount, pixels });
+  // A pull is planned from these, so the same non-positive rule the pull planner enforces is
+  // answered here, before admission, the capture, or the gesture.
+  if (refresh) assertScrollGestureInput({ amount, pixels });
 }
 
 /**
@@ -138,9 +146,9 @@ export async function resolveBoundScrollRuntime(
   const durationMs = params.context.durationMs;
   const until = params.context.until;
   if (!directionInput) throw new AppError('INVALID_ARGS', 'scroll requires direction');
-  assertScrollCommandInputs(amount, pixels, durationMs);
-
   const target = parseScrollTarget(directionInput);
+  assertScrollCommandInputs(amount, pixels, durationMs, target.refresh === true);
+
   const stopCondition = {
     ...(target.edge === undefined ? {} : { edge: target.edge }),
     ...(until === undefined ? {} : { until }),
@@ -168,22 +176,11 @@ export async function resolveBoundScrollRuntime(
       return await resolveBoundGenericRuntime(
         {
           ...admission,
-          // The pull reads the top edge of a freshly captured tree to refuse or aim, so the
-          // capture is part of admission — the same requirement an edge scroll declares. A device
-          // whose platform declares no touch scroll surface (a TV target, a desktop leaf) is
-          // refused on that fact here, with no inline platform check.
+          // Each requirement the use mixes names its own refusal: the touch-scroll fact for a
+          // surface no finger pulls, the capture for a leaf that cannot read the screen, and the
+          // pan for a leaf that plans no gesture. None of them collapses into "requires snapshot".
           unavailableResponse: (unavailable, operation) =>
-            operation === 'touchScrollSurface'
-              ? errorResponse(
-                  'UNSUPPORTED_OPERATION',
-                  `scroll refresh is not supported on ${publicPlatformString(params.device)}: it needs a touch scroll surface`,
-                  { reason: 'scroll_refresh_unsupported_platform' },
-                  unavailable.hint === undefined ? undefined : { hint: unavailable.hint },
-                )
-              : scrollCaptureUnsupported(
-                  'scroll refresh, which reads the top edge of the scrollable area before pulling,',
-                  unavailable.hint,
-                ),
+            refreshAdmissionRefusal(params.device, operation, unavailable.hint),
           use: plan.use,
         },
         async (runtime, dispatchContext) => {
@@ -326,6 +323,40 @@ function scrollCaptureUnsupported(subject: string, hint: string | undefined) {
 }
 
 /**
+ * The refusal one refresh requirement answers, named for the cell that failed. The refresh use
+ * mixes a capability fact with two execution operations, so a leaf that runs gestures but cannot
+ * read the screen, or reads the screen but plans no gesture, must not be told it lacks snapshot
+ * support. The touch-scroll branch keeps the reason the review round named: `scroll_refresh_unsupported_platform`.
+ */
+function refreshAdmissionRefusal(
+  device: DeviceInfo,
+  operation: RuntimeOperationKey<PlatformRuntimeOperations>,
+  hint: string | undefined,
+) {
+  const withHint = hint === undefined ? undefined : { hint };
+  if (operation === 'touchScrollSurface') {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      `scroll refresh is not supported on ${publicPlatformString(device)}: it needs a touch scroll surface`,
+      { reason: 'scroll_refresh_unsupported_platform' },
+      withHint,
+    );
+  }
+  if (operation === 'performGesturePlan') {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      `scroll refresh is not supported on ${publicPlatformString(device)}: it dispatches the pull as a gesture plan`,
+      { reason: 'scroll_refresh_unsupported_platform' },
+      withHint,
+    );
+  }
+  return scrollCaptureUnsupported(
+    'scroll refresh, which reads the top edge of the scrollable area before pulling,',
+    hint,
+  );
+}
+
+/**
  * The execution options one pull-to-refresh carries: a slow pull (a fast one reads as a fling and
  * rubber-bands back without committing the refresh control) whose distance defaults to a fraction
  * of the container height and is clamped into the measured-safe band — small pulls only
@@ -374,6 +405,25 @@ async function performRefreshPull(
     container: containerRect,
     viewport,
   });
+  // The planner keeps the lane inside the container, so a container shorter than the measured-safe
+  // floor cannot carry a pull that commits (0/5 below ~300px on an iOS RN list). Dispatching it
+  // would report a refresh the pull provably cannot trigger, so the refusal names the container.
+  if (pull.pixels < REFRESH_PULL_MIN_PX) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `scroll refresh found a scroll container too short to pull: ${pull.pixels}px of travel is below the ${REFRESH_PULL_MIN_PX}px that commits a refresh`,
+      {
+        reason: 'scroll_refresh_container_too_short',
+        containerRect: containerRect,
+        travelPixels: pull.pixels,
+        hint: 'The refresh control needs a longer list. Scroll with a direction if the content should move.',
+      },
+    );
+  }
+  // The gesture planner is loaded here, not at the module's top: the daemon evaluates no gesture
+  // planner on boot, and `scroll refresh` is the only scroll mode that needs one, so a static edge
+  // would put the planner in every daemon's eager closure.
+  const { buildGesturePlan } = await import('@agent-device/contracts/gesture-plan');
   const plan = buildGesturePlan(
     {
       intent: 'pan',

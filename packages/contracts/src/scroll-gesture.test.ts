@@ -10,7 +10,6 @@ import {
   buildPullRefreshGesturePlan,
   buildScrollGesturePlan,
   clampGestureCoordinate,
-  DEFAULT_REFRESH_PULL_AMOUNT,
   SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE,
   SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION,
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
@@ -73,7 +72,6 @@ type ScrollGestureFixture = {
     defaultEdgePaddingFraction: number;
     ordinaryScrollReleaseBehavior: 'controlled';
     edgeScrollReleaseBehavior: 'inertial';
-    defaultRefreshPullAmount: number;
   };
   cases: Array<{
     name: string;
@@ -82,14 +80,6 @@ type ScrollGestureFixture = {
     pixels?: number;
     referenceWidth: number;
     referenceHeight: number;
-    expected: { x1: number; y1: number; x2: number; y2: number; pixels: number };
-  }>;
-  pullCases: Array<{
-    name: string;
-    container: Rect;
-    viewport: Rect;
-    amount?: number;
-    pixels?: number;
     expected: { x1: number; y1: number; x2: number; y2: number; pixels: number };
   }>;
 };
@@ -132,30 +122,75 @@ test('buildScrollGesturePlan agrees with every scroll-gesture parity table case'
   }
 });
 
-// The pull-to-refresh planner is TypeScript-only (the daemon dispatches the pull through the
-// gesture pan planner; the runner needs no pull port), so its parity table is asserted here alone.
-test('buildPullRefreshGesturePlan agrees with every scroll-gesture pull parity table case', () => {
-  const { pullCases } = readScrollGestureFixture();
-  assert.ok(pullCases.length > 0, 'pull parity table must not be empty');
+/**
+ * The pull-to-refresh lane the daemon plans in TypeScript and dispatches through the gesture pan
+ * planner. The runner computes no lane, so these vectors pin the one planner here rather than
+ * joining the cross-language table, which every entry in it must have a Swift twin for.
+ */
+const PULL_CASES: Array<{
+  name: string;
+  container: Rect;
+  viewport: Rect;
+  amount?: number;
+  pixels?: number;
+  expected: { x1: number; y1: number; x2: number; y2: number; pixels: number };
+}> = [
+  {
+    name: 'anchored at the container top: 402x874, container y=205 h=640, 400px -> (201,213)->(201,613)',
+    container: { x: 0, y: 205, width: 402, height: 640 },
+    viewport: { x: 0, y: 0, width: 402, height: 874 },
+    pixels: 400,
+    expected: { x1: 201, y1: 213, x2: 201, y2: 613, pixels: 400 },
+  },
+  {
+    name: 'default amount is 0.4 of the container height: 400x800, container y=100 h=600 -> (200,108)->(200,348)',
+    container: { x: 20, y: 100, width: 360, height: 600 },
+    viewport: { x: 0, y: 0, width: 400, height: 800 },
+    expected: { x1: 200, y1: 108, x2: 200, y2: 348, pixels: 240 },
+  },
+  {
+    name: 'shortens to the container band: 400x800, container y=100 h=200, 500px -> travel 183',
+    container: { x: 0, y: 100, width: 400, height: 200 },
+    viewport: { x: 0, y: 0, width: 400, height: 800 },
+    pixels: 500,
+    expected: { x1: 200, y1: 108, x2: 200, y2: 291, pixels: 183 },
+  },
+  {
+    name: 'starts at the padded frame top when the container reaches into it: container y=50 h=700, amount 0.5',
+    container: { x: 0, y: 50, width: 400, height: 700 },
+    viewport: { x: 0, y: 0, width: 400, height: 800 },
+    amount: 0.5,
+    expected: { x1: 200, y1: 80, x2: 200, y2: 430, pixels: 350 },
+  },
+  {
+    name: 'keeps the window origin in a split-view window: viewport x=400 y=120 600x900, container (420,240,560,700)',
+    container: { x: 420, y: 240, width: 560, height: 700 },
+    viewport: { x: 400, y: 120, width: 600, height: 900 },
+    pixels: 400,
+    expected: { x1: 700, y1: 248, x2: 700, y2: 648, pixels: 400 },
+  },
+];
+
+test('buildPullRefreshGesturePlan resolves every pull lane case', () => {
   assert.equal(
-    new Set(pullCases.map((c) => c.name)).size,
-    pullCases.length,
+    new Set(PULL_CASES.map((c) => c.name)).size,
+    PULL_CASES.length,
     'case names must be unique',
   );
-  for (const fixture of pullCases) {
+  for (const testCase of PULL_CASES) {
     const plan = buildPullRefreshGesturePlan({
-      amount: fixture.amount,
-      pixels: fixture.pixels,
-      container: fixture.container,
-      viewport: fixture.viewport,
+      ...(testCase.amount === undefined ? {} : { amount: testCase.amount }),
+      ...(testCase.pixels === undefined ? {} : { pixels: testCase.pixels }),
+      container: testCase.container,
+      viewport: testCase.viewport,
     });
     assert.deepEqual(
       { x1: plan.x1, y1: plan.y1, x2: plan.x2, y2: plan.y2, pixels: plan.pixels },
-      fixture.expected,
-      fixture.name,
+      testCase.expected,
+      testCase.name,
     );
-    assert.equal(plan.direction, 'up', fixture.name);
-    assert.deepEqual(plan.viewport, fixture.viewport, fixture.name);
+    assert.equal(plan.direction, 'up', testCase.name);
+    assert.deepEqual(plan.viewport, testCase.viewport, testCase.name);
   }
 });
 
@@ -164,11 +199,6 @@ test('buildPullRefreshGesturePlan rejects a non-positive amount or pixels', () =
   const container = { x: 0, y: 100, width: 400, height: 600 };
   assert.throws(() => buildPullRefreshGesturePlan({ amount: 0, container, viewport }), AppError);
   assert.throws(() => buildPullRefreshGesturePlan({ pixels: -5, container, viewport }), AppError);
-});
-
-test('the refresh pull default amount agrees with the parity table', () => {
-  const { constants } = readScrollGestureFixture();
-  assert.equal(DEFAULT_REFRESH_PULL_AMOUNT, constants.defaultRefreshPullAmount);
 });
 
 // The two planner constants are private on both sides; the table pins them behaviourally on a

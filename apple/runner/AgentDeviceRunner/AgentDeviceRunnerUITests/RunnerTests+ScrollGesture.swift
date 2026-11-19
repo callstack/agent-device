@@ -80,17 +80,6 @@ func runnerScrollGesturePlan(
   }
 }
 
-/// A swipe kept inside a container stays this far off its edges (SCROLL_CONTAINER_EDGE_INSET).
-private let runnerScrollContainerEdgeInset = 8.0
-
-/// The coordinates of `[start, start + size)` an inset swipe may use inside `[paddedMin, paddedMax]`.
-private func insetRange(start: Double, size: Double, paddedMin: Double, paddedMax: Double)
-  -> (min: Double, max: Double)? {
-  let lower = Swift.max(paddedMin, ceil(start) + runnerScrollContainerEdgeInset)
-  let upper = Swift.min(paddedMax, floor(start + size) - 1 - runnerScrollContainerEdgeInset)
-  return upper > lower ? (min: lower, max: upper) : nil
-}
-
 struct RunnerDragCommandDefaults {
   let scrollAmount: Double?
   let durationMs: Double
