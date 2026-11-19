@@ -12,6 +12,7 @@ import { revylSessionIdForLease } from './session-identity.ts';
 import type {
   RevylStartDeviceRequest,
   RevylStartDeviceResponse,
+  RevylWorkerConnection,
   RevylWorkerHealth,
 } from './revyl-types.ts';
 
@@ -36,6 +37,8 @@ const DEFAULT_IDLE_TIMEOUT_SECONDS = 5 * 60;
 export const REVYL_KEEP_ALIVE_INTERVAL_MS = 60_000;
 /** Revyl answers a device-proxy action the worker cannot serve yet with these. */
 const NOT_READY_STATUSES = new Set([503, 409]);
+/** A server error on the worker-connection read, which changes nothing, leaves the start pending. */
+const CONNECTION_PENDING_STATUSES = new Set([500, 502, 503, 504]);
 
 export type RevylScreenSize = Readonly<{ width: number; height: number }>;
 
@@ -409,12 +412,12 @@ async function untilRevylWorkerReady(
 ): Promise<void> {
   for (;;) {
     requireTime(deadline, input);
-    const connection = await runWithinDeadline(
-      () => client.getWorkerConnection(runId, pollSignal(deadline, input)),
-      deadline,
-      input,
-    );
+    const connection = await readWorkerConnection(client, runId, deadline, input);
     requireTime(deadline, input);
+    if (connection === undefined) {
+      await sleepBefore(deadline, input.signal);
+      continue;
+    }
     if (connection.status === 'ready' && connection.worker_ws_url) return;
     if (
       connection.status === 'cancelled' ||
@@ -432,6 +435,29 @@ async function untilRevylWorkerReady(
       );
     }
     await sleepBefore(deadline, input.signal);
+  }
+}
+
+/**
+ * One worker-connection read, or `undefined` when Revyl answered it with a server error: the read
+ * changes nothing, so the next poll asks again within the same deadline.
+ */
+async function readWorkerConnection(
+  client: RevylClient,
+  runId: string,
+  deadline: RevylDeadline,
+  input: RevylReadyInput,
+): Promise<RevylWorkerConnection | undefined> {
+  try {
+    return await runWithinDeadline(
+      () => client.getWorkerConnection(runId, pollSignal(deadline, input)),
+      deadline,
+      input,
+    );
+  } catch (error) {
+    const status = error instanceof AppError ? error.details?.providerStatus : undefined;
+    if (typeof status === 'number' && CONNECTION_PENDING_STATUSES.has(status)) return undefined;
+    throw error;
   }
 }
 
