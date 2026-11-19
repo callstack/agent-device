@@ -309,6 +309,15 @@ async function tapRefPlanCommand(
   // response identity, so the plan iterates `refs` alone.
   const plannedRefs = (options.refs ?? []).map((ref) => (ref.startsWith('@') ? ref : `@${ref}`));
   const observation = planPostActionObservation(options);
+  // A plan member is a tree-visible ref, and the pixel fallback behind
+  // --verify answers one point the pre-action tree cannot see. Refuse the
+  // flag instead of silently dropping the pair it promises.
+  if (observation.verify) {
+    throw new AppError('INVALID_ARGS', 'A multi-ref press plan cannot carry --verify', {
+      reason: 'verify-unsupported-on-ref-plan',
+      hint: 'Run --verify on a single press; the plan already dispatches tree-visible refs.',
+    });
+  }
   const members = await resolveRefPlanMembers(
     runtime,
     options,
