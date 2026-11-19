@@ -124,6 +124,8 @@ test('upload route progress renews the ticket idle lifetime and keeps 308 framin
     assert.equal(first.status, 308);
     assert.equal(first.headers.range, 'bytes=0-1');
     assert.equal(first.headers['x-upload-offset'], '2');
+    // A chunk answered after its body is read keeps the connection.
+    assert.notEqual(first.headers.connection, 'close');
 
     // Four idle minutes pass, then accepted bytes renew the ticket's idle lifetime.
     await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
@@ -140,6 +142,7 @@ test('upload route progress renews the ticket idle lifetime and keeps 308 framin
     );
     assert.equal(second.status, 200);
     assert.equal(second.body, 'ok');
+    assert.notEqual(second.headers.connection, 'close');
 
     // Eight minutes after ticket creation but under five since accepted progress, the
     // idempotent preflight still resolves to the same live ticket.
@@ -158,6 +161,8 @@ test('upload route progress renews the ticket idle lifetime and keeps 308 framin
       ),
     );
     assert.equal(finalized.status, 200);
+    assert.notEqual(preflight.headers.connection, 'close');
+    assert.notEqual(finalized.headers.connection, 'close');
     const artifact = JSON.parse(finalized.body) as { ok: boolean; uploadId: string };
     assert.equal(artifact.ok, true);
     cleanupUploadedArtifact(artifact.uploadId);
@@ -573,6 +578,7 @@ test('an early answer to an unfinished body closes the connection and keeps the 
       headers: { 'content-range': 'bytes 2-3/4', 'content-length': '2' },
     });
     assert.equal(refused.status, 401);
+    assert.equal(refused.headers.connection, 'close');
   } finally {
     agent.destroy();
     await closeLoopbackServer(server);

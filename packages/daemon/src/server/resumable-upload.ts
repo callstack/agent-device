@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { AppError } from '@agent-device/kernel/errors';
+import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
 import {
   requireTenantOwnedEntry,
@@ -281,7 +282,13 @@ async function runExclusive<T>(
   const operation = (async () => {
     // Admission is abortable: an expired or disconnected waiter leaves the queue with the
     // owner's typed reason and never waits for a predecessor it does not own (#4441).
-    await admitAfter(predecessor, signal);
+    await awaitWithSignal(
+      predecessor.catch(() => {}),
+      signal,
+      () => {
+        throwIfIngressAborted(signal);
+      },
+    );
     if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
     // The close check above runs first, so a close/cancel race keeps the close side's
     // typed expiry error, and the entry's ownership is untouched either way (#4441).
@@ -297,29 +304,6 @@ async function runExclusive<T>(
   // waiter never lets its successor overlap the work still running ahead of it.
   entry.tail = Promise.allSettled([predecessor, operation]).then(() => {});
   return await operation;
-}
-
-function admitAfter(predecessor: Promise<void>, signal: AbortSignal | undefined): Promise<void> {
-  const turn = predecessor.catch(() => {});
-  if (!signal) return turn;
-  return new Promise<void>((resolve, reject) => {
-    const abandon = () => {
-      try {
-        throwIfIngressAborted(signal);
-      } catch (error) {
-        reject(error);
-      }
-    };
-    if (signal.aborted) {
-      abandon();
-      return;
-    }
-    signal.addEventListener('abort', abandon, { once: true });
-    void turn.then(() => {
-      signal.removeEventListener('abort', abandon);
-      resolve();
-    });
-  });
 }
 
 async function materializeFinalArtifact(

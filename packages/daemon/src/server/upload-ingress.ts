@@ -21,12 +21,16 @@ export type UploadTransferIngress = {
   /** Renews only the inactivity ceiling; never the aggregate. */
   onAcceptedBodyBytes(bytes: number): void;
   /**
-   * Stops only the inactivity ceiling once the request body is complete. Post-body
-   * work (hash, extraction, registration) then observes just the aggregate. Safe to
-   * call more than once; does not abort.
+   * Stops only the inactivity ceiling once the request body is complete, and keeps the
+   * connection open for the answer. Post-body work (hash, extraction, registration) then
+   * observes just the aggregate. Safe to call more than once; does not abort.
    */
   bodyComplete(): void;
-  /** Stops both timers. Safe to call more than once; does not abort. */
+  /**
+   * Releases the request. With the body read, both timers stop at once. With the body
+   * unread, the connection closes after the answer flushes, and both timers keep bounding
+   * it until the socket closes. Safe to call more than once; does not abort.
+   */
   dispose(): void;
 };
 
@@ -34,12 +38,19 @@ export type UploadTransferIngress = {
  * Admits one upload request's transfer budgets. Armed at the request callback, not
  * lazily on the first byte, so a stalled body is bounded from admission. Expiry
  * destroys the request stream and aborts owned work with a typed reason.
+ *
+ * The ingress also owns the early-answer rule: every answer sent before the body is
+ * fully read carries `Connection: close`, and that connection ends after the answer
+ * flushes, under these timers. A keep-alive connection never drains an unread body
+ * outside the ingress budget.
  */
 export function beginUploadTransferIngress(params: {
   req: IncomingMessage;
   res: ServerResponse;
 }): UploadTransferIngress {
   const { req, res } = params;
+  // Until the body is complete, any answer is an early answer.
+  res.setHeader('connection', 'close');
   const expiry = new AbortController();
   const signal = AbortSignal.any([expiry.signal, responseDisconnectSignal(req, res)]);
   const aggregateTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
@@ -54,22 +65,40 @@ export function beginUploadTransferIngress(params: {
   aggregateTimer.unref();
   let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
+  let released = false;
 
   const stopInactivity = () => {
     if (inactivityTimer !== undefined) clearTimeout(inactivityTimer);
     inactivityTimer = undefined;
   };
 
-  const dispose = () => {
+  const stopTimers = () => {
     if (disposed) return;
     disposed = true;
     clearTimeout(aggregateTimer);
     stopInactivity();
   };
 
+  const dispose = () => {
+    if (disposed || released) return;
+    released = true;
+    // A finished exchange may already have detached its socket.
+    const socket = req.socket as IncomingMessage['socket'] | null;
+    if (req.complete || !socket || socket.destroyed) {
+      stopTimers();
+      return;
+    }
+    socket.once('close', stopTimers);
+    const closeConnection = () => {
+      if (!socket.destroyed) socket.destroySoon();
+    };
+    if (res.writableFinished) closeConnection();
+    else res.once('finish', closeConnection);
+  };
+
   const fail = (error: AppError) => {
     if (disposed) return;
-    dispose();
+    stopTimers();
     expiry.abort(error);
     req.destroy(error);
   };
@@ -96,6 +125,7 @@ export function beginUploadTransferIngress(params: {
       if (!disposed && bytes > 0) armInactivity();
     },
     bodyComplete() {
+      if (!res.headersSent) res.removeHeader('connection');
       if (!disposed) stopInactivity();
     },
     dispose,

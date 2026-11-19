@@ -20,6 +20,13 @@ function fakeRes(): ServerResponse {
   };
   res.writableFinished = false;
   res.destroyed = false;
+  const headers = new Map<string, string>();
+  Object.assign(res, {
+    headersSent: false,
+    setHeader: (name: string, value: string) => headers.set(name.toLowerCase(), value),
+    removeHeader: (name: string) => headers.delete(name.toLowerCase()),
+    getHeader: (name: string) => headers.get(name.toLowerCase()),
+  });
   return res;
 }
 
@@ -127,6 +134,15 @@ test('dispose stops both timers without aborting', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('an answer before body completion carries Connection: close and bodyComplete clears it', () => {
+  const res = fakeRes();
+  const ingress = beginUploadTransferIngress({ req: fakeReq(), res });
+  assert.equal(res.getHeader('connection'), 'close');
+  ingress.bodyComplete();
+  assert.equal(res.getHeader('connection'), undefined);
+  ingress.dispose();
 });
 
 test('a client disconnect on an unfinished response aborts the transfer signal', async () => {

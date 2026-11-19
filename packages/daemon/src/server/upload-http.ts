@@ -11,11 +11,7 @@ import {
 } from './resumable-upload.ts';
 import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
-import {
-  beginUploadTransferIngress,
-  throwIfIngressAborted,
-  type UploadTransferIngress,
-} from './upload-ingress.ts';
+import { beginUploadTransferIngress, throwIfIngressAborted } from './upload-ingress.ts';
 import { readNodeHttpRequestBody } from '@agent-device/host-kit/transport';
 
 const DIRECT_UPLOAD_PATH_PREFIX = '/upload/direct/';
@@ -130,10 +126,9 @@ async function handleUpload(
       ingress.signal,
     );
   } catch (error) {
-    closeConnectionAfterEarlyAnswer(req, res);
     sendRestJsonError(res, normalizeError(error));
   } finally {
-    settleUploadRequest(req, res, ingress);
+    ingress.dispose();
   }
 }
 
@@ -170,10 +165,9 @@ async function handleUploadPreflight(
 
     sendJson(res, { ok: true, ...upload });
   } catch (error) {
-    closeConnectionAfterEarlyAnswer(req, res);
     sendRestJsonError(res, normalizeError(error));
   } finally {
-    settleUploadRequest(req, res, ingress);
+    ingress.dispose();
   }
 }
 
@@ -212,17 +206,15 @@ async function handleResumableUpload(
     }
 
     res.statusCode = 308;
-    closeConnectionAfterEarlyAnswer(req, res);
     if (result.offset > 0) {
       res.setHeader('range', `bytes=0-${result.offset - 1}`);
     }
     res.setHeader('x-upload-offset', String(result.offset));
     res.end();
   } catch (error) {
-    closeConnectionAfterEarlyAnswer(req, res);
     sendRestJsonError(res, normalizeError(error));
   } finally {
-    settleUploadRequest(req, res, ingress);
+    ingress.dispose();
   }
 }
 
@@ -257,44 +249,10 @@ async function handleUploadFinalize(
       ingress.signal,
     );
   } catch (error) {
-    closeConnectionAfterEarlyAnswer(req, res);
     sendRestJsonError(res, normalizeError(error));
   } finally {
-    settleUploadRequest(req, res, ingress);
-  }
-}
-
-/** Tells the client this connection ends with the answer when the request body is unread. */
-function closeConnectionAfterEarlyAnswer(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-): void {
-  if (!req.complete && !res.headersSent) res.setHeader('connection', 'close');
-}
-
-/**
- * Releases one upload request. After an early answer to an unfinished body (a 308, a header
- * refusal, or an authorization refusal), the connection closes once the answer flushes, so
- * the unread body never outlives the ingress budget on a keep-alive connection. The ingress
- * timers keep bounding the connection until it closes (#4441).
- */
-function settleUploadRequest(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  ingress: UploadTransferIngress,
-): void {
-  // A finished exchange may already have detached its socket.
-  const socket = req.socket as http.IncomingMessage['socket'] | null;
-  if (req.complete || !socket || socket.destroyed) {
     ingress.dispose();
-    return;
   }
-  socket.once('close', () => ingress.dispose());
-  const closeConnection = () => {
-    if (!socket.destroyed) socket.destroySoon();
-  };
-  if (res.writableFinished) closeConnection();
-  else res.once('finish', closeConnection);
 }
 
 function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void {

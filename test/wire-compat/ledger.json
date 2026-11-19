@@ -134,10 +134,10 @@
     "packages/daemon/src/server/upload-http.ts#UploadHttpRoute": "sha256:3fee66976292bedc9587e266f7f584ff27574e939329bb3ecb98f100c4c54b2e",
     "packages/daemon/src/server/upload-http.ts#UploadPreflightBody": "sha256:05b5e8bd75887f821c44cd54b027f09de1ea08c6e41c44d4dc9ec7cf09fc1ea5",
     "packages/daemon/src/server/upload-http.ts#buildUploadTicketAuthHeaders": "sha256:04d65207c440424257ea04a86fa50fd27f5e6b62e8cede884d9af1db4fb86475",
-    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:f7c6f4b2e03880b92fc1b61b8a683a1c35991bf9b9737735b09012e8bef84809",
-    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:9dfc84dd74f8a7c4378d93789f69c9cf4f3f1e9d483273c38f6535be957b59a6",
-    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:6eb21ad3411c0c0eac0e6a1a5102be41df904517e0961b9ded7bf0a0cbedec4e",
-    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:d4b7b3135ffb3eaddfef5e1c72c63286e6cf8023b0d72434b65fa93462b5d743",
+    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:ef8045a0d5c267e51842f5a6d205885d455a678e9eb6183bc2a4706b28158fd2",
+    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:63184210d79fbe0f5cb514cb69637db020c3b13513c4441b7041170ae0df043d",
+    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:688d98edb33e00cd736e47af03c85fa36b7a02c2d655850ac3e230277c3a1687",
+    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:3dd32f24bdd20dd5f703251f6c9945a49fea84b4c2a0cab07e14513bb1174685",
     "packages/daemon/src/server/upload-http.ts#readUploadFinalizeBody": "sha256:076298afa73d7e498a964b6c48d823de1cc8b15e9e971d0a22b7e6c3fd98d685",
     "packages/daemon/src/server/upload-http.ts#readUploadPreflightBody": "sha256:2e56302178b75d9a6f5424f01dfc46551dca2056ba06a43e48ae09ec528956b6",
     "packages/contracts/src/daemon-http.ts#resolveHttpRequestBaseUrl": "sha256:6ef76a849a7c61c7ae035cbf162dd1dfac3631f6a2df421560f19f798853e50f",
@@ -567,23 +567,23 @@
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadPreflight",
-      "digest": "sha256:d4b7b3135ffb3eaddfef5e1c72c63286e6cf8023b0d72434b65fa93462b5d743",
-      "rationale": "#4441 adds finite server-side ingress budgets to the existing upload routes: a 600-second aggregate and a 120-second body-inactivity ceiling admitted per request, renewed only after body bytes pass the bounded JSON reader or file writer, and stopped at body completion so post-body work observes just the aggregate, plus explicit 30s/600s header and body ceilings on the daemon listener. Routes, methods, request fields, response fields, status codes (including the 308 resume framing) and ticket/artifact payloads are unchanged, so a released peer parses and answers exactly as before. An early answer to an unfinished request body (308, header refusal or authorization refusal) now carries Connection: close and the server closes the connection after the answer flushes; status codes, the 308 range/x-upload-offset headers and response bodies are unchanged, and an HTTP client that honors Connection: close sends its next request on a new connection."
+      "digest": "sha256:3dd32f24bdd20dd5f703251f6c9945a49fea84b4c2a0cab07e14513bb1174685",
+      "rationale": "#4441 adds finite server-side ingress budgets to the existing upload routes: a 600-second aggregate and a 120-second body-inactivity ceiling admitted per request, renewed only after body bytes pass the bounded JSON reader or file writer, and stopped at body completion so post-body work observes just the aggregate, plus explicit 30s/600s header and body ceilings on the daemon listener. Routes, methods, request fields, response fields, status codes (including the 308 resume framing) and ticket/artifact payloads are unchanged, so a released peer parses and answers exactly as before."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUpload",
-      "digest": "sha256:9dfc84dd74f8a7c4378d93789f69c9cf4f3f1e9d483273c38f6535be957b59a6",
-      "rationale": "#4441 bounds the single-shot upload with the same finite ingress budgets and threads the request's ingress signal into the owned post-body hash and extraction; the route, headers, response artifact framing and status codes are unchanged, so a released peer interoperates as before. An early answer to an unfinished request body (308, header refusal or authorization refusal) now carries Connection: close and the server closes the connection after the answer flushes; status codes, the 308 range/x-upload-offset headers and response bodies are unchanged, and an HTTP client that honors Connection: close sends its next request on a new connection."
+      "digest": "sha256:63184210d79fbe0f5cb514cb69637db020c3b13513c4441b7041170ae0df043d",
+      "rationale": "#4441 bounds the single-shot upload with the same finite ingress budgets and threads the request's ingress signal into the owned post-body hash and extraction; the route, headers, response artifact framing and status codes are unchanged, so a released peer interoperates as before."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleResumableUpload",
-      "digest": "sha256:f7c6f4b2e03880b92fc1b61b8a683a1c35991bf9b9737735b09012e8bef84809",
-      "rationale": "#4441 bounds the direct chunk receive with the same finite ingress budgets and renews the ticket idle timer on accepted bytes; the 308 range/x-upload-offset framing and completion status are unchanged, so a released client resumes exactly as before. An early answer to an unfinished request body (308, header refusal or authorization refusal) now carries Connection: close and the server closes the connection after the answer flushes; status codes, the 308 range/x-upload-offset headers and response bodies are unchanged, and an HTTP client that honors Connection: close sends its next request on a new connection."
+      "digest": "sha256:ef8045a0d5c267e51842f5a6d205885d455a678e9eb6183bc2a4706b28158fd2",
+      "rationale": "#4441 bounds the direct chunk receive with the same finite ingress budgets and renews the ticket idle timer on accepted bytes; the 308 range/x-upload-offset framing and completion status are unchanged, so a released client resumes exactly as before."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadFinalize",
-      "digest": "sha256:6eb21ad3411c0c0eac0e6a1a5102be41df904517e0961b9ded7bf0a0cbedec4e",
-      "rationale": "#4441 bounds the finalize request with the same finite ingress budgets, renews inactivity on JSON bytes accepted by the bounded reader, and passes the request's ingress signal through the serialized admission into the post-body hash, the owned extraction stream and the artifact registration boundary; the request body, response artifact framing and status codes are unchanged, so a released peer interoperates as before. An early answer to an unfinished request body (308, header refusal or authorization refusal) now carries Connection: close and the server closes the connection after the answer flushes; status codes, the 308 range/x-upload-offset headers and response bodies are unchanged, and an HTTP client that honors Connection: close sends its next request on a new connection."
+      "digest": "sha256:688d98edb33e00cd736e47af03c85fa36b7a02c2d655850ac3e230277c3a1687",
+      "rationale": "#4441 bounds the finalize request with the same finite ingress budgets, renews inactivity on JSON bytes accepted by the bounded reader, and passes the request's ingress signal through the serialized admission into the post-body hash, the owned extraction stream and the artifact registration boundary; the request body, response artifact framing and status codes are unchanged, so a released peer interoperates as before."
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse",
