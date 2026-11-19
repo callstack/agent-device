@@ -47,6 +47,7 @@ type RemoteClient = ReturnType<typeof createAgentDeviceClient>;
 type RemotePaths = {
   screenshotPath: string;
   recordingPath: string;
+  cwd: string;
   localApkPath: string;
   localInstallSourcePath: string;
 };
@@ -547,10 +548,18 @@ async function assertRecordingArtifactRoundTrip(
   assert.equal(start.recording, 'started');
   assert.equal(fs.existsSync(paths.recordingPath), false);
 
+  // #4518: a remote stop never writes to the daemon's localPath echo. It lands in the client cwd
+  // under the daemon's file name and reports that fallback.
   const stop = await client.recording.record({ action: 'stop' });
   assert.equal(stop.recording, 'stopped');
-  assert.equal(stop.outPath, paths.recordingPath);
-  assert.deepEqual(fs.readFileSync(paths.recordingPath), RECORDING_BYTES);
+  const landed = path.join(paths.cwd, 'remote-recording.mp4');
+  assert.equal(stop.outPath, landed);
+  assert.deepEqual(fs.readFileSync(landed), RECORDING_BYTES);
+  assert.equal(fs.existsSync(paths.recordingPath), false);
+  assert.deepEqual(
+    (stop as { recordingDestinationWarnings?: unknown }).recordingDestinationWarnings,
+    [{ reason: 'recording_destination_not_requested', field: 'outPath', path: landed }],
+  );
 
   const recordStartRpc = rpcRequests.at(-2);
   assert.equal(recordStartRpc?.params?.command, 'record');
@@ -631,14 +640,19 @@ test('Provider-backed integration remote daemon client materializes artifacts an
     return;
   }
 
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-client-'));
+  const stateDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-client-')),
+  );
+  const cwd = path.join(stateDir, 'cwd');
+  fs.mkdirSync(cwd);
   const screenshotPath = path.join(stateDir, 'remote-shot.png');
-  const recordingPath = path.join(stateDir, 'remote-recording.mp4');
+  const recordingPath = path.join(stateDir, 'clips', 'remote-recording.mp4');
   const localApkPath = path.join(stateDir, 'demo.apk');
   const localInstallSourcePath = path.join(stateDir, 'source.apk');
   fs.writeFileSync(localApkPath, 'fake-apk');
   fs.writeFileSync(localInstallSourcePath, 'fake-source-apk');
   const paths = {
+    cwd,
     screenshotPath,
     recordingPath,
     localApkPath,
@@ -656,6 +670,7 @@ test('Provider-backed integration remote daemon client materializes artifacts an
       daemonBaseUrl: `http://127.0.0.1:${port}`,
       daemonAuthToken: 'remote-token',
       stateDir,
+      cwd,
     });
 
     await assertScreenshotRoundTrip(client, paths, rpcRequests);
