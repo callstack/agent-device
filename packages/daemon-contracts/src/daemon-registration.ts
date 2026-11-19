@@ -1,6 +1,6 @@
 import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import {
-  birthTokenOf,
+  readPersistedOwner,
   isProcessAlive,
   ownerIdentityDiffers,
   isProcessPid,
@@ -75,14 +75,11 @@ function readDaemonRegistration(infoPath: string): DaemonRegistrationReading {
     identity:
       parsed.pid === null
         ? null
-        : {
+        : readPersistedOwner({
             pid: parsed.pid,
-            // In-memory reads compare against live canonical process reads, so the provenanced
-            // token wins; the legacy raw rendering stays beside it for released readers.
-            startTime: parsed.startTimeToken ?? parsed.startTime,
+            startTime: parsed.startTime,
             birthToken: parsed.startTimeToken,
-            rawStartTime: parsed.startTime,
-          },
+          }),
     ownership: readDaemonOwnership(read.record.ownership),
   };
 }
@@ -267,7 +264,7 @@ export function observedDaemonIdentityOfRegistration(
 export function readStopCleanupOwner(
   record: DaemonStopIdentity,
 ): { pid: number; processStartTime: string } | null {
-  const token = record.identity ? birthTokenOf(record.identity) : null;
+  const token = record.identity?.startTime ?? null;
   if (record.ownership !== 'detached' || !token) return null;
   return { pid: record.identity!.pid, processStartTime: token };
 }

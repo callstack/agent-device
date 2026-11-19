@@ -78,6 +78,11 @@ This proves the daemon cutover.
 It does not expand the host-kit mixed-protocol support contract.
 Older clients still require the deployment controls above.
 
+Hardened owner records keep the released reader's `startTime` beside a canonical `birthToken`.
+Daemon registrations use the corresponding `processStartTime` and `processStartTimeToken` fields.
+Readers use the canonical token when present and retain unqualified older values as unknown evidence.
+The legacy field can be removed only when supported older hardened readers no longer access the shared paths.
+
 ## Recovering retained legacy daemon state
 
 1. Stop every daemon and client that uses the affected state directory, including older versions.

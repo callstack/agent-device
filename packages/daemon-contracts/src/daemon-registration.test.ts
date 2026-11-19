@@ -38,8 +38,6 @@ test('reads back the identity a running daemon publishes for its state dir', () 
   assert.deepEqual(readRegisteredDaemonIdentity(infoPathOf(stateDir)), {
     pid: process.pid,
     startTime: 'published-start',
-    birthToken: null,
-    rawStartTime: 'published-start',
   });
 });
 
@@ -93,14 +91,14 @@ test('a published start time proves supersession only when both sides are proven
 
 test('a new-build record keeps the legacy raw field released clients read, beside the canonical token', () => {
   const stateDir = useStateDir();
-  // What the new publisher writes: legacy raw lstart in `processStartTime`, posix token in
-  // `processStartTimeToken`.
-  publishDaemonRegistration(stateDir, {
-    pid: 4242,
-    startTime: LIFETIME_TOKEN,
-    birthToken: LIFETIME_TOKEN,
-    rawStartTime: LEGACY_RAW_START_TIME,
-  });
+  fs.writeFileSync(
+    infoPathOf(stateDir),
+    JSON.stringify({
+      pid: 4242,
+      processStartTime: LEGACY_RAW_START_TIME,
+      processStartTimeToken: LIFETIME_TOKEN,
+    }),
+  );
 
   const record = JSON.parse(fs.readFileSync(infoPathOf(stateDir), 'utf8')) as Record<
     string,
@@ -113,8 +111,6 @@ test('a new-build record keeps the legacy raw field released clients read, besid
 
   const identity = readRegisteredDaemonIdentity(infoPathOf(stateDir));
   assert.equal(identity?.startTime, LIFETIME_TOKEN);
-  assert.equal(identity?.birthToken, LIFETIME_TOKEN);
-  assert.equal(identity?.rawStartTime, LEGACY_RAW_START_TIME);
 
   // A new reader compares canonical tokens: the live owner matches, a stale one is proven replaced.
   assert.equal(
@@ -122,7 +118,6 @@ test('a new-build record keeps the legacy raw field released clients read, besid
       stateDir,
       pid: 4242,
       startTime: LIFETIME_TOKEN,
-      birthToken: LIFETIME_TOKEN,
     }),
     false,
   );
@@ -131,7 +126,6 @@ test('a new-build record keeps the legacy raw field released clients read, besid
       stateDir,
       pid: 4242,
       startTime: STALE_LIFETIME_TOKEN,
-      birthToken: STALE_LIFETIME_TOKEN,
     }),
     true,
   );
@@ -143,14 +137,12 @@ test('an old-format record (raw only) is unknown to new readers, never treated a
 
   const identity = readRegisteredDaemonIdentity(infoPathOf(stateDir));
   assert.equal(identity?.startTime, LEGACY_RAW_START_TIME);
-  assert.equal(identity?.birthToken, null);
   // Raw record vs canonical live read: unknown, so not superseded — unresolved, not reassignment.
   assert.equal(
     isSupersededDaemonOwner({
       stateDir,
       pid: 4242,
       startTime: LIFETIME_TOKEN,
-      birthToken: LIFETIME_TOKEN,
     }),
     false,
   );
@@ -158,7 +150,6 @@ test('an old-format record (raw only) is unknown to new readers, never treated a
     readRegisteredDaemonOwnership(infoPathOf(stateDir), {
       pid: 4242,
       startTime: LIFETIME_TOKEN,
-      birthToken: LIFETIME_TOKEN,
     }).state,
     'unproven',
   );
@@ -209,8 +200,6 @@ test('ownership is decided by the identity in the record, not by its pid alone',
     identity: {
       pid: 4242,
       startTime: 'successor-start',
-      birthToken: null,
-      rawStartTime: 'successor-start',
     },
   });
 });
@@ -228,7 +217,7 @@ test('ownership names each way a record yields no owner', () => {
   fs.writeFileSync(infoPath, JSON.stringify({ pid: 4242 }));
   assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
     state: 'replaced',
-    identity: { pid: 4242, startTime: null, birthToken: null, rawStartTime: null },
+    identity: { pid: 4242, startTime: null },
   });
 });
 

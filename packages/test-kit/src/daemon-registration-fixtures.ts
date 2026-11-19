@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { OwnerIdentity } from '@agent-device/host-kit/process';
+import { writePersistedOwner, type OwnerIdentity } from '@agent-device/host-kit/process';
 
 /**
  * Publishes the daemon registration a running daemon writes for its state dir.
@@ -9,6 +9,7 @@ import type { OwnerIdentity } from '@agent-device/host-kit/process';
  * legacy raw `processStartTime` plus the canonical `processStartTimeToken` beside it.
  */
 export function publishDaemonRegistration(stateDir: string, owner: OwnerIdentity): void {
+  const persisted = writePersistedOwner(owner);
   fs.mkdirSync(stateDir, { recursive: true });
   fs.writeFileSync(
     path.join(stateDir, 'daemon.json'),
@@ -20,9 +21,11 @@ export function publishDaemonRegistration(stateDir: string, owner: OwnerIdentity
       ...(owner.startTime === null
         ? {}
         : {
-            processStartTime: owner.rawStartTime ?? owner.startTime,
+            processStartTime: persisted.startTime,
             // The token field only ever carries a provenanced token; an old-format record has none.
-            ...(owner.birthToken == null ? {} : { processStartTimeToken: owner.birthToken }),
+            ...(persisted.birthToken == null
+              ? {}
+              : { processStartTimeToken: persisted.birthToken }),
           }),
       stateDir,
     }),

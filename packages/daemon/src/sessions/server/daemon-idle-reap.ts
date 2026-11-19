@@ -1,3 +1,4 @@
+import { readPersistedOwner, writePersistedOwner } from '@agent-device/host-kit/process';
 import {
   DAEMON_LIFECYCLE_REASONS,
   DAEMON_SHUTTING_DOWN_REASON,
@@ -222,6 +223,11 @@ export function createDaemonLifecycleAdmission(params: {
   /** Who owns this process and may close it. */
   ownership: () => DaemonRuntimeOwnership;
 }): DaemonLifecycleAdmission {
+  const persistedIdentity = writePersistedOwner({
+    pid: params.identity.pid,
+    startTime: params.identity.processStartTime,
+  });
+  const comparableIdentity = readPersistedOwner(persistedIdentity);
   let admitting = true;
   const refuse = (error: AppError): DaemonResponse => ({
     ok: false,
@@ -244,8 +250,8 @@ export function createDaemonLifecycleAdmission(params: {
     // The canonical token is the positive match; the daemon's own legacy raw rendering is also
     // accepted because a released client sends exactly what this record's raw field held.
     if (
-      fence.processStartTime !== params.identity.processStartTime &&
-      fence.processStartTime !== params.identity.rawStartTime
+      fence.processStartTime !== comparableIdentity.startTime &&
+      fence.processStartTime !== persistedIdentity.startTime
     ) {
       return refuse(instanceMismatch());
     }

@@ -12,27 +12,27 @@ import {
   type HostProcessIdentityObservation,
 } from './host-process.ts';
 
-export type OwnerIdentity = {
-  pid: number;
-  startTime: string | null;
-  /**
-   * The canonical provenanced birth token (`posix:`/`linux:`/CIM) when the record carries it,
-   * persisted beside the legacy raw `startTime` so released readers keep their format. Lifetime
-   * comparisons prefer this field; without it the raw value is unqualified and proves nothing.
-   */
-  birthToken?: string | null;
-  /**
-   * The legacy raw lstart rendering exactly as a released build would have recorded it, persisted
-   * into `processStartTime`/`startTime` fields that old clients read. Never used for comparisons.
-   */
-  rawStartTime?: string | null;
-};
+export type OwnerIdentity = { pid: number; startTime: string | null };
 
-/** The token lifetime comparisons use: the canonical one when present, else the raw value. */
-export function birthTokenOf(
-  identity: Pick<OwnerIdentity, 'startTime' | 'birthToken'>,
-): string | null {
-  return identity.birthToken ?? identity.startTime;
+export type PersistedOwner = { pid: number; startTime: string | null; birthToken?: string | null };
+
+/** Converts a stored owner to the single comparison identity used in memory. */
+export function readPersistedOwner(record: PersistedOwner): OwnerIdentity {
+  return { pid: record.pid, startTime: record.birthToken ?? record.startTime };
+}
+
+/** Encodes the process identity for released readers and token-aware readers. */
+export function writePersistedOwner(identity: OwnerIdentity): PersistedOwner {
+  if (
+    currentPersistedOwner?.pid === identity.pid &&
+    currentPersistedOwner.birthToken === identity.startTime
+  )
+    return { ...currentPersistedOwner };
+  return {
+    pid: identity.pid,
+    startTime: identity.startTime?.startsWith('posix:') ? null : identity.startTime,
+    birthToken: identity.startTime,
+  };
 }
 
 /** A process id accepted by Node's native signal API. */
@@ -48,6 +48,7 @@ export type OwnerLiveness =
   | 'unknown';
 
 let currentOwnerIdentity: Readonly<OwnerIdentity> | undefined;
+let currentPersistedOwner: Readonly<PersistedOwner> | undefined;
 
 /**
  * This process's identity. A process's own start time never changes, so the first readable answer
@@ -55,45 +56,49 @@ let currentOwnerIdentity: Readonly<OwnerIdentity> | undefined;
  * not kept: the next call asks the host again rather than recording an owner without one.
  */
 export function readCurrentOwnerIdentity(): OwnerIdentity {
-  return (
-    rememberedOwnerIdentity() ??
-    rememberOwnerIdentity(readProcessStartTime(process.pid), readProcessStartTimeRaw(process.pid))
-  );
+  return rememberedOwnerIdentity() ?? rememberOwnerIdentitySync();
 }
 
 /** {@link readCurrentOwnerIdentity} for a caller that is already waiting: no blocking `ps`. */
 export async function readCurrentOwnerIdentityAsync(): Promise<OwnerIdentity> {
-  return (
-    rememberedOwnerIdentity() ??
-    rememberOwnerIdentity(
-      (await readProcessIdentityFacts(process.pid)).startTime,
-      await readProcessStartTimeRawAsync(process.pid),
-    )
-  );
+  const cached = rememberedOwnerIdentity();
+  if (cached) return cached;
+  const startTime = (await readProcessIdentityFacts(process.pid)).startTime;
+  const legacy = needsLegacyPsRead(startTime)
+    ? await readProcessStartTimeRawAsync(process.pid)
+    : startTime;
+  return rememberOwnerIdentity(startTime, legacy);
+}
+
+function rememberOwnerIdentitySync(): OwnerIdentity {
+  const startTime = readProcessStartTime(process.pid);
+  const legacy = needsLegacyPsRead(startTime) ? readProcessStartTimeRaw(process.pid) : startTime;
+  return rememberOwnerIdentity(startTime, legacy);
+}
+
+function needsLegacyPsRead(startTime: string | null): boolean {
+  return startTime !== null && !startTime.startsWith('linux:') && !/^\d{21}$/.test(startTime);
 }
 
 function rememberedOwnerIdentity(): OwnerIdentity | undefined {
   return currentOwnerIdentity?.pid === process.pid ? { ...currentOwnerIdentity } : undefined;
 }
 
-function rememberOwnerIdentity(
-  startTime: string | null,
-  rawStartTime: string | null,
-): OwnerIdentity {
-  // The canonical token doubles as `birthToken`: the value persisted beside the legacy raw field.
-  const identity = { pid: process.pid, startTime, birthToken: startTime, rawStartTime };
-  if (startTime !== null) currentOwnerIdentity = Object.freeze({ ...identity });
+function rememberOwnerIdentity(startTime: string | null, legacy: string | null): OwnerIdentity {
+  const identity = { pid: process.pid, startTime };
+  if (startTime !== null) {
+    currentOwnerIdentity = Object.freeze(identity);
+    currentPersistedOwner = Object.freeze({
+      pid: process.pid,
+      startTime: legacy,
+      birthToken: startTime,
+    });
+  }
   return identity;
 }
 
-export function ownerIdentityMatches(
-  left: Pick<OwnerIdentity, 'pid' | 'startTime' | 'birthToken'>,
-  right: Pick<OwnerIdentity, 'pid' | 'startTime' | 'birthToken'>,
-): boolean {
+export function ownerIdentityMatches(left: OwnerIdentity, right: OwnerIdentity): boolean {
   if (left.pid !== right.pid) return false;
-  // Structural fence: exact equality, on the canonical token when both sides carry one.
-  if (left.birthToken != null && right.birthToken != null)
-    return left.birthToken === right.birthToken;
   return left.startTime === right.startTime;
 }
 
@@ -104,13 +109,10 @@ export function ownerIdentityMatches(
  * that acts on this can never mistake one owner for two and hand its resource
  * away.
  */
-export function ownerIdentityDiffers(
-  left: Pick<OwnerIdentity, 'pid' | 'startTime' | 'birthToken'>,
-  right: Pick<OwnerIdentity, 'pid' | 'startTime' | 'birthToken'>,
-): boolean {
+export function ownerIdentityDiffers(left: OwnerIdentity, right: OwnerIdentity): boolean {
   if (left.pid !== right.pid) return true;
   // Compares canonical tokens when both sides carry one; a legacy raw-only record is unknown.
-  return processStartTimesDiffer(birthTokenOf(left), birthTokenOf(right));
+  return processStartTimesDiffer(left.startTime, right.startTime);
 }
 
 /**
@@ -214,12 +216,12 @@ function hostSaysZombie(
  * not answer is unknown evidence, never proof.
  */
 function provesPidReused(
-  owner: Pick<OwnerIdentity, 'pid' | 'startTime' | 'birthToken'>,
+  owner: OwnerIdentity,
   observation: HostProcessIdentityObservation | null | undefined,
 ): boolean {
   const currentStartTime =
     observation === undefined ? readProcessStartTime(owner.pid) : (observation?.startTime ?? null);
-  return processStartTimesDiffer(currentStartTime, birthTokenOf(owner));
+  return processStartTimesDiffer(currentStartTime, owner.startTime);
 }
 
 function classifyOwnerStateDirectory(stateDir: string): OwnerLiveness {

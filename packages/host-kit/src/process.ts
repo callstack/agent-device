@@ -54,7 +54,9 @@ export {
   readOwnedProcessRecordFile,
 } from './internal/owned-process-record.ts';
 export {
-  birthTokenOf,
+  readPersistedOwner,
+  writePersistedOwner,
+  type PersistedOwner,
   classifyOwnerLiveness,
   classifyOwnerLivenessAsync,
   classifyOwnerLivenessFromObservation,

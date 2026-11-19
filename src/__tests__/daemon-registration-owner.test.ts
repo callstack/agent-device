@@ -207,9 +207,7 @@ for (const [pid, startTime, reason] of [
     const before = fs.readFileSync(paths.infoPath, 'utf8');
     assert.deepEqual(await owner.finish(), {
       state: reason,
-      ...(reason === 'replaced'
-        ? { identity: { pid, startTime, birthToken: null, rawStartTime: startTime } }
-        : {}),
+      ...(reason === 'replaced' ? { identity: { pid, startTime } } : {}),
     });
     assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), before);
     assert.equal(fs.existsSync(paths.lockPath), false);

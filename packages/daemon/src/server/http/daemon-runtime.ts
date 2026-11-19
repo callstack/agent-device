@@ -494,7 +494,6 @@ async function startDaemonRuntimeOnHost(
     identity: {
       pid: daemonIdentity.pid,
       processStartTime: daemonIdentity.startTime,
-      rawStartTime: daemonIdentity.rawStartTime,
     },
     sessionStore,
     leaseRegistry,

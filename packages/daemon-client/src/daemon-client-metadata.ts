@@ -120,7 +120,6 @@ export async function readRegisteredDaemon(
       !processLockHoldsDaemonIdentity(inspection, {
         pid: info.pid,
         startTime: info.processStartTime ?? null,
-        birthToken: info.processStartTimeToken ?? null,
       })
     )
       info = null;
@@ -156,7 +155,6 @@ export function observedDaemonIdentityOf(info: DaemonInfo): ObservedDaemonIdenti
   return {
     pid: info.pid,
     startTime: info.processStartTime ?? null,
-    birthToken: info.processStartTimeToken ?? null,
     ownership: readDaemonOwnership(info.ownership),
   };
 }

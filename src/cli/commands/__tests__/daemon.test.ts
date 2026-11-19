@@ -142,8 +142,6 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
       observed: {
         pid: 123,
         startTime: 'start',
-        birthToken: null,
-        rawStartTime: 'start',
         ownership: 'detached',
       },
     });
@@ -462,8 +460,6 @@ test('daemon stop passes host ownership to shared retirement without detached cl
       observed: {
         pid: 555,
         startTime: 'start-time',
-        birthToken: null,
-        rawStartTime: 'start-time',
         ownership: 'embedded',
       },
     });

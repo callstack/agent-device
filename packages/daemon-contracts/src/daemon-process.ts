@@ -1,5 +1,4 @@
 import {
-  birthTokenOf,
   compareBirthTokens,
   isProcessAlive,
   processStartTimesDiffer,
@@ -149,7 +148,7 @@ export async function stopDaemonProcess(
 ): Promise<DaemonTerminationResult> {
   if (!isProcessPid(observed.pid)) return { status: 'retained', reason: 'identity-unverified' };
   // The record's canonical token is the comparison evidence; a legacy raw-only value is unknown.
-  const observedToken = birthTokenOf(observed);
+  const observedToken = observed.startTime;
   if (!observedToken?.trim()) {
     if (!isProcessAlive(observed.pid)) return { status: 'not-running' };
     return { status: 'retained', reason: 'missing-start-time' };
