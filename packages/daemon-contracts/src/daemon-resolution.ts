@@ -78,78 +78,120 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   // directory and WRITTEN into as another, and `daemon.json` would record a directory holding no records. The fold
   // therefore happens HERE, once, and every entry of `DaemonPaths` is derived from the folded base.
   //
-  // Folding is faithful exactly while each step backs out of a directory that is not a link: `name/..` returns to
-  // the parent of whatever NAME resolves to, so a link at `name` makes the spelling mean the target's parent while
-  // the fold says the directory the text names. Such a route has two meanings and no base could be proven to be the
-  // one the state rule judges, so it is refused. Every directory a fold steps OUT OF stands above the state root,
+  // Folding is faithful exactly while each step backs out of a directory that is provably not a link: `name/..`
+  // returns to the parent of whatever NAME resolves to, so a link at `name` makes the spelling mean the target's
+  // parent while the fold says the directory the text names. A step whose ground cannot be said — a link, or an
+  // `lstat` the host refuses — is therefore refused rather than folded, because folding an uncertain route is how
+  // records end up in a base nothing judged. Every directory a fold steps OUT OF stands above the state root,
   // where ADR 0016 allows links, which is why this is asked here — at the one point where the route is still a
   // spelling — and cannot be reconstructed from folded text afterwards.
-  if (stepsBackOut(route)) return foldParentRelativeRoute(value, route);
+  if (stepsBackOut(route)) return foldParentRelativeStateRoute(value, route);
   return route;
 }
 
 /**
  * Folds the `name/..` pairs an ABSOLUTE state route asks for, having proven each fold faithful.
  *
- * Folding `name/..` says "the directory the text names", while the host answers "the parent of whatever NAME
- * resolves to". The two agree exactly while `name` is not a symbolic link, so each step back out is asked of the
- * one host fact that decides it — whether the directory it leaves is a link. A step with nothing to leave changes
- * nothing, which is what a route that climbs past its root spells.
+ * The walk and the result are built with the platform's own path API, never by rebuilding a string from a fixed
+ * separator: a Windows route carries a drive (`C:\`) or a UNC scope (`\\server\share\`) as its root, which a leading
+ * `/` would silently drop into another scope, and a POSIX name may legitimately contain a backslash, which only the
+ * host's own separator may split on.
+ *
+ * @param platform the host's path API, asked of the caller rather than assumed, so the fold a Windows host gets is
+ *   the one this rule means and can be checked without one.
  */
-function foldParentRelativeRoute(value: string, route: string): string {
-  const names = route.split(/[\\/]/).filter((name) => name.length > 0 && name !== '.');
+export function foldParentRelativeStateRoute(
+  value: string,
+  route: string,
+  platform: typeof path = path,
+): string {
+  const { root, names } = splitSpelledRoute(route, platform);
   const stood: string[] = [];
   for (const name of names) {
     if (name !== '..') {
       stood.push(name);
       continue;
     }
+    // A step with nothing to leave changes nothing, which is what a route that climbs past its root spells.
     if (stood.length === 0) continue;
-    const leaving = `/${stood.join('/')}`;
-    if (hostIsSymbolicLink(leaving)) {
+    const leaving = joinSpelledRoute(root, stood, platform);
+    const standing = hostStandingAt(leaving);
+    if (standing === 'link') {
       throw new AppError(
         'INVALID_ARGS',
         `State dir "${value}" steps back out from the symbolic link ${leaving}, so which directory its ` +
           'records land in is not established. Name the state directory without a ".." step, or remove that ' +
           'link.',
-        {
-          reason: 'state_dir_parent_step_through_link',
-          details: { link: leaving },
-        },
+        { reason: 'state_dir_parent_step_through_link', details: { link: leaving } },
+      );
+    }
+    if (standing === 'unverified') {
+      throw new AppError(
+        'INVALID_ARGS',
+        `State dir "${value}" steps back out from ${leaving}, which this process cannot inspect, so it ` +
+          'cannot tell whether that step is a symbolic link and where the records would land. Make that ' +
+          'directory readable and searchable by the user that runs agent-device, or name the state directory ' +
+          'without a ".." step.',
+        { reason: 'state_dir_parent_step_unverified', details: { directory: leaving } },
       );
     }
     stood.pop();
   }
-  return `/${stood.join('/')}`;
+  return joinSpelledRoute(root, stood, platform);
 }
 
 /**
- * Whether the directory a step back out leaves is a link, asked by `lstat` so a link is seen and not followed.
+ * Whether the directory a step back out leaves is a link, seen by `lstat` so a link is not followed.
  *
- * An `lstat` that fails — the level is absent, or its parent cannot be read — answers `false`, and the fold stays
- * textual. That is the answer for the ordinary configuration: `../shared-state` beside a checkout is a route that
- * stands before this daemon's first start, and a level that does not stand yet cannot be a link. Whatever ground
- * the fold names is judged again by the state rule before a record lands in it, and that judgment is what withholds
- * a write.
+ * Absence is answered APART from a fault, and the two are not interchangeable. `absent` is the ordinary case —
+ * `../shared-state` beside a checkout stands nowhere before the daemon's first start, and a level that does not
+ * stand cannot be a link — so the fold stays textual. `unverified` is a lookup the host refused or failed, which
+ * says nothing about what stands there: a route in that state is never folded into a different base.
  */
-function hostIsSymbolicLink(pathname: string): boolean {
+function hostStandingAt(pathname: string): 'link' | 'plain' | 'absent' | 'unverified' {
   try {
-    return fs.lstatSync(pathname).isSymbolicLink();
-  } catch {
-    return false;
+    return fs.lstatSync(pathname).isSymbolicLink() ? 'link' : 'plain';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' ? 'absent' : 'unverified';
   }
 }
 
-/** Puts a spelled relative path under `cwd` without folding any name away. */
+/** Splits a spelled route into its platform root and the names below it, without folding anything away. */
+function splitSpelledRoute(
+  route: string,
+  platform: typeof path,
+): Readonly<{ root: string; names: string[] }> {
+  const root = platform.parse(route).root;
+  const below = route.slice(root.length).split(separatorPattern(platform));
+  return { root, names: below.filter((name) => name.length > 0 && name !== '.') };
+}
+
+/** The one pattern that splits a name: the host's own separator, so a POSIX backslash stays a filename byte. */
+function separatorPattern(platform: typeof path): RegExp {
+  return platform.sep === '\\' ? /[\\/]/ : /\//;
+}
+
+/** Puts names back under a platform root, which already carries its own trailing separator. */
+function joinSpelledRoute(root: string, names: readonly string[], platform: typeof path): string {
+  return `${root}${names.join(platform.sep)}`;
+}
+
+/**
+ * Puts a spelled relative path under `cwd` without folding any name away.
+ *
+ * `path.join` and `path.resolve` both fold a `..` the moment they are asked, which is the substitution this rule
+ * refuses to make unproven, so the anchor is concatenated and the host separator is the only thing inserted.
+ */
 function joinTextually(cwd: string, spelled: string): string {
   const relative = spelled.replace(/^\.\//, '');
   if (!cwd) return relative;
   return cwd.endsWith(path.sep) ? `${cwd}${relative}` : `${cwd}${path.sep}${relative}`;
 }
 
-/** Whether a spelled path asks for a step back out of the directory it is in, under either separator. */
+/** Whether a spelled path asks for a step back out of the directory it is in, on the host's own separator. */
 function stepsBackOut(spelled: string): boolean {
-  return spelled.split(/[\\/]/).some((name) => name === '..');
+  return spelled.split(separatorPattern(path)).some((name) => name === '..');
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

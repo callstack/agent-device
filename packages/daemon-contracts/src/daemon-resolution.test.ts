@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { resolveDaemonPaths } from './daemon-resolution.ts';
+import { foldParentRelativeStateRoute, resolveDaemonPaths } from './daemon-resolution.ts';
 
 test('a relative state dir resolves against the working directory it is given', () => {
   const paths = resolveDaemonPaths('state/here', { cwd: '/workspace/project' });
@@ -93,3 +93,67 @@ test('a state dir whose parent step is part of a name is not a step back out', (
 
   expect(paths.baseDir).toBe(path.resolve('/workspace/project', 'state/..hidden'));
 });
+
+test('a Windows drive route keeps its drive through the fold', () => {
+  // A fold that rebuilds a route with a leading `/` moves a Windows state dir out of its own drive scope, and the
+  // records then land beside a root nothing chose.
+  const route = win('C:', 'work', 'state', '..', 'shared-state');
+  expect(foldParentRelativeStateRoute(route, route, path.win32)).toBe(
+    win('C:', 'work', 'shared-state'),
+  );
+  const toRoot = win('C:', 'state', '..');
+  expect(foldParentRelativeStateRoute(toRoot, toRoot, path.win32)).toBe('C:\\');
+});
+
+test('a Windows UNC route keeps its server and share through the fold', () => {
+  const route = win('', '', 'srv', 'share', 'work', 'state', '..', 'shared-state');
+  expect(foldParentRelativeStateRoute(route, route, path.win32)).toBe(
+    win('', '', 'srv', 'share', 'work', 'shared-state'),
+  );
+  // A server and share are a root, so a step with nothing below it to leave changes nothing.
+  const toScope = win('', '', 'srv', 'share', 'state', '..', '..');
+  expect(foldParentRelativeStateRoute(toScope, toScope, path.win32)).toBe(
+    win('', '', 'srv', 'share') + '\\',
+  );
+});
+
+test('a fold uses the host separator for the route it returns', () => {
+  expect(foldParentRelativeStateRoute('x', '/work/state/../shared-state', path.posix)).toBe(
+    '/work/shared-state',
+  );
+});
+
+test('a POSIX name containing a backslash is not split into a step back out', () => {
+  // On POSIX the backslash is an ordinary filename byte, so a name spelled with one is ONE directory name.
+  // Splitting on both separators would see a `..` the host never sees and fold a route that asks for none.
+  const spelled = String.raw`/work/state\..\elsewhere`;
+  expect(foldParentRelativeStateRoute(spelled, spelled, path.posix)).toBe(spelled);
+});
+
+test('an lstat fault on the stepped-out-of directory is refused, not folded', () => {
+  // Absence and a refused lookup are different answers: absence says the level cannot be a link, a fault says
+  // nothing about what stands there. Folding a route the rule could not check is how records reach a base that
+  // was never judged.
+  const root = fs.realpathSync(mkdtempForTestSync('agent-device-resolution-'));
+  const project = path.join(root, 'project');
+  fs.mkdirSync(project);
+  const lstat = vi.spyOn(fs, 'lstatSync').mockImplementation((() => {
+    throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+  }) as unknown as typeof fs.lstatSync);
+
+  try {
+    expect(() => resolveDaemonPaths('../shared-state', { cwd: project })).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({ reason: 'state_dir_parent_step_unverified' }),
+      }),
+    );
+  } finally {
+    lstat.mockRestore();
+  }
+});
+
+/** Builds a Windows route from its parts, so a test pins a SCOPE without spelling backslash escapes. */
+function win(...parts: readonly string[]): string {
+  return parts.join('\\');
+}
