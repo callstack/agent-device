@@ -46,7 +46,8 @@ function runTouchCommand(payloadBase64: string) {
   });
 }
 
-// A 64 KiB `fill --text-stdin` of JSON-escaped control characters expands past the cap here.
+// A frame larger than any documented producer: the payload alone fills the cap, and the action and
+// request id push the frame past it.
 const OVER_LIMIT_PAYLOAD = 'A'.repeat(ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES);
 
 test('an oversized input frame skips session dispatch and leaves the live helper available', async () => {

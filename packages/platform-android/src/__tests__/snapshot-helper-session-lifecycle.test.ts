@@ -64,7 +64,7 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('a verified unsupported build stays one-shot across capture settings for a finite backoff', async () => {
+test('a verified unsupported build stays one-shot across time and capture settings until it is verified again', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
@@ -106,10 +106,10 @@ test('a verified unsupported build stays one-shot across capture settings for a 
   assert.match(log, /"helperSha256":"old-build"/);
   assert.doesNotMatch(log, /"phase":"android_snapshot_helper_session_start_failed"/);
 
-  // A stale memo can hide a reinstalled APK, so the build is tried again once the backoff ends.
-  now.mockReturnValue(startedAtMs + 10 * 60_000 + 1);
+  // No timer retries the build: only a fresh on-device verification can.
+  now.mockReturnValue(startedAtMs + 60 * 60_000);
   assert.equal(await captureAndroidSnapshotWithHelperSession(remembered), undefined);
-  assert.equal(spawnArgs.length, 2);
+  assert.equal(spawnArgs.length, 1);
 
   const replacement = createSessionProvider({ calls, spawnArgs });
   const output = await captureAndroidSnapshotWithHelperSession({
@@ -119,7 +119,7 @@ test('a verified unsupported build stays one-shot across capture settings for a 
     helperSha256: 'new-build',
   });
   assert.equal(output?.metadata.transport, 'persistent-session');
-  assert.equal(spawnArgs.length, 3);
+  assert.equal(spawnArgs.length, 2);
 });
 
 test('an unsupported build starts once unverified and once verified, then waits for a new verification', async () => {
@@ -151,7 +151,7 @@ test('an unsupported build starts once unverified and once verified, then waits 
   assert.equal(spawnArgs.length, 2);
 });
 
-test('a fresh on-device verification retries a build inside its unsupported backoff', async () => {
+test('a fresh on-device verification of a reinstalled APK clears the unsupported mark', async () => {
   const spawnArgs: (readonly string[])[] = [];
   const legacy = createSessionProvider({ calls: [], spawnArgs, legacySessionTransport: true });
   const options = {
@@ -236,7 +236,7 @@ test('an unsupported start on remembered install evidence makes the next install
   );
 });
 
-test('a marker-less binary without a verified installed digest earns only timed backoff', async () => {
+test('a marker-less binary with no verified digest and no version code earns only timed backoff', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
