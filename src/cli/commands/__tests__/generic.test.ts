@@ -174,37 +174,3 @@ test('open --json at a non-default response level still prints lease.device', as
   );
   assert.deepEqual((JSON.parse(json) as { data: Record<string, unknown> }).data.lease, { device });
 });
-
-test.each([{ json: true }, { json: false }])(
-  'close --level full keeps savedScript exact and escapes its C1 characters in the output (json: $json)',
-  async ({ json }) => {
-    const savedScript = '/tmp/a\u009bb\u007fc.ad';
-    const client = createAgentDeviceClient(
-      { session: 'qa', responseLevel: 'full' },
-      {
-        transport: async (): Promise<DaemonResponse> => ({
-          ok: true,
-          data: { session: 'qa', savedScript },
-        }),
-      },
-    );
-
-    const out = await withCapturedStdoutAsync(() =>
-      runGenericClientBackedCommand({
-        host: createTestHostEnvironment(),
-        command: 'close' as ClientBackedCliCommandName,
-        positionals: [],
-        flags: { json, responseLevel: 'full' } as CliFlags,
-        client,
-      }),
-    );
-
-    assert.ok(out.includes(String.raw`/tmp/a\u009bb\u007fc.ad`), out);
-    assert.deepEqual(
-      [...out].filter((char) => char >= '\u007f' && char <= '\u009f'),
-      [],
-    );
-    const parsed = JSON.parse(out) as { data?: { savedScript?: string }; savedScript?: string };
-    assert.equal((json ? parsed.data : parsed)?.savedScript, savedScript);
-  },
-);

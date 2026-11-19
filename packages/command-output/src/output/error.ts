@@ -10,7 +10,7 @@ import {
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
-import { collapseWarningText, escapeControlCharacters } from '../output-common.ts';
+import { collapseWarningText } from '../output-common.ts';
 
 /**
  * A failure as the CLI prints it on stderr. `summary` is one line that carries the code, the
@@ -62,12 +62,14 @@ export function formatHumanError(
     options.synopsis,
     forModel,
   );
-  const body = formatBody(normalized, {
-    fullMessage: truncated,
-    candidateViews: inlineCandidates ? [] : candidateViews,
-    showDetails: options.showDetails,
-  });
-  return { summary: escapeControlCharacters(summary), body: body.map(escapeControlCharacters) };
+  return {
+    summary,
+    body: formatBody(normalized, {
+      fullMessage: truncated,
+      candidateViews: inlineCandidates ? [] : candidateViews,
+      showDetails: options.showDetails,
+    }),
+  };
 }
 
 function formatSummary(

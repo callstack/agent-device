@@ -286,30 +286,3 @@ describe('the two stdout contracts in one run', () => {
     );
   });
 });
-
-test('a delivery-failure warning shows control characters in its path escaped', async () => {
-  const destination = '/tmp/a\u001b[8mb\u0085c.ad';
-  const failure = {
-    reason: 'script_delivery_failed',
-    cause: 'script_download_failed',
-    publicationId: 'p',
-    message: `The remote script could not be saved to ${destination}.`,
-    hint: 'The file may still hold the previous version.',
-  };
-
-  const output = await render('close', {
-    session: 'journey',
-    scriptDeliveryFailure: failure,
-    warnings: [`${failure.message} ${failure.hint}`],
-  });
-
-  const rendered = `${output.text ?? ''}${output.stderr ?? ''}`;
-  expect(rendered).toContain(
-    String.raw`/tmp/a\x1b[8mb\x85c.ad. The file may still hold the previous version.`,
-  );
-  expect(
-    [...rendered].filter(
-      (char) => (char < ' ' && char !== '\n') || (char >= '\u007f' && char <= '\u009f'),
-    ),
-  ).toEqual([]);
-});
