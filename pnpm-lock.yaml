@@ -218,6 +218,9 @@ importers:
       oxlint:
         specifier: ^1.79.0
         version: 1.79.0
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
       publint:
         specifier: ^0.3.24
         version: 0.3.24
