@@ -253,34 +253,37 @@ test.each(['create', 'reuse'])(
   },
 );
 
-test.each(['///journey.ad', '//server', 'C:journey.ad', String.raw`\\?\C:\journey.ad`])(
-  'all Windows publication boundaries refuse the unqualified path %s',
-  (destination) => {
-    const stat = vi.spyOn(fs, 'statSync');
-    const mkdir = vi.spyOn(fs, 'mkdirSync');
-    onWindows(() => {
-      const prepared = {
-        directory: 'C:\\',
-        entry: 'C:\\journey.ad',
-        name: 'journey.ad',
-        identity: 'windows',
-      };
-      for (const attempt of [
-        () => prepareScriptDestination(destination),
-        () => judgeScriptDestination(destination),
-        () => confirmScriptDestination(destination, prepared),
-      ]) {
-        expect(attempt).toThrow(
-          expect.objectContaining({
-            details: expect.objectContaining({ exposure: 'windows_path_form' }),
-          }),
-        );
-      }
-    });
-    expect(stat).not.toHaveBeenCalled();
-    expect(mkdir).not.toHaveBeenCalled();
-  },
-);
+test.each([
+  '///journey.ad',
+  '//server',
+  'C:journey.ad',
+  String.raw`\\?\C:\journey.ad`,
+  String.raw`\\server\pipe\recorder`,
+])('all Windows publication boundaries refuse the unsupported path form %s', (destination) => {
+  const stat = vi.spyOn(fs, 'statSync');
+  const mkdir = vi.spyOn(fs, 'mkdirSync');
+  onWindows(() => {
+    const prepared = {
+      directory: 'C:\\',
+      entry: 'C:\\journey.ad',
+      name: 'journey.ad',
+      identity: 'windows',
+    };
+    for (const attempt of [
+      () => prepareScriptDestination(destination),
+      () => judgeScriptDestination(destination),
+      () => confirmScriptDestination(destination, prepared),
+    ]) {
+      expect(attempt).toThrow(
+        expect.objectContaining({
+          details: expect.objectContaining({ exposure: 'windows_path_form' }),
+        }),
+      );
+    }
+  });
+  expect(stat).not.toHaveBeenCalled();
+  expect(mkdir).not.toHaveBeenCalled();
+});
 
 test("an unnamed entry is the caller's input to correct, and hints at a file name", () => {
   let failure: { code?: unknown; details?: { hint?: unknown } } | undefined;
