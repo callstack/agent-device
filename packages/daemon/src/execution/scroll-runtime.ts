@@ -72,7 +72,6 @@ import {
   type ScrollMovementPlan,
 } from './scroll-movement.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
-import { rectContains } from '@agent-device/kernel/rect';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
@@ -527,16 +526,47 @@ async function readCapturedTopEdgeState(
   // only NARROW that container. A screen can also carry a scroller that merely overlaps the centre
   // without containing it — an iOS dev client leaves its SwiftUI launcher list in the tree over the
   // app's own — and a pull planned there drags that list while the refresh control never sees it.
-  const inner = await readScrollEdgeState(nodes, 'top', {
-    point: {
-      x: broadRect.x + broadRect.width / 2,
-      y: broadRect.y + broadRect.height / 2,
-    },
-  });
-  if (!inner.containerRect || !rectContains(broadRect, inner.containerRect)) {
+  // Membership is the TREE, not the frame: iOS rects carry sub-pixel noise and a nested list may
+  // run past its parent, so containment-of-rects would drop a real narrowing and accept an
+  // overlapping one. The candidate counts when its own ancestry chain passes through the container.
+  const centre = {
+    x: broadRect.x + broadRect.width / 2,
+    y: broadRect.y + broadRect.height / 2,
+  };
+  const inner = await readScrollEdgeState(nodes, 'top', { point: centre });
+  const innerIndex = inner.containerIndex;
+  const broadIndex = broad.containerIndex;
+  const narrows =
+    inner.containerRect !== undefined &&
+    innerIndex !== undefined &&
+    broadIndex !== undefined &&
+    innerIndex !== broadIndex &&
+    descendsFromNode(nodes, innerIndex, broadIndex);
+  if (!narrows) {
     return { state: broad, nodes };
   }
   return { state: { ...inner, canScroll: inner.canScroll || broad.canScroll }, nodes };
+}
+
+/**
+ * Whether the node at `index` hangs below `ancestorIndex` in the captured tree. A tree read from a
+ * device carries no ordering guarantee between siblings, so the walk follows `parentIndex` links and
+ * stops on a cycle or a missing parent rather than guessing membership.
+ */
+function descendsFromNode(
+  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
+  index: number,
+  ancestorIndex: number,
+): boolean {
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const visited = new Set<number>([index]);
+  let current = byIndex.get(index)?.parentIndex;
+  while (current !== undefined && !visited.has(current)) {
+    if (current === ancestorIndex) return true;
+    visited.add(current);
+    current = byIndex.get(current)?.parentIndex;
+  }
+  return false;
 }
 
 /**

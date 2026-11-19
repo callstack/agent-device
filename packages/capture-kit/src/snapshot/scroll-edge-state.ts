@@ -27,6 +27,13 @@ export type ScrollEdgeState = {
    */
   containerRect?: Rect;
   /**
+   * The tree position of the container `containerRect` frames. Rects alone cannot tell a nested
+   * scroller from an unrelated one that happens to cover the same pixels — a dev client's launcher
+   * list over the app's own — so a caller that has to stay INSIDE the container it resolved walks
+   * the ancestry chain, and needs the node it is a chain to.
+   */
+  containerIndex?: number;
+  /**
    * A cheap signature of what is on screen right now. Two consecutive captures with the same
    * fingerprint but `canScroll` still true mean the scroll did not move the container — the actuator
    * and the detector disagree, which is the stuck-container signature `runScrollEdgePasses` stops on.

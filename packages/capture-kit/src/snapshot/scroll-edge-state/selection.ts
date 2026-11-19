@@ -43,6 +43,7 @@ export function analyzeScrollEdgeState(
     // Every selection path admits only `isUsableRect` containers, so a resolved container always
     // has a frame to report and its absence always means no container was resolved.
     ...(container.rect ? { containerRect: container.rect } : {}),
+    containerIndex: container.index,
     scope: buildScrollContainerScope(container, nodes),
     fingerprint: buildSurfaceFingerprint(container, nodes),
   };

@@ -450,6 +450,47 @@ test('bound scroll refresh anchors the pull inside the innermost nested scroller
   assert.deepEqual(pullSamples(plan)[0]!.point, { x: 540, y: 459 });
 });
 
+test('bound scroll refresh narrows to a nested scroller whose frame runs past the outer one', async () => {
+  // The rule is the tree, not the frame. A list nested in a screen-level ScrollView reports a
+  // content frame taller than its parent's clip, and iOS rects carry sub-pixel noise, so comparing
+  // rects would reject a real narrowing and put the pull back on the header.
+  const nestedScreen: SnapshotNode[] = [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'ScrollView',
+      rect: { x: 0, y: 132, width: 1080, height: 2142 },
+    },
+    {
+      ref: 'e2',
+      index: 2,
+      parentIndex: 1,
+      depth: 1,
+      type: 'ScrollView',
+      identifier: 'refresh-list',
+      // Bottom edge 451 + 1900 = 2351 runs past the parent's 132 + 2142 = 2274.
+      rect: { x: 63, y: 450.9999694824219, width: 954, height: 1900 },
+      hiddenContentBelow: true,
+    },
+  ];
+  const plans: PullPlanCall[] = [];
+  await runScroll(
+    ['refresh'],
+    {},
+    {
+      ...frozenCaptures([nestedScreen]),
+      scroll: async () => ({}),
+      gesture: async (plan) => {
+        plans.push(plan as PullPlanCall);
+        return {};
+      },
+    },
+    { session: sessionWithStoredScreen(nestedScreen) },
+  );
+  assert.deepEqual(pullSamples(plans[0]!)[0]!.point, { x: 540, y: 459 });
+});
+
 test('bound scroll refresh keeps the pull on the container it resolved when an unrelated scroller only overlaps its centre', async () => {
   // A dev client leaves its launcher list in the accessibility tree over the app's own. It is
   // smaller than the app's list and so sorts first at the broad container's centre, but it frames
