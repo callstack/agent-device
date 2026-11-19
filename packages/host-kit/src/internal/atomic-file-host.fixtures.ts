@@ -22,7 +22,7 @@ export const currentGid = process.getgid?.() ?? -1;
  * "foreign" case this user's own directory, so the ownership boundary is asserted nowhere at all. The same rule
  * is written in `@agent-device/test-kit`'s `host-ownership.fixtures.ts`; a package's tests may not reach
  * test-kit, and one package may not publish test support to another (R83), so each keeps its own copy — change
- * both together.
+ * all three together: this one, test-kit's, and capture-kit's `recording/swift-cache-trust.test.ts`.
  */
 export const FOREIGN_UID = (process.getuid?.() ?? -1) === 65534 ? 65533 : 65534;
 

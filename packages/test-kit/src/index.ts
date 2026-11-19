@@ -132,6 +132,11 @@ export {
 export { makeTempWorkspace } from './temp-workspace.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
 export {
+  requireUnsharedTestRunDir,
+  type SkippableTest,
+  unsharedTestRunDir,
+} from './unshared-tmp-dir.ts';
+export {
   STUBBED_APPLE_TOOLCHAIN,
   stubbedAppleDeveloperDir,
   writeXcodeFixture,

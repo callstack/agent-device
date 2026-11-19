@@ -106,6 +106,7 @@
     "build:xcuitest:visionos": "AGENT_DEVICE_XCUITEST_PLATFORM=visionos sh ./scripts/build-xcuitest-apple.sh",
     "build:xcuitest:visionos:clean": "pnpm clean:xcuitest:visionos && pnpm build:xcuitest:visionos",
     "package:xcuitest": "node scripts/build-package-xcuitest.mjs",
+    "generate:recording-swift-sources": "node --experimental-strip-types scripts/generate-recording-swift-sources.ts",
     "build:android-snapshot-helper": "AGENT_DEVICE_ANDROID_HELPER=snapshot sh ./scripts/build-android-helper.sh $(node -p \"require('./package.json').version\") .tmp/android-snapshot-helper",
     "package:android-snapshot-helper": "AGENT_DEVICE_ANDROID_HELPER=snapshot sh ./scripts/package-android-helper.sh $(node -p \"require('./package.json').version\") v$(node -p \"require('./package.json').version\") .tmp/android-snapshot-helper",
     "package:android-snapshot-helper:npm": "rm -rf android/snapshot-helper/dist && AGENT_DEVICE_ANDROID_HELPER=snapshot sh ./scripts/package-android-helper.sh $(node -p \"require('./package.json').version\") v$(node -p \"require('./package.json').version\") android/snapshot-helper/dist",

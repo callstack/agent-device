@@ -106,8 +106,8 @@ test('iOS simulator recording reports host contention and recovers through the f
         },
       };
       const daemon = await createProviderScenarioHarness({
-        // No real tool is on the daemon's PATH, and its Swift helper compiles into the scenario's cache.
-        env: { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') },
+        // No real tool is on the daemon's PATH; the harness gives the scenario a Swift cache of its own.
+        env: { PATH: tmpDir },
         appleRunnerProvider: () => appleRunnerProvider,
         appleToolProvider: () => appleTool.provider,
         appleSimulatorScreenRecordingTransport: () => recordingTransport,
