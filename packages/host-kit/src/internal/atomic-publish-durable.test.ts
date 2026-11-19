@@ -3,7 +3,7 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { isAtomicPublishTemporaryPath, publishDurableFileSync } from './atomic-file.ts';
+import { isAtomicPublishTemporaryPath, publishDurableFileSync } from './atomic-publish.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const roots: string[] = [];

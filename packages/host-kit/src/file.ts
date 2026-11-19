@@ -1,17 +1,20 @@
 export {
-  confirmScriptDestination,
   isAtomicPublishTemporaryPath,
+  publishDurableFileSync,
+  publishFileSync,
+  type DurableFilePublishMode,
+} from './internal/atomic-publish.ts';
+export {
+  confirmScriptDestination,
   isWindowsShareUnavailable,
   judgeScriptDestination,
   prepareScriptDestination,
-  publishDurableFileSync,
-  publishFileSync,
   publishScriptFileSync,
-  scriptAncestryReason,
-  type DurableFilePublishMode,
   type ScriptDestination,
   type ScriptDestinationOptions,
-} from './internal/atomic-file.ts';
+} from './internal/script-destination.ts';
+export { scriptAncestryReason } from './internal/script-destination-refusal.ts';
+export { resolveScriptDestination } from './internal/entry-name.ts';
 export {
   assertScriptTargetVacant,
   lstatIfPresent,
@@ -25,7 +28,6 @@ export {
   resolveUserConfigPath,
   resolveDeviceClaimRoot,
   resolveUserPath,
-  resolveScriptDestination,
 } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,

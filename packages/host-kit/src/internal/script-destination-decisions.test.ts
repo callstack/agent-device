@@ -9,8 +9,8 @@ import {
   untrustedAncestryExposure,
   untrustedLinkExposure,
   type DirectoryAuthority,
-} from './atomic-file.ts';
-import { FOREIGN_UID, currentUid } from './atomic-file-host.fixtures.ts';
+} from './script-destination.ts';
+import { FOREIGN_UID, currentUid } from './script-destination-host.fixtures.ts';
 
 // --- what makes one directory unsafe to publish inside ---
 

@@ -4,8 +4,8 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { directoryWith, expectUntrusted, FOREIGN_UID } from './atomic-file-host.fixtures.ts';
-import { prepareScriptDestination } from './atomic-file.ts';
+import { directoryWith, expectUntrusted, FOREIGN_UID } from './script-destination-host.fixtures.ts';
+import { prepareScriptDestination } from './script-destination.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 const PRIVATE = { privateAncestry: true } as const;
