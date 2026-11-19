@@ -59,13 +59,21 @@ export function hasRuntimeTransportHints(runtime: SessionRuntimeHints | undefine
 /**
  * Pairs the open's requested transport hints with the fact-admitted apply operation, so the
  * lifecycle input cannot carry a hints request without its transport. Absent when the open
- * requests no transport hint; facts admission guarantees the operation whenever it is requested.
+ * requests no transport hint. Transport hints without the admitted operation are a caller bug:
+ * the builder refuses them here, before any dispatch, so `dispatched: 'no'` holds.
  */
 export function openApplicationRuntimeHints(
   runtime: SessionRuntimeHints | undefined,
   apply: ((input: RuntimeHintsApplicationInput) => Promise<void>) | undefined,
 ): OpenApplicationRuntimeHints | undefined {
-  if (apply === undefined || !hasRuntimeTransportHints(runtime)) return undefined;
+  if (!hasRuntimeTransportHints(runtime)) return undefined;
+  if (apply === undefined) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Transport runtime hints were requested without the fact-admitted apply operation; pair the hints with the operation or drop them.',
+      { reason: 'runtime-hints-operation-missing', dispatched: 'no' },
+    );
+  }
   return { values: runtimeHintValues(runtime), apply };
 }
 
