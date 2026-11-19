@@ -12,15 +12,12 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
-import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
-import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.TimeoutException;
@@ -210,12 +207,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
           if (!admitSessionPeer(socket)) {
             continue;
           }
-          long deadlineAtMs =
-              SessionPeerPolicy.commandReadDeadlineAtMs(SystemClock.elapsedRealtime(), readBudgetMs);
+          long deadlineAtMs = SystemClock.elapsedRealtime() + readBudgetMs;
           try {
             String command;
             try {
-              command = readSessionCommandLine(socket, deadlineAtMs, SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
+              command =
+                  SessionPeerPolicy.readSessionCommandLine(
+                      socket.getInputStream(),
+                      socket::setSoTimeout,
+                      SystemClock::elapsedRealtime,
+                      deadlineAtMs,
+                      SessionPeerPolicy.MAX_COMMAND_LINE_BYTES);
             } catch (IOException error) {
               socket.setSoTimeout(SESSION_RESPONSE_WRITE_TIMEOUT_MS);
               SessionResponseWriter.writeSessionError(socket.getOutputStream(), "", error);
@@ -243,33 +245,28 @@ public final class SnapshotInstrumentation extends Instrumentation {
               writeSessionOkQuietly(socket, requestId);
               return;
             }
-            // The automation context is acquired per connection, after admission: a connect
-            // failure is this connection's failure, answered like the capture failure below
-            // instead of ending the session for the next peer.
-            UiAutomation automation;
-            try {
-              automation = getConnectedUiAutomationUnchecked();
-            } catch (RuntimeException error) {
-              SessionResponseWriter.writeSessionError(socket.getOutputStream(), requestId, error);
-              continue;
-            }
-            if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
-              AutomationCommandHandler.writeSessionResponse(
-                  socket.getOutputStream(), requestId, action,
-                  parts.length > 2 ? parts[2] : "", automation, getContext());
-              continue;
-            }
-            if ("viewport".equals(action)) {
-              TouchCommandHandler.writeSessionViewport(
-                  socket.getOutputStream(), requestId, automation);
-              continue;
-            }
-            if ("gesture".equals(action)) {
-              TouchCommandHandler.writeSessionGesture(
-                  socket.getOutputStream(),
-                  requestId,
-                  parts.length > 2 ? parts[2] : "",
-                  automation);
+            boolean automationCommand =
+                "input".equals(action) || "screenshot".equals(action)
+                    || "focus".equals(action) || "app".equals(action);
+            if (automationCommand || "viewport".equals(action) || "gesture".equals(action)) {
+              UiAutomation automation;
+              try {
+                automation = getConnectedUiAutomationUnchecked();
+              } catch (RuntimeException error) {
+                SessionResponseWriter.writeSessionError(socket.getOutputStream(), requestId, error);
+                continue;
+              }
+              if (automationCommand) {
+                AutomationCommandHandler.writeSessionResponse(
+                    socket.getOutputStream(), requestId, action,
+                    parts.length > 2 ? parts[2] : "", automation, getContext());
+              } else if ("viewport".equals(action)) {
+                TouchCommandHandler.writeSessionViewport(
+                    socket.getOutputStream(), requestId, automation);
+              } else {
+                TouchCommandHandler.writeSessionGesture(
+                    socket.getOutputStream(), requestId, parts.length > 2 ? parts[2] : "", automation);
+              }
               continue;
             }
             if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
@@ -311,42 +308,6 @@ public final class SnapshotInstrumentation extends Instrumentation {
       return false;
     }
     return SessionPeerPolicy.admitPeer(credentials.getUid()) == SessionPeerPolicy.Admission.ADMITTED;
-  }
-
-  /**
-   * Reads one newline-terminated command line under an absolute deadline fixed at accept time and
-   * a hard byte cap. Each read gets only the budget still left before the deadline, so a peer that
-   * drip-feeds bytes cannot extend the connection past it the way a rolling SO_TIMEOUT would. The
-   * buffer holds at most {@code maxBytes + 1} bytes: past the cap the read stops and the line is
-   * returned for the policy to reject, so the over-limit response has one owner. Returns null on
-   * end-of-stream before any byte.
-   */
-  private static String readSessionCommandLine(LocalSocket socket, long deadlineAtMs, int maxBytes)
-      throws IOException {
-    InputStream input = socket.getInputStream();
-    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    byte[] chunk = new byte[8 * 1024];
-    while (bytes.size() <= maxBytes) {
-      long remainingMs =
-          SessionPeerPolicy.remainingBudgetMs(deadlineAtMs, SystemClock.elapsedRealtime());
-      if (remainingMs <= 0) {
-        throw new SocketTimeoutException("session command read deadline exceeded");
-      }
-      socket.setSoTimeout((int) remainingMs);
-      int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
-      if (SystemClock.elapsedRealtime() >= deadlineAtMs) {
-        throw new SocketTimeoutException("session command read deadline exceeded");
-      }
-      if (count < 0) {
-        if (bytes.size() == 0) return null;
-        break;
-      }
-      int end = 0;
-      while (end < count && chunk[end] != '\n') end++;
-      bytes.write(chunk, 0, end);
-      if (end < count) break;
-    }
-    return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
   }
 
   private static void writeSessionOkQuietly(LocalSocket socket, String requestId) {

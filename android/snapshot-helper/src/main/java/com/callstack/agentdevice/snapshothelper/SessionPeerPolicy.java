@@ -1,5 +1,9 @@
 package com.callstack.agentdevice.snapshothelper;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -73,18 +77,42 @@ final class SessionPeerPolicy {
     return Math.min(Integer.MAX_VALUE, budgetMs);
   }
 
-  /**
-   * The absolute deadline instant for one connection's command read, fixed at accept time. The
-   * remaining budget shrinks toward zero no matter how many reads the peer forces, unlike a
-   * rolling SO_TIMEOUT that resets on every read.
-   */
-  static long commandReadDeadlineAtMs(long acceptedAtMs, long budgetMs) {
-    return acceptedAtMs + Math.max(0, budgetMs);
+  @FunctionalInterface
+  interface ReadTimeout {
+    void setMillis(int timeoutMs) throws IOException;
   }
 
-  /** The budget left before {@code deadlineAtMs}, never negative. */
-  static long remainingBudgetMs(long deadlineAtMs, long nowMs) {
-    return Math.max(0, deadlineAtMs - nowMs);
+  @FunctionalInterface
+  interface MonotonicClock {
+    long nowMs();
+  }
+
+  /** Reads one command using the deadline fixed at accept and at most maxBytes + 1 bytes. */
+  static String readSessionCommandLine(
+      InputStream input, ReadTimeout timeout, MonotonicClock clock, long deadlineAtMs, int maxBytes)
+      throws IOException {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    byte[] chunk = new byte[8 * 1024];
+    while (bytes.size() <= maxBytes) {
+      long remainingMs = deadlineAtMs - clock.nowMs();
+      if (remainingMs <= 0) {
+        throw new SocketTimeoutException("session command read deadline exceeded");
+      }
+      timeout.setMillis((int) remainingMs);
+      int count = input.read(chunk, 0, Math.min(chunk.length, maxBytes + 1 - bytes.size()));
+      if (clock.nowMs() >= deadlineAtMs) {
+        throw new SocketTimeoutException("session command read deadline exceeded");
+      }
+      if (count < 0) {
+        if (bytes.size() == 0) return null;
+        break;
+      }
+      int end = 0;
+      while (end < count && chunk[end] != '\n') end++;
+      bytes.write(chunk, 0, end);
+      if (end < count) break;
+    }
+    return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
   }
 
   static LineDecision commandLineDecision(String line, int maxLineBytes) {

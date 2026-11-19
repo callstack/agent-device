@@ -1,18 +1,23 @@
 package com.callstack.agentdevice.snapshothelper;
 
+import java.io.ByteArrayInputStream;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public final class SessionPeerPolicyTest {
   private SessionPeerPolicyTest() {}
 
-  static void run() {
+  static void run() throws Exception {
     admitsTheAdbdUids();
     rejectsNonAdbdUids();
     deadlineFollowsTheSessionTimeout();
     deadlineFallsBackWhenTheSessionTimeoutIsUnset();
     deadlineFitsSocketTimeout();
-    deadlineIsAbsoluteFromAcceptTime();
-    remainingBudgetNeverGoesNegative();
+    dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline();
+    readHonorsTheByteLimitAndEof();
     socketNameIsDerivedFromThePortAndCarriesNoSecret();
     acceptsCommandLinesUpToTheByteLimit();
     rejectsEmptyCommandLines();
@@ -58,25 +63,47 @@ public final class SessionPeerPolicyTest {
     }
   }
 
-  private static void deadlineIsAbsoluteFromAcceptTime() {
-    long deadline = SessionPeerPolicy.commandReadDeadlineAtMs(1_000, 8_000);
-    if (deadline != 9_000) {
-      throw new AssertionError("Expected the deadline to be fixed at accept plus the budget");
-    }
-    // A peer that drip-feeds reads still sees the same fixed deadline: the budget shrinks with the
-    // clock, it does not reset per read.
-    if (SessionPeerPolicy.remainingBudgetMs(deadline, 5_000) != 4_000) {
-      throw new AssertionError("Expected the remaining budget to shrink with elapsed time");
-    }
-    if (SessionPeerPolicy.remainingBudgetMs(deadline, 9_000) != 0) {
-      throw new AssertionError("Expected the budget to be spent at the deadline");
+  private static void dripFedLineExpiresEvenWhenTheFinalReadReturnsANewline() throws Exception {
+    long[] nowMs = {100};
+    List<Integer> timeouts = new ArrayList<>();
+    ByteArrayInputStream drip = new ByteArrayInputStream("ab\n".getBytes(StandardCharsets.UTF_8)) {
+      @Override
+      public int read(byte[] data, int offset, int length) {
+        nowMs[0] += 4;
+        return super.read(data, offset, Math.min(1, length));
+      }
+    };
+    try {
+      SessionPeerPolicy.readSessionCommandLine(drip, timeouts::add, () -> nowMs[0], 110, 8);
+      throw new AssertionError("A command completed after its absolute deadline was accepted");
+    } catch (SocketTimeoutException expected) {
+      if (!timeouts.equals(Arrays.asList(10, 6, 2))) {
+        throw new AssertionError("The timeout must shrink before each read: " + timeouts);
+      }
     }
   }
 
-  private static void remainingBudgetNeverGoesNegative() {
-    if (SessionPeerPolicy.remainingBudgetMs(1_000, 5_000) != 0) {
-      throw new AssertionError("Expected a spent deadline to report zero, not a negative budget");
+  private static void readHonorsTheByteLimitAndEof() throws Exception {
+    String atLimit = readFixture("abcd\nignored", 4);
+    if (!"abcd".equals(atLimit)
+        || SessionPeerPolicy.commandLineDecision(atLimit, 4) != SessionPeerPolicy.LineDecision.ACCEPTED) {
+      throw new AssertionError("Expected a newline after exactly maxBytes to be accepted");
     }
+    String overLimit = readFixture("abcdef\n", 4);
+    if (!"abcde".equals(overLimit)
+        || SessionPeerPolicy.commandLineDecision(overLimit, 4)
+            != SessionPeerPolicy.LineDecision.REJECTED_OVER_LIMIT) {
+      throw new AssertionError("Expected the reader to stop and reject maxBytes + 1");
+    }
+    if (readFixture("", 4) != null) {
+      throw new AssertionError("Expected EOF before any byte to return null");
+    }
+  }
+
+  private static String readFixture(String input, int maxBytes) throws Exception {
+    return SessionPeerPolicy.readSessionCommandLine(
+        new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),
+        ignored -> {}, () -> 100, 110, maxBytes);
   }
 
   private static void socketNameIsDerivedFromThePortAndCarriesNoSecret() {

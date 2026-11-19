@@ -122,8 +122,8 @@ silent or drip-feeding peer cannot hold the command reader past that budget; and
 capped at 256 KiB, a bound derived from the largest supported producer of this channel (a 10 s
 two-contact gesture carries 1,252 densified samples, at most ~130 KB base64; the documented 64 KiB
 `fill --text-stdin` contract encodes to ~88 KB — the cap keeps at least 2x headroom over both). A
-connection that hits either bound, or fails its read or response with an expected I/O error, is
-answered with a session error and closed; the session keeps serving the next connection:
+connection that hits either read bound receives a session error and closes. A response write failure
+closes that connection. The session keeps serving the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling
