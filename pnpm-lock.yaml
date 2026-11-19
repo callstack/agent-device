@@ -22,6 +22,10 @@ patchedDependencies:
 importers:
 
   .:
+    dependencies:
+      oxc-parser:
+        specifier: ^0.146.0
+        version: 0.146.0
     devDependencies:
       '@agent-device/ad-script':
         specifier: workspace:*
@@ -209,9 +213,6 @@ importers:
       jscpd:
         specifier: 5.4.2
         version: 5.4.2
-      oxc-parser:
-        specifier: ^0.146.0
-        version: 0.146.0
       oxfmt:
         specifier: ^0.67.0
         version: 0.67.0

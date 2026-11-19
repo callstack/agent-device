@@ -473,7 +473,7 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'the required macOS lane runs the Swift/TypeScript snapshot differential',
     owns: (file) =>
       file.startsWith('packages/capture-kit/src/ios-snapshot-engine/') ||
-      file === 'test/ios-snapshot-differential.test.ts' ||
+      file === 'packages/capture-kit/test/ios-snapshot-differential.test.ts' ||
       file.startsWith('apple/snapshot-presentation/') ||
       file === 'packages/kernel/src/rect.ts' ||
       file === 'contracts/fixtures/ios-snapshot-engine-conformance.json' ||

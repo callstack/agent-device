@@ -206,7 +206,7 @@ test('a tooling change beside an Android-only change still fails open to the ful
 });
 
 test('the moved differential test selects its macOS lane in a test-only PR', () => {
-  const changedFiles = ['test/ios-snapshot-differential.test.ts'];
+  const changedFiles = ['packages/capture-kit/test/ios-snapshot-differential.test.ts'];
   const selected = selectChecks({ changedFiles });
   assert.equal(selected.failOpen, false);
   assert.ok(selected.checks.includes('ios-snapshot-differential'));

@@ -124,7 +124,7 @@
     "maestro:conformance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/maestro-conformance/format-generated-json.test.mjs scripts/maestro-conformance/verify-cli-version.test.mjs packages/maestro/test/conformance/verify.test.ts packages/maestro/test/conformance/differential/engine-process.test.ts packages/maestro/test/conformance/differential/report-output.test.ts packages/maestro/test/conformance/differential/run.test.ts packages/maestro/test/conformance/differential/invariants.test.ts",
     "maestro:conformance:regenerate": "node --experimental-strip-types scripts/maestro-conformance/regenerate.mjs",
     "maestro:conformance:differential": "node --experimental-strip-types packages/maestro/test/conformance/differential/run.ts",
-    "test:ios-snapshot-differential": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift test --package-path apple/snapshot-presentation && node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test test/ios-snapshot-differential.test.ts",
+    "test:ios-snapshot-differential": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift test --package-path apple/snapshot-presentation && node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test packages/capture-kit/test/ios-snapshot-differential.test.ts",
     "size": "node scripts/size-report.mjs",
     "perf": "node --experimental-strip-types scripts/perf/run.ts",
     "perf:compare": "node --experimental-strip-types scripts/perf/compare-cli.ts",
@@ -290,6 +290,9 @@
     "maestro",
     "detox"
   ],
+  "dependencies": {
+    "oxc-parser": "^0.146.0"
+  },
   "peerDependencies": {
     "ai": "^6.0.0 || ^7.0.0"
   },
@@ -355,7 +358,6 @@
     "fallow": "3.34.0",
     "fast-check": "^4.9.0",
     "jscpd": "5.4.2",
-    "oxc-parser": "^0.146.0",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.79.0",
     "publint": "^0.3.24",
