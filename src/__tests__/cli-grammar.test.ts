@@ -181,7 +181,7 @@ test('is grammar explains the predicate/selector-key collision on invalid predic
       assert.equal(err.code, 'INVALID_ARGS');
       assert.match(
         err.message,
-        /is requires predicate: visible\|hidden\|exists\|absent\|editable\|selected\|focused\|text/,
+        /is requires predicate: visible\|hidden\|exists\|absent\|editable\|selected\|checked\|focused\|text/,
       );
       assert.match(err.details?.hint ?? '', /is <selector> <predicate>/);
       assert.match(err.details?.hint ?? '', /visible=true/);

@@ -41,6 +41,12 @@ function matchesTerm(
       return isNodeEditable(node, platform) === Boolean(term.value);
     case 'selected':
       return Boolean(node.selected === true) === Boolean(term.value);
+    // `checked` is three-valued: it is published only on checkable controls (switch, checkbox,
+    // radio), so an absent fact means "not checkable or unavailable", not "unchecked", and iOS
+    // can publish 'mixed'. Both match neither `checked=true` nor `checked=false`; only an
+    // explicit true/false matches the same value.
+    case 'checked':
+      return term.value === true ? node.checked === true : node.checked === false;
     case 'focused':
       return Boolean(node.focused === true) === Boolean(term.value);
     case 'enabled':

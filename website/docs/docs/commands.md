@@ -641,11 +641,13 @@ agent-device is absent 'label="Loading..."'
 agent-device is hidden 'text="Loading..."'
 agent-device is editable 'id="email"'
 agent-device is selected 'label="Wi-Fi"'
+agent-device is checked 'role=switch label="Wi-Fi"'
 agent-device is text 'id="greeting"' "Welcome back"
 ```
 
 - `is` evaluates UI predicates against a selector expression and exits non-zero on failure. It takes selectors, not refs like `@e3`, and the same snapshot flags as `click`, `fill`, `get`, and `wait`.
-- Supported predicates are `visible`, `hidden`, `exists`, `absent`, `editable`, `selected`, `focused`, and `text`.
+- Supported predicates are `visible`, `hidden`, `exists`, `absent`, `editable`, `selected`, `checked`, `focused`, and `text`.
+- `is checked` passes only on a checkable control (switch, checkbox, radio) whose snapshot state is explicitly checked; an iOS `mixed` state or a control with no checked state fails it.
 - `is visible` passes when the element is in the visible viewport, or has no rect of its own but sits inside a visible ancestor. `is exists` only checks that the selector matches.
 - `is text <selector> <value>` compares the element's text with the value. `wait text` checks that text is present, not that it can be tapped.
 - `is absent` passes only when the selector has zero matches in one readable, complete, settled, unscoped, full-depth capture. It does not mean hidden: `--scope` and `--depth` are rejected, and sparse, unreadable, truncated, unsettled, or loading captures fail.

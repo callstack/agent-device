@@ -13,6 +13,7 @@ const SELECTOR_KEY_VALUE_KINDS = {
   hidden: 'boolean',
   editable: 'boolean',
   selected: 'boolean',
+  checked: 'boolean',
   focused: 'boolean',
   enabled: 'boolean',
   hittable: 'boolean',

@@ -29,6 +29,7 @@ const EXPECTED_IS_PREDICATES = [
   'absent',
   'editable',
   'selected',
+  'checked',
   'focused',
   'text',
 ] as const;
