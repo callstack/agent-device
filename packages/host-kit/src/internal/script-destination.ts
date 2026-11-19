@@ -7,8 +7,10 @@ import {
   scriptEntryNameOrRefuse,
 } from './entry-name.ts';
 import { hostPathRules } from './path-resolution.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   scriptAncestryFailure,
+  scriptAncestryReason,
   type ScriptAncestryExposure,
 } from './script-destination-refusal.ts';
 
@@ -519,4 +521,82 @@ function createMissingLevel(
     throw scriptAncestryFailure(destination, level, 'shared_parent');
   }
   return level;
+}
+
+/** A private root's verdict: admitted, absent (inspect mode's answer, creating nothing), or refused. */
+export type PrivateRootAdmission =
+  | Readonly<{ status: 'admitted' }>
+  | Readonly<{ status: 'absent' }>
+  | Readonly<{ status: 'refused'; component: string; exposure: ScriptAncestryExposure }>;
+
+/**
+ * Admits a private root once, before its first use: {@link privateDirectoryExposure} judges the root's own name
+ * and every managed name below it, and {@link walkSpelledParent} judges each ancestor and creates what is
+ * missing one level at a time at 0700. `create` is establish mode, asked once for a whole operation; without
+ * it an absent root is answered as absent and nothing is created, so a refusal precedes any read, write or
+ * lock below the root. `uid` is a test seam. ADR 0016 states the rules and why.
+ */
+export function admitPrivateRoot(options: {
+  rootPath: string;
+  create: boolean;
+  /** Names below the root this caller traverses, admitted with it. */
+  managedDirs?: readonly string[];
+  uid?: number;
+}): PrivateRootAdmission {
+  const uid = options.uid ?? process.getuid?.() ?? -1;
+  const root = options.rootPath;
+  // The walk resolves from the filesystem root, so a relative spelling would judge another directory.
+  if (!path.isAbsolute(root))
+    return { status: 'refused', component: root, exposure: 'relative_destination' };
+  const trust = { uid };
+  // A root that stands is judged on its OWN bits first, before the walk resolves it: a link here must not be
+  // followed into a directory somebody else chose, and a group-writable root is the caller's own to chmod.
+  const spelledRoot = lstatEntry(root);
+  const spelledExposure = spelledRoot && privateDirectoryExposure(spelledRoot, uid, true);
+  if (spelledExposure) return { status: 'refused', component: root, exposure: spelledExposure };
+  try {
+    // The root is judged again from the directory the walk lands on: a concurrent starter may have created it
+    // just now, and the walk adopted that winner under the rule for passing THROUGH a directory.
+    const { authority } = walkSpelledParent(root, root, trust, options.create);
+    if (authority.mode & 0o077)
+      return { status: 'refused', component: root, exposure: 'not_private' };
+    for (const name of options.managedDirs ?? []) {
+      const managed = path.join(root, name);
+      // An existing name is judged before anything is created below it, so a link planted at one of these
+      // names is refused where it stands. An absent one is nothing to report to a caller that only inspects.
+      const seen = lstatEntry(managed);
+      const exposure = seen === undefined ? undefined : privateDirectoryExposure(seen, uid, false);
+      if (exposure) return { status: 'refused', component: managed, exposure };
+      // A missing one is made by the same level-at-a-time rule the walk pays for its own tail.
+      if (seen === undefined && options.create)
+        createMissingLevels(root, root, name.split(path.sep), trust);
+    }
+  } catch (error) {
+    if (scriptAncestryReason(error) === undefined) throw error;
+    const { ancestor, exposure } = (error as AppError).details as Readonly<{
+      ancestor: string;
+      exposure: ScriptAncestryExposure;
+    }>;
+    // A route that is not there yet is an ABSENT root rather than an unsafe one. Establish mode has just made
+    // it, and one that arrives beside this call is judged again by that same walk.
+    if (
+      !options.create &&
+      (exposure === 'unreachable_parent' || exposure === 'unresolvable_parent')
+    )
+      return { status: 'absent' };
+    return { status: 'refused', component: ancestor, exposure };
+  }
+  return { status: 'admitted' };
+}
+
+/** ADR 0016's rule for a private directory: a real directory this user owns, never a link. */
+function privateDirectoryExposure(
+  stats: fs.BigIntStats,
+  uid: number,
+  requirePrivateMode: boolean,
+): ScriptAncestryExposure | undefined {
+  if (stats.isSymbolicLink()) return 'planted_link';
+  if (!stats.isDirectory()) return 'not_a_directory';
+  if (Number(stats.uid) !== uid) return 'foreign_owned';
+  return requirePrivateMode && Number(stats.mode) & 0o077 ? 'not_private' : undefined;
 }

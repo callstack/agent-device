@@ -5,6 +5,7 @@ export {
   type DurableFilePublishMode,
 } from './internal/atomic-publish.ts';
 export {
+  admitPrivateRoot,
   confirmScriptDestination,
   prepareScriptDestination,
   publishScriptFileSync,

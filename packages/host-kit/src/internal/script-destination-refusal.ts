@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 /** The ways a step can be unsafe; `untrustedGroundWording` words each one for the caller. */
 export type ScriptAncestryExposure =
   | 'foreign_owned'
+  | 'not_private'
   | 'world_writable'
   | 'shared_group_writable'
   | 'shared_parent'
@@ -19,6 +20,7 @@ export type ScriptAncestryExposure =
 /** Why each exposure makes that ground unsafe, in the caller's terms. */
 const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
   foreign_owned: 'another local user owns that part of the path.',
+  not_private: 'its group or other permission bits let other accounts read it.',
   world_writable: 'any local user can write that part of the path.',
   shared_group_writable:
     'the group can write that part of the path, and agent-device cannot tell who else belongs to that group.',
