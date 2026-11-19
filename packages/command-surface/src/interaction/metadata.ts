@@ -243,7 +243,7 @@ const gestureFields = {
     max: GESTURE_MAX_CONTACTS,
   }),
   holdMs: integerField(
-    'Hold duration: contact hold for gesture tap, or the hold before the move for single-pointer gesture pan.',
+    'Hold duration: contact hold for gesture tap, or the hold before the move for single-pointer gesture pan, which works where gesture drag works: Android touch devices and iOS/iPadOS.',
     {
       min: GESTURE_DURATION_MIN_MS,
       max: GESTURE_DURATION_MAX_MS,

@@ -25,7 +25,7 @@ test('MCP gesture tool exposes tap contacts bounded to 2 to 5 points', () => {
   assert.deepEqual(gesture.inputSchema.properties?.holdMs, {
     type: 'integer',
     description:
-      'Hold duration: contact hold for gesture tap, or the hold before the move for single-pointer gesture pan.',
+      'Hold duration: contact hold for gesture tap, or the hold before the move for single-pointer gesture pan, which works where gesture drag works: Android touch devices and iOS/iPadOS.',
     minimum: 16,
     maximum: 10_000,
   });

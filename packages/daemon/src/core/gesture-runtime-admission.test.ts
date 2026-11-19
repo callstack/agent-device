@@ -196,3 +196,57 @@ test.each(heldPanRefusalCases)(
     expect(bindDevice).not.toHaveBeenCalled();
   },
 );
+
+// On an endpoint-only backend (plan cell available, drag cell not) an unheld pan is still admitted
+// through the plan tier and binds, while a held pan is refused — the two directions of the routing.
+test('on Linux an unheld pan still goes to the plan tier and binds; a held pan is refused', async () => {
+  const linuxDesktop = {
+    platform: 'linux',
+    id: 'linux-desktop',
+    name: 'Linux Desktop',
+    kind: 'device',
+    target: 'desktop',
+  } as const satisfies DeviceInfo;
+  const owner = localRuntimeOwner(linuxDesktop.platform);
+  const base = createUnavailableRuntimeFactsForTest(linuxDesktop, owner);
+  const inspectFacts = vi.fn(async () => ({
+    ...base,
+    operations: {
+      ...base.operations,
+      captureSnapshot: { available: true } as const,
+      performGesturePlan: { available: true } as const,
+      performTargetAuthoredDrag: {
+        available: false,
+        reason: 'unsupported-platform-leaf',
+        hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+      } as const,
+    },
+  }));
+  const bindDevice = vi.fn(async () => ({ operations: {} }) as never);
+
+  const unheld = await resolveBoundGestureRuntime({
+    device: linuxDesktop,
+    input: { intent: 'pan', origin: { x: 100, y: 200 }, delta: { x: 0, y: 160 }, durationMs: 500 },
+    inspectFacts,
+    bindDevice,
+    platformServices: daemonPlatformServicesFixture(),
+  });
+  expect(unheld.ok).toBe(true);
+  expect(bindDevice).toHaveBeenCalledOnce();
+
+  bindDevice.mockClear();
+  const held = await resolveBoundGestureRuntime({
+    device: linuxDesktop,
+    input: heldPanInput,
+    inspectFacts,
+    bindDevice,
+    platformServices: daemonPlatformServicesFixture(),
+  });
+  expect(held.ok).toBe(false);
+  if (!held.ok) {
+    expect(held.response.error.code).toBe('UNSUPPORTED_OPERATION');
+    expect(held.response.error.message).toBe('gesture pan is not supported on linux');
+    expect(held.response.error.hint).toMatch(/preserves source hold/);
+  }
+  expect(bindDevice).not.toHaveBeenCalled();
+});
