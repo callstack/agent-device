@@ -253,7 +253,7 @@ test('a version delivered again is answered from the record without touching the
     data: {
       savedScript: entry,
       warnings: [
-        `Revision 1 of the recording was already saved to ${entry}. It is not checked again. If that file is missing, the next recorded action writes it again.`,
+        `Revision 1 of the recording was already saved to ${entry}. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
       ],
     },
   });
@@ -349,6 +349,7 @@ test('a record that still carries a content digest parses, and a repeat ignores 
     revision: 2,
     entry: { revision: 2, path: destination },
   });
+  expect(soleRecord(stateDir).record).not.toHaveProperty('committedDigest');
 });
 
 test.skipIf(process.platform === 'win32')(
@@ -495,29 +496,40 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test('a recorded entry is only reported: a newer version is written to the authorized destination', async () => {
-  const { root, stateDir, directory } = caller();
-  const destination = path.join(directory, 'journey.ad');
-  const decoy = path.join(root, 'decoy.ad');
-  fs.writeFileSync(decoy, 'decoy\n');
-  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
-  const { id } = await open(baseUrl, stateDir, destination);
-  const { file: recordFile, record } = soleRecord(stateDir);
-  fs.writeFileSync(recordFile, JSON.stringify({ ...record, entry: { revision: 1, path: decoy } }));
+test.each([
+  { name: 'another file', edited: (root: string) => path.join(root, 'decoy.ad') },
+  { name: 'a relative path', edited: () => 'journey.ad' },
+  {
+    name: 'an unnormalized path',
+    edited: (root: string) => path.join(root, 'caller') + '/../caller/journey.ad',
+  },
+])(
+  'an edited entry naming $name is not reported, and a newer version is written to the authorized destination',
+  async ({ edited }) => {
+    const { root, stateDir, directory } = caller();
+    const destination = path.join(directory, 'journey.ad');
+    const decoy = path.join(root, 'decoy.ad');
+    fs.writeFileSync(decoy, 'decoy\n');
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
+    const { file: recordFile, record } = soleRecord(stateDir);
+    const entry = { revision: 1, path: edited(root) };
+    fs.writeFileSync(recordFile, JSON.stringify({ ...record, entry }));
 
-  const repeated = await answer(baseUrl, stateDir, request('click'), {
-    artifacts: [script('v1', 1, id)],
-  });
-  const next = await answer(baseUrl, stateDir, request('click'), {
-    artifacts: [script('v2', 2, id)],
-  });
+    const repeated = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v1', 1, id)],
+    });
+    const next = await answer(baseUrl, stateDir, request('click'), {
+      artifacts: [script('v2', 2, id)],
+    });
 
-  expect(repeated).toMatchObject({ ok: true, data: { savedScript: decoy } });
-  expect(next).toMatchObject({ ok: true, data: { savedScript: destination } });
-  expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
-  expect(fs.readFileSync(decoy, 'utf8')).toBe('decoy\n');
-  expect(soleRecord(stateDir).record.entry).toEqual({ revision: 2, path: destination });
-});
+    expect(repeated).toMatchObject({ ok: true, data: { savedScript: destination } });
+    expect(next).toMatchObject({ ok: true, data: { savedScript: destination } });
+    expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+    expect(fs.readFileSync(decoy, 'utf8')).toBe('decoy\n');
+    expect(soleRecord(stateDir).record.entry).toEqual({ revision: 2, path: destination });
+  },
+);
 
 test('a staging removal that fails after settlement recorded the commit keeps the committed answer', async () => {
   // A dropped Windows share answers ECONNRESET to the removal; the revision is already recorded by then.
@@ -548,5 +560,42 @@ test('a staging removal that fails after settlement recorded the commit keeps th
   expect(reoffered.ok && reoffered.data).not.toHaveProperty('scriptDeliveryFailure');
   // The directory stays listed, so retirement or the sweep removes it later.
   expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, staging: [staging] });
+  expect(soleRecord(stateDir).record).not.toHaveProperty('publishing');
+});
+
+test.skipIf(process.platform === 'win32').each([
+  {
+    name: 'grows past the delivery cap',
+    change: (staged: string) => fs.truncateSync(staged, 8 * 1024 * 1024 + 1),
+  },
+  {
+    name: 'is swapped for a symbolic link',
+    change: (staged: string) => {
+      const elsewhere = `${path.dirname(path.dirname(staged))}/elsewhere.ad`;
+      fs.writeFileSync(elsewhere, 'elsewhere\n');
+      fs.rmSync(staged);
+      fs.symlinkSync(elsewhere, staged);
+    },
+  },
+])('a staged script that $name after its download is not committed', async ({ change }) => {
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' } });
+  vi.mocked(file.confirmScriptDestination).mockImplementationOnce((spelled, prepared) => {
+    const [staging] = fs
+      .readdirSync(prepared.directory)
+      .filter((name) => name.startsWith('.agent-device-script-'));
+    change(path.join(prepared.directory, staging!, 'script.ad'));
+    return actual.confirmScriptDestination(spelled, prepared);
+  });
+
+  const { response } = await open(baseUrl, stateDir, destination);
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { scriptDeliveryFailure: { cause: 'script_download_failed' } },
+  });
+  expect(fs.existsSync(destination)).toBe(false);
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 0, staging: [] });
   expect(soleRecord(stateDir).record).not.toHaveProperty('publishing');
 });

@@ -48,13 +48,26 @@ function otherDeliveryCommits(stateDir: string, destination: string, revision = 
   );
 }
 
-test('a failed download after another delivery commits the same version reports the file', async () => {
+/** Serves version 1, and counts every fetch of version 2, running `onFetch` first and serving what it returns. */
+function countedServer(onFetch: () => { body: string } | undefined = () => ({ body: 'v2\n' })) {
+  const fetches = { count: 0 };
+  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' } };
+  Object.defineProperty(served, 'v2', {
+    enumerable: true,
+    get: () => {
+      fetches.count += 1;
+      return onFetch();
+    },
+  });
+  return { served, fetches };
+}
+
+test('a commit that lands between the first read and staging is answered without a fetch', async () => {
   const { stateDir, directory } = caller();
   const destination = path.join(directory, 'journey.ad');
-  const served: Record<string, { body: string }> = { v1: { body: 'v1\n' }, v2: { body: 'v2\n' } };
+  const { served, fetches } = countedServer();
   const baseUrl = await artifactServer(served);
   const { id } = await open(baseUrl, stateDir, destination);
-  delete served.v2;
   vi.mocked(file.prepareScriptDestination).mockImplementationOnce((spelled) => {
     otherDeliveryCommits(stateDir, destination);
     return actual.prepareScriptDestination(spelled);
@@ -64,9 +77,39 @@ test('a failed download after another delivery commits the same version reports 
     artifacts: [script('v2', 2, id)],
   });
 
+  expect(fetches.count).toBe(0);
   expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
   expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
   expect(fs.readFileSync(destination, 'utf8')).toBe('v2\n');
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, staging: [] });
+});
+
+test('a failed fetch settles a commit another delivery installed and did not record', async () => {
+  // While this client fetches version 2, another delivery renames version 2 into place and stops before
+  // recording it; then this fetch fails.
+  const { stateDir, directory } = caller();
+  const destination = path.join(directory, 'journey.ad');
+  const { served, fetches } = countedServer(() => {
+    fs.writeFileSync(destination, 'v2\n');
+    const stat = fs.statSync(destination, { bigint: true });
+    const { file: recordFile, record } = soleRecord(stateDir);
+    const staging = path.join(directory, '.agent-device-script-other');
+    const publishing = { revision: 2, file: `${stat.dev}:${stat.ino}`, staging };
+    fs.writeFileSync(recordFile, JSON.stringify({ ...record, publishing }));
+    return undefined;
+  });
+  const baseUrl = await artifactServer(served);
+  const { id } = await open(baseUrl, stateDir, destination);
+
+  const late = await answer(baseUrl, stateDir, request('click'), {
+    artifacts: [script('v2', 2, id)],
+  });
+
+  expect(fetches.count).toBe(1);
+  expect(late).toMatchObject({ ok: true, data: { savedScript: destination } });
+  expect(late.ok && late.data).not.toHaveProperty('scriptDeliveryFailure');
+  expect(soleRecord(stateDir).record).toMatchObject({ revision: 2, staging: [] });
+  expect(soleRecord(stateDir).record).not.toHaveProperty('publishing');
 });
 
 test('a commit that lands while a failed download cleans up its staging is still reported', async () => {
@@ -159,7 +202,7 @@ test('a held download that loses to a newer commit reports it superseded and ove
     data: {
       savedScript: destination,
       warnings: [
-        `Revision 2 of the recording is superseded; the file holds revision 3 at ${destination}. It is not checked again. If that file is missing, the next recorded action writes it again.`,
+        `Revision 2 of the recording is superseded; the file holds revision 3 at ${destination}. It is not checked again. If that file is missing, the next recorded action writes the recording to the destination again.`,
       ],
     },
   });
