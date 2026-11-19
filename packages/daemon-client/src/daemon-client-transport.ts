@@ -28,9 +28,9 @@ import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
   refuseOversizedDaemonRequest,
-  withCaptureStartGrant,
 } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
+import { saveCaptureStartDestination } from '@agent-device/remote/daemon-artifacts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -557,11 +557,9 @@ async function sendRequestWithTransport(
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  return transport === 'http'
-    ? await withCaptureStartGrant(info, req, statePaths.baseDir, (request, delivery) =>
-        sendHttpRequest(info, request, statePaths, timeoutMs, options, delivery),
-      )
-    : await sendSocketRequest(info, req, timeoutMs, options);
+  if (transport !== 'http') return await sendSocketRequest(info, req, timeoutMs, options);
+  await saveCaptureStartDestination(req, info, statePaths.baseDir);
+  return await sendHttpRequest(info, req, statePaths, timeoutMs, options);
 }
 
 function chooseTransport(
@@ -801,7 +799,6 @@ async function sendHttpRequest(
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   options: SendRequestOptions,
-  delivery?: { possible: boolean },
 ): Promise<DaemonResponse> {
   const rpcEndpoint = daemonHttpEndpoint(info, 'rpc');
   if (!rpcEndpoint) throw daemonEndpointUnavailableError('http');
@@ -860,7 +857,6 @@ async function sendHttpRequest(
       },
       (res) => {
         if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
-          if (delivery) delivery.possible = false;
           res.resume();
           if (timeoutHandle) clearTimeout(timeoutHandle);
           rejectOnce(
@@ -942,21 +938,12 @@ async function sendHttpRequest(
       rejectOnce(handleTransportError(err, req.meta?.requestId, remote, requestSent));
     });
 
-    if (delivery) request.on('socket', (socket) => observeCaptureDispatch(socket, delivery));
     request.on('finish', () => {
       requestSent = true;
     });
     request.write(rpcPayload);
     request.end();
   });
-}
-
-function observeCaptureDispatch(socket: net.Socket, delivery: { possible: boolean }): void {
-  const markConnected = (): void => {
-    delivery.possible = true;
-  };
-  if (socket.connecting) socket.once('connect', markConnected);
-  else markConnected();
 }
 
 // Loaded on the remote path only: a local daemon request never pays for the remote health cache.

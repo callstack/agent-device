@@ -1,5 +1,4 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { readCaptureGrantId } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { validateAndNormalizeBatchSteps } from '@agent-device/command-registry/batch';
 import { DEFAULT_BATCH_MAX_STEPS } from '@agent-device/contracts/command';
@@ -20,27 +19,10 @@ const HOST_PATH_FIELDS = [
   'iosSimulatorDeviceSet',
 ] as const;
 
-/**
- * The meta a public-network caller may keep. `cwd` is a client-side concept and a capture grant ID
- * (#4518) is the one client-minted identifier a remote capture start may carry: the daemon binds it
- * to the accepted capture and echoes it back. On any other request it is dropped — it is inert
- * without its own persisted client-side grant either way.
- */
-function narrowRemoteMeta(request: DaemonRequest): NonNullable<DaemonRequest['meta']> {
-  const { cwd: _cwd, captureGrantId, ...restMeta } = request.meta ?? {};
-  const admittedGrantId = isRemoteCaptureStart(request)
-    ? readCaptureGrantId(captureGrantId)
-    : undefined;
-  return {
-    ...restMeta,
-    ...(admittedGrantId === undefined ? {} : { captureGrantId: admittedGrantId }),
-  };
-}
-
 /** Remote callers choose client destinations; only the daemon chooses host output paths. */
 export function restrictRemoteHostInputs(request: DaemonRequest): DaemonRequest {
   if (!request.internal?.publicNetworkOnly) return request;
-  const meta = narrowRemoteMeta(request);
+  const { cwd: _cwd, ...meta } = request.meta ?? {};
   const command = request.command;
   const fields = [request.flags, request.input, request.runtime];
   assertRemoteHostToolingInputs(request, fields);
@@ -188,16 +170,6 @@ function restrictRemoteBatchSteps(request: DaemonRequest): DaemonRequest {
     };
   });
   return { ...request, flags };
-}
-
-/**
- * Whether this request STARTS a multi-request capture (#4518): the only requests whose meta may
- * carry a client-minted capture grant ID. Record-only scope — trace and perf starts keep their
- * existing paths and never carry one; the daemon binds the ID only on an accepted start anyway.
- */
-function isRemoteCaptureStart(request: DaemonRequest): boolean {
-  const positionals = request.positionals ?? [];
-  return request.command === 'record' && (positionals[0] ?? '').toLowerCase() === 'start';
 }
 
 function restrictRemoteCaptureOutput(request: DaemonRequest): DaemonRequest {

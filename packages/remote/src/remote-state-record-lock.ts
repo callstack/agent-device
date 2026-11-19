@@ -3,7 +3,7 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
 /**
  * The shared helpers of the small record stores a client keeps under its remote-connections state
- * directory (session scripts, capture grants). This module loads only on demand: its lock imports
+ * directory (session scripts, capture destinations). This module loads only on demand: its lock imports
  * must not become an eager edge of `remote-connection-state.ts`, which the CLI evaluates at startup.
  */
 

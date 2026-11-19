@@ -11,37 +11,14 @@ import {
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
-  admitCaptureStartGrant,
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
-  noteFailedCaptureStart,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
-
-/** Persists a start's grant before the HTTP attempt and releases it when delivery was ruled out. */
-export async function withCaptureStartGrant(
-  info: DaemonInfo,
-  req: DaemonWireRequest,
-  stateDir: string,
-  send: (request: DaemonWireRequest, delivery?: { possible: boolean }) => Promise<DaemonResponse>,
-): Promise<DaemonResponse> {
-  const grantId = await admitCaptureStartGrant(req, info, stateDir);
-  if (grantId === undefined) return await send(req);
-
-  const start = { ...req, meta: { ...req.meta, captureGrantId: grantId } };
-  // Once a socket connects, the daemon might receive the request even if the answer is lost.
-  const delivery = { possible: false };
-  try {
-    return await send(start, delivery);
-  } catch (error) {
-    if (!delivery.possible) await noteFailedCaptureStart(info, start, stateDir);
-    throw error;
-  }
-}
 
 export function handleDaemonHttpResponseBody(
   body: string,
@@ -119,10 +96,6 @@ async function rejectDaemonHttpRpcError(
     reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
-  // #4518: an error answer to a capture START is a known rejection: only the grant the request
-  // itself named is released. An error answer to a finishing capture settles nothing — the grant
-  // stays until a matching stop delivers it, the session closes, or the store's sweep reclaims it.
-  await noteFailedCaptureStart(info, req, stateDir);
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {
       baseUrl: info.baseUrl,

@@ -19,7 +19,7 @@ import {
 } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { namesSessionExplicitly, readCaptureGrantId } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
 import {
   deviceIdentityFlag,
   type DeviceIdentity,
@@ -73,7 +73,6 @@ import {
   buildRecordingStopResponse,
   buildRecordingUnsupportedResponse,
   isDaemonOwnedRecordingOutput,
-  withCaptureGrantEcho,
 } from './record-runtime-response.ts';
 import { resolveRequestTargetDevice } from '../../core/request-device-resolution.ts';
 
@@ -278,10 +277,6 @@ async function startRecording(
     screenRecordingStartInput(params, session, prepared, fence, outputPaths),
   );
   const tenantId = session.lease?.tenantId ?? params.req.meta?.tenantId;
-  // #4518: the accepted start binds the client-minted grant ID into the capture's own producer
-  // lifecycle metadata, so the matching stop/report can echo it from this capture. A malformed ID
-  // is absent, never repaired; the internal fence stays inside the envelope.
-  const captureGrantId = readCaptureGrantId(params.req.meta?.captureGrantId);
   await adoptStartedScreenRecording({
     admissionLedger: params.admissionLedger,
     binding,
@@ -289,11 +284,17 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
-    envelope: withProducerLifecycleMetadata(started.envelope, {
-      remoteCaptureOutput: params.req.internal?.publicNetworkOnly === true,
-      tenantId,
-      captureGrantId,
-    }),
+    envelope:
+      params.req.internal?.publicNetworkOnly || tenantId
+        ? {
+            ...started.envelope,
+            metadata: {
+              ...started.envelope.metadata,
+              ...(params.req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
+              ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
+            },
+          }
+        : started.envelope,
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
@@ -312,30 +313,6 @@ async function startRecording(
     params.sessionStore.ensureSessionDir(params.sessionName),
     outputPaths.requestedPath,
   );
-}
-
-/**
- * The producer lifecycle metadata an accepted capture carries: remote-output and tenant markers,
- * and #4518's bound capture grant ID. Returns the envelope unchanged when there is nothing to add.
- */
-function withProducerLifecycleMetadata(
-  envelope: DurableResourceEnvelope<'screen-recording'>,
-  facts: Readonly<{
-    remoteCaptureOutput: boolean;
-    tenantId: string | undefined;
-    captureGrantId: string | undefined;
-  }>,
-): DurableResourceEnvelope<'screen-recording'> {
-  if (!facts.remoteCaptureOutput && !facts.tenantId && !facts.captureGrantId) return envelope;
-  return {
-    ...envelope,
-    metadata: {
-      ...envelope.metadata,
-      ...(facts.remoteCaptureOutput ? { remoteCaptureOutput: true } : {}),
-      ...(facts.tenantId ? { remoteCaptureTenantId: facts.tenantId } : {}),
-      ...(facts.captureGrantId ? { captureGrantId: facts.captureGrantId } : {}),
-    },
-  };
 }
 
 function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: SessionState) {
@@ -464,12 +441,6 @@ async function stopRecording(
     params.sessionName,
   );
   const record = screenRecordingDurableResource.store.read(resourcePath);
-  // #4518: the stop echoes the grant ID from the capture's own durable record — never from the
-  // request, so a reordered or replayed request cannot name another capture's grant.
-  const captureGrantId =
-    record.status === 'decoded'
-      ? readCaptureGrantId(record.envelope.metadata?.captureGrantId)
-      : undefined;
   const daemonOwned = isDaemonOwnedRecordingOutput(
     completion,
     record.status === 'decoded' && record.envelope.metadata?.remoteCaptureOutput === true,
@@ -493,13 +464,16 @@ async function stopRecording(
   // session has to be re-read here, because the record this stop started with may have gained an
   // app, a capture, a claim, or a lease while the recording was being finished.
   if (ref) retireRecordOnlySession(params.sessionStore, ref);
-  const echoed = withCaptureGrantEcho(response, captureGrantId);
-  return echoed.ok && echoed.data
+  return response.ok && response.data
     ? {
-        ...echoed,
-        data: withCaptureOutputOwnership(echoed.data, daemonOwned ? 'daemon' : 'caller', tenantId),
+        ...response,
+        data: withCaptureOutputOwnership(
+          response.data,
+          daemonOwned ? 'daemon' : 'caller',
+          tenantId,
+        ),
       }
-    : echoed;
+    : response;
 }
 
 function deleteTerminalRecordOnlySession(

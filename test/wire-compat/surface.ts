@@ -295,7 +295,6 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DaemonArtifactKnownType',
         'ScriptDeliveryFailure',
         'readScriptDeliveryFailure',
-        'readCaptureGrantId',
       ),
       ...from(
         KERNEL_ERRORS,
