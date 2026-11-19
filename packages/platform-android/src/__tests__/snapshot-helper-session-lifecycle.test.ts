@@ -59,20 +59,37 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('an older ready helper falls back without using or retaining its session', async () => {
+test('an older ready helper stays one-shot across time and capture options until the build changes', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, legacySessionTransport: true });
+  const now = vi.spyOn(Date, 'now');
   const options = {
     adb: provider.exec,
     adbProvider: provider,
     deviceKey: 'android:emulator-5554',
+    helperSha256: 'old-build',
   };
 
   assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  now.mockReturnValue(Date.now() + 61_000);
   assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(
+    await captureAndroidSnapshotWithHelperSession({ ...options, waitForIdleTimeoutMs: 40 }),
+    undefined,
+  );
   assert.equal(spawnArgs.length, 1);
   assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 1);
+
+  const replacement = createSessionProvider({ calls, spawnArgs });
+  const output = await captureAndroidSnapshotWithHelperSession({
+    ...options,
+    adb: replacement.exec,
+    adbProvider: replacement,
+    helperSha256: 'new-build',
+  });
+  assert.equal(output?.metadata.transport, 'persistent-session');
+  assert.equal(spawnArgs.length, 2);
 });
 
 test('a helper that never starts is not spawned again on every command', async () => {

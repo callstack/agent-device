@@ -54,6 +54,9 @@ export function androidSnapshotHelperSessionForwardTarget(port: number): `locala
   return `localabstract:${androidSnapshotHelperSessionSocketName(port)}`;
 }
 
+export const SESSION_TRANSPORT_UNSUPPORTED_REASON =
+  'android_snapshot_helper_session_transport_unsupported';
+
 const SESSION_REQUEST_TIMEOUT_REASON = 'android_snapshot_helper_session_request_timeout';
 
 /** The helper accepted the session request but sent no answer before the command deadline. */
@@ -186,7 +189,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
         ) {
           reject(
             new AppError('COMMAND_FAILED', 'Android snapshot helper lacks authenticated sessions', {
-              reason: 'android_snapshot_helper_session_transport_unsupported',
+              reason: SESSION_TRANSPORT_UNSUPPORTED_REASON,
             }),
           );
           return;

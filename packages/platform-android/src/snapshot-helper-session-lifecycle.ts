@@ -33,6 +33,7 @@ import {
   allocateAndroidSnapshotHelperSessionPort,
   androidSnapshotHelperSessionForwardTarget,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
+  SESSION_TRANSPORT_UNSUPPORTED_REASON,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
@@ -113,6 +114,10 @@ const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
 const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
 const failedSessions = (): Map<string, number> =>
   runtimeSlot(failedSessionsSlot, () => new Map<string, number>());
+/** A readiness marker belongs to the installed build, independent of capture options. */
+const unsupportedSessionBuildsSlot = Symbol('androidSnapshotHelperUnsupportedSessionBuilds');
+const unsupportedSessionBuilds = (): Set<string> =>
+  runtimeSlot(unsupportedSessionBuildsSlot, () => new Set<string>());
 
 /**
  * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
@@ -140,10 +145,18 @@ export async function acquireAndroidSnapshotHelperSession(
   }
   const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
   const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions(callerResolved);
-  const identity = createSessionIdentity(deviceKey, resolved, options);
+  const build = {
+    deviceKey,
+    packageName: resolved.packageName,
+    runner: resolved.runner,
+    helperVersion: options.helperVersion,
+    helperVersionCode: options.helperVersionCode,
+    helperSha256: options.helperSha256,
+  };
   const session = await resolveAndroidSnapshotHelperSession({
     deviceKey,
-    identity,
+    identity: createSessionIdentity(build, resolved),
+    buildIdentity: JSON.stringify(build),
     options,
     resolved,
     startBudgetMs: resolveAndroidSnapshotHelperSessionBudgetMs(callerResolved.commandTimeoutMs),
@@ -169,12 +182,14 @@ export async function getLiveAndroidSnapshotHelperSession(
 async function resolveAndroidSnapshotHelperSession(params: {
   deviceKey: string;
   identity: string;
+  buildIdentity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
+  if (unsupportedSessionBuilds().has(params.buildIdentity)) return undefined;
   return sessions().get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
 }
 
@@ -194,12 +209,13 @@ async function retireUnusableAndroidSnapshotHelperSession(
 
 /**
  * Starts the helper, or answers `undefined` for a start that failed. A start that failed is not a
- * command that failed — the caller answers with the one-shot transport — and this helper build is
- * not spawned again until the backoff it just earned is over.
+ * command that failed — the caller answers with the one-shot transport. Transient failures earn
+ * a timed backoff. An unsupported build stays on the one-shot path until the identity changes.
  */
 async function tryStartAndroidSnapshotHelperSession(params: {
   deviceKey: string;
   identity: string;
+  buildIdentity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
@@ -209,16 +225,21 @@ async function tryStartAndroidSnapshotHelperSession(params: {
     return await startAndroidSnapshotHelperSession(params);
   } catch (error) {
     params.options.signal?.throwIfAborted();
-    failedSessions().set(
-      params.identity,
-      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
-    );
+    const reason = error instanceof AppError ? error.details?.reason : undefined;
+    if (reason === SESSION_TRANSPORT_UNSUPPORTED_REASON) {
+      unsupportedSessionBuilds().add(params.buildIdentity);
+    } else {
+      failedSessions().set(
+        params.identity,
+        Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
+      );
+    }
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_session_start_failed',
       data: {
         deviceKey: params.deviceKey,
-        reason: error instanceof AppError ? error.details?.reason : undefined,
+        reason,
         instrumentation: error instanceof AppError ? error.details?.instrumentation : undefined,
         detail: error instanceof Error ? error.message : String(error),
       },
@@ -413,24 +434,17 @@ async function startAndroidSnapshotHelperSession(params: {
 }
 
 function createSessionIdentity(
-  deviceKey: string,
+  build: { deviceKey: string } & AndroidSnapshotHelperSessionHelperIdentity,
   resolved: AndroidSnapshotHelperResolvedCaptureOptions,
-  options: AndroidSnapshotHelperCaptureOptions,
 ): string {
-  const identity = JSON.stringify({
-    deviceKey,
-    packageName: resolved.packageName,
-    runner: resolved.runner,
-    helperVersion: options.helperVersion,
-    helperVersionCode: options.helperVersionCode,
-    helperSha256: options.helperSha256,
+  return JSON.stringify({
+    ...build,
     waitForIdleTimeoutMs: resolved.waitForIdleTimeoutMs,
     waitForIdleQuietMs: resolved.waitForIdleQuietMs,
     timeoutMs: resolved.timeoutMs,
     maxDepth: resolved.maxDepth,
     maxNodes: resolved.maxNodes,
   });
-  return identity;
 }
 
 /**
@@ -642,6 +656,7 @@ export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
     // retirement, or a failed start is still standing.
     sessions().clear();
     failedSessions().clear();
+    unsupportedSessionBuilds().clear();
     resetAndroidSnapshotHelperRetirements();
     resetAndroidAdbShellProtocolProbes();
   }
