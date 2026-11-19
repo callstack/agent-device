@@ -445,7 +445,7 @@ A drive-relative route is anchored by a textual join, never by a second `path.re
 
 Each component is accepted when it is owned by this user or by root and is neither group- nor world-writable, and a missing tail is accepted when every parent is accepted, so the caller creates it at `0700`. A sticky directory this user or root owns is accepted for PASSING THROUGH, as it is for a script destination.
 
-The state rule is stricter than the script rule at one point, deliberately. Before a name is created, `othersCreateEntriesIn` is asked of EVERY level of the route, and a sticky bit is no exception there:
+The state rule is stricter than the script rule at one point, deliberately. Before a name is created, `othersCreateEntriesIn` is asked of EVERY level of the route, and a sticky bit is no exception there. That strictness is the state walk's own policy, not the private-ancestry option above: a state record is data, not an executable another user could have compiled.
 
 | Verdict | Component |
 | --- | --- |
