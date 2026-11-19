@@ -504,6 +504,17 @@ describe('android role-less clickables', () => {
     );
     expect(findings).toEqual([]);
   });
+
+  test('still share-names two icon-only touchables that carry the same name of their own', () => {
+    const { findings } = audit(
+      [
+        node(1, { type: 'android.view.View', clickable: true, label: 'Delete', rect: dp48 }),
+        node(2, { type: 'android.view.View', clickable: true, label: 'Delete', rect: dp48 }),
+      ],
+      ANDROID,
+    );
+    expect(summarize(findings)).toEqual(['ambiguous-name @e1', 'ambiguous-name @e2']);
+  });
 });
 
 describe('auditSnapshotState with retained tap facts', () => {

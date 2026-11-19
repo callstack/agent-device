@@ -131,7 +131,10 @@ function countSharedNames(
   const counts = new Map<string, number>();
   for (const node of nodes) {
     const control = evaluated.get(node.index);
-    if (control?.name === undefined || control.role === ANDROID_TOUCHABLE_ROLE) continue;
+    if (control?.name === undefined) continue;
+    // TalkBack reads a role-less touchable named by its descendants as their joined text, which the
+    // audit does not rebuild. Only a touchable with its own name joins a group.
+    if (control.role === ANDROID_TOUCHABLE_ROLE && ownName(node, false) === undefined) continue;
     if (isDuplicateExposure(node, control.role, facts, evaluated)) continue;
     const group = nameGroupKey(control.role, control.name);
     counts.set(group, (counts.get(group) ?? 0) + 1);
