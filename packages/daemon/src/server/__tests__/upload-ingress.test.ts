@@ -35,8 +35,11 @@ function fakeRes(): ServerResponse {
   return res;
 }
 
-function reqError(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve) => req.once('error', resolve));
+/** Resolves with the typed reason the ingress aborts its signal with on expiry. */
+function abortReason(signal: AbortSignal): Promise<unknown> {
+  return new Promise((resolve) =>
+    signal.addEventListener('abort', () => resolve(signal.reason), { once: true }),
+  );
 }
 
 test('a stalled upload body expires at the 120-second inactivity ceiling with a typed reason', async () => {
@@ -44,10 +47,10 @@ test('a stalled upload body expires at the 120-second inactivity ceiling with a 
   try {
     const req = fakeReq();
     const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
-    const failure = reqError(req);
+    const failure = abortReason(ingress.signal);
     await vi.advanceTimersByTimeAsync(INACTIVITY_MS);
     const error = (await failure) as AppError;
-    assert.equal(req.destroyed, true);
+    assert.equal(ingress.signal.aborted, true);
     assert.equal(ingress.signal.aborted, true);
     assert.equal(error instanceof AppError, true);
     assert.equal(error.details?.reason, 'transfer_phase_timeout');
@@ -64,18 +67,18 @@ test('body progress renews inactivity but never the 600-second aggregate', async
   try {
     const req = fakeReq();
     const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
-    const failure = reqError(req);
+    const failure = abortReason(ingress.signal);
     // Five progress windows of 119s stay under the inactivity ceiling and pass 595s
     // of the aggregate without renewing it.
     for (let i = 0; i < 5; i += 1) {
       await vi.advanceTimersByTimeAsync(INACTIVITY_MS - 1_000);
       ingress.onAcceptedBodyBytes(1);
       await vi.advanceTimersByTimeAsync(0);
-      assert.equal(req.destroyed, false);
+      assert.equal(ingress.signal.aborted, false);
     }
     await vi.advanceTimersByTimeAsync(AGGREGATE_MS - 5 * (INACTIVITY_MS - 1_000) + 1);
     const error = (await failure) as AppError;
-    assert.equal(req.destroyed, true);
+    assert.equal(ingress.signal.aborted, true);
     assert.equal(error.details?.reason, 'transfer_ingress_deadline_exceeded');
     assert.equal(error.details?.timeoutMs, AGGREGATE_MS);
     ingress.dispose();
@@ -89,17 +92,17 @@ test('bodyComplete stops only the inactivity ceiling; post-body work observes th
   try {
     const req = fakeReq();
     const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
-    const failure = reqError(req);
+    const failure = abortReason(ingress.signal);
     // The body completed: the inactivity ceiling must not fire for post-body work…
     ingress.bodyComplete();
     ingress.bodyComplete();
     await vi.advanceTimersByTimeAsync(INACTIVITY_MS * 4);
-    assert.equal(req.destroyed, false);
+    assert.equal(ingress.signal.aborted, false);
     assert.equal(ingress.signal.aborted, false);
     // …but the 600-second aggregate still bounds it.
     await vi.advanceTimersByTimeAsync(AGGREGATE_MS - INACTIVITY_MS * 4 + 1);
     const error = (await failure) as AppError;
-    assert.equal(req.destroyed, true);
+    assert.equal(ingress.signal.aborted, true);
     assert.equal(error.details?.reason, 'transfer_ingress_deadline_exceeded');
     assert.equal(error.details?.timeoutMs, AGGREGATE_MS);
     ingress.dispose();
@@ -113,7 +116,7 @@ test('body bytes received after bodyComplete re-arm only the inactivity ceiling'
   try {
     const req = fakeReq();
     const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
-    const failure = reqError(req);
+    const failure = abortReason(ingress.signal);
     ingress.bodyComplete();
     await vi.advanceTimersByTimeAsync(AGGREGATE_MS - 1_000);
     // A late body byte renews inactivity only; the aggregate still fires on schedule.
@@ -134,7 +137,7 @@ test('dispose stops both timers without aborting', async () => {
     const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
     ingress.dispose();
     await vi.advanceTimersByTimeAsync(AGGREGATE_MS + INACTIVITY_MS);
-    assert.equal(req.destroyed, false);
+    assert.equal(ingress.signal.aborted, false);
     assert.equal(ingress.signal.aborted, false);
   } finally {
     vi.useRealTimers();
@@ -157,6 +160,52 @@ test('late progress after an overdue inactivity ceiling expires instead of renew
     const reason = ingress.signal.reason as AppError;
     assert.equal(reason.details?.reason, 'transfer_phase_timeout');
     ingress.dispose();
+  } finally {
+    clock.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+test('body completion after an overdue inactivity ceiling expires instead of clearing it', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const realNow = performance.now.bind(performance);
+  let skewMs = 0;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => realNow() + skewMs);
+  try {
+    const req = fakeReq();
+    const ingress = beginUploadTransferIngress({ req, res: fakeRes() });
+    req.on('error', () => {});
+    // The body terminator arrives after the inactivity deadline, before its timer runs.
+    skewMs = INACTIVITY_MS + 1;
+    assert.throws(
+      () => ingress.bodyComplete(),
+      (error: unknown) => (error as AppError).details?.reason === 'transfer_phase_timeout',
+    );
+    assert.equal(ingress.signal.aborted, true, 'the overdue ceiling is not cleared');
+    ingress.dispose();
+  } finally {
+    clock.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+test('a release after an overdue aggregate expires the request instead of clearing it', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const realNow = performance.now.bind(performance);
+  let skewMs = 0;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => realNow() + skewMs);
+  try {
+    const res = fakeRes();
+    const ingress = beginUploadTransferIngress({ req: fakeReq(), res });
+    // The aggregate deadline passed, but its timer callback has not run yet.
+    skewMs = AGGREGATE_MS + 1;
+    ingress.dispose();
+    assert.equal(ingress.signal.aborted, true, 'dispose does not clear an overdue deadline');
+    assert.equal(
+      (ingress.signal.reason as AppError).details?.reason,
+      'transfer_ingress_deadline_exceeded',
+    );
+    assert.equal(res.statusCode, 500, 'the expiry answers with its typed error');
   } finally {
     clock.mockRestore();
     vi.useRealTimers();

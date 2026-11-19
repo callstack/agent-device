@@ -28,15 +28,18 @@ export type UploadTransferIngress = {
   /**
    * Stops only the inactivity ceiling once the request body is complete, and keeps the
    * connection open for the answer. Post-body work (hash, extraction, registration) then
-   * observes just the aggregate. Safe to call more than once; does not abort.
+   * observes just the aggregate. It clears a deadline, so it commits through `commit` and
+   * throws the typed expiry when the inactivity deadline already passed.
    */
   bodyComplete(): void;
   /**
-   * Throws the typed expiry when the request may no longer commit work: its signal fired,
-   * or a recorded deadline has passed although its timer callback has not run yet. An
-   * overdue deadline expires the request through the same path as its timer.
+   * The only way to commit work that becomes externally visible: an answer, a ticket, a
+   * registration, an offset, or a cleared deadline. It first compares the recorded
+   * monotonic deadlines, so a deadline that passed before its timer callback ran expires
+   * the request through the same path as the timer and the work is refused with the typed
+   * expiry. `commit(() => undefined)` is the same gate for a cancellation point.
    */
-  ensureActive(): void;
+  commit<T>(work: () => T): T;
   /**
    * Releases the request. With the body read, both timers stop at once. With the body
    * unread, the connection closes after the answer flushes, and both timers keep bounding
@@ -149,6 +152,15 @@ export function beginUploadTransferIngress(params: {
     inactivityTimer.unref();
   };
 
+  const commit = <T>(work: () => T): T => {
+    if (!disposed) {
+      const overdue = overdueExpiry();
+      if (overdue) fail(overdue);
+    }
+    throwIfIngressAborted(signal);
+    return work();
+  };
+
   armInactivity();
 
   return {
@@ -163,17 +175,13 @@ export function beginUploadTransferIngress(params: {
       armInactivity();
     },
     bodyComplete() {
-      releaseLinger();
-      if (!res.headersSent) res.removeHeader('connection');
-      if (!disposed) stopInactivity();
+      commit(() => {
+        releaseLinger();
+        if (!res.headersSent) res.removeHeader('connection');
+        stopInactivity();
+      });
     },
-    ensureActive() {
-      if (!disposed) {
-        const overdue = overdueExpiry();
-        if (overdue) fail(overdue);
-      }
-      throwIfIngressAborted(signal);
-    },
+    commit,
     dispose,
   };
 }
@@ -196,9 +204,11 @@ function inactivityExpiry(): AppError {
 
 /**
  * Ends one expired exchange in response order. No answer started: answer with the typed
- * error now; Node writes it after any earlier pipelined answer. Body unread: close the
- * connection only after this request's own answer flushes, so a queued request never
- * closes the socket under an earlier answer that is still owned.
+ * error now; Node writes it after any earlier pipelined answer. Body unread: once this
+ * request's own answer flushes, hand the socket to its close owner's lingering close and
+ * discard the rest of the body, bounded by a short grace. A queued request therefore never
+ * closes the socket under an earlier answer, and a full close never resets a client that
+ * is still sending before it reads the answers.
  */
 function endExchange(req: IncomingMessage, res: ServerResponse, error: AppError): void {
   if (!res.headersSent) {
@@ -206,9 +216,23 @@ function endExchange(req: IncomingMessage, res: ServerResponse, error: AppError)
     sendRestJsonError(res, normalizeError(error));
   }
   if (req.complete) return;
-  const closeConnection = () => req.destroy(error);
+  const closeConnection = () => lingerThenClose(req);
   if (res.writableFinished) closeConnection();
   else res.once('finish', closeConnection);
+}
+
+/** How long an expired request's connection may linger to discard its unread body. */
+const EXPIRED_BODY_LINGER_GRACE_MS = 5_000;
+
+function lingerThenClose(req: IncomingMessage): void {
+  const socket = req.socket as IncomingMessage['socket'] | null;
+  if (!socket || socket.destroyed) return;
+  const grace = setTimeout(() => socket.destroy(), EXPIRED_BODY_LINGER_GRACE_MS);
+  grace.unref();
+  socket.once('close', () => clearTimeout(grace));
+  // Discard the rest of the expired body; the close owner half-closes until it ends.
+  req.resume();
+  socket.destroySoon();
 }
 
 /**

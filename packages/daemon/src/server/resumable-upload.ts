@@ -74,21 +74,51 @@ type ResumableUploadEntry = {
   timer?: ReturnType<typeof setTimeout>;
   generation: number;
   tail: Promise<void>;
-  activeReceive?: IncomingMessage;
+  /** Aborts the active receive with the ticket's typed expiry. */
+  activeReceive?: AbortController;
   closed: boolean;
   finalized: boolean;
 };
 
-export function beginResumableUpload(options: BeginResumableUploadOptions): {
+type ResumableUploadTicket = {
   uploadId: string;
   cacheHit: false;
   upload: { url: string; headers: Record<string, string> };
-} {
+};
+
+/**
+ * Returns the ticket for this upload attempt, creating it when none exists. With `publish`,
+ * a newly created ticket is provisional until `publish` returns: when `publish` throws (a
+ * refused commit), the new ticket and its directory are removed again. An existing ticket
+ * returned for the same attempt is kept either way.
+ */
+export function beginResumableUpload(
+  options: BeginResumableUploadOptions,
+  publish?: (ticket: ResumableUploadTicket) => void,
+): ResumableUploadTicket {
   validateResumableUploadOptions(options);
   const key = buildResumableUploadKey(options);
   const existingId = RESUMABLE_UPLOADS_BY_KEY().get(key);
   const existing = existingId ? RESUMABLE_UPLOADS_BY_ID().get(existingId) : undefined;
   const entry = existing ?? createResumableUploadEntry(options, key);
+  const ticket = describeResumableUploadTicket(entry, options);
+  if (!publish) return ticket;
+  try {
+    publish(ticket);
+  } catch (error) {
+    if (!existing) {
+      closeEntry(entry);
+      fs.rmSync(entry.tempDir, { recursive: true, force: true });
+    }
+    throw error;
+  }
+  return ticket;
+}
+
+function describeResumableUploadTicket(
+  entry: ResumableUploadEntry,
+  options: BeginResumableUploadOptions,
+): ResumableUploadTicket {
   return {
     uploadId: entry.id,
     cacheHit: false,
@@ -110,27 +140,35 @@ export async function receiveResumableUploadChunk(params: {
   req: IncomingMessage;
   tenantId?: string;
   signal?: AbortSignal;
-  ensureActive?: () => void;
+  /** The request owner's commit gate; the chunk offset commits through it. */
+  commit?: <T>(work: () => T) => T;
   onAcceptedBytes?: (bytes: number) => void;
   onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
+  // The ticket's own expiry reaches the receive through this controller, never by
+  // destroying the request: the request owner ends the exchange in response order.
+  const ticketExpiry = new AbortController();
+  const signal = params.signal
+    ? AbortSignal.any([params.signal, ticketExpiry.signal])
+    : ticketExpiry.signal;
   return await runExclusive(
     entry,
     'receive',
-    params.req,
+    ticketExpiry,
     async () => {
       const { appended, ...result } = await receiveResumableTransfer({
         entry,
         req: params.req,
-        signal: params.signal,
-        ensureActive: params.ensureActive,
+        signal,
+        commit: params.commit,
         invalidate: async () => await terminateEntry(entry),
         onAcceptedBytes: (bytes) => {
           // Accepted (flushed) body bytes renew the ticket's idle lifetime during
-          // actual progress, not only when a whole chunk completes (#4441).
-          if (!entry.closed) refreshResumableUploadTimer(entry);
+          // actual progress, not only when a whole chunk completes (#4441). The request
+          // deadline is checked first, so an overdue write never extends the ticket.
           params.onAcceptedBytes?.(bytes);
+          if (!entry.closed && !signal.aborted) refreshResumableUploadTimer(entry);
         },
         onBodyComplete: params.onBodyComplete,
       });
@@ -149,8 +187,8 @@ export async function receiveResumableUploadChunk(params: {
  */
 export type FinalizeUploadIngressLink = {
   signal?: AbortSignal;
-  /** Throws the owner's typed expiry when a recorded deadline passed. */
-  ensureActive?: () => void;
+  /** The request owner's commit gate; each finalize step checks it. */
+  commit?: <T>(work: () => T) => T;
 };
 
 export async function finalizeResumableUpload(
@@ -162,7 +200,7 @@ export async function finalizeResumableUpload(
   const signal = ingress?.signal;
   // The owner's typed expiry, including a recorded deadline whose timer has not run yet.
   const ensureActive = () => {
-    ingress?.ensureActive?.();
+    ingress?.commit?.(() => undefined);
     throwIfIngressAborted(signal);
   };
   return await runExclusive(
@@ -267,9 +305,7 @@ function disarmResumableUploadTimer(entry: ResumableUploadEntry): void {
 function expireEntry(entry: ResumableUploadEntry, generation: number): void {
   if (entry.generation !== generation || entry.closed) return;
   closeEntry(entry);
-  const activeReceive = entry.activeReceive;
-  activeReceive?.once('error', () => {});
-  activeReceive?.destroy(
+  entry.activeReceive?.abort(
     new AppError('COMMAND_FAILED', 'Upload expired while receiving data', {
       reason: 'RESOURCE_EXPIRED',
     }),
@@ -283,7 +319,7 @@ function expireEntry(entry: ResumableUploadEntry, generation: number): void {
 async function runExclusive<T>(
   entry: ResumableUploadEntry,
   kind: 'receive' | 'finalize',
-  req: IncomingMessage | undefined,
+  receive: AbortController | undefined,
   action: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
@@ -302,7 +338,7 @@ async function runExclusive<T>(
     // The close check above runs first, so a close/cancel race keeps the close side's
     // typed expiry error, and the entry's ownership is untouched either way (#4441).
     throwIfIngressAborted(signal);
-    if (kind === 'receive') entry.activeReceive = req;
+    if (kind === 'receive') entry.activeReceive = receive;
     try {
       return await action();
     } finally {

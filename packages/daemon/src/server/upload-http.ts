@@ -152,7 +152,7 @@ async function handleUpload(
         onBodyComplete: () => ingress.bodyComplete(),
       }),
       auth.tenantId,
-      () => ingress.ensureActive(),
+      ingress.commit,
     );
   });
 }
@@ -170,15 +170,18 @@ async function handleUploadPreflight(
     // observes only the aggregate (#4441).
     ingress.bodyComplete();
     const preflight = readUploadPreflightBody(body);
-    // No ticket is created once a deadline has passed.
-    ingress.ensureActive();
-    const upload = beginResumableUpload({
-      baseUrl: origin,
-      tokenHeaders: buildUploadTicketAuthHeaders(token),
-      ...preflight,
-      tenantId: auth.tenantId,
-    });
-    sendJson(res, { ok: true, ...upload });
+    // bodyComplete above committed under the recorded deadlines in this same turn, so no
+    // ticket is created after a deadline. A ticket created here is published only when
+    // its answer commits; a refused commit removes it again.
+    beginResumableUpload(
+      {
+        baseUrl: origin,
+        tokenHeaders: buildUploadTicketAuthHeaders(token),
+        ...preflight,
+        tenantId: auth.tenantId,
+      },
+      (upload) => ingress.commit(() => sendJson(res, { ok: true, ...upload })),
+    );
   });
 }
 
@@ -194,22 +197,23 @@ async function handleResumableUpload(
       req,
       tenantId: auth.tenantId,
       signal: ingress.signal,
-      ensureActive: () => ingress.ensureActive(),
+      commit: ingress.commit,
       onAcceptedBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
       onBodyComplete: () => ingress.bodyComplete(),
     });
-    if (result.complete) {
-      res.statusCode = 200;
-      res.end('ok');
-      return;
-    }
-
-    res.statusCode = 308;
-    if (result.offset > 0) {
-      res.setHeader('range', `bytes=0-${result.offset - 1}`);
-    }
-    res.setHeader('x-upload-offset', String(result.offset));
-    res.end();
+    ingress.commit(() => {
+      if (result.complete) {
+        res.statusCode = 200;
+        res.end('ok');
+        return;
+      }
+      res.statusCode = 308;
+      if (result.offset > 0) {
+        res.setHeader('range', `bytes=0-${result.offset - 1}`);
+      }
+      res.setHeader('x-upload-offset', String(result.offset));
+      res.end();
+    });
   });
 }
 
@@ -230,10 +234,10 @@ async function handleUploadFinalize(
       // the post-body hash, the owned extraction stream and artifact materialization.
       await finalizeResumableUpload(finalize.uploadId, auth.tenantId, {
         signal: ingress.signal,
-        ensureActive: () => ingress.ensureActive(),
+        commit: ingress.commit,
       }),
       auth.tenantId,
-      () => ingress.ensureActive(),
+      ingress.commit,
     );
   });
 }
@@ -245,27 +249,31 @@ function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void
 }
 
 /**
- * Registers a finished artifact and answers. A deadline that passed before registration
- * removes the unregistered directory and answers with the same typed expiry as the timer.
+ * Registers a finished artifact and answers, as one commit. A refused commit (a deadline
+ * that passed first) removes the unregistered directory and answers with the same typed
+ * expiry as the timer.
  */
 function sendUploadedArtifactResponse(
   res: http.ServerResponse,
   result: { artifactPath: string; tempDir: string },
   tenantId: string | undefined,
-  ensureActive: () => void,
+  commit: <T>(work: () => T) => T,
 ): void {
+  let registered = false;
   try {
-    ensureActive();
+    commit(() => {
+      const uploadId = trackUploadedArtifact({
+        artifactPath: result.artifactPath,
+        tempDir: result.tempDir,
+        tenantId,
+      });
+      registered = true;
+      sendJson(res, { ok: true, uploadId });
+    });
   } catch (error) {
-    fs.rmSync(result.tempDir, { recursive: true, force: true });
+    if (!registered) fs.rmSync(result.tempDir, { recursive: true, force: true });
     throw error;
   }
-  const uploadId = trackUploadedArtifact({
-    artifactPath: result.artifactPath,
-    tempDir: result.tempDir,
-    tenantId,
-  });
-  sendJson(res, { ok: true, uploadId });
 }
 
 /** Answers a route failure unless the ingress already ended the exchange with its expiry. */

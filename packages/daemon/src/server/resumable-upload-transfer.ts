@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
+import { PassThrough, finished } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { createByteLimitStream } from '@agent-device/host-kit/archive';
@@ -17,8 +18,8 @@ export async function receiveResumableTransfer(params: {
   req: IncomingMessage;
   invalidate: (error: unknown) => Promise<void>;
   signal?: AbortSignal;
-  /** Throws the owner's typed expiry when a recorded deadline passed; called before commit. */
-  ensureActive?: () => void;
+  /** The request owner's commit gate; the offset commits through it inside rollback. */
+  commit?: <T>(work: () => T) => T;
   onAcceptedBytes?: (bytes: number) => void;
   onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number; appended: boolean }> {
@@ -49,8 +50,10 @@ export async function receiveResumableTransfer(params: {
   const payloadStream = fs.createWriteStream(params.entry.payloadPath, { flags: 'a' });
   observeAcceptedWrites(payloadStream, params.onAcceptedBytes);
   let offset: number;
+  const body = new PassThrough();
+  const stopForwarding = forwardRequestBody(params.req, body);
   try {
-    await pipeline(params.req, limiter, payloadStream, { signal: params.signal });
+    await pipeline(body, limiter, payloadStream, { signal: params.signal });
     if (range && limiter.bytesSeen !== range.span) {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-range');
     }
@@ -62,17 +65,37 @@ export async function receiveResumableTransfer(params: {
     params.onBodyComplete?.();
     // The final offset check and the owner's last cancellation check stay inside the
     // rollback boundary: a cancelled chunk never commits its offset (#4441).
-    offset = await currentOffset(params.entry);
-    params.ensureActive?.();
+    const finalOffset = await currentOffset(params.entry);
     throwIfIngressAborted(params.signal);
+    offset = params.commit ? params.commit(() => finalOffset) : finalOffset;
   } catch (error) {
     // An aborted ingress signal owns the failure with its typed reason; an earlier
     // classified failure (limiter, ticket expiry) is preserved unchanged (#4441).
     const failure = resolveIngressFailure(params.signal, error);
     await rollback(params.entry.payloadPath, oldSize, failure, params.invalidate);
     throw failure;
+  } finally {
+    stopForwarding();
   }
   return { complete: offset === params.entry.sizeBytes, offset, appended: offset > oldSize };
+}
+
+/**
+ * Feeds the request body into the chunk pipeline without handing the request to it. An
+ * aborted or failed pipeline must not destroy the request: on a pipelined keep-alive
+ * socket that would close the socket under an earlier answer. The request's owner ends
+ * the exchange in response order instead. A request that fails (client disconnect) still
+ * fails the pipeline.
+ */
+function forwardRequestBody(req: IncomingMessage, body: PassThrough): () => void {
+  req.pipe(body);
+  const stopWatching = finished(req, (error) => {
+    if (error) body.destroy(error);
+  });
+  return () => {
+    req.unpipe(body);
+    stopWatching();
+  };
 }
 
 /**

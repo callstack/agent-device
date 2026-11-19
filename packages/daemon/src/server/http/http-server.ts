@@ -248,7 +248,10 @@ export async function createDaemonHttpServer(options: {
     });
   });
   // Socket ingress ceilings from one owner (ingress-budget.ts). They bound socket ingress
-  // only; RPC execution keeps its own deadlines.
+  // only; RPC execution keeps its own deadlines. The header ceiling acts before admission
+  // and per connection: when a later pipelined header block expires, Node closes the whole
+  // socket, including earlier answers still owned on it. No upload owner exists yet at that
+  // point, so this stays socket-wide by design.
   const server = http.createServer(
     {
       headersTimeout: DAEMON_HTTP_HEADERS_TIMEOUT_MS,
