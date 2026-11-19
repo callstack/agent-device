@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   beginResumableUpload,
   finalizeResumableUpload,
@@ -394,6 +394,105 @@ test('an ingress owner aborted while finalize waits in the admission queue owns 
   } finally {
     fs.rmSync(finalized.tempDir, { recursive: true, force: true });
   }
+});
+
+test('an aborted queued PUT releases at once while later work still waits for the active owner', async () => {
+  const flushIO = async () => {
+    for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
+  };
+  const bytes = Buffer.from('AB');
+  const uploadId = beginUpload(bytes).uploadId;
+  const blocker = requestStream({ 'content-range': 'bytes 0-1/2' });
+  const receiving = receiveResumableUploadChunk({ uploadId, req: blocker });
+  blocker.write('A');
+  await flushIO();
+  const controller = new AbortController();
+  const queued = receiveResumableUploadChunk({
+    uploadId,
+    req: requestStream({ 'content-range': 'bytes 0-1/2' }),
+    signal: controller.signal,
+  }).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  const finalizing = finalizeResumableUpload(uploadId);
+  let finalizeSettled = false;
+  void finalizing.then(
+    () => {
+      finalizeSettled = true;
+    },
+    () => {
+      finalizeSettled = true;
+    },
+  );
+  await flushIO();
+  let queuedOutcome: unknown = 'pending';
+  void queued.then((outcome) => {
+    queuedOutcome = outcome;
+  });
+  controller.abort(createRequestCanceledError());
+  await flushIO();
+  // The disconnected waiter is released without waiting for the receive it does not own.
+  assert.equal(queuedOutcome instanceof AppError, true, 'the aborted waiter settles at once');
+  assert.equal((queuedOutcome as AppError).details?.reason, 'request_canceled');
+  // Serialization holds: the finalize queued behind the released waiter still waits.
+  assert.equal(finalizeSettled, false);
+  blocker.end('B');
+  assert.deepEqual(await receiving, { complete: true, offset: 2 });
+  const finalized = await finalizing;
+  try {
+    assert.equal(fs.readFileSync(finalized.artifactPath, 'utf8'), 'AB');
+  } finally {
+    fs.rmSync(finalized.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('a chunk cancelled during its final offset check rolls back and never advances the offset', async () => {
+  const bytes = Buffer.from('ABCD');
+  const uploadId = beginUpload(bytes).uploadId;
+  const controller = new AbortController();
+  const stat = fs.promises.stat.bind(fs.promises);
+  let payloadStats = 0;
+  const held = vi.spyOn(fs.promises, 'stat').mockImplementation((async (
+    target: fs.PathLike,
+    options?: fs.StatOptions,
+  ) => {
+    const result = await stat(target, options);
+    if (path.basename(String(target)) === 'payload' && (payloadStats += 1) === 2) {
+      // The body is fully appended; the owner fires before the offset is committed.
+      controller.abort(
+        new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+          reason: 'transfer_ingress_deadline_exceeded',
+        }),
+      );
+    }
+    return result;
+  }) as typeof fs.promises.stat);
+  try {
+    const error = (await receiveResumableUploadChunk({
+      uploadId,
+      req: request(bytes, { 'content-range': 'bytes 0-3/4' }),
+      signal: controller.signal,
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    )) as AppError | null;
+    assert.equal(payloadStats, 2);
+    assert.equal(error instanceof AppError, true);
+    assert.equal(error?.details?.reason, 'transfer_ingress_deadline_exceeded');
+  } finally {
+    held.mockRestore();
+  }
+  // The cancelled chunk rolled back: a full retry from offset zero completes.
+  assert.deepEqual(
+    await receiveResumableUploadChunk({
+      uploadId,
+      req: request(bytes, { 'content-range': 'bytes 0-3/4' }),
+    }),
+    { complete: true, offset: 4 },
+  );
+  const finalized = await finalizeResumableUpload(uploadId);
+  fs.rmSync(finalized.tempDir, { recursive: true, force: true });
 });
 
 test('an ingress owner aborted mid-hash cancels the finalize with its typed reason and cleans up', async () => {

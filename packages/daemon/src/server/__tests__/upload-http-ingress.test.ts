@@ -46,10 +46,10 @@ function routeRequest(
 }
 
 /** Bounds a promise against a real-I/O stall while the clock is faked. */
-async function withIO<T>(pending: Promise<T>): Promise<T> {
+async function withIO<T>(pending: Promise<T>, label = 'loopback I/O'): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const guard = new Promise<never>((_, reject) => {
-    timeout = realSetTimeout(() => reject(new Error('loopback I/O did not complete in 3s')), 3_000);
+    timeout = realSetTimeout(() => reject(new Error(`${label} did not complete in 3s`)), 3_000);
   });
   try {
     return await Promise.race([pending, guard]);
@@ -426,6 +426,155 @@ test('stalled PUT rolls back at 120 s and finalize can spend longer on its hash'
     readers.mockRestore();
     writers.mockRestore();
     vi.useRealTimers();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a finalize queued behind a held ticket answers at its own deadline', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const partialWritten = ioBarrier();
+  const rollbackStarted = ioBarrier();
+  const releaseRollback = ioBarrier();
+  const createWriteStream = fs.createWriteStream;
+  const writers = vi.spyOn(fs, 'createWriteStream').mockImplementation((path, options) => {
+    const stream = createWriteStream(path, options);
+    if (typeof options === 'object' && options.flags === 'a') {
+      stream.once('ready', () => stream.once('drain', () => partialWritten.resolve()));
+      const write = stream.write.bind(stream);
+      stream.write = ((chunk: unknown, ...rest: never[]) => {
+        const accepted = write(chunk as never, ...rest);
+        if (accepted) partialWritten.resolve();
+        return accepted;
+      }) as typeof stream.write;
+    }
+    return stream;
+  });
+  const truncate = fs.promises.truncate.bind(fs.promises);
+  // The stalled chunk's rollback holds the ticket past the queued finalize's deadline.
+  const rollbacks = vi.spyOn(fs.promises, 'truncate').mockImplementation(async (target, length) => {
+    rollbackStarted.resolve();
+    await releaseRollback.promise;
+    await truncate(target, length);
+  });
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const auth = { authorization: 'Bearer daemon-secret' };
+    const json = { ...auth, 'content-type': 'application/json' };
+    const preflight = await withIO(
+      routeRequest(port, { method: 'POST', path: '/upload/preflight', headers: json }, (req) =>
+        req.end(preflightBody(Buffer.from('ABCD'))),
+      ),
+    );
+    assert.equal(preflight.status, 200);
+    const { uploadId } = JSON.parse(preflight.body) as { uploadId: string };
+
+    const stalled = routeRequest(
+      port,
+      {
+        method: 'PUT',
+        path: `/upload/direct/${uploadId}`,
+        headers: {
+          ...auth,
+          connection: 'close',
+          'content-range': 'bytes 0-3/4',
+          'content-length': 4,
+        },
+      },
+      (req) => req.write('AB'),
+    );
+    void stalled.catch(() => {});
+    await withIO(partialWritten.promise);
+
+    const finalizeBodyRead = ioBarrier();
+    server.prependOnceListener('request', (req: http.IncomingMessage) =>
+      req.once('end', () => finalizeBodyRead.resolve()),
+    );
+    const finalize = routeRequest(
+      port,
+      { method: 'POST', path: '/upload/finalize', headers: json },
+      (req) => req.end(JSON.stringify({ uploadId })),
+    );
+    void finalize.catch(() => {});
+    await withIO(finalizeBodyRead.promise);
+    await flushIO();
+
+    // The chunk stalls at 120 s and its rollback keeps the ticket held.
+    await vi.advanceTimersByTimeAsync(120_000);
+    await withIO(rollbackStarted.promise);
+    // The finalize's own 600 s deadline releases it from the queue.
+    await vi.advanceTimersByTimeAsync(480_000);
+    const answered = await withIO(finalize, 'the queued finalize answer');
+    assert.equal(answered.status, 500);
+    assert.equal(JSON.parse(answered.body).reason, 'transfer_ingress_deadline_exceeded');
+  } finally {
+    releaseRollback.resolve();
+    rollbacks.mockRestore();
+    writers.mockRestore();
+    vi.useRealTimers();
+    await flushIO();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('an early answer to an unfinished body closes the connection and keeps the 308 offset', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { server, port } = await startServer();
+  const agent = new http.Agent({ keepAlive: true });
+  const sendUnfinished = async (options: http.RequestOptions) => {
+    const socketClosed = ioBarrier();
+    const reply = routeRequest(port, { ...options, agent }, (req) => {
+      req.once('socket', (socket) => socket.once('close', () => socketClosed.resolve()));
+      req.write('A');
+    });
+    const answered = await withIO(reply, 'the early answer');
+    // The server closes the connection instead of draining the unread body.
+    await withIO(socketClosed.promise, 'the server close of the early-answered connection');
+    return answered;
+  };
+  try {
+    const auth = { authorization: 'Bearer daemon-secret' };
+    const json = { ...auth, 'content-type': 'application/json' };
+    const preflight = await withIO(
+      routeRequest(port, { method: 'POST', path: '/upload/preflight', headers: json }, (req) =>
+        req.end(preflightBody(Buffer.from('ABCD'))),
+      ),
+    );
+    assert.equal(preflight.status, 200);
+    const { uploadId } = JSON.parse(preflight.body) as { uploadId: string };
+    const first = await withIO(
+      routeRequest(
+        port,
+        {
+          method: 'PUT',
+          path: `/upload/direct/${uploadId}`,
+          headers: { ...auth, 'content-range': 'bytes 0-1/4', 'content-length': '2' },
+        },
+        (req) => req.end('AB'),
+      ),
+    );
+    assert.equal(first.status, 308);
+
+    // An offset mismatch answers 308 before its body arrives.
+    const mismatch = await sendUnfinished({
+      method: 'PUT',
+      path: `/upload/direct/${uploadId}`,
+      headers: { ...auth, 'content-range': 'bytes 0-1/4', 'content-length': '2' },
+    });
+    assert.equal(mismatch.status, 308);
+    assert.equal(mismatch.headers.range, 'bytes=0-1');
+    assert.equal(mismatch.headers['x-upload-offset'], '2');
+    assert.equal(mismatch.headers.connection, 'close');
+
+    // An authorization refusal answers before its body arrives.
+    const refused = await sendUnfinished({
+      method: 'PUT',
+      path: `/upload/direct/${uploadId}`,
+      headers: { 'content-range': 'bytes 2-3/4', 'content-length': '2' },
+    });
+    assert.equal(refused.status, 401);
+  } finally {
+    agent.destroy();
     await closeLoopbackServer(server);
   }
 });
