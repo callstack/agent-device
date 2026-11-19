@@ -27,9 +27,7 @@ export type DaemonStartupProgressMessage = Readonly<{
   phase: DaemonStartupPhase;
 }>;
 
-export function daemonStartupProgressMessage(
-  phase: DaemonStartupPhase,
-): DaemonStartupProgressMessage {
+function daemonStartupProgressMessage(phase: DaemonStartupPhase): DaemonStartupProgressMessage {
   return { type: DAEMON_STARTUP_PROGRESS_MESSAGE_TYPE, phase };
 }
 
@@ -61,3 +59,40 @@ export type DaemonStartupProgress = Readonly<{
   /** Ends reporting after `registered`. */
   close(): void;
 }>;
+
+/** The parts of a Node process that carry its IPC channel to the parent. */
+export type DaemonStartupProgressProcess = Pick<
+  NodeJS.Process,
+  'channel' | 'send' | 'connected' | 'disconnect' | 'stderr'
+>;
+
+/**
+ * The launch channel of the daemon process `proc`. Without the launcher's mark in `env` or a
+ * channel, reporting is a no-op. The channel is unref'd so it never holds the daemon alive. A
+ * failed send (launcher gone) writes one stderr line: the callback form keeps it out of the
+ * uncaughtException handler, which would otherwise end the daemon.
+ */
+export function openDaemonStartupProgress(
+  env: Readonly<Record<string, string | undefined>>,
+  proc: DaemonStartupProgressProcess,
+): DaemonStartupProgress {
+  const { channel, send } = proc;
+  if (env[DAEMON_PROGRESS_CHANNEL_ENV] !== '1' || !channel || !send) {
+    return { report() {}, close() {} };
+  }
+  channel.unref();
+  let failed = false;
+  return {
+    report(phase) {
+      if (failed || !proc.connected) return;
+      send.call(proc, daemonStartupProgressMessage(phase), (error: Error | null) => {
+        if (!error || failed) return;
+        failed = true;
+        proc.stderr.write(`Daemon startup phase report failed: ${error.message}\n`);
+      });
+    },
+    close() {
+      if (proc.connected) proc.disconnect();
+    },
+  };
+}

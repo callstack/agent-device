@@ -33,7 +33,7 @@ type RegisteredDaemonFixtureOptions = Readonly<{
 export type RegisteredDaemonComposition<TInfo extends { pid: number }> = Readonly<{
   /** Module URL exporting `DAEMON_STARTUP_EXIT_CODES` and `tryAcquireDaemonRegistration`. */
   registrationOwnerUrl: string;
-  /** Module URL exporting the daemon startup-phase message constructor. */
+  /** Module URL exporting the daemon startup-phase channel opener. */
   startupPhasesUrl: string;
   /** Launches a child process without any mock the test installed on process launching. */
   launch: typeof runCmdDetachedMonitored;
@@ -120,9 +120,9 @@ export function createRegisteredDaemonFixtures<
       `import fs from 'node:fs';
 import path from 'node:path';
 import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration } from ${JSON.stringify(composition.registrationOwnerUrl)};
-import { daemonStartupProgressMessage } from ${JSON.stringify(composition.startupPhasesUrl)};
-process.channel?.unref();
-const reportDaemonStartupPhase = (phase) => { if (process.connected) process.send(daemonStartupProgressMessage(phase), () => {}); };
+import { DAEMON_PROGRESS_CHANNEL_ENV, openDaemonStartupProgress } from ${JSON.stringify(composition.startupPhasesUrl)};
+const progress = openDaemonStartupProgress({ [DAEMON_PROGRESS_CHANNEL_ENV]: '1' }, process);
+const reportDaemonStartupPhase = (phase) => progress.report(phase);
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
 const emitBefore = ${fixtureOptions?.emitStartupPhaseBeforeAcquisition ? 'true' : 'false'};
