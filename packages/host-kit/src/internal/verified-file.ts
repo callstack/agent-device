@@ -147,7 +147,12 @@ export function lstatIfPresent(pathname: string): fs.Stats | undefined {
 
 /** Refuses an occupied script destination before dispatch, including dangling final links. */
 export function assertScriptTargetVacant(destination: string): void {
-  if (!lstatIfPresent(destination)) return;
+  try {
+    if (!lstatIfPresent(destination)) return;
+  } catch {
+    // Delivery judges the ancestry and commits exclusively when this probe cannot establish occupancy.
+    return;
+  }
   throw new AppError('COMMAND_FAILED', `A file already exists at ${destination}.`, {
     reason: 'script_target_exists',
     path: destination,

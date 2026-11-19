@@ -121,6 +121,39 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
+test.each(['EACCES', 'ELOOP', 'ECONNRESET'])(
+  'remote open defers %s from the vacancy probe to script delivery',
+  async (code) => {
+    const root = mkdtempForTestSync('script-probe-');
+    const destination = path.join(root, 'journey.ad');
+    const lstat = fs.lstatSync;
+    const probe = vi.spyOn(fs, 'lstatSync').mockImplementation((entry, options) => {
+      if (entry === destination) throw Object.assign(new Error('probe failed'), { code });
+      return lstat(entry, options);
+    });
+    try {
+      await expect(
+        prepareRemoteRequestArtifacts(
+          {
+            session: 'owned',
+            command: 'open',
+            positionals: [],
+            flags: { saveScript: destination },
+          },
+          REMOTE,
+          signal,
+          createTestHostEnvironment(),
+        ),
+      ).resolves.toMatchObject({
+        flags: { saveScript: true },
+        clientArtifactPaths: { savedScript: destination },
+      });
+    } finally {
+      probe.mockRestore();
+    }
+  },
+);
+
 test('remote open expands home on the caller', async () => {
   const root = mkdtempForTestSync('script-home-');
   const home = path.join(root, 'caller-home');
