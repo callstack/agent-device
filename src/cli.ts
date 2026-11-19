@@ -1,5 +1,4 @@
 import { parseRawArgs, usage } from './cli/parser/args.ts';
-import { exitAfterHelp } from './cli/help-output.ts';
 import {
   asAppError,
   AppError,
@@ -282,7 +281,7 @@ async function parseCliInputOrExit(
   const isHelpAlias = parsed.command === 'help';
   const isHelpFlag = parsed.flags.help;
   if (isHelpAlias || isHelpFlag) {
-    return await exitAfterHelp(parsed, isHelpAlias);
+    return await (await import('./cli/help-output.ts')).exitAfterHelp(parsed, isHelpAlias);
   }
 
   if (!parsed.command) {
