@@ -129,18 +129,7 @@ export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRu
               await import('../core/interactors/limrun-ios-runner.ts');
             const { createAppleApplicationTools } =
               await import('../platform-runtime-apple-application-tools.ts');
-            // The lease receives only the three shared Apple operations it consumes: open-target
-            // resolution and this platform's runtime hints. The projection removes every runner
-            // member from the runtime value, so a lease cannot reach another session's runner; the
-            // lease's own tools, built around its own runner, keep its teardown, and the daemon's
-            // durable-resource lifecycle keeps the full port.
-            const { availableAppleApplicationToolsForProvider } =
-              await import('@agent-device/contracts/application-lifecycle-runtime');
-            return createLimrunIosRunner(
-              session,
-              host,
-              availableAppleApplicationToolsForProvider(createAppleApplicationTools(host.env)),
-            );
+            return createLimrunIosRunner(session, host, createAppleApplicationTools(host.env));
           },
           readBundleAppName: async (appPath) => {
             const { readIosBundleInfo } =

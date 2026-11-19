@@ -7,6 +7,7 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { afterEach, vi, type Mock } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
+import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { createLimrunIosRunner } from './limrun-ios-runner.ts';
 const cleanups: Array<() => Promise<void>> = [];
@@ -54,6 +55,7 @@ type RunnerFixture = {
 
 export async function fixture(
   options: {
+    wrapApplicationTools?: (tools: AppleApplicationTools) => AppleApplicationTools;
     launchStatus?: number;
     holdLaunchErrorBody?: boolean;
     syncStatus?: number;
@@ -306,8 +308,12 @@ export async function fixture(
         : { AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS: String(options.idleMs) }),
     },
   };
-  const runner: Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>> =
-    await createLimrunIosRunner(session, host, createAppleApplicationTools(host.env));
+  const tools = createAppleApplicationTools(host.env);
+  const runner = await createLimrunIosRunner(
+    session,
+    host,
+    options.wrapApplicationTools?.(tools) ?? tools,
+  );
   cleanups.push(() => runner.dispose());
   return {
     runner,

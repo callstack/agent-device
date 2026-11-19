@@ -49,6 +49,20 @@ test('stages a token-authenticated runner once and presents forwarded XCTest sna
   ).rejects.toThrow();
 });
 
+test('runner construction reads only lease-facing Apple operations', async () => {
+  const f = await fixture({
+    wrapApplicationTools: (tools) => ({
+      ...tools,
+      get stopRunnerSession(): never {
+        throw new Error('Runner construction read daemon-owned teardown');
+      },
+    }),
+  });
+  await expect(
+    f.runner.createInteractor().snapshot({ appBundleId: 'com.apple.Preferences' }),
+  ).resolves.toMatchObject({ backend: 'xctest' });
+});
+
 test('reports an occupied XCTest slot instead of falling back to AX', async () => {
   const f = await fixture({ launchStatus: 409 });
   await expect(

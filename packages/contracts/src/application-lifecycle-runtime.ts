@@ -454,13 +454,6 @@ export type AppleApplicationToolsForProvider = Readonly<{
   clearRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
 }>;
 
-/** The operations the provider projection publishes: exactly the three a provider consumes. */
-const appleProviderToolMembers = [
-  'resolveOpenTarget',
-  'applyRuntimeHints',
-  'clearRuntimeHints',
-] as const;
-
 /**
  * Projects Apple tools to {@link AppleApplicationToolsForProvider}. Every member beyond the allow-
  * listed three — the runner-session mechanics a lease owns, and the daemon-wide shutdown members
@@ -469,12 +462,13 @@ const appleProviderToolMembers = [
  * unchecked reference. The daemon's own durable-resource lifecycle keeps the full port.
  */
 export function availableAppleApplicationToolsForProvider(
-  tools: AppleApplicationTools,
+  tools: AppleApplicationToolsForProvider,
 ): AppleApplicationToolsForProvider {
-  const published: readonly string[] = appleProviderToolMembers;
-  return Object.freeze(
-    Object.fromEntries(Object.entries(tools).filter(([key]) => published.includes(key))),
-  ) as AppleApplicationToolsForProvider;
+  return Object.freeze({
+    resolveOpenTarget: tools.resolveOpenTarget,
+    applyRuntimeHints: tools.applyRuntimeHints,
+    clearRuntimeHints: tools.clearRuntimeHints,
+  });
 }
 
 /** Lazy Android mechanics used by the Android package's own lifecycle binding. */

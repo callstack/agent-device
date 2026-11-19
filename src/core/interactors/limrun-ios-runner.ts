@@ -2,7 +2,10 @@ import { limrunRunnerError, withLimrunRunnerErrors } from './limrun-ios-runner-e
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import { Deadline, type DeadlineClock, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { createLimrunAppleToolProvider } from './limrun-ios-tools.ts';
-import type { AppleApplicationToolsForProvider } from '@agent-device/contracts/application-lifecycle-runtime';
+import {
+  availableAppleApplicationToolsForProvider,
+  type AppleApplicationToolsForProvider,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { createLimrunAppleApplicationTools } from './limrun-ios-application-tools.ts';
 import { randomInt } from 'node:crypto';
@@ -25,9 +28,8 @@ type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 
 /**
  * Owns the lease’s XCTest runs; closing an attached lease never terminates its simulator.
- * `appleApplications` is the provider projection: the runner consumes open-target resolution and
- * runtime hints, and builds its own lease-scoped tools, whose shutdown members stop only this
- * lease's runner. The daemon's whole-process Apple shutdown is never handed to a lease.
+ * The runner projects open-target resolution and runtime hints from `appleApplications`. Its
+ * lease-scoped tools own shutdown of this lease's runner.
  */
 export async function createLimrunIosRunner(
   session: Session,
@@ -48,8 +50,9 @@ export async function createLimrunIosRunner(
     withAppleToolProvider(createLimrunAppleToolProvider(session, lifetime.signal, signal), () =>
       withLimrunRunnerErrors(task),
     );
-  const hostTools = withMethodScope({ ...appleApplications }, (task) =>
-    hasScopedAppleToolProvider() ? task() : withTools(task),
+  const hostTools = withMethodScope(
+    { ...availableAppleApplicationToolsForProvider(appleApplications) },
+    (task) => (hasScopedAppleToolProvider() ? task() : withTools(task)),
   );
   const port = randomInt(20000, 50000);
   const apiUrl = session.apiUrl.replace(/\/$/, '');
