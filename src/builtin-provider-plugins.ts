@@ -66,9 +66,6 @@ export async function builtinLimrunConnection(
 ): Promise<PluginConnectionCallbacks> {
   const { withConnectionHost } = await import('@agent-device/plugins/registry');
   const plugin = limrunPlugin(builtinLimrunPluginOptions(host));
-  if (!plugin.connection) {
-    throw new Error('The built-in Limrun plugin declares no connection.');
-  }
   const connection = withConnectionHost(plugin.connection, undefined);
   return { resolve: connection.resolve, verify: connection.verify };
 }
