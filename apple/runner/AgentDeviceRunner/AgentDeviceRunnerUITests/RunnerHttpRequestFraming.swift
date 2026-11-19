@@ -26,6 +26,9 @@ enum RunnerHttpRequestRejection: Equatable {
     }
   }
 
+  /// pre-session HTTP framing: INVALID_ARGS/UNAUTHORIZED are top-level codes, parity guard skips
+  /// this file. Framing rejects a request before the runner's session and listener-token model
+  /// exists, so this type stays standalone and names its two codes itself.
   var code: String {
     self == .unauthorized ? "UNAUTHORIZED" : "INVALID_ARGS"
   }

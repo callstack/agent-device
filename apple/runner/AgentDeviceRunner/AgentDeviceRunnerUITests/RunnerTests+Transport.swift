@@ -190,7 +190,7 @@ extension RunnerTests {
         jsonResponse(
           status: 400,
           response: errorResponse(
-            code: "INVALID_ARGS",
+            code: RunnerWireErrorCode.invalidArgs,
             message: "runner request body must be UTF-8 JSON",
             hint: "Send a JSON object matching the runner command protocol."
           )
@@ -287,7 +287,7 @@ extension RunnerTests {
         jsonResponse(
           status: 400,
           response: errorResponse(
-            code: "INVALID_ARGS",
+            code: RunnerWireErrorCode.invalidArgs,
             message: "runner command payload is invalid: \(String(describing: error))",
             hint: "Check the command name and fields against the runner protocol."
           )

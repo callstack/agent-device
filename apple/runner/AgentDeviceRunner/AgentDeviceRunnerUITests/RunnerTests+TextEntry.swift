@@ -11,6 +11,24 @@ extension RunnerTests {
     case clearNotObserved = "TEXT_INPUT_CLEAR_NOT_OBSERVED"
     case synthesisBudgetExceeded = "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
 
+    /// The code this refusal puts on the wire: always the `RunnerPassThroughErrorCode` member that
+    /// shares the raw value. The raw value stays for test assertions; only this property may carry
+    /// the code, so the parity guard sees one constant per code.
+    var wireCode: String {
+      switch self {
+      case .notFocused:
+        return RunnerPassThroughErrorCode.textInputNotFocused
+      case .synthesisUnavailable:
+        return RunnerPassThroughErrorCode.textInputSynthesisUnavailable
+      case .commitNotObserved:
+        return RunnerPassThroughErrorCode.textInputCommitNotObserved
+      case .clearNotObserved:
+        return RunnerPassThroughErrorCode.textInputClearNotObserved
+      case .synthesisBudgetExceeded:
+        return RunnerPassThroughErrorCode.textInputSynthesisBudgetExceeded
+      }
+    }
+
     var message: String {
       switch self {
       case .notFocused:

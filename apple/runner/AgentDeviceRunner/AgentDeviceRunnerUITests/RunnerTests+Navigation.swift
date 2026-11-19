@@ -890,7 +890,7 @@ extension RunnerTests {
   /// No screen to compare means no proof either way, so the swipe is not sent.
   static func backScreenRefusal(_ refusal: RunnerAppScreenCaptureFailure) -> ErrorPayload {
     ErrorPayload(
-      code: refusal.rawValue,
+      code: refusal.wireCode,
       message: "back did not swipe: the app's screen could not be sampled to verify it.",
       hint: refusal.hint
     )

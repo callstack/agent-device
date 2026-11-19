@@ -14,7 +14,7 @@ extension RunnerTests {
   }
 
   private func textEntryFailureResponse(_ failure: TextEntryFailure) -> Response {
-    Response(ok: false, error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint))
+    Response(ok: false, error: ErrorPayload(code: failure.wireCode, message: failure.message, hint: failure.hint))
   }
 
   @MainActor
@@ -159,7 +159,7 @@ extension RunnerTests {
       return Response(
         ok: false,
         error: ErrorPayload(
-          code: "TEXT_ENTRY_MISMATCH",
+          code: RunnerPassThroughErrorCode.textEntryMismatch,
           message: "text entry read-back did not match the requested text",
           hint: textEntryMode == .replacement
             ? "The app may have formatted, filtered, or consumed the entry. Inspect the field or resulting screen before retrying. If it needs correction, retry fill with the full text and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds)."

@@ -543,7 +543,7 @@ extension RunnerTests {
       rawMatchPolicy: .preferHittableMatch
     )
     if match.isAmbiguous {
-      return Response(ok: false, error: ErrorPayload(code: "AMBIGUOUS_MATCH", message: "selector matched multiple elements"))
+      return Response(ok: false, error: ErrorPayload(code: RunnerWireErrorCode.ambiguousMatch, message: "selector matched multiple elements"))
     }
     guard let element = match.element else {
       return Response(ok: true, data: DataPayload(found: false, nodes: []))
