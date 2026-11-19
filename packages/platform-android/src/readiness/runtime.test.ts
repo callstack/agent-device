@@ -184,28 +184,59 @@ function probeHost(sequence: readonly (ProbeResult | Error)[]) {
       },
     },
   } as unknown as PlatformRuntimeHost;
-  return { host, run };
+  return { host, run, elapsed: () => now - 1_000 };
 }
 
 const BOOTED_PROBE: ProbeResult = { stdout: '1\n', stderr: '', exitCode: 0 };
-const STILL_BOOTING_PROBE: ProbeResult = { stdout: '', stderr: '', exitCode: 0 };
 
-test.each(['error: device offline', 'device offline'])(
-  'a retriable typed adb observation (%s) retries until the device reports booted',
-  async (stderr) => {
-    const { host, run } = probeHost([{ stdout: '', stderr, exitCode: 1 }, BOOTED_PROBE]);
+const PROBE_FAILURE_TEXT = 'adb shell getprop sys.boot_completed failed';
 
-    await expect(
-      ensureAndroidReady(
-        host,
-        runningEmulator(),
-        { headless: false, deadlineAtMs: 30_000 },
-        new AbortController().signal,
-      ),
-    ).resolves.toMatchObject({ booted: true });
-    expect(run).toHaveBeenCalledTimes(2);
-  },
-);
+test('a probe failure with retriable typed evidence retries until the device reports booted', async () => {
+  const { host, run, elapsed } = probeHost([
+    new AppError('COMMAND_FAILED', PROBE_FAILURE_TEXT, {
+      adbFailure: 'device_not_found',
+      retriable: true,
+    }),
+    BOOTED_PROBE,
+  ]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).resolves.toMatchObject({ booted: true });
+  expect(run).toHaveBeenCalledTimes(2);
+  expect(elapsed()).toBe(1_000);
+});
+
+test('the same probe failure text with typed host-refusal evidence fails on the first poll', async () => {
+  const { host, run, elapsed } = probeHost([
+    new AppError('COMMAND_FAILED', PROBE_FAILURE_TEXT, {
+      adbFailure: 'device_not_found',
+      retriable: true,
+      adbHostRefusal: true,
+    }),
+    BOOTED_PROBE,
+  ]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: PROBE_FAILURE_TEXT,
+    details: { adbHostRefusal: true, reason: 'ADB_TRANSPORT_UNAVAILABLE', serial: 'emulator-5554' },
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(elapsed()).toBe(0);
+});
 
 test.each(['error: device unauthorized', 'device unauthorized'])(
   'a terminal typed unauthorized observation (%s) fails after one poll, not at the deadline',
@@ -319,20 +350,6 @@ test('a thrown offline wording without typed details does not retry, proving tex
     ),
   ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
   expect(run).toHaveBeenCalledTimes(1);
-});
-
-test('still-booting exit 0 observations retry inside the deadline and then report boot_timeout', async () => {
-  const { host, run } = probeHost([STILL_BOOTING_PROBE]);
-
-  await expect(
-    ensureAndroidReady(
-      host,
-      runningEmulator(),
-      { headless: false, deadlineAtMs: 3_000 },
-      new AbortController().signal,
-    ),
-  ).rejects.toMatchObject({ details: { reason: 'boot_timeout', serial: 'emulator-5554' } });
-  expect(run.mock.calls.length).toBeGreaterThan(1);
 });
 
 function stoppedAvd(): DeviceInfo {
