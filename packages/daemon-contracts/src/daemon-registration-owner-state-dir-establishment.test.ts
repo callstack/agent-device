@@ -1,10 +1,11 @@
-// Who establishes the daemon's state chain, and what that costs: one walk of the route the operator NAMED,
-// said out loud once, and never a text substitution that changes which directory the rule judges (#4649).
+// Who establishes the daemon's state chain, and what that costs: one walk of the route the operator named, said
+// out loud once, and asked of the SAME base every record name is built from (#4649).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { establishPrivateDaemonStateDir } from './daemon-registration-owner.ts';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
 import { FOREIGN_UID, mkdtempForTestSync, serveHostOwnership } from '@agent-device/test-kit';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
@@ -43,6 +44,26 @@ skipOnWindows('the route the operator named is the route that gets judged', () =
     'nothing is created for a refused route',
   );
   assert.equal(fs.statSync(outside).mode & 0o777, 0o644, 'the named entry keeps its own mode');
+});
+
+skipOnWindows('a parent-relative route is established at the base its records use', () => {
+  // Establishment and the record names are asked of the SAME base: were establishment given a route the record
+  // names fold differently, the levels would be refused at the spelled route and never made at the folded one,
+  // and the daemon would run with no log while believing its state chain were established.
+  const root = scratch();
+  const project = path.join(root, 'project');
+  fs.mkdirSync(project);
+
+  const paths = resolveDaemonPaths('../shared-state', { cwd: project });
+  const said = captureStderr(() => establishPrivateDaemonStateDir(paths.baseDir));
+
+  assert.equal(said, '', 'a route the daemon can make is not reported as exposed');
+  assert.equal(
+    fs.statSync(paths.baseDir).mode & 0o777,
+    0o700,
+    'the level the records use is the one made',
+  );
+  assert.equal(fs.statSync(path.dirname(paths.infoPath)).ino, fs.statSync(paths.baseDir).ino);
 });
 
 skipOnWindows('one route is walked once, and its verdict is said once', () => {

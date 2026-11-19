@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import { expandUserHomePath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -58,25 +58,7 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
     return resolveDefaultDaemonStateDir(options);
   }
   const expanded = expandUserHomePath(value, { env: options.env });
-  // A step back out is refused HERE rather than passed on, because nothing downstream can keep it intact: the
-  // record names are derived with `path.join`, which folds a `..` away, so a route that survives this call
-  // would be JUDGED as one directory and written into as another. A `..` is also the one name whose meaning
-  // depends on what the route physically stands in — through a symbolic link, `link/..` lands beside the link,
-  // not inside its target — so the state rule could not establish where the daemon's records would land even
-  // if the spelling survived (#4649). Refusing the spelling is the one answer that is true of every route it
-  // could mean, and the fix is to spell the directory plainly.
-  if (stepsBackOut(expanded)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `State dir "${value}" steps back out of a directory, so where the daemon's records land is not ` +
-        'established. Name the state directory without a ".." step.',
-      {
-        reason: 'state_dir_parent_escape',
-      },
-    );
-  }
-  if (options.cwd === undefined) {
-    if (path.isAbsolute(expanded)) return expanded;
+  if (!path.isAbsolute(expanded) && options.cwd === undefined) {
     throw new AppError(
       'INVALID_ARGS',
       `State dir "${value}" is relative and no working directory was given.`,
@@ -85,7 +67,84 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
       },
     );
   }
-  return resolveUserPath(value, { env: options.env, cwd: options.cwd });
+  // Joined TEXTUALLY rather than with `path.resolve`, and anchored once: this is the ONE base every record name is
+  // then built from, so the join must add nothing to what the operator named beyond the working directory a
+  // relative spelling is given against.
+  const anchor = path.isAbsolute(expanded) ? '' : path.resolve(options.cwd ?? '');
+  const route = anchor === '' ? expanded : joinTextually(anchor, expanded);
+  // A parent-relative state dir is an ordinary configuration — `--state-dir ../shared-state` beside a checkout —
+  // and it stays supported, as it was before this branch. What it cannot be is passed on UN-folded: the record
+  // names are derived with `path.join`, which folds a `..` away, so an un-folded base would be JUDGED as one
+  // directory and WRITTEN into as another, and `daemon.json` would record a directory holding no records. The fold
+  // therefore happens HERE, once, and every entry of `DaemonPaths` is derived from the folded base.
+  //
+  // Folding is faithful exactly while each step backs out of a directory that is not a link: `name/..` returns to
+  // the parent of whatever NAME resolves to, so a link at `name` makes the spelling mean the target's parent while
+  // the fold says the directory the text names. Such a route has two meanings and no base could be proven to be the
+  // one the state rule judges, so it is refused. Every directory a fold steps OUT OF stands above the state root,
+  // where ADR 0016 allows links, which is why this is asked here — at the one point where the route is still a
+  // spelling — and cannot be reconstructed from folded text afterwards.
+  if (stepsBackOut(route)) return foldParentRelativeRoute(value, route);
+  return route;
+}
+
+/**
+ * Folds the `name/..` pairs an ABSOLUTE state route asks for, having proven each fold faithful.
+ *
+ * Folding `name/..` says "the directory the text names", while the host answers "the parent of whatever NAME
+ * resolves to". The two agree exactly while `name` is not a symbolic link, so each step back out is asked of the
+ * one host fact that decides it — whether the directory it leaves is a link. A step with nothing to leave changes
+ * nothing, which is what a route that climbs past its root spells.
+ */
+function foldParentRelativeRoute(value: string, route: string): string {
+  const names = route.split(/[\\/]/).filter((name) => name.length > 0 && name !== '.');
+  const stood: string[] = [];
+  for (const name of names) {
+    if (name !== '..') {
+      stood.push(name);
+      continue;
+    }
+    if (stood.length === 0) continue;
+    const leaving = `/${stood.join('/')}`;
+    if (hostIsSymbolicLink(leaving)) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `State dir "${value}" steps back out from the symbolic link ${leaving}, so which directory its ` +
+          'records land in is not established. Name the state directory without a ".." step, or remove that ' +
+          'link.',
+        {
+          reason: 'state_dir_parent_step_through_link',
+          details: { link: leaving },
+        },
+      );
+    }
+    stood.pop();
+  }
+  return `/${stood.join('/')}`;
+}
+
+/**
+ * Whether the directory a step back out leaves is a link, asked by `lstat` so a link is seen and not followed.
+ *
+ * An `lstat` that fails — the level is absent, or its parent cannot be read — answers `false`, and the fold stays
+ * textual. That is the answer for the ordinary configuration: `../shared-state` beside a checkout is a route that
+ * stands before this daemon's first start, and a level that does not stand yet cannot be a link. Whatever ground
+ * the fold names is judged again by the state rule before a record lands in it, and that judgment is what withholds
+ * a write.
+ */
+function hostIsSymbolicLink(pathname: string): boolean {
+  try {
+    return fs.lstatSync(pathname).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/** Puts a spelled relative path under `cwd` without folding any name away. */
+function joinTextually(cwd: string, spelled: string): string {
+  const relative = spelled.replace(/^\.\//, '');
+  if (!cwd) return relative;
+  return cwd.endsWith(path.sep) ? `${cwd}${relative}` : `${cwd}${path.sep}${relative}`;
 }
 
 /** Whether a spelled path asks for a step back out of the directory it is in, under either separator. */
