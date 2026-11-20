@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
@@ -125,7 +126,7 @@ export function bindSetSetting(
  * fact is refused at admission rather than resolving an absent method into an empty answer — the
  * same guard every optional-member binder takes.
  */
-export function bindReadSetting(
+function bindReadSetting(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): Pick<SettingsRuntimeOperations, 'readSetting'> {
@@ -140,3 +141,9 @@ export function bindReadSetting(
     },
   });
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const SETTINGS_INTERACTOR_OPERATIONS = [
+  { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
+  { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },
+] as const satisfies readonly InteractorOperationDefinition<SettingsRuntimeOperations>[];

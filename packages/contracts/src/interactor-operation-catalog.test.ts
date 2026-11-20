@@ -2,7 +2,8 @@ import { expect, test, vi } from 'vitest';
 import {
   bindAdmittedLocalInteractorOperations,
   bindAdmittedProviderInteractorOperations,
-} from './interactor-operation-catalog.ts';
+} from './interactor-operation-binding.ts';
+import { INTERACTOR_OPERATIONS } from './interactor-operation-catalog.ts';
 import type { Interactor } from './interactor-types.ts';
 
 const device = {
@@ -18,6 +19,7 @@ const unavailable = { available: false, reason: 'unsupported-device-kind' } as c
 
 test('skips an operation the facts refused', () => {
   const operations = bindAdmittedLocalInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal: new AbortController().signal,
     resolveInteractor: vi.fn(),
@@ -28,8 +30,9 @@ test('skips an operation the facts refused', () => {
   expect(operations.home).toBeUndefined();
 });
 
-// The facts a caller passes are the ONLY source of truth for what binds — there is no separate,
-// caller-maintained operation list that could drift from them.
+// Among the rows a caller supplies, its facts are the ONLY source of truth for what binds. An owner
+// that supplies fewer families than the catalog pins, in its own runtime test, that its facts
+// admit no operation outside them.
 test('binds every one of the seven navigation operations when every fact admits it', async () => {
   const back = vi.fn(async () => undefined);
   const home = vi.fn(async () => undefined);
@@ -52,6 +55,7 @@ test('binds every one of the seven navigation operations when every fact admits 
   );
 
   const operations = bindAdmittedLocalInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal: new AbortController().signal,
     resolveInteractor,
@@ -93,6 +97,7 @@ test('binds every one of the seven navigation operations when every fact admits 
 
 test('treats an operation missing from a partial facts map as unavailable', () => {
   const operations = bindAdmittedLocalInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal: new AbortController().signal,
     resolveInteractor: vi.fn(),
@@ -108,6 +113,7 @@ test('a provider binding drives its own resolved interactor for every admitted o
   const resolveInteractor = vi.fn(() => ({ tvRemote }) as unknown as Interactor);
 
   const operations = bindAdmittedProviderInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal: new AbortController().signal,
     resolveInteractor,
@@ -123,6 +129,7 @@ test('a provider binding drives its own resolved interactor for every admitted o
 
 test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
   const operations = bindAdmittedProviderInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => undefined,

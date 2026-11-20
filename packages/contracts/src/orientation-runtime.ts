@@ -1,4 +1,5 @@
 import type { DeviceRotation } from './device-rotation.ts';
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -68,7 +69,7 @@ export function bindOrientation(
   });
 }
 
-export function bindOrientationUnlock(
+function bindOrientationUnlock(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): Pick<OrientationRuntimeOperations, 'unlockOrientation'> {
@@ -87,3 +88,9 @@ export function bindOrientationUnlock(
     },
   });
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const ORIENTATION_INTERACTOR_OPERATIONS = [
+  { operation: 'setOrientation', label: 'orientation', bind: bindOrientation },
+  { operation: 'unlockOrientation', label: 'orientation auto', bind: bindOrientationUnlock },
+] as const satisfies readonly InteractorOperationDefinition<OrientationRuntimeOperations>[];

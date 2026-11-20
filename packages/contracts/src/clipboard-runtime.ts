@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -70,7 +71,7 @@ export function clipboardRuntimeOperationFacts(
 }
 
 /** How a fail-closed refusal names each clipboard half to the caller. */
-export const CLIPBOARD_LEG_LABELS = {
+const CLIPBOARD_LEG_LABELS = {
   readClipboard: 'clipboard read',
   writeClipboard: 'clipboard write',
 } as const;
@@ -131,3 +132,17 @@ export function bindClipboardWrite(
     },
   });
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const CLIPBOARD_INTERACTOR_OPERATIONS = [
+  {
+    operation: 'readClipboard',
+    label: CLIPBOARD_LEG_LABELS.readClipboard,
+    bind: bindClipboardRead,
+  },
+  {
+    operation: 'writeClipboard',
+    label: CLIPBOARD_LEG_LABELS.writeClipboard,
+    bind: bindClipboardWrite,
+  },
+] as const satisfies readonly InteractorOperationDefinition<ClipboardRuntimeOperations>[];

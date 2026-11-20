@@ -2,8 +2,11 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindElementTextRuntime } from './element-text-runtime.ts';
 import { bindLocalFocusInteractor } from './focus-runtime.ts';
 import { bindLocalGestureInteractor } from './gesture-runtime.ts';
-import { bindAdmittedLocalInteractorOperations } from './interactor-operation-catalog.ts';
-import type { LocalInteractorOperationResolver } from './interactor-operation-binding.ts';
+import {
+  bindAdmittedLocalInteractorOperations,
+  type LocalInteractorOperationResolver,
+} from './interactor-operation-binding.ts';
+import { INTERACTOR_OPERATIONS } from './interactor-operation-catalog.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import { whenAdmitted, type RuntimeFacts } from './platform-runtime.ts';
 import { bindLocalScreenshotInteractor } from './screenshot-runtime.ts';
@@ -48,6 +51,10 @@ export function bindLocalInteractorOperationSet(
     ...(facts.typeText.available ? bindLocalTypeTextInteractor(resolver) : {}),
     ...(facts.readTextAtPoint.available ? bindElementTextRuntime(resolver) : {}),
     ...whenAdmitted(facts.tapPoint, () => bindLocalTouchInteractor({ ...resolver, facts, pause })),
-    ...bindAdmittedLocalInteractorOperations({ ...resolver, facts }),
+    ...bindAdmittedLocalInteractorOperations({
+      ...resolver,
+      operations: INTERACTOR_OPERATIONS,
+      facts,
+    }),
   };
 }

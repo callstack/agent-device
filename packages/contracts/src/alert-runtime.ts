@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { AlertInteractorOptions, Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -109,7 +110,7 @@ function alertInteractorOptions(
 type AlertLeg = 'readAlert' | 'awaitAlert' | 'acceptAlert' | 'dismissAlert';
 
 /** How a fail-closed refusal names each leg to the caller, matching the command that asked for it. */
-export const ALERT_LEG_LABELS = {
+const ALERT_LEG_LABELS = {
   readAlert: 'alert get',
   awaitAlert: 'alert wait',
   acceptAlert: 'alert accept',
@@ -132,3 +133,27 @@ export function bindAlertLeg<Leg extends AlertLeg>(
     },
   }) as Readonly<Record<Leg, (input: AlertRuntimeInput) => Promise<Record<string, unknown>>>>;
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const ALERT_INTERACTOR_OPERATIONS = [
+  {
+    operation: 'readAlert',
+    label: ALERT_LEG_LABELS.readAlert,
+    bind: (signal, resolve) => bindAlertLeg('readAlert', signal, resolve),
+  },
+  {
+    operation: 'awaitAlert',
+    label: ALERT_LEG_LABELS.awaitAlert,
+    bind: (signal, resolve) => bindAlertLeg('awaitAlert', signal, resolve),
+  },
+  {
+    operation: 'acceptAlert',
+    label: ALERT_LEG_LABELS.acceptAlert,
+    bind: (signal, resolve) => bindAlertLeg('acceptAlert', signal, resolve),
+  },
+  {
+    operation: 'dismissAlert',
+    label: ALERT_LEG_LABELS.dismissAlert,
+    bind: (signal, resolve) => bindAlertLeg('dismissAlert', signal, resolve),
+  },
+] as const satisfies readonly InteractorOperationDefinition<AlertRuntimeOperations>[];

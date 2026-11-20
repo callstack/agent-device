@@ -2,7 +2,8 @@ import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtim
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   RuntimeOperationFact,
@@ -207,6 +208,7 @@ export function createAppleSystemOperations(params: {
 }) {
   const { host, device, signal } = params;
   return bindAdmittedLocalInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal,
     resolveInteractor: host.localInteractors.resolve,

@@ -2,7 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
@@ -18,6 +19,7 @@ bindTestCommandHost();
 
 async function triggerEvent(device: DeviceInfo, eventUrl: string, appBundleId?: string) {
   const operations = bindAdmittedLocalInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal: new AbortController().signal,
     resolveInteractor: async (owned, runner) =>

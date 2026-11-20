@@ -1,5 +1,8 @@
 import type { HARDWARE_BUTTON_NAME_LABELS, HardwareButton } from './device-rotation.ts';
-import { requireInteractorMethod } from './interactor-operation-binding.ts';
+import {
+  requireInteractorMethod,
+  type InteractorOperationDefinition,
+} from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -210,3 +213,82 @@ export function bindSystemButton<Button extends SystemButton>(
     Pick<SystemButtonRuntimeOperations, Button>
   >;
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const SYSTEM_BUTTON_INTERACTOR_OPERATIONS = [
+  {
+    operation: 'home',
+    label: SYSTEM_BUTTON_LABELS.home,
+    bind: (signal, resolve) => bindSystemButton('home', signal, resolve),
+  },
+  {
+    operation: 'appSwitcher',
+    label: SYSTEM_BUTTON_LABELS.appSwitcher,
+    bind: (signal, resolve) => bindSystemButton('appSwitcher', signal, resolve),
+  },
+  {
+    operation: 'actionButton',
+    label: SYSTEM_BUTTON_LABELS.actionButton,
+    bind: (signal, resolve) => bindSystemButton('actionButton', signal, resolve),
+  },
+  {
+    operation: 'shake',
+    label: SYSTEM_BUTTON_LABELS.shake,
+    bind: (signal, resolve) => bindSystemButton('shake', signal, resolve),
+  },
+  {
+    operation: 'volumeUp',
+    label: SYSTEM_BUTTON_LABELS.volumeUp,
+    bind: (signal, resolve) => bindSystemButton('volumeUp', signal, resolve),
+  },
+  {
+    operation: 'volumeDown',
+    label: SYSTEM_BUTTON_LABELS.volumeDown,
+    bind: (signal, resolve) => bindSystemButton('volumeDown', signal, resolve),
+  },
+  {
+    operation: 'power',
+    label: SYSTEM_BUTTON_LABELS.power,
+    bind: (signal, resolve) => bindSystemButton('power', signal, resolve),
+  },
+  {
+    operation: 'mute',
+    label: SYSTEM_BUTTON_LABELS.mute,
+    bind: (signal, resolve) => bindSystemButton('mute', signal, resolve),
+  },
+  {
+    operation: 'sleep',
+    label: SYSTEM_BUTTON_LABELS.sleep,
+    bind: (signal, resolve) => bindSystemButton('sleep', signal, resolve),
+  },
+  {
+    operation: 'wake',
+    label: SYSTEM_BUTTON_LABELS.wake,
+    bind: (signal, resolve) => bindSystemButton('wake', signal, resolve),
+  },
+  {
+    operation: 'mediaPlayPause',
+    label: SYSTEM_BUTTON_LABELS.mediaPlayPause,
+    bind: (signal, resolve) => bindSystemButton('mediaPlayPause', signal, resolve),
+  },
+  {
+    operation: 'mediaNext',
+    label: SYSTEM_BUTTON_LABELS.mediaNext,
+    bind: (signal, resolve) => bindSystemButton('mediaNext', signal, resolve),
+  },
+  {
+    operation: 'mediaPrevious',
+    label: SYSTEM_BUTTON_LABELS.mediaPrevious,
+    bind: (signal, resolve) => bindSystemButton('mediaPrevious', signal, resolve),
+  },
+  {
+    operation: 'mediaRewind',
+    label: SYSTEM_BUTTON_LABELS.mediaRewind,
+    bind: (signal, resolve) => bindSystemButton('mediaRewind', signal, resolve),
+  },
+  {
+    operation: 'mediaFastForward',
+    label: SYSTEM_BUTTON_LABELS.mediaFastForward,
+    bind: (signal, resolve) => bindSystemButton('mediaFastForward', signal, resolve),
+  },
+] as const satisfies readonly InteractorOperationDefinition<SystemButtonRuntimeOperations>[];

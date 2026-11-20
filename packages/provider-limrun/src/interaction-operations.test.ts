@@ -5,7 +5,8 @@ import {
   parseHardwareButtonPositionals,
 } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import {
@@ -223,6 +224,7 @@ test('binds only the operations the facts admitted, driving the resolved interac
   };
 
   const operations = bindAdmittedProviderInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device: androidTvDevice,
     signal: new AbortController().signal,
     resolveInteractor: (runner) => getInteractor(androidTvDevice, runner),
@@ -248,6 +250,7 @@ test('binding omits every operation an unavailable fact refused', () => {
     ...factsFor(iosDevice),
   };
   const operations = bindAdmittedProviderInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device: iosDevice,
     signal: new AbortController().signal,
     resolveInteractor: () => ({}) as unknown as Interactor,

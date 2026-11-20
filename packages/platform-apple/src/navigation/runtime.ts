@@ -1,5 +1,6 @@
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -261,6 +262,7 @@ export function createAppleNavigationOperations(params: {
     keyof ReturnType<typeof appleNavigationFacts>
   >;
   return bindAdmittedLocalInteractorOperations({
+    operations: INTERACTOR_OPERATIONS,
     device,
     signal,
     resolveInteractor: host.localInteractors.resolve,

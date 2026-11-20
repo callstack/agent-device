@@ -9,13 +9,19 @@ import {
   bindDirectApplicationLifecycle,
   bindProviderApplicationLifecycleInteractor,
 } from '@agent-device/contracts/application-lifecycle-interaction';
-import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import {
+  BACK_INTERACTOR_OPERATIONS,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import {
+  bindAdmittedProviderInteractorOperations,
+  type InteractorOperationDefinition,
+} from '@agent-device/contracts/interactor-operation-binding';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import {
   providerRuntimeOwner,
@@ -47,7 +53,10 @@ import {
   bindProviderTouchInteractor,
   touchRuntimeOperationFacts,
 } from '@agent-device/contracts/touch-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import {
+  TV_REMOTE_INTERACTOR_OPERATIONS,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
@@ -61,6 +70,9 @@ import { createPageInteractor, detachPage, finishTeardown } from './page-interac
 import type { TvPlatform, TvSession } from './tv.ts';
 
 const INSTANCE = 'local';
+/** The interactor families a TV admits an operation of; every other family stays refused. */
+const TV_INTERACTOR_OPERATIONS: readonly InteractorOperationDefinition<PlatformRuntimeOperations>[] =
+  [...BACK_INTERACTOR_OPERATIONS, ...TV_REMOTE_INTERACTOR_OPERATIONS];
 const available = Object.freeze({ available: true } as const);
 
 type Owner = ReturnType<typeof providerRuntimeOwner>;
@@ -391,6 +403,7 @@ function createTvPlatformRuntime(
           ...bindProviderTypeTextInteractor({ device, signal, resolveInteractor }),
           ...bindProviderScrollInteractor({ device, signal, resolveInteractor }),
           ...bindAdmittedProviderInteractorOperations({
+            operations: TV_INTERACTOR_OPERATIONS,
             device,
             signal,
             resolveInteractor,
