@@ -38,7 +38,7 @@ A vocabulary that only one zone uses, and that names that zone's own operations,
 
 Contracts keeps types and constants.
 A pure algorithm over a contracts vocabulary belongs in a package above contracts and below every consumer of that algorithm.
-Each plugin bundles the contracts code that it imports, so logic in contracts can differ between a plugin and the core.
+R18 states that contracts owns vocabulary only, and an algorithm there breaks that rule without a gate failure.
 
 Gesture payload reading, public gesture normalization, and gesture plan geometry live in `@agent-device/gestures`.
 That package depends only on contracts and kernel.
