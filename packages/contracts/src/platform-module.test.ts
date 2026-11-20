@@ -4,25 +4,28 @@ import { PLATFORMS, type Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   createPlatformModuleRegistry,
-  getOptionalPlatformPluginDeclaration,
   isOptionalPlatform,
-  missingOptionalPlatformError,
   OPTIONAL_PLATFORMS,
-  pluginInstallCommand,
-  pluginPackageSelector,
-  pluginRepairCommand,
   REQUIRED_PLATFORMS,
   type PlatformModuleMetadata,
   type PlatformPartitionIsCanonical,
 } from './platform-module.ts';
+import {
+  getOptionalPlatformPluginDeclaration,
+  missingOptionalPlatformError,
+  pluginInstallCommand,
+  pluginPackageSelector,
+  pluginRepairCommand,
+} from './plugin-installation.ts';
 
 const CORE_VERSION = '0.22.0';
+const reportAbsent = (family: Platform) => missingOptionalPlatformError(family, CORE_VERSION);
 
 test('platform metadata registry is canonical, ordered, and immutable', () => {
   const registrations = [...PLATFORMS]
     .reverse()
     .map((family) => ({ family, marker: family.toUpperCase() }));
-  const registry = createPlatformModuleRegistry(registrations, CORE_VERSION);
+  const registry = createPlatformModuleRegistry(registrations, reportAbsent);
 
   assert.deepEqual(registry.families, PLATFORMS);
   assert.deepEqual(
@@ -40,13 +43,13 @@ test('platform metadata registry rejects missing required and duplicate family o
   // Only the required families are completeness-checked, so dropping one optional family is not
   // a missing registration — this drops `apple`.
   const missing = PLATFORMS.filter((family) => family !== 'apple').map((family) => ({ family }));
-  assert.throws(() => createPlatformModuleRegistry(missing, CORE_VERSION), /Missing.*apple/);
+  assert.throws(() => createPlatformModuleRegistry(missing, reportAbsent), /Missing.*apple/);
 
   const duplicate: PlatformModuleMetadata[] = [
     ...PLATFORMS.map((family) => ({ family })),
     { family: 'apple' },
   ];
-  assert.throws(() => createPlatformModuleRegistry(duplicate, CORE_VERSION), /Duplicate.*apple/);
+  assert.throws(() => createPlatformModuleRegistry(duplicate, reportAbsent), /Duplicate.*apple/);
 });
 
 test('platform metadata registry rejects an unknown runtime family value', () => {
@@ -55,7 +58,7 @@ test('platform metadata registry rejects an unknown runtime family value', () =>
     { family: 'unknown' as Platform },
   ];
   assert.throws(
-    () => createPlatformModuleRegistry(registrations, CORE_VERSION),
+    () => createPlatformModuleRegistry(registrations, reportAbsent),
     /Unknown.*unknown/,
   );
 });
@@ -141,7 +144,7 @@ test('missingOptionalPlatformError returns plugin-not-installed with the family 
 
 test('optional families may be absent: the registry keeps only what is registered', () => {
   const registrations = REQUIRED_PLATFORMS.map((family) => ({ family, marker: family }));
-  const registry = createPlatformModuleRegistry(registrations, CORE_VERSION);
+  const registry = createPlatformModuleRegistry(registrations, reportAbsent);
 
   assert.deepEqual(registry.families, [...REQUIRED_PLATFORMS]);
   assert.deepEqual(
@@ -154,7 +157,7 @@ test('optional families may be absent: the registry keeps only what is registere
 test('get on an absent optional family throws the typed plugin-not-installed outcome', () => {
   const registry = createPlatformModuleRegistry(
     REQUIRED_PLATFORMS.map((family) => ({ family })),
-    CORE_VERSION,
+    reportAbsent,
   );
 
   for (const family of OPTIONAL_PLATFORMS) {

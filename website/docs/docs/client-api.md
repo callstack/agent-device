@@ -195,8 +195,8 @@ To fetch provider-hosted video and log URLs after close, pass `closed.provider?.
 ## Web sessions
 
 Pass `platform: 'web'` to drive a browser session with the same command methods. Web automation
-requires Node 24+. No client method sets up the managed web backend: run `agent-device web setup`
-before first use, in the same state directory the client uses. Run `agent-device web doctor` to check
+requires Node 24+. Run `agent-device plugins add @agent-device/web`, then run `agent-device web setup`
+in the same state directory the client uses. Run `agent-device web doctor` to check
 backend health.
 
 ```ts

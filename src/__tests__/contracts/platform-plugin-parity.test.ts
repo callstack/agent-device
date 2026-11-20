@@ -1,7 +1,10 @@
+import {
+  createPlatformModuleRegistry,
+  REQUIRED_PLATFORMS,
+} from '@agent-device/contracts/platform-module';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { PLATFORMS, type Platform } from '@agent-device/kernel/device';
-import { REQUIRED_PLATFORMS } from '@agent-device/contracts/platform-module';
+import type { Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   getPlugin,
@@ -17,7 +20,7 @@ import {
 import { missingPlatformPlugin } from '../../core/platform-plugin-absence.ts';
 
 // Idempotently populate the root-owned registry for this test module.
-registerBuiltinPlatformPlugins(missingPlatformPlugin);
+registerBuiltinPlatformPlugins(missingPlatformPlugin, createPlatformModuleRegistry);
 
 // Independent copy of the internal platform accept-set. The CLI `--platform`
 // enum derives separately from `PLATFORM_SELECTORS`; this oracle keeps registry
@@ -33,11 +36,11 @@ function parsePlatformByHand(value: unknown): Platform | undefined {
     : undefined;
 }
 
-test('registeredPlatforms() equals the canonical PLATFORMS tuple, in order', () => {
+test('built-in platforms follow the canonical family order', () => {
   // Byte-for-byte allow-list parity: the registry derives exactly PLATFORMS,
   // in the same order. (Left as a parity assertion — PLATFORMS stays the
   // hand-authored source of truth; nothing is derived FROM the registry yet.)
-  assert.deepEqual(registeredPlatforms(), [...PLATFORMS]);
+  assert.deepEqual(registeredPlatforms(), ['apple', 'android', 'harmonyos', 'vega', 'linux']);
 });
 
 test('every required family is covered by a builtin plugin; optional families may be absent', () => {
@@ -75,7 +78,7 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
   ];
   for (const candidate of candidates) {
     const registered = tryGetPlugin(candidate as Platform) !== undefined;
-    const parses = parsePlatformByHand(candidate) !== undefined;
+    const parses = parsePlatformByHand(candidate) !== undefined && candidate !== 'web';
     assert.equal(registered, parses, `coverage parity for ${JSON.stringify(candidate)}`);
   }
 });
@@ -91,7 +94,7 @@ test('a family plugin resolves to the SAME instance for every leaf it owns', () 
 });
 
 test('each registered platform resolves to a plugin that owns it', () => {
-  for (const platform of PLATFORMS) {
+  for (const platform of registeredPlatforms()) {
     const plugin = getPlugin(platform);
     assert.ok(
       plugin.platforms.includes(platform),
@@ -116,7 +119,12 @@ test('getPlugin throws UNSUPPORTED_PLATFORM (verbatim) for an unregistered platf
 
 test('registering a duplicate platform is a hard error', () => {
   assert.throws(
-    () => registerPlatformPluginSet([BUILTIN_PLATFORM_PLUGINS[0]], missingPlatformPlugin),
-    /already registered for platform/,
+    () =>
+      registerPlatformPluginSet(
+        [BUILTIN_PLATFORM_PLUGINS[0]],
+        missingPlatformPlugin,
+        createPlatformModuleRegistry,
+      ),
+    /Duplicate platform family registration/,
   );
 });

@@ -1,3 +1,4 @@
+import { absentPlatformRegistry } from './__tests__/test-utils/absent-platform-registry.ts';
 import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
@@ -30,7 +31,8 @@ vi.mock('./platform-runtime.ts', () => ({
   createPlatformDeviceInventoryGateways: () => ({}),
 }));
 
-vi.mock('./provider-device-runtimes.ts', async () => ({
+vi.mock('./provider-device-runtimes.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./provider-device-runtimes.ts')>()),
   createDaemonProviderRuntimeComposition: async () => ({
     runtimes: [
       {
@@ -43,6 +45,7 @@ vi.mock('./provider-device-runtimes.ts', async () => ({
       },
     ],
     platformModules: [],
+    platformRegistry: absentPlatformRegistry,
     shutdown: async () => [],
     inventory: [
       ...(await (

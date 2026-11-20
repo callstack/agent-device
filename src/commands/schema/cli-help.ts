@@ -98,6 +98,7 @@ Command shape:
 
 Bootstrap:
   open --foreground -> snapshot. Selection: explicit --device/--udid/--serial, then session, booted/bootable local, or provider; --platform/--target only filter. Ambiguous/empty fails with bounded retry selectors; no provider fallback.
+  An absent optional platform returns details.reason plugin-not-installed with its install command.
   Install arguments are app/package id then artifact path: agent-device install com.example.app ./dist/app.apk --platform android, then open <id> --relaunch for fresh state. Use reinstall only when explicitly requested.
   Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids; ask if lookup misses the target.
   Apple CI: prepare ios-runner after boot/install, before replay/test (help prepare). Remote/cloud: connect -> open -> commands -> close -> disconnect (help remote). Reusable scripts, secret-safe fills, replay repair: help scripting.
@@ -685,6 +686,7 @@ Dependency:
   Browser mechanics come from a managed, pinned agent-browser backend. agent-device owns command/session/replay integration, selectors/refs at the command surface, and artifact routing; agent-browser owns browser launch, page control, screenshots, and browser-specific behavior.
   Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow. Use agent-browser directly for standalone web automation.
   Before first use, set up and verify the managed backend:
+    agent-device plugins add @agent-device/web
     agent-device web setup
     agent-device web doctor
   Web automation requires Node 24+.
@@ -694,6 +696,7 @@ Planning rule:
 
 First-slice loop:
   Audio probe start uses duration seconds first, then bucket milliseconds.
+  agent-device plugins add @agent-device/web
   agent-device web setup
   agent-device web doctor
   agent-device open https://example.com --platform web

@@ -1,3 +1,5 @@
+import { createPlatformModuleRegistry } from '@agent-device/contracts/platform-module';
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -9,12 +11,13 @@ import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.
 
 // Populate the platform-plugin registry once, at module load (only registers
 // lazy closures — no leaf code is imported here, so CLI cold-start is unaffected).
-registerBuiltinPlatformPlugins(missingPlatformPlugin);
+registerBuiltinPlatformPlugins(missingPlatformPlugin, createPlatformModuleRegistry);
 
 export async function getInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
   host: HostEnvironment,
+  web?: WebPlatformSelection,
 ): Promise<Interactor> {
   if (isActiveProviderDevice(device)) {
     const providerInteractor = getProviderDeviceInteractor(device, runnerContext);
@@ -26,7 +29,7 @@ export async function getInteractor(
     );
   }
 
-  return await getLocalInteractor(device, runnerContext, host);
+  return await getLocalInteractor(device, runnerContext, host, web);
 }
 
 /**
@@ -39,7 +42,11 @@ export async function getLocalInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
   host: HostEnvironment,
+  web?: WebPlatformSelection,
 ): Promise<Interactor> {
+  if (device.platform === 'web' && web) {
+    return await web.get().createInteractor(device, runnerContext, host);
+  }
   // Byte-identical replacement for the former per-platform switch: each plugin's
   // `createInteractor` is the SAME lazy dynamic import + factory call the switch
   // arm performed, and `getPlugin` throws the SAME `UNSUPPORTED_PLATFORM` AppError

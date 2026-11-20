@@ -1,3 +1,8 @@
+import type { ManagedWebBackend } from './managed-web-backend.ts';
+import type { DoctorCheck } from './doctor.ts';
+import type { InventoryPlatformModule } from './platform-module.ts';
+import type { PlatformRuntimeModule } from './platform-runtime-operations.ts';
+import type { WebProvider } from './web-provider.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
@@ -63,3 +68,25 @@ export type PlatformPlugin = {
     readonly platformGatedResolvers: readonly PlatformGatedProviderResolverKey[];
   };
 };
+
+export type WebPlatformOperations = ManagedWebBackend &
+  Readonly<{
+    cleanupOrphans(openWebSessionNames: readonly string[]): Promise<void>;
+    browserLifecycleCheck(stateDir: string): Promise<DoctorCheck>;
+    createProvider(session: string): Promise<WebProvider>;
+    resolveRequestProvider(): Promise<WebProvider | undefined>;
+  }>;
+
+export type WebPlatformRegistration = Readonly<{
+  family: 'web';
+  inventoryModule: InventoryPlatformModule<'web'>;
+  runtimeModule: PlatformRuntimeModule & { readonly family: 'web' };
+  createInteractor: PlatformPlugin['createInteractor'];
+  withRequestProvider<T>(provider: WebProvider, task: () => Promise<T>): Promise<T>;
+  operations: WebPlatformOperations;
+}>;
+
+export type WebPlatformSelection = Readonly<{
+  active?: WebPlatformRegistration;
+  get(): WebPlatformRegistration;
+}>;

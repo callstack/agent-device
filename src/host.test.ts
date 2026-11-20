@@ -12,6 +12,7 @@ import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { AgentDevicePlugin } from './sdk/plugins.ts';
+import { absentPlatformRegistry } from './__tests__/test-utils/absent-platform-registry.ts';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { stopRecordedDaemon } from '@agent-device/daemon-client';
 import { startAgentDevice } from './host.ts';
@@ -78,6 +79,7 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => {
       return {
         runtimes: [],
         platformModules: [],
+        platformRegistry: absentPlatformRegistry,
         shutdown: async () => [],
         inventory: [
           ...(await (

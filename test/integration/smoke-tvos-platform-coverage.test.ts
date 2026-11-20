@@ -1,4 +1,3 @@
-import { readVersion } from '@agent-device/host-kit/version';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -84,7 +83,6 @@ test('tvOS gesture contract preserves the typed multi-touch denial', async () =>
   // R42: the denial is now the Apple owner's own fact for the tvOS leaf, and the refusal a
   // gesture reports is that fact's hint under the shared wording.
   const facts = await createPlatformRuntimeGateway({
-    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
     resolveSessionArtifacts: () => ({
       outputPath: '/sessions/tvos/app.log',

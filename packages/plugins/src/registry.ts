@@ -841,3 +841,5 @@ function once<T>(run: () => Promise<T>): () => Promise<T> {
   let started: Promise<T> | undefined;
   return () => (started ??= run());
 }
+
+export type { RegisteredPlatformSetup } from './platform.ts';

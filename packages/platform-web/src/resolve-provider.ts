@@ -21,10 +21,11 @@ export async function resolveRequestScopedWebProvider(): Promise<WebProvider | u
 export async function resolveWebProviderForHost(
   host: HostEnvironment,
   provider?: WebProvider,
+  stateDir?: string,
 ): Promise<WebProvider> {
   if (provider) return provider;
   const scoped = await resolveRequestScopedWebProvider();
   if (scoped) return scoped;
   const { createAgentBrowserWebProvider } = await import('./agent-browser-provider.ts');
-  return await createAgentBrowserWebProvider({ host });
+  return await createAgentBrowserWebProvider({ host, stateDir });
 }

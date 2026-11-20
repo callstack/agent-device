@@ -1,10 +1,12 @@
-import type { ManagedWebBackend } from '@agent-device/contracts/managed-web-backend';
-import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type {
   InventoryPlatformModule,
   OptionalPlatform,
 } from '@agent-device/contracts/platform-module';
-import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
+import type {
+  PlatformPlugin,
+  WebPlatformOperations,
+  WebPlatformRegistration,
+} from '@agent-device/contracts/platform-plugin';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
@@ -32,14 +34,6 @@ export type PlatformHost = HostEnvironment &
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;
 
-export type WebPlatformOperations = ManagedWebBackend &
-  Readonly<{
-    cleanupOrphans(openWebSessionNames: readonly string[]): Promise<void>;
-    browserLifecycleCheck(stateDir: string): Promise<DoctorCheck>;
-    createProvider(session: string): Promise<WebProvider>;
-    resolveRequestProvider(): Promise<WebProvider | undefined>;
-  }>;
-
 export type PlatformSetup<Family extends OptionalPlatform = OptionalPlatform> =
   Family extends OptionalPlatform
     ? Readonly<{
@@ -65,12 +59,14 @@ export type PlatformSetup<Family extends OptionalPlatform = OptionalPlatform> =
 /** Full module types used after the composing registry validates the declared family and loaders. */
 export type RegisteredPlatformSetup<Family extends OptionalPlatform = OptionalPlatform> =
   Family extends OptionalPlatform
-    ? Omit<PlatformSetup<Family>, 'inventoryModule' | 'runtimeModule' | 'createInteractor'> &
-        Readonly<{
-          createInteractor: PlatformPlugin['createInteractor'];
-          inventoryModule: InventoryPlatformModule<Family>;
-          runtimeModule: PlatformRuntimeModule & { readonly family: Family };
-        }>
+    ? Family extends 'web'
+      ? WebPlatformRegistration
+      : Omit<PlatformSetup<Family>, 'inventoryModule' | 'runtimeModule' | 'createInteractor'> &
+          Readonly<{
+            createInteractor: PlatformPlugin['createInteractor'];
+            inventoryModule: InventoryPlatformModule<Family>;
+            runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+          }>
     : never;
 
 export type PlatformContribution = {

@@ -1,3 +1,4 @@
+import { createPlatformModuleRegistry } from '@agent-device/contracts/platform-module';
 import type { PlatformProviderRequestContext } from '@agent-device/contracts/platform-providers';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import assert from 'node:assert/strict';
@@ -18,6 +19,7 @@ vi.mock('./interactors/register-builtins.ts', async (importOriginal) => {
       registerPlatformPluginSet(
         original.BUILTIN_PLATFORM_PLUGINS.filter((plugin) => plugin.id !== 'vega'),
         reportAbsent,
+        createPlatformModuleRegistry,
       );
     },
   };
@@ -104,6 +106,7 @@ test('a duplicate plugin set is rejected before it replaces the composed set or 
   registry.registerPlatformPluginSet(
     [pluginOwning('apple', ['apple']), pluginOwning('android', ['android'])],
     composedAbsence,
+    createPlatformModuleRegistry,
   );
   assert.equal(registry.getPlugin('apple').id, 'apple');
   assert.throws(
@@ -120,8 +123,9 @@ test('a duplicate plugin set is rejected before it replaces the composed set or 
       registry.registerPlatformPluginSet(
         [pluginOwning('web-and-apple', ['web', 'apple'])],
         rejectedAbsence,
+        createPlatformModuleRegistry,
       ),
-    /already registered for platform "apple"/,
+    /Duplicate platform family registration: apple/,
   );
 
   // Neither the duplicate's platform nor its absence policy reached the registry.

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { pluginHome, selectPlugin } from '@agent-device/test-kit';
-import { missingOptionalPlatformError } from '@agent-device/contracts/platform-module';
+import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createPluginSelectionGuard, storePluginCandidates } from './store.ts';
 import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';

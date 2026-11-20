@@ -3,6 +3,7 @@ import {
   type InventoryPlatformModule,
   createPlatformModuleRegistry,
 } from '@agent-device/contracts/platform-module';
+import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
 import {
   testInventoryHost,
   testRequestScope,
@@ -54,7 +55,9 @@ describe('production device inventory composition', () => {
         source(family === 'apple' ? [simulator('sim-a'), simulator('sim-b')] : []),
     }));
     const gateways = await attachAppleSelectionProbes({
-      registry: createPlatformModuleRegistry(modules, CORE_VERSION),
+      registry: createPlatformModuleRegistry(modules, (family) =>
+        missingOptionalPlatformError(family, CORE_VERSION),
+      ),
       loadHost: async () => testInventoryHost,
       env: {},
     });
@@ -114,7 +117,9 @@ describe('production device inventory composition', () => {
         loadInventory: async () => source(family === 'apple' ? [mac] : []),
       }));
       const gateways = await attachAppleSelectionProbes({
-        registry: createPlatformModuleRegistry(modules, CORE_VERSION),
+        registry: createPlatformModuleRegistry(modules, (family) =>
+          missingOptionalPlatformError(family, CORE_VERSION),
+        ),
         loadHost: async () => testInventoryHost,
         env: { AGENT_DEVICE_MACOS_APP_BACKEND: backend },
       });

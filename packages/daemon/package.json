@@ -15,7 +15,6 @@
     "@agent-device/kernel": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",
-    "@agent-device/platform-web": "workspace:*",
     "@agent-device/replay-port": "workspace:*",
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*"

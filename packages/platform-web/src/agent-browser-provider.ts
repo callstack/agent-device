@@ -1,3 +1,4 @@
+import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/contracts/managed-web-backend';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
@@ -9,7 +10,6 @@ import {
 } from '@agent-device/kernel/errors';
 
 import type { Rect } from '@agent-device/kernel/snapshot';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   buildSelectFocusedContentEvalScript,
   readSelectFocusedContentOutcome,
@@ -32,6 +32,7 @@ import {
   getManagedAgentBrowserStatus,
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
+  type ManagedBrowserHost,
 } from './agent-browser-tool.ts';
 import { agentBrowserFleetOf, type AgentBrowserFleet } from './agent-browser-fleet.ts';
 import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
@@ -43,13 +44,12 @@ import { uniqueStrings } from '@agent-device/kernel/collections';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
-const AGENT_BROWSER_TIMEOUT_MS = 30_000;
 const AGENT_BROWSER_DOCTOR_HINT =
   'Run `agent-device web setup` to install the managed web backend.';
 
 type AgentBrowserProviderOptions = {
   /** The composing runtime's host; every backend spawn and status read uses it. */
-  host: HostEnvironment;
+  host: ManagedBrowserHost;
   /** The backend session key, read from the session device id; omitted for no session. */
   session?: string;
   stateDir?: string;
@@ -686,7 +686,7 @@ async function finalizeAgentBrowserProcessRecord(params: {
         await recordManagedAgentBrowserProcesses(params.status, store, params.options.host);
       }
     } catch (error) {
-      emitDiagnostic({
+      (params.options.host.emitDiagnostic ?? emitDiagnostic)({
         level: 'warn',
         phase: 'web_agent_browser_process_record_failed',
         data: { error: error instanceof Error ? error.message : String(error) },
@@ -784,6 +784,7 @@ async function cleanupProviderStartupOrphans(
   try {
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
       env: options.host.env,
+      ...(options.host.emitDiagnostic ? { emitDiagnostic: options.host.emitDiagnostic } : {}),
       openWebSessionNames: options.openWebSessionNames(),
       ...(startingSession === undefined ? {} : { startingSession }),
       ...(options.ownedProcessRecords === undefined
@@ -791,7 +792,7 @@ async function cleanupProviderStartupOrphans(
         : { ownedProcessRecords: options.ownedProcessRecords }),
     });
   } catch (error) {
-    emitDiagnostic({
+    (options.host.emitDiagnostic ?? emitDiagnostic)({
       level: 'warn',
       phase: 'web_agent_browser_provider_orphan_cleanup_failed',
       data: { error: error instanceof Error ? error.message : String(error) },

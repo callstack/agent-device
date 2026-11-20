@@ -1,5 +1,9 @@
 import type { Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type {
+  createPlatformModuleRegistry,
+  PlatformModuleRegistry,
+} from '@agent-device/contracts/platform-module';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 
 /**
@@ -12,17 +16,9 @@ import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
  */
 export type PlatformPluginAbsence = (family: Platform) => AppError;
 
-const registry = new Map<Platform, PlatformPlugin>();
-let reportAbsence: PlatformPluginAbsence = unsupportedPlatform;
+type InteractorRegistration = { family: Platform; plugin: PlatformPlugin };
 
-/**
- * What an absent family is before a composition has registered a plugin set and named its absence
- * outcome: unsupported, with no package inferred. A family with no installation row keeps this
- * outcome after registration too.
- */
-function unsupportedPlatform(family: Platform): AppError {
-  return new AppError('UNSUPPORTED_PLATFORM', `Unsupported platform: ${family}`);
-}
+let registry: PlatformModuleRegistry<InteractorRegistration> | undefined;
 
 /**
  * Composes `plugins` as this process's platform-plugin set and takes, once for the whole set, the
@@ -38,20 +34,12 @@ function unsupportedPlatform(family: Platform): AppError {
 export function registerPlatformPluginSet(
   plugins: readonly PlatformPlugin[],
   reportAbsent: PlatformPluginAbsence,
+  createRegistry: typeof createPlatformModuleRegistry,
 ): void {
-  const claimed = new Map<Platform, PlatformPlugin>();
-  for (const plugin of plugins) {
-    for (const platform of plugin.platforms) {
-      if (registry.has(platform) || claimed.has(platform)) {
-        throw new Error(`PlatformPlugin already registered for platform "${platform}"`);
-      }
-      claimed.set(platform, plugin);
-    }
-  }
-  reportAbsence = reportAbsent;
-  for (const [platform, plugin] of claimed) {
-    registry.set(platform, plugin);
-  }
+  const registrations = plugins.flatMap((plugin) =>
+    plugin.platforms.map((family) => ({ family, plugin })),
+  );
+  registry = createRegistry([...(registry?.modules ?? []), ...registrations], reportAbsent);
 }
 
 /**
@@ -62,16 +50,15 @@ export function registerPlatformPluginSet(
  * outcome with no package inferred.
  */
 export function getPlugin(platform: Platform): PlatformPlugin {
-  const plugin = registry.get(platform);
-  if (plugin) return plugin;
-  throw reportAbsence(platform);
+  if (!registry) throw new AppError('UNSUPPORTED_PLATFORM', `Unsupported platform: ${platform}`);
+  return registry.get(platform).plugin;
 }
 
 export function tryGetPlugin(platform: Platform): PlatformPlugin | undefined {
-  return registry.get(platform);
+  return registry?.tryGet(platform)?.plugin;
 }
 
 /** @internal Registered leaf platforms in insertion order, for parity gates. */
 export function registeredPlatforms(): Platform[] {
-  return [...registry.keys()];
+  return [...(registry?.families ?? [])];
 }

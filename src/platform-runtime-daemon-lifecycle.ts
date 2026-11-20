@@ -1,11 +1,10 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type { PlatformOwnerLifecycle } from '@agent-device/daemon';
 import {
   configureAppleRunnerDeviceClaimAuthorityProbe,
   configureAppleRunnerLeaseOwnerStateDir,
 } from './platform-runtime-apple-runner-owner.ts';
 import {
-  cleanupManagedWebRuntimeOrphans,
   resetAndroidSnapshotHelperRuntime,
   restoreLegacyXctestDeviceSetRedirectRuntime,
 } from './platform-runtime-resource-cleanup.ts';
@@ -16,7 +15,9 @@ import {
  * snapshot-helper and Web orphan cleanups, legacy app-log marker recovery, and the legacy
  * `XCTestDevices` restore); the daemon holds only the typed `PlatformOwnerLifecycle` contract.
  */
-export function createPlatformDaemonLifecycleOwners(host: HostEnvironment): PlatformOwnerLifecycle {
+export function createPlatformDaemonLifecycleOwners(
+  web?: WebPlatformSelection,
+): PlatformOwnerLifecycle {
   return Object.freeze({
     configureForDaemonLock: async (input) => {
       await configureAppleRunnerLeaseOwnerStateDir(input.stateDir);
@@ -33,7 +34,7 @@ export function createPlatformDaemonLifecycleOwners(host: HostEnvironment): Plat
       return await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
     },
     cleanupManagedWebOrphans: async (params) => {
-      await cleanupManagedWebRuntimeOrphans(params, host);
+      await web?.active?.operations.cleanupOrphans(params.openWebSessionNames);
     },
     resetAndroidSnapshotHelper: async () => {
       await resetAndroidSnapshotHelperRuntime();

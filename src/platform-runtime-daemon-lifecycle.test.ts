@@ -2,11 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  createLiveTestHostEnvironment,
-  mkdtempForTestSync,
-  withMockedPlatform,
-} from '@agent-device/test-kit';
+import { mkdtempForTestSync, withMockedPlatform } from '@agent-device/test-kit';
 
 const legacyRedirect = vi.hoisted(() => ({ xctestDeviceSetPath: '' }));
 
@@ -26,9 +22,7 @@ vi.mock('@agent-device/platform-apple/runner-owner', async (importOriginal) => {
 
 import { createPlatformDaemonLifecycleOwners } from './platform-runtime-daemon-lifecycle.ts';
 
-const platformDaemonLifecycleOwners = createPlatformDaemonLifecycleOwners(
-  createLiveTestHostEnvironment(),
-);
+const platformDaemonLifecycleOwners = createPlatformDaemonLifecycleOwners();
 
 const roots: string[] = [];
 

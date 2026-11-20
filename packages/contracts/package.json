@@ -300,6 +300,10 @@
       "types": "./src/lease-scope.ts",
       "default": "./src/lease-scope.ts"
     },
+    "./plugin-installation": {
+      "types": "./src/plugin-installation.ts",
+      "default": "./src/plugin-installation.ts"
+    },
     "./plugin-inventory": {
       "types": "./src/plugin-inventory.ts",
       "default": "./src/plugin-inventory.ts"

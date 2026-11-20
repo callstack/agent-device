@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/platform-web';
+import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/contracts/managed-web-backend';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../core/session-store.ts';

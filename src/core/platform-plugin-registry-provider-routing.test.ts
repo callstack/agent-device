@@ -1,8 +1,11 @@
+import {
+  createPlatformModuleRegistry,
+  REQUIRED_PLATFORMS,
+} from '@agent-device/contracts/platform-module';
 import type {
   PlatformGatedProviderResolverKey,
   PlatformProviderRequestContext,
 } from '@agent-device/contracts/platform-providers';
-import { REQUIRED_PLATFORMS } from '@agent-device/contracts/platform-module';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
@@ -33,7 +36,7 @@ import {
   type PlatformProviderResolvers,
 } from '../platform-runtime.ts';
 
-registerBuiltinPlatformPlugins(missingPlatformPlugin);
+registerBuiltinPlatformPlugins(missingPlatformPlugin, createPlatformModuleRegistry);
 
 const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'androidAdbProvider',
@@ -97,13 +100,17 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ...buildDeviceMatrix(),
 ];
 
-test('providers.platformGatedResolvers facet is byte-identical to the former hand gate', () => {
+test('built-in provider facets retain the former routing', () => {
   for (const device of SAMPLE_DEVICES) {
     const facet = tryGetPlugin(device.platform)?.providers;
     const expected = gatedResolversByHand(device);
     for (const key of GATED_KEYS) {
       const applies = facet?.platformGatedResolvers.includes(key) ?? false;
-      assert.equal(applies, expected.has(key), `gate for ${key} on ${device.id}`);
+      assert.equal(
+        applies,
+        key !== 'webProvider' && expected.has(key),
+        `gate for ${key} on ${device.id}`,
+      );
     }
   }
 });
@@ -122,7 +129,6 @@ test('every family carries the providers facet with the resolvers it owns', () =
     [...getPlugin('linux').providers!.platformGatedResolvers],
     ['linuxToolProvider'],
   );
-  assert.deepEqual([...getPlugin('web').providers!.platformGatedResolvers], ['webProvider']);
 });
 
 test('root provider composition invokes exactly the resolvers the former gate did', async () => {

@@ -1,6 +1,9 @@
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
-import type { RequiredPlatform } from '@agent-device/contracts/platform-module';
+import type {
+  RequiredPlatform,
+  createPlatformModuleRegistry,
+} from '@agent-device/contracts/platform-module';
 import {
   registerPlatformPluginSet,
   type PlatformPluginAbsence,
@@ -42,18 +45,6 @@ const linuxPlugin = {
   },
 } as const satisfies PlatformPlugin;
 
-const webPlugin = {
-  id: 'web',
-  platforms: ['web'],
-  // Declares the platform-gated request provider resolver the web family owns (the web
-  // provider, formerly gated by `device.platform === 'web'`).
-  providers: { platformGatedResolvers: ['webProvider'] },
-  createInteractor: async (_device, _runner, host) => {
-    const { createWebInteractor } = await import('@agent-device/platform-web/interactor');
-    return await createWebInteractor(host);
-  },
-} as const satisfies PlatformPlugin;
-
 /**
  * The builtin plugins, in `PLATFORMS` order so `registeredPlatforms()` derives
  * the canonical tuple's order (asserted by the parity test).
@@ -64,7 +55,6 @@ export const BUILTIN_PLATFORM_PLUGINS = [
   harmonyosPlugin,
   vegaPlugin,
   linuxPlugin,
-  webPlugin,
 ] as const satisfies readonly PlatformPlugin[];
 
 // The leaf platforms covered by at least one builtin plugin, recovered from the
@@ -94,8 +84,11 @@ let registered = false;
  * decides which core's plugin release an installation hint names (ADR 0034). It belongs to the set —
  * not to a plugin — so no plugin can swap this process's absence policy.
  */
-export function registerBuiltinPlatformPlugins(reportAbsent: PlatformPluginAbsence): void {
+export function registerBuiltinPlatformPlugins(
+  reportAbsent: PlatformPluginAbsence,
+  createRegistry: typeof createPlatformModuleRegistry,
+): void {
   if (registered) return;
-  registerPlatformPluginSet(BUILTIN_PLATFORM_PLUGINS, reportAbsent);
+  registerPlatformPluginSet(BUILTIN_PLATFORM_PLUGINS, reportAbsent, createRegistry);
   registered = true;
 }
