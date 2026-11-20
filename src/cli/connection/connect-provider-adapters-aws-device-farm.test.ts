@@ -25,7 +25,7 @@ import {
 import manifest from '@agent-device/aws-device-farm/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
-import { providerContributionOf } from '@agent-device/plugins/validate';
+import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -100,7 +100,7 @@ beforeEach(() => {
     home,
     manifest.name,
     pluginSource('aws-device-farm', {
-      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(awsDeviceFarm()).connection?.capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(awsDeviceFarm()))}, resolve() {}, verify() {} },`,
     }),
   );
   vi.stubEnv('AGENT_DEVICE_HOME', home);

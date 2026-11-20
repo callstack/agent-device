@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ProviderOnlyPlugin } from '@agent-device/plugins/contract';
+import type { PluginConnection, ProviderOnlyPlugin } from '@agent-device/plugins/contract';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
 import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
@@ -22,6 +22,18 @@ export type LimrunPluginOptions = Readonly<{
 }>;
 
 /**
+ * Limrun's own `connect` callbacks, exported so the built-in composition can wire them to a CLI call
+ * without reading the plugin declaration back. Each callback loads the SDK only when it runs.
+ */
+export const LIMRUN_CONNECTION: PluginConnection = {
+  capabilities: LIMRUN_CONNECTION_CAPABILITIES,
+  resolve: async (context) =>
+    await (await import('./connection.ts')).createLimrunConnection().resolve(context),
+  verify: async (context) =>
+    await (await import('./connection.ts')).createLimrunConnection().verify(context),
+};
+
+/**
  * Limrun as a version 3 plugin: instances are rented from the Limrun API and driven through their
  * own ADB tunnel or Simulator bridge.
  *
@@ -41,13 +53,7 @@ export function limrunPlugin(options: LimrunPluginOptions): ProviderOnlyPlugin {
         credentials: limrunCredentialDeclaration(),
         // The connect callbacks are the provider's own and load when the first `connect` runs them,
         // so a process that only lists or fingerprints this provider evaluates none of them.
-        connection: {
-          capabilities: LIMRUN_CONNECTION_CAPABILITIES,
-          resolve: async (context) =>
-            await (await import('./connection.ts')).createLimrunConnection().resolve(context),
-          verify: async (context) =>
-            await (await import('./connection.ts')).createLimrunConnection().verify(context),
-        },
+        connection: LIMRUN_CONNECTION,
         setup: async (host) => {
           const credentials = requireLimrunCredentials(host.env);
           const [register, dependencies] = await Promise.all([

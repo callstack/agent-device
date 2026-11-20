@@ -14,7 +14,7 @@ import revyl from '@agent-device/revyl';
 import manifest from '@agent-device/revyl/package.json' with { type: 'json' };
 import { resolveConnectProviderProfile } from '../../connection/connect-provider-adapters.ts';
 import { connectWithGeneratedProviderProfile } from '../../../__tests__/test-utils/connect-command.ts';
-import { providerContributionOf } from '@agent-device/plugins/validate';
+import { declaredConnectionCapabilities } from '../../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 // Mirrors src/__tests__/cloud-connect-testmu.test.ts: the store declares the Revyl plugin installed
 // and its connection callbacks are loaded from the workspace source, so the assertions read the HTTP
@@ -88,7 +88,7 @@ beforeEach(() => {
     home,
     manifest.name,
     pluginSource('revyl', {
-      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(revyl()).connection?.capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(revyl()))}, resolve() {}, verify() {} },`,
       credentials: '{ variables: ["REVYL_API_KEY"] }',
     }),
   );

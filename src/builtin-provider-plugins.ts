@@ -1,11 +1,10 @@
-import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
-import { providerContributionOf } from '@agent-device/plugins/validate';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { LIMRUN_ID } from './builtin-provider-ids.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
+  LIMRUN_CONNECTION,
   limrunPlugin,
   readLimrunCredentials,
   type LimrunPluginOptions,
@@ -21,7 +20,10 @@ export function builtinProviderCandidates(host: HostEnvironment): PluginCandidat
 }
 
 function limrunCandidate(host: HostEnvironment): PluginCandidate {
-  const base = { source: 'builtin', provider: LIMRUN_ID } as const;
+  const base = {
+    source: 'builtin' as const,
+    declaredClaims: [{ kind: 'provider' as const, id: LIMRUN_ID }],
+  };
   // The provider owns what counts as its credentials; the candidate only asks whether this host
   // holds them, so an unconfigured process keeps the id dormant and never loads the runtime.
   let configured: boolean;
@@ -33,7 +35,7 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
   if (!configured) return { ...base, dormant: true, load: () => undefined };
   return {
     ...base,
-    load: (): AgentDevicePlugin => limrunPlugin(builtinLimrunPluginOptions(host)),
+    load: () => limrunPlugin(builtinLimrunPluginOptions(host)),
   };
 }
 
@@ -57,16 +59,13 @@ function builtinLimrunPluginOptions(host: HostEnvironment): LimrunPluginOptions 
 }
 
 /**
- * The built-in Limrun connection the CLI `connect` runs: the provider's own callbacks, composed as
- * a plugin and wired to this host the same way the daemon's registry wires an installed plugin's.
- * The read-only check is the provider's own, so both answers verify through one entry, and it loads
- * only when `verify` runs.
+ * The built-in Limrun connection the CLI `connect` runs: the provider's own callbacks, wired to the
+ * calling invocation's host the same way the daemon's registry wires an installed plugin's. The
+ * read-only check is the provider's own, so both answers verify through one entry, and the SDK loads
+ * only when a callback runs.
  */
-export async function builtinLimrunConnection(
-  host: HostEnvironment,
-): Promise<PluginConnectionCallbacks> {
+export async function builtinLimrunConnection(): Promise<PluginConnectionCallbacks> {
   const { withConnectionHost } = await import('@agent-device/plugins/registry');
-  const plugin = limrunPlugin(builtinLimrunPluginOptions(host));
-  const connection = withConnectionHost(providerContributionOf(plugin).connection!, undefined);
+  const connection = withConnectionHost(LIMRUN_CONNECTION, undefined);
   return { resolve: connection.resolve, verify: connection.verify };
 }

@@ -36,7 +36,7 @@ Plugins import contract types from `agent-device/plugins`.
 The host-side `addPluginArtifact(path, { env, cwd })` operation shares the managed store.
 The factory returns `{ apiVersion: 3, contributes: [Contribution, ...Contribution[]] }`.
 The factory acquires no resources.
-The current version 2 contracts are in `packages/plugins/src/contract.ts` and `packages/plugins/src/replay-backend.ts`.
+The current version 3 contracts are in `packages/plugins/src/contract.ts` and `packages/plugins/src/replay-backend.ts`.
 The current registry is in `packages/plugins/src/registry.ts`.
 
 Each contribution has one kind and a narrow host type for that kind.
@@ -53,11 +53,11 @@ A `replay-execution` declares the id `ad` for native replay and test.
 There is no open-ended `feature` kind.
 A new kind requires an explicit decision, a named owner, a typed operation, and a consuming command.
 
-The `agent-device` field in package metadata contains only `apiVersion` and static claim keys.
+The `agent-device` field in package metadata contains only `apiVersion` and static claims.
 Package `name` and `version` establish identity.
 The declared engines range establishes the Node floor.
 Before import, the host verifies selection identity, entry containment, supported API, Node floor, and unique claims.
-After the factory runs with its options, declared and returned claim keys must be exactly equal without regard to order.
+After the factory runs with its options, declared and returned claims must be exactly equal without regard to order.
 At setup, returned runtime owners and family modules must match their keys.
 Credentials, callbacks, and runtime facts remain in code.
 This explicitly replaces the former decision that package metadata declares no claims.

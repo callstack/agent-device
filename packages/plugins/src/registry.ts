@@ -33,16 +33,20 @@ import {
   type PluginSource,
 } from '@agent-device/contracts/plugin-inventory';
 import { describePluginFailure } from './inventory.ts';
-import { isProviderId } from './discovery.ts';
 import {
   assertProviderRuntime,
-  claimKeyOfContribution,
+  claimKeyOf,
+  claimOfContribution,
+  duplicateClaimError,
+  identityOfClaim,
   invalidPlugin,
+  reservedClaimError,
   validateAgentDevicePlugin,
+  validateClaimSetup,
   validateReplayBackend,
-  validateReplayBackendSetup,
   validateReplayExecution,
-  validateReplayExecutionSetup,
+  type ClaimKind,
+  type PluggedClaim,
 } from './validate.ts';
 
 /**
@@ -54,27 +58,26 @@ export type PluginCandidate = Readonly<{
   package?: string;
   version?: string;
   selectionStamp?: string;
-  /** Claims `provider` before its load settles, so a later candidate with that id is a duplicate. Dormant candidates claim it without loading. */
-  provider?: string;
-  /** Claims `provider` without registering or listing: a built-in that is not configured. */
+  /** Holds its declared claims without registering or listing them: a built-in that is not configured. */
   dormant?: boolean;
   /** The `options` the store passes to the host when it calls the factory. */
   hostOptions?: Record<string, unknown>;
   /**
-   * The claim keys the package's `agent-device` metadata declares, read before import. After the
-   * factory runs, the returned claim keys must equal these, in any order.
+   * The claims the package's `agent-device` metadata declares, validated before import. The registry
+   * reserves them as soon as it reaches this candidate, so a slot that then fails to load keeps them,
+   * and once the factory runs its returned claims must equal these, in any order.
    */
-  declaredClaims?: readonly string[];
+  declaredClaims?: readonly PluggedClaim[];
   /** Returns the unvalidated plugin, or throws the reason it cannot load. */
   load(): Promise<unknown> | unknown;
 }>;
 
-/** Claims provider ids without loading anything, as the built-in sources do for their own. */
+/** Holds provider ids without loading anything, as the built-in sources do for their own. */
 export function claimProviderIds(providers: readonly string[]): PluginCandidate[] {
   return providers.map((provider) => ({
     source: 'builtin',
-    provider,
     dormant: true,
+    declaredClaims: [{ kind: 'provider', id: provider }],
     load: () => undefined,
   }));
 }
@@ -100,14 +103,16 @@ export type ProviderRegistration = Readonly<{
   dispose?: () => Promise<void> | void;
 }>;
 
-type ClaimSpace = 'provider' | 'replay-backend' | 'replay-execution';
+/** Every id held in one claim space. */
+type ClaimedClaims = Map<ClaimKind, Set<string>>;
 
-/** One contribution expanded into its own claim: its own record, setup outcome and cleanup entry. */
-type Claim = {
+/**
+ * One contribution expanded into its own claim: its own record, setup outcome and cleanup entry. A
+ * claim reserved before the load settles carries no contribution until the factory answers it.
+ */
+type Claim = PluggedClaim & {
   slot: Slot;
-  space: ClaimSpace;
-  key: string;
-  contribution: Contribution;
+  contribution?: Contribution;
   failure?: unknown;
   registration?: ProviderRegistration;
   replaySetup?: ReplayBackendSetup | ReplayExecutionSetup;
@@ -116,24 +121,47 @@ type Claim = {
   replayFailure?: unknown;
 };
 
+/** A candidate, its load outcome, and the claims it holds. */
 type Slot = {
   candidate: PluginCandidate;
   plugin?: AgentDevicePlugin;
-  /** Identity pre-read from an unloadable value, so the inventory can still name what failed. */
-  provider?: string;
-  backend?: string;
+  /** Why this slot cannot answer its claims; each unclaimed entry reports it. */
   failure?: unknown;
   claims: Claim[];
 };
 
-/** Candidates whose plugins loaded and validated, with every claim already settled. */
+/** A claim as the composition reads it: its kind, id, contribution and owning candidate. */
+export type ResolvedClaim = Readonly<{
+  kind: ClaimKind;
+  id: string;
+  candidate: PluginCandidate;
+  contribution?: Contribution;
+}>;
+
+/** What a root reads from the slots it does not own: each claim with its contribution and candidate. */
+function claimsOf(slots: readonly Slot[]): readonly ResolvedClaim[] {
+  return slots.flatMap(({ claims }) =>
+    claims.map((claim) =>
+      Object.freeze({
+        kind: claim.kind,
+        id: claim.id,
+        candidate: claim.slot.candidate,
+        contribution: claim.contribution,
+      }),
+    ),
+  );
+}
+
+/** Candidates whose claims are already reserved, with every load outcome settled. */
 export type ResolvedProviderPlugins = Readonly<{
   /** The connection callbacks of every loaded provider claim, by provider. */
   connections: ReadonlyMap<string, RegisteredConnection>;
   /** Every provider id claimed, including failed and dormant plugins. */
   claimedProviders: readonly string[];
   inventory(): readonly PluginInventoryEntry[];
-  /** @internal Consumed by {@link startProviderRegistry}. */
+  /** Every claim the registry holds, with its contribution and owning candidate. */
+  claims: readonly ResolvedClaim[];
+  /** @internal Consumed by {@link startProviderRegistry}, which owns setup and cleanup. */
   slots: readonly Slot[];
 }>;
 
@@ -145,48 +173,39 @@ export type ProviderRegistry = Readonly<{
   inventory: readonly PluginInventoryEntry[];
   /**
    * The one cleanup owner. Closes activated registrations in reverse activation order, shutting
-   * each runtime down before its disposer, each claim independently of the others, and reports
-   * what happened to each. It runs once; later calls return the same outcomes. It never throws and
-   * never wraps a runtime.
+   * each runtime down before its disposer, and reports what happened to each. It runs once; later
+   * calls return the same outcomes. It never throws and never wraps a runtime.
    */
   close(): Promise<readonly PluginCleanupOutcome[]>;
 }>;
 
 /**
- * Loads and validates the candidates in order. The whole declaration is validated, then expanded
- * into claims. The first candidate to name a claim keeps it, even when that claim later fails; a
- * later one with the same key is recorded as failed. A plugin that cannot load never stops the
- * others.
+ * Loads and validates the candidates in order. Each one reserves its declared claims first, so the
+ * first candidate to name a claim keeps it even when that claim later fails; a later one with the
+ * same claim is recorded as failed. A plugin that cannot load never stops the others.
  */
 export async function resolveProviderPlugins(
   candidates: readonly PluginCandidate[],
 ): Promise<ResolvedProviderPlugins> {
   const slots: Slot[] = [];
-  const claimed = {
-    provider: new Set<string>(),
-    backend: new Set<string>(),
-    execution: new Set<string>(),
-  };
+  const claimed: ClaimedClaims = new Map();
   for (const candidate of candidates) {
-    const slot: Slot = { candidate, provider: candidate.provider, claims: [] };
+    const slot: Slot = { candidate, claims: [] };
     slots.push(slot);
-    if (candidate.dormant) {
-      if (candidate.provider !== undefined) claimed.provider.add(candidate.provider);
-      continue;
-    }
-    await loadSlot(slot, claimed);
+    reserveDeclaredClaims(slot, claimed, !candidate.dormant);
+    if (!candidate.dormant) await loadSlot(slot, claimed);
   }
 
   return Object.freeze({
     connections: new Map(
       slots.flatMap(({ claims }) =>
         claims.flatMap((claim) => {
-          if (claim.space !== 'provider' || claim.failure !== undefined) return [];
-          const connection = (claim.contribution as ProviderContribution).connection;
+          if (claim.kind !== 'provider' || claim.failure !== undefined) return [];
+          const connection = (claim.contribution as ProviderContribution | undefined)?.connection;
           return connection
             ? [
                 [
-                  claim.key,
+                  claim.id,
                   withConnectionHost(connection, claim.slot.candidate.hostOptions),
                 ] as const,
               ]
@@ -194,10 +213,106 @@ export async function resolveProviderPlugins(
         }),
       ),
     ),
-    claimedProviders: [...claimed.provider],
+    claimedProviders: [...(claimed.get('provider') ?? [])],
     inventory: () => slots.flatMap(describeSlot),
+    claims: Object.freeze(claimsOf(slots)),
     slots,
   });
+}
+
+/**
+ * Reserves each declared claim in its own space, in deterministic candidate order. The first claim
+ * of a kind and id wins; a later one is recorded as failed against its own slot, and so is a claim of
+ * an id the host reserves. A dormant slot holds its claims without listing them.
+ */
+function reserveDeclaredClaims(slot: Slot, claimed: ClaimedClaims, list: boolean): void {
+  for (const claim of slot.candidate.declaredClaims ?? []) {
+    const obstacle = claimObstacle(claimed, claim);
+    if (obstacle !== undefined) {
+      if (list) slot.claims.push({ ...claim, slot, failure: obstacle });
+      continue;
+    }
+    if (list) slot.claims.push({ ...claim, slot });
+  }
+}
+
+/**
+ * Why this claim cannot be held: its id belongs to the host, or its space already names it. Nothing
+ * is reserved when there is an obstacle.
+ */
+function claimObstacle(claimed: ClaimedClaims, claim: PluggedClaim): AppError | undefined {
+  const reserved = reservedClaimError(claim);
+  if (reserved !== undefined) return reserved;
+  return reserveClaim(claimed, claim) ? undefined : duplicateClaimError(claim);
+}
+
+/** Whether this claim's space had not been named yet, which is what keeps the claim for its slot. */
+function reserveClaim(claimed: ClaimedClaims, claim: PluggedClaim): boolean {
+  let ids = claimed.get(claim.kind);
+  if (ids === undefined) claimed.set(claim.kind, (ids = new Set()));
+  if (ids.has(claim.id)) return false;
+  ids.add(claim.id);
+  return true;
+}
+
+/**
+ * Runs one slot's factory and matches its contributions to the claims already reserved for the slot.
+ * A slot that declares no claims claims what its factory returns, so an embedder's plugin competes
+ * for the same spaces the same way.
+ */
+async function loadSlot(slot: Slot, claimed: ClaimedClaims): Promise<void> {
+  try {
+    const plugin = validateAgentDevicePlugin(await slot.candidate.load());
+    assertDeclaredClaims(slot.candidate, plugin);
+    slot.plugin = plugin;
+    for (const contribution of plugin.contributes) {
+      const claim = claimOfContribution(contribution);
+      const reserved = slot.claims.find(
+        (entry) => entry.contribution === undefined && claimKeyOf(entry) === claimKeyOf(claim),
+      );
+      if (reserved !== undefined) {
+        reserved.contribution = contribution;
+        continue;
+      }
+      const obstacle = claimObstacle(claimed, claim);
+      slot.claims.push({
+        ...claim,
+        slot,
+        contribution,
+        ...(obstacle !== undefined ? { failure: obstacle } : {}),
+      });
+    }
+  } catch (error) {
+    slot.failure = asPluginFailure(error, 'plugin_load_failed');
+    for (const claim of slot.claims) {
+      if (claim.contribution === undefined) claim.failure = slot.failure;
+    }
+  }
+}
+
+/** After the factory runs, declared and returned claims must be exactly equal, unordered. */
+function assertDeclaredClaims(candidate: PluginCandidate, plugin: AgentDevicePlugin): void {
+  const declared = candidate.declaredClaims;
+  if (declared === undefined) return;
+  const returned = plugin.contributes.map((contribution) =>
+    claimKeyOf(claimOfContribution(contribution)),
+  );
+  const sortedDeclared = declared.map((claim) => claimKeyOf(claim)).sort();
+  const sortedReturned = [...returned].sort();
+  if (
+    sortedDeclared.length !== sortedReturned.length ||
+    sortedDeclared.some((key, index) => key !== sortedReturned[index])
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Plugin factory claims do not match its package metadata: ${candidate.package ?? 'candidate'}`,
+      {
+        reason: 'invalid_plugin',
+        declared: sortedDeclared,
+        returned: sortedReturned,
+      },
+    );
+  }
 }
 
 /**
@@ -230,12 +345,11 @@ export async function startProviderRegistry(
         });
       const claim = requireReplayClaim(
         resolved,
-        'replay-backend',
-        id,
+        { kind: 'replay-backend', id },
         packageName,
         policy.assertReplaySelectionCurrent,
       );
-      return await resolveRegisteredReplayBackend(claim, refreshInventory, id, host);
+      return await resolveRegisteredReplayBackend(claim, refreshInventory, host);
     },
     resolveReplayExecution: async (packageName) => {
       if (closed)
@@ -244,13 +358,15 @@ export async function startProviderRegistry(
         });
       const claim = requireReplayClaim(
         resolved,
-        'replay-execution',
-        NATIVE_REPLAY_BACKEND,
+        { kind: 'replay-execution', id: NATIVE_REPLAY_BACKEND },
         packageName,
         policy.assertReplaySelectionCurrent,
       );
       return await resolveRegisteredReplayExecution(claim, refreshInventory);
     },
+    // Reverse activation order, per ADR 0034: each runtime shuts down before its own disposer, and
+    // a claim activated later is torn down first. The sequence is the ownership order, so it is
+    // deliberately not a Promise.all: one disposer's work is the next one's precondition.
     close: once(async () => {
       closed = true;
       const activated = resolved.slots.flatMap(({ claims }) =>
@@ -265,103 +381,6 @@ export async function startProviderRegistry(
       return outcomes;
     }),
   });
-}
-
-async function loadSlot(
-  slot: Slot,
-  claimed: { provider: Set<string>; backend: Set<string>; execution: Set<string> },
-): Promise<void> {
-  let raw: unknown;
-  try {
-    raw = await slot.candidate.load();
-    const plugin = validateAgentDevicePlugin(raw);
-    assertDeclaredClaims(slot.candidate, plugin);
-    slot.plugin = plugin;
-    for (const contribution of plugin.contributes) {
-      const claim = makeClaim(slot, contribution);
-      slot.claims.push(claim);
-      reserveClaim(claim, claimed);
-    }
-  } catch (error) {
-    slot.failure = asPluginFailure(error, 'plugin_load_failed');
-    slot.provider = readProviderId(raw) ?? slot.candidate.provider;
-    slot.backend = readBackendId(raw);
-    // The first registration keeps its claim even when it fails: a pre-read identity still
-    // reserves the claim, so a later candidate with the same id is the failed duplicate.
-    if (slot.provider !== undefined) claimed.provider.add(slot.provider);
-    if (slot.backend !== undefined) claimed.backend.add(slot.backend);
-  }
-}
-
-function makeClaim(slot: Slot, contribution: Contribution): Claim {
-  const key = claimKeyOfContribution(contribution);
-  const space: ClaimSpace = key.startsWith('provider:')
-    ? 'provider'
-    : key.startsWith('replay-backend:')
-      ? 'replay-backend'
-      : 'replay-execution';
-  return { slot, space, key: key.slice(key.indexOf(':') + 1), contribution };
-}
-
-/**
- * Reserves the claim in its space in deterministic candidate order. The first registration keeps
- * its claim even when it fails; later ones are recorded as failed. `ad` is reserved against format
- * claims: only a replay-execution contribution may claim it.
- */
-function reserveClaim(
-  claim: Claim,
-  claimed: { provider: Set<string>; backend: Set<string>; execution: Set<string> },
-): void {
-  if (claim.space === 'replay-backend' && claim.key === NATIVE_REPLAY_BACKEND) {
-    claim.failure = new AppError(
-      'INVALID_ARGS',
-      `Replay backend id is reserved for native execution: ${NATIVE_REPLAY_BACKEND}`,
-      { reason: 'reserved_replay_backend', backend: NATIVE_REPLAY_BACKEND },
-    );
-    return;
-  }
-  const space =
-    claim.space === 'provider'
-      ? claimed.provider
-      : claim.space === 'replay-backend'
-        ? claimed.backend
-        : claimed.execution;
-  if (space.has(claim.key)) {
-    claim.failure = new AppError('INVALID_ARGS', `Duplicate ${claim.space} claim: ${claim.key}`, {
-      reason:
-        claim.space === 'provider'
-          ? 'duplicate_provider'
-          : claim.space === 'replay-backend'
-            ? 'duplicate_replay_backend'
-            : 'duplicate_replay_execution',
-      ...(claim.space === 'provider' ? { provider: claim.key } : { backend: claim.key }),
-    });
-    return;
-  }
-  space.add(claim.key);
-}
-
-/** After the factory runs, declared and returned claim keys must be exactly equal, unordered. */
-function assertDeclaredClaims(candidate: PluginCandidate, plugin: AgentDevicePlugin): void {
-  const declared = candidate.declaredClaims;
-  if (declared === undefined) return;
-  const returned = plugin.contributes.map((contribution) => claimKeyOfContribution(contribution));
-  const sortedDeclared = [...declared].sort();
-  const sortedReturned = [...returned].sort();
-  if (
-    sortedDeclared.length !== sortedReturned.length ||
-    sortedDeclared.some((key, index) => key !== sortedReturned[index])
-  ) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Plugin factory claims do not match its package metadata: ${candidate.package ?? 'candidate'}`,
-      {
-        reason: 'invalid_plugin',
-        declared: sortedDeclared,
-        returned: sortedReturned,
-      },
-    );
-  }
 }
 
 /**
@@ -394,22 +413,18 @@ async function setUpClaim(
   policy: PluginRegistryPolicy,
   scope: 'all' | 'replay-backends',
 ): Promise<void> {
-  if (claim.space !== 'provider') {
-    await setUpReplayClaim(claim);
+  const contribution = claim.contribution;
+  if (contribution === undefined) {
+    throw invalidPlugin(`Plugin claim has no contribution: ${claimKeyOf(claim)}`);
+  }
+  if (contribution.kind === 'provider') {
+    if (scope === 'all') await setUpProviderClaim(claim, contribution, host, policy);
     return;
   }
-  if (scope === 'all') await setUpProviderClaim(claim, host, policy);
-}
-
-async function setUpReplayClaim(claim: Claim): Promise<void> {
-  const contribution = claim.contribution;
-  if (contribution.kind === 'provider') return;
   const result = await contribution.setup(createReplaySetupHost());
   try {
-    claim.replaySetup =
-      contribution.kind === 'replay-backend'
-        ? validateReplayBackendSetup(result)
-        : validateReplayExecutionSetup(result);
+    validateClaimSetup(claim, result);
+    claim.replaySetup = result as ReplayBackendSetup | ReplayExecutionSetup;
   } catch (error) {
     await cleanUpRejectedSetup(result);
     throw error;
@@ -419,15 +434,14 @@ async function setUpReplayClaim(claim: Claim): Promise<void> {
 async function resolveRegisteredReplayBackend(
   claim: Claim,
   refreshInventory: () => void,
-  id: string,
   host: import('@agent-device/contracts/replay-backend').ReplayBackendHost,
 ): Promise<ReplayBackend> {
   if (claim.failure !== undefined) throw replayClaimError(claim);
   const replayBackend = (claim.replaySetup as ReplayBackendSetup | undefined)?.replayBackend;
-  if (!replayBackend) throw invalidPlugin(`Replay backend was not set up: ${id}`);
+  if (!replayBackend) throw invalidPlugin(`Replay backend was not set up: ${claim.id}`);
   return await (claim.replayLoading ??= Promise.resolve().then(async () => {
     try {
-      const backend = validateReplayBackend(id, await replayBackend.create(host));
+      const backend = validateReplayBackend(claim.id, await replayBackend.create(host));
       claim.replayFailure = undefined;
       refreshInventory();
       return backend;
@@ -462,21 +476,6 @@ async function resolveRegisteredReplayExecution(
   }));
 }
 
-/**
- * A selected package that failed before it could claim still answers for its own name. The first
- * candidate to name a claim owns what a resolution surfaces.
- */
-function failedLoadClaimFor(slot: Slot, space: ClaimSpace, id: string): Claim | undefined {
-  if (slot.claims.length > 0 || slot.failure === undefined || slot.backend !== id) return undefined;
-  return {
-    slot,
-    space,
-    key: id,
-    contribution: undefined as unknown as Contribution,
-    failure: slot.failure,
-  };
-}
-
 /** The store selection owns a store-sourced slot's claim, whatever its outcome. */
 function assertStoreSelectionCurrent(
   slot: Slot,
@@ -486,26 +485,23 @@ function assertStoreSelectionCurrent(
   assertSelectionCurrent?.(slot.candidate.package);
 }
 
+/**
+ * The claim a replay resolution answers, in candidate order, so the first candidate that named it
+ * owns what a resolution surfaces. A selected package that failed before it could claim its space
+ * still answers for its own name.
+ */
 function requireReplayClaim(
   resolved: ResolvedProviderPlugins,
-  space: ClaimSpace,
-  id: string,
+  claim: PluggedClaim,
   packageName: string | undefined,
   assertSelectionCurrent?: (packageName: string) => void,
 ): Claim {
-  // In candidate order: a slot's own claim first, then a failed load whose pre-read id matches,
-  // so the first registration's failure is what a resolution surfaces.
+  const wanted = claimKeyOf(claim);
   for (const slot of resolved.slots) {
-    const claim = slot.claims.find((claim) => claim.space === space && claim.key === id);
-    if (claim) {
-      assertStoreSelectionCurrent(slot, assertSelectionCurrent);
-      return claim;
-    }
-    const failedLoad = failedLoadClaimFor(slot, space, id);
-    if (failedLoad) {
-      assertStoreSelectionCurrent(slot, assertSelectionCurrent);
-      return failedLoad;
-    }
+    const held = slot.claims.find((entry) => claimKeyOf(entry) === wanted);
+    if (held === undefined) continue;
+    assertStoreSelectionCurrent(slot, assertSelectionCurrent);
+    return held;
   }
   const failedSlot = resolved.slots.find(
     (slot) =>
@@ -516,18 +512,12 @@ function requireReplayClaim(
   );
   if (failedSlot) {
     assertStoreSelectionCurrent(failedSlot, assertSelectionCurrent);
-    return {
-      slot: failedSlot,
-      space,
-      key: id,
-      contribution: undefined as unknown as Contribution,
-      failure: failedSlot.failure,
-    } satisfies Claim;
+    return { ...claim, slot: failedSlot, failure: failedSlot.failure };
   }
   if (packageName) assertSelectionCurrent?.(packageName);
-  throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${id}`, {
+  throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${claim.id}`, {
     reason: 'plugin-not-installed',
-    backend: id,
+    backend: claim.id,
   });
 }
 
@@ -561,16 +551,17 @@ async function cleanUpClaim(claim: Claim): Promise<PluginCleanupOutcome> {
     return { provider, source, shutdown, dispose: disposed };
   }
   const setup = claim.replaySetup;
+  const identity = identityOfClaim(claim);
   if (!setup)
     return {
-      backend: claim.key,
+      ...identity,
       source: claim.slot.candidate.source,
       shutdown: { status: 'ok' },
       dispose: { status: 'ok' },
     };
   await (claim.replayLoading ?? claim.executionLoading)?.catch(() => {});
   return {
-    backend: claim.key,
+    ...identity,
     source: claim.slot.candidate.source,
     shutdown: { status: 'ok' },
     dispose: await attempt(async () => await setup.dispose?.()),
@@ -603,10 +594,10 @@ export function withConnectionHost(
 
 async function setUpProviderClaim(
   claim: Claim,
+  contribution: ProviderContribution,
   host: HostEnvironment,
   policy: PluginRegistryPolicy,
 ): Promise<void> {
-  const contribution = claim.contribution as ProviderContribution;
   const pluginHost = createPluginHost(host, claim.slot.candidate.hostOptions);
   const result = await contribution.setup(pluginHost);
   try {
@@ -687,19 +678,12 @@ function asPluginFailure(error: unknown, reason: 'plugin_load_failed' | 'plugin_
 }
 
 function describeSlot(slot: Slot): PluginInventoryEntry[] {
-  const { candidate } = slot;
-  if (candidate.dormant) return [];
+  if (slot.candidate.dormant) return [];
   if (slot.claims.length > 0) return slot.claims.flatMap(describeClaim);
-  const base = {
-    ...(slot.provider !== undefined ? { provider: slot.provider } : {}),
-    ...(slot.backend !== undefined ? { backend: slot.backend } : {}),
-    source: candidate.source,
-    ...(candidate.package !== undefined ? { package: candidate.package } : {}),
-    ...(candidate.version !== undefined ? { version: candidate.version } : {}),
-  };
   return [
     {
-      ...base,
+      source: slot.candidate.source,
+      ...identityOfCandidate(slot.candidate),
       state: 'failed',
       error: describePluginFailure(slot.failure),
       credentials: NO_PLUGIN_CREDENTIALS,
@@ -708,19 +692,19 @@ function describeSlot(slot: Slot): PluginInventoryEntry[] {
 }
 
 function describeClaim(claim: Claim): PluginInventoryEntry[] {
+  const failure = claim.failure ?? claim.replayFailure;
   const { candidate } = claim.slot;
   const base = {
-    ...(claim.space === 'provider' ? { provider: claim.key } : { backend: claim.key }),
+    ...identityOfClaim(claim),
     source: candidate.source,
-    ...(candidate.package !== undefined ? { package: candidate.package } : {}),
-    ...(candidate.version !== undefined ? { version: candidate.version } : {}),
+    ...identityOfCandidate(candidate),
   };
-  if (claim.failure !== undefined || claim.replayFailure !== undefined) {
+  if (failure !== undefined) {
     return [
       {
         ...base,
         state: 'failed',
-        error: describePluginFailure(claim.failure ?? claim.replayFailure),
+        error: describePluginFailure(failure),
         credentials: NO_PLUGIN_CREDENTIALS,
       },
     ];
@@ -734,8 +718,18 @@ function describeClaim(claim: Claim): PluginInventoryEntry[] {
   ];
 }
 
-function claimCredentials(contribution: Contribution) {
-  if (contribution.kind !== 'provider') return NO_PLUGIN_CREDENTIALS;
+function identityOfCandidate(candidate: PluginCandidate): {
+  package?: string;
+  version?: string;
+} {
+  return {
+    ...(candidate.package !== undefined ? { package: candidate.package } : {}),
+    ...(candidate.version !== undefined ? { version: candidate.version } : {}),
+  };
+}
+
+function claimCredentials(contribution: Contribution | undefined) {
+  if (contribution?.kind !== 'provider') return NO_PLUGIN_CREDENTIALS;
   return {
     variables: [...contribution.credentials.variables],
     byBackend: Object.fromEntries(
@@ -745,31 +739,6 @@ function claimCredentials(contribution: Contribution) {
       ]),
     ),
   };
-}
-
-function readProviderId(raw: unknown): string | undefined {
-  if (!isRecord(raw)) return undefined;
-  if (isProviderId(raw.provider)) return raw.provider;
-  if (Array.isArray(raw.contributes)) {
-    for (const entry of raw.contributes) {
-      if (isRecord(entry) && entry.kind === 'provider' && isProviderId(entry.provider))
-        return entry.provider;
-    }
-  }
-  return undefined;
-}
-
-function readBackendId(raw: unknown): string | undefined {
-  if (!isRecord(raw)) return undefined;
-  if (isProviderId(raw.backend)) return raw.backend;
-  if (Array.isArray(raw.contributes)) {
-    for (const entry of raw.contributes) {
-      if (isRecord(entry) && entry.kind === 'replay-backend' && isProviderId(entry.backend))
-        return entry.backend;
-      if (isRecord(entry) && entry.kind === 'replay-execution') return NATIVE_REPLAY_BACKEND;
-    }
-  }
-  return undefined;
 }
 
 async function attempt(step: () => Promise<unknown>): Promise<PluginCleanupStep> {

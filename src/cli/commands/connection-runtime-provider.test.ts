@@ -11,7 +11,7 @@ import {
   seedConnectionState,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { materializeRemoteConnectionForCommand } from '../../__tests__/test-utils/host-bound-commands.ts';
-import { providerContributionOf } from '@agent-device/plugins/validate';
+import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -22,7 +22,7 @@ test('deferred provider materialization forwards provider profile fields to leas
     home,
     '@agent-device/browserstack',
     pluginSource('browserstack', {
-      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(browserstack()).connection?.capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(browserstack()))}, resolve() {}, verify() {} },`,
     }),
   );
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-provider-lease-flags-');

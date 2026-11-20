@@ -22,7 +22,7 @@ import {
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
-import { providerContributionOf } from '@agent-device/plugins/validate';
+import { declaredConnectionCapabilities } from './test-utils/plugin-declaration.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -58,7 +58,7 @@ beforeEach(() => {
     home,
     manifest.name,
     pluginSource('testmu', {
-      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(testmu()).connection?.capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(testmu()))}, resolve() {}, verify() {} },`,
       credentials: '{ variables: ["LT_USERNAME", "LT_ACCESS_KEY"] }',
     }),
   );

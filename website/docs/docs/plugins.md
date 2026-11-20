@@ -117,7 +117,7 @@ const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
 export default example;
 ```
 
-The `agent-device` field in `package.json` declares the contract version and the static claim keys (`provider`, `replayBackend`, `replayExecution`). Before any import, the host checks the package identity, that the resolved entry stays inside the package, the `apiVersion`, the Node floor from `engines.node`, and that the declared claims are unique and unreserved. After the factory runs with its options, the returned claim keys must equal the declared ones, in any order; a mismatch invalidates the package.
+The `agent-device` field in `package.json` declares the contract version and the static claims: `provider` and `replayBackend` name their id, and `replayExecution: true` claims native `ad` execution. Before any import, the host checks the package identity, that the resolved entry stays inside the package, the `apiVersion`, the Node floor from `engines.node`, and that each declared claim is unreserved. The first claim of a kind and id wins, and the claim holds even when that package then fails to load. After the factory runs with its options, the returned claims must equal the declared ones, in any order; a mismatch invalidates the package.
 
 The factory is called with the package's `options` from `config.json` (`plugins["<package>"].options`; leave `installation` unchanged). A JavaScript host that imports the package calls the same factory directly with its own options.
 
@@ -132,7 +132,7 @@ The host checks required runtime methods and owner metadata when it sets the plu
 
 Keep the factory and `setup` fast, with no network I/O or device allocation; a stalled plugin delays daemon startup. Load platform mechanics through `platformModule.loadRuntime` and perform remote work in request-bound operations.
 
-Incompatible contract changes require a new `apiVersion`; there is no compatibility shim. A version 2 plugin is listed as `failed` with reason `incompatible-plugin-api`. Plugins can't replace bundled providers or register arbitrary commands.
+Incompatible contract changes require a new `apiVersion`; there is no compatibility shim. `plugins add` and `plugins update` refuse a package whose `agent-device` field is missing or names another `apiVersion`, and a package already in the store is listed as `failed` with reason `incompatible-plugin-api`. Plugins can't replace bundled providers or register arbitrary commands.
 
 ### Credentials
 
@@ -174,12 +174,12 @@ Bundle the plugin implementation and ship ready-to-run ESM: installation disable
 
 ## Migrating from the version 2 contract
 
-Version 2 returned `{ apiVersion: 2, provider, credentials, connection?, setup }` from the factory. Version 3 wraps each contribution in `contributes` and declares the static claim keys in the package's `agent-device` field. There is no compatibility shim: a version 2 package is listed as `failed` with reason `incompatible-plugin-api`.
+Version 2 returned `{ apiVersion: 2, provider, credentials, connection?, setup }` from the factory. Version 3 wraps each contribution in `contributes` and declares the static claims in the package's `agent-device` field. There is no compatibility shim: `plugins add` and `plugins update` refuse a version 2 package, and one already in the store is listed as `failed` with reason `incompatible-plugin-api`.
 
 To move a package:
 
 1. Return `apiVersion: 3` with `contributes: [{ kind: 'provider', provider, credentials, connection?, setup }]`; the default export stays a function the host calls with the selection's options.
-2. Add `"agent-device": { "apiVersion": 3, "provider": "example" }` and `"engines": { "node": ">=22.12" }` to `package.json`, with the same claim keys the factory returns.
+2. Add `"agent-device": { "apiVersion": 3, "provider": "example" }` and `"engines": { "node": ">=22.12" }` to `package.json`, with the same claims the factory returns.
 
 ```diff
  export default () => ({

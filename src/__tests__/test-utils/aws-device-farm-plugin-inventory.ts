@@ -4,7 +4,7 @@ import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { selectPlugin, pluginSource } from '@agent-device/test-kit';
 import awsDeviceFarm from '@agent-device/aws-device-farm';
 import manifest from '@agent-device/aws-device-farm/package.json' with { type: 'json' };
-import { providerContributionOf } from '@agent-device/plugins/validate';
+import { declaredConnectionCapabilities } from './plugin-declaration.fixtures.ts';
 
 /** The AWS Device Farm package as an installed store plugin, without touching the on-disk store. */
 function awsDeviceFarmPluginCandidate(): PluginCandidate {
@@ -30,7 +30,7 @@ export function selectAwsDeviceFarmPlugin(home: string): void {
     home,
     manifest.name,
     pluginSource('aws-device-farm', {
-      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(awsDeviceFarm()).connection?.capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(awsDeviceFarm()))}, resolve() {}, verify() {} },`,
     }),
   );
 }

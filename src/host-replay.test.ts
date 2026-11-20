@@ -117,10 +117,10 @@ function fixture() {
 
 async function nativePlugin(): Promise<AgentDevicePlugin> {
   const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
-  const claim = resolved.slots
-    .flatMap((slot) => slot.claims)
-    .find((claim) => claim.space === 'replay-execution' && claim.key === 'ad');
-  if (!claim) throw new Error('Native replay test installation is missing');
+  const claim = resolved.claims.find(
+    (claim) => claim.kind === 'replay-execution' && claim.id === 'ad',
+  );
+  if (!claim?.contribution) throw new Error('Native replay test installation is missing');
   return {
     apiVersion: 3,
     contributes: [claim.contribution as AgentDevicePlugin['contributes'][number]],
@@ -129,12 +129,12 @@ async function nativePlugin(): Promise<AgentDevicePlugin> {
 
 async function trackedPlugin() {
   const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
-  const claim = resolved.slots
-    .flatMap((slot) => slot.claims)
-    .find((claim) => claim.space === 'replay-backend' && claim.key === 'maestro');
-  if (!claim || claim.contribution.kind !== 'replay-backend')
+  const claim = resolved.claims.find(
+    (claim) => claim.kind === 'replay-backend' && claim.id === 'maestro',
+  );
+  const maestro = claim?.contribution;
+  if (!maestro || maestro.kind !== 'replay-backend')
     throw new Error('Maestro test installation is missing');
-  const maestro = claim.contribution;
   const calls = { setup: 0, create: 0, collect: 0, run: 0, dispose: 0 };
   const contribution: ReplayBackendContribution = {
     ...maestro,

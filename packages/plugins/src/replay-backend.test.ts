@@ -3,6 +3,7 @@ import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
 import type { PluginCandidate, PluginRegistryPolicy } from './registry.ts';
 import type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import { validateReplayBackendSetup, validateReplayExecutionSetup } from './validate.ts';
+import type { PluggedClaim } from './validate.ts';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { AgentDevicePlugin } from './contract.ts';
 import type { ReplaySetupHost } from './host.ts';
@@ -13,8 +14,9 @@ const policy: PluginRegistryPolicy = {
     throw new Error('no provider');
   },
 };
-function candidate(plugin: unknown): PluginCandidate {
-  return { source: 'embedder', load: () => plugin };
+/** A candidate that declares the claims its package metadata would declare. */
+function candidate(plugin: unknown, declaredClaims?: readonly PluggedClaim[]): PluginCandidate {
+  return { source: 'embedder', ...(declaredClaims ? { declaredClaims } : {}), load: () => plugin };
 }
 function engine(backend = 'maestro') {
   const runtime: ReplayBackend = {
@@ -103,9 +105,9 @@ test('backend identity is separate from provider identity and first failure clai
   const bad = { ...engine().plugin, apiVersion: 99 };
   const other = engine('other');
   const resolved = await resolveProviderPlugins([
-    candidate(bad),
-    candidate(engine().plugin),
-    candidate(other.plugin),
+    candidate(bad, [{ kind: 'replay-backend', id: 'maestro' }]),
+    candidate(engine().plugin, [{ kind: 'replay-backend', id: 'maestro' }]),
+    candidate(other.plugin, [{ kind: 'replay-backend', id: 'other' }]),
   ]);
   const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' }, policy);
   expect(registry.claimedProviders).toEqual([]);
@@ -128,7 +130,12 @@ test('a format claim of the reserved ad id fails while native execution claims i
   const reserved = engine('ad');
   const native = nativeExecution();
   const registry = await startProviderRegistry(
-    await resolveProviderPlugins([candidate(reserved.plugin), candidate(native.plugin)]),
+    await resolveProviderPlugins([
+      // The declared claim is what a store package's metadata would have declared, which is how the
+      // failed package keeps its identity in the inventory.
+      candidate(reserved.plugin, [{ kind: 'replay-backend', id: 'ad' }]),
+      candidate(native.plugin),
+    ]),
     { env: {}, cwd: '/' },
     policy,
   );
@@ -293,17 +300,20 @@ test.each([
   async (override, reason) => {
     const registry = await startProviderRegistry(
       await resolveProviderPlugins([
-        candidate({
-          apiVersion: 3,
-          contributes: [
-            {
-              kind: 'replay-execution',
-              id: 'ad',
-              setup: () => ({ execution: { create: () => ({}) } }),
-            },
-          ],
-          ...override,
-        }),
+        candidate(
+          {
+            apiVersion: 3,
+            contributes: [
+              {
+                kind: 'replay-execution',
+                id: 'ad',
+                setup: () => ({ execution: { create: () => ({}) } }),
+              },
+            ],
+            ...override,
+          },
+          [{ kind: 'replay-execution', id: 'ad' }],
+        ),
       ]),
       { env: {}, cwd: '/' },
       policy,

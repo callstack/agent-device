@@ -2,87 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
-import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
-import { PLUGIN_API_VERSION, ROUTING_PROVIDER_IDENTITIES } from './contract.ts';
-
-const PROVIDER_ID = /^[a-z][a-z0-9-]*$/;
-
-export function isProviderId(value: unknown): value is string {
-  return typeof value === 'string' && PROVIDER_ID.test(value);
-}
+import { compareVersions } from '@agent-device/host-kit/version';
+import { readPluginPackageClaims, type PluggedClaim } from './validate.ts';
 
 /**
- * The static claims a plugin package declares in its `agent-device` package.json field, as claim
- * keys (`provider:<id>`, `replay-backend:<id>`, `replay-execution:ad`). Read before any import:
- * the apiVersion must be the supported one, and every declared claim must be unique and
- * unreserved. After the factory runs, its returned claim keys must equal these, in any order.
+ * The static claims a plugin package declares in its `agent-device` package.json field, in kind
+ * order. Read before any import: the apiVersion must be the supported one, and every declared claim
+ * must be unreserved. After the factory runs, its returned claims must equal these, in any order.
  */
-export function readAgentDeviceClaims(manifest: Record<string, unknown>): readonly string[] {
-  const field = manifest['agent-device'];
-  if (!isRecord(field) || field.apiVersion !== PLUGIN_API_VERSION) {
-    throw incompatiblePackageApi(field);
-  }
-  const claims: string[] = [];
-  if (field.provider !== undefined) claims.push(providerClaim(field.provider));
-  if (field.replayBackend !== undefined) claims.push(replayBackendClaim(field.replayBackend));
-  if (field.replayExecution !== undefined) claims.push(replayExecutionClaim(field.replayExecution));
-  return claims;
-}
-
-function incompatiblePackageApi(field: unknown): AppError {
-  const declared = isRecord(field) ? field.apiVersion : undefined;
-  return new AppError(
-    'INVALID_ARGS',
-    'Plugin package does not declare a compatible contract version',
-    {
-      reason: 'incompatible-plugin-api',
-      apiVersion: PLUGIN_API_VERSION,
-      ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
-      hint: `Install a plugin release supporting plugin contract apiVersion ${PLUGIN_API_VERSION}.`,
-    },
-  );
-}
-
-function providerClaim(provider: unknown): string {
-  if (!isProviderId(provider)) {
-    throw new AppError('INVALID_ARGS', 'Plugin metadata provider must be a lowercase id', {
-      reason: 'invalid_plugin',
-    });
-  }
-  if (ROUTING_PROVIDER_IDENTITIES.includes(provider)) {
-    throw new AppError('INVALID_ARGS', `Provider id is reserved for routing: ${provider}`, {
-      reason: 'reserved_provider',
-      provider,
-    });
-  }
-  return `provider:${provider}`;
-}
-
-function replayBackendClaim(backend: unknown): string {
-  if (!isProviderId(backend)) {
-    throw new AppError('INVALID_ARGS', 'Plugin metadata replayBackend must be a lowercase id', {
-      reason: 'invalid_plugin',
-    });
-  }
-  if (backend === NATIVE_REPLAY_BACKEND) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Replay backend id is reserved for native execution: ${NATIVE_REPLAY_BACKEND}`,
-      { reason: 'reserved_replay_backend', backend: NATIVE_REPLAY_BACKEND },
-    );
-  }
-  return `replay-backend:${backend}`;
-}
-
-function replayExecutionClaim(replayExecution: unknown): string {
-  if (replayExecution !== true && replayExecution !== NATIVE_REPLAY_BACKEND) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Plugin metadata replayExecution must be true or "${NATIVE_REPLAY_BACKEND}"`,
-      { reason: 'invalid_plugin' },
-    );
-  }
-  return `replay-execution:${NATIVE_REPLAY_BACKEND}`;
+export function readAgentDeviceClaims(manifest: Record<string, unknown>): readonly PluggedClaim[] {
+  return readPluginPackageClaims(manifest['agent-device']);
 }
 
 /**
@@ -149,18 +78,6 @@ function compareVersionsTuple(a: Version, b: Version): number {
     if (diff !== 0) return diff;
   }
   return 0;
-}
-
-function compareVersions(a: string, b: string): number {
-  const pa = parseVersion(a);
-  const pb = parseVersion(b);
-  if (pa === undefined || pb === undefined) return 0;
-  const byCore = compareVersionsTuple(pa, pb);
-  if (byCore !== 0) return byCore;
-  // A prerelease sorts below the same release.
-  const aPre = a.includes('-');
-  const bPre = b.includes('-');
-  return aPre === bPre ? 0 : aPre ? -1 : 1;
 }
 
 /** The subpath a plugin package exports; its default export is the plugin factory. */

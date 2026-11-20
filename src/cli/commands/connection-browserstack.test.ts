@@ -23,7 +23,7 @@ import {
 import manifest from '@agent-device/browserstack/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
-import { providerContributionOf } from '@agent-device/plugins/validate';
+import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -67,7 +67,7 @@ beforeEach(() => {
     home,
     manifest.name,
     pluginSource('browserstack', {
-      extra: `connection: { capabilities: ${JSON.stringify(providerContributionOf(browserstack()).connection?.capabilities)}, resolve() {}, verify() {} },`,
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(browserstack()))}, resolve() {}, verify() {} },`,
       credentials: '{ variables: ["BROWSERSTACK_USERNAME", "BROWSERSTACK_ACCESS_KEY"] }',
     }),
   );

@@ -39,7 +39,7 @@ function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlu
     ...(credentials?.accessKey !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]),
   ];
   // The connection code loads when `connect` runs it, so importing the package for its declaration
-  // stays small.
+  // stays small. The loader keeps the credentials it was given on the host it builds.
   const loadBrowserStackConnection = async (host: ProviderPluginHost) =>
     (await import('./connection.ts')).createBrowserStackConnection(withCredentials(host));
   return {
@@ -52,15 +52,9 @@ function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlu
         connection: {
           capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
           resolve: async (context) =>
-            (await import('@agent-device/provider-webdriver/plugin')).resolveHostedConnection(
-              context,
-              loadBrowserStackConnection,
-            ),
+            (await loadBrowserStackConnection(context.host)).resolve(context),
           verify: async (context) =>
-            (await import('@agent-device/provider-webdriver/plugin')).verifyHostedConnection(
-              context,
-              loadBrowserStackConnection,
-            ),
+            await (await loadBrowserStackConnection(context.host)).verify(context),
         },
         setup: async (host) => ({
           webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(

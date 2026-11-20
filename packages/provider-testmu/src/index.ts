@@ -52,16 +52,9 @@ function testmu(options: TestmuOptions = {}): ProviderAgentDevicePlugin {
             supportsDirectPortReverse: false,
             usesCloudWebDriverLease: true,
           },
-          resolve: async (context) =>
-            (await import('@agent-device/provider-webdriver/plugin')).resolveHostedConnection(
-              context,
-              loadTestMuConnection,
-            ),
+          resolve: async (context) => (await loadTestMuConnection(context.host)).resolve(context),
           verify: async (context) =>
-            (await import('@agent-device/provider-webdriver/plugin')).verifyHostedConnection(
-              context,
-              loadTestMuConnection,
-            ),
+            await (await loadTestMuConnection(context.host)).verify(context),
         },
         setup: async (host) => ({
           webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
