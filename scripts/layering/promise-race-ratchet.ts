@@ -1,8 +1,9 @@
 // R88: hand-rolled deadline races, counted per package. `Promise.race(work, sleep(timeout))`
 // and its setTimeout twin are the same pattern: a timer racing work, and the timer is only safe
 // while someone remembers to clear it on every settle path. The one deadline primitive belongs to
-// host-kit (`settleWithin` in `@agent-device/host-kit/retry`, next to Deadline/sleep/
-// pollUntilSettled) and clears its own timer on every path, so a new race site must not appear.
+// host-kit (`settleWithin` in `@agent-device/host-kit/settle-within`, a dependency-free leaf
+// re-exported by `@agent-device/host-kit/retry`) and clears its own timer on every path, so a new
+// race site must not appear.
 //
 // Catches: a new `Promise.race(...)` call in production source — a per-site deadline race that can
 // leak its timer when the work side settles or rejects on a path the author did not clear. Calls

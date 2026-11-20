@@ -3,7 +3,7 @@ import type {
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
-import { settleWithin, type SettleWithinOutcome } from '@agent-device/host-kit/retry';
+import { settleWithin, type SettleWithinOutcome } from '@agent-device/host-kit/settle-within';
 import type { DaemonServer } from './transport.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';

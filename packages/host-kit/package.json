@@ -92,6 +92,10 @@
       "types": "./src/session-paths.ts",
       "default": "./src/session-paths.ts"
     },
+    "./settle-within": {
+      "types": "./src/settle-within.ts",
+      "default": "./src/settle-within.ts"
+    },
     "./status-markers": {
       "types": "./src/status-markers.ts",
       "default": "./src/status-markers.ts"

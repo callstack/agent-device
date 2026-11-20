@@ -16,6 +16,7 @@ import {
   type ExecBackgroundResult,
   type ExecResult,
 } from '@agent-device/host-kit/command';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import {
   copyHostPath,
@@ -450,10 +451,8 @@ async function prepareAppleTraceRecordRetry(tracePath: string, attempt: number):
 async function waitForImmediateAppleXctraceExit(
   wait: Promise<ExecResult>,
 ): Promise<ExecResult | undefined> {
-  return await Promise.race([
-    wait,
-    new Promise<undefined>((resolve) => setTimeout(resolve, APPLE_XCTRACE_START_SETTLE_MS)),
-  ]);
+  const outcome = await settleWithin(() => wait, APPLE_XCTRACE_START_SETTLE_MS);
+  return outcome.kind === 'settled' ? outcome.value : undefined;
 }
 
 async function stopAppleXctraceProcess(
@@ -497,11 +496,8 @@ async function waitForAppleXctraceExit(
   wait: Promise<ExecResult>,
   timeoutMs: number,
 ): Promise<ExecResult | undefined> {
-  const result = await Promise.race([
-    wait,
-    new Promise<undefined>((resolve) => setTimeout(resolve, timeoutMs)),
-  ]);
-  return result;
+  const outcome = await settleWithin(() => wait, timeoutMs);
+  return outcome.kind === 'settled' ? outcome.value : undefined;
 }
 
 async function assertTracePathHasData(

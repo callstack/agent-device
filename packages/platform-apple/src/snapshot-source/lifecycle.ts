@@ -10,7 +10,7 @@ import {
 } from './deadline.ts';
 import { createDetachedAttempts } from '../detached-attempt.ts';
 import { snapshotSourceSocketPath } from './host.ts';
-import { settleWithin } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { bridgeProcessExited } from './process.ts';
 import { createSnapshotBridgeDescribeRequest, encodeSnapshotBridgeFrame } from './protocol.ts';
 import { roundTripSnapshotBridge } from './transport.ts';

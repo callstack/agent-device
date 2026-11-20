@@ -2,7 +2,7 @@ import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value'
 import { readlink } from 'node:fs/promises';
 import path from 'node:path';
 import { runCmd, withoutCommandExecutorOverride } from './exec.ts';
-import { settleWithin } from './retry.ts';
+import { settleWithin } from '../settle-within.ts';
 import { hostPlatform, uniquePositivePids } from './host-process.ts';
 
 const DEFAULT_TIMEOUT_MS = 1_000;

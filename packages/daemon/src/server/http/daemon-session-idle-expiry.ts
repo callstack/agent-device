@@ -1,6 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { settleWithin } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import {
   clearDeviceClaim,
   type DeviceClaimClearOutcome,
