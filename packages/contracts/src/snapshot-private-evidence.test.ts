@@ -13,6 +13,7 @@ test('retains exact evidence without adding enumerable snapshot or node fields',
     kind: 'exact' as const,
     provider: 'android-helper' as const,
     clickableByNodeIndex: new Map<number, boolean | undefined>([[0, true]]),
+    longClickableByNodeIndex: new Map<number, boolean | undefined>([[0, false]]),
   };
 
   attachSnapshotClickabilityEvidence(snapshot, evidence);

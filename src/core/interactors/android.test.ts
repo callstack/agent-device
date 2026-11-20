@@ -61,6 +61,7 @@ test('preserves Android clickability evidence through the interactor snapshot ad
     kind: 'exact' as const,
     provider: 'android-helper' as const,
     clickableByNodeIndex: new Map<number, boolean | undefined>([[0, true]]),
+    longClickableByNodeIndex: new Map<number, boolean | undefined>([[0, undefined]]),
   };
   const occlusionContext = {
     nodes,

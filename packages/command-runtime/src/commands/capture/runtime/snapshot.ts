@@ -193,9 +193,9 @@ export const auditSnapshotCommand: RuntimeCommand<
   AuditSnapshotCommandOptions,
   AuditSnapshotCommandResult
 > = async (runtime, options): Promise<AuditSnapshotCommandResult> => {
-  const { auditSnapshot } = await import('@agent-device/capture-kit/snapshot-audit');
+  const { auditSnapshotState } = await import('@agent-device/capture-kit/snapshot-audit');
   const capture = await captureRuntimeSnapshot(runtime, options);
-  const audit = auditSnapshot(capture.snapshot.nodes, {
+  const audit = auditSnapshotState(capture.snapshot, {
     platform: runtime.backend.platform,
     producer: capture.snapshot.producer,
     target: options.target,

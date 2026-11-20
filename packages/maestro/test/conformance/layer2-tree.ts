@@ -86,6 +86,7 @@ function snapshotFromTreeVector(vector: Layer2TreeVector): SnapshotState {
         kind: 'exact',
         provider: 'android-helper',
         clickableByNodeIndex: new Map(vector.nodes.map((node, index) => [index, node.clickable])),
+        longClickableByNodeIndex: new Map<number, boolean | undefined>(),
       })
     : snapshot;
 }

@@ -25,6 +25,7 @@ export function makeAndroidSnapshotCapture(
         kind: 'exact',
         provider: 'android-helper',
         clickableByNodeIndex: new Map(),
+        longClickableByNodeIndex: new Map(),
       },
       ...(options.occlusionContext ? { occlusionContext: options.occlusionContext } : {}),
     },
