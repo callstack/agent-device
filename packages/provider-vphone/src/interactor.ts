@@ -7,6 +7,7 @@ import { extractNodeText } from '@agent-device/contracts/snapshot';
 import { normalizeSelectorMatchText } from '@agent-device/selectors/normalize-match-text';
 import { decodePng } from '@agent-device/capture-kit/png';
 import { AppError } from '@agent-device/kernel/errors';
+import { VPHONE_ERROR_REASONS } from './reasons.ts';
 import {
   captureVphoneSnapshot,
   mapVphoneNode,
@@ -92,7 +93,7 @@ export function createVphoneInteractor(options: VphoneInteractorOptions): Intera
           matches.length > 1 ? 'AMBIGUOUS_MATCH' : 'COMMAND_FAILED',
           'vphone could not resolve one framed element with the requested selector.',
           {
-            reason: 'vphone_semantic_target_unresolved',
+            reason: VPHONE_ERROR_REASONS.semanticTargetUnresolved,
             key: selector.key,
             matches: matches.length,
           },
@@ -109,7 +110,7 @@ export function createVphoneInteractor(options: VphoneInteractorOptions): Intera
         throw new AppError(
           'INVALID_ARGS',
           `vphone long-press duration must be greater than 0 and at most ${MAX_LONG_PRESS_MS} ms.`,
-          { reason: 'vphone_long_press_duration_invalid' },
+          { reason: VPHONE_ERROR_REASONS.longPressDurationInvalid },
         );
       }
       await rpc(
@@ -132,7 +133,7 @@ export function createVphoneInteractor(options: VphoneInteractorOptions): Intera
         throw new AppError(
           'INVALID_ARGS',
           `vphone type delay must be an integer from 0 to ${MAX_TYPE_DELAY_MS} ms.`,
-          { reason: 'vphone_type_delay_invalid' },
+          { reason: VPHONE_ERROR_REASONS.typeDelayInvalid },
         );
       }
       const timeoutMs = Array.from(text).length * effectiveDelayMs + TYPE_OVERHEAD_MS;
@@ -141,7 +142,7 @@ export function createVphoneInteractor(options: VphoneInteractorOptions): Intera
           'INVALID_ARGS',
           'vphone type request exceeds the transport time budget.',
           {
-            reason: 'vphone_type_timeout_exceeded',
+            reason: VPHONE_ERROR_REASONS.typeTimeoutExceeded,
             timeoutMs,
             maximum: MAX_VPHONE_TIMEOUT_MS,
           },
@@ -190,7 +191,7 @@ export function createVphoneInteractor(options: VphoneInteractorOptions): Intera
           'COMMAND_FAILED',
           'vphone screenshot is not a valid PNG.',
           {
-            reason: 'vphone_screenshot_invalid',
+            reason: VPHONE_ERROR_REASONS.screenshotInvalid,
           },
           error,
         );

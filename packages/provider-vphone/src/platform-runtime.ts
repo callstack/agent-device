@@ -48,6 +48,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { VPHONE_PROVIDER } from './connection.ts';
+import { VPHONE_ERROR_REASONS } from './reasons.ts';
 import type { VphoneRuntime } from './runtime.ts';
 
 const available = Object.freeze({ available: true } as const);
@@ -74,7 +75,7 @@ export function createVphonePlatformRuntimeOwner(options: {
       }
       if (!options.runtime.hasLiveSession(request.device)) {
         throw new AppError('UNSUPPORTED_OPERATION', 'The vphone provider session is not live.', {
-          reason: 'provider-session-unavailable',
+          reason: VPHONE_ERROR_REASONS.providerSessionUnavailable,
         });
       }
       return bindVphone(options, request.device, request.scope.signal, owner);

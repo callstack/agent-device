@@ -9,6 +9,7 @@ import {
   type VphoneTransportOptions,
 } from './transport.ts';
 import { VPHONE_PROFILE_FIELDS } from './profile-fields.ts';
+import { VPHONE_ERROR_REASONS } from './reasons.ts';
 
 export const VPHONE_PROVIDER = 'vphone';
 
@@ -78,12 +79,12 @@ export async function verifyVphoneMachine(
   });
   if (matches.length === 0) {
     throw new AppError('DEVICE_NOT_FOUND', `vphone machine ${name} was not found.`, {
-      reason: 'vphone_machine_missing',
+      reason: VPHONE_ERROR_REASONS.machineMissing,
     });
   }
   if (matches.length !== 1) {
     throw new AppError('INVALID_ARGS', `vphone machine name ${name} is ambiguous.`, {
-      reason: 'vphone_machine_ambiguous',
+      reason: VPHONE_ERROR_REASONS.machineAmbiguous,
     });
   }
   const machine = matches[0]!;
@@ -91,7 +92,7 @@ export async function verifyVphoneMachine(
     throw new AppError(
       'COMMAND_FAILED',
       `vphone machine ${name} is ${machine.state}; start it outside agent-device before connecting.`,
-      { reason: 'vphone_machine_not_running' },
+      { reason: VPHONE_ERROR_REASONS.machineNotRunning },
     );
   }
   const catalog = await transport.rpc(name, 'methods.list', {}, { signal });
@@ -104,7 +105,7 @@ export async function verifyVphoneMachine(
   const missing = VPHONE_REQUIRED_METHODS.filter((method) => !methods.has(method));
   if (missing.length > 0) {
     throw new AppError('UNSUPPORTED_OPERATION', 'The vphone guest lacks required RPC methods.', {
-      reason: 'vphone_methods_missing',
+      reason: VPHONE_ERROR_REASONS.methodsMissing,
       missingMethods: missing,
     });
   }
@@ -125,13 +126,13 @@ function requireMachine(flags: CliFlags): string {
 
 function invalidMachineInventory(): AppError {
   return new AppError('COMMAND_FAILED', 'vphone vm list returned an invalid machine inventory.', {
-    reason: 'vphone_invalid_response',
+    reason: VPHONE_ERROR_REASONS.invalidResponse,
   });
 }
 
 function invalidMethodCatalog(): AppError {
   return new AppError('COMMAND_FAILED', 'vphone methods.list returned an invalid catalog.', {
-    reason: 'vphone_invalid_response',
+    reason: VPHONE_ERROR_REASONS.invalidResponse,
   });
 }
 

@@ -3,6 +3,7 @@ import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretat
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import { VPHONE_ERROR_REASONS } from './reasons.ts';
 import type { VphoneTransport } from './transport.ts';
 
 export type VphoneTreeNode = Readonly<Record<string, unknown>>;
@@ -27,7 +28,7 @@ export async function captureVphoneSnapshot(
   );
   if (before.bundleId !== after.bundleId || before.pid !== after.pid) {
     throw new AppError('COMMAND_FAILED', 'vphone foreground app changed during tree capture.', {
-      reason: 'vphone_foreground_changed',
+      reason: VPHONE_ERROR_REASONS.foregroundChanged,
       before,
       after,
     });
@@ -49,7 +50,7 @@ export async function captureVphoneSnapshot(
 export function vphoneTreeElements(tree: unknown): readonly VphoneTreeNode[] {
   if (!isRecord(tree) || !Array.isArray(tree.elements)) {
     throw new AppError('COMMAND_FAILED', 'vphone ui.tree returned no flat elements array.', {
-      reason: 'vphone_invalid_response',
+      reason: VPHONE_ERROR_REASONS.invalidResponse,
     });
   }
   return tree.elements.filter(isRecord);
@@ -102,12 +103,12 @@ function assertVphoneTreePid(elements: readonly VphoneTreeNode[], expectedPid: n
     )
   ) {
     throw new AppError('COMMAND_FAILED', 'vphone tree PID evidence is incomplete.', {
-      reason: 'vphone_tree_pid_unverified',
+      reason: VPHONE_ERROR_REASONS.treePidUnverified,
     });
   }
   if (elements.some((node) => node.pid !== expectedPid)) {
     throw new AppError('COMMAND_FAILED', 'vphone tree and foreground PIDs do not match.', {
-      reason: 'vphone_tree_pid_mismatch',
+      reason: VPHONE_ERROR_REASONS.treePidMismatch,
       expectedPid,
       nodePids: [...new Set(elements.map((node) => node.pid))],
     });
@@ -127,7 +128,7 @@ function readForegroundIdentity(value: unknown): Readonly<{ bundleId: string; pi
     return { bundleId: value.bundle_id, pid: value.pid };
   }
   throw new AppError('COMMAND_FAILED', 'vphone foreground app identity is not verified.', {
-    reason: 'vphone_foreground_unverified',
+    reason: VPHONE_ERROR_REASONS.foregroundUnverified,
   });
 }
 
@@ -167,7 +168,7 @@ function finiteNumber(value: unknown): number | undefined {
 
 function invalidScreen(): AppError {
   return new AppError('COMMAND_FAILED', 'vphone device.screen returned invalid point dimensions.', {
-    reason: 'vphone_invalid_response',
+    reason: VPHONE_ERROR_REASONS.invalidResponse,
   });
 }
 

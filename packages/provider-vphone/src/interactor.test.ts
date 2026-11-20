@@ -29,6 +29,57 @@ test('terminateRunningApp terminates before launch and preserves the URL', async
   });
 });
 
+test('open launches a bundle ID without optional flags', async () => {
+  const fixture = createRecordingVphoneTransport();
+  const interactor = createVphoneInteractor({ transport: fixture.transport, machine: 'machine-a' });
+
+  await interactor.open('com.example.app');
+
+  assert.deepEqual(fixture.calls, [
+    {
+      kind: 'rpc',
+      machine: 'machine-a',
+      method: 'apps.launch',
+      params: { bundle_id: 'com.example.app' },
+    },
+  ]);
+});
+
+test('open rejects launch-console output and Android activity selection before RPC', async () => {
+  const fixture = createRecordingVphoneTransport();
+  const interactor = createVphoneInteractor({ transport: fixture.transport, machine: 'machine-a' });
+
+  await assert.rejects(interactor.open('com.example.app', { launchConsole: 'launch.log' }), {
+    code: 'UNSUPPORTED_OPERATION',
+  });
+  await assert.rejects(interactor.open('com.example.app', { activity: 'MainActivity' }), {
+    code: 'UNSUPPORTED_OPERATION',
+  });
+  assert.deepEqual(fixture.calls, []);
+});
+
+test('deep link open preserves its URL and rejects secondary app controls', async () => {
+  const fixture = createRecordingVphoneTransport();
+  const interactor = createVphoneInteractor({ transport: fixture.transport, machine: 'machine-a' });
+
+  await interactor.open('example://home');
+
+  await assert.rejects(interactor.open('example://home', { terminateRunningApp: true }), {
+    code: 'UNSUPPORTED_OPERATION',
+  });
+  await assert.rejects(interactor.open('example://home', { url: 'example://other' }), {
+    code: 'UNSUPPORTED_OPERATION',
+  });
+  assert.deepEqual(fixture.calls, [
+    {
+      kind: 'rpc',
+      machine: 'machine-a',
+      method: 'apps.open_url',
+      params: { url: 'example://home' },
+    },
+  ]);
+});
+
 test('unsupported launch arguments and excluded operations reject without RPC', async () => {
   const fixture = createRecordingVphoneTransport();
   const interactor = createVphoneInteractor({ transport: fixture.transport, machine: 'machine-a' });

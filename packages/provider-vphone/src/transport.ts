@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { VPHONE_ERROR_REASONS } from './reasons.ts';
 
 const DEFAULT_VPHONE_CLI = 'vphone-launchpad-cli';
 const DEFAULT_VPHONE_TIMEOUT_MS = 45_000;
@@ -167,7 +168,7 @@ function parseRpcEnvelope(stdout: string, method: string): unknown {
       'request refused',
   );
   throw new AppError('COMMAND_FAILED', `vphone ${method} failed [${code}]: ${message}`, {
-    reason: 'vphone_rpc_refused',
+    reason: VPHONE_ERROR_REASONS.rpcRefused,
     vphoneCode: code,
   });
 }
@@ -175,7 +176,7 @@ function parseRpcEnvelope(stdout: string, method: string): unknown {
 function boundedOption(value: number, name: string, maximum: number): number {
   if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0 || value > maximum) {
     throw new AppError('INVALID_ARGS', `vphone ${name} must be an integer from 1 to ${maximum}.`, {
-      reason: 'vphone_transport_option_invalid',
+      reason: VPHONE_ERROR_REASONS.transportOptionInvalid,
       option: name,
       maximum,
     });
@@ -197,19 +198,19 @@ function processFailure(
     (error.code === 'ETIMEDOUT' || (error.killed === true && error.code === null))
   ) {
     return new AppError('COMMAND_FAILED', `${operation} timed out`, {
-      reason: 'vphone_command_timeout',
+      reason: VPHONE_ERROR_REASONS.commandTimeout,
     });
   }
   const detail =
     stderr ?? (isRecord(error) && typeof error.stderr === 'string' ? error.stderr : undefined);
   const suffix = detail?.trim() ? `: ${diagnosticText(detail)}` : '';
   return new AppError('COMMAND_FAILED', `${operation} failed${suffix}`, {
-    reason: 'vphone_process_failed',
+    reason: VPHONE_ERROR_REASONS.processFailed,
   });
 }
 
 function invalidResponse(message: string): AppError {
-  return new AppError('COMMAND_FAILED', message, { reason: 'vphone_invalid_response' });
+  return new AppError('COMMAND_FAILED', message, { reason: VPHONE_ERROR_REASONS.invalidResponse });
 }
 
 function diagnosticCode(value: unknown): string {

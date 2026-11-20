@@ -18,6 +18,7 @@ import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/prov
 import { VPHONE_PROFILE_FIELDS } from './profile-fields.ts';
 import { buildVphoneDevice, isVphoneDeviceId } from './device.ts';
 import { createVphoneInteractor } from './interactor.ts';
+import { VPHONE_ERROR_REASONS } from './reasons.ts';
 import {
   createVphoneTransport,
   type VphoneTransport,
@@ -111,7 +112,7 @@ class VphoneRuntimeImplementation implements VphoneRuntime {
     if (existing) {
       if (existing.machine !== machine) {
         throw new AppError('DEVICE_IN_USE', 'A vphone lease cannot change machines.', {
-          reason: 'vphone_lease_machine_mismatch',
+          reason: VPHONE_ERROR_REASONS.leaseMachineMismatch,
         });
       }
       return { vphoneMachine: existing.machine, device: existing.device };
@@ -142,7 +143,7 @@ function requiredMachine(context?: LeaseLifecycleContext): string {
       'INVALID_ARGS',
       'vphone allocation requires the connected --device machine.',
       {
-        reason: 'vphone_machine_missing',
+        reason: VPHONE_ERROR_REASONS.machineMissing,
       },
     );
   }
