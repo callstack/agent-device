@@ -182,6 +182,14 @@ export type SessionState = {
    * through `SessionStore.updateOpenDevice`; changing device identity clears it. Close only reads it.
    */
   bootedByOpen?: true;
+  /**
+   * #4791: this session's `open` inferred a boot from a pre-open snapshot that said the device was
+   * stopped, and the platform then answered its own boot step with "this call did not boot it". The
+   * session therefore owns no stop, and a plain `close` reports in `warnings` that it left the device
+   * running rather than stopping a boot it never caused. Recorded and cleared by the same
+   * `SessionStore.updateOpenDevice` write as `bootedByOpen`; close only reads it.
+   */
+  bootOwnerUnverified?: true;
   androidLaunchIdentity?: AndroidEmulatorLaunchIdentity;
   createdAt: number;
   surface?: SessionSurface;

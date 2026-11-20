@@ -1,6 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { DeviceBootPerformance } from '@agent-device/contracts/device-boot';
 import { openApplicationRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -23,6 +24,8 @@ type OpenCommandDetails = {
   appBundleId?: string;
   appName?: string;
   runtime: SessionRuntimeHints | undefined;
+  /** #4791: what the platform's own boot step reported about the call this open made. */
+  bootPerformance: DeviceBootPerformance | undefined;
 };
 
 export type PreparedOpenCommandDetailsResult =
@@ -158,6 +161,7 @@ export async function prepareOpenCommandDetails(params: {
     clearRuntimeHints,
     foreground,
   } = params;
+  let reportedBootPerformance: DeviceBootPerformance | undefined;
   await runtime.operations.prepareApplicationOpen({
     target: openTarget,
     currentAppBundleId: existingSession?.appBundleId,
@@ -165,6 +169,11 @@ export async function prepareOpenCommandDetails(params: {
     surface,
     prewarmRunnerOnColdBoot:
       surface === 'app' && Boolean(openTarget) && !isDeepLinkTarget(openTarget ?? ''),
+    // #4791: this is the call that can boot the device for this open, so it is the call that has to
+    // say whether it did. Everything downstream takes boot ownership from this answer alone.
+    onBootPerformance: (performance) => {
+      reportedBootPerformance = performance;
+    },
     execution: {
       startupDeadlineAtMs: params.startupDeadlineAtMs,
       requestId: req.meta?.requestId,
@@ -213,6 +222,7 @@ export async function prepareOpenCommandDetails(params: {
       appBundleId,
       appName,
       runtime: runtimeHintPlan.runtime,
+      bootPerformance: reportedBootPerformance,
     },
   };
 }

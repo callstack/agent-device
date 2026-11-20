@@ -52,6 +52,7 @@ import {
   inspectDeviceClaims,
 } from '@agent-device/daemon-contracts/device-claims';
 import { SessionStore } from '../../../../core/session-store.ts';
+import { NO_BOOT_PROOF } from '../../../../__tests__/support/boot-ownership-fixtures.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -460,7 +461,11 @@ test('changing the device serial clears launch ownership', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
   const ref = runs.sessionStore.lookup(SESSION)!;
-  runs.sessionStore.updateOpenDevice(ref, { ...BOOTED_EMULATOR, id: 'emulator-5556' }, false);
+  runs.sessionStore.updateOpenDevice(
+    ref,
+    { ...BOOTED_EMULATOR, id: 'emulator-5556' },
+    NO_BOOT_PROOF,
+  );
   expect(runs.sessionStore.get(SESSION)?.androidLaunchIdentity).toBeUndefined();
   expect(runs.sessionStore.get(SESSION)?.bootedByOpen).toBeUndefined();
 });

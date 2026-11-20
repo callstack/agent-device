@@ -112,6 +112,9 @@ export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   // Close only reads the fact; a replacement cannot inherit it.
   'device',
   'bootedByOpen',
+  // #4791: the same write records that the platform disproved the snapshot's boot inference, which is
+  // what makes close report the kept-running device instead of silently stopping somebody else's boot.
+  'bootOwnerUnverified',
   // #4585: `SessionStore.updateOpenDevice` records the launch identity of the boot above in the
   // same write. Close compares it with the current emulator process before it stops the device.
   'androidLaunchIdentity',
