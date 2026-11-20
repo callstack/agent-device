@@ -20,6 +20,7 @@ import { requestWebSession } from '../../../core/session-tenant-scope.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { resolveOpenTargetDeviceOptions } from '../../../core/open-target-device-resolution.ts';
 import { bootStoppedLocalAndroidDevice } from '../../../core/stopped-local-android-device.ts';
+import { requestCwd } from '../../../core/context.ts';
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import {
@@ -439,6 +440,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     launch: { attempted: launchReported, identity: androidLaunchIdentity },
     sessionStore,
     sessionName,
+    workspace: requestCwd(req, params.host),
     deviceShutdownDenied: params.deviceShutdownDenied === true,
     launchedProcess: params.platformServices.launchedDeviceProcess,
     run: async () => {

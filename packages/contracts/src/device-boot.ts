@@ -79,24 +79,38 @@ export type LaunchedDeviceProcessService = Readonly<{
 }>;
 
 /**
+ * The `details.failedOpenEmulatorCleanupReason` values a failed open publishes, from the owner of
+ * this outcome. Callers read a member; none writes a literal.
+ */
+export const FAILED_OPEN_KEPT_RUNNING_REASONS = {
+  daemonPolicyDenied: 'daemon-policy-denied',
+  noProcessIdentity: 'no-process-identity',
+  deviceInUse: 'device-in-use',
+} as const satisfies Record<string, string>;
+
+type FailedOpenKeptRunningReason =
+  (typeof FAILED_OPEN_KEPT_RUNNING_REASONS)[keyof typeof FAILED_OPEN_KEPT_RUNNING_REASONS];
+
+/**
  * What happened to the device process an `open` launched when that open published no session, and so
  * claimed nothing to stop it later. `stopped` confirms the process is gone; `kept_running` names why
- * nothing was signaled, either because the daemon's policy denies `device-shutdown` or because the
- * launch recorded no process identity to signal; `not_confirmed` means the stop was made but the
- * process was still running when the budget ended, or the host refused to answer for the stop at all.
+ * nothing was signaled: the daemon's policy denies `device-shutdown`, the launch recorded no process
+ * identity to signal, or another session or claim holds the booted device and this open must not stop
+ * what that owner is using; `not_confirmed` means the stop was made but the process was still running
+ * when the budget ended, or the host refused to answer for the stop at all.
  */
 export type FailedOpenLaunchCleanup =
   | Readonly<{ outcome: 'stopped' }>
   | Readonly<{
       outcome: 'kept_running';
-      reason: 'daemon-policy-denied' | 'no-process-identity';
+      reason: FailedOpenKeptRunningReason;
     }>
   | Readonly<{ outcome: 'not_confirmed' }>;
 
 /** The `details` entries for one launch cleanup, so every report of it agrees. */
 export function failedOpenLaunchCleanupDetails(cleanup: FailedOpenLaunchCleanup): Readonly<{
   failedOpenEmulatorCleanup: FailedOpenLaunchCleanup['outcome'];
-  failedOpenEmulatorCleanupReason?: 'daemon-policy-denied' | 'no-process-identity';
+  failedOpenEmulatorCleanupReason?: FailedOpenKeptRunningReason;
 }> {
   return cleanup.outcome === 'kept_running'
     ? {

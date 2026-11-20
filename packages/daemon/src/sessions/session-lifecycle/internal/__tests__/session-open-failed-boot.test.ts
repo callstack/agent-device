@@ -5,6 +5,8 @@
 // launched-process owner fixture, exactly as the composed owner answers it; the process reads behind
 // each answer are pinned in the Android and composition lanes.
 import { beforeEach, expect, test, vi } from 'vitest';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import * as hostProcess from '@agent-device/host-kit/process';
 import {
@@ -12,6 +14,7 @@ import {
   createTestHostEnvironment,
   mkdtempForTestSync,
   pinOwnProcessStartTime,
+  publishDaemonRegistration,
 } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -46,6 +49,9 @@ import {
   mockEnsureReadyRuntime,
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
+import { makeSession } from '../../../../__tests__/support/session-factories.ts';
+import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
+import { deviceIdentity } from '@agent-device/kernel/device';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -163,6 +169,7 @@ function createRoutedSession() {
     runColdOpen: (
       params: Omit<Parameters<typeof runColdOpen>[0], 'sessionStore' | 'env' | 'stateDir'>,
     ) => runColdOpen({ ...params, sessionStore, env, stateDir }),
+    seedForeignLiveClaim: (device: DeviceInfo) => seedForeignLiveClaim(env, device),
     sessionStore,
   };
 }
@@ -330,6 +337,76 @@ test('a cold open of an emulator that was already running stops nothing', async 
   expect(owner.stops).toEqual([]);
   expect(launchMissSteps()).toEqual([]);
 });
+
+test('a cold open that failed with the booted device already taken by another session keeps it running', async () => {
+  const runs = createRoutedSession();
+  // Open B took the booted serial while this open was still working: the conflict refusal must
+  // not turn into a stop of the emulator B is now using (#4764 review).
+  runs.sessionStore.publish(
+    'other-holder',
+    makeSession('other-holder', { device: BOOTED_EMULATOR }),
+  );
+
+  const response = await runs.runColdOpen({});
+
+  expect(response).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+  expect(response?.ok === false ? response.error.details : {}).toMatchObject({
+    session: 'other-holder',
+    failedOpenEmulatorCleanup: 'kept_running',
+    failedOpenEmulatorCleanupReason: 'device-in-use',
+  });
+  expect(owner.stops).toEqual([]);
+  expect(launchMissSteps()).toEqual(['open-kept-device-in-use']);
+});
+
+test("a cold open that failed against another session's live claim keeps it running", async () => {
+  const runs = createRoutedSession();
+  // A claim from another workspace whose owner process is alive is the other route to "somebody
+  // else holds this device": acquisition refuses with DEVICE_IN_USE, and the launch stays.
+  runs.seedForeignLiveClaim(BOOTED_EMULATOR);
+
+  const response = await runs.runColdOpen({});
+
+  expect(response).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+  expect(response?.ok === false ? response.error.details : {}).toMatchObject({
+    reason: 'DEVICE_CLAIM_LIVE_OWNER',
+    failedOpenEmulatorCleanup: 'kept_running',
+    failedOpenEmulatorCleanupReason: 'device-in-use',
+  });
+  expect(owner.stops).toEqual([]);
+  expect(launchMissSteps()).toEqual(['open-kept-device-in-use']);
+});
+
+/**
+ * Writes the claim another daemon's session holds for `device`, owned by a live process of its own
+ * (this test process's parent), in the claims dir the case's environment selects.
+ */
+function seedForeignLiveClaim(env: NodeJS.ProcessEnv, device: DeviceInfo): void {
+  const deviceKey = canonicalLocalDeviceKey(deviceIdentity(device));
+  const stateDir = mkdtempForTestSync('agent-device-failed-open-foreign-owner-');
+  fs.mkdirSync(env.AGENT_DEVICE_CLAIMS_DIR!, { recursive: true });
+  fs.writeFileSync(
+    path.join(
+      env.AGENT_DEVICE_CLAIMS_DIR!,
+      `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`,
+    ),
+    JSON.stringify({
+      schemaVersion: 3,
+      deviceKey,
+      device: { ...deviceIdentity(device), name: device.name },
+      session: 'foreign-holder',
+      workspace: '/workspaces/foreign',
+      stateDir,
+      ownerPid: process.ppid,
+      ownerStartTime: null,
+      ownerToken: 'foreign-token',
+      createdAtMs: 1,
+      updatedAtMs: Date.now(),
+      claimOwnerKind: 'open-session',
+    }),
+  );
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+}
 
 test('a successful cold open leaves its boot to the session it published', async () => {
   const runs = createRoutedSession();

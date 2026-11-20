@@ -99,14 +99,9 @@ export async function checkAndroidEmulatorLaunchProcess(
 export async function confirmAndroidEmulatorLaunchProcessStopped(
   identity: AndroidEmulatorLaunchIdentity,
 ): Promise<LaunchedProcessStopConfirmation> {
-  const { stopProcessAndConfirmExit, waitForProcessExit } =
-    await import('@agent-device/host-kit/process');
+  const { waitForProcessExit } = await import('@agent-device/host-kit/process');
   if (await waitForProcessExit(identity.pid, GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS)) return 'stopped';
-  const stop = await stopProcessAndConfirmExit(
-    { pid: identity.pid, identity: { startTime: identity.startTime } },
-    LAUNCHED_PROCESS_STOP_BUDGET,
-  );
-  return stop.status === 'stopped' ? 'stopped' : 'unconfirmed';
+  return await stopAndroidEmulatorLaunchProcess(identity);
 }
 
 /**
@@ -133,18 +128,8 @@ export async function stopAndroidEmulatorLaunchProcess(
  */
 const PROCESS_IDENTITY_TIMEOUT_MS = 1_000;
 
-/**
- * The graceful `adb emu kill` already had its own 15 s to work, so the close path confirms the exit
- * briefly before it escalates to a stop by pid.
- */
+/** The graceful `adb emu kill` had its own 15 s; the close path confirms briefly, then escalates. */
 const GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS = 3_000;
 
-/**
- * The stop escalation both callers use: 1.5 s to take SIGTERM and 1.5 s to take SIGKILL, so one stop
- * costs at most 3 s. The close-path caller got that escalation because the graceful `adb emu kill`
- * already had its own 15 s — waiting the same again on a process demonstrably ignoring it would
- * double what one close may spend. This caller never asked the device for a graceful stop: a failed
- * `open` is cleanup on a request that already failed, so TERM does the work and KILL confirms it,
- * inside the same bound rather than on top of another 15 s.
- */
+/** One stop costs at most 3 s: 1.5 s for SIGTERM, then 1.5 s for SIGKILL. */
 const LAUNCHED_PROCESS_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;

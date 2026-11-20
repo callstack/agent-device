@@ -3,8 +3,12 @@ import type {
   LaunchedDeviceProcessService,
   LaunchedProcessStopConfirmation,
 } from '@agent-device/contracts/device-boot';
-import { failedOpenLaunchCleanupDetails } from '@agent-device/contracts/device-boot';
+import {
+  FAILED_OPEN_KEPT_RUNNING_REASONS,
+  failedOpenLaunchCleanupDetails,
+} from '@agent-device/contracts/device-boot';
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
+import { inspectDeviceClaimAcquisition } from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -25,20 +29,18 @@ export type OpenDeviceLaunch = Readonly<{
 }>;
 
 /**
- * #4764: an open that launched an emulator and then ended without a session leaves that emulator
- * running with no owner — no later `close` ever learns this open booted it, so nothing stops it.
- * This runs the open's remaining steps and stops the launch when they end with no published session
- * owning it, whether they return a failure, throw, or report the request canceled.
- *
- * The open's own failure stays the reported failure: this only adds the cleanup's result to that
- * error's details. A launch is stopped only when the boot named its process, so an emulator that was
- * already running, and a launch the host could not name, are both left alone.
+ * Runs one cold open's post-boot steps and stops the device process they left running with no owner:
+ * a launch this open started, whose process the host named, with no published session owning the
+ * boot and no other session or claim holding the device (#4764). The open's own failure stays the
+ * reported failure; the cleanup rides its details. The stop costs at most 3 s: TERM, then KILL.
  */
 export async function withFailedOpenLaunchCleanup(params: {
   device: DeviceInfo;
   launch: OpenDeviceLaunch;
   sessionStore: SessionStore;
   sessionName: string;
+  /** The workspace this open's own claim carries, so a claim it took is not read as foreign. */
+  workspace: string;
   deviceShutdownDenied: boolean;
   launchedProcess: LaunchedDeviceProcessService;
   run: () => Promise<SessionOpenResult>;
@@ -59,14 +61,16 @@ export async function withFailedOpenLaunchCleanup(params: {
 
 /**
  * Stops this open's launch unless the boot never named a process, the open published a session that
- * owns the boot, or the daemon's policy denies `device-shutdown`. Returns nothing when this open
- * started no device process to report, so an open that never took the boot path stays silent.
+ * owns the boot, another owner holds the device, or the daemon's policy denies `device-shutdown`.
+ * Returns nothing when this open started no device process to report, so an open that never took the
+ * boot path stays silent.
  */
 async function stopUnownedLaunch(params: {
   device: DeviceInfo;
   launch: OpenDeviceLaunch;
   sessionStore: SessionStore;
   sessionName: string;
+  workspace: string;
   deviceShutdownDenied: boolean;
   launchedProcess: LaunchedDeviceProcessService;
 }): Promise<FailedOpenLaunchCleanup | undefined> {
@@ -74,13 +78,29 @@ async function stopUnownedLaunch(params: {
   if (!launch.attempted) return undefined;
   if (launchHasPublishedSessionOwner(params)) return undefined;
   const identity = launch.identity;
+  // An open that lost the booted device to another owner must leave that owner's emulator running,
+  // whatever its own failure was. This check precedes the identity one: a kept launch is reported
+  // with the reason that kept it, not with a missing-identity excuse.
+  if (await deviceHeldByAnotherOwner(params)) {
+    emitLaunchProcessMiss('open-kept-device-in-use', {});
+    return {
+      outcome: 'kept_running',
+      reason: FAILED_OPEN_KEPT_RUNNING_REASONS.deviceInUse,
+    };
+  }
   if (!identity) {
     emitLaunchProcessMiss('open-recorded-no-process', {});
-    return { outcome: 'kept_running', reason: 'no-process-identity' };
+    return {
+      outcome: 'kept_running',
+      reason: FAILED_OPEN_KEPT_RUNNING_REASONS.noProcessIdentity,
+    };
   }
   if (params.deviceShutdownDenied) {
     emitLaunchProcessMiss('open-kept-by-daemon-policy', { pid: identity.pid });
-    return { outcome: 'kept_running', reason: 'daemon-policy-denied' };
+    return {
+      outcome: 'kept_running',
+      reason: FAILED_OPEN_KEPT_RUNNING_REASONS.daemonPolicyDenied,
+    };
   }
   let confirmation: LaunchedProcessStopConfirmation;
   try {
@@ -113,6 +133,34 @@ function launchHasPublishedSessionOwner(params: {
   if (params.launch.identity === undefined) return recorded === undefined;
   if (recorded?.pid !== params.launch.identity.pid) return false;
   return !processStartTimesDiffer(recorded.startTime, params.launch.identity.startTime);
+}
+
+/**
+ * Whether the booted device belongs to somebody else by the time this failed open would stop its
+ * launch: another session in this daemon holds it, or the claim says so. The claim answer is the
+ * exact decision acquisition makes for this open — the same session and workspace this open would
+ * claim under answers `held`, an unsettled foreign owner answers `conflict` — asked without taking
+ * or settling anything. A `reconcile` settlement belongs to acquisition itself and keeps nothing
+ * here.
+ */
+async function deviceHeldByAnotherOwner(params: {
+  sessionStore: SessionStore;
+  sessionName: string;
+  workspace: string;
+  device: DeviceInfo;
+}): Promise<boolean> {
+  const holder = params.sessionStore.findByDevice(params.device.id);
+  if (holder && holder.address !== params.sessionName) return true;
+  const settlements = await inspectDeviceClaimAcquisition({
+    device: params.device,
+    command: 'open',
+    session: params.sessionName,
+    workspace: params.workspace,
+    stateDir: params.sessionStore.resolveDaemonStateDir(),
+    env: params.sessionStore.host.env,
+    coveredClaimIsOwnedByRequest: () => false,
+  });
+  return settlements.some((settlement) => settlement.status === 'conflict');
 }
 
 /** Adds the cleanup result to a failed open's returned error, keeping that error's own fields. */
