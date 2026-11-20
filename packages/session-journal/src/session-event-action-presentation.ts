@@ -29,21 +29,26 @@ export function buildInstallActionSummary(action: SessionAction): string {
   return `${verb} ${readInstalledAppLabel(action.result ?? {}) ?? 'app'}`;
 }
 
+/** The argumentless commands whose summary reads nothing from the result. */
+const FIXED_ACTION_SUMMARIES: Readonly<Record<string, string>> = {
+  [PUBLIC_COMMANDS.home]: 'Went home',
+  [PUBLIC_COMMANDS.appSwitcher]: 'Opened app switcher',
+  [PUBLIC_COMMANDS.actionButton]: 'Pressed Action Button',
+  [PUBLIC_COMMANDS.shake]: 'Shook the device',
+};
+
 export function buildStructuredActionSummary(action: SessionAction): string | undefined {
+  if (Object.hasOwn(FIXED_ACTION_SUMMARIES, action.command)) {
+    return FIXED_ACTION_SUMMARIES[action.command];
+  }
   const result = action.result ?? {};
   switch (action.command) {
     case PUBLIC_COMMANDS.scroll:
       return buildScrollActionSummary(result);
     case PUBLIC_COMMANDS.screenshot:
       return buildScreenshotActionSummary(result);
-    case PUBLIC_COMMANDS.home:
-      return 'Went home';
     case PUBLIC_COMMANDS.back:
       return buildBackActionSummary(result);
-    case PUBLIC_COMMANDS.appSwitcher:
-      return 'Opened app switcher';
-    case PUBLIC_COMMANDS.actionButton:
-      return 'Pressed Action Button';
     case PUBLIC_COMMANDS.hardwareButton:
       return buildHardwareButtonActionSummary(result);
     case PUBLIC_COMMANDS.orientation:

@@ -253,6 +253,13 @@ test('structural action events preserve navigation, viewport, keyboard, and gest
   });
 });
 
+test('argumentless system commands summarize without reading the result', () => {
+  assert.equal(buildActionSummary(action('home', {})), 'Went home');
+  assert.equal(buildActionSummary(action('app-switcher', {})), 'Opened app switcher');
+  assert.equal(buildActionSummary(action('action-button', {})), 'Pressed Action Button');
+  assert.equal(buildActionSummary(action('shake', {})), 'Shook the device');
+});
+
 // #1598: the keyboard-dismiss mechanism must show up in both the human
 // summary and the structured details, so a transcript reader can tell a
 // vouched-for dismiss-key tap; unrecognized mechanisms are dropped (#1606).

@@ -215,6 +215,7 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     // The Action Button is iPhone/iPad hardware with no web analogue at all, and so are the
     // phone volume and power keys the hardware-button command presses (#3848).
     'actionButton',
+    'shake',
     'volumeUp',
     'volumeDown',
     'power',

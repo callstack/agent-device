@@ -133,6 +133,7 @@ export type {
   OrientationCommandOptions,
   PrepareCommandOptions,
   ReactNativeCommandOptions,
+  ShakeCommandOptions,
   TelephonyCommandOptions,
   TvRemoteCommandOptions,
   ViewportCommandOptions,

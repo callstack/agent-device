@@ -221,6 +221,7 @@ function expectLinuxNavigationAndKeyboardFacts(
     // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control,
     // and neither does it have the phone volume and power keys hardware-button presses (#3848).
     'actionButton',
+    'shake',
     'volumeUp',
     'volumeDown',
     'power',

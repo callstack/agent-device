@@ -36,6 +36,7 @@ const EXPECTATIONS: {
   writeClipboard: { method: 'writeClipboard', input: { text: '' } },
   appSwitcher: { method: 'appSwitcher', input: {} },
   actionButton: { method: 'actionButton', input: {} },
+  shake: { method: 'shake', input: {} },
   volumeUp: { method: 'volumeUp', input: {} },
   volumeDown: { method: 'volumeDown', input: {} },
   power: { method: 'power', input: {} },

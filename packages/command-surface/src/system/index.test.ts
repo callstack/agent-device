@@ -6,6 +6,7 @@ import type {
   FoldCommandOptions,
   HomeCommandOptions,
   OrientationCommandOptions,
+  ShakeCommandOptions,
   TelephonyCommandOptions,
   TvRemoteCommandOptions,
 } from '@agent-device/contracts/client';
@@ -67,12 +68,15 @@ describe('system command interface', () => {
     expectTypeOf<AgentDeviceCommandClient['actionButton']>().toEqualTypeOf<
       (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>
     >();
+    expectTypeOf<AgentDeviceCommandClient['shake']>().toEqualTypeOf<
+      (options?: ShakeCommandOptions) => Promise<CommandResult<'shake'>>
+    >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
     >();
   });
 
-  const parameterless = ['appstate', 'home', 'app-switcher', 'action-button'] as const;
+  const parameterless = ['appstate', 'home', 'app-switcher', 'action-button', 'shake'] as const;
 
   test('parameterless readers project common selection flags through', () => {
     for (const command of parameterless) {

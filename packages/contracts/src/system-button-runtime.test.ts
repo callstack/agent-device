@@ -27,6 +27,7 @@ test('an omitted button reports the family denial, a named one its own cell', ()
     home: available,
     appSwitcher: unsupported,
     actionButton: unsupported,
+    shake: unsupported,
     volumeUp: unsupported,
     volumeDown: unsupported,
     power: unsupported,

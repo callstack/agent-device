@@ -284,6 +284,7 @@ await client.command.tvRemote({
 
 await client.command.appSwitcher();
 await client.command.actionButton();
+await client.command.shake();
 await client.command.hardwareButton({ button: 'volume-up' });
 await client.command.hardwareButton({ button: 'volume-down' });
 await client.command.hardwareButton({ button: 'power', platform: 'android' });
@@ -334,6 +335,7 @@ Supported command methods:
 - `orientation`
 - `appSwitcher`
 - `actionButton`
+- `shake`
 - `hardwareButton`
 - `fold`
 - `telephony`

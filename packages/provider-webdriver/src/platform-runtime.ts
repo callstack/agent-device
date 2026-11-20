@@ -242,6 +242,11 @@ const foldUnavailable = unavailableFact(
   'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
 );
 
+const shakeUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  "shake goes through simctl or the Android emulator console on the daemon host; agent-device does not drive a WebDriver backend's own shake.",
+);
+
 const telephonyUnavailable = unavailableFact(
   'unsupported-provider-mode',
   "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not drive a WebDriver backend's own call or SMS simulation.",
@@ -627,6 +632,7 @@ function webDriverFacts(
         unsupported: systemButtonUnavailable,
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
+        shake: shakeUnavailable,
         // Volume and power ride the backend's own hardware-key route and read the same
         // declared-capability seam `home` uses; the iOS platform map declares power and the
         // extended keys unsupported, so the declaration — not a device-kind guess — refuses them.

@@ -19,6 +19,7 @@ import type {
   HardwareButtonCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
+  ShakeCommandResult,
   TvRemoteCommandResult,
 } from '@agent-device/contracts/navigation';
 import type {
@@ -87,6 +88,7 @@ export interface CommandResultMap {
   record: RecordingCommandResult;
   replay: ReplayCommandResult;
   scroll: ScrollCommandResult;
+  shake: ShakeCommandResult;
   shutdown: ShutdownCommandResult;
   telephony: TelephonyCommandResult;
   test: ReplaySuiteResult;

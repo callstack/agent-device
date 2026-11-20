@@ -18,6 +18,8 @@ import {
   busy,
   createDaemonLeaver,
   draining,
+  failureOf,
+  identityIn,
   launchesFreshDaemonAt as launchSeamAnswersAt,
   okResult,
   registerDaemon,
@@ -75,20 +77,6 @@ function request(stateDir: string, extra: Record<string, unknown> = {}) {
     flags: { stateDir, daemonTransport: 'http' as const, ...extra },
     meta: { requestId: 'req-explicit-lifecycle' },
   };
-}
-
-function identityIn(error: AppError, key: 'daemon' | 'client'): { pid?: number; version?: string } {
-  return (error.details?.[key] ?? {}) as { pid?: number; version?: string };
-}
-
-async function failureOf(run: Promise<unknown>): Promise<AppError> {
-  try {
-    await run;
-  } catch (error) {
-    assert.ok(error instanceof AppError, 'expected a typed AppError');
-    return error;
-  }
-  return assert.fail('expected the call to reject');
 }
 
 async function withLoopback(t: { skip: (note: string) => void }): Promise<boolean> {

@@ -100,6 +100,11 @@ export const INTERACTOR_OPERATIONS = [
     bind: (signal, resolve) => bindSystemButton('actionButton', signal, resolve),
   },
   {
+    operation: 'shake',
+    label: SYSTEM_BUTTON_LABELS.shake,
+    bind: (signal, resolve) => bindSystemButton('shake', signal, resolve),
+  },
+  {
     operation: 'volumeUp',
     label: SYSTEM_BUTTON_LABELS.volumeUp,
     bind: (signal, resolve) => bindSystemButton('volumeUp', signal, resolve),

@@ -5,6 +5,8 @@
  * implementation seam for selected Android use; host-bound adb wiring is supplied separately by
  * the root composition module.
  */
+import type { DeviceInfo } from '@agent-device/kernel/device';
+
 export {
   androidAdbHostTarget,
   androidAdbInvocation,
@@ -387,4 +389,13 @@ export async function createAndroidPerfOperations(
 ) {
   const { createAndroidPerfOperations: bind } = await import('./perf/runtime.ts');
   return bind(params);
+}
+
+/** Deferred to keep this entry's eager closure within scripts/__tests__/eager-closure-budgets.test.ts. */
+export async function shakeAndroidEmulator(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const { shakeAndroidEmulator: shake } = await import('./shake/console-shake.ts');
+  await shake(device, signal);
 }
