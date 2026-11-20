@@ -67,7 +67,10 @@ export type AndroidImeHelperDispatchOutcome = Readonly<
   | { kind: 'no-input-connection' }
   | { kind: 'rejected-payload'; detail: string }
   | { kind: 'protocol-mismatch' }
-  | { kind: 'no-ack' }
+  // `no-receiver`: the broadcast completed and no receiver answered (result=0), as a helper from
+  // before the acknowledgement protocol does. `unreadable-ack`: no completion line, or one the
+  // host cannot read, which says nothing about the installed helper.
+  | { kind: 'no-ack'; cause: 'no-receiver' | 'unreadable-ack' }
 >;
 
 type AndroidImeBroadcastResult = Readonly<{ resultCode: number; resultData: string }>;
@@ -96,16 +99,18 @@ function readAttemptedUtf16(resultData: string): number | null {
 function classifyAndroidImeBroadcastResult(
   result: AndroidImeBroadcastResult | null,
 ): AndroidImeHelperDispatchOutcome {
-  if (!result || result.resultCode === 0) return { kind: 'no-ack' };
+  const unreadable = { kind: 'no-ack', cause: 'unreadable-ack' } as const;
+  if (!result) return unreadable;
+  if (result.resultCode === 0) return { kind: 'no-ack', cause: 'no-receiver' };
   switch (result.resultCode) {
     case IME_RESULT_COMMITTED: {
       const attemptedUtf16 = readAttemptedUtf16(result.resultData);
-      return attemptedUtf16 === null ? { kind: 'no-ack' } : { kind: 'committed', attemptedUtf16 };
+      return attemptedUtf16 === null ? unreadable : { kind: 'committed', attemptedUtf16 };
     }
     case IME_RESULT_COMMIT_RETURNED_FALSE: {
       const attemptedUtf16 = readAttemptedUtf16(result.resultData);
       return attemptedUtf16 === null
-        ? { kind: 'no-ack' }
+        ? unreadable
         : { kind: 'commit-returned-false', attemptedUtf16 };
     }
     case IME_RESULT_NO_INPUT_CONNECTION:
@@ -115,7 +120,7 @@ function classifyAndroidImeBroadcastResult(
     case IME_RESULT_PROTOCOL_MISMATCH:
       return { kind: 'protocol-mismatch' };
     default:
-      return { kind: 'no-ack' };
+      return unreadable;
   }
 }
 
@@ -340,7 +345,13 @@ function assertCommittedOutcome(
           : ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
       dispatchKind: outcome.kind,
       ...(outcome.kind === 'no-ack'
-        ? { hint: 'Reinstall a current bundled or provider IME helper and reopen the session.' }
+        ? {
+            ackCause: outcome.cause,
+            hint:
+              outcome.cause === 'no-receiver'
+                ? 'Reinstall a current bundled or provider IME helper and reopen the session.'
+                : 'The helper acknowledgement did not arrive or could not be read. Retry the command. If it repeats, check the adb connection.',
+          }
         : {}),
       ...('attemptedUtf16' in outcome ? { attemptedUtf16: outcome.attemptedUtf16 } : {}),
       ...('detail' in outcome ? { detail: outcome.detail } : {}),

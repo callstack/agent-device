@@ -89,7 +89,10 @@ test('sendAndroidImeHelperText classifies the ordered ack: committed, rejections
   });
 
   const noAck = fakeAdb({ onDispatch: () => NO_RECEIVER });
-  assert.deepEqual(await sendAndroidImeHelperText(noAck.adb, PACKAGE, 'abc'), { kind: 'no-ack' });
+  assert.deepEqual(await sendAndroidImeHelperText(noAck.adb, PACKAGE, 'abc'), {
+    kind: 'no-ack',
+    cause: 'no-receiver',
+  });
 });
 
 test('the first text broadcast without an ordered acknowledgement fails without another send', async () => {
@@ -167,7 +170,21 @@ test('each text or clear operation sends one ordered broadcast', async () => {
   assert.equal(calls.filter((args) => args.includes(CLEAR_ACTION)).length, 1);
 });
 
-test('a malformed ack line is no-ack', async () => {
+// A missing or unreadable completion line says nothing about the installed helper, so it must not
+// tell the user to reinstall a helper that can be current.
+test('an unreadable ack is no-ack without the reinstall hint', async () => {
   const { adb } = fakeAdb({ onDispatch: () => 'Broadcasting: Intent { act=... }\n' });
-  assert.deepEqual(await sendAndroidImeHelperText(adb, PACKAGE, 'hello'), { kind: 'no-ack' });
+  assert.deepEqual(await sendAndroidImeHelperText(adb, PACKAGE, 'hello'), {
+    kind: 'no-ack',
+    cause: 'unreadable-ack',
+  });
+  await assert.rejects(
+    sendAndroidImeHelperTextCommitted(adb, PACKAGE, 'hello'),
+    (error: AppError) => {
+      assert.equal(error.details?.reason, 'android_ime_helper_no_ack');
+      assert.equal(error.details?.ackCause, 'unreadable-ack');
+      assert.doesNotMatch(String(error.details?.hint), /reinstall/i);
+      return true;
+    },
+  );
 });
