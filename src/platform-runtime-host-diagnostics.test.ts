@@ -2,13 +2,17 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
   createLiveTestHostEnvironment,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { createHostDiagnostics } from './platform-runtime-host-diagnostics.ts';
+import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
+import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
   mockAppleRunnerWarmupCheck: vi.fn(),
@@ -69,18 +73,95 @@ test('vega toolchain check finds the CLI through the host it was composed with',
   const scratch = mkdtempForTestSync('vega-doctor-host-home-');
   const hostHome = path.join(scratch, 'host-home');
   mkdirSync(path.join(hostHome, 'vega', 'bin'), { recursive: true });
-  const vega = path.join(hostHome, 'vega', 'bin', 'vega');
+  const vegaCli = path.join(hostHome, 'vega', 'bin', 'vega');
   writeFileSync(
-    vega,
+    vegaCli,
     '#!/bin/sh\ncase "$*" in\n  *--version*) echo "Vega CLI 9.9.9" ;;\n  *) echo "VirtualDevice : running" ;;\nesac\n',
   );
-  chmodSync(vega, 0o755);
+  chmodSync(vegaCli, 0o755);
 
-  const check = await createHostDiagnostics({
+  const host: HostEnvironment = {
     env: { PATH: path.join(scratch, 'empty-path'), HOME: hostHome },
     cwd: scratch,
-  }).toolchainCheck('vega', context);
+  };
+  // Vega is a platform plugin, so the scenario supplies it: the assertion covers which host the
+  // plugin's doctor binds, not the builtin family set.
+  const check = await createHostDiagnostics(
+    host,
+    undefined,
+    vegaSelectionFixture(host),
+  ).toolchainCheck('vega', context);
 
   expect(check?.status).toBe('pass');
   expect(check?.summary).toContain('Vega CLI 9.9.9');
+});
+
+test('doctor targeted at Vega reports the absent plugin with its install command', async () => {
+  // `--platform vega` is the explicit signal: an unfiltered doctor passes no selector and stays
+  // silent about an absent optional family. The row comes from the composition's own absence
+  // report, so the hint names the same package and command every other Vega lookup answers with.
+  const { vega } = composePlatformPlugins([], []);
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    vega,
+  ).toolchainCheck('vega', context);
+
+  expect(check?.id).toBe('toolchain');
+  expect(check?.status).toBe('fail');
+  expect(check?.summary).toContain('@agent-device/vega');
+  expect(check?.hint).toContain('agent-device plugins add @agent-device/vega');
+  expect(check?.command).toMatch(/^agent-device plugins add @agent-device\/vega/);
+  expect(check?.evidence).toMatchObject({
+    code: 'UNSUPPORTED_PLATFORM',
+    reason: 'plugin-not-installed',
+    family: 'vega',
+    package: '@agent-device/vega',
+  });
+});
+
+test('doctor targeted at Vega reports a failed plugin load as that plugin reports it', async () => {
+  // A store plugin whose load threw owns its answer: the row carries the plugin's own code and
+  // message rather than the installation hint a host without the plugin needs.
+  const { vega } = composePlatformPlugins([], [
+    {
+      platform: 'vega',
+      source: 'store',
+      package: '@agent-device/vega',
+      version: '0.22.0-dev',
+      state: 'failed',
+      credentials: { variables: [], byBackend: {} },
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Plugin exited during setup',
+        reason: 'setup-threw',
+      },
+    },
+  ] satisfies readonly PluginInventoryEntry[]);
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    vega,
+  ).toolchainCheck('vega', context);
+
+  expect(check?.status).toBe('fail');
+  expect(check?.summary).toContain('Plugin exited during setup');
+  expect(check?.evidence).toMatchObject({
+    code: 'COMMAND_FAILED',
+    reason: 'setup-threw',
+    family: 'vega',
+    package: '@agent-device/vega',
+  });
+});
+
+test('doctor without a Vega selector reports no Vega row when the plugin is absent', async () => {
+  // An unfiltered doctor runs the toolchain check for the resolved device or selector platform only,
+  // so an absent optional family stays out of the report instead of failing every host without it.
+  const { vega } = composePlatformPlugins([], []);
+  expect(
+    await createHostDiagnostics(createLiveTestHostEnvironment(), undefined, vega).toolchainCheck(
+      undefined,
+      context,
+    ),
+  ).toBeUndefined();
 });

@@ -136,8 +136,8 @@ export async function composeDaemonRuntimeDeps(
       providerComposition.inventory,
       providerComposition.assertSelectionCurrent,
     );
-    const { web } = platforms;
-    const hostDiagnostics = createHostDiagnostics(host, web);
+    const { web, vega } = platforms;
+    const hostDiagnostics = createHostDiagnostics(host, web, vega);
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
       platforms,
@@ -157,6 +157,7 @@ export async function composeDaemonRuntimeDeps(
           providerRuntimeProviders.appleRunnerScreenRecordingTransport,
       },
       web,
+      vega,
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
       host,
