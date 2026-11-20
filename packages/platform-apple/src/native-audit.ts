@@ -78,12 +78,35 @@ function mapNativeAuditIssues(data: Record<string, unknown>): NativeAuditFinding
  * by check, then top to bottom and left to right, so two audits of that screen print the same list.
  */
 function compareNativeAuditFindings(a: NativeAuditFinding, b: NativeAuditFinding): number {
+  const [aOrigin, aSize] = frameSortKeys(a);
+  const [bOrigin, bSize] = frameSortKeys(b);
   return (
     compareText(a.auditType, b.auditType) ||
-    (a.rect?.y ?? Infinity) - (b.rect?.y ?? Infinity) ||
-    (a.rect?.x ?? Infinity) - (b.rect?.x ?? Infinity) ||
-    compareText(a.description, b.description)
+    compareNumbers(aOrigin, bOrigin) ||
+    compareText(a.description, b.description) ||
+    compareNumbers(aSize, bSize)
   );
+}
+
+/** Top to bottom, then left to right, then by size. A finding without a frame sorts last. */
+function frameSortKeys({ rect }: NativeAuditFinding): [origin: number[], size: number[]] {
+  return rect
+    ? [
+        [rect.y, rect.x],
+        [rect.width, rect.height],
+      ]
+    : [
+        [Infinity, Infinity],
+        [Infinity, Infinity],
+      ];
+}
+
+function compareNumbers(a: readonly number[], b: readonly number[]): number {
+  for (const [index, value] of a.entries()) {
+    const other = b[index] ?? Infinity;
+    if (value !== other) return value < other ? -1 : 1;
+  }
+  return 0;
 }
 
 function compareText(a: string, b: string): number {

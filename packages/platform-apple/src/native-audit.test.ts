@@ -155,3 +155,21 @@ test('orders native findings by check and then by frame, whatever order the runn
     expect(findings.map((finding) => finding.description)).toEqual(ordered);
   }
 });
+
+test('orders native findings that share check, origin and description by frame size', async () => {
+  const sameSpot = (width: number, height: number) => ({
+    auditType: 'contrast',
+    description: 'Low',
+    rect: { x: 10, y: 20, width, height },
+  });
+  const issues = [sameSpot(60, 44), sameSpot(30, 88), sameSpot(30, 44)];
+  const ordered = [
+    { x: 10, y: 20, width: 30, height: 44 },
+    { x: 10, y: 20, width: 30, height: 88 },
+    { x: 10, y: 20, width: 60, height: 44 },
+  ];
+  for (const auditIssues of [issues, [...issues].reverse()]) {
+    const findings = await readNativeAudit({ auditIssues });
+    expect(findings.map((finding) => finding.rect)).toEqual(ordered);
+  }
+});
