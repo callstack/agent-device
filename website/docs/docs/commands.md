@@ -787,6 +787,28 @@ See [Batching](/docs/batching) for payload format, response shape, and usage gui
 
 ## App install (in-place)
 
+<!-- generated:command install -->
+
+Install an app binary from a path.
+
+```bash
+agent-device install <path> | install <app> <path> [--os <version|range>] [--image-tag <tag>] [--device-mode <slim|full>] [--device-baseline <name>] [--physical]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
+| `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
+| `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |
+| `--device-baseline <name>` | Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend |
+| `--physical` | Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend |
+
+Supported targets: [Install and reinstall an app](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help install`.
+
+<!-- /generated -->
+
 ```bash
 agent-device install com.example.app ./build/app.apk --platform android
 agent-device install com.example.app ./build/MyApp.app --platform ios
@@ -802,6 +824,28 @@ agent-device install ./build/entry-default-signed.hap --platform harmonyos
 
 ## App reinstall (fresh state)
 
+<!-- generated:command reinstall -->
+
+Replace an installed app with a new build.
+
+```bash
+agent-device reinstall <app> <path> [--os <version|range>] [--image-tag <tag>] [--device-mode <slim|full>] [--device-baseline <name>] [--physical]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
+| `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
+| `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |
+| `--device-baseline <name>` | Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend |
+| `--physical` | Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend |
+
+Supported targets: [Install and reinstall an app](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help reinstall`.
+
+<!-- /generated -->
+
 ```bash
 agent-device reinstall com.example.app ./build/app.apk --platform android
 agent-device reinstall com.example.app ./build/MyApp.app --platform ios
@@ -812,6 +856,28 @@ agent-device reinstall com.example.app ./build/MyApp.app --platform ios
 
 ## App uninstall
 
+<!-- generated:command uninstall -->
+
+Remove an installed app.
+
+```bash
+agent-device uninstall <app> [--os <version|range>] [--image-tag <tag>] [--device-mode <slim|full>] [--device-baseline <name>] [--physical]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
+| `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
+| `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |
+| `--device-baseline <name>` | Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend |
+| `--physical` | Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend |
+
+Supported targets: [Uninstall an app](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help uninstall`.
+
+<!-- /generated -->
+
 ```bash
 agent-device uninstall com.example.app --platform android
 ```
@@ -821,6 +887,27 @@ agent-device uninstall com.example.app --platform android
 - A package name or bundle id that is not installed succeeds with `wasInstalled: false`; another name that matches nothing installed fails with `APP_NOT_INSTALLED`.
 
 ## App install from source URL
+
+<!-- generated:command install-from-source -->
+
+Install app builds from URLs or CI artifacts.
+
+```bash
+agent-device install-from-source <url> | install-from-source --github-actions-artifact <owner/repo:artifact>
+```
+
+| Option | What it does |
+| --- | --- |
+| `--header <name:value>` | install-from-source: repeatable HTTP header for URL downloads |
+| `--github-actions-artifact <owner/repo:artifact>` | install-from-source: GitHub Actions artifact resolved by a remote daemon |
+| `--retain-paths` | install-from-source: keep materialized artifact paths after install |
+| `--retention-ms <ms>` | install-from-source: retain files for 1-2147483647 ms |
+
+Supported targets: [Install from a source URL](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help install-from-source`.
+
+<!-- /generated -->
 
 ```bash
 agent-device install-from-source https://example.com/builds/app.apk --platform android
@@ -838,6 +925,20 @@ agent-device install-from-source --github-actions-artifact thymikee/RNCLI83:6635
 
 ## Push notification simulation
 
+<!-- generated:command push -->
+
+Deliver a push notification payload.
+
+```bash
+agent-device push <bundleOrPackage> <payloadOrJson>
+```
+
+Supported targets: [Push notification simulation](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help push`.
+
+<!-- /generated -->
+
 ```bash
 agent-device push com.example.app ./payload.apns --platform ios
 agent-device push com.example.app '{"aps":{"alert":"Welcome","badge":1}}' --platform ios
@@ -851,6 +952,20 @@ agent-device push com.example.app '{"action":"com.example.app.PUSH","extras":{"t
 
 ## App event triggers (app hook)
 
+<!-- generated:command trigger-app-event -->
+
+Invoke an app-defined automation event.
+
+```bash
+agent-device trigger-app-event <event> [payloadJson]
+```
+
+Supported targets: [App event triggers through the app hook](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help trigger-app-event`.
+
+<!-- /generated -->
+
 ```bash
 agent-device trigger-app-event screenshot_taken '{"source":"qa"}'
 ```
@@ -860,6 +975,24 @@ agent-device trigger-app-event screenshot_taken '{"source":"qa"}'
 - Set the URL template with `AGENT_DEVICE_APP_EVENT_URL_TEMPLATE`, or per platform with `AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE`, or `AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE`. Placeholders are `{event}`, `{payload}`, and `{platform}`, for example `myapp://agent-device/event?name={event}&payload={payload}`.
 
 ## Settings helpers
+
+<!-- generated:command settings -->
+
+Change OS settings and app permissions.
+
+```bash
+agent-device settings <wifi|bluetooth|airplane|mobile-data|location|animations> <on|off> | settings location set <lat> <lon> | settings appearance <light|dark|toggle> | settings text-size [extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large] | settings <faceid|touchid> <match|nonmatch|enroll|unenroll> | settings fingerprint <match|nonmatch> | settings clear-app-state [app-id] | settings reset-keychain clear | settings permission <grant|deny|reset> <all|camera|microphone|photos|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri> [full|limited] | settings permission <grant|reset> <accessibility|screen-recording|input-monitoring> [--app <id-or-name>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--app <id-or-name>` | Target an app without opening it: doctor verifies an installed app by id or name; settings applies an app-scoped change (permission, iOS location) to a bundle id or package |
+
+Supported targets: [System and app settings helpers](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help settings`.
+
+<!-- /generated -->
 
 ```bash
 agent-device settings wifi on
@@ -954,6 +1087,38 @@ Permissions:
 - Android kills a running app when one of its granted permissions is revoked. `deny` and `reset` report `priorGrantState` (`granted`, `not_granted`, or `unknown`) and warn you to run `open <app> --relaunch` unless it was `not_granted`.
 
 ## App state and app lists
+
+<!-- generated:command appstate -->
+
+Show the foreground app and activity.
+
+```bash
+agent-device appstate
+```
+
+Supported targets: [Foreground app state](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help appstate`.
+
+<!-- /generated -->
+
+<!-- generated:command apps -->
+
+List installed apps or deferred provider app assets.
+
+```bash
+agent-device apps [--all]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--all` | Apps: include system/OEM apps |
+
+Supported targets: [Installed app list](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help apps`.
+
+<!-- /generated -->
 
 ```bash
 agent-device appstate
