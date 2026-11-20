@@ -19,6 +19,11 @@ import {
 export { signalProcessGroupBestEffort } from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
+/** The `error.details.reason` values a failed command publishes beside its settlement. */
+const EXEC_FAILURE_REASONS = {
+  outputLimit: 'command_output_limit',
+} as const satisfies Record<string, string>;
+
 export type ExecResult = {
   stdout: string;
   stderr: string;
@@ -280,7 +285,7 @@ function runSpawnedCommand(
           new AppError('COMMAND_FAILED', `${executable} exceeded its output limit`, {
             cmd,
             args,
-            reason: 'command_output_limit',
+            reason: EXEC_FAILURE_REASONS.outputLimit,
             stream: exceededStream,
             maxBuffer: options.maxBuffer,
             stdout,

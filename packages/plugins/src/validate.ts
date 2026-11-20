@@ -12,6 +12,19 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import { PLUGIN_API_VERSION, ROUTING_PROVIDER_IDENTITIES, type Contribution } from './contract.ts';
 
+/**
+ * The `error.details.reason` values plugin discovery, validation and the registry publish. A client
+ * branches on these, so each value is declared here once and read at the site that raises it.
+ */
+export const PLUGIN_REASONS = {
+  incompatiblePluginApi: 'incompatible-plugin-api',
+  invalidPlugin: 'invalid_plugin',
+  nodeBelowFloor: 'node-below-floor',
+  notInstalled: 'plugin-not-installed',
+  platformHostMissing: 'platform_host_missing',
+  registryClosed: 'plugin-registry-closed',
+} as const satisfies Record<string, string>;
+
 const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
 
 /** The id shape every claim space admits: a lowercase label such as `browserstack` or `maestro`. */
@@ -49,7 +62,7 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
     rejectId: (id) =>
       isPlatform(id)
         ? undefined
-        : { reason: 'invalid_plugin', message: `Unknown platform family: ${id}` },
+        : { reason: PLUGIN_REASONS.invalidPlugin, message: `Unknown platform family: ${id}` },
     duplicateReason: 'duplicate_platform',
     identityFor: (id) => ({ platform: id }),
     readMetadata: (value) => readableClaimId(value, 'platform'),
@@ -351,7 +364,7 @@ function claimKindSpecOf(kind: unknown): ClaimKindSpec | undefined {
 function readableClaimId(value: unknown, field: string): string {
   if (!isClaimId(value)) {
     throw new AppError('INVALID_ARGS', `Plugin metadata ${field} must be a lowercase id`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin,
     });
   }
   return value;
@@ -362,7 +375,7 @@ function readableClaimId(value: unknown, field: string): string {
  */
 function incompatiblePluginApi(declared: unknown): AppError {
   return new AppError('INVALID_ARGS', 'Plugin does not declare a compatible contract version', {
-    reason: 'incompatible-plugin-api',
+    reason: PLUGIN_REASONS.incompatiblePluginApi,
     apiVersion: PLUGIN_API_VERSION,
     ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
     hint: incompatibleApiHint('plugin', declared),
@@ -378,7 +391,7 @@ function incompatiblePackageApi(field: unknown): AppError {
     'INVALID_ARGS',
     'Plugin package does not declare a compatible contract version',
     {
-      reason: 'incompatible-plugin-api',
+      reason: PLUGIN_REASONS.incompatiblePluginApi,
       apiVersion: PLUGIN_API_VERSION,
       ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
       hint: incompatibleApiHint('package', declared),
@@ -511,7 +524,7 @@ function hasProviderFacets(runtime: ProviderDeviceRuntime): boolean {
 }
 
 export function invalidPlugin(message: string): AppError {
-  return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
+  return new AppError('INVALID_ARGS', message, { reason: PLUGIN_REASONS.invalidPlugin });
 }
 
 /** A format backend's setup must provide the lazy backend factory and nothing else. */

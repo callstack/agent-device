@@ -124,6 +124,11 @@ export function getOptionalPlatformPluginDeclaration(
     : undefined;
 }
 
+/** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
+export const PLUGIN_INSTALLATION_REASONS = {
+  notInstalled: 'plugin-not-installed',
+} as const satisfies Record<string, string>;
+
 /**
  * The typed outcome for a platform family a composition does not have (ADR 0034). An optional family
  * reports `plugin-not-installed` with the package that provides it and its installation command,
@@ -140,7 +145,7 @@ export function missingOptionalPlatformError(family: Platform, coreVersion: stri
     'UNSUPPORTED_PLATFORM',
     `${declaration.label} platform requires the ${declaration.package} plugin.`,
     {
-      reason: 'plugin-not-installed',
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled,
       family,
       package: declaration.package,
       ...pluginInstallationHint(declaration, coreVersion),
