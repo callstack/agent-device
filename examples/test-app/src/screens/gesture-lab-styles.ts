@@ -76,8 +76,8 @@ export function createGestureLabStyles(colors: AppColors) {
       borderBottomColor: colors.line,
       borderBottomWidth: StyleSheet.hairlineWidth,
       flexDirection: 'row',
+      gap: 12,
       height: 48,
-      justifyContent: 'space-between',
     },
     reorderLabel: {
       color: colors.text,

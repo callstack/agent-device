@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
 import {
-  Image,
-  PanResponder,
-  Platform,
-  Pressable,
-  Text,
-  View,
-  type GestureResponderEvent,
-} from 'react-native';
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ComponentType,
+  type RefObject,
+} from 'react';
+import { Image, Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 import {
   Directions,
   FlingGestureHandler,
@@ -24,6 +23,7 @@ import {
   type PinchGestureHandlerStateChangeEvent,
   type RotationGestureHandlerGestureEvent,
   type RotationGestureHandlerStateChangeEvent,
+  type ScrollView,
 } from 'react-native-gesture-handler';
 
 import { SectionCard } from '../components';
@@ -54,12 +54,10 @@ type MultiTapState = {
 const panDurationBucketMs = 400;
 
 /**
- * The reorder handle arms only after this hold, the way a plain PanResponder
- * drag-to-reorder handle behaves: a touch that moves first never captures.
+ * The reorder handle arms only after this hold: a touch that moves first scrolls the page.
  */
 const reorderHoldArmMs = 600;
 const reorderRowHeightPx = 48;
-const reorderSwapThresholdPx = reorderRowHeightPx / 2;
 const initialReorderOrder = ['Alpha', 'Beta', 'Gamma'];
 
 type AndroidTouchStart = TransformState & {
@@ -84,7 +82,9 @@ const initialMultiTap: MultiTapState = { rounds: 0, lastRoundContacts: 0 };
 const minScale = 0.5;
 const maxScale = 2;
 
-export function GestureLab() {
+type PageScrollRef = RefObject<ComponentRef<typeof ScrollView> | null>;
+
+export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
   const colors = useAppColors();
   const styles = createGestureLabStyles(colors);
   const [canaryReady, setCanaryReady] = useState(false);
@@ -495,7 +495,7 @@ export function GestureLab() {
               setReorderOrder((current) => {
                 const index = current.indexOf(label);
                 const target = index + direction;
-                if (direction === 0 || index < 0 || target < 0 || target >= current.length) {
+                if (index < 0 || target < 0 || target >= current.length) {
                   return current;
                 }
                 const next = [...current];
@@ -504,6 +504,7 @@ export function GestureLab() {
                 return next;
               })
             }
+            pageScrollRef={props.pageScrollRef}
           />
         ))}
       </View>
@@ -521,84 +522,51 @@ export function GestureLab() {
 }
 
 /**
- * One reorderable row. The handle is a plain View with no accessibility props
- * and no testID, so it never becomes an accessibility element and carries no
- * @ref; the row label is the only addressable part. The PanResponder arms only
- * after a hold, so a pan that starts moving immediately never captures it.
+ * One reorderable row. The handle is a labelled button, so it carries an @ref; it starts
+ * dragging only after a hold and then keeps the touch from the page scroll view.
  */
 function ReorderRow(props: {
   label: string;
+  pageScrollRef: PageScrollRef;
   onHoldActivated: () => void;
   onMoveDy: (dy: number) => void;
-  onSwap: (direction: 0 | 1 | -1) => void;
+  onSwap: (direction: 1 | -1) => void;
 }) {
   const colors = useAppColors();
   const styles = createGestureLabStyles(colors);
-  const armedRef = useRef(false);
-  const lastDyRef = useRef(0);
-  const swappedRef = useRef(false);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => {
-        armedRef.current = false;
-        swappedRef.current = false;
-        lastDyRef.current = 0;
-        if (holdTimerRef.current !== undefined) clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = setTimeout(() => {
-          armedRef.current = true;
-        }, reorderHoldArmMs);
-        return false;
-      },
-      // Capture wins over the surrounding scroll view once the hold has armed.
-      // In a shouldSet callback gestureState is measured from the touch start,
-      // so this move carries the full travel; after the grant no further move
-      // events may arrive, so the swap commits here, once per touch.
-      onMoveShouldSetPanResponderCapture: (_event, gestureState) => {
-        if (!armedRef.current || Math.hypot(gestureState.dx, gestureState.dy) <= 8) return false;
-        lastDyRef.current = gestureState.dy;
-        props.onMoveDy(gestureState.dy);
-        if (!swappedRef.current && Math.abs(gestureState.dy) >= reorderSwapThresholdPx) {
-          swappedRef.current = true;
-          props.onSwap(swapDirectionFromDy(gestureState.dy));
-        }
-        return true;
-      },
-      onPanResponderGrant: () => {
-        props.onHoldActivated();
-      },
-      onPanResponderMove: (_event, gestureState) => {
-        lastDyRef.current = Math.max(lastDyRef.current, gestureState.dy);
-        props.onMoveDy(gestureState.dy);
-      },
-      onPanResponderRelease: () => undefined,
-      onPanResponderTerminate: () => undefined,
-    }),
-  ).current;
-
-  useEffect(
-    () => () => {
-      if (holdTimerRef.current !== undefined) clearTimeout(holdTimerRef.current);
-    },
-    [],
-  );
+  // A handle the way sortable-list libraries build it: a native pan that activates after a
+  // hold and then owns the touch, so the surrounding scroll view cannot take the drag back.
+  const handleGesture = Gesture.Pan()
+    .activateAfterLongPress(reorderHoldArmMs)
+    .runOnJS(true)
+    // The builder types this ref as a component type; at runtime it takes the scroll view instance.
+    .blocksExternalGesture(props.pageScrollRef as unknown as RefObject<ComponentType | null>)
+    .onStart(() => props.onHoldActivated())
+    .onUpdate((event) => props.onMoveDy(event.translationY))
+    // The order changes on release: moving the row's view mid-drag would cancel the touch.
+    .onEnd((event) => {
+      const steps = Math.round(event.translationY / reorderRowHeightPx);
+      for (let step = 0; step < Math.abs(steps); step += 1) props.onSwap(steps > 0 ? 1 : -1);
+    });
 
   return (
     <View style={styles.reorderRow}>
+      {/* The handle leads the row: the dev client's floating Tools button covers the right edge. */}
+      <GestureDetector gesture={handleGesture}>
+        <View
+          accessibilityLabel={`Reorder ${props.label}`}
+          accessibilityRole="button"
+          accessible
+          collapsable={false}
+          style={styles.reorderHandle}
+          testID={`reorder-handle-${props.label}`}
+        />
+      </GestureDetector>
       <Text style={styles.reorderLabel} testID={`reorder-label-${props.label}`}>
         {props.label}
       </Text>
-      {/* Intentionally no accessibilityLabel, no accessible, no testID: this
-          handle must stay out of the accessibility tree. */}
-      <View collapsable={false} {...panResponder.panHandlers} style={styles.reorderHandle} />
     </View>
   );
-}
-
-function swapDirectionFromDy(dy: number): 0 | 1 | -1 {
-  if (Math.abs(dy) < reorderSwapThresholdPx) return 0;
-  return dy > 0 ? 1 : -1;
 }
 
 function clamp(value: number, min: number, max: number): number {
