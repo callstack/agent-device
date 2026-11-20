@@ -170,7 +170,8 @@ test('a leased session teardown keeps the remote recording export downloadable b
     }),
     expect.objectContaining({
       artifactType: 'screen-recording-telemetry',
-      filename: path.basename(recordingExport.telemetryPath),
+      // #4518: named from the caller's start path, like the video.
+      filename: 'checkout.gesture-telemetry.json',
       sessionName: 'checkout-flow',
     }),
   ]);
