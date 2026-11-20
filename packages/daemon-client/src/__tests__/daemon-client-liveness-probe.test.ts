@@ -46,7 +46,8 @@ async function withLoopback<T>(
 }
 
 test('the probe budget stays an order of magnitude under the narrowest reset-eligible envelope', () => {
-  // A timed-out reset-eligible request may pay one extra probe window before its error lands.
+  // A timed-out reset-eligible request may pay three probe windows before its error lands. This
+  // pins one window; three of them stay well under the same envelope.
   // The narrowest envelope that class carries is the registry default (90s): keep the probe a
   // rounding error against it, so the probe never dominates the operation it follows (AGENTS.md
   // probe rule). If someone widens the probe toward the envelope, this fails at the owning number.

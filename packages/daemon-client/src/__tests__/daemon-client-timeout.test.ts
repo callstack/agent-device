@@ -52,7 +52,7 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
         command: 'open',
         applePlatformDeclared,
       }),
-      'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.',
+      'The daemon did not answer the liveness probes and was reset after the timeout. Read the request log for the timed-out step.',
     );
   }
 
@@ -115,7 +115,7 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       action: 'stop',
       session: 'recording',
     }),
-    'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.',
+    'The daemon did not answer the liveness probes and was reset after the timeout. Read the request log for the timed-out step.',
   );
   // `record start` runs no export, so it keeps the generic remote wording.
   assert.equal(
