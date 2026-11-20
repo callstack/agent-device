@@ -137,7 +137,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 10_000,
     usageLabel: '--hold-ms <ms>',
-    usageDescription: 'Press or gesture tap hold duration for each iteration',
+    usageDescription:
+      'Press or gesture tap hold duration for each iteration; for gesture pan, the hold before the move',
     projectConfig: true,
     recorded: true,
   },

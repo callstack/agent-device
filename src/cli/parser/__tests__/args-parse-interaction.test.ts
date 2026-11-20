@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
+import { readInputFromCli } from '@agent-device/command-surface';
 import { parseArgs } from '../args.ts';
 
 test('parseArgs accepts clipboard subcommands', () => {
@@ -445,12 +446,61 @@ test('parseArgs reads the tap series flags on gesture tap', () => {
   assert.equal(tap.flags.pauseMs, 100);
 });
 
+test('parseArgs accepts --hold-ms on gesture pan and tap, and refuses it on other kinds', () => {
+  const pan = parseArgs(['gesture', 'pan', '200', '420', '0', '160', '500', '--hold-ms', '800'], {
+    strictFlags: true,
+  });
+  assert.deepEqual(pan.positionals, ['pan', '200', '420', '0', '160', '500']);
+  assert.equal(pan.flags.holdMs, 800);
+  const tap = parseArgs(['gesture', 'tap', '80', '300', '200', '450', '--hold-ms', '40'], {
+    strictFlags: true,
+  });
+  assert.equal(tap.flags.holdMs, 40);
+});
+
+test('parseArgs reads a gesture pan hold only from a typed --hold-ms, never from config defaults', () => {
+  const configHold = { holdMs: 300 };
+
+  const plain = parseArgs(['gesture', 'pan', '200', '420', '0', '160', '500'], {
+    strictFlags: true,
+    defaultFlags: configHold,
+  });
+  assert.equal(plain.flags.holdMs, undefined);
+  assert.equal(readInputFromCli('gesture', plain.positionals, plain.flags).holdMs, undefined);
+
+  const typed = parseArgs(['gesture', 'pan', '200', '420', '0', '160', '500', '--hold-ms', '800'], {
+    strictFlags: true,
+    defaultFlags: configHold,
+  });
+  assert.equal(typed.flags.holdMs, 800);
+  assert.equal(readInputFromCli('gesture', typed.positionals, typed.flags).holdMs, 800);
+
+  const twoFinger = parseArgs(
+    ['gesture', 'pan', '200', '420', '0', '160', '500', '--pointer-count', '2'],
+    { strictFlags: true, defaultFlags: configHold },
+  );
+  assert.equal(twoFinger.flags.pointerCount, 2);
+  assert.equal(twoFinger.flags.holdMs, undefined);
+  assert.doesNotThrow(() => readInputFromCli('gesture', twoFinger.positionals, twoFinger.flags));
+  assert.equal(
+    readInputFromCli('gesture', twoFinger.positionals, twoFinger.flags).holdMs,
+    undefined,
+  );
+
+  // A config holdMs still applies to the kind it was requested for.
+  const tap = parseArgs(['gesture', 'tap', '80', '300', '200', '450'], {
+    strictFlags: true,
+    defaultFlags: configHold,
+  });
+  assert.equal(tap.flags.holdMs, 300);
+});
+
 test('parseArgs refuses a gesture option the chosen kind never reads', () => {
   const cases: Array<[string[], string]> = [
     [['gesture', 'pinch', '1.5', '--count', '2'], 'gesture pinch does not read --count'],
     [
-      ['gesture', 'pan', '200', '420', '0', '-80', '--hold-ms', '40'],
-      'gesture pan does not read --hold-ms',
+      ['gesture', 'fling', 'up', '200', '420', '--hold-ms', '40'],
+      'gesture fling does not read --hold-ms',
     ],
     [
       ['gesture', 'tap', '80', '300', '200', '450', '--pointer-count', '2'],

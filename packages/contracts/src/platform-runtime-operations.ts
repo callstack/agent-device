@@ -378,6 +378,10 @@ function isMultiTouchGesture(input: GestureSemanticInput): boolean {
 /** Selects the one tier a gesture input needs, so its handler binds exactly once (ADR 0019 §9). */
 function gestureRuntimeTier(input: GestureCommandInput): GestureRuntimeTier {
   if (input.intent === 'drag') return 'target-authored-drag';
+  // A held pan carries its hold only in intermediate plan samples; endpoint-only plan lowering
+  // drops them, so admit it through the tier whose fact promises hold-preserving execution and let
+  // backends without that fact refuse before dispatch.
+  if (input.intent === 'pan' && (input.holdMs ?? 0) > 0) return 'target-authored-drag';
   if (isMultiTouchGesture(input)) return 'multi-touch';
   // A direction-authored fling carries speed semantics a coordinate fling does not, which is the
   // one thing the Linux drag primitive cannot reproduce.
