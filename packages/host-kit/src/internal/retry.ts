@@ -219,11 +219,6 @@ export async function pollUntilSettled<T>(params: {
   }
 }
 
-// The deadline primitive lives in its own dependency-free leaf (`../settle-within.ts`) so a caller
-// that needs only it can import that subpath without this module's retry, deadline and diagnostic
-// edges. It stays reachable from `@agent-device/host-kit/retry` for every existing importer.
-export { settleWithin, type SettleWithinOutcome } from '../settle-within.ts';
-
 function waitForRetryDelay(
   ms: number,
   signal: AbortSignal | undefined,

@@ -4,7 +4,7 @@ import type {
   ManagedProcessOwnership,
 } from '@agent-device/contracts/platform-runtime-host';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { settleWithin } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { errorMessage } from '@agent-device/kernel/errors';
 import {
   expandProcessTree,

@@ -28,7 +28,7 @@ import {
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { settleWithin } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';

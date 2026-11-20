@@ -1,9 +1,7 @@
 /**
- * The one deadline-settle primitive, as a dependency-free leaf: this module imports nothing, so
- * reaching it costs an entry exactly its own two statements. `@agent-device/host-kit/retry`
- * re-exports it beside `Deadline`, `sleep` and `pollUntilSettled`; a caller that needs ONLY this
- * waits on this subpath, so it never evaluates the retry policy, diagnostics or error vocabulary
- * the retry façade carries with it (the eager-closure gate measures the difference).
+ * The one deadline-settle primitive, as a dependency-free leaf: this module imports nothing, so a
+ * caller that waits on it never evaluates the retry policy, diagnostics or error vocabulary that
+ * `@agent-device/host-kit/retry` carries (the eager-closure gate measures the difference).
  */
 
 /** What {@link settleWithin} reports: the work settled first, or the deadline won. */

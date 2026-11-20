@@ -76,7 +76,8 @@ import {
   reapOwnedProcessRecordsAtStartup,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { isEnvTruthy, settleWithin } from '@agent-device/host-kit/retry';
+import { isEnvTruthy } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import {
   parseIntegerEnv,
   readVersion,
