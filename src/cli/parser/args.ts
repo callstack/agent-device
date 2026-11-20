@@ -217,6 +217,7 @@ export function finalizeParsedArgs(
     }
   }
   stripFlagsTheCommandTreatsAsExplicitOnly(parsed, flags);
+  stripConfigSourcedGesturePanHold(parsed, flags);
   assertNoConflictingBackModeFlags(parsed);
   applyCommandDefaults(parsed.command, flags);
   const normalized = normalizeParsedCommandAliases({
@@ -404,6 +405,19 @@ function stripFlagsTheCommandTreatsAsExplicitOnly(parsed: RawParsedArgs, flags: 
     if (typedKeys.has(key)) continue;
     delete (flags as Record<string, unknown>)[key];
   }
+}
+
+/**
+ * Drops a config/env/remote-config `holdMs` for `gesture pan` unless the command line typed it.
+ * A config default must never change a gesture kind it was not requested for: a press-oriented
+ * `"holdMs": 300` would otherwise make every one-finger pan hold first and fail every two-finger
+ * pan with INVALID_ARGS for a flag nobody passed. `gesture tap` keeps the config default, and a
+ * typed `--hold-ms` always wins.
+ */
+function stripConfigSourcedGesturePanHold(parsed: RawParsedArgs, flags: CliFlags): void {
+  if (parsed.command !== 'gesture' || parsed.positionals[0] !== 'pan') return;
+  if (parsed.providedFlags.some((entry) => entry.key === 'holdMs')) return;
+  delete (flags as Record<string, unknown>).holdMs;
 }
 
 /**

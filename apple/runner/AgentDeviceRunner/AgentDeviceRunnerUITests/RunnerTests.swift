@@ -29,7 +29,10 @@ final class RunnerTests: XCTestCase {
     static let objcException = 1
   }
 
-  /// String codes the daemon keys behavior on. `RUNNER_BUSY` and `RUNNER_WEDGED` come from the busy
+  /// String codes the daemon keys behavior on. The enum mirrors the daemon's RUNNER_ERROR_CODES
+  /// table in packages/apple-runner/src/runner-contract.ts one-for-one (guarded by
+  /// test/repo-guards/runner-error-code-parity.test.ts), so a new runner refusal adds one constant
+  /// here and one row there. `RUNNER_BUSY` and `RUNNER_WEDGED` come from the busy
   /// gate; `MAIN_THREAD_TIMEOUT` is emitted by the transport when a command trips the execution
   /// watchdog, so the daemon can tell "the main thread is now occupied" from a generic failure.
   /// `APP_NOT_RUNNING` refuses a read whose session app is not running.
@@ -48,9 +51,21 @@ final class RunnerTests: XCTestCase {
   /// nothing. `KEYBOARD_RETURN_UNAVAILABLE` is `keyboard enter` finding nothing to submit.
   /// `HARDWARE_CONTROL_UNAVAILABLE` is a press the runner answers that its target cannot perform.
   /// The host publishes `details.reason` for all three.
+  /// `INVALID_ARGS`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `AMBIGUOUS_MATCH`,
+  /// `OBSERVATION_UNAVAILABLE`, `SCROLL_KEYBOARD_OCCLUDES_SURFACE` and the `APP_SCREEN_*` capture
+  /// refusals all answer before the command runs, so dispatched: no.
   enum RunnerWireErrorCode {
+    static let invalidArgs = "INVALID_ARGS"
+    static let elementNotFound = "ELEMENT_NOT_FOUND"
+    static let elementOffscreen = "ELEMENT_OFFSCREEN"
+    static let ambiguousMatch = "AMBIGUOUS_MATCH"
+    static let observationUnavailable = "OBSERVATION_UNAVAILABLE"
+    static let runnerBusy = "RUNNER_BUSY"
+    static let runnerWedged = "RUNNER_WEDGED"
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
+    static let scrollKeyboardOccludesSurface = "SCROLL_KEYBOARD_OCCLUDES_SURFACE"
+    static let alertNotFound = "ALERT_NOT_FOUND"
     static let noTextInputAtPoint = "NO_TEXT_INPUT_AT_POINT"
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
@@ -80,6 +95,33 @@ final class RunnerTests: XCTestCase {
     /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
     /// reached the device — and its hint sends the caller to observe the screen instead of resending.
     static let commandAlreadyFinished = "COMMAND_ALREADY_FINISHED"
+    static let appScreenWindowUnresolved = "APP_SCREEN_WINDOW_UNRESOLVED"
+    static let appScreenUnresolved = "APP_SCREEN_UNRESOLVED"
+    static let appScreenCaptureUnrenderable = "APP_SCREEN_CAPTURE_UNRENDERABLE"
+    static let appScreenOffLitPanel = "APP_SCREEN_OFF_LIT_PANEL"
+  }
+
+  /// Codes the runner emits that the daemon does not classify: they travel verbatim inside
+  /// `details.runnerErrorCode` (or, for the alert pair, a command-level envelope). Every other code
+  /// the runner puts on the wire is a `RunnerWireErrorCode` table row or a top-level
+  /// `KNOWN_APP_ERROR_CODES` family code written at the emit site.
+  /// test/repo-guards/runner-error-code-parity.test.ts keeps both sets aligned with TypeScript.
+  enum RunnerPassThroughErrorCode {
+    static let textEntryMismatch = "TEXT_ENTRY_MISMATCH"
+    static let textInputNotFocused = "TEXT_INPUT_NOT_FOCUSED"
+    static let textInputSynthesisUnavailable = "TEXT_INPUT_SYNTHESIS_UNAVAILABLE"
+    static let textInputCommitNotObserved = "TEXT_INPUT_COMMIT_NOT_OBSERVED"
+    static let textInputClearNotObserved = "TEXT_INPUT_CLEAR_NOT_OBSERVED"
+    static let textInputSynthesisBudgetExceeded = "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
+    static let xctestRecordedFailure = "XCTEST_RECORDED_FAILURE"
+    static let alertDeadlineExceeded = "ALERT_DEADLINE_EXCEEDED"
+    static let alertConfirmationUnavailable = "ALERT_CONFIRMATION_UNAVAILABLE"
+    static let iosTreeCaptureTimeout = "IOS_TREE_CAPTURE_TIMEOUT"
+    static let iosAxSnapshotFailed = "IOS_AX_SNAPSHOT_FAILED"
+    static let iosRawSnapshotTooLarge = "IOS_RAW_SNAPSHOT_TOO_LARGE"
+    static let iosSnapshotTooLarge = "IOS_SNAPSHOT_TOO_LARGE"
+    static let iosSnapshotProjectionMismatch = "IOS_SNAPSHOT_PROJECTION_MISMATCH"
+    static let iosSnapshotPresentationFailed = "IOS_SNAPSHOT_PRESENTATION_FAILED"
   }
 
   /// A replayed failure must carry the same code and recovery hint as its live reply.

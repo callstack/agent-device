@@ -40,6 +40,18 @@ type RunnerFixture = {
   readonly testRun: ServerResponse | undefined;
 };
 
+/** Reads one request body. A canceled client can leave before its upload ends: no body, no answer. */
+async function requestBody(request: IncomingMessage): Promise<Buffer | undefined> {
+  const chunks: Buffer[] = [];
+  try {
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  } catch (error) {
+    if (!request.complete) return undefined;
+    throw error;
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function fixture(
   options: {
     launchStatus?: number;
@@ -195,9 +207,8 @@ export async function fixture(
       response.writeHead(401).end();
       return;
     }
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    let body = Buffer.concat(chunks);
+    let body = await requestBody(request);
+    if (!body) return;
     if (request.headers['content-encoding'] === 'gzip') body = gunzipSync(body);
     if (storage.serve(request, response, body)) return;
     if (request.url === '/v1/ios_test/api/sync') {

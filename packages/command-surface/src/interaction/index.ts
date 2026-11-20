@@ -458,7 +458,7 @@ const interactionCliSchemas = {
     ],
   },
   scroll: {
-    usageOverride: 'scroll <direction|top|bottom> [amount]',
+    usageOverride: 'scroll <direction|top|bottom|refresh> [amount]',
     usageFlags: ['until', 'maxPasses', 'pixels', 'durationMs', 'settle'],
     positionalArgs: ['directionOrEdge', 'amount?'],
     allowedFlags: [
@@ -603,9 +603,9 @@ const scrollCommandFacet = defineCommandFacet({
   effect: 'write',
   text: {
     summary: 'Scroll in a direction or to an edge',
-    searchHint: 'swipe down list',
+    searchHint: 'swipe list reload',
     cliDetail:
-      'A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture. On watchOS, scroll turns the Digital Crown: up and down only, and the amount is a fraction of the screen height. Use swipe for horizontal pages.',
+      'scroll refresh is pull-to-refresh: one slow pull down. Android aims it inside the scroll container; on iOS it runs down the middle of the screen, so a list that does not reach the middle is not pulled. It refuses with reason scroll_refresh_not_at_top when content is hidden above, so run scroll top first. A caller that verifies the screen by polling can add --no-post-gesture-stabilization. The scroll then returns right after its gesture, with no movement field and no scroll_no_progress refusal, and the next read skips the stabilization wait. With --settle the settle observation already reports the outcome, and the option removes the same wait from its first capture. On watchOS, scroll turns the Digital Crown: up and down only, and the amount is a fraction of the screen height. Use swipe for horizontal pages.',
   },
   metadata: metadata('scroll'),
   run: (client, input) => client.interactions.scroll(input as ScrollOptions),

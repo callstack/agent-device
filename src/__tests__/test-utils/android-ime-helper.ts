@@ -22,6 +22,6 @@ export const ANDROID_IME_HELPER_FIXTURE_ARTIFACT: AndroidImeHelperArtifact = {
     packageName: IME_HELPER_PACKAGE,
     versionCode: 13003,
     serviceComponent: `${IME_HELPER_PACKAGE}/.TestInputMethodService`,
-    broadcastProtocol: 'android-ime-helper-v1',
+    broadcastProtocol: 'android-ime-helper-v2',
   },
 };

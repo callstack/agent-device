@@ -206,6 +206,41 @@ test('runtime multi-touch planning prefers backend viewport geometry without a s
   );
 });
 
+test('runtime pan with holdMs dispatches one pointer held at the origin before moving', async () => {
+  let capturedPlan:
+    | Parameters<
+        NonNullable<import('@agent-device/contracts/backend').AgentDeviceBackend['performGesture']>
+      >[1]
+    | undefined;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async (_context, plan) => {
+      capturedPlan = plan;
+    },
+  });
+
+  const result = await device.interactions.gesture({
+    gesture: {
+      intent: 'pan',
+      origin: { x: 100, y: 200 },
+      delta: { x: 0, y: 160 },
+      durationMs: 500,
+      holdMs: 800,
+    },
+  });
+
+  assert.equal(result.kind, 'pan');
+  assert.equal(result.durationMs, 1_300);
+  assert.deepEqual(result.from, { x: 100, y: 200 });
+  assert.deepEqual(result.to, { x: 100, y: 360 });
+  assert.equal(capturedPlan?.topology, 'single');
+  assert.deepEqual(capturedPlan?.pointers[0]?.samples, [
+    { offsetMs: 0, point: { x: 100, y: 200 } },
+    { offsetMs: 800, point: { x: 100, y: 200 } },
+    { offsetMs: 1_300, point: { x: 100, y: 360 } },
+  ]);
+});
+
 test('each tap plans one repetition against a fresh viewport', async () => {
   const viewports: unknown[] = [];
   let reads = 0;

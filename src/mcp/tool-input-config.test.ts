@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import { readGesturePayload } from '@agent-device/contracts/gesture-input';
 import type { DevicePin } from '@agent-device/command-surface';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '@agent-device/client';
@@ -121,4 +122,50 @@ test('a devicePin in tool input is rejected before a client exists, and the conf
     device: 'iPad Pro',
   });
   assert.equal(requests.length, 0);
+});
+
+test('a config holdMs never becomes a gesture pan hold; a typed field and gesture tap still apply', () => {
+  const gestureFields = { kind: { type: 'string' }, holdMs: { type: 'integer' } } as const;
+  const host = hostPinnedTo({ holdMs: 300 });
+
+  const pan = resolveMcpConfigDefaults(
+    'gesture',
+    { kind: 'pan', origin: { x: 200, y: 420 }, delta: { x: 0, y: 160 }, durationMs: 500 },
+    gestureFields,
+    host,
+  );
+  assert.equal('holdMs' in pan.input, false);
+
+  const typed = resolveMcpConfigDefaults(
+    'gesture',
+    { kind: 'pan', holdMs: 800 },
+    gestureFields,
+    host,
+  );
+  assert.equal(typed.input.holdMs, 800);
+
+  const tap = resolveMcpConfigDefaults(
+    'gesture',
+    {
+      kind: 'tap',
+      points: [
+        { x: 80, y: 300 },
+        { x: 200, y: 450 },
+      ],
+    },
+    gestureFields,
+    host,
+  );
+  assert.equal(tap.input.holdMs, 300);
+
+  // A kind that never reads holdMs must not fail on a config default the caller never sent.
+  const fling = resolveMcpConfigDefaults(
+    'gesture',
+    { kind: 'fling', direction: 'up', origin: { x: 200, y: 420 }, distance: 90 },
+    gestureFields,
+    host,
+  );
+  assert.equal('holdMs' in fling.input, false);
+  assert.doesNotThrow(() => readGesturePayload(fling.input));
+  assert.equal('holdMs' in readGesturePayload(fling.input), false);
 });

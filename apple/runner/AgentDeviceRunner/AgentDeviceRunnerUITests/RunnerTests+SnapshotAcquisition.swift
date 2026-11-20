@@ -71,7 +71,7 @@ extension RunnerTests {
     )
   }
 
-  static let xCTestSnapshotTimeoutCode = "IOS_TREE_CAPTURE_TIMEOUT"
+  static let xCTestSnapshotTimeoutCode = RunnerPassThroughErrorCode.iosTreeCaptureTimeout
 
   /// Runs the blocking tree-snapshot XPC on the main thread bounded by `sliceSeconds`. On
   /// timeout the XPC keeps running on main (it cannot be cancelled); the capture is marked

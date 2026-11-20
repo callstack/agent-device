@@ -3,7 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { readTestScope, threadHostileTestFiles } from './scripts/mutation/test-scope.ts';
 import { workspaceSourceAliases } from './scripts/mutation/workspace-aliases.ts';
-import { MUTATION_EXCLUDED_TESTS, SETUP_FILES, TEST_ISOLATION } from './vitest.config.ts';
+import {
+  GLOBAL_SETUP,
+  MUTATION_EXCLUDED_TESTS,
+  SETUP_FILES,
+  TEST_ISOLATION,
+} from './vitest.config.ts';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +33,7 @@ export default defineConfig({
       ...threadHostileTestFiles(repoRoot),
       '**/node_modules/**',
     ],
+    globalSetup: GLOBAL_SETUP.map((file) => path.join(repoRoot, file)),
     setupFiles: [...SETUP_FILES, path.join(repoRoot, 'scripts/mutation/seed-setup.ts')],
     ...TEST_ISOLATION,
   },

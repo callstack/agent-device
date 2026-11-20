@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import { directoryWith, expectUntrusted, FOREIGN_UID } from './script-destination-host.fixtures.ts';
 import { prepareScriptDestination } from './script-destination.ts';
 
@@ -64,10 +65,10 @@ skipOnWindows('without private ancestry, the same sticky ancestor is still passe
   expect(directory).toBe(path.join(shared, 'cache'));
 });
 
-skipOnWindows(
-  'a group-writable ancestor is refused with private ancestry, and nothing is created',
-  () => {
-    const shared = directoryWith(path.join(root, 'group'), 0o770);
+skipOnWindows.each(['770', '775'])(
+  'a group-writable ancestor this user owns (mode %s) is refused with private ancestry, and nothing is created',
+  (mode) => {
+    const shared = directoryWith(path.join(root, 'group'), Number.parseInt(mode, 8));
 
     expectUntrusted(
       () => prepareScriptDestination(path.join(shared, 'cache', 'entry'), PRIVATE),
@@ -75,6 +76,21 @@ skipOnWindows(
       shared,
     );
     expect(fs.readdirSync(shared)).toEqual([]);
+  },
+);
+
+skipOnWindows(
+  'a group-writable ancestor this user owns is refused with the mode change they can make',
+  () => {
+    const shared = directoryWith(path.join(root, 'group'), 0o770);
+    let hint = '';
+    try {
+      prepareScriptDestination(path.join(shared, 'cache', 'entry'), PRIVATE);
+    } catch (error) {
+      hint = String((error as AppError).details?.hint);
+    }
+
+    expect(hint).toContain(`chmod g-w ${shared}`);
   },
 );
 

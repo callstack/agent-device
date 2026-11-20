@@ -314,6 +314,6 @@ extension RunnerTests {
   }
 
   private func sequenceInvalidArgs(_ message: String) -> Response {
-    Response(ok: false, error: ErrorPayload(code: "INVALID_ARGS", message: message))
+    Response(ok: false, error: ErrorPayload(code: RunnerWireErrorCode.invalidArgs, message: message))
   }
 }

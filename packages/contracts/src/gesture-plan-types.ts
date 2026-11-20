@@ -49,6 +49,8 @@ export type GestureSemanticInput =
       delta: Point;
       pointerCount?: GesturePointerCount;
       durationMs?: number;
+      /** Hold the contact at the origin this long before the move starts. */
+      holdMs?: number;
       executionProfile?: GestureExecutionProfile;
     }
   | { intent: 'pinch'; origin?: Point; scale: number }

@@ -571,7 +571,11 @@ async function captureStableSignalWithinDeadline(
         },
       );
     });
-    return result.timedOut ? { kind: 'stalled' } : { kind: 'captured', capture: result.value };
+    if (!result.timedOut) return { kind: 'captured', capture: result.value };
+    // A capture the deadline cancelled in flight did not return, which is a stall. A capture that
+    // answered after the cutoff did return: the budget ran out, and the loop reports that it never
+    // settled instead of blaming the capture.
+    return { kind: 'error' in result ? 'stalled' : 'expired' };
   } catch (error) {
     return { kind: 'failed', error };
   }
@@ -580,4 +584,5 @@ async function captureStableSignalWithinDeadline(
 type StableCaptureRead =
   | { kind: 'captured'; capture: CapturedSnapshot }
   | { kind: 'stalled' }
+  | { kind: 'expired' }
   | { kind: 'failed'; error: unknown };

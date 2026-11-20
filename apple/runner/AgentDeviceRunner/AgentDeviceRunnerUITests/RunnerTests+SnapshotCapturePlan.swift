@@ -484,7 +484,7 @@ extension RunnerTests {
     acquired: CaptureHint.Projection
   ) -> SnapshotCaptureFailure {
     SnapshotCaptureFailure(
-      code: "IOS_SNAPSHOT_PROJECTION_MISMATCH",
+      code: RunnerPassThroughErrorCode.iosSnapshotProjectionMismatch,
       message:
         "the \(kind.rawValue) backend returned a \(acquired.rawValue) capture for a \(requested.rawValue) snapshot request",
       hint: "This is a runner bug: report it with the failing command and the app under test."

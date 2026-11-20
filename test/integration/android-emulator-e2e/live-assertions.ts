@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SnapshotDiffLine } from '@agent-device/contracts/capture';
 import {
   assertFilesDiffer,
   assertJsonContains,
@@ -62,22 +61,6 @@ export async function scrollToVisibleSelector(
   assert.fail(`${selector} did not become visible after five scrolls`);
 }
 
-export function assertDiffLine(
-  result: CliJsonResult,
-  kind: SnapshotDiffLine['kind'],
-  expectedText: string,
-): void {
-  const lines: unknown = result.json?.data?.lines;
-  assert.ok(Array.isArray(lines), `snapshot diff has no lines: ${JSON.stringify(result.json)}`);
-  assert.ok(
-    lines.some(
-      (line: unknown) =>
-        isSnapshotDiffLine(line) && line.kind === kind && line.text.includes(expectedText),
-    ),
-    `expected ${kind} snapshot line containing ${expectedText}: ${JSON.stringify(result.json)}`,
-  );
-}
-
 export function requireAndroidResourceId(
   result: CliJsonResult,
   suffix: string,
@@ -125,13 +108,4 @@ function isSnapshotNode(value: unknown): value is RawSnapshotNode & { identifier
   if (typeof value !== 'object' || value === null) return false;
   const node = value as RawSnapshotNode;
   return typeof node.identifier === 'string';
-}
-
-function isSnapshotDiffLine(value: unknown): value is SnapshotDiffLine {
-  if (typeof value !== 'object' || value === null) return false;
-  const line = value as Partial<SnapshotDiffLine>;
-  return (
-    (line.kind === 'added' || line.kind === 'removed' || line.kind === 'unchanged') &&
-    typeof line.text === 'string'
-  );
 }

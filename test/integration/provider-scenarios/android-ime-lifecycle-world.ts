@@ -15,7 +15,33 @@ export type AndroidProviderShellState = {
 const IME_INPUT_TEXT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 const IME_CLEAR_TEXT_ACTION = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
 const IME_PACKAGE = 'com.callstack.agentdevice.imehelper';
-const IME_PROTOCOL = 'android-ime-helper-v1';
+const IME_PROTOCOL = 'android-ime-helper-v2';
+
+/**
+ * The v2 ordered acknowledgement the on-device helper prints for `am broadcast`, so scripted
+ * providers answer exactly what the host parses: codes and lengths only, never user text.
+ */
+export function androidImeBroadcastAckResult(
+  args: readonly string[],
+): AndroidImeAdbResult | undefined {
+  if (!argsStartWith(args, ['shell', 'am', 'broadcast']) || !args.includes('-p')) return undefined;
+  if (args[args.indexOf('-p') + 1] !== IME_PACKAGE) return undefined;
+  const action = valueAfter(args, '-a');
+  if (action === IME_CLEAR_TEXT_ACTION) {
+    return { stdout: 'Broadcast completed: result=1, data="utf16=0"\n', stderr: '', exitCode: 0 };
+  }
+  if (action === IME_INPUT_TEXT_ACTION) {
+    const encodedText = valueAfterPair(args, '--es', 'text');
+    const utf16 =
+      encodedText === undefined ? 0 : Buffer.from(encodedText, 'base64').toString('utf8').length;
+    return {
+      stdout: `Broadcast completed: result=1, data="utf16=${utf16}"\n`,
+      stderr: '',
+      exitCode: 0,
+    };
+  }
+  return { stdout: 'Broadcast completed: result=0\n', stderr: '', exitCode: 0 };
+}
 
 export function androidImeInputTextBroadcast(text: string): string[] {
   return [

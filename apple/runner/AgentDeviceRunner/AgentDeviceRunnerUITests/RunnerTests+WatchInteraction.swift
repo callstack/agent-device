@@ -38,7 +38,7 @@ extension RunnerTests {
     } else if let amount = runnerDragCommandDefaults(command).scrollAmount {
       viewportFraction = amount
     } else {
-      return Response(ok: false, error: ErrorPayload(code: "INVALID_ARGS", message: "scroll requires an amount or pixels"))
+      return Response(ok: false, error: ErrorPayload(code: RunnerWireErrorCode.invalidArgs, message: "scroll requires an amount or pixels"))
     }
     let delta = viewportFraction * Self.watchCrownRotationsPerViewport
     let timing = measureGesture {
@@ -173,7 +173,7 @@ extension RunnerTests {
     guard watchPoll(timeout: Self.watchInputSheetTimeout, until: { activeApp.keyboards.firstMatch.exists }) else {
       let failure = TextEntryFailure.notFocused
       return Response(ok: false, error: ErrorPayload(
-        code: failure.rawValue,
+        code: failure.wireCode,
         message: failure.message,
         hint: "Press the text field first. On watchOS the field opens a system input sheet, and the text goes there."
       ))
@@ -191,7 +191,7 @@ extension RunnerTests {
     let done = activeApp.buttons[Self.watchInputSheetDoneLabel]
     guard done.exists else {
       return Response(ok: false, error: ErrorPayload(
-        code: TextEntryFailure.commitNotObserved.rawValue,
+        code: TextEntryFailure.commitNotObserved.wireCode,
         message: "the watchOS input sheet has no Done button to commit the text",
         hint: "The text is typed into the open input sheet. Press its commit button by ref."
       ))
@@ -201,7 +201,7 @@ extension RunnerTests {
     }
     guard watchPoll(timeout: Self.watchInputSheetTimeout, until: { !activeApp.keyboards.firstMatch.exists }) else {
       return Response(ok: false, error: ErrorPayload(
-        code: TextEntryFailure.commitNotObserved.rawValue,
+        code: TextEntryFailure.commitNotObserved.wireCode,
         message: "the watchOS input sheet stayed open after Done",
         hint: "Check the screen with snapshot; the text may still be in the open input sheet."
       ))

@@ -32,7 +32,10 @@ import {
   selectorSnapshotInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import type { ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
+import {
+  SCROLL_INPUT_DIRECTIONS,
+  type ScrollInputDirection,
+} from '@agent-device/contracts/scroll-gesture';
 
 export const interactionCliReaders = {
   click: (positionals, flags) => ({
@@ -211,21 +214,14 @@ function fillPositionals(input: FillOptions): string[] {
 }
 
 function readScrollDirection(value: string | undefined): ScrollInputDirection {
-  if (
-    value === 'up' ||
-    value === 'down' ||
-    value === 'left' ||
-    value === 'right' ||
-    value === 'top' ||
-    value === 'bottom'
-  ) {
-    return value;
+  if ((SCROLL_INPUT_DIRECTIONS as readonly string[]).includes(value ?? '')) {
+    return value as ScrollInputDirection;
   }
   // #1366: agents recovering from an off-screen target often mis-shape this as
   // `scroll @ref down` or `scroll down @ref`. scroll takes no target — name the
   // grammar so the retry lands instead of cycling through arg orders.
   throw new AppError('INVALID_ARGS', `Unknown direction: ${String(value)}`, {
-    hint: 'scroll takes a direction first, then an optional amount: scroll <up|down|left|right|top|bottom> [amount]. It takes no @ref or selector — scroll the whole viewport, then retry the target with a selector.',
+    hint: 'scroll takes a direction first, then an optional amount: scroll <up|down|left|right|top|bottom|refresh> [amount]. It takes no @ref or selector — scroll the whole viewport, then retry the target with a selector.',
   });
 }
 

@@ -467,6 +467,47 @@ test('a capture that never becomes readable reports capture-stalled', async () =
   }
 });
 
+/**
+ * #4789 step 1 regression: a capture that answers after the cutoff, before the deadline timer's
+ * callback has run, is still a timeout. The wait clock decides, not which callback the harness ran
+ * first: the cutoff passes while the timer's callback is still queued, and the capture answers in
+ * that window. A late observation is also not evidence for this wait — `wait absent` decides
+ * absent from readable captures, and this caller never receives the observation.
+ */
+test('a capture that answers after the cutoff is a timeout and not a readable capture', async () => {
+  vi.useFakeTimers();
+  try {
+    let currentMs = 0;
+    const runtime = {
+      clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
+    } as unknown as AgentDeviceRuntime;
+    const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+    await polling.capture(async () => 'readable');
+
+    let settleLateCapture!: (value: string) => void;
+    const lateAnswer = new Promise<string>((resolve) => {
+      settleLateCapture = resolve;
+    });
+    const pending = polling.capture(async () => await lateAnswer);
+
+    // The budget runs out while this capture is in flight, and its answer arrives before the
+    // deadline timer's callback gets a turn.
+    currentMs = 50;
+    settleLateCapture('late observation');
+
+    const late = await pending;
+    assert.equal(late.timedOut, true);
+    if (!late.timedOut) return;
+    assert.equal(late.deadline, 'capture-truncated');
+    const error = waitTimeoutError('wait timed out for text: Ready', polling, late.deadline);
+    assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded);
+    assert.equal(error.details?.readableCaptures, 1);
+    assert.equal(error.details?.captureStalled, undefined);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('a non-retriable producer failure still ends the wait at its first poll', async () => {
   const runtime = {
     clock: { now: () => 0, sleep: async (_durationMs: number) => {} },

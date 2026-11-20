@@ -5,7 +5,6 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { LiveScenario } from '../live-device-e2e/runtime.ts';
 import {
   assertElementText,
-  assertDiffLine,
   assertFilesDiffer,
   assertJsonContains,
   assertPersistentAndroidHelper,
@@ -23,6 +22,7 @@ import {
   verifyCommand,
 } from './live-harness.ts';
 import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
+import { waitForSnapshotDiffLines } from './live-snapshot-transition.ts';
 import { waitForSurfaceChange } from './live-surface-transition.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -244,13 +244,11 @@ export async function assertAutomationSystem(
   await scrollToVisibleSelector(context, 'id="automation-open-alert"');
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
   await runStep(context, 'return from automation route with Back', ['back']);
-  const diff = await runStep(context, 'observe automation-to-settings diff', [
-    'diff',
-    'snapshot',
-    '-i',
+  // Back is confirmed before Settings has rendered, so one diff can still show this route.
+  await waitForSnapshotDiffLines(context, runStep, 'observe automation-to-settings diff', [
+    { kind: 'removed', text: 'Open automation alert' },
+    { kind: 'added', text: 'Open automation lab' },
   ]);
-  assertDiffLine(diff, 'removed', 'Open automation alert');
-  assertDiffLine(diff, 'added', 'Open automation lab');
   await assertWaitText(context, 'Settings');
   verifyCommand(context, C.diff, 'snapshot diff reports the Automation-to-Settings transition');
   verifyCommand(context, C.back, 'Android Back returns from automation route to Settings');

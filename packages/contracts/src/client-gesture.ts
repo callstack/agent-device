@@ -105,6 +105,8 @@ export type PanOptions = DeviceCommandBaseOptions & {
   dy: number;
   pointerCount?: GesturePointerCount;
   durationMs?: number;
+  /** Hold the contact at (x, y) this long before the move starts. */
+  holdMs?: number;
 };
 
 export type DragOptions = DeviceCommandBaseOptions & Omit<DragGesturePayload, 'kind'>;

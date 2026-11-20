@@ -170,3 +170,10 @@ test('a multi-finger tap needs the multi-touch tier; a one-finger pan does not',
     'plan',
   );
 });
+
+test('a held pan needs the target-authored-drag tier; an unheld one stays on plan', () => {
+  const pan = { intent: 'pan', origin: { x: 10, y: 20 }, delta: { x: 0, y: 100 } } as const;
+  assert.equal(resolveGestureRuntimePlan({ ...pan, holdMs: 800 }).tier, 'target-authored-drag');
+  assert.equal(resolveGestureRuntimePlan({ ...pan, holdMs: 0 }).tier, 'plan');
+  assert.equal(resolveGestureRuntimePlan(pan).tier, 'plan');
+});

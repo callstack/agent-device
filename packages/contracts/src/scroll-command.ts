@@ -9,6 +9,21 @@ export const DEFAULT_SCROLL_UNTIL_PASSES = 12;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
 export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
 export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
+/**
+ * `scroll refresh` is a directional scroll with these defaults. iOS commits a refresh only for a
+ * slow pull that starts on the list: 0/5 at the 400ms default, 5/5 at 1200ms.
+ */
+export const DEFAULT_REFRESH_PULL_DURATION_MS = 1200;
+export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
+
+/** The typed refusals `scroll refresh` publishes as `details.reason`. */
+export const SCROLL_REFRESH_REFUSALS = {
+  notAtTop: {
+    reason: 'scroll_refresh_not_at_top',
+    message: 'scroll refresh needs the content at its top',
+    hint: 'Run scroll top, then scroll refresh.',
+  },
+} as const satisfies Record<string, Readonly<{ reason: string; message: string; hint: string }>>;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 
@@ -85,7 +100,12 @@ export function assertExclusiveScrollDistanceInputs(
  * than resolved by precedence, so neither stop condition can silently win.
  */
 export function assertScrollUntilCompatible(
-  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string; maxPasses?: number }>,
+  input: Readonly<{
+    edge?: 'top' | 'bottom';
+    refresh?: boolean;
+    until?: string;
+    maxPasses?: number;
+  }>,
 ): void {
   if (input.maxPasses !== undefined) {
     if (input.until === undefined) {
@@ -107,7 +127,11 @@ export function assertScrollUntilCompatible(
       );
     }
   }
-  if (input.until === undefined || input.edge === undefined) return;
+  if (input.until === undefined) return;
+  if (input.refresh) {
+    throw new AppError('INVALID_ARGS', 'scroll refresh pulls once and cannot take --until');
+  }
+  if (input.edge === undefined) return;
   throw new AppError(
     'INVALID_ARGS',
     `scroll ${input.edge} already scrolls to the ${input.edge} edge and cannot take --until`,
