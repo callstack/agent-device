@@ -1,3 +1,4 @@
+import { PLUGIN_REASONS } from './reasons.ts';
 import type { RegisteredPlatformSetup } from './platform.ts';
 import { isPlatform, type Platform } from '@agent-device/kernel/device-identity';
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
@@ -35,9 +36,9 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
     contributionIdField: 'provider',
     rejectId: (id) =>
       ROUTING_PROVIDER_IDENTITIES.includes(id)
-        ? { reason: 'reserved_provider', message: `Provider id is reserved for routing: ${id}` }
+        ? { reason: PLUGIN_REASONS.reservedProvider.reason, message: `Provider id is reserved for routing: ${id}` }
         : undefined,
-    duplicateReason: 'duplicate_provider',
+    duplicateReason: PLUGIN_REASONS.duplicateProvider.reason,
     identityFor: (id) => ({ provider: id }),
     readMetadata: (value) => readableClaimId(value, 'provider'),
     readContribution: (value) => ({ kind: 'provider', id: readProviderContribution(value) }),
@@ -49,8 +50,8 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
     rejectId: (id) =>
       isPlatform(id)
         ? undefined
-        : { reason: 'invalid_plugin', message: `Unknown platform family: ${id}` },
-    duplicateReason: 'duplicate_platform',
+        : { reason: PLUGIN_REASONS.invalidPlugin.reason, message: `Unknown platform family: ${id}` },
+    duplicateReason: PLUGIN_REASONS.duplicatePlatform.reason,
     identityFor: (id) => ({ platform: id }),
     readMetadata: (value) => readableClaimId(value, 'platform'),
     readContribution: (value) => {
@@ -68,7 +69,7 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
     rejectId: (id) =>
       id === NATIVE_REPLAY_BACKEND
         ? {
-            reason: 'reserved_replay_backend',
+            reason: PLUGIN_REASONS.reservedReplayBackend.reason,
             message: `Replay backend id is reserved for native execution: ${id}`,
           }
         : undefined,
@@ -78,7 +79,7 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
       value.backend !== NATIVE_REPLAY_BACKEND
         ? value.backend
         : undefined,
-    duplicateReason: 'duplicate_replay_backend',
+    duplicateReason: PLUGIN_REASONS.duplicateReplayBackend.reason,
     identityFor: (id) => ({ backend: id }),
     readMetadata: (value) => readableClaimId(value, 'replayBackend'),
     readContribution: (value) => {
@@ -95,7 +96,7 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
   'replay-execution': {
     metadataField: 'replayExecution',
     contributionIdField: 'id',
-    duplicateReason: 'duplicate_replay_execution',
+    duplicateReason: PLUGIN_REASONS.duplicateReplayExecution.reason,
     readNamedId: (value) => (value === true ? NATIVE_REPLAY_BACKEND : namedId(value)),
     readLegacyClaim: (value) =>
       value.kind === 'replay-backend' && value.backend === NATIVE_REPLAY_BACKEND
@@ -351,7 +352,7 @@ function claimKindSpecOf(kind: unknown): ClaimKindSpec | undefined {
 function readableClaimId(value: unknown, field: string): string {
   if (!isClaimId(value)) {
     throw new AppError('INVALID_ARGS', `Plugin metadata ${field} must be a lowercase id`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin.reason,
     });
   }
   return value;
@@ -362,7 +363,7 @@ function readableClaimId(value: unknown, field: string): string {
  */
 function incompatiblePluginApi(declared: unknown): AppError {
   return new AppError('INVALID_ARGS', 'Plugin does not declare a compatible contract version', {
-    reason: 'incompatible-plugin-api',
+    reason: PLUGIN_REASONS.incompatiblePluginApi.reason,
     apiVersion: PLUGIN_API_VERSION,
     ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
     hint: incompatibleApiHint('plugin', declared),
@@ -378,7 +379,7 @@ function incompatiblePackageApi(field: unknown): AppError {
     'INVALID_ARGS',
     'Plugin package does not declare a compatible contract version',
     {
-      reason: 'incompatible-plugin-api',
+      reason: PLUGIN_REASONS.incompatiblePluginApi.reason,
       apiVersion: PLUGIN_API_VERSION,
       ...(declared !== undefined ? { declaredApiVersion: declared } : {}),
       hint: incompatibleApiHint('package', declared),
@@ -511,7 +512,7 @@ function hasProviderFacets(runtime: ProviderDeviceRuntime): boolean {
 }
 
 export function invalidPlugin(message: string): AppError {
-  return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
+  return new AppError('INVALID_ARGS', message, { reason: PLUGIN_REASONS.invalidPlugin.reason });
 }
 
 /** A format backend's setup must provide the lazy backend factory and nothing else. */

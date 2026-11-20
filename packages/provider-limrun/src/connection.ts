@@ -8,6 +8,7 @@ import {
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  LIMRUN_CREDENTIAL_REASONS,
   limrunInstanceVariables,
   readLimrunCredentials,
   requireLimrunCredentials,
@@ -116,7 +117,7 @@ function requireLimrunConnectAccess(env: ConnectContext['env'], platform: Limrun
     'INVALID_ARGS',
     `connect limrun requires LIMRUN_API_KEY, or ${limrunInstanceVariables(platform).join(', ')} for an existing instance.`,
     {
-      reason: 'missing_provider_credentials',
+      reason: LIMRUN_CREDENTIAL_REASONS.missing.reason,
       hint: 'Set the credentials in the environment before running agent-device connect limrun.',
     },
   );

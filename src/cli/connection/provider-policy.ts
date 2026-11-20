@@ -6,7 +6,7 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
-import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
+import { PLUGIN_INSTALLATION_REASONS, pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
 import { readVersion } from '@agent-device/host-kit/version';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
@@ -77,8 +77,6 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
 const CONNECTION_PLUGIN_REASONS = {
   // The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke.
   unavailable: { reason: 'plugin-unavailable' },
-  // No plugin declares this provider; `details.installCommand` is the command that adds it.
-  notInstalled: { reason: 'plugin-not-installed' },
 } as const satisfies ReasonTable<'connect'>;
 
 export function unavailableConnectPluginError(
@@ -107,7 +105,7 @@ export function unavailableConnectPluginError(
     'UNSUPPORTED_OPERATION',
     `${declaration.label} requires the ${declaration.package} plugin.`,
     {
-      reason: CONNECTION_PLUGIN_REASONS.notInstalled.reason,
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
       provider,
       package: declaration.package,
       ...pluginInstallationHint(declaration, readVersion()),
