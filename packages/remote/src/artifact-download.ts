@@ -3,7 +3,7 @@ import fs from 'node:fs';
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
 import type http from 'node:http';
 import path from 'node:path';
-import { Transform } from 'node:stream';
+import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -17,28 +17,30 @@ import {
 
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
 
-export type RemoteArtifactDownload = {
+/** An error answer is read this far for the diagnostic, then the response is dropped. */
+const MAX_ERROR_BODY_CHARS = 65_536;
+
+type RemoteArtifactRequest = {
   artifactUrl: URL;
   token: string;
   artifactId: string;
-  destinationPath: string;
   requestScope: DaemonRequestMeta | undefined;
   timeoutMs?: number;
-  /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
-  isDirectory?: boolean;
-  /**
-   * Writes a new private file: created exclusively at 0600, never through a symbolic link, and
-   * stopped once it crosses `maxBytes`, whatever `Content-Length` announced.
-   */
-  privateFile?: Readonly<{ maxBytes: number }>;
-  /**
-   * Stages the file in a private directory beside the destination and renames it into place
-   * (#4518). No link at the destination name or a replaced parent directory redirects the bytes,
-   * and a failed transfer leaves the existing destination untouched.
-   */
-  stagedFile?: true;
-  /** The caller's cancellation. An abort stops the transfer and its publish, then cleans up. */
+  /** The caller's cancellation. An abort stops the transfer and any publish, then cleans up. */
   signal?: AbortSignal;
+};
+
+/**
+ * How a download lands at `destinationPath`: one file written in place, a caller-owned root that
+ * receives one extracted directory, or one file staged privately beside the destination and renamed
+ * into place (#4518), where no link at the name or replaced parent redirects the bytes.
+ */
+export type RemoteArtifactDestinationMode = 'file' | 'directory' | 'staged-file';
+
+export type RemoteArtifactDownload = RemoteArtifactRequest & {
+  destinationPath: string;
+  /** Defaults to `file`. */
+  mode?: RemoteArtifactDestinationMode;
 };
 
 /**
@@ -58,16 +60,19 @@ const PRIVATE_FILE_FLAGS =
   fs.constants.O_EXCL |
   (fs.constants.O_NOFOLLOW ?? 0);
 
-type DownloadDestination = {
+type DownloadDestination<T> = {
   prepare(): Promise<void>;
   cleanupOnError(): Promise<void>;
-  materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<string>;
+  materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
 };
 
-function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination {
+/** An artifact held in memory, stopped once it crosses `maxBytes`, whatever `Content-Length` announced. */
+export type RemoteArtifactFetch = RemoteArtifactRequest & { maxBytes: number };
+
+function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination<string> {
   const { destinationPath } = params;
-  if (params.stagedFile) return stagedFileDestination(params);
-  if (params.isDirectory) {
+  if (params.mode === 'staged-file') return stagedFileDestination(params);
+  if (params.mode === 'directory') {
     return {
       prepare: async () => {
         await fs.promises.mkdir(destinationPath, { recursive: true });
@@ -75,37 +80,23 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
       // The root belongs to the caller and may contain earlier runs. Directory materialization
       // owns and cleans its hidden staging directory, so the root itself is never removed.
       cleanupOnError: async () => {},
-      materialize: (res, signal) => materializeDirectoryArtifact(res, destinationPath, signal),
+      materialize: (res: http.IncomingMessage, signal: AbortSignal) =>
+        materializeDirectoryArtifact(res, destinationPath, signal),
     };
   }
   return {
-    // A private file goes into a directory its caller allocated, which is never recreated here.
     prepare: async () => {
-      if (!params.privateFile)
-        await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     },
     cleanupOnError: () => fs.promises.rm(destinationPath, { force: true }),
-    materialize: async (res, signal) => {
-      const { privateFile } = params;
-      if (!privateFile) {
-        await pipeline(res, fs.createWriteStream(destinationPath), { signal });
-        return destinationPath;
-      }
-      // A file that cannot be opened never consumes the response, so release its socket here.
-      const file = await fs.promises
-        .open(destinationPath, PRIVATE_FILE_FLAGS, 0o600)
-        .catch((error) => {
-          res.destroy();
-          throw error;
-        });
-      const limit = limitBytes(privateFile.maxBytes, params.artifactId);
-      await pipeline(res, limit, file.createWriteStream(), { signal });
+    materialize: async (res: http.IncomingMessage, signal: AbortSignal) => {
+      await pipeline(res, fs.createWriteStream(destinationPath), { signal });
       return destinationPath;
     },
   };
 }
 
-function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestination {
+function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestination<string> {
   const { destinationPath, artifactId } = params;
   const parent = path.dirname(destinationPath);
   // Staging, publishing and cleanup all use this one resolved parent and its identity.
@@ -191,30 +182,63 @@ function directoryIdentity(directory: string): string | undefined {
   }
 }
 
-function limitBytes(maxBytes: number, artifactId: string): Transform {
-  let received = 0;
-  return new Transform({
-    transform(chunk: Buffer, _encoding, callback) {
-      received += chunk.length;
-      if (received <= maxBytes) {
-        callback(null, chunk);
-        return;
-      }
-      callback(
-        new AppError('COMMAND_FAILED', `The remote artifact is larger than ${maxBytes} bytes.`, {
-          reason: 'artifact_too_large',
-          artifactId,
-          maxBytes,
-        }),
-      );
+/** Fetches one artifact into memory. Nothing reaches the disk, so a failure leaves nothing behind. */
+export async function fetchRemoteArtifactFromUrl(params: RemoteArtifactFetch): Promise<Buffer> {
+  return await requestRemoteArtifact(params, {
+    prepare: async () => {},
+    cleanupOnError: async () => {},
+    materialize: async (res, signal) => {
+      const memory = boundedMemory(params.maxBytes, params.artifactId);
+      await pipeline(res, memory.sink, { signal });
+      return memory.bytes();
     },
   });
+}
+
+/**
+ * Collects a body into ONE buffer that doubles up to `maxBytes` and refuses the chunk that crosses it, so
+ * what is allocated depends on the bytes received and never on how many chunks carried them.
+ */
+function boundedMemory(maxBytes: number, artifactId: string) {
+  let buffer = Buffer.allocUnsafe(Math.min(maxBytes, 64 * 1024));
+  let length = 0;
+  const sink = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      const needed = length + chunk.length;
+      if (needed > maxBytes) {
+        callback(
+          new AppError('COMMAND_FAILED', `The remote artifact is larger than ${maxBytes} bytes.`, {
+            reason: 'artifact_too_large',
+            artifactId,
+            maxBytes,
+          }),
+        );
+        return;
+      }
+      if (needed > buffer.length) {
+        const grown = Buffer.allocUnsafe(Math.min(maxBytes, Math.max(needed, buffer.length * 2)));
+        buffer.copy(grown, 0, 0, length);
+        buffer = grown;
+      }
+      chunk.copy(buffer, length);
+      length = needed;
+      callback();
+    },
+  });
+  return { sink, bytes: () => buffer.subarray(0, length) };
 }
 
 /** Downloads an artifact and returns the exact file or directory published on the client. */
 export async function downloadRemoteArtifactFromUrl(
   params: RemoteArtifactDownload,
 ): Promise<string> {
+  return await requestRemoteArtifact(params, buildDownloadDestination(params));
+}
+
+async function requestRemoteArtifact<T>(
+  params: RemoteArtifactRequest,
+  destination: DownloadDestination<T>,
+): Promise<T> {
   const canceled = (): AppError =>
     createRequestCanceledError(
       { artifactId: params.artifactId, requestId: params.requestScope?.requestId },
@@ -222,41 +246,43 @@ export async function downloadRemoteArtifactFromUrl(
     );
   if (params.signal?.aborted) throw canceled();
   const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
-  const destination = buildDownloadDestination(params);
   await destination.prepare();
-  return await new Promise<string>((resolve, reject) => {
+  return await new Promise<T>((resolve, reject) => {
     let settled = false;
     let materializationStarted = false;
-    let stopError: AppError | undefined;
+    let timeoutError: AppError | undefined;
     const operation = new AbortController();
     const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
     // A caller abort stops the transfer like the timeout does, and settles only after cleanup.
     const onCallerAbort = (): void => {
-      stopError ??= canceled();
-      operation.abort(stopError);
-      request.destroy(stopError);
-      if (!materializationStarted) settle(undefined, stopError);
+      timeoutError ??= canceled();
+      operation.abort(timeoutError);
+      request.destroy(timeoutError);
+      if (!materializationStarted) fail(timeoutError);
     };
-    const settle = (result?: string, error?: Error) => {
-      if (settled) return;
+    const settleOnce = (): boolean => {
+      if (settled) return false;
       settled = true;
       clearTimeout(timeoutHandle);
       params.signal?.removeEventListener('abort', onCallerAbort);
-      if (error) {
-        // A cleanup that fails is reported on its own; the caller still receives the download's own error.
-        void destination
-          .cleanupOnError()
-          .catch((cleanupError: unknown) =>
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'remote_artifact_cleanup_failed',
-              data: { artifactId: params.artifactId, error: String(cleanupError) },
-            }),
-          )
-          .finally(() => reject(error));
-        return;
-      }
-      resolve(result ?? params.destinationPath);
+      return true;
+    };
+    const succeed = (result: T) => {
+      if (settleOnce()) resolve(result);
+    };
+    const fail = (error: Error) => {
+      if (!settleOnce()) return;
+      // A cleanup that fails is reported on its own; the caller still receives the download's own error.
+      void destination
+        .cleanupOnError()
+        .catch((cleanupError: unknown) =>
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'remote_artifact_cleanup_failed',
+            data: { artifactId: params.artifactId, error: String(cleanupError) },
+          }),
+        )
+        .finally(() => reject(error));
     };
     const request = transport.request(
       {
@@ -275,13 +301,8 @@ export async function downloadRemoteArtifactFromUrl(
         if (res.statusCode !== 200) {
           let body = '';
           res.setEncoding('utf8');
-          res.on('data', (chunk) => {
-            const remainingChars = 65536 - body.length;
-            if (remainingChars > 0) body += chunk.slice(0, remainingChars);
-          });
-          const fail = () => {
-            settle(
-              undefined,
+          const failWithStatus = () => {
+            fail(
               new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
                 artifactId: params.artifactId,
                 statusCode: res.statusCode,
@@ -290,44 +311,47 @@ export async function downloadRemoteArtifactFromUrl(
               }),
             );
           };
-          res.on('end', fail);
-          res.on('error', fail);
-          res.on('aborted', fail);
+          res.on('data', (chunk: string) => {
+            body += chunk.slice(0, MAX_ERROR_BODY_CHARS - body.length);
+            if (body.length < MAX_ERROR_BODY_CHARS) return;
+            // The diagnostic is full: the rest of an error answer is never read.
+            failWithStatus();
+            res.destroy();
+          });
+          res.on('end', failWithStatus);
+          res.on('error', failWithStatus);
+          res.on('aborted', failWithStatus);
           return;
         }
         materializationStarted = true;
         void destination.materialize(res, operation.signal).then(
-          (materializedPath) => settle(materializedPath),
+          (materializedPath) => succeed(materializedPath),
           (error: unknown) =>
-            settle(
-              undefined,
-              stopError ?? (error instanceof Error ? error : new Error(String(error))),
-            ),
+            fail(timeoutError ?? (error instanceof Error ? error : new Error(String(error)))),
         );
       },
     );
     const timeoutHandle = setTimeout(() => {
-      stopError ??= new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
+      timeoutError ??= new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
         artifactId: params.artifactId,
         requestId: params.requestScope?.requestId,
         timeoutMs,
       });
-      operation.abort(stopError);
-      request.destroy(stopError);
+      operation.abort(timeoutError);
+      request.destroy(timeoutError);
       // The abort-aware materializer cleans its staging area. Do not reject before it finishes,
       // or extraction could keep writing after the caller observes the timeout.
-      if (!materializationStarted) settle(undefined, stopError);
+      if (!materializationStarted) fail(timeoutError);
     }, timeoutMs);
     params.signal?.addEventListener('abort', onCallerAbort, { once: true });
     if (params.signal?.aborted) onCallerAbort();
     request.on('error', (error) => {
       if (materializationStarted) return;
       if (error instanceof AppError) {
-        settle(undefined, stopError ?? error);
+        fail(timeoutError ?? error);
         return;
       }
-      settle(
-        undefined,
+      fail(
         new AppError(
           'COMMAND_FAILED',
           'Failed to download remote artifact',

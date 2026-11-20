@@ -11,7 +11,7 @@ import {
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
-  downloadRemoteArtifact,
+  fetchRemoteArtifact,
   materializeRemoteArtifacts,
   withoutClientOwnedFields,
   settleScriptDeliveryReceiptOfFailure,
@@ -171,7 +171,7 @@ async function settleFailedDeliveryReceipt(
       req,
       error,
       stateDir,
-      downloadRemoteArtifact,
+      fetchRemoteArtifact,
       signal,
     );
   } catch {

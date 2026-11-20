@@ -8,8 +8,9 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 
 ## Applied today
 
-Script publishers use caller paths. On POSIX, apply ADR 0016 checks and stage in the checked directory.
-Cap bytes in remote script delivery.
+ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
+Both script publishers commit in the judged directory.
+Remote script delivery caps in-memory bytes and error answers.
 Remote record stop never takes a daemon path: use the request's path or one plain cwd file name, and warn (#4518).
 Stage recordings privately in one resolved parent, then rename. A parent other users can write is the caller's choice.
 

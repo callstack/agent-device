@@ -1,3 +1,7 @@
+import {
+  ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
+  ANDROID_IME_HELPER_NO_ACK_REASON,
+} from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
@@ -23,7 +27,7 @@ const HELPER_LABEL = 'Android IME helper';
 const ANDROID_IME_HELPER_NAME = 'android-ime-helper';
 const ANDROID_IME_HELPER_PACKAGE = 'com.callstack.agentdevice.imehelper';
 const ANDROID_IME_HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
-const ANDROID_IME_HELPER_PROTOCOL = 'android-ime-helper-v1';
+const ANDROID_IME_HELPER_PROTOCOL = 'android-ime-helper-v2';
 
 // Stable service-component id, matched literally by the manifest parser. Exported so the restore
 // lifecycle can compare the device's active IME without reading the packaged artifact from disk.
@@ -35,6 +39,90 @@ const ANDROID_IME_HELPER_REGISTRATION_POLL_MS = 100;
 
 const ACTION_INPUT_TEXT_B64 = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 const ACTION_CLEAR_TEXT = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
+
+// Finite result-code set mirrored by the helper (TestInputMethodService). All non-zero: the
+// transport prints result=0 when no receiver answered, so 0 is never a valid ack. An ack proves
+// attempted dispatch (and the commitText return), not final field content — fill keeps its single
+// read-back owner. Result data carries codes/lengths only, never user text.
+const IME_RESULT_COMMITTED = 1;
+const IME_RESULT_COMMIT_RETURNED_FALSE = 2;
+const IME_RESULT_NO_INPUT_CONNECTION = 3;
+const IME_RESULT_REJECTED_PAYLOAD = 4;
+const IME_RESULT_PROTOCOL_MISMATCH = 5;
+
+/**
+ * Declared per-dispatch payload bound, mirrored by the helper: a base64 extra of at most 64_000
+ * chars, i.e. at most 48_000 UTF-8 bytes decoded. Measured on-device (Pixel 7, API 36): payloads up
+ * to 64_000 chars are delivered and committed, and the adb-shell channel itself breaks between
+ * 65_000 and 66_000 chars, so this declared bound is the binding one. The host chunks below it on
+ * code-point boundaries; the helper rejects (never truncates) anything above it.
+ */
+const IME_HELPER_MAX_BASE64_LENGTH = 64_000;
+const IME_HELPER_MAX_UTF8_BYTES = (IME_HELPER_MAX_BASE64_LENGTH / 4) * 3;
+
+/** What the helper's ordered broadcast acknowledgement reported for one dispatch. */
+export type AndroidImeHelperDispatchOutcome = Readonly<
+  | { kind: 'committed'; attemptedUtf16: number }
+  | { kind: 'commit-returned-false'; attemptedUtf16: number }
+  | { kind: 'no-input-connection' }
+  | { kind: 'rejected-payload'; detail: string }
+  | { kind: 'protocol-mismatch' }
+  // `no-receiver`: the broadcast completed and no receiver answered (result=0), as a helper from
+  // before the acknowledgement protocol does. `unreadable-ack`: no completion line, or one the
+  // host cannot read, which says nothing about the installed helper.
+  | { kind: 'no-ack'; cause: 'no-receiver' | 'unreadable-ack' }
+>;
+
+type AndroidImeBroadcastResult = Readonly<{ resultCode: number; resultData: string }>;
+
+/**
+ * Parses `am broadcast`'s completion line, e.g. `Broadcast completed: result=1, data="utf16=9",
+ * extras: Bundle[...]`. Returns null when the line is absent — the process exit code alone is not
+ * evidence: it is 0 whether or not any receiver answered.
+ */
+function parseAndroidImeBroadcastResult(stdout: string): AndroidImeBroadcastResult | null {
+  const match = /Broadcast completed: result=(-?\d+)(?:, data="((?:[^"\\]|\\.)*)")?/.exec(stdout);
+  if (!match) return null;
+  const resultCode = Number.parseInt(match[1] ?? '0', 10);
+  const rawData = match[2] ?? '';
+  return {
+    resultCode,
+    resultData: rawData.replaceAll(String.raw`\"`, '"').replaceAll(String.raw`\\`, '\\'),
+  };
+}
+
+function readAttemptedUtf16(resultData: string): number | null {
+  const match = /^utf16=(\d+)$/.exec(resultData);
+  return match ? Number.parseInt(match[1] ?? '', 10) : null;
+}
+
+function classifyAndroidImeBroadcastResult(
+  result: AndroidImeBroadcastResult | null,
+): AndroidImeHelperDispatchOutcome {
+  const unreadable = { kind: 'no-ack', cause: 'unreadable-ack' } as const;
+  if (!result) return unreadable;
+  if (result.resultCode === 0) return { kind: 'no-ack', cause: 'no-receiver' };
+  switch (result.resultCode) {
+    case IME_RESULT_COMMITTED: {
+      const attemptedUtf16 = readAttemptedUtf16(result.resultData);
+      return attemptedUtf16 === null ? unreadable : { kind: 'committed', attemptedUtf16 };
+    }
+    case IME_RESULT_COMMIT_RETURNED_FALSE: {
+      const attemptedUtf16 = readAttemptedUtf16(result.resultData);
+      return attemptedUtf16 === null
+        ? unreadable
+        : { kind: 'commit-returned-false', attemptedUtf16 };
+    }
+    case IME_RESULT_NO_INPUT_CONNECTION:
+      return { kind: 'no-input-connection' };
+    case IME_RESULT_REJECTED_PAYLOAD:
+      return { kind: 'rejected-payload', detail: result.resultData || 'rejected' };
+    case IME_RESULT_PROTOCOL_MISMATCH:
+      return { kind: 'protocol-mismatch' };
+    default:
+      return unreadable;
+  }
+}
 
 /**
  * The IME helper this device should use: a provider that ships its own helper supplies it on the
@@ -176,25 +264,13 @@ export function isAndroidImeHelperPackage(packageName: string | undefined): pack
 // but a co-installed third-party app cannot — that permission gate (not the transport) is the
 // trust boundary. Broadcasts are package-scoped (`-p`) to the in-process dynamic receiver.
 
-// TestInputMethodService.MAX_TEXT_LENGTH: one broadcast commits at most this many UTF-16 units, and
-// the service drops a Base64 payload longer than twice that.
-const ANDROID_IME_HELPER_MAX_TEXT_LENGTH = 32_000;
-
-/** Whether one helper broadcast can commit the whole text, untruncated. */
-export function canAndroidImeHelperCommitText(text: string): boolean {
-  return (
-    text.length <= ANDROID_IME_HELPER_MAX_TEXT_LENGTH &&
-    Buffer.from(text, 'utf8').toString('base64').length <= ANDROID_IME_HELPER_MAX_TEXT_LENGTH * 2
-  );
-}
-
 export async function sendAndroidImeHelperText(
   adb: AndroidAdbExecutor,
   packageName: string,
   text: string,
-): Promise<void> {
+): Promise<AndroidImeHelperDispatchOutcome> {
   const payloadBase64 = Buffer.from(text, 'utf8').toString('base64');
-  await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_INPUT_TEXT_B64, {
+  return await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_INPUT_TEXT_B64, {
     text: payloadBase64,
   });
 }
@@ -202,8 +278,86 @@ export async function sendAndroidImeHelperText(
 export async function clearAndroidImeHelperText(
   adb: AndroidAdbExecutor,
   packageName: string,
+): Promise<AndroidImeHelperDispatchOutcome> {
+  return await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_CLEAR_TEXT, {});
+}
+
+/**
+ * Splits text into code-point-safe dispatch chunks, each within the helper's declared per-broadcast
+ * byte bound (base64 of the chunk stays under 64_000 chars). Never splits a surrogate pair; the
+ * total payload stays unbounded — oversized text is dispatched as ordered chunks, not truncated.
+ */
+export function chunkAndroidImeHelperText(text: string): string[] {
+  const codePoints = Array.from(text);
+  const chunks: string[] = [];
+  let current = '';
+  let currentBytes = 0;
+  for (const codePoint of codePoints) {
+    const bytes = Buffer.byteLength(codePoint, 'utf8');
+    if (currentBytes + bytes > IME_HELPER_MAX_UTF8_BYTES && current.length > 0) {
+      chunks.push(current);
+      current = '';
+      currentBytes = 0;
+    }
+    current += codePoint;
+    currentBytes += bytes;
+  }
+  chunks.push(current);
+  return chunks;
+}
+
+/**
+ * Sends one code-point-safe chunk and requires a committed acknowledgement whose attempted UTF-16
+ * length matches the request — a shorter ack would mean silent truncation. Throws a typed error
+ * otherwise; result details carry codes and lengths only.
+ */
+export async function sendAndroidImeHelperTextCommitted(
+  adb: AndroidAdbExecutor,
+  packageName: string,
+  text: string,
 ): Promise<void> {
-  await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_CLEAR_TEXT, {});
+  const outcome = await sendAndroidImeHelperText(adb, packageName, text);
+  assertCommittedOutcome(outcome, text.length);
+}
+
+/** Clear whose acknowledgement must report an attempted (empty) commit, same strictness as text. */
+export async function clearAndroidImeHelperTextCommitted(
+  adb: AndroidAdbExecutor,
+  packageName: string,
+): Promise<void> {
+  const outcome = await clearAndroidImeHelperText(adb, packageName);
+  assertCommittedOutcome(outcome, 0);
+}
+
+function assertCommittedOutcome(
+  outcome: AndroidImeHelperDispatchOutcome,
+  requestedUtf16: number,
+): asserts outcome is { kind: 'committed'; attemptedUtf16: number } {
+  if (outcome.kind === 'committed' && outcome.attemptedUtf16 === requestedUtf16) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Android test IME helper dispatch was not acknowledged as committed.',
+    {
+      backend: 'test-ime',
+      reason:
+        outcome.kind === 'no-ack'
+          ? ANDROID_IME_HELPER_NO_ACK_REASON
+          : ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
+      dispatchKind: outcome.kind,
+      ...(outcome.kind === 'no-ack'
+        ? {
+            ackCause: outcome.cause,
+            hint:
+              outcome.cause === 'no-receiver'
+                ? 'Reinstall a current bundled or provider IME helper and reopen the session.'
+                : 'The helper acknowledgement did not arrive or could not be read. Retry the command. If it repeats, check the adb connection.',
+          }
+        : {}),
+      ...('attemptedUtf16' in outcome ? { attemptedUtf16: outcome.attemptedUtf16 } : {}),
+      ...('detail' in outcome ? { detail: outcome.detail } : {}),
+      requestedUtf16,
+    },
+  );
 }
 
 async function sendAndroidImeHelperBroadcast(
@@ -211,7 +365,7 @@ async function sendAndroidImeHelperBroadcast(
   packageName: string,
   action: string,
   extras: Record<string, string>,
-): Promise<void> {
+): Promise<AndroidImeHelperDispatchOutcome> {
   const words: ShellWord[] = ['am', 'broadcast', '-p', packageName, '-a', action];
   words.push('--es', 'protocol', ANDROID_IME_HELPER_PROTOCOL);
   for (const [key, value] of Object.entries(extras)) {
@@ -228,6 +382,7 @@ async function sendAndroidImeHelperBroadcast(
         packageName,
       });
     }
+    return classifyAndroidImeBroadcastResult(parseAndroidImeBroadcastResult(result.stdout));
   } catch (error) {
     throw discloseAdbInputDispatch(error);
   }

@@ -6,7 +6,7 @@ extension RunnerTests {
     Response(
       ok: false,
       error: ErrorPayload(
-        code: "INVALID_ARGS",
+        code: RunnerWireErrorCode.invalidArgs,
         message: "\(commandName) requires direction up|down|left|right"
       )
     )
@@ -21,7 +21,7 @@ extension RunnerTests {
     return Response(
       ok: false,
       error: ErrorPayload(
-        code: "INVALID_ARGS",
+        code: RunnerWireErrorCode.invalidArgs,
         message: "\(commandName) durationMs must be between 0 and 10000"
       )
     )
@@ -83,7 +83,7 @@ extension RunnerTests {
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
       return Response(
         ok: false,
-        error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
+        error: ErrorPayload(code: RunnerWireErrorCode.invalidArgs, message: "\(commandName) requires finite coordinates")
       )
     }
     if let synthesized, let synthesizedResponse = try executeSynthesizedDragGesture(
@@ -177,7 +177,7 @@ extension RunnerTests {
       return Response(
         ok: false,
         error: ErrorPayload(
-          code: "INVALID_ARGS",
+          code: RunnerWireErrorCode.invalidArgs,
           message: "\(dragCommandName(message: message)) could not resolve a finite synthesized coordinate frame"
         )
       )

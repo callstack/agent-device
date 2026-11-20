@@ -53,17 +53,28 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
-test.skipIf(process.platform === 'win32').each([
-  { mode: 0o777, exposure: 'world_writable', hint: (_dir: string) => 'only you can write' },
-  { mode: 0o775, exposure: 'shared_group_writable', hint: (dir: string) => `chmod g-w ${dir}` },
-])(
-  'a refused destination with a missing parent leaves no directories behind ($exposure)',
-  ({ mode, exposure, hint }) => {
-    // `close --save-script <shared>/recordings/journey.ad` where `recordings` is absent. A `mkdir -p` that
-    // runs before the rule answers leaves `recordings` behind after the refusal. A group-writable
-    // directory is the one refusal the hint tells the caller how to fix in place.
+test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+  'a recording saves under group-writable directories this user owns, as umask 002 leaves a checkout',
+  () => {
     const directory = root();
-    const shared = directoryWith(path.join(directory, 'shared'), mode);
+    const checkout = directoryWith(path.join(directory, 'checkout'), 0o775);
+    const flows = directoryWith(path.join(checkout, 'flows'), 0o775);
+    const destination = path.join(flows, 'login.ad');
+
+    const result = writerFor(directory).write(recordingTo(destination));
+
+    expect(result.written).toBe(true);
+    expect(fs.lstatSync(destination).mode & 0o777).toBe(0o600);
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'a refused destination with a missing parent leaves no directories behind',
+  () => {
+    // `close --save-script <shared>/recordings/journey.ad` where `recordings` is absent. A `mkdir -p` that
+    // runs before the rule answers leaves `recordings` behind after the refusal.
+    const directory = root();
+    const shared = directoryWith(path.join(directory, 'shared'), 0o777);
     const destination = path.join(shared, 'recordings', 'journey.ad');
 
     const result = writerFor(directory).write(recordingTo(destination));
@@ -72,10 +83,10 @@ test.skipIf(process.platform === 'win32').each([
     const details = result.written ? undefined : result.error?.details;
     expect(details).toMatchObject({
       reason: 'script_ancestor_untrusted',
-      exposure,
+      exposure: 'world_writable',
       ancestor: shared,
     });
-    expect(String(details?.hint)).toContain(hint(shared));
+    expect(String(details?.hint)).toContain('only you can write');
     expect(fs.readdirSync(shared)).toEqual([]);
   },
 );

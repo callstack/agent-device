@@ -20,6 +20,7 @@ import { resetAndroidSnapshotHelperInstallCache } from '@agent-device/platform-a
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {
+  androidImeBroadcastAckResult,
   androidImeLifecycleAdbResult,
   createAndroidProviderShellState,
   type AndroidProviderShellState,
@@ -397,7 +398,10 @@ function androidAppMutationAdbResult(args: readonly string[]): AndroidAdbResult 
     args.includes('-a') &&
     args.includes('-p')
   ) {
-    return { stdout: 'Broadcast completed: result=0\n', stderr: '', exitCode: 0 };
+    // The test IME helper answers with the v2 ordered acknowledgement; any other broadcast keeps
+    // the old result=0 (no receiver answered).
+    const imeAck = androidImeBroadcastAckResult(args);
+    return imeAck ?? { stdout: 'Broadcast completed: result=0\n', stderr: '', exitCode: 0 };
   }
   return undefined;
 }

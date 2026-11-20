@@ -344,3 +344,66 @@ function publishRetryEvent(event: RetryTelemetryEvent): void {
     },
   });
 }
+
+/**
+ * How long a scope may run, and what its expiry reports. `armedMs` is the budget the scope was
+ * given, so a typed timeout states the value its owner armed (ADR 0010).
+ */
+export type Limit = {
+  maxMs: number;
+  expired: (armedMs: number) => Error;
+};
+
+/**
+ * One bounded piece of work: the signal that wakes it at its cutoff, and the only place its result
+ * may be published (#4789).
+ */
+export type Scope = {
+  /** Seals publication and stops the timer. */
+  close(): void;
+  /** Publishes `publish`'s result, or aborts and throws when the scope has already ended. */
+  commit<T>(publish: () => T): T;
+  /** The signal to hand the work. Reading it arms the timer that wakes blocked work. */
+  readonly signal: AbortSignal;
+};
+
+/**
+ * Opens a scope under `limit`, inheriting cancellation from `inherited`. `commit` decides
+ * publication on the clock, so a result that reaches its caller after the cutoff is refused even
+ * when no timer callback has run. `now` must be a monotonic elapsed-time clock.
+ */
+export function openScope(
+  inherited: AbortSignal | undefined,
+  limit: Limit,
+  now: () => number = () => performance.now(),
+): Scope {
+  const deadline = Deadline.fromTimeoutMs(limit.maxMs, now());
+  const controller = new AbortController();
+  const signal = inherited ? AbortSignal.any([inherited, controller.signal]) : controller.signal;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  // The one expiry operation, reached from the timer and from `commit`.
+  const expire = (): void => {
+    if (!controller.signal.aborted) controller.abort(limit.expired(limit.maxMs));
+  };
+  return {
+    close: () => {
+      closed = true;
+      clearTimeout(timer);
+    },
+    commit: (publish) => {
+      if (closed) throw new Error('Request scope is closed');
+      // An inherited cancellation stays the reason: the clock is read only while nothing aborted.
+      if (!signal.aborted && deadline.isExpired(now())) expire();
+      signal.throwIfAborted();
+      return publish();
+    },
+    get signal() {
+      if (timer === undefined && !closed && !signal.aborted) {
+        timer = setTimeout(expire, deadline.remainingMs(now()));
+        timer.unref();
+      }
+      return signal;
+    },
+  };
+}

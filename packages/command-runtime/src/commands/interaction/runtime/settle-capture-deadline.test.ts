@@ -56,6 +56,40 @@ test('a stalled settle capture receives its deadline signal and the press still 
   assert.equal(observedAbort, true);
 });
 
+// A capture that returns after the settle budget did not stall: the budget ran out while the UI
+// was still being read. The late capture is not evidence, and the hint must not blame the capture.
+test('a settle capture that answers after the budget reports never settled, not a stall', async () => {
+  const before = buttonSnapshot();
+  const clock = createFakeClock();
+  let captureCalls = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        captureCalls += 1;
+        if (captureCalls > 1) clock.advance(100);
+        return { snapshot: before };
+      },
+      tap: async () => ({ ok: true }),
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: before }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: { quietMs: 25, timeoutMs: 75 },
+  });
+
+  assert.ok(result.settle);
+  assert.equal(result.settle.settled, false);
+  assert.equal(result.settle.diff, undefined);
+  assert.doesNotMatch(result.settle.hint ?? '', /capture stalled/i);
+  assert.match(result.settle.hint ?? '', /kept changing/i);
+});
+
 test('fill on a @ref with --settle carries the settle observation on its result', async () => {
   const before = buttonSnapshot();
   const after = welcomeSnapshot();

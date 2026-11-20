@@ -7,8 +7,8 @@
 // request the way a hostile daemon would and asserts where the client's files ended up.
 //
 // The script route reaches the filesystem in two places only. A version is matched to a record by a HASH of
-// the publication identity, and its bytes are staged in a directory the client makes with `mkdtempSync` and
-// names `script.ad` itself. That is what this file pins: a response string that would resolve outside those
+// the publication identity, and its bytes are held in memory until host-kit commits them at the destination
+// that record names. That is what this file pins: a response string that would resolve outside those
 // two places has to be refused, and it has to be refused without creating anything the daemon named.
 //
 // Receipt cases send a real `batch`, because the client reads `scriptDeliveryReceipt` only on that command:
@@ -175,7 +175,7 @@ function ownRecordFiles(world: World, pinnedNames: readonly string[]): string[] 
 /**
  * What the records named `pinnedNames` SAY, in full: each exact name and every field of the record. Nothing is
  * discovered by listing the directory, so a renamed record, a destination moved, a revision that did not move,
- * or a staging directory left listed all fail the caller's `toEqual`. The listing is compared against the PIN
+ * or a field the record does not own all fail the caller's `toEqual`. The listing is compared against the PIN
  * first, so a record that was added, or moved to another hash-shaped name, fails as the name it moved to.
  */
 function recordsAsWritten(
@@ -254,7 +254,7 @@ skipOnWindows(
 
     expect(response.ok).toBe(true);
     // Neither recording moved, and the whole watched tree is byte-for-byte what it was: no new record, no
-    // record rewritten, no staging directory, nothing anywhere the receipt could have named.
+    // record rewritten, no temporary file, nothing anywhere the receipt could have named.
     expect(fs.readFileSync(world.destination, 'utf8')).toBe('open Demo\n');
     expect(fs.readFileSync(other, 'utf8')).toBe('open Demo\n');
     const data = response.ok ? (response.data as Record<string, unknown>) : {};
@@ -329,8 +329,8 @@ skipOnWindows(
 
     expect(response.ok).toBe(true);
     // The bytes arrived, at the destination THIS client recorded, and they are exactly the version's bytes. The
-    // record file is the only other entry allowed to move, and only to the fields pinned below: so no staging
-    // directory, no second record, and no entry anywhere the receipt could have named.
+    // record file is the only other entry allowed to move, and only to the fields pinned below: so no temporary
+    // file, no second record, and no entry anywhere the receipt could have named.
     expect(fs.readFileSync(world.destination, 'utf8')).toBe('click Demo\n');
     expect(
       entriesThatMoved(
@@ -342,15 +342,12 @@ skipOnWindows(
         ]),
       ),
     ).toEqual([]);
-    // Revision 2, and the staging list EMPTY: the publication released the directory it staged in, and this
-    // assertion is what proves no staging directory is still named there.
     expect(recordsAsWritten(world, namesAtSend)).toEqual([
       {
         name: namesAtSend[0],
         destination: world.destination,
         force: false,
         revision: 2,
-        staging: [],
       },
     ]);
     expect(nothingEscaped(world, HOSTILE_NAMES)).toEqual([]);
@@ -404,14 +401,13 @@ skipOnWindows(
         ),
         hostile,
       ).toEqual([]);
-      // One record, its exact name, the destination the CLIENT recorded, revision 1, and nothing staged.
+      // One record, its exact name, the destination the CLIENT recorded, revision 1, and nothing else.
       expect(recordsAsWritten(world, recordsAtSend), hostile).toEqual([
         {
           name: recordsAtSend[0],
           destination: world.destination,
           force: false,
           revision: 1,
-          staging: [],
         },
       ]);
       expect(nothingEscaped(world, [hostile]), hostile).toEqual([]);

@@ -30,7 +30,7 @@ const ARTIFACT: AndroidImeHelperArtifact = {
     packageName: 'com.callstack.agentdevice.imehelper',
     versionCode: 1,
     serviceComponent: HELPER_SERVICE,
-    broadcastProtocol: 'android-ime-helper-v1',
+    broadcastProtocol: 'android-ime-helper-v2',
   },
 };
 
@@ -203,7 +203,16 @@ test('a confirmed rebind whose device record stays set is retried at the next en
   await withDeviceAdb(
     async (args) => {
       calls.push(`${args[1]} ${args[2]}`);
-      return args[1] === 'am' ? { exitCode: 0, stdout: '', stderr: '' } : await deviceAdb(args);
+      if (args[1] === 'am') {
+        const payload = args[args.indexOf('text') + 1] ?? '';
+        const utf16 = Buffer.from(payload, 'base64').toString('utf8').length;
+        return {
+          exitCode: 0,
+          stdout: `Broadcast completed: result=1, data="utf16=${utf16}"\n`,
+          stderr: '',
+        };
+      }
+      return await deviceAdb(args);
     },
     async () => await typeAndroid(DEVICE, 'Jane'),
   );

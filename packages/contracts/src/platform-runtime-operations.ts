@@ -416,6 +416,7 @@ function gesturePlan<const Tier extends GestureRuntimeTier>(tier: Tier): Gesture
 export type ScrollRuntimePlan =
   | Readonly<{ kind: 'direction'; use: typeof scrollDirectionUse }>
   | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollVerifiedPassUse }>
+  | Readonly<{ kind: 'refresh'; use: typeof scrollVerifiedPassUse }>
   | Readonly<{ kind: 'until'; until: string; use: typeof scrollVerifiedPassUse }>;
 
 /**
@@ -425,8 +426,10 @@ export type ScrollRuntimePlan =
  * before this resolves.
  */
 export function resolveScrollRuntimePlan(
-  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string }>,
+  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string; refresh?: boolean }>,
 ): ScrollRuntimePlan {
+  // `scroll refresh` reads the top edge off a fresh capture before its one pull.
+  if (input.refresh) return Object.freeze({ kind: 'refresh', use: scrollVerifiedPassUse } as const);
   if (input.until !== undefined) {
     return Object.freeze({
       kind: 'until',

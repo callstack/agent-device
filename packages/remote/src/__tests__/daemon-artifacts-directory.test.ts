@@ -53,7 +53,7 @@ test('downloadRemoteArtifact extracts a directory artifact into the caller-local
       artifactId,
       destinationPath: callerArtifactsRoot,
       requestScope: {},
-      isDirectory: true,
+      mode: 'directory',
     });
 
     const downloadedResult = path.join(
@@ -111,7 +111,7 @@ test('a failed directory download leaves the caller-local artifacts root untouch
           artifactId: 'does-not-exist',
           destinationPath: callerArtifactsRoot,
           requestScope: {},
-          isDirectory: true,
+          mode: 'directory',
         }),
     );
 
@@ -164,7 +164,7 @@ test('a directory artifact containing a symlink is rejected, not extracted', asy
           artifactId,
           destinationPath: callerArtifactsRoot,
           requestScope: {},
-          isDirectory: true,
+          mode: 'directory',
         }),
       (error: unknown) =>
         error instanceof AppError && error.details?.reason === 'ARCHIVE_UNSAFE_ENTRY',

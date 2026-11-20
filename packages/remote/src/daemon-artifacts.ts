@@ -20,6 +20,7 @@ import {
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
+import type { RemoteArtifactDestinationMode } from './artifact-download.ts';
 import type { SessionScriptDelivery } from './session-script-destination.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { withUploadPreparationDeadline } from './upload-stream.ts';
@@ -555,7 +556,7 @@ async function deliverResponseArtifacts(
     req,
     response,
     client.stateDir,
-    downloadRemoteArtifact,
+    fetchRemoteArtifact,
     signal,
   );
   return await scripts.settleAfter(download);
@@ -631,9 +632,12 @@ async function downloadEachArtifact(
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
       // `downloadRemoteArtifact`). A recording is always one staged file, chosen from the request,
       // never from the reply's artifact type (#4518).
-      ...(req.command === 'record'
-        ? { stagedFile: true as const }
-        : { isDirectory: artifact.artifactType === 'test-artifacts' }),
+      mode:
+        req.command === 'record'
+          ? 'staged-file'
+          : artifact.artifactType === 'test-artifacts'
+            ? 'directory'
+            : 'file',
     });
     if (destination.fallback && req.command === 'record') {
       client.fallbacks.push({
@@ -813,12 +817,8 @@ type DownloadRemoteArtifactParams = {
   destinationPath: string;
   requestScope: DaemonWireRequest['meta'];
   timeoutMs?: number;
-  /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
-  isDirectory?: boolean;
-  /** A capped download into a new private file (`artifact-download.ts`). */
-  privateFile?: Readonly<{ maxBytes: number }>;
-  /** A file staged beside its destination and renamed into place (`artifact-download.ts`). */
-  stagedFile?: true;
+  /** How the download lands (`artifact-download.ts`); defaults to one file written in place. */
+  mode?: RemoteArtifactDestinationMode;
   /** The caller's cancellation (`artifact-download.ts`). */
   signal?: AbortSignal;
 };
@@ -832,6 +832,27 @@ export async function downloadRemoteArtifact(
   const { baseUrl, ...download } = params;
   return await downloadRemoteArtifactFromUrl({
     ...download,
+    artifactUrl: new URL(buildDaemonArtifactUrl(baseUrl, params.artifactId)),
+  });
+}
+
+type FetchRemoteArtifactParams = {
+  baseUrl: string;
+  token: string;
+  artifactId: string;
+  requestScope: DaemonWireRequest['meta'];
+  /** The fetch stops once the body crosses this size. */
+  maxBytes: number;
+  /** The caller's cancellation (`artifact-download.ts`). */
+  signal?: AbortSignal;
+};
+
+/** Fetches one artifact into memory, capped at `maxBytes` (`artifact-download.ts`). */
+export async function fetchRemoteArtifact(params: FetchRemoteArtifactParams): Promise<Buffer> {
+  const { fetchRemoteArtifactFromUrl } = await import('./artifact-download.ts');
+  const { baseUrl, ...fetch } = params;
+  return await fetchRemoteArtifactFromUrl({
+    ...fetch,
     artifactUrl: new URL(buildDaemonArtifactUrl(baseUrl, params.artifactId)),
   });
 }

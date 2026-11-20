@@ -119,7 +119,7 @@ enum ScrollViewportPolicy {
 
   /// The runner's own wire vocabulary, not a shared policy constant: the host keeps it
   /// `COMMAND_FAILED` and reads it back from `details.runnerErrorCode`.
-  static let occlusionRunnerCode = "SCROLL_KEYBOARD_OCCLUDES_SURFACE"
+  static let occlusionRunnerCode = RunnerTests.RunnerWireErrorCode.scrollKeyboardOccludesSurface
 
   /// Clips a scroll viewport to the band above an occluding keyboard, failing open on a frame the
   /// runner cannot measure: a missing keyboard query is not evidence that the surface is blocked.

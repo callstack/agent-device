@@ -25,7 +25,7 @@ const manifest = {
   packageName: PACKAGE,
   versionCode: 19002,
   serviceComponent: 'com.callstack.agentdevice.imehelper/.TestInputMethodService',
-  broadcastProtocol: 'android-ime-helper-v1' as const,
+  broadcastProtocol: 'android-ime-helper-v2' as const,
 };
 
 beforeEach(() => {

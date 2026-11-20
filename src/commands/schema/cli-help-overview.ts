@@ -22,7 +22,7 @@ Start:
 Loop:
   press|click|fill|longpress <target> ... --settle
   hover <target> --settle (web only; reveals hover-gated UI)
-  scroll <direction|top|bottom> [amount] --settle; back --settle
+  scroll <direction|top|bottom|refresh> [amount] --settle; back --settle
     acts, waits for quiet, and prints the UI diff. Continue from that diff.
     Run snapshot -i only when the diff lacks the next target or did not settle.
   Verify a named expectation with the diff, wait text "...", wait <selector>, wait absent <selector>,

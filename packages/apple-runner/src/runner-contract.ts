@@ -7,11 +7,6 @@ import {
   type DispatchDisclosure,
 } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
-import {
-  ALERT_BUTTON_NOT_FOUND_RUNNER_CODE,
-  ALERT_NOT_FOUND_RUNNER_CODE,
-  ALERT_UNRESOLVED_RUNNER_CODE,
-} from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
@@ -25,29 +20,13 @@ import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-comma
 import { getRequestSignal, isRequestCanceled } from './host.ts';
 
 /**
- * The runner's own code for "an earlier command exceeded the execution watchdog and its abandoned
- * main-thread work is still draining" (#1105). It is transient by construction — past the wedge
- * threshold the runner escalates to `RUNNER_WEDGED` instead — so every host path must publish it
- * as retriable.
- */
-export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
-
-/**
- * The runner's own code for the command that just tripped the execution watchdog: its main-thread
- * work was abandoned and the thread is now occupied (#2552). Unlike `RUNNER_BUSY` (a fast refusal
- * of a *later* command), this is the error the *stalling* command itself returns, so it is the only
- * typed signal available before any refusal happens. Not retriable: the wait already elapsed and an
- * immediate retry would only meet `RUNNER_BUSY`.
- */
-export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
-
-/**
  * The runner's own code for refusing a repeat of a `commandId` it already finished, when that
  * command's classification keeps no response body to replay. The command journal answers this; no
  * command ran for the repeat. It is therefore silent about the runner's main thread, and a caller
  * must not read it as drained occupancy ({@link runnerMainThreadOccupancyReport}).
  */
-export const COMMAND_ALREADY_FINISHED_RUNNER_CODE = 'COMMAND_ALREADY_FINISHED';
+export const COMMAND_ALREADY_FINISHED_RUNNER_CODE: RunnerTableErrorCode =
+  'COMMAND_ALREADY_FINISHED';
 
 /** The longest readiness preflight a ready runner session pays before a conservative command. */
 export const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
@@ -56,19 +35,7 @@ export const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
  * The runner's own code for a command it refused because abandoned main-thread work has occupied it
  * past the wedge threshold (#1105). Like `RUNNER_BUSY`, the refused command never ran.
  */
-export const RUNNER_WEDGED_RUNNER_CODE = 'RUNNER_WEDGED';
-
-/**
- * The runner's own code for a read whose session app is not running. No runner read launches the
- * app — a bare launch would drop the payload of a launch still pending, such as a deep link held
- * behind SpringBoard's confirmation — so the runner refuses any command carrying its read-only
- * trait, including a mutation's leading read (a gesture's viewport read, a selector's resolving
- * capture). Only the iOS runner refuses (`#if os(iOS)`); the macOS, tvOS and visionOS runners keep the
- * activate repair. The refusal describes one poll: the launch that confirmation releases may still be
- * starting when the next read arrives, so it is retriable for a `wait`, while the transport reads
- * it as a definite answer and never resends it.
- */
-const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
+export const RUNNER_WEDGED_RUNNER_CODE: RunnerTableErrorCode = 'RUNNER_WEDGED';
 
 export type RunnerCommand = {
   coordinateTapTextInputEvidence?: CoordinateTapTextInputEvidence;
@@ -292,210 +259,211 @@ export function resolveRunnerStartupSignal(
 /**
  * The code the XCTest runner answers with when it declines to place a scroll gesture under the
  * on-screen keyboard (#2500). It is the runner's own vocabulary, so it is declared here beside the
- * set that keeps it off the wire, and the Apple scroll owner matches it on `details.runnerErrorCode`
- * rather than on error text.
+ * table row that keeps it off the wire, and the Apple scroll owner matches it on
+ * `details.runnerErrorCode` rather than on error text.
  */
-export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
-
-/** The Apple runner left the visible keyboard alone. */
-export const KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_DISMISS_UNAVAILABLE';
-
-/** A Return attempt on the focused input could not be confirmed. */
-export const KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE = 'KEYBOARD_RETURN_UNAVAILABLE';
-
-/**
- * The runner's own code refusing a press of a hardware or Siri Remote control its target cannot
- * perform. Today that is the Action Button on an iPhone or iPad model without one: the daemon admits
- * `action-button` for every iPhone and iPad and lets the runner answer whether the hardware is there.
- * A volume key on a simulator and a remote button off tvOS are refused by runtime admission before the
- * runner is reached, so those refusals carry `unsupported-device-kind` and `unsupported-platform-leaf`.
- * Each refusal comes from the press helper answering false, which it does before pressing anything, so
- * the reply proves nothing was sent. One code covers the family because the recovery is one question —
- * does this target have that control — and the message names the control.
- */
-export const HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE = 'HARDWARE_CONTROL_UNAVAILABLE';
-
-/**
- * The runner's own code refusing macOS `back` when the app's tree exposes no in-app back control. The
- * refusal answered with no code at all before, which left the caller reading prose; it keeps the
- * `COMMAND_FAILED` code such a code-less reply always produced.
- */
-export const IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE = 'IN_APP_BACK_CONTROL_UNAVAILABLE';
-
-/**
- * The codes the XCTest runner answers with when a resolved-display capture it was asked to make did
- * not happen (#2728): no window resolved so no display could be named, the resolved window named no
- * display, or the resolved display handed back an image it could not encode upright. The runner emits
- * them from every consumer of that helper — the `screenshot` command's fallback, `record start`'s
- * required first frame, and an optional visual check such as the `back` fallback's before/after
- * sample. They are the runner's own vocabulary, so they are declared here beside the set that keeps
- * them off the wire; a required capture fails closed on them rather than falling back to a screen
- * nobody is on, and an optional one reports the refusal as an unknown. Only the `screenshot` route
- * consumes the set for its own simctl-to-runner decision, but the set names the whole family.
- */
-const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
-const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';
-const RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE = 'APP_SCREEN_CAPTURE_UNRENDERABLE';
-const RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE = 'APP_SCREEN_OFF_LIT_PANEL';
-
-/**
- * Every runner code meaning "this capture did not happen", covering the display, the image, and the
- * panel: on a foldable, a target app whose windows are all on the dark panel is refused.
- */
-export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = new Set([
-  RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE,
-  RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE,
-  RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE,
-  RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE,
-]);
-
-/**
- * The runner's own code refusing a coordinate `fill` whose point identified no text input (#1721).
- * The synthesized first-responder replacement this route would otherwise take has no element, so its
- * clear and its typed text reach whichever field already holds focus. The runner refuses before
- * dispatching the focus tap, so the reply proves nothing ran.
- */
-export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
-
-/**
- * The runner code refusing a coordinate `fill` whose pre-tap input lookup could not answer on the
- * degraded channel. Like NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a
- * claim that the point has no input — only that the runner could not tell.
- */
-export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
+export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE: RunnerTableErrorCode =
+  'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
 
 /**
  * The runner codes for a synthesized long press, scroll, or planned gesture on iOS; the CLI `swipe` is
- * a planned fling gesture.
+ * a planned fling gesture. Both are rows of {@link RUNNER_ERROR_CODES}.
  * NOT_DISPATCHED: the event synthesis refused before any of its events reached XCTest, so the
  * command sent nothing. OUTCOME_UNKNOWN: failed after its events reached XCTest, so it may have run;
  * the runner never falls back to repeat it. Any other refusal, a platform one included, keeps
  * UNSUPPORTED_OPERATION.
  */
-const SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE = 'SYNTHESIZED_GESTURE_NOT_DISPATCHED';
-const SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE = 'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN';
+const SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE: RunnerTableErrorCode =
+  'SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN';
 
 /**
- * The runner codes for an iOS `back` swipe. BACK_SWIPE_NO_CHANGE: the swipe was sent and the screen
- * did not change. BACK_SWIPE_UNVERIFIED: the swipe was sent but the screen kept changing before it
- * or could not be sampled after it. Both ran the swipe, so they stay `unknown`.
- * BACK_SWIPE_NOT_DISPATCHED: the swipe was refused before any touch went down.
+ * The runner codes for an iOS `back` swipe, rows of {@link RUNNER_ERROR_CODES}. BACK_SWIPE_NO_CHANGE:
+ * the swipe was sent and the screen did not change. BACK_SWIPE_UNVERIFIED: the swipe was sent but
+ * the screen kept changing before it or could not be sampled after it. Both ran the swipe, so they
+ * stay `unknown`. BACK_SWIPE_NOT_DISPATCHED: the swipe was refused before any touch went down.
  */
-const BACK_SWIPE_NO_CHANGE_RUNNER_CODE = 'BACK_SWIPE_NO_CHANGE';
-const BACK_SWIPE_UNVERIFIED_RUNNER_CODE = 'BACK_SWIPE_UNVERIFIED';
-const BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE = 'BACK_SWIPE_NOT_DISPATCHED';
+const BACK_SWIPE_NO_CHANGE_RUNNER_CODE: RunnerTableErrorCode = 'BACK_SWIPE_NO_CHANGE';
 
 /**
- * Runner codes that classify a failure for the host without renaming it on the wire. They stay
- * `COMMAND_FAILED` unless `DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES` names the code the caller already
- * reads the family under, and survive as `details.runnerErrorCode`, which is what family policy
- * reads: `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there
- * yet, the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and
- * the retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
+ * One row per runner error code: the single declaration of what the host does with a reported
+ * code, replacing the four parallel maps this file used to keep. A new runner refusal is one row
+ * here plus one `RunnerWireErrorCode` constant in the Swift tests, and
+ * test/repo-guards/runner-error-code-parity.test.ts fails when the two drift apart. A row holds:
+ * - `dispatched`: what the reply proves about reaching the device — refusals answer before the
+ *   command runs (selector refusals included; `INVALID_ARGS` comes only from request decoding,
+ *   ahead of any gesture); every other code, and a reply without one, is `unknown`.
+ * - `reason`: the `details.reason` a consumer acts on instead of `details.runnerErrorCode`; the
+ *   union below is derived from the rows.
+ * - `diagnosticOnly`: the code classifies a failure without renaming it on the wire — it stays
+ *   `COMMAND_FAILED` unless `wireCode` names the family code the caller already reads (the
+ *   keyboard and hardware refusals stay `UNSUPPORTED_OPERATION`) — and survives as
+ *   `details.runnerErrorCode`, which family policy reads (`RUNNER_BUSY` retriable contention,
+ *   `ALERT_NOT_FOUND`, the scroll keyboard refusal, retriable `APP_NOT_RUNNING`).
  */
-const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
-  string,
-  Readonly<{ retriable?: true }>
-> = new Map([
-  [RUNNER_BUSY_RUNNER_CODE, { retriable: true }],
-  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, {}],
-  [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
-  [ALERT_NOT_FOUND_RUNNER_CODE, {}],
-  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
-  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, {}],
-  [KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, {}],
-  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, {}],
-  [IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, {}],
-  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, {}],
-  [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, {}],
-  [BACK_SWIPE_NO_CHANGE_RUNNER_CODE, {}],
-  [BACK_SWIPE_UNVERIFIED_RUNNER_CODE, {}],
-  [BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE, {}],
-  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
-]);
+export type RunnerErrorCodeRow = Readonly<{
+  dispatched: DispatchDisclosure;
+  reason?: string;
+  diagnosticOnly?: Readonly<{
+    retriable?: boolean;
+    wireCode?: AppErrorCode;
+  }>;
+}>;
+
+export const RUNNER_ERROR_CODES = {
+  INVALID_ARGS: { dispatched: 'no' },
+  ELEMENT_NOT_FOUND: { dispatched: 'no' },
+  ELEMENT_OFFSCREEN: { dispatched: 'no' },
+  AMBIGUOUS_MATCH: { dispatched: 'no' },
+  OBSERVATION_UNAVAILABLE: { dispatched: 'no' },
+  // Transient by construction (#1105) — past the wedge threshold the runner escalates to
+  // RUNNER_WEDGED — so every host path publishes this refusal as retriable.
+  RUNNER_BUSY: { dispatched: 'no', reason: 'runner_busy', diagnosticOnly: { retriable: true } },
+  RUNNER_WEDGED: { dispatched: 'no' },
+  COMMAND_ALREADY_FINISHED: { dispatched: 'unknown' },
+  // A read whose session app is not running: no runner read launches the app (a bare launch would
+  // drop a pending launch's payload), so the runner refuses the read-only command. The refusal
+  // describes one poll, so it is retriable for a `wait` while the transport never resends it.
+  APP_NOT_RUNNING: { dispatched: 'no', diagnosticOnly: { retriable: true } },
+  MAIN_THREAD_TIMEOUT: {
+    // This is the answer the stalling command itself gives: its main-thread work was abandoned and the
+    // thread is now occupied (#2552), so the command may have run. Unlike RUNNER_BUSY, the fast refusal
+    // of a later command, this is the only typed signal available before any refusal happens. It is not
+    // retriable: the wait already elapsed and an immediate retry would only meet RUNNER_BUSY.
+    dispatched: 'unknown',
+    reason: 'runner_main_thread_timeout',
+    diagnosticOnly: {},
+  },
+  SCROLL_KEYBOARD_OCCLUDES_SURFACE: { dispatched: 'no', diagnosticOnly: {} },
+  ALERT_NOT_FOUND: { dispatched: 'no', diagnosticOnly: {} },
+  // The XCUITest runner refused an `accept` or `dismiss` because no button on the alert fits the
+  // action: `dismiss` found no label on its decline list, and tapping anything else could answer an
+  // affirmative (#3627). The refusal is made in the button choice, before any activation.
+  ALERT_BUTTON_NOT_FOUND: { dispatched: 'no' },
+  ALERT_UNRESOLVED: { dispatched: 'no' },
+  // A coordinate `fill` whose point identified no text input (#1721). The synthesized first-responder
+  // replacement this route would otherwise take has no element, so its clear and its typed text reach
+  // whichever field already holds focus. The refusal answers before the focus tap.
+  NO_TEXT_INPUT_AT_POINT: { dispatched: 'no', reason: 'no_text_input_at_point' },
+  // A coordinate `fill` whose pre-tap input lookup could not answer on the degraded channel. Like
+  // NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a claim that the point has
+  // no input — only that the runner could not tell.
+  TEXT_INPUT_PROBE_UNAVAILABLE: { dispatched: 'no', reason: 'text_input_probe_unavailable' },
+  SYNTHESIZED_GESTURE_NOT_DISPATCHED: {
+    dispatched: 'no',
+    reason: 'synthesized_gesture_not_dispatched',
+    diagnosticOnly: {},
+  },
+  SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN: {
+    dispatched: 'unknown',
+    reason: 'synthesized_gesture_outcome_unknown',
+    diagnosticOnly: {},
+  },
+  BACK_SWIPE_NO_CHANGE: {
+    dispatched: 'unknown',
+    reason: 'back_swipe_no_change',
+    diagnosticOnly: {},
+  },
+  BACK_SWIPE_UNVERIFIED: {
+    dispatched: 'unknown',
+    reason: 'back_swipe_unverified',
+    diagnosticOnly: {},
+  },
+  BACK_SWIPE_NOT_DISPATCHED: {
+    dispatched: 'no',
+    reason: 'back_swipe_not_dispatched',
+    diagnosticOnly: {},
+  },
+  // The Apple runner left the visible keyboard alone: it exposes no dismiss key, and a background tap
+  // is never attempted, so the refusal proves nothing was pressed.
+  KEYBOARD_DISMISS_UNAVAILABLE: {
+    dispatched: 'no',
+    reason: 'keyboard_dismiss_unavailable',
+    diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
+  },
+  // A Return attempt on the focused input could not be confirmed. The row keeps `unknown`: the
+  // sole-text-field route taps the field before typing the return, so a refusal can follow a tap that
+  // landed.
+  KEYBOARD_RETURN_UNAVAILABLE: {
+    dispatched: 'unknown',
+    reason: 'keyboard_return_unavailable',
+    diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
+  },
+  // A press of a hardware or Siri Remote control this target cannot perform. Today that is the Action
+  // Button on an iPhone or iPad model without one: the daemon admits `action-button` for every iPhone
+  // and iPad and lets the runner answer whether the hardware is there. A volume key on a simulator and
+  // a remote button off tvOS are refused by runtime admission before the runner is reached, so those
+  // refusals carry `unsupported-device-kind` and `unsupported-platform-leaf`. The press helper answers
+  // false before pressing anything, so the reply proves nothing was sent. One code covers the family
+  // because the recovery is one question — does this target have that control — and the message names
+  // the control.
+  HARDWARE_CONTROL_UNAVAILABLE: {
+    dispatched: 'no',
+    reason: 'hardware_control_unavailable',
+    diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
+  },
+  // macOS `back` where the app's tree exposes no in-app back control. That refusal answered with no
+  // code at all before, which left the caller reading prose, and the host read the reply as
+  // `COMMAND_FAILED`. There is no wire-code override on purpose: the `UNSUPPORTED_OPERATION` family is
+  // the wrong home for it and this row must not move the command to a code its callers never saw.
+  IN_APP_BACK_CONTROL_UNAVAILABLE: {
+    dispatched: 'no',
+    reason: 'in_app_back_control_unavailable',
+    diagnosticOnly: {},
+  },
+  // The four runner codes meaning "this capture did not happen" (#2728), covering the display, the
+  // image, and the panel. The runner emits them from every consumer of its one screen-capture helper —
+  // the `screenshot` command's fallback, `record start`'s required first frame, and an optional visual
+  // check such as the `back` fallback's before/after sample. A required capture fails closed on them
+  // rather than falling back to a screen nobody is on, and an optional one reports the refusal as an
+  // unknown. Only the `screenshot` route reads the family for its own simctl-to-runner decision.
+  // No window resolved, so no display could be named.
+  APP_SCREEN_WINDOW_UNRESOLVED: { dispatched: 'no', diagnosticOnly: {} },
+  // The resolved window named no display.
+  APP_SCREEN_UNRESOLVED: { dispatched: 'no', diagnosticOnly: {} },
+  // The resolved display handed back an image it could not encode upright.
+  APP_SCREEN_CAPTURE_UNRENDERABLE: { dispatched: 'no', diagnosticOnly: {} },
+  // On a foldable, every window of the target app is on the dark panel.
+  APP_SCREEN_OFF_LIT_PANEL: { dispatched: 'no', diagnosticOnly: {} },
+} as const satisfies Record<string, RunnerErrorCodeRow>;
 
 /**
- * Diagnostic-only codes that keep the wire code their command already refuses with instead of
- * `COMMAND_FAILED`: the keyboard-dismiss, keyboard-return and hardware-control refusals stay
- * `UNSUPPORTED_OPERATION`, the code each of those commands already refuses with. A macOS in-app back
- * that found no control is absent here on purpose: that refusal carried no code at all, which the host
- * read as `COMMAND_FAILED`, and adding a row must not move the command to a new code.
+ * A code with a row in {@link RUNNER_ERROR_CODES}. The code constants are typed with it, so a
+ * constant naming no row fails to compile;
+ * test/repo-guards/runner-error-code-parity.test.ts checks the same keys against the Swift
+ * `RunnerWireErrorCode` enum and the codes the runner Swift actually emits. Runner codes the host
+ * passes through unclassified get no row here — nothing on the host branches on them — and the
+ * same guard declares and checks them against the Swift `RunnerPassThroughErrorCode` enum.
  */
-const DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES: ReadonlyMap<string, AppErrorCode> = new Map([
-  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
-  [KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
-  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'UNSUPPORTED_OPERATION'],
-]);
+export type RunnerTableErrorCode = keyof typeof RUNNER_ERROR_CODES;
 
 /**
- * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
- * `details.runnerErrorCode`, which stays for the runner's own vocabulary. Both the codes that stay
- * off the wire and the codes that travel under their own name are answered from this one table.
+ * `details.reason` for the runner codes a consumer acts on, derived from {@link RUNNER_ERROR_CODES}
+ * so the published union cannot drift from the rows that publish it.
  */
-const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReason> = new Map([
-  [RUNNER_BUSY_RUNNER_CODE, 'runner_busy'],
-  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'runner_main_thread_timeout'],
-  [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no_text_input_at_point'],
-  [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'text_input_probe_unavailable'],
-  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'synthesized_gesture_not_dispatched'],
-  [SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE, 'synthesized_gesture_outcome_unknown'],
-  [BACK_SWIPE_NO_CHANGE_RUNNER_CODE, 'back_swipe_no_change'],
-  [BACK_SWIPE_UNVERIFIED_RUNNER_CODE, 'back_swipe_unverified'],
-  [BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE, 'back_swipe_not_dispatched'],
-  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'keyboard_dismiss_unavailable'],
-  [KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, 'keyboard_return_unavailable'],
-  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'hardware_control_unavailable'],
-  [IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, 'in_app_back_control_unavailable'],
-]);
+export type RunnerReportedErrorReason = {
+  [Code in keyof typeof RUNNER_ERROR_CODES]: (typeof RUNNER_ERROR_CODES)[Code] extends {
+    reason: infer Reason;
+  }
+    ? Reason
+    : never;
+}[keyof typeof RUNNER_ERROR_CODES];
 
-/**
- * Runner codes whose reply proves the command never reached the device. The refusals answer before
- * the command runs, the selector refusals included: the runner resolves the element and refuses
- * before any gesture. `INVALID_ARGS` comes only from request decoding and argument validation,
- * each ahead of any gesture. Every other code, and a reply without one, is `unknown`:
- * `UNSUPPORTED_OPERATION` is also what an element or coordinate tap reports after it ran.
- */
-const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
-  ['INVALID_ARGS', 'no'],
-  ['ELEMENT_NOT_FOUND', 'no'],
-  ['ELEMENT_OFFSCREEN', 'no'],
-  ['AMBIGUOUS_MATCH', 'no'],
-  [RUNNER_BUSY_RUNNER_CODE, 'no'],
-  [RUNNER_WEDGED_RUNNER_CODE, 'no'],
-  [APP_NOT_RUNNING_RUNNER_CODE, 'no'],
-  ['OBSERVATION_UNAVAILABLE', 'no'],
-  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
-  [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
-  [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no'],
-  [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'no'],
-  [ALERT_BUTTON_NOT_FOUND_RUNNER_CODE, 'no'],
-  [ALERT_UNRESOLVED_RUNNER_CODE, 'no'],
-  [SYNTHESIZED_GESTURE_NOT_DISPATCHED_RUNNER_CODE, 'no'],
-  [BACK_SWIPE_NOT_DISPATCHED_RUNNER_CODE, 'no'],
-  [KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'no'],
-  [HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'no'],
-  [IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, 'no'],
-  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
-]);
+/** A row of {@link RUNNER_ERROR_CODES} as a reader sees it, with the reason union applied. */
+export type RunnerErrorCodeRowView = Readonly<{
+  dispatched: DispatchDisclosure;
+  reason?: RunnerReportedErrorReason;
+  diagnosticOnly?: Readonly<{ retriable?: boolean; wireCode?: AppErrorCode }>;
+}>;
 
-/**
- * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
- * `details.runnerErrorCode`, which stays for the runner's own vocabulary.
- */
-type RunnerReportedErrorReason =
-  | 'runner_busy'
-  | 'runner_main_thread_timeout'
-  | 'no_text_input_at_point'
-  | 'text_input_probe_unavailable'
-  | 'synthesized_gesture_not_dispatched'
-  | 'synthesized_gesture_outcome_unknown'
-  | 'back_swipe_no_change'
-  | 'back_swipe_unverified'
-  | 'back_swipe_not_dispatched'
-  | 'keyboard_dismiss_unavailable'
-  | 'keyboard_return_unavailable'
-  | 'hardware_control_unavailable'
-  | 'in_app_back_control_unavailable';
+/** The one row for a runner-reported code, or undefined for a code the table does not declare. */
+function runnerErrorCodeRow(
+  runnerErrorCode: string | undefined,
+): RunnerErrorCodeRowView | undefined {
+  if (runnerErrorCode === undefined || !Object.hasOwn(RUNNER_ERROR_CODES, runnerErrorCode)) {
+    return undefined;
+  }
+  return RUNNER_ERROR_CODES[runnerErrorCode as keyof typeof RUNNER_ERROR_CODES];
+}
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{
@@ -517,26 +485,19 @@ export type RunnerReportedErrorClass = Readonly<{
 export function classifyRunnerReportedError(
   runnerErrorCode: string | undefined,
 ): RunnerReportedErrorClass {
-  const diagnosticOnly =
-    runnerErrorCode === undefined
-      ? undefined
-      : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
-  const wireCode =
-    runnerErrorCode === undefined
-      ? undefined
-      : DIAGNOSTIC_RUNNER_ERROR_WIRE_CODES.get(runnerErrorCode);
-  const reason =
-    runnerErrorCode === undefined ? undefined : RUNNER_REPORTED_ERROR_REASONS.get(runnerErrorCode);
+  const row = runnerErrorCodeRow(runnerErrorCode);
+  // A code the table does not declare carries no dispatch evidence, so it publishes `unknown`.
+  const dispatched = row?.dispatched ?? 'unknown';
   return Object.freeze({
-    code: diagnosticOnly ? (wireCode ?? 'COMMAND_FAILED') : toAppErrorCode(runnerErrorCode),
+    code:
+      row?.diagnosticOnly !== undefined
+        ? (row.diagnosticOnly.wireCode ?? 'COMMAND_FAILED')
+        : toAppErrorCode(runnerErrorCode),
     details: Object.freeze({
       runnerErrorCode,
-      ...(diagnosticOnly?.retriable === true ? { retriable: true as const } : {}),
-      ...(reason === undefined ? {} : { reason }),
-      dispatched:
-        (runnerErrorCode === undefined
-          ? undefined
-          : RUNNER_ERROR_CODE_DISPATCH.get(runnerErrorCode)) ?? 'unknown',
+      ...(row?.diagnosticOnly?.retriable === true ? { retriable: true as const } : {}),
+      ...(row?.reason === undefined ? {} : { reason: row.reason }),
+      dispatched,
     }),
   });
 }
@@ -950,11 +911,12 @@ function buildSequenceStepError(
 }
 
 function sequenceStepClassifiesDispatch(code: string | undefined): boolean {
-  return (
-    code !== undefined &&
-    (RUNNER_ERROR_CODE_DISPATCH.has(code) ||
-      code === SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE)
-  );
+  if (code === undefined) return false;
+  // The outcome-unknown gesture code classifies on its own, exactly as it does on a standalone
+  // command, even though its row keeps the `unknown` wire verdict.
+  if (code === SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN_RUNNER_CODE) return true;
+  const row = runnerErrorCodeRow(code);
+  return row !== undefined && row.dispatched !== 'unknown';
 }
 
 function readSequenceResults(value: unknown): RunnerSequenceStepResult[] {
