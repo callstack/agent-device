@@ -3,6 +3,12 @@ import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 
+/** The `details.reason` a remote record stop answer publishes when it cannot be delivered safely. */
+const RECORD_STOP_ANSWER_REASONS = {
+  /** Two artifacts share an id or a role, or a chunk artifact names no chunk of the answer. */
+  invalid: 'record_stop_answer_invalid',
+} as const;
+
 const RECORDING_ROLES = new Set(['outPath', 'telemetryPath', 'chunkPath']);
 
 type DeliverableArtifact = DaemonArtifact & { artifactId: string };
@@ -110,7 +116,7 @@ function readChunks(value: unknown): Array<{ index: number; path: string }> {
 
 function invalidAnswer(message: string): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: 'record_stop_answer_invalid',
+    reason: RECORD_STOP_ANSWER_REASONS.invalid,
   });
 }
 

@@ -159,7 +159,7 @@
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
-    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:72501a5aeebe32cd5d610e4f608ee65b82c43168a9a2e0c5fb7895f00275f284",
+    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:83e08bb955b4b4f895f0af85076fc5273603e47c53c720f9c047a0a405bf4e67",
     "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:b0ba4c155bbefe846ab5770c8acbd72ccf46d83de147e685a4d8ef605ff571f1",
     "packages/remote/src/upload-client-artifact.ts#PreparedUploadArtifact": "sha256:5c40027d47feda3c946e836372b9f08ad866ab1612708b0d506551545f931ea4",
     "packages/remote/src/upload-client.ts#ARTIFACT_HASH_ALGORITHM": "sha256:328c135ea5f9d89fd2c142b440d5402a61d19f9044bf0504dfc2c525e58c1909",
@@ -434,7 +434,7 @@
     },
     {
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics",
-      "digest": "sha256:72501a5aeebe32cd5d610e4f608ee65b82c43168a9a2e0c5fb7895f00275f284",
+      "digest": "sha256:83e08bb955b4b4f895f0af85076fc5273603e47c53c720f9c047a0a405bf4e67",
       "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). #4518 (client-side only): cancellation stops the record download and removes its private staging file. The client publishes only a complete record. The request is unchanged."
     },
     {

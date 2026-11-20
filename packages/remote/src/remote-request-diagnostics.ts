@@ -21,6 +21,7 @@ import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contra
 import fs from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import path from 'node:path';
+import { addAbortSignal } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { DaemonError, DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
@@ -140,11 +141,8 @@ function withUnavailableRecord(
 }
 
 /**
- * Downloads one record to `destinationPath`. Returns `undefined` on success, or
- * the reason the caller has no record — never throws, because the request this
- * belongs to already failed with its own error. The body is staged in a private
- * sibling and renamed into place only while the caller's signal is not aborted,
- * so a cancel at any point leaves no new file and never touches an earlier one.
+ * Stages one bounded diagnostics record. After the cancellation check, publish the complete
+ * record atomically. Return a failure reason if the caller has no record to open.
  */
 async function fetchRemoteRequestDiagnostics(params: {
   endpoint: RemoteDiagnosticsEndpoint;
@@ -172,9 +170,12 @@ async function fetchRemoteRequestDiagnostics(params: {
     const staged = path.join(staging, 'record');
     const response = await new Promise<IncomingMessage>((resolve, reject) => {
       const request = transport.request(
-        url,
         {
-          signal: transfer,
+          protocol: url.protocol,
+          host: url.hostname,
+          port: url.port,
+          method: 'GET',
+          path: url.pathname + url.search,
           headers: {
             ...buildDaemonHttpAuthHeaders(endpoint.token),
             ...buildDaemonHttpTenantHeaders(endpoint.tenantId),
@@ -184,7 +185,7 @@ async function fetchRemoteRequestDiagnostics(params: {
         resolve,
       );
       request.once('error', reject);
-      request.end();
+      addAbortSignal(transfer, request).end();
     });
     if (response.statusCode !== 200) {
       response.destroy();
