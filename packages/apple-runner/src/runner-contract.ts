@@ -319,6 +319,9 @@ export const RUNNER_ERROR_CODES = {
   // RUNNER_WEDGED — so every host path publishes this refusal as retriable.
   RUNNER_BUSY: { dispatched: 'no', reason: 'runner_busy', diagnosticOnly: { retriable: true } },
   RUNNER_WEDGED: { dispatched: 'no' },
+  // A repeat of a `commandId` the runner already finished, when that command keeps no response body
+  // to replay. Nothing ran for the repeat, but only the runner knows whether an earlier send of that
+  // id reached the device, so the disclosure stays `unknown`.
   COMMAND_ALREADY_FINISHED: { dispatched: 'unknown' },
   // A read whose session app is not running: no runner read launches the app (a bare launch would
   // drop a pending launch's payload), so the runner refuses the read-only command. The refusal
@@ -339,6 +342,8 @@ export const RUNNER_ERROR_CODES = {
   // action: `dismiss` found no label on its decline list, and tapping anything else could answer an
   // affirmative (#3627). The refusal is made in the button choice, before any activation.
   ALERT_BUTTON_NOT_FOUND: { dispatched: 'no' },
+  // Required alert acquisition failed or exhausted its deadline. It establishes no absence and
+  // activates nothing.
   ALERT_UNRESOLVED: { dispatched: 'no' },
   // A coordinate `fill` whose point identified no text input (#1721). The synthesized first-responder
   // replacement this route would otherwise take has no element, so its clear and its typed text reach
@@ -348,21 +353,25 @@ export const RUNNER_ERROR_CODES = {
   // NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a claim that the point has
   // no input — only that the runner could not tell.
   TEXT_INPUT_PROBE_UNAVAILABLE: { dispatched: 'no', reason: 'text_input_probe_unavailable' },
+  // Refused before the gesture's events reached XCTest, so the command sent nothing.
   SYNTHESIZED_GESTURE_NOT_DISPATCHED: {
     dispatched: 'no',
     reason: 'synthesized_gesture_not_dispatched',
     diagnosticOnly: {},
   },
+  // Failed after the gesture's events reached XCTest, so it may have run.
   SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN: {
     dispatched: 'unknown',
     reason: 'synthesized_gesture_outcome_unknown',
     diagnosticOnly: {},
   },
+  // The swipe ran and left the app's screen unchanged.
   BACK_SWIPE_NO_CHANGE: {
     dispatched: 'unknown',
     reason: 'back_swipe_no_change',
     diagnosticOnly: {},
   },
+  // The swipe ran, but the screen kept changing on its own beforehand or could not be sampled after.
   BACK_SWIPE_UNVERIFIED: {
     dispatched: 'unknown',
     reason: 'back_swipe_unverified',
