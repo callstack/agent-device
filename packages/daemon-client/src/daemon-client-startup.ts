@@ -18,9 +18,10 @@ import {
   parseDaemonStartupProgressMessage,
   type DaemonStartupPhase,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
-import type {
-  DaemonPaths,
-  DaemonTransportPreference,
+import {
+  admitDaemonStateRoot,
+  type DaemonPaths,
+  type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveDaemonLaunchSpec, resolveDaemonTakeover } from './daemon-launch-spec.ts';
 import {
@@ -94,6 +95,9 @@ export async function observeLocalDaemon(
   options: DaemonObservationOptions = {},
 ): Promise<LocalDaemonObservation | null> {
   const { deadline } = options;
+  // The first state-directory read of every client route — the MCP server, the AI SDK tools,
+  // `createAgentDeviceClient`, `ensureDaemon`, an attach client — none of which pass `src/cli.ts` (#4649).
+  admitDaemonStateRoot({ paths: settings.paths, mode: 'repair' });
   const existing = await readRegisteredDaemon(settings.paths);
   if (!existing) return null;
   if (options.waitForLiveStartup && (await isAwaitingDaemonStartup(existing, deadline)))

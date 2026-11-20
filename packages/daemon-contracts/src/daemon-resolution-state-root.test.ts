@@ -150,6 +150,37 @@ test.skipIf(!posix)(
   },
 );
 
+// Only the host's own separator is stripped from a spelling. On POSIX a `\` is an ordinary file-name
+// character, so `state\` is the name the daemon reads and writes, and it is that directory the rule judges.
+// Stripping it would judge `state` and hand the daemon `state\`, #4649 on the spelling itself.
+test.skipIf(!posix)(
+  'a trailing backslash in a POSIX directory name is part of the name the rule judges',
+  () => {
+    const under = fs.realpathSync(mkdtempForTestSync('state-admit-backslash-'));
+    const root = path.join(under, 'state\\');
+    const decoy = path.join(under, 'state');
+    fs.mkdirSync(root);
+    fs.chmodSync(root, 0o755);
+    fs.mkdirSync(decoy);
+    fs.chmodSync(decoy, 0o755);
+
+    expect(pathsOf(root).baseDir).toBe(root);
+    admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish' });
+
+    expect(fs.statSync(root).mode & 0o777).toBe(0o700);
+    // The name the rule did NOT judge keeps the mode its owner gave it.
+    expect(fs.statSync(decoy).mode & 0o777).toBe(0o755);
+
+    // And a link spelled with one is still the link it is.
+    const link = path.join(under, 'linked\\');
+    fs.symlinkSync(decoy, link);
+    const details = refusalOf(() =>
+      admitDaemonStateRoot({ paths: pathsOf(link), mode: 'establish' }),
+    );
+    expect(details).toMatchObject({ problem: 'symlink', component: link });
+  },
+);
+
 test.skipIf(!posix)(
   'a root another local account owns refuses, and so does one root owns but this user does not',
   () => {
@@ -225,6 +256,108 @@ test.skipIf(!posix)('a root whose mode change is refused still refuses as not pr
   } finally {
     vi.restoreAllMocks();
     realChmod(root, 0o700);
+  }
+});
+
+// The repair never touches a link target: a root that IS a link refuses at its own name, before any mode
+// change, and the directory behind it keeps the mode its owner gave it (#4649).
+test.skipIf(!posix)('a root that is a link refuses and the link target keeps its mode', () => {
+  const under = fs.realpathSync(mkdtempForTestSync('state-admit-swap-'));
+  const target = path.join(under, 'target');
+  fs.mkdirSync(target);
+  fs.chmodSync(target, 0o755);
+  const root = path.join(under, 'state');
+  fs.symlinkSync(target, root);
+
+  const details = refusalOf(() =>
+    admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish' }),
+  );
+
+  expect(details).toMatchObject({ problem: 'symlink', component: root });
+  expect(fs.statSync(target).mode & 0o777).toBe(0o755);
+});
+
+// And the order of the two judgements is the fix: the ancestry is judged to the directory holding the root's
+// name BEFORE the root's own bits are closed, so an open root below a parent another account could add a name
+// to refuses with that parent as the problem and is left exactly as it stands.
+test.skipIf(!posix)(
+  'an open root below a shared parent refuses for the parent and keeps its own mode',
+  () => {
+    const under = fs.realpathSync(mkdtempForTestSync('state-admit-order-'));
+    const parent = path.join(under, 'shared');
+    fs.mkdirSync(parent);
+    fs.chmodSync(parent, 0o770);
+    const root = path.join(parent, 'state');
+    fs.mkdirSync(root);
+    fs.chmodSync(root, 0o755);
+
+    const details = refusalOf(() =>
+      admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish' }),
+    );
+
+    expect(details).toMatchObject({ problem: 'group-or-other-writable-ancestor' });
+    expect(fs.statSync(root).mode & 0o777).toBe(0o755);
+  },
+);
+
+// `shared_parent` is the walk's name for ground where another account could put a directory of its own
+// before this call did. It is an exposure of the same kind as a group- or world-writable ancestor, so it
+// reaches the operator as one, with the fix that ends it (#4649).
+test.skipIf(!posix)(
+  'a shared parent that wins the creation race refuses as a writable ancestor',
+  () => {
+    const under = fs.realpathSync(mkdtempForTestSync('state-admit-shared-parent-'));
+    // Sticky and open to all: the walk passes through it, and it is exactly where a name is claimable.
+    const parent = path.join(under, 'shared');
+    fs.mkdirSync(parent);
+    fs.chmodSync(parent, 0o1777);
+    const root = path.join(parent, 'state');
+    const realMkdir = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((target: fs.PathLike, options?: never) => {
+      if (String(target) === root) {
+        realMkdir(root, { mode: 0o770 });
+        fs.chmodSync(root, 0o770);
+        throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
+      }
+      return realMkdir(target as string, options);
+    }) as typeof fs.mkdirSync);
+
+    try {
+      const details = refusalOf(() =>
+        admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish' }),
+      );
+      expect(details).toMatchObject({
+        problem: 'group-or-other-writable-ancestor',
+        component: root,
+        fix: expect.stringContaining('AGENT_DEVICE_STATE_DIR'),
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  },
+);
+
+// The walk is asked once per base directory: a repair that passed is remembered, so the next caller in the
+// same process — the client a CLI invocation goes on to build, or a client's tenth request — pays nothing for
+// a route that was just judged. A refusal is not remembered, because the operator may have just fixed it.
+test.skipIf(!posix)('a repair that passed is walked once per base directory', () => {
+  const under = mkdtempForTestSync('state-admit-memo-');
+  const root = makePrivateRoot(under, 'walked-once');
+  const realLstat = fs.lstatSync;
+  let walks = 0;
+  vi.spyOn(fs, 'lstatSync').mockImplementation(((name: fs.PathLike, ...rest: unknown[]) => {
+    if (String(name).startsWith(root)) walks += 1;
+    return realLstat(name as string, ...(rest as []));
+  }) as typeof fs.lstatSync);
+
+  try {
+    admitDaemonStateRoot({ paths: pathsOf(root), mode: 'repair' });
+    const afterFirst = walks;
+    expect(afterFirst).toBeGreaterThan(0);
+    admitDaemonStateRoot({ paths: pathsOf(root), mode: 'repair' });
+    expect(walks).toBe(afterFirst);
+  } finally {
+    vi.restoreAllMocks();
   }
 });
 

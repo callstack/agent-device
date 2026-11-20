@@ -523,10 +523,15 @@ function createMissingLevel(
   return level;
 }
 
+/** Never all of a bare `/`. On POSIX `\` is a file-name character: `state\` is part of a name to judge. */
+const TRAILING_HOST_SEPARATORS = process.platform === 'win32' ? /(?<=.)[\\/]+$/ : /(?<=.)\/+$/;
+
 /**
- * Admits a private root once, before an operation's first use: its OWN name where it stands, every ancestor
- * through {@link walkSpelledParent}, then each managed name below it. `establish` creates a missing root at 0700
- * and `repair` creates nothing; both close an owned directory the umask left open (#4649). ADR 0016 owns it.
+ * Admits a private root before an operation's first use of it: every ancestor through
+ * {@link walkSpelledParent}, then the root's OWN name, then each managed name below it. `establish` creates a
+ * missing root at 0700 and `repair` creates nothing; both close a directory the umask left open (#4649).
+ * The ancestry is judged BEFORE the root's own bits are closed, and `chmod` follows links, so that order is
+ * what keeps a planted link's target out of reach of the mode change.
  */
 export type PrivateRootAdmission =
   | Readonly<{ status: 'admitted' }>
@@ -539,28 +544,44 @@ export function admitPrivateRoot(options: {
   managedDirs?: readonly string[];
 }): PrivateRootAdmission {
   const trust = scriptTrust({});
-  // `lstat` resolves a trailing separator, so `/root/link/` would answer for the link's target.
-  const root = options.rootPath.replace(/(?<=.)[\\/]+$/, '');
+  const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
   if (!path.isAbsolute(root)) return refusedRoot(root, 'relative_destination');
   const create = options.mode === 'establish';
   try {
-    // Judged BEFORE the walk resolves the route: a link here must not be followed into a directory another
-    // account chose, and the walk refuses an open directory it stands on rather than closing it.
-    const spelled = lstatEntry(root);
-    const own = spelled && exposureOfEntry(spelled, root, trust.uid);
-    if (own) return refusedRoot(root, own);
-    // The walk's last directory is the root as the route lands on it: another starter's winner, judged again.
-    const { deepest, authority } = walkSpelledParent(root, root, trust, create);
-    if (authority.mode & 0o077 && !makePrivate(deepest)) return refusedRoot(deepest, 'not_private');
-    for (const managed of (options.managedDirs ?? []).map((name) => path.join(root, name))) {
-      const seen = lstatEntry(managed);
-      const exposure = seen && exposureOfEntry(seen, managed, trust.uid);
-      if (exposure) return refusedRoot(managed, exposure);
+    const parent = walkSpelledParent(path.dirname(root), root, trust, create);
+    if (create && !lstatEntry(root))
+      createMissingLevel(root, parent.deepest, path.basename(root), trust);
+    for (const directory of [
+      root,
+      ...(options.managedDirs ?? []).map((name) => path.join(root, name)),
+    ]) {
+      const fault = admitDirectory(directory, trust);
+      if (fault) return refusedRoot(directory, fault);
     }
   } catch (error) {
     return verdictForAncestryFault(error, create);
   }
   return { status: 'admitted' };
+}
+
+/** The root rule of one name. Absence is no fault: `repair` creates nothing. */
+function admitDirectory(
+  directory: string,
+  trust: ScriptDestinationTrust,
+): ScriptAncestryExposure | undefined {
+  const seen = lstatEntry(directory);
+  if (seen === undefined) return undefined;
+  if (seen.isSymbolicLink()) return 'planted_link';
+  if (!seen.isDirectory()) return 'not_a_directory';
+  if (Number(seen.uid) !== trust.uid) return 'foreign_owned';
+  if (!(Number(seen.mode) & 0o077)) return undefined;
+  // Only a change the host refuses for the directory's OWN owner is a fault (#4649).
+  try {
+    fs.chmodSync(directory, SCRIPT_DIR_MODE);
+  } catch {
+    return 'not_private';
+  }
+  return undefined;
 }
 
 function verdictForAncestryFault(error: unknown, create: boolean): PrivateRootAdmission {
@@ -570,36 +591,11 @@ function verdictForAncestryFault(error: unknown, create: boolean): PrivateRootAd
     exposure: ScriptAncestryExposure;
   }>;
   // A route that is not there yet is an absent root, not an unsafe one, to a caller that creates nothing.
-  const absent = exposure === 'unreachable_parent' || exposure === 'unresolvable_parent';
-  if (!create && absent) return { status: 'admitted' };
+  if (!create && (exposure === 'unreachable_parent' || exposure === 'unresolvable_parent'))
+    return { status: 'admitted' };
   return refusedRoot(ancestor, exposure);
 }
 
 function refusedRoot(component: string, exposure: ScriptAncestryExposure): PrivateRootAdmission {
   return { status: 'refused', component, exposure };
-}
-
-/**
- * ADR 0016's private-directory rule: a real directory this user owns, never a link. Its OWN group or other bits
- * are closed by one `chmod`; only a `chmod` the host refuses is an exposure (#4649).
- */
-function exposureOfEntry(
-  stats: fs.BigIntStats,
-  pathname: string,
-  uid: number,
-): ScriptAncestryExposure | undefined {
-  if (stats.isSymbolicLink()) return 'planted_link';
-  if (!stats.isDirectory()) return 'not_a_directory';
-  if (Number(stats.uid) !== uid) return 'foreign_owned';
-  return Number(stats.mode) & 0o077 && !makePrivate(pathname) ? 'not_private' : undefined;
-}
-
-/** Makes a directory this user owns private; false when the mode change itself is refused. */
-function makePrivate(pathname: string): boolean {
-  try {
-    fs.chmodSync(pathname, SCRIPT_DIR_MODE);
-    return true;
-  } catch {
-    return false;
-  }
 }

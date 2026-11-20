@@ -206,7 +206,7 @@ async function startDaemonRuntimeOnHost(
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
-  // The launcher admitted it in the parent; a daemon from another build, or embedded, enters here.
+  // A daemon from another build, or embedded, reaches the root without the launcher's admission.
   admitDaemonStateRoot({ paths: daemonPaths, mode: 'establish' });
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);

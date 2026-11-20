@@ -554,7 +554,7 @@ function writeLeaseRecord(stateDir: string, file: string, leases: readonly Devic
     version: LEASE_RECORD_VERSION,
     leases: [...leases],
   } satisfies PersistedProviderLeaseRecord)}\n`;
-  // The state root was admitted before startup, and `exactMode` is what makes 0600 exact under a wide umask.
+  // `exactMode` is what makes 0600 exact under a wide umask, so no chmod follows.
   publishFileSync({ destination: filePath, contents, mode: 0o600, exactMode: true });
 }
 

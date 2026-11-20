@@ -1,4 +1,5 @@
-import { parseRawArgs, usage } from './cli/parser/args.ts';
+import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
+import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import {
   asAppError,
   AppError,
@@ -281,9 +282,25 @@ async function parseCliInputOrExit(
   }
 
   const isHelpAlias = parsed.command === 'help';
-  // Loaded on demand: `--help` must not pay for the help route's module graph, nor the reverse.
-  if (isHelpAlias || parsed.flags.help)
-    return await (await import('./cli/help-request.ts')).exitOnHelpRequest(parsed, isHelpAlias);
+  if (isHelpAlias || parsed.flags.help) {
+    if (isHelpAlias && parsed.positionals.length > 1) {
+      await printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
+      return exitAfterFlush(1);
+    }
+    const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
+    if (!helpTarget) {
+      process.stdout.write(`${await usage()}\n`);
+      return exitAfterFlush(0);
+    }
+    const commandHelp = await usageForCommand(helpTarget);
+    if (commandHelp) {
+      process.stdout.write(commandHelp);
+      return exitAfterFlush(0);
+    }
+    await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
+    process.stdout.write(`${await usage()}\n`);
+    return exitAfterFlush(1);
+  }
 
   if (!parsed.command) {
     process.stdout.write(`${await usage()}\n`);
@@ -397,7 +414,7 @@ async function resolveRunContextOrExit(
       env: base.host.env,
       cwd: base.host.cwd,
     });
-    // Admitted once here: the connection defaults below read, and the upgrade notifier writes, this directory.
+    // The connection defaults below read, and the upgrade notifier writes, this directory.
     admitDaemonStateRoot({ paths: daemonPaths, mode: 'repair' });
     const sessionName = flags.session ?? 'default';
     const connectionDefaults = resolveActiveConnectionDefaults({
@@ -697,6 +714,13 @@ function isDebugRequested(argv: string[]): boolean {
   } catch {
     return argv.includes('--debug') || argv.includes('-v') || argv.includes('--verbose');
   }
+}
+
+function formatUnknownHelpTargetMessage(helpTarget: string): string {
+  const hint = suggestCommandFor(helpTarget);
+  return hint
+    ? `Unknown command: ${helpTarget}. Did you mean ${hint}?`
+    : `Unknown command: ${helpTarget}`;
 }
 
 function formatUnhandledCommandMessage(command: string): string {
