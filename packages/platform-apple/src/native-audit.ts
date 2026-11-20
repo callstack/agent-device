@@ -26,7 +26,7 @@ export async function collectNativeAudit(
       },
       { ...input, signal: input.signal ? AbortSignal.any([signal, input.signal]) : signal },
     );
-    return mapNativeAuditIssues(data);
+    return mapNativeAuditIssues(data).sort(compareNativeAuditFindings);
   } catch (error) {
     if (isRunnerNativeAuditUnavailableError(error)) return [];
     throw error;
@@ -71,6 +71,23 @@ function mapNativeAuditIssues(data: Record<string, unknown>): NativeAuditFinding
       ...(rect ? { rect } : {}),
     };
   });
+}
+
+/**
+ * Apple delivers issues in an order that changes between runs of one unchanged screen. Order them
+ * by check, then top to bottom and left to right, so two audits of that screen print the same list.
+ */
+function compareNativeAuditFindings(a: NativeAuditFinding, b: NativeAuditFinding): number {
+  return (
+    compareText(a.auditType, b.auditType) ||
+    (a.rect?.y ?? Infinity) - (b.rect?.y ?? Infinity) ||
+    (a.rect?.x ?? Infinity) - (b.rect?.x ?? Infinity) ||
+    compareText(a.description, b.description)
+  );
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function nativeAuditType(value: string): IosNativeAuditType {

@@ -104,8 +104,8 @@ test('preserves new runner type names as unknown issues', async () => {
     ],
   });
   expect(findings.map((finding) => finding.auditType)).toEqual([
-    'unknown:futureAppleCheck',
     'unknown:1024',
+    'unknown:futureAppleCheck',
   ]);
 });
 
@@ -140,4 +140,19 @@ test('another runner failure of the native audit is not swallowed', async () => 
       collectNativeAudit(IOS_SIMULATOR, {}, new AbortController().signal),
     ),
   ).rejects.toMatchObject({ details: { reason: 'native_audit_blocked_by_alert' } });
+});
+
+test('orders native findings by check and then by frame, whatever order the runner delivered', async () => {
+  const issues = [
+    { auditType: 'trait', description: 'Trait', rect: { x: 0, y: 10, width: 1, height: 1 } },
+    { auditType: 'contrast', description: 'No frame' },
+    { auditType: 'contrast', description: 'Low', rect: { x: 5, y: 200, width: 1, height: 1 } },
+    { auditType: 'contrast', description: 'Right', rect: { x: 50, y: 20, width: 1, height: 1 } },
+    { auditType: 'contrast', description: 'Left', rect: { x: 5, y: 20, width: 1, height: 1 } },
+  ];
+  const ordered = ['Left', 'Right', 'Low', 'No frame', 'Trait'];
+  for (const auditIssues of [issues, [...issues].reverse()]) {
+    const findings = await readNativeAudit({ auditIssues });
+    expect(findings.map((finding) => finding.description)).toEqual(ordered);
+  }
 });
