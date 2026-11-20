@@ -107,8 +107,8 @@ export async function confirmAndroidEmulatorLaunchProcessStopped(
 /**
  * Stops the emulator process this host launched for a device nobody owns: it stops the process
  * directly, because no shutdown was ever asked of the device. Host-kit signals the pid only while the
- * recorded start time still names it, so a launch that has already been replaced answers `unconfirmed`
- * rather than stopping somebody else's emulator.
+ * recorded start time still names it, so a launch that has already been replaced gets no signal and
+ * answers `stopped`: the launched process is gone, and somebody else's emulator is left alone.
  */
 export async function stopAndroidEmulatorLaunchProcess(
   identity: AndroidEmulatorLaunchIdentity,

@@ -66,8 +66,9 @@ export type LaunchedDeviceProcessService = Readonly<{
   /**
    * Stops the launch the caller caused, without asking the device to shut down first. A caller that
    * never published a session has no device to ask, so this addresses only the process the host
-   * itself started: a launch the host does not record, or one the recorded start time no longer
-   * names, gets no signal and answers `unconfirmed`. A host that refuses the stop itself reports an
+   * itself started: a launch the host does not record gets no signal and answers
+   * `unconfirmed`, and one the recorded start time no longer names gets no signal and answers
+   * `stopped`, because the process the host launched is gone. A host that refuses the stop itself reports an
    * error, which a caller treats the same way: the launch must be assumed to be running. A device
    * whose owner launches no host process answers `stopped`, because nothing of the caller's own is
    * left running.
