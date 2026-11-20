@@ -96,6 +96,8 @@ function createRoutedSession() {
     deviceShutdownDenied?: boolean;
     /** A cold open whose readiness never reported the process it launched. */
     omitLaunchIdentity?: boolean;
+    /** Runs while close dispatches its platform close, before the stop is asked for. */
+    duringPlatformClose?: () => void;
   }) {
     if (command.selectsDevice) {
       vi.mocked(resolveTargetDevice).mockResolvedValue(STOPPED_AVD);
@@ -116,6 +118,14 @@ function createRoutedSession() {
           finalizeAsks.push(input);
           return await finalizeApplicationClose(input);
         },
+        ...(command.duringPlatformClose
+          ? {
+              closeApplication: async (...args: Parameters<typeof operations.closeApplication>) => {
+                command.duringPlatformClose?.();
+                return await operations.closeApplication(...args);
+              },
+            }
+          : {}),
       });
     };
     const response = await handleSessionCommands({
@@ -220,7 +230,32 @@ test('plain close stops the emulator this session booted while it still runs tha
   expect(runs.sessionClaimCount()).toBe(0);
 }, 30_000);
 
-test('plain close succeeds without saying more when the stop could not be confirmed', async () => {
+test('a replacement that takes the serial during platform close is not stopped', async () => {
+  const runs = createRoutedSession();
+  await openBootedByThisSession(runs);
+  let platformCloseRan = false;
+
+  // The launched process still runs when close starts. It is replaced while close dispatches its
+  // platform close, so the one ownership read, taken right before the stop, must see the change.
+  const closed = await runs.run({
+    name: 'close',
+    duringPlatformClose: () => {
+      platformCloseRan = true;
+      expect(owner.checks).toEqual([]);
+      owner.check = 'changed';
+    },
+  });
+
+  expect(platformCloseRan).toBe(true);
+  expect(closed.response?.ok).toBe(true);
+  expect(closed.finalizeAsks).toEqual([expect.objectContaining({ shutdownTarget: false })]);
+  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
+  expect(closeWarningMessages(closed.response!)).toEqual([PROCESS_CHANGED_WARNING]);
+  expect(owner.checks).toHaveLength(1);
+  expect(owner.confirmations).toEqual([]);
+}, 30_000);
+
+test('plain close warns when the stop could not be confirmed', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
   owner.confirmation = 'unconfirmed';
@@ -232,9 +267,11 @@ test('plain close succeeds without saying more when the stop could not be confir
     expect.objectContaining({ shutdownTarget: true, retainRunner: false }),
   ]);
   expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
-  // The stop was asked of the device and the launched process was escalated by the owner; an
-  // unconfirmed exit is the owner's diagnostic, not a close the caller has to act on.
-  expect(closeWarningMessages(closed.response!)).toBeUndefined();
+  // The stop was asked of the device and the owner escalated to the launched process; the caller
+  // is told that the exit was not confirmed.
+  expect(closeWarningMessages(closed.response!)).toEqual([
+    'Close asked this device to stop, but could not confirm that its emulator process exited. The device may still be running.',
+  ]);
   expect(owner.confirmations).toEqual([LAUNCH_IDENTITY]);
 });
 

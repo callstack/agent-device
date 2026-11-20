@@ -46,7 +46,8 @@ export type LaunchedProcessStopConfirmation = 'stopped' | 'unconfirmed';
  * The host half of a device boot: the one process this machine started to bring the device up.
  * Owners answer for the device kinds that launch a host process and report `not-applicable` for
  * every other leaf, so neutral orchestration can ask "is this still the launch I caused?" and "did
- * it stop?" without naming a platform, a pid, or a process tool.
+ * it stop?" without naming a platform or a process tool. The caller passes the recorded launch
+ * identity (its pid and start time) through unchanged.
  *
  * Both members are bounded probes on the caller's decision path, so each stays well below the
  * operation it precedes, and an unanswered probe leaves that operation as cautious as it was before

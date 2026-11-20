@@ -63,6 +63,11 @@ export type SessionCloseTeardownResult = Readonly<{
   saveScriptOutcome: OrdinaryCloseScript;
   shutdownResult?: TargetShutdownResult;
   shutdownPrepared: boolean;
+  /**
+   * The stop was asked for, but the process this session launched was still running when the
+   * confirmation budget ended and the pid stop could not confirm its exit.
+   */
+  implicitShutdownStopUnconfirmed: boolean;
 }> &
   Omit<CloseDeviceStopDecision, 'shutdownRequested'>;
 
@@ -74,11 +79,11 @@ export type SessionCloseTeardownResult = Readonly<{
  * retention a kept-running device earns is not spent on a stop that can never happen.
  *
  * #4585: the stop this session owes is owed to the launch its own open caused, not to whatever
- * answers the device address now, so the process behind that launch is checked once, right before
- * the stop is asked for, through the root-composed owner that knows which devices have one. An
- * explicit `--shutdown` commands the stop whatever the process says, and a lost claim or a policy
- * refusal has already decided it without reaching the host. Each reason is reported as itself and
- * in this order: what settled the stop first is the only reason close can honestly give.
+ * answers the device address now. This decides only whether a stop is owed. The process behind the
+ * launch is checked once, later, right before the stop is asked for (`runSessionCloseTeardown`),
+ * so platform close and hint cleanup cannot open a window in which a replacement takes the serial.
+ * An explicit `--shutdown` commands the stop whatever the process says, and a lost claim or a
+ * policy refusal has already decided it without reaching the host.
  */
 async function decideDeviceStopOnClose(params: {
   env: EnvMap;
@@ -86,7 +91,6 @@ async function decideDeviceStopOnClose(params: {
   session: SessionState;
   localFamily: boolean;
   deviceShutdownDenied: boolean;
-  launchedProcess: LaunchedDeviceProcessService;
 }): Promise<CloseDeviceStopDecision> {
   const { session } = params;
   const implicitShutdown =
@@ -97,24 +101,14 @@ async function decideDeviceStopOnClose(params: {
   const implicitShutdownClaimLost = claimRenewal?.status === 'lost';
   const implicitShutdownDeniedByPolicy =
     implicitShutdown && !implicitShutdownClaimLost && params.deviceShutdownDenied;
-  const launchedProcess =
-    implicitShutdown && !implicitShutdownDeniedByPolicy && claimRenewal?.status === 'renewed'
-      ? await checkLaunchedProcessOwnership(session, params.launchedProcess)
-      : 'not-applicable';
-  const implicitShutdownLaunchedProcessGone = launchedProcess === 'changed';
-  const implicitShutdownLaunchedProcessUnverified = launchedProcess === 'unverified';
   return {
     shutdownRequested:
       params.explicitShutdown ||
-      (implicitShutdown &&
-        !implicitShutdownDeniedByPolicy &&
-        !implicitShutdownLaunchedProcessGone &&
-        !implicitShutdownLaunchedProcessUnverified &&
-        claimRenewal?.status === 'renewed'),
+      (implicitShutdown && !implicitShutdownDeniedByPolicy && claimRenewal?.status === 'renewed'),
     implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost,
-    implicitShutdownLaunchedProcessGone,
-    implicitShutdownLaunchedProcessUnverified,
+    implicitShutdownLaunchedProcessGone: false,
+    implicitShutdownLaunchedProcessUnverified: false,
   };
 }
 
@@ -146,14 +140,16 @@ async function checkLaunchedProcessOwnership(
 async function confirmLaunchedProcessStopped(
   session: SessionState,
   launchedProcess: LaunchedDeviceProcessService,
-): Promise<void> {
+): Promise<boolean> {
   const identity = session.androidLaunchIdentity;
-  if (!identity) return;
+  if (!identity) return false;
   if (
-    (await launchedProcess.confirmLaunchedProcessStopped(session.device, identity)) ===
+    (await launchedProcess.confirmLaunchedProcessStopped(session.device, identity)) !==
     'unconfirmed'
   )
-    emitLaunchedProcessMiss('launched-process-stop-unconfirmed', { pid: identity.pid });
+    return false;
+  emitLaunchedProcessMiss('launched-process-stop-unconfirmed', { pid: identity.pid });
+  return true;
 }
 
 /**
@@ -225,7 +221,6 @@ export async function runSessionCloseTeardown(params: {
     session,
     localFamily: lifecycle.owner.kind === 'local-family',
     deviceShutdownDenied: params.deviceShutdownDenied === true,
-    launchedProcess: params.launchedProcess,
   });
   const { shutdownRequested, ...stopReasons } = deviceStop;
   const retainExecutionHost = params.platformResourceCleanup.retainExecutionHostAfterClose({
@@ -262,6 +257,14 @@ export async function runSessionCloseTeardown(params: {
       });
     });
   }
+  // #4585: the one ownership read, after every other close step and right before the stop is asked
+  // for. A replacement that took the serial during platform close or hint cleanup is seen here.
+  const implicitStop = shutdownRequested && req.flags?.shutdown !== true;
+  const launchedProcess = implicitStop
+    ? await checkLaunchedProcessOwnership(session, params.launchedProcess)
+    : 'not-applicable';
+  const stopOwed =
+    shutdownRequested && launchedProcess !== 'changed' && launchedProcess !== 'unverified';
   const finalization = await attemptCleanup(
     'application_lifecycle',
     async (): Promise<CloseApplicationFinalizationResult> =>
@@ -270,15 +273,17 @@ export async function runSessionCloseTeardown(params: {
         surface: session.surface ?? 'app',
         retainRunner: retainExecutionHost,
         stateDir: sessionStore.resolveDaemonStateDir(),
-        shutdownTarget: shutdownRequested && lifecycle.owner.kind === 'local-family',
+        shutdownTarget: stopOwed && lifecycle.owner.kind === 'local-family',
       })) ?? {},
   );
   // The platform has asked the emulator it owns to shut down; this is where this session checks the
   // process it launched actually left, because `adb emu kill` answers for the guest, not for the
   // host process. An explicit `--shutdown` is the user's own command for the device and is not this
   // session's launched process to confirm.
-  if (shutdownRequested && req.flags?.shutdown !== true)
-    await confirmLaunchedProcessStopped(session, params.launchedProcess);
+  const stopUnconfirmed =
+    implicitStop && stopOwed
+      ? await confirmLaunchedProcessStopped(session, params.launchedProcess)
+      : false;
   const saveScriptOutcome = repairArmed
     ? {}
     : finalizeOrdinaryCloseScript({ req, ref, sessionStore, platformCloseError });
@@ -292,6 +297,9 @@ export async function runSessionCloseTeardown(params: {
     shutdownResult: finalization?.shutdown,
     shutdownPrepared: finalization !== undefined,
     ...stopReasons,
+    implicitShutdownLaunchedProcessGone: launchedProcess === 'changed',
+    implicitShutdownLaunchedProcessUnverified: launchedProcess === 'unverified',
+    implicitShutdownStopUnconfirmed: stopUnconfirmed,
   };
 }
 
