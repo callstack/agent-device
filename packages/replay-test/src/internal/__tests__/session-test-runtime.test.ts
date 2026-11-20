@@ -294,3 +294,63 @@ test('runReplayTestAttempt cleans up without a finalizer and adds no finalizatio
   expect(result.warnings).toEqual([]);
   expect(cleanupSession).toHaveBeenCalledWith('default:test:no-finalizer');
 });
+
+test.each(['passed', 'failed'] as const)(
+  'successful cleanup warnings survive a %s attempt',
+  async (status) => {
+    const prior: ReplayTestAttemptOutcome =
+      status === 'passed'
+        ? PASSED
+        : {
+            status: 'failed',
+            error: { code: 'COMMAND_FAILED', message: 'assertion failed' },
+            warnings: ['earlier warning'],
+            artifactPaths: [],
+            infrastructure: false,
+          };
+    const result = await runReplayTestAttempt({
+      filePath: 'cleanup.ad',
+      sessionName: 'suite:cleanup',
+      requestId: 'cleanup-warning',
+      runReplay: async () => prior,
+      cleanupSession: async () => ['Device remains running.'],
+      ...trackCancellation(),
+    });
+    expect(result.status).toBe(status);
+    expect(result.warnings).toEqual([...prior.warnings, 'Device remains running.']);
+  },
+);
+
+test('late cleanup warnings are diagnosed after the timeout result was returned', async () => {
+  vi.useFakeTimers();
+  let finish!: (outcome: ReplayTestAttemptOutcome) => void;
+  const replay = new Promise<ReplayTestAttemptOutcome>((resolve) => {
+    finish = resolve;
+  });
+  const cleanupSession = vi.fn(async () =>
+    cleanupSession.mock.calls.length > 1 ? ['Device remains running.'] : [],
+  );
+  const emitDiagnostic = vi.fn();
+  const attempt = runReplayTestAttempt({
+    filePath: 'late.ad',
+    sessionName: 'suite:late',
+    requestId: 'late-warning',
+    timeoutMs: 10,
+    runReplay: async () => replay,
+    cleanupSession,
+    ...trackCancellation(),
+    emitDiagnostic,
+  });
+  await vi.advanceTimersByTimeAsync(2010);
+  const result = await attempt;
+  finish(PASSED);
+  await vi.waitFor(() => expect(cleanupSession).toHaveBeenCalledTimes(2));
+  expect(emitDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      level: 'warn',
+      phase: 'test_late_cleanup_warning',
+      data: expect.objectContaining({ session: 'suite:late', warning: 'Device remains running.' }),
+    }),
+  );
+  await expect(attempt).resolves.toBe(result);
+});

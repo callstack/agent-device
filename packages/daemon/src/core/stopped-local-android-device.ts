@@ -1,4 +1,5 @@
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import { ensureReadyUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -24,6 +25,7 @@ export async function bootStoppedLocalAndroidDevice(params: {
   flags: Pick<RequestFlags, 'androidDeviceAllowlist'>;
   env: EnvMap;
   deadlineAtMs: number | undefined;
+  onAndroidEmulatorLaunchIdentity?: (identity: AndroidEmulatorLaunchIdentity) => void;
 }): Promise<DeviceInfo | undefined> {
   const { device, owner } = params;
   if (owner.kind !== 'local-family' || device.platform !== 'android' || device.booted === true) {
@@ -33,5 +35,6 @@ export async function bootStoppedLocalAndroidDevice(params: {
   return await readiness.operations.ensureReady({
     androidSerialAllowlist: resolveSortedAndroidSerialAllowlist(params.flags, params.env),
     deadlineAtMs: params.deadlineAtMs,
+    onAndroidEmulatorLaunchIdentity: params.onAndroidEmulatorLaunchIdentity,
   });
 }
