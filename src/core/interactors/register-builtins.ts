@@ -1,7 +1,10 @@
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import type { RequiredPlatform } from '@agent-device/contracts/platform-module';
-import { registerPlatformPlugin, type PlatformPluginAbsence } from '../platform-plugin-registry.ts';
+import {
+  registerPlatformPluginSet,
+  type PlatformPluginAbsence,
+} from '../platform-plugin-registry.ts';
 import { applePlugin } from '@agent-device/platform-apple';
 import { vegaPlugin } from '@agent-device/platform-vega';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -84,16 +87,15 @@ export type BuiltinPluginsCoverRequiredPlatforms = AssertTrue<
 let registered = false;
 
 /**
- * Registers every builtin plugin into the shared registry exactly once
- * (idempotent). Called at the top of `core/interactors.ts` so the registry is
- * populated before any `getPlugin` lookup; safe to call again from tests.
- * `absent` is how the registry reports a family the builtin set does not own, so the
- * caller decides which core's plugin release an installation hint names (ADR 0034).
+ * Composes every builtin plugin into the shared registry exactly once (idempotent), and gives the
+ * registry the builtin set's absence reporter as one input. Called at the top of `core/interactors.ts`
+ * so the registry is populated before any `getPlugin` lookup; safe to call again from tests.
+ * `reportAbsent` is how the registry reports a family the builtin set does not own, so the caller
+ * decides which core's plugin release an installation hint names (ADR 0034). It belongs to the set —
+ * not to a plugin — so no plugin can swap this process's absence policy.
  */
-export function registerBuiltinPlatformPlugins(absent: PlatformPluginAbsence): void {
+export function registerBuiltinPlatformPlugins(reportAbsent: PlatformPluginAbsence): void {
   if (registered) return;
-  for (const plugin of BUILTIN_PLATFORM_PLUGINS) {
-    registerPlatformPlugin(plugin, absent);
-  }
+  registerPlatformPluginSet(BUILTIN_PLATFORM_PLUGINS, reportAbsent);
   registered = true;
 }

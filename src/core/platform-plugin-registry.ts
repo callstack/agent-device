@@ -5,8 +5,8 @@ import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 /**
  * The outcome for a platform family this runtime does not have (ADR 0034).
  *
- * The composition supplies it when it registers its plugins, because naming the package that
- * provides a family needs the running core's version — a host read owned by
+ * The plugin-set composition supplies it once, when it composes its plugins, because naming the
+ * package that provides a family needs the running core's version — a host read owned by
  * `@agent-device/host-kit/version`. This registry is the interactor lookup every request reaches, so
  * it stays free of that read and of the install-hint catalog: importing it evaluates neither.
  */
@@ -25,19 +25,31 @@ function unsupportedPlatform(family: Platform): AppError {
 }
 
 /**
- * Registers `plugin` for each leaf platform it owns and records how this plugin set reports a family
- * it lacks. Throws on duplicate registration so platform ownership cannot silently become
- * last-writer-wins. One process holds one plugin set, and `registerBuiltinPlatformPlugins` runs once.
+ * Composes `plugins` as this process's platform-plugin set and takes, once for the whole set, the
+ * reporter for a family the set lacks. The set is the only registration path, so no single plugin can
+ * carry its own absence policy.
+ *
+ * Checks every leaf platform before it changes any state: a rejected set leaves the registry and the
+ * absence reporter exactly as they were, so a duplicate cannot replace the policy it came to install.
+ * Throws when one platform has two claimants — inside the set or against the registered set — so
+ * platform ownership cannot silently become last-writer-wins.
+ * One process holds one plugin set, and `registerBuiltinPlatformPlugins` runs once.
  */
-export function registerPlatformPlugin(
-  plugin: PlatformPlugin,
-  absent: PlatformPluginAbsence,
+export function registerPlatformPluginSet(
+  plugins: readonly PlatformPlugin[],
+  reportAbsent: PlatformPluginAbsence,
 ): void {
-  reportAbsence = absent;
-  for (const platform of plugin.platforms) {
-    if (registry.has(platform)) {
-      throw new Error(`PlatformPlugin already registered for platform "${platform}"`);
+  const claimed = new Map<Platform, PlatformPlugin>();
+  for (const plugin of plugins) {
+    for (const platform of plugin.platforms) {
+      if (registry.has(platform) || claimed.has(platform)) {
+        throw new Error(`PlatformPlugin already registered for platform "${platform}"`);
+      }
+      claimed.set(platform, plugin);
     }
+  }
+  reportAbsence = reportAbsent;
+  for (const [platform, plugin] of claimed) {
     registry.set(platform, plugin);
   }
 }

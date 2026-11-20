@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   getPlugin,
   registeredPlatforms,
-  registerPlatformPlugin,
+  registerPlatformPluginSet,
   tryGetPlugin,
 } from '../../core/platform-plugin-registry.ts';
 import {
@@ -116,7 +116,7 @@ test('getPlugin throws UNSUPPORTED_PLATFORM (verbatim) for an unregistered platf
 
 test('registering a duplicate platform is a hard error', () => {
   assert.throws(
-    () => registerPlatformPlugin(BUILTIN_PLATFORM_PLUGINS[0], missingPlatformPlugin),
+    () => registerPlatformPluginSet([BUILTIN_PLATFORM_PLUGINS[0]], missingPlatformPlugin),
     /already registered for platform/,
   );
 });
