@@ -362,17 +362,16 @@ test.skipIf(process.platform !== 'linux')(
         if (stat === null) throw new Error('ENOENT');
         return stat;
       });
-      psReturns('original lstart');
-      assert.equal(readProcessStartTime(4242), 'original lstart');
-      psReturns('4242 Ss original lstart');
-      mockRunCmd.mockResolvedValue({ stdout: '4242 Ss original lstart', stderr: '', exitCode: 0 });
-      assert.equal(
-        readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
-        'original lstart',
-      );
+      const lstart = 'Mon Aug 10 20:00:00 2026';
+      const expected = posixToken(2026, 7, 10, 20, 0, 0);
+      psReturns(lstart);
+      assert.equal(readProcessStartTime(4242), expected);
+      psReturns(`4242 Ss ${lstart}`);
+      mockRunCmd.mockResolvedValue({ stdout: `4242 Ss ${lstart}`, stderr: '', exitCode: 0 });
+      assert.equal(readHostProcessIdentityObservations([4242]).get(4242)?.startTime, expected);
       assert.equal(
         (await readHostProcessIdentityObservationsAsync([4242])).get(4242)?.startTime,
-        'original lstart',
+        expected,
       );
       vi.restoreAllMocks();
     }
