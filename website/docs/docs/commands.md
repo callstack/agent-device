@@ -2328,7 +2328,7 @@ agent-device record stop                # Stop active recording
 
 **Screenshot diffs**
 
-`diff screenshot` reads `--baseline`, `--threshold`, `--out`, `--overlay-refs`, and `--screen-mask`. `diff snapshot` reads `-i`, `--depth`, `--scope`, `--raw`, and `--out`; see [Snapshot and inspect](#snapshot-and-inspect). The CLI accepts both sets on either action, and an action ignores the options that it does not read. Exact behavior: `agent-device help diff`.
+`diff screenshot` reads `--baseline`, `--threshold`, `--out`, `--overlay-refs`, and `--screen-mask`. `diff snapshot` reads `-i`, `--depth`, `--scope`, `--raw`, and `--out`; see [Snapshot and inspect](#snapshot-and-inspect). The CLI refuses `--screen-mask` on `diff snapshot` with `INVALID_ARGS`. It accepts every other option of one action on the other, and that action ignores it. Exact behavior: `agent-device help diff`.
 
 - `diff screenshot` compares a live capture, or a saved `current.png` (no session needed), against `--baseline`. Inputs may be PNG or JPEG regardless of extension; HarmonyOS captures are JPEG. Output ranks changed regions with rectangles, changed-pixel counts, and share of the diff; `--out` writes a diff PNG with changed pixels tinted red. `ocr` and `nonTextDeltas` are never populated, so read the images yourself for qualitative review.
 - `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Keep it above `0` when either input is JPEG.
