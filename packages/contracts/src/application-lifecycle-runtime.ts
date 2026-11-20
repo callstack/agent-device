@@ -6,6 +6,7 @@ import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { ProviderPortReverseOptions } from './provider-device-runtime.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
+import type { DeviceBootPerformance } from './device-boot.ts';
 
 /**
  * A deliberately neutral runtime-hint payload. Daemon policy owns parsing and
@@ -89,6 +90,14 @@ export type OpenApplicationPreparationInput = Readonly<{
   surface: SessionSurface;
   prewarmRunnerOnColdBoot: boolean;
   execution: ApplicationLifecycleExecution;
+  /**
+   * #4791: an owner whose preparation contains the step that could boot the device reports what that
+   * step did with its own call: `performed: true` is positive proof this open booted the device, and
+   * a `performed: false` answer is positive proof it did not, whatever an earlier inventory snapshot
+   * said. An owner that performs no boot step in its preparation answers nothing — answering for a
+   * boot made elsewhere would misreport this call.
+   */
+  onBootPerformance?: (performance: DeviceBootPerformance) => void;
 }>;
 
 /**

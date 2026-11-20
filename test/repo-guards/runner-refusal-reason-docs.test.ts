@@ -51,6 +51,11 @@ const REASON_TABLES = [
     'packages/contracts/src/device-inventory.ts',
     'table',
   ),
+  reasonTable(
+    'CLOSE_BOOT_OWNER_UNVERIFIED_REASONS',
+    'packages/contracts/src/device-boot.ts',
+    'table',
+  ),
 ];
 
 test('every reason of every exported published-reason table is documented at its surfaces', () => {

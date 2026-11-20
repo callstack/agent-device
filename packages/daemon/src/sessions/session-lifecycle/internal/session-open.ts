@@ -358,6 +358,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       surface: surfaceResult,
       existingRef,
       selection,
+      bootPerformance: details.details.bootPerformance,
     });
   }
 

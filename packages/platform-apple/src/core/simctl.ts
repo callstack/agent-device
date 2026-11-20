@@ -52,6 +52,20 @@ export function scopeSimctlArgsForDevice(
   return scopeSimctlArgs(simulatorAddressFor(device).simulatorSetPath, args);
 }
 
+/**
+ * Whether a `simctl boot` was refused because the Simulator was already up. CoreSimulator answers
+ * this with text and a non-zero exit rather than a distinguishable code, so this is the one read of
+ * it in the package: a boot refused this way was NOT performed by the call that asked for it.
+ */
+export function simctlBootRefusedAlreadyBooted(output: string): boolean {
+  const lowered = output.toLowerCase();
+  return (
+    lowered.includes('already booted') ||
+    lowered.includes('current state: booted') ||
+    lowered.includes('current device state: booted')
+  );
+}
+
 export function buildSimctlArgsForAddress(
   address: SimulatorAddress,
   args: readonly string[],

@@ -31,6 +31,7 @@ import {
 } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../core/snapshot-interactor-capture.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
+import { NO_BOOT_PROOF } from '../../__tests__/support/boot-ownership-fixtures.ts';
 import { selectorCaptureFixture } from '../../__tests__/support/selector-capture-fixture.ts';
 import {
   SAVE_ANNOTATION,
@@ -185,6 +186,7 @@ test.each(['close and reopen', 'open with refreshed device'])(
               device: closes ? initial.session.device : { ...initial.session.device },
               surface: 'app',
               appBundleId: initial.session.appBundleId,
+              bootOwnership: NO_BOOT_PROOF,
             });
           }
           return { ok: true, data: {} };
