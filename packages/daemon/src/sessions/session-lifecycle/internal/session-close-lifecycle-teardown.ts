@@ -43,6 +43,11 @@ type CloseDeviceStopDecision = Readonly<{
    */
   implicitShutdownDeniedByPolicy: boolean;
   implicitShutdownClaimLost: boolean;
+  /**
+   * #4791: the session recorded the snapshot's boot inference and the platform then said its own boot
+   * step did not boot the device, so close owns no stop and reports the device it left running.
+   */
+  implicitShutdownBootOwnerUnverified: boolean;
 }>;
 
 export type SessionCloseTeardownResult = Readonly<{
@@ -96,6 +101,10 @@ async function decideDeviceStopOnClose(params: {
   const { session } = params;
   const implicitShutdown =
     !params.explicitShutdown && session.bootedByOpen === true && params.localFamily;
+  // #4791: the open recorded a boot the platform later said it did not perform, so there is no stop
+  // for this close to owe. The device is somebody else's boot and stays as it is.
+  const implicitShutdownBootOwnerUnverified =
+    !params.explicitShutdown && session.bootOwnerUnverified === true && params.localFamily;
   const claimRenewal = implicitShutdown
     ? await renewDeviceClaim(session.deviceClaim, params.env)
     : undefined;
@@ -108,6 +117,7 @@ async function decideDeviceStopOnClose(params: {
       (implicitShutdown && !implicitShutdownDeniedByPolicy && claimRenewal?.status === 'renewed'),
     implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost,
+    implicitShutdownBootOwnerUnverified,
   };
 }
 

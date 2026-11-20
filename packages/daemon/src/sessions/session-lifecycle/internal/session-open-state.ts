@@ -1,4 +1,5 @@
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
+import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -32,8 +33,8 @@ export function publishOpenSession(params: {
   appBundleId?: string;
   appName?: string;
   deviceClaim?: DeviceClaimSessionOwnership;
-  /** #4162: this open booted the local virtual device, so its plain close owns stopping it. */
-  bootedByOpen?: boolean;
+  /** #4162: who owns stopping this device, and what close must say when nobody proved a boot. */
+  bootOwnership: CloseBootOwnership;
   androidLaunchIdentity?: AndroidEmulatorLaunchIdentity;
 }): SessionRef {
   const {
@@ -46,16 +47,11 @@ export function publishOpenSession(params: {
     appBundleId,
     appName,
     deviceClaim,
-    bootedByOpen,
+    bootOwnership,
   } = params;
   requireOpenSessionAdmission(store, sessionName, existingRef);
   if (existingRef) {
-    store.updateOpenDevice(
-      existingRef,
-      device,
-      bootedByOpen === true,
-      params.androidLaunchIdentity,
-    );
+    store.updateOpenDevice(existingRef, device, bootOwnership, params.androidLaunchIdentity);
     const session = store.update(existingRef, {
       surface,
       appBundleId,
@@ -79,7 +75,7 @@ export function publishOpenSession(params: {
     deviceClaim,
   };
   const ref = store.publish(sessionName, draft);
-  if (bootedByOpen === true)
-    store.updateOpenDevice(ref, device, true, params.androidLaunchIdentity);
+  if (bootOwnership.ownsBoot || bootOwnership.bootOwnerUnverified)
+    store.updateOpenDevice(ref, device, bootOwnership, params.androidLaunchIdentity);
   return store.refresh(ref);
 }

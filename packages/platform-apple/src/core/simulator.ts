@@ -15,7 +15,11 @@ import {
   IOS_SIMCTL_LIST_TIMEOUT_MS,
   IOS_SIMULATOR_SHOW_TIMEOUT_MS,
 } from './config.ts';
-import { buildSimctlArgsForDevice, readSimctlDeviceState } from './simctl.ts';
+import {
+  buildSimctlArgsForDevice,
+  readSimctlDeviceState,
+  simctlBootRefusedAlreadyBooted,
+} from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
 
 type SimulatorCommandOptions = {
@@ -119,9 +123,9 @@ export async function ensureBootedSimulator(
         });
         bootResult = boot;
 
-        const bootOutput = `${bootResult.stdout}\n${bootResult.stderr}`.toLowerCase();
-        const bootAlreadyDone =
-          bootOutput.includes('already booted') || bootOutput.includes('current state: booted');
+        const bootAlreadyDone = simctlBootRefusedAlreadyBooted(
+          `${bootResult.stdout}\n${bootResult.stderr}`,
+        );
 
         if (bootResult.exitCode !== 0 && !bootAlreadyDone) {
           throw new AppError(
