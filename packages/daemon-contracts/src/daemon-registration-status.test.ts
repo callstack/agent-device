@@ -120,7 +120,7 @@ test('a record whose process is gone or was replaced is not a running daemon', (
       process.platform === 'linux'
         ? 'linux:00000000-0000-0000-0000-000000000000:0'
         : process.platform === 'win32'
-          ? '00000000000000000000'
+          ? '000000000000000000000'
           : 'posix:1',
     plugins: [ACTIVE],
   });

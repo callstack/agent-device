@@ -18,9 +18,6 @@ import {
   ownerIdentityMatches,
   readCurrentOwnerIdentity,
   readCurrentOwnerIdentityAsync,
-  readPersistedOwner,
-  writePersistedOwner,
-  type OwnerIdentity,
   type OwnerLiveness,
 } from './owner-identity.ts';
 import { sleep } from './retry.ts';
@@ -179,7 +176,7 @@ export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAt
       params.lockDirPath,
       (holder) => readHostProcessIdentityObservations([holder.pid]).get(holder.pid) ?? null,
     ),
-    guardHolderIdentity: readCurrentOwnerIdentity(),
+    guardHolderStartTime: readCurrentOwnerIdentity().startTime,
   });
 }
 
@@ -189,8 +186,8 @@ type AttemptEvidence = Readonly<{
   /** Judges an owner record the attempt reports on; it must not probe on an async path. */
   judgeOwner: (owner: ProcessLockOwnerRecord) => OwnerLiveness;
   abandonedGuard: AbandonedGuard | undefined;
-  /** This process's identity, recorded in a guard it takes. */
-  guardHolderIdentity: OwnerIdentity;
+  /** This process's start time, recorded in a guard it takes. */
+  guardHolderStartTime: string | null;
 }>;
 
 function attemptProcessLock(
@@ -200,7 +197,7 @@ function attemptProcessLock(
   const { lockDirPath } = params;
   const judgment = evidence.standing;
   if (judgment.kind === 'live') return { status: 'busy', inspection: judgment.inspection };
-  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard, evidence.guardHolderIdentity)) {
+  if (!holdReclaimMutex(lockDirPath, evidence.abandonedGuard, evidence.guardHolderStartTime)) {
     return { status: 'busy', inspection: inspectProcessLockWith(lockDirPath, evidence.judgeOwner) };
   }
   const outcome = withMutationGuardHeld(
@@ -284,11 +281,7 @@ function publishClaim(
     return { status: 'unproven' };
   }
   const claimToken = crypto.randomUUID();
-  const claim: ProcessLockOwnerRecord = {
-    ...owner,
-    claimToken,
-    claimIssuerId: CLAIM_ISSUER_ID,
-  };
+  const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
   try {
     writeProcessLockOwner(ownerFilePath, claim);
   } catch (error) {
@@ -403,7 +396,7 @@ async function createWaitObservers() {
   return {
     owner: createOwnerObservationReuse(),
     guardHolder: createGuardHolderObservationReuse(),
-    guardHolderIdentity: await readCurrentOwnerIdentityAsync(),
+    guardHolderStartTime: (await readCurrentOwnerIdentityAsync()).startTime,
   };
 }
 
@@ -419,7 +412,7 @@ async function gatherWaitEvidence(
     standing: judgeStandingClaim(reading, liveness),
     judgeOwner: judgeOwnerFromReading(reading, liveness),
     abandonedGuard: await findAbandonedGuardAsync(params.lockDirPath, observe.guardHolder),
-    guardHolderIdentity: observe.guardHolderIdentity,
+    guardHolderStartTime: observe.guardHolderStartTime,
   };
 }
 
@@ -549,7 +542,7 @@ function staleLockHint(lockDirPath: string): string {
 function writeProcessLockOwner(ownerFilePath: string, owner: ProcessLockOwnerRecord): void {
   publishFileSync({
     destination: ownerFilePath,
-    contents: JSON.stringify({ ...owner, ...writePersistedOwner(owner) }),
+    contents: JSON.stringify(owner),
   });
 }
 
@@ -611,7 +604,7 @@ function clearLockDirectory(
     try {
       publishFileSync({
         destination: ownerFilePath,
-        contents: JSON.stringify({ ...owner, ...writePersistedOwner(owner) }),
+        contents: JSON.stringify(owner),
         publish: 'link-exclusive',
       });
     } catch {}
@@ -630,13 +623,7 @@ function reclaimMutexPath(lockDirPath: string): string {
  * The guard's holder, written into the guard file itself. A holder that dies inside its guarded
  * filesystem step would otherwise leave a guard nobody can attribute, and so nobody can remove.
  */
-type GuardHolder = Readonly<{
-  pid: number;
-  startTime: string | null;
-  /** Canonical provenanced token beside the legacy raw `startTime` (same dual-write as owner.json). */
-  birthToken?: string | null;
-  token: string;
-}>;
+type GuardHolder = Readonly<{ pid: number; startTime: string | null; token: string }>;
 
 /** A standing guard whose holder is proven dead or its pid reused, named by the holder's token. */
 type AbandonedGuard = Readonly<{ token: string }>;
@@ -651,17 +638,18 @@ const GUARD_TOKEN = /^[0-9a-f-]{36}$/;
 function holdReclaimMutex(
   lockDirPath: string,
   abandoned: AbandonedGuard | undefined,
-  holderIdentity: OwnerIdentity,
+  holderStartTime: string | null,
 ): boolean {
-  if (createReclaimMutex(lockDirPath, holderIdentity)) return true;
+  if (createReclaimMutex(lockDirPath, holderStartTime)) return true;
   if (!abandoned || !reapAbandonedGuard(lockDirPath, abandoned)) return false;
-  return createReclaimMutex(lockDirPath, holderIdentity);
+  return createReclaimMutex(lockDirPath, holderStartTime);
 }
 
-function createReclaimMutex(lockDirPath: string, holderIdentity: OwnerIdentity): boolean {
+function createReclaimMutex(lockDirPath: string, holderStartTime: string | null): boolean {
   const mutexPath = reclaimMutexPath(lockDirPath);
   const holder: GuardHolder = {
-    ...writePersistedOwner(holderIdentity),
+    pid: process.pid,
+    startTime: holderStartTime,
     token: crypto.randomUUID(),
   };
   let descriptor: number;
@@ -738,21 +726,8 @@ function readGuardHolder(mutexPath: string): { holder: GuardHolder; ageMs: numbe
   if (!isProcessPid(record.pid) || typeof record.token !== 'string') return undefined;
   if (!GUARD_TOKEN.test(record.token)) return undefined;
   if (record.startTime !== null && typeof record.startTime !== 'string') return undefined;
-  if (
-    record.birthToken !== undefined &&
-    record.birthToken !== null &&
-    typeof record.birthToken !== 'string'
-  )
-    return undefined;
   return {
-    holder: {
-      ...readPersistedOwner({
-        pid: record.pid,
-        startTime: record.startTime,
-        birthToken: typeof record.birthToken === 'string' ? record.birthToken : undefined,
-      }),
-      token: record.token,
-    },
+    holder: { pid: record.pid, startTime: record.startTime, token: record.token },
     ageMs,
   };
 }
@@ -827,13 +802,13 @@ function createGuardHolderObservationReuse() {
  */
 async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
   const deadline = Date.now() + RELEASE_GUARD_WAIT_MS;
-  const holderIdentity = await readCurrentOwnerIdentityAsync();
+  const holderStartTime = (await readCurrentOwnerIdentityAsync()).startTime;
   const observedHolder = createGuardHolderObservationReuse();
   while (
     !holdReclaimMutex(
       lockDirPath,
       await findAbandonedGuardAsync(lockDirPath, observedHolder),
-      holderIdentity,
+      holderStartTime,
     )
   ) {
     if (Date.now() >= deadline) return false;
@@ -893,11 +868,8 @@ function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null 
     if (!holdsShape(record[field])) return null;
   }
   return {
-    ...readPersistedOwner({
-      pid: record.pid as number,
-      startTime: typeof record.startTime === 'string' ? record.startTime : null,
-      birthToken: typeof record.birthToken === 'string' ? record.birthToken : undefined,
-    }),
+    pid: record.pid as number,
+    startTime: typeof record.startTime === 'string' ? record.startTime : null,
     acquiredAtMs: record.acquiredAtMs as number,
     // A record written before claims were tokenized names a process without saying which
     // acquisition it was, which no release can match and no reclaim can be blamed for.
@@ -906,12 +878,12 @@ function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null 
   };
 }
 
-const PROCESS_LOCK_OWNER_FIELD_SHAPES: Record<string, (value: unknown) => boolean> = {
-  pid: isProcessPid,
-  acquiredAtMs: (value) => typeof value === 'number' && Number.isFinite(value),
-  startTime: (value) => value === undefined || value === null || typeof value === 'string',
-  birthToken: (value) => value === undefined || value === null || typeof value === 'string',
-};
+const PROCESS_LOCK_OWNER_FIELD_SHAPES: Record<keyof ProcessLockOwner, (value: unknown) => boolean> =
+  {
+    pid: isProcessPid,
+    acquiredAtMs: (value) => typeof value === 'number' && Number.isFinite(value),
+    startTime: (value) => value === undefined || value === null || typeof value === 'string',
+  };
 
 function readProcessLockDiagnostics(
   lockDirPath: string,

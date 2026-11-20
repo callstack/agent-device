@@ -10,7 +10,6 @@ import {
 import {
   LIFETIME_TOKEN,
   LEGACY_RAW_START_TIME,
-  STALE_LIFETIME_TOKEN,
   mkdtempForTestSync,
   publishDaemonRegistration,
 } from '@agent-device/test-kit';
@@ -89,49 +88,7 @@ test('a published start time proves supersession only when both sides are proven
   );
 });
 
-test('a new-build record keeps the legacy raw field released clients read, beside the canonical token', () => {
-  const stateDir = useStateDir();
-  fs.writeFileSync(
-    infoPathOf(stateDir),
-    JSON.stringify({
-      pid: 4242,
-      processStartTime: LEGACY_RAW_START_TIME,
-      processStartTimeToken: LIFETIME_TOKEN,
-    }),
-  );
-
-  const record = JSON.parse(fs.readFileSync(infoPathOf(stateDir), 'utf8')) as Record<
-    string,
-    unknown
-  >;
-  // An old hardened client reads `processStartTime` and compares it with its own raw read: the
-  // raw legacy value is still there, in the format it expects, so no spurious reclaim.
-  assert.equal(record.processStartTime, LEGACY_RAW_START_TIME);
-  assert.equal(record.processStartTimeToken, LIFETIME_TOKEN);
-
-  const identity = readRegisteredDaemonIdentity(infoPathOf(stateDir));
-  assert.equal(identity?.startTime, LIFETIME_TOKEN);
-
-  // A new reader compares canonical tokens: the live owner matches, a stale one is proven replaced.
-  assert.equal(
-    isSupersededDaemonOwner({
-      stateDir,
-      pid: 4242,
-      startTime: LIFETIME_TOKEN,
-    }),
-    false,
-  );
-  assert.equal(
-    isSupersededDaemonOwner({
-      stateDir,
-      pid: 4242,
-      startTime: STALE_LIFETIME_TOKEN,
-    }),
-    true,
-  );
-});
-
-test('an old-format record (raw only) is unknown to new readers, never treated as replaced', () => {
+test('a record from an older release (a raw ps start time) is never treated as replaced', () => {
   const stateDir = useStateDir();
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: LEGACY_RAW_START_TIME });
 
@@ -197,10 +154,7 @@ test('ownership is decided by the identity in the record, not by its pid alone',
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'successor-start' });
   assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
     state: 'replaced',
-    identity: {
-      pid: 4242,
-      startTime: 'successor-start',
-    },
+    identity: { pid: 4242, startTime: 'successor-start' },
   });
 });
 

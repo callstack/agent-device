@@ -137,7 +137,7 @@ test('a lease whose runner pid was recycled is never signalled', async () => {
     leaseFor({
       deviceId,
       runnerPid: real.pid,
-      runnerStartTime: 'posix:1',
+      runnerStartTime: '1970-01-01T00:00:00Z',
       stateDir,
     }),
   );

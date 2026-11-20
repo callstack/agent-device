@@ -12,7 +12,6 @@ import { shellQuote } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
-  compareBirthTokens,
   isProcessAlive,
   isProcessGroupAlive,
   readProcessCommand,
@@ -90,7 +89,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   deadlineFromTimeoutMs: (timeoutMs, nowMs) => Deadline.fromTimeoutMs(timeoutMs, nowMs),
   isProcessAlive,
   isProcessGroupAlive,
-  compareBirthTokens,
   readProcessStartTime,
   readProcessCommand,
   signalPidsBestEffort,

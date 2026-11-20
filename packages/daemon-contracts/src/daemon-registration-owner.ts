@@ -16,7 +16,6 @@ import {
 } from './daemon-process.ts';
 import {
   readCurrentOwnerIdentity,
-  writePersistedOwner,
   readProcessStartTime,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
@@ -91,7 +90,6 @@ export async function tryAcquireDaemonRegistration(
 > {
   const boundPaths = { ...paths };
   const identity = readCurrentOwnerIdentity();
-  const persisted = writePersistedOwner(identity);
   const attempt = tryAcquireProcessLock({
     lockDirPath: boundPaths.lockPath,
     owner: { ...identity, acquiredAtMs: Date.now() },
@@ -123,8 +121,7 @@ export async function tryAcquireDaemonRegistration(
               httpPort,
               transport,
               pid: identity.pid,
-              processStartTime: persisted.startTime ?? undefined,
-              processStartTimeToken: persisted.birthToken ?? undefined,
+              processStartTime: identity.startTime ?? undefined,
               stateDir: boundPaths.baseDir,
             },
             null,

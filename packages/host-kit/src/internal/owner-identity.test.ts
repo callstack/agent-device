@@ -33,7 +33,7 @@ test('distinguishes dead and PID-reused owners', () => {
   const staleStartTime = liveStartTime?.startsWith('linux:')
     ? 'linux:other-boot:1'
     : liveStartTime !== null && /^\d{21}$/.test(liveStartTime)
-      ? '00000000000000000000'
+      ? '000000000000000000000'
       : 'posix:1';
   assert.equal(
     classifyOwnerLiveness({

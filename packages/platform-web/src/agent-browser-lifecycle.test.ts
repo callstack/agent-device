@@ -13,9 +13,13 @@ import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from './__tests__/test-utils.ts';
 
-/** C-form `lstart` token per pid: the verified format, so a differing token proves a different lifetime. */
+/** A start token per pid: one source, so a differing token proves a different lifetime. */
 function startToken(pid: number): string {
-  return `posix:${1000 + pid}`;
+  return `posix:${pid * 1000}`;
+}
+/** What a pinned `ps -o lstart=` prints for `startToken(pid)`. */
+function psLstart(pid: number): string {
+  return `Thu Jan  1 ${new Date(pid * 1000).toISOString().slice(11, 19)} 1970`;
 }
 /** A birth token naming a different lifetime than any `startToken`. */
 const LATER_LIFETIME = STALE_LIFETIME_TOKEN;
@@ -854,7 +858,7 @@ test('recording and reaping require executable provenance and matching identity'
       (_command: string, args: readonly string[]) => {
         const pid = Number(args[1]);
         const command = rows.find((row) => row.pid === pid)?.command;
-        const start = pid === 11003 ? LATER_LIFETIME : startToken(pid);
+        const start = pid === 11003 ? 'Fri Jan  2 00:00:00 1970' : psLstart(pid);
         const stdout = args[3] === 'pid=,command=' ? `${pid} ${command}\n` : `${pid} S ${start}\n`;
         const child = Object.assign(new ChildProcess(), {
           stdin: new PassThrough(),

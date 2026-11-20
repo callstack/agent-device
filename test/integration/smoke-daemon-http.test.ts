@@ -14,7 +14,7 @@ import { runCliJson } from './test-helpers.ts';
 type DaemonInfo = {
   token: string;
   pid: number;
-  processStartTimeToken?: string;
+  processStartTime?: string;
   transport?: string;
   httpPort?: number;
 };
@@ -113,7 +113,7 @@ async function callCommandRpc(
 async function stopDaemon(info: DaemonInfo): Promise<void> {
   if (!Number.isInteger(info.pid) || info.pid <= 0) return;
   const termination = await stopDaemonProcess(
-    { pid: info.pid, startTime: info.processStartTimeToken ?? null },
+    { pid: info.pid, startTime: info.processStartTime ?? null },
     { mode: 'graceful', termTimeoutMs: 1500, killTimeoutMs: 1500 },
   );
   assert.notEqual(termination.status, 'retained', JSON.stringify(termination));

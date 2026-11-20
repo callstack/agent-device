@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { withCommandHost } from './exec.ts';
 import {
   captureHostEnvironment,
   expandProcessTree,
@@ -8,7 +9,9 @@ import {
   judgeProcessIdentity,
   listHostProcesses,
   parseHostProcessList,
+  readHostProcessIdentityObservations,
   readProcessCommand,
+  readProcessIdentityFacts,
   readProcessStartTime,
   signalPidsBestEffort,
   uniquePositivePids,
@@ -30,6 +33,30 @@ test('readProcessStartTime returns value for current process', () => {
   }
   assert.ok(startTime.length > 0);
 });
+
+// #4656: macOS `ps` renders `lstart` in the caller's locale and zone, so a daemon and a client
+// under different ones disagreed on one live process.
+test.skipIf(process.platform === 'win32')(
+  'readers under different locales and time zones read one start token for a process',
+  async () => {
+    const readUnder = async (env: Record<string, string>) =>
+      await withCommandHost(
+        { host: { env: { ...process.env, ...env }, cwd: process.cwd() }, requestEnv: undefined },
+        async () => [
+          readProcessStartTime(process.pid),
+          readHostProcessIdentityObservations([process.pid]).get(process.pid)?.startTime,
+          (await readProcessIdentityFacts(process.pid)).startTime,
+        ],
+      );
+    const [token, ...others] = await readUnder({ LC_ALL: 'C', TZ: 'UTC' });
+    assert.match(token ?? '', /^(posix|linux):/);
+    assert.deepEqual(others, [token, token]);
+    assert.deepEqual(
+      await readUnder({ LC_ALL: 'fr_FR.UTF-8', LANG: 'fr_FR.UTF-8', TZ: 'Pacific/Kiritimati' }),
+      [token, token, token],
+    );
+  },
+);
 
 test('host process parser preserves command text after pid and parent pid', () => {
   assert.deepEqual(
@@ -138,8 +165,7 @@ test('captureHostEnvironment copies the environment and reads the working direct
   assert.equal(source.cwd.mock.calls.length, 1);
 });
 
-// One row per verdict rule: `ours` needs every recorded claim read and matching, and a start-time
-// match must be a provenanced token comparison — an unqualified raw value is never a match.
+// One row per verdict rule: `ours` needs every recorded claim read and matching.
 const POSIX_TOKEN = 'posix:1794944547000';
 test.each([
   [
@@ -192,12 +218,6 @@ test.each([
     { matches: true },
     ['S1', 'other'],
     'reassigned',
-  ],
-  [
-    'an identical raw record and read is unknown, never ours',
-    { startTime: 'Tue Nov 17 19:42:27 2026', matches: true },
-    ['Tue Nov 17 19:42:27 2026', 'recorded'],
-    'unverified',
   ],
 ] as const)('judgeProcessIdentity: %s', (_name, recorded, [startTime, command], verdict) => {
   const expected = {

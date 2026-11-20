@@ -19,7 +19,6 @@ import {
   readHostProcessIdentityObservationsAsync,
   readProcessCommand,
   readProcessStartTime,
-  readProcessStartTimeRaw,
   readProcessIdentities,
   readProcessIdentityFacts,
   processStartTimesDiffer,
@@ -59,26 +58,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-test('raw start time preserves the released ps rendering and does not pin its locale', () => {
-  psReturns('mar. 17 nov. 19:42:27 2026\n');
-  assert.equal(readProcessStartTimeRaw(4242), 'mar. 17 nov. 19:42:27 2026');
-  const [command, args, options] = mockRunCmdSync.mock.calls[0]!;
-  assert.ok(PINNED_PS_COMMANDS.includes(command));
-  assert.deepEqual(args, ['-p', '4242', '-o', 'lstart=']);
-  assert.equal(options.envOverrides, undefined);
-});
-
-test('raw start time treats invalid pids and failed ps reads as unknown', () => {
-  assert.equal(readProcessStartTimeRaw(-1), null);
-  assert.equal(mockRunCmdSync.mock.calls.length, 0);
-  psReturns('', 1);
-  assert.equal(readProcessStartTimeRaw(4242), null);
-  mockRunCmdSync.mockImplementation(() => {
-    throw new Error('ps unavailable');
-  });
-  assert.equal(readProcessStartTimeRaw(4242), null);
 });
 
 test('isProcessZombie detects the Z state code with trailing flags', () => {
@@ -263,10 +242,10 @@ test('the ownership read leaves the zombie question open when only the state is 
 });
 
 test('the ownership read answers the zombie question from the state field', async () => {
-  psAnswersIdentity({ identity: '4242 ZN x\n', command: '4242 y\n' });
+  psAnswersIdentity({ identity: '4242 ZN Mon Aug 10 20:00:00 2026\n', command: '4242 y\n' });
 
   assert.deepEqual(await readProcessIdentityFacts(4242), {
-    startTime: 'x',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
     command: 'y',
     zombie: true,
   });
@@ -277,13 +256,13 @@ test('the ownership read answers the zombie question from the state field', asyn
 test('a host without /bin/ps reads identity through the NixOS system profile procps', async () => {
   psInstalledAt(['/run/current-system/sw/bin/ps']);
   psReturns('4242 Ss   Mon Aug 10 20:00:00 2026\n');
-  psAnswersIdentity({ identity: '4242 Ss x\n', command: '4242 y\n' });
+  psAnswersIdentity({ identity: '4242 Ss Mon Aug 10 20:01:00 2026\n', command: '4242 y\n' });
 
   assert.equal(
     readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
     posixToken(2026, 7, 10, 20, 0, 0),
   );
-  assert.equal((await readProcessIdentityFacts(4242)).startTime, 'x');
+  assert.equal((await readProcessIdentityFacts(4242)).startTime, posixToken(2026, 7, 10, 20, 1, 0));
   assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/run/current-system/sw/bin/ps');
   for (const call of mockRunCmd.mock.calls) {
     assert.equal(call[0], '/run/current-system/sw/bin/ps');
@@ -508,6 +487,27 @@ test.runIf(process.platform !== 'win32')(
     }
   },
 );
+
+test('a start time ps renders in a form this build cannot parse is unknown evidence', async () => {
+  // A raw rendering has no source, so it must never reach a comparison as a token.
+  mockRunCmdSync.mockImplementation((_cmd: string, args: readonly string[]) => ({
+    stdout:
+      psFieldOf(args) === 'lstart='
+        ? 'mar. 17 nov. 19:42:27 2026\n'
+        : '4242 Ss   mar. 17 nov. 19:42:27 2026\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+  psAnswersIdentity({ identity: '4242 Ss   17 nov. 2026\n', command: '4242 y\n' });
+
+  assert.equal(readProcessStartTime(4242), null);
+  assert.equal(readHostProcessIdentityObservations([4242]).has(4242), false);
+  assert.deepEqual(await readProcessIdentityFacts(4242), {
+    startTime: null,
+    command: 'y',
+    zombie: null,
+  });
+});
 
 test('only two start times in the same provenanced format prove different lifetimes', () => {
   const cForm = 'Tue Nov 17 19:42:27 2026';

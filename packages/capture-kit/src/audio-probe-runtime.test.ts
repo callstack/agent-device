@@ -396,18 +396,6 @@ test('reattach is cleanup-only: live sampler unreattachable, finished run comple
       reason: 'ownership-fence-lost',
     });
 
-    const uncertain = createHostAudioProbeRecoveryOperations({
-      host: fakeHost({ inspectProcess: async () => 'unprovable' as const }),
-    });
-    assert.deepEqual(await uncertain.audioProbeReattach({ envelope: envelopeWith(body) }), {
-      status: 'unreattachable',
-      reason: 'transport-not-reattachable',
-    });
-    assert.deepEqual(await uncertain.audioProbeCleanup({ envelope: envelopeWith(body) }), {
-      status: 'cleanup-pending',
-      reason: 'manual-recovery-required',
-    });
-
     const gone = createHostAudioProbeRecoveryOperations({ host: fakeHost() });
     assert.deepEqual(await gone.audioProbeReattach({ envelope: envelopeWith(body) }), {
       status: 'missing',

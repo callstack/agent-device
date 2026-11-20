@@ -1,5 +1,4 @@
 import {
-  compareBirthTokens,
   isProcessAlive,
   processStartTimesDiffer,
   isProcessPid,
@@ -36,9 +35,7 @@ export function isAgentDeviceDaemonProcess(
   if (!expectedStartTime) return false;
   if (!isProcessAlive(pid)) return false;
   const actualStartTime = readProcessStartTime(pid);
-  // Only a positive provenanced `match` confirms the recorded lifetime and authorizes the daemon
-  // gate; a raw legacy rendering is `unknown` and can neither confirm nor authorize.
-  if (compareBirthTokens(expectedStartTime, actualStartTime) !== 'match') return false;
+  if (!actualStartTime || actualStartTime !== expectedStartTime) return false;
   const command = readProcessCommand(pid);
   if (!command) return false;
   return isAgentDeviceDaemonCommand(command);
@@ -147,13 +144,11 @@ export async function stopDaemonProcess(
   },
 ): Promise<DaemonTerminationResult> {
   if (!isProcessPid(observed.pid)) return { status: 'retained', reason: 'identity-unverified' };
-  // The record's canonical token is the comparison evidence; a legacy raw-only value is unknown.
-  const observedToken = observed.startTime;
-  if (!observedToken?.trim()) {
+  if (!observed.startTime?.trim()) {
     if (!isProcessAlive(observed.pid)) return { status: 'not-running' };
     return { status: 'retained', reason: 'missing-start-time' };
   }
-  const identity: DaemonProcessIdentity = { pid: observed.pid, startTime: observedToken };
+  const identity: DaemonProcessIdentity = { pid: observed.pid, startTime: observed.startTime };
   if ((await waitForDaemonExit(identity, { timeoutMs: 0 })).exited) {
     return { status: 'exited', identity, mode: 'already-exited' };
   }

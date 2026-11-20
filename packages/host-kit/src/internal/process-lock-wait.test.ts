@@ -73,10 +73,10 @@ test('waiting behind a live owner reads its identity off the event loop, about o
   );
 
   assert.equal(processToolRuns.sync, 0, 'a waiter blocked the event loop on the process tool');
-  // Two runs per identity read (canonical token plus legacy raw), a bounded number of owner reads
-  // across the wait: never one per 100 ms poll.
+  // Two runs for this process's own identity, then one owner read when the wait starts, one when
+  // the reused observation expires, and one for the timeout report: never one per 100 ms poll.
   assert.ok(
-    processToolRuns.async >= 1 && processToolRuns.async <= 8,
+    processToolRuns.async >= 1 && processToolRuns.async <= 5,
     `the waiter ran the process tool ${processToolRuns.async} times`,
   );
 });
@@ -131,10 +131,9 @@ test('a release waiting on a long-standing live guard reads its holder about onc
 
   assert.match(String(outcome), /Cannot verify ownership/);
   assert.equal(processToolRuns.sync, 0);
-  // Two runs per identity read (canonical token plus legacy raw), then one holder read per second
-  // of the wait.
+  // Two runs for this process's own identity, then one holder read per second of the wait.
   assert.ok(
-    processToolRuns.async >= 1 && processToolRuns.async <= 14,
+    processToolRuns.async >= 1 && processToolRuns.async <= 8,
     `the release ran the process tool ${processToolRuns.async} times`,
   );
 });

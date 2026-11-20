@@ -79,7 +79,7 @@ test('a long-standing guard whose holder pid now has another start time is recla
       process.platform === 'linux'
         ? 'linux:00000000-0000-0000-0000-000000000000:0'
         : process.platform === 'win32'
-          ? '00000000000000000000'
+          ? '000000000000000000000'
           : 'posix:1',
   };
   fs.writeFileSync(mutexPath, JSON.stringify(reusedHolder));

@@ -6,9 +6,11 @@ import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value'
 
 const PS_TIMEOUT_MS = 1_000;
 // Every POSIX probe runs the first of these that exists, never a PATH lookup, so a hostile PATH
-// cannot substitute another `ps`; with neither present `/bin/ps` runs and fails closed.
+// cannot substitute another `ps`. NixOS keeps procps only in its root-owned system profile. With
+// neither present, `/bin/ps` runs and fails closed. Windows hosts take the CIM query instead.
 const HOST_PS_COMMANDS = ['/bin/ps', '/run/current-system/sw/bin/ps'] as const;
-// PowerShell pays a fixed startup cost before the CIM query even runs.
+// PowerShell pays a fixed startup cost before the CIM query even runs, so every
+// Windows process-table read gets at least this budget instead of the `ps` one.
 const WINDOWS_PS_TIMEOUT_MS = 2_000;
 const WINDOWS_PROCESS_TOOL = 'powershell.exe';
 
@@ -23,7 +25,13 @@ export type HostProcessIdentityObservation = Readonly<{
   startTime: string;
 }>;
 
-/** What the host says about one pid before a signal; `null` fields are unknown evidence, never absence. */
+/**
+ * What the host says about one pid when a caller is about to signal it. Each field is `null`
+ * when the host did not answer, which is unknown evidence rather than absence: only a `ps`
+ * that names a different process proves the pid changed hands. `zombie` is `null` together
+ * with an unreadable process state, since a zombie passes `kill(pid, 0)` and still reports
+ * its original start time, so nothing else exposes that it already terminated.
+ */
 export type HostProcessIdentityFacts = Readonly<{
   startTime: string | null;
   command: string | null;
@@ -116,7 +124,16 @@ const UNANSWERED_IDENTITY: HostProcessIdentityFacts = Object.freeze({
   zombie: null,
 });
 
-/** Off-loop facts for many pids from one shared process-table read set; unanswered pids are all-`null` facts. */
+/**
+ * What the host says about each pid named, off the event loop. Every pid shares the same process
+ * table reads: on POSIX one `ps` for state and start time and one for the command, run
+ * concurrently so a loaded host pays one budget for the set; on Windows one CIM query. A pid the
+ * host did not answer for maps to all-`null` facts, which is unknown evidence, never absence.
+ *
+ * Nothing about another process is cached: its identity is the fact a caller is about to act on,
+ * and a pid can change hands between two reads. Only this process's own identity is reused, by
+ * `readCurrentOwnerIdentity`, because a process's own start time never changes.
+ */
 export async function readProcessIdentities(
   pids: Iterable<number>,
   timeoutMs = PS_TIMEOUT_MS,
@@ -147,16 +164,8 @@ async function readProcessIdentityRows(
     );
   }
   const [identityRows, commandRows] = await Promise.all([
-    runHostPsAsync(
-      HOST_PROCESS_IDENTITY_PS_ARGS(pids),
-      psLstartReadOptions(timeoutMs),
-      parseHostProcessIdentityRows,
-    ),
-    runHostPsAsync(
-      HOST_PROCESS_COMMAND_PS_ARGS(pids),
-      psReadOptions(timeoutMs),
-      parseHostProcessCommandRows,
-    ),
+    runHostPsAsync(HOST_PROCESS_IDENTITY_PS_ARGS(pids), timeoutMs, parseHostProcessIdentityRows),
+    runHostPsAsync(HOST_PROCESS_COMMAND_PS_ARGS(pids), timeoutMs, parseHostProcessCommandRows),
   ]);
   const identities = new Map(identityRows.map((row) => [row.pid, row]));
   const commands = new Map(commandRows.map((row) => [row.pid, row.command]));
@@ -176,11 +185,11 @@ async function readProcessIdentityRows(
 
 async function runHostPsAsync<Row>(
   args: string[],
-  options: ExecOptions,
+  timeoutMs: number,
   parse: (stdout: string) => Row[],
 ): Promise<Row[]> {
   try {
-    const result = await runCmd(hostPsCommand(), args, options);
+    const result = await runCmd(hostPsCommand(), args, hostPsOptions(args, timeoutMs));
     return result.exitCode !== 0 ? [] : parse(result.stdout);
   } catch {
     // A failed ps read is unknown evidence; callers remain fail-closed.
@@ -225,127 +234,63 @@ function readLinuxProcessStat(pid: number): { state: string; startTime: string }
 }
 
 /**
- * Locale/clock pin for lstart-bearing ps reads, as a final `envOverrides` word that wins over any
- * captured `TZ` while keeping the rest of the child env: `TZ=UTC` puts ps on the UTC clock.
+ * `ps` renders `lstart` in the caller's locale and time zone, so every read that carries it pins
+ * both, as the final word over the child environment. Readers under different locales or zones
+ * then agree on one process. Other fields keep the caller's locale.
  */
-const PS_LSTART_ENV_OVERRIDES: NodeJS.ProcessEnv = { LC_ALL: 'C', TZ: 'UTC' };
+const PS_LSTART_ENV: NodeJS.ProcessEnv = { LC_ALL: 'C', TZ: 'UTC' };
 
-/** ps read options without lstart: failure is unknown evidence; the caller's locale stays in charge. */
-const psReadOptions = (timeoutMs: number): ExecOptions => ({ allowFailure: true, timeoutMs });
-
-/** ps read options carrying lstart: C locale and UTC clock pinned over the effective child env. */
-const psLstartReadOptions = (timeoutMs: number): ExecOptions => ({
-  allowFailure: true,
-  timeoutMs,
-  envOverrides: PS_LSTART_ENV_OVERRIDES,
-});
-
-const WINDOWS_START_TIME = /^\d{21}$/; // Windows CIM stamp yyyyMMddHHmmssfffffff
-const POSIX_BIRTH_TOKEN_PREFIX = 'posix:'; // canonical POSIX birth token: UTC epoch ms
-// Raw C-form `ps -o lstart=` (historical records) is unqualified: no comparable provenance.
-const PS_START_TIME_FIELDS =
-  /^([A-Za-z]{3}) ([A-Za-z]{3}) +(\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/;
-const PS_MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
-
-type BirthTokenFormat = 'linux' | 'posix' | 'windows' | 'unqualified';
-
-function psStartTimeFormat(value: string): BirthTokenFormat {
-  if (value.startsWith('linux:')) return 'linux';
-  if (value.startsWith(POSIX_BIRTH_TOKEN_PREFIX)) return 'posix';
-  if (WINDOWS_START_TIME.test(value)) return 'windows';
-  return 'unqualified';
+function hostPsOptions(args: readonly string[], timeoutMs: number): ExecOptions {
+  const envOverrides = args.some((arg) => arg.includes('lstart=')) ? PS_LSTART_ENV : undefined;
+  return { allowFailure: true, timeoutMs, envOverrides };
 }
 
-/** A birth token with comparable provenance can prove or authorize a lifetime; a raw one cannot. */
-export function isProvenancedBirthToken(value: string): boolean {
-  return psStartTimeFormat(value) !== 'unqualified';
+const PS_LSTART = /^[A-Za-z]{3} ([A-Za-z]{3}) +(\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/;
+const PS_MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+
+/**
+ * The start token of a pinned `lstart` read: `posix:<epochMs>`. The fields are UTC wall-clock time,
+ * so they are never parsed in the reader's zone. An unreadable rendering is unknown evidence.
+ */
+function posixStartTimeToken(lstart: string): string | null {
+  const match = PS_LSTART.exec(lstart.trim());
+  const month = match ? PS_MONTHS.indexOf(match[1]!) : -1;
+  if (!match || month < 0) return null;
+  const [day, hour, minute, second, year] = match.slice(2).map(Number);
+  return `posix:${Date.UTC(year!, month, day, hour, minute, second)}`;
+}
+
+/** The source of a start token. A raw `ps` string from an older release has none. */
+function startTimeTokenSource(value: string): 'linux' | 'posix' | 'windows' | undefined {
+  if (value.startsWith('linux:')) return 'linux';
+  if (value.startsWith('posix:')) return 'posix';
+  return /^\d{21}$/.test(value) ? 'windows' : undefined;
 }
 
 /**
- * The one live-birth comparison: `match` only when both sides share one provenanced format with
- * equal values (the only result that may open a signal gate); `different` for one format with
- * different values (proven pid reuse); `unknown` otherwise — equal raw renderings never prove a
- * recorded lifetime.
+ * Positive proof of different lifetimes: two tokens from one source that differ. An unreadable
+ * token, tokens from two sources, and a raw `ps` string from an older release prove nothing.
  */
-export type BirthTokenComparison = 'match' | 'different' | 'unknown';
-
-export function compareBirthTokens(
-  left: string | null | undefined,
-  right: string | null | undefined,
-): BirthTokenComparison {
-  if (!left || !right) return 'unknown';
-  const leftFormat = psStartTimeFormat(left);
-  if (leftFormat === 'unqualified' || leftFormat !== psStartTimeFormat(right)) return 'unknown';
-  return left === right ? 'match' : 'different';
-}
-
-// Differ proves exit/reuse only on a provenanced `different`; raw and mixed pairs stay unknown.
 export function processStartTimesDiffer(
   left: string | null | undefined,
   right: string | null | undefined,
 ): boolean {
-  return compareBirthTokens(left, right) === 'different';
-}
-
-/** Canonicalize a pinned C-form lstart to a zone-independent token: `TZ=UTC` was pinned, so parse the fields with `Date.UTC`, never the reader's local zone (which folds ambiguous times at DST). */
-function canonicalPosixBirthToken(lstart: string): string | null {
-  const match = PS_START_TIME_FIELDS.exec(lstart.trim());
-  const month = match === null ? -1 : PS_MONTHS.indexOf(match[2]!);
-  if (match === null || month < 0) return null;
-  const startedAtMs = Date.UTC(
-    Number(match[7]),
-    month,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-    Number(match[6]),
-  );
-  return Number.isFinite(startedAtMs) ? `${POSIX_BIRTH_TOKEN_PREFIX}${startedAtMs}` : null;
+  if (!left || !right) return false;
+  const source = startTimeTokenSource(left);
+  return source !== undefined && source === startTimeTokenSource(right) && left !== right;
 }
 
 export function readProcessStartTime(pid: number): string | null {
   return readProcessField(pid, 'lstart=');
 }
 
-/**
- * The legacy lstart rendering as a released build recorded it (unpinned, raw), kept beside the
- * canonical token for released readers; never used for comparisons (`unknown`).
- */
-export function readProcessStartTimeRaw(pid: number): string | null {
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  if (isWindowsHostPlatform()) return readProcessField(pid, 'lstart=');
-  try {
-    const result = runCmdSync(
-      hostPsCommand(),
-      ['-p', String(pid), '-o', 'lstart='],
-      psReadOptions(PS_TIMEOUT_MS),
-    );
-    return processFieldValue(result);
-  } catch {
-    return null;
-  }
-}
-
-/** {@link readProcessStartTimeRaw} for a caller that is already waiting: no blocking `ps`. */
-export async function readProcessStartTimeRawAsync(pid: number): Promise<string | null> {
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  if (isWindowsHostPlatform()) return readProcessField(pid, 'lstart=');
-  try {
-    // A host answer about a pid is never a toolchain command to route elsewhere.
-    const result = await withoutCommandExecutorOverride(() =>
-      runCmd(hostPsCommand(), ['-p', String(pid), '-o', 'lstart='], psReadOptions(PS_TIMEOUT_MS)),
-    );
-    return processFieldValue(result);
-  } catch {
-    return null;
-  }
-}
-
 export function readProcessCommand(pid: number): string | null {
   return readProcessField(pid, 'command=');
 }
 
-// A terminated Windows process leaves the CIM table, so no live pid there can be a zombie.
+// A terminated Windows process leaves the CIM table rather than lingering in it
+// unreaped, so no live pid on that host can be a zombie: the question is answered
+// without a process-table probe, and exit proof stays liveness-and-lifetime.
 export function isProcessZombie(pid: number): boolean {
   if (isWindowsHostPlatform()) return false;
   return readProcessField(pid, 'state=')?.startsWith('Z') ?? false;
@@ -366,7 +311,8 @@ export async function readHostProcessIdentityObservationsAsync(
 ): Promise<ReadonlyMap<number, HostProcessIdentityObservation>> {
   const selected = uniquePositivePids(pids);
   if (selected.length === 0) return new Map();
-  // A host answer about a pid is never a toolchain command to route elsewhere.
+  // What a host says about a pid is never a toolchain command to route elsewhere, so the
+  // snapshot leaves the executor scope the way the synchronous probe already ignores it.
   const rows = await withoutCommandExecutorOverride(() =>
     readHostProcessIdentityRowsAsync(selected),
   );
@@ -382,7 +328,8 @@ function readHostProcessIdentitySnapshot(
   if (selected.length === 0 || rows.length === 0) return observations;
   const named = new Set(selected);
   for (const row of rows) {
-    // A live row is never a zombie on Windows; a zombie keeps its recorded start time.
+    // A live row is never a zombie on Windows, and a zombie keeps its recorded start time, so
+    // the row the process tool answers is where both facts are.
     if (!named.has(row.pid)) continue;
     observations.set(row.pid, { state: row.state, startTime: row.startTime });
   }
@@ -405,11 +352,8 @@ function readHostProcessIdentityRowsSync(
     return windowsProcessIdentityRows(readWindowsProcessRows(pids, WINDOWS_PS_TIMEOUT_MS));
   }
   try {
-    const result = runCmdSync(
-      hostPsCommand(),
-      HOST_PROCESS_IDENTITY_PS_ARGS(pids),
-      psLstartReadOptions(PS_TIMEOUT_MS),
-    );
+    const args = HOST_PROCESS_IDENTITY_PS_ARGS(pids);
+    const result = runCmdSync(hostPsCommand(), args, hostPsOptions(args, PS_TIMEOUT_MS));
     return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
   } catch {
     // A failed ps snapshot is unknown evidence; callers remain fail-closed.
@@ -427,7 +371,7 @@ async function readHostProcessIdentityRowsAsync(
   }
   return await runHostPsAsync(
     HOST_PROCESS_IDENTITY_PS_ARGS(pids),
-    psLstartReadOptions(PS_TIMEOUT_MS),
+    PS_TIMEOUT_MS,
     parseHostProcessIdentityRows,
   );
 }
@@ -439,11 +383,10 @@ function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] 
     if (!match) continue;
     const pid = Number.parseInt(match[1]!, 10);
     if (!Number.isInteger(pid) || pid <= 0) continue;
-    // On Linux both facts come from one /proc read; ps is the fallback.
+    // On Linux both facts come from one /proc read; the ps row is the fallback when /proc is unreadable.
     const linux = readLinuxProcessStat(pid);
-    // A ps lstart row canonicalizes to a `posix:` token; an unparseable raw value stays unqualified.
-    const startTime = linux ? linux.startTime : (canonicalPosixBirthToken(match[3]!) ?? match[3]!);
-    rows.push(linux ? { pid, ...linux } : { pid, state: match[2]!, startTime });
+    const startTime = linux ? linux.startTime : posixStartTimeToken(match[3]!);
+    if (startTime !== null) rows.push({ pid, state: linux?.state ?? match[2]!, startTime });
   }
   return rows;
 }
@@ -452,7 +395,8 @@ function windowsProcessIdentityRows(
   rows: readonly WindowsProcessRow[],
 ): readonly HostProcessIdentityRow[] {
   return rows.flatMap((row) =>
-    // A terminated Windows process leaves the CIM table, so no live row can be a zombie.
+    // A terminated Windows process leaves the CIM table rather than lingering in it unreaped,
+    // so no live row can be a zombie: exit proof stays liveness-and-lifetime.
     row.startTime === null ? [] : [{ pid: row.pid, state: 'R', startTime: row.startTime }],
   );
 }
@@ -467,14 +411,11 @@ function readProcessField(pid: number, field: HostProcessField): string | null {
     if (token !== undefined) return token;
   }
   try {
-    const result = runCmdSync(
-      hostPsCommand(),
-      ['-p', String(pid), '-o', field],
-      // Only the lstart-bearing read is locale-pinned; command/state keep the caller's locale.
-      field === 'lstart=' ? psLstartReadOptions(PS_TIMEOUT_MS) : psReadOptions(PS_TIMEOUT_MS),
+    const args = ['-p', String(pid), '-o', field];
+    const value = processFieldValue(
+      runCmdSync(hostPsCommand(), args, hostPsOptions(args, PS_TIMEOUT_MS)),
     );
-    const value = processFieldValue(result);
-    return field === 'lstart=' ? (canonicalPosixBirthToken(value ?? '') ?? value) : value;
+    return field === 'lstart=' && value !== null ? posixStartTimeToken(value) : value;
   } catch {
     return null;
   }
@@ -527,9 +468,15 @@ function isWindowsHostPlatform(): boolean {
   return hostPlatform() === 'win32';
 }
 
-// Rows are `pid|ppid|creation|command`. The creation stamp uses the invariant culture so the value
-// recorded in daemon.json compares equal regardless of host locale; a null CreationDate prints
-// empty and never raises. Newlines in a command line are flattened so one process is one row.
+// Rows are `pid|ppid|creation|command`. The creation stamp is formatted with
+// the invariant culture, so the value recorded in daemon.json compares equal
+// on every read of the same process lifetime regardless of host locale. The
+// row rule is that a null field prints empty and never raises: the CIM table
+// carries rows without a CreationDate (the System Idle Process), and a
+// terminating error mid-pipeline would exit 1 and blank the whole snapshot
+// instead of that one row. Newlines inside a command line are flattened so
+// one process is one row; the command may still contain `|`, which only ever
+// lands in the final capture group.
 const WINDOWS_PROCESS_ROW_BODY =
   ' | ForEach-Object {' +
   ' $birth = if ($_.CreationDate) {' +
@@ -546,7 +493,10 @@ function windowsProcessQueryArgs(pids: readonly number[]): string[] {
           .map((pid) => `ProcessId=${pid}`)
           .join(' OR ')}'`
       : 'Get-CimInstance -ClassName Win32_Process';
-  // Pin the console to UTF-8 so non-ASCII command lines are not mojibake-ed in the pipe.
+  // PowerShell writes redirected stdout in the OEM console code page, which would
+  // mojibake any non-ASCII command line the identity check later compares
+  // byte-for-byte; the console is pinned to UTF-8 so the pipe matches the
+  // UTF-8 decode Node applies.
   const command = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${source}${WINDOWS_PROCESS_ROW_BODY}`;
   return ['-NoProfile', '-NonInteractive', '-Command', command];
 }
@@ -703,8 +653,18 @@ export type GracefulStopSignal = 'SIGTERM' | 'SIGINT';
 type StopSignal = GracefulStopSignal | 'SIGKILL';
 
 /**
- * A stop outcome a caller may act on; a tracked process may be forgotten only on `stopped`.
- * `retained` keeps the pid — the reason says why nothing may be forgotten or signaled further.
+ * The outcome of a stop that a caller may act on. A process tracked elsewhere (a state file, a
+ * registration) may be forgotten only on `stopped`.
+ *
+ * - `stopped`: the host released the pid, or proved the pid now names a different process.
+ *   `signal` is the last signal this stop sent before that proof, and is absent when the recorded
+ *   process was already gone before anything was signaled. `reassigned` says the proof was a pid
+ *   that now names a different process: the recorded process is gone, but nobody watched it leave.
+ * - `retained` + `signal-failed`: `signal` was refused by `errno` while the process was there.
+ *   `EPERM` usually means another owner holds it, and later signals are refused by the same check.
+ * - `retained` + `exit-timeout`: SIGKILL was accepted and the process outlived its budget.
+ * - `retained` + `identity-unverified`: no recorded claim could be confirmed against a readable fact,
+ *   so nothing proves which process a signal would reach.
  */
 export type ConfirmedProcessStop =
   | Readonly<{ status: 'stopped'; signal?: StopSignal; reassigned?: true }>
@@ -720,7 +680,11 @@ export type ConfirmedProcessStopDetails = Readonly<{
   pid: number;
 }>;
 
-/** Projects a retained verdict onto the publishable `details` keys, and nothing else. */
+/**
+ * Projects a retained verdict onto the keys a caller may publish. A caller adds its own artifact
+ * paths beside these; a layer that forwards the verdict forwards only these, so an inner surface's
+ * file paths and advice cannot ride along under an outer surface's message.
+ */
 export function confirmedProcessStopDetails(
   retained: Extract<ConfirmedProcessStop, { status: 'retained' }>,
   pid: number,
@@ -733,7 +697,10 @@ export function confirmedProcessStopDetails(
   };
 }
 
-/** Names a pid the stop left alone; it must never read as "still running". */
+/**
+ * Names a pid the stop left alone. This is the one verdict that must not say the process is still
+ * running: the host refused to describe it, so nothing was ever signaled to it.
+ */
 export function describeUnconfirmedProcessStop(pid: number, claimedAs: string): string {
   return `pid ${pid} could not be confirmed as ${claimedAs}, so no signal was sent to it`;
 }
@@ -741,14 +708,18 @@ export function describeUnconfirmedProcessStop(pid: number, claimedAs: string): 
 /** Which verdict a retained stop recorded, as it travels through untyped error `details`. */
 type ConfirmedProcessStopReason = Extract<ConfirmedProcessStop, { status: 'retained' }>['reason'];
 
-/** Whether `reason` names a retained stop verdict, so an unrelated failure's details are never forwarded as one. */
+/**
+ * Whether `reason` names a retained stop verdict. Forwarding gates on this rather than on error text,
+ * so an unrelated failure's details cannot be forwarded as one.
+ */
 function isConfirmedProcessStopReason(value: unknown): value is ConfirmedProcessStopReason {
   return value === 'signal-failed' || value === 'exit-timeout' || value === 'identity-unverified';
 }
 
 /**
- * The verdict a nested layer published, or nothing when the error carries no stop verdict; a
- * flattening wrapper keeps the verdict in `details` and drops the inner surface's advice.
+ * The verdict a nested layer published, or nothing when the error carries no stop verdict. A wrapper
+ * that flattens the inner message keeps the verdict in `details` and drops the inner surface's file
+ * paths and advice, which describe a file the caller of the wrapper was not asked about.
  */
 export function readConfirmedProcessStopDetails(
   details: Record<string, unknown> | undefined,
@@ -767,7 +738,11 @@ export function readConfirmedProcessStopDetails(
   };
 }
 
-/** The pid to stop and the caller's recorded claims; a stop signals only a process it can name. */
+/**
+ * The process to stop, and what the caller recorded about it. A stop signals only a process it can
+ * name: an `identity` that claims nothing is unverifiable, and so is one whose claims the host will
+ * not confirm.
+ */
 export type ProcessStopTarget = Readonly<{
   pid: number;
   identity: ProcessStopIdentity;
@@ -781,8 +756,9 @@ export type ProcessStopIdentity = Readonly<{
 }>;
 
 /**
- * Per-stage exit budgets: `termTimeoutMs` for the opening signal (SIGTERM unless `gracefulSignal`
- * names SIGINT), `killTimeoutMs` for SIGKILL.
+ * How long each signal stage may wait for the exit. `termTimeoutMs` is the grace the opening
+ * signal gets, SIGTERM unless `gracefulSignal` names SIGINT for a process that finalizes its output
+ * on an interrupt; `killTimeoutMs` is how long SIGKILL may take to be confirmed.
  */
 export type ProcessStopBudget = Readonly<{
   termTimeoutMs: number;
@@ -791,8 +767,18 @@ export type ProcessStopBudget = Readonly<{
 }>;
 
 /**
- * The one identity rule before a signal: `exited`, `reassigned`, `ours` (every recorded claim read
- * and matching), or `unverified` — never proof of exit, never permission to signal.
+ * What the host's facts say about the process a caller recorded. One rule answers every identity
+ * question before a signal:
+ *
+ * - `exited`: the host shows the pid as a zombie, so the recorded process already terminated.
+ * - `reassigned`: a readable start time contradicts the record, or, when no start time was
+ *   recorded, a readable command does: the pid now names a different process and the recorded one
+ *   is gone.
+ * - `ours`: every recorded claim was read and matches. One confirmed claim beside an unread one is
+ *   not enough, because the start-time and command reads can fail independently.
+ * - `unverified`: everything else. A claim the host did not answer, no claim at all, or a recorded
+ *   start time beside a command that does not match (the same lifetime may have exec'd or rewritten
+ *   its argv) is neither proof the recorded process is gone nor permission to signal.
  */
 export type ProcessIdentityVerdict = 'ours' | 'exited' | 'reassigned' | 'unverified';
 
@@ -802,19 +788,22 @@ export function judgeProcessIdentity(
 ): ProcessIdentityVerdict {
   if (facts.zombie) return 'exited';
   const { startTime, matches } = expected;
-  // Only a provenanced `different` proves the pid changed hands; anything else is `unknown`.
-  if (compareBirthTokens(startTime, facts.startTime) === 'different') return 'reassigned';
+  if (processStartTimesDiffer(startTime, facts.startTime)) return 'reassigned';
   const commandMatches = facts.command === null || !matches ? undefined : matches(facts.command);
   if (!startTime && commandMatches === false) return 'reassigned';
   if (!startTime && !matches) return 'unverified';
-  // `ours` — the only verdict that authorizes a signal — needs a provenanced `match`.
-  const startTimeConfirmed =
-    !startTime || compareBirthTokens(startTime, facts.startTime) === 'match';
+  const startTimeConfirmed = !startTime || facts.startTime === startTime;
   const commandConfirmed = !matches || commandMatches === true;
   return startTimeConfirmed && commandConfirmed ? 'ours' : 'unverified';
 }
 
-/** The TERM-then-KILL escalation: every signal needs a host-confirmed identity; unreadable identity retains rather than signaling. */
+/**
+ * The one TERM-then-KILL escalation in host-kit. Signals one process gracefully, waits the grace
+ * period, re-proves identity, then sends SIGKILL, and proves which way the recorded process ended
+ * so a caller only forgets one it watched leave. Every signal needs a host-confirmed identity
+ * ({@link judgeProcessIdentity}): an unreadable identity before either signal retains rather than
+ * signaling a process this caller cannot name. A refusal is not absence, so each stage waits.
+ */
 export async function stopProcessAndConfirmExit(
   target: ProcessStopTarget,
   budget: ProcessStopBudget,
@@ -841,7 +830,8 @@ function stageVerdict(
 ): ConfirmedProcessStop {
   if (stage.proof === 'exited') return { status: 'stopped', signal };
   if (stage.proof === 'reassigned') return { status: 'stopped', signal, reassigned: true };
-  // A refused graceful signal is the whole verdict; SIGKILL would hit the same permission check.
+  // A refused graceful signal is the whole verdict: the host refuses SIGKILL by the same
+  // permission check, so escalating would spend a second budget repeating it.
   if (stage.proof === 'refused') return retainedSignalFailure(signal, stage.errno);
   // The pid outlived the grace period and the host will not say what it is now.
   return { status: 'retained', reason: 'identity-unverified' };
@@ -865,9 +855,10 @@ type SignalStageProof =
   | Readonly<{ proof: 'refused'; errno: string }>;
 
 /**
- * Sends one signal and waits its budget; a pid that outlives it is judged again — the identity proof
- * the next signal needs, since `kill(pid, 0)` cannot tell (`EPERM` also means a zombie awaiting
- * its parent, or on Windows an exited process with live handles).
+ * Sends one signal and waits its budget. A pid that outlives the budget is judged again, which is
+ * also the identity proof the next signal needs: `kill(pid, 0)` cannot tell, because `EPERM` also
+ * comes back for a zombie awaiting its parent, and on Windows for a process that exited while its
+ * object still had handles.
  */
 async function proveSignalStage(
   target: ProcessStopTarget,
@@ -875,7 +866,8 @@ async function proveSignalStage(
   timeoutMs: number,
 ): Promise<SignalStageProof> {
   const errno = signalProcessForStop(target.pid, signal);
-  // `ESRCH` is absence; any other refusal still leaves a live pid worth waiting on.
+  // `ESRCH` is absence; any other refusal still leaves a live pid worth waiting on, because the
+  // owner may release it inside this budget, and a released pid is what the caller may forget.
   if (errno === 'ESRCH') return { proof: 'exited' };
   if (await waitForStopPidRelease(target.pid, timeoutMs)) return { proof: 'exited' };
   const verdict = await proveStopTargetIdentity(target);
@@ -888,8 +880,9 @@ async function proveSignalStage(
 const STOP_LIVENESS_POLL_MS = 50;
 
 /**
- * Whether `kill(pid, 0)` finds the process; unlike `isProcessAlive`, only `ESRCH` releases a pid —
- * an answer that is not about the process must not become permission to forget it.
+ * Whether `kill(pid, 0)` finds the process. `isProcessAlive` reads every answer but `EPERM` as
+ * absence, which suits a best-effort sweep and not a stop: here only `ESRCH` releases a pid, and an
+ * answer that is not about the process at all must not become permission to forget it.
  */
 function isStopPidLive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -921,7 +914,8 @@ function signalProcessForStop(pid: number, signal: StopSignal): string | undefin
     process.kill(pid, signal);
     return undefined;
   } catch (error) {
-    // Only an errno classifies a stop outcome; Node's argument faults carry a `code` too.
+    // Only an errno classifies a stop outcome: Node's argument faults carry a `code` too, and one
+    // reported as a refusal would invent a process for the caller to go and stop.
     const code = (error as NodeJS.ErrnoException).code;
     if (typeof code === 'string' && ERRNO_CODE.test(code)) return code;
     throw error;
@@ -936,14 +930,21 @@ const APPLE_SILICON_SYSCTL = ['-n', 'hw.optional.arm64'] as const;
 let pendingHostCpuArch: Promise<string> | undefined;
 let settledHostCpuArch: string | undefined;
 
-/** The machine's native CPU architecture in Apple naming (`arm64`/`x86_64`), resolved once per process. */
+/**
+ * The machine's native CPU architecture in Apple naming (`arm64`, `x86_64`), which is what
+ * simulators on a Mac run by default. Other CPUs keep Node's `process.arch` name. Resolved once
+ * per process.
+ */
 export function readHostCpuArch(): Promise<string> {
   if (settledHostCpuArch !== undefined) return Promise.resolve(settledHostCpuArch);
   pendingHostCpuArch ??= resolveHostCpuArch(process.platform, process.arch).then(settleHostCpuArch);
   return pendingHostCpuArch;
 }
 
-/** {@link readHostCpuArch} for a caller that cannot await; shares the same per-process value. */
+/**
+ * {@link readHostCpuArch} for a caller that cannot await. It shares the same per-process value,
+ * resolving it with a blocking `sysctl` only when nothing has resolved it yet.
+ */
 export function readHostCpuArchSync(): string {
   return (
     settledHostCpuArch ??
@@ -970,7 +971,8 @@ function hostCpuArchName(appleSilicon: boolean, nodeArch: string): string {
   return nodeArch === 'x64' ? 'x86_64' : nodeArch;
 }
 
-// macOS: `hw.optional.arm64` is 1 on Apple silicon even under Rosetta; Intel Macs lack the key.
+// macOS: `hw.optional.arm64` is 1 on Apple silicon even inside a Rosetta-translated process,
+// where `process.arch` reports x64; Intel Macs do not define the key.
 async function isAppleSiliconMac(): Promise<boolean> {
   try {
     const result = await runCmd('/usr/sbin/sysctl', APPLE_SILICON_SYSCTL, {

@@ -66,11 +66,6 @@ function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: str
   return spawnFakeDaemon('repair-evidence-');
 }
 
-/** A start time in the same provenanced format as `live` but naming a different lifetime. */
-function staleStartTimeLike(live: string): string {
-  return staleBirthTokenLike(live);
-}
-
 // #1545: a reachable daemon with a code-signature mismatch is replaced. If a
 // branch-named worktree is rejected as "not ours", replacement leaves the old
 // daemon alive and the next request reaches a fresh empty session store.
@@ -113,7 +108,7 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
   assert.ok(actualStartTime, 'expected the spawned daemon to report a start time');
   // A proven reuse needs a stale value in the same verified format as the live read; a legacy
   // token would be unverified rather than proof.
-  const staleStartTime = staleStartTimeLike(actualStartTime);
+  const staleStartTime = staleBirthTokenLike(actualStartTime);
   assert.equal(isAgentDeviceDaemonProcess(pid, staleStartTime), false);
 
   const result = await stopDaemonProcess(

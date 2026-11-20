@@ -359,7 +359,7 @@ test('maps each managed-process outcome through Apple descriptor cleanup', async
   const envelope = appleEnvelope();
   const cases: Array<
     Readonly<{
-      ownership: 'ownership-lost' | 'missing' | 'owned-alive' | 'unprovable';
+      ownership: 'ownership-lost' | 'missing' | 'owned-alive';
       terminated?: 'terminated' | 'already-missing' | 'ownership-lost';
       expected: { status: string; reason?: string };
     }>
@@ -369,10 +369,6 @@ test('maps each managed-process outcome through Apple descriptor cleanup', async
       expected: { status: 'cleanup-pending', reason: 'ownership-fence-lost' },
     },
     { ownership: 'missing', expected: { status: 'already-missing' } },
-    {
-      ownership: 'unprovable',
-      expected: { status: 'cleanup-pending', reason: 'manual-recovery-required' },
-    },
     {
       ownership: 'owned-alive',
       terminated: 'terminated',
@@ -404,8 +400,7 @@ test('maps each managed-process outcome through Apple descriptor reattach', asyn
   processHost.inspectManagedProcess
     .mockReturnValueOnce('missing')
     .mockReturnValueOnce('owned-alive')
-    .mockReturnValueOnce('ownership-lost')
-    .mockReturnValueOnce('unprovable');
+    .mockReturnValueOnce('ownership-lost');
   await expect(inspectApplePerfCaptureDescriptor(envelope)).resolves.toEqual({
     status: 'missing',
   });
@@ -416,10 +411,6 @@ test('maps each managed-process outcome through Apple descriptor reattach', asyn
   await expect(inspectApplePerfCaptureDescriptor(envelope)).resolves.toEqual({
     status: 'unreattachable',
     reason: 'ownership-fence-lost',
-  });
-  await expect(inspectApplePerfCaptureDescriptor(envelope)).resolves.toEqual({
-    status: 'unreattachable',
-    reason: 'transport-not-reattachable',
   });
 });
 

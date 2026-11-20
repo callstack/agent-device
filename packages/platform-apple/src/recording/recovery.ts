@@ -165,16 +165,8 @@ async function cleanupSimulator(
   const ownership = await Promise.all(
     processes.map(async (marker) => await host.screenRecording.apple.inspectProcess(marker)),
   );
-  for (const value of ownership) {
-    switch (value) {
-      case 'ownership-lost':
-        return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
-      case 'unprovable':
-        return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
-      case 'owned-alive':
-      case 'missing':
-        break;
-    }
+  if (ownership.includes('ownership-lost')) {
+    return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
   }
   if (ownership.every((value) => value === 'missing')) {
     if (sessionId !== undefined) {
@@ -215,15 +207,9 @@ async function cleanupRunner(
       descriptor.runnerSessionId,
       descriptor.runnerAuthority,
     );
-    switch (ownership) {
-      case 'missing':
-        return { status: 'already-missing' };
-      case 'ownership-lost':
-        return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
-      case 'unprovable':
-        return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
-      case 'owned-alive':
-        break;
+    if (ownership === 'missing') return { status: 'already-missing' };
+    if (ownership === 'ownership-lost') {
+      return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
     }
     await host.screenRecording.apple.runRunner(device, {
       kind: 'stop',
@@ -306,20 +292,13 @@ async function reattachSimulatorRecording(
       async (marker) => await params.host.screenRecording.apple.inspectProcess(marker),
     ),
   );
-  for (const value of ownership) {
-    switch (value) {
-      case 'missing':
-        break;
-      case 'owned-alive':
-      case 'ownership-lost':
-      case 'unprovable':
-        return unreattachableAppleRecording(
-          'transport-not-reattachable',
-          value === 'ownership-lost'
-            ? 'Apple recording ownership no longer matches the durable descriptor.'
-            : 'Apple screen recordings require exact cleanup after daemon restart.',
-        );
-    }
+  if (!ownership.every((value) => value === 'missing')) {
+    return unreattachableAppleRecording(
+      'transport-not-reattachable',
+      ownership.includes('ownership-lost')
+        ? 'Apple recording ownership no longer matches the durable descriptor.'
+        : 'Apple screen recordings require exact cleanup after daemon restart.',
+    );
   }
   const { recording } = descriptor;
   const source = resumedExportSource(
@@ -365,21 +344,13 @@ async function reattachRunnerRecording(
     descriptor.runnerSessionId,
     descriptor.runnerAuthority,
   );
-  switch (ownership) {
-    case 'missing':
-      return { status: 'missing' };
-    case 'ownership-lost':
-      return unreattachableAppleRecording(
-        'transport-not-reattachable',
-        'Apple recording ownership no longer matches the durable descriptor.',
-      );
-    case 'owned-alive':
-    case 'unprovable':
-      return unreattachableAppleRecording(
-        'transport-not-reattachable',
-        'Apple screen recordings require exact cleanup after daemon restart.',
-      );
-  }
+  if (ownership === 'missing') return { status: 'missing' };
+  return unreattachableAppleRecording(
+    'transport-not-reattachable',
+    ownership === 'ownership-lost'
+      ? 'Apple recording ownership no longer matches the durable descriptor.'
+      : 'Apple screen recordings require exact cleanup after daemon restart.',
+  );
 }
 
 /**

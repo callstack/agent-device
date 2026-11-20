@@ -10,7 +10,6 @@ import {
   expandProcessTree,
   type HostProcessIdentityFacts,
   type HostProcessInfo,
-  compareBirthTokens,
   isProcessAlive,
   judgeProcessIdentity,
   listHostProcesses,
@@ -103,9 +102,7 @@ export async function inspectManagedProcess(
 ): Promise<ManagedProcessOwnership> {
   const evidence = await readOwnershipEvidence(marker, commandMatches);
   if (evidence === 'gone') return 'missing';
-  if (evidence === 'ours') return 'owned-alive';
-  if (evidence === 'unprovable') return 'unprovable';
-  return 'ownership-lost';
+  return evidence === 'ours' ? 'owned-alive' : 'ownership-lost';
 }
 
 /**
@@ -136,15 +133,11 @@ async function readOwnershipEvidence(
   );
   if (verdict === 'exited') return 'gone';
   if (marker.startTime.length === 0 || marker.command.length === 0) return 'not-ours';
-  // Only a proven `different` birth is a mismatch; an `unverified` verdict (including a legacy raw
-  // record beside a canonical read) is unknown evidence, kept apart from `not-ours` so recovery
-  // keeps its markers instead of reporting a proven fence loss.
   if (verdict === 'reassigned') return 'not-ours';
   if (verdict === 'ours') return 'ours';
-  // A provenanced birth match beside a contradicted command claim is still a proven mismatch of
-  // what was captured; only an unknown birth comparison is unresolved evidence.
-  if (compareBirthTokens(marker.startTime, facts.startTime) === 'match') return 'not-ours';
-  return 'unprovable';
+  // The host answered both facts and they do not name the marker: a refusal that also holds the
+  // spawned child's handle back, unlike a host that did not answer at all.
+  return facts.startTime !== null && facts.command !== null ? 'not-ours' : 'unprovable';
 }
 
 export async function terminateManagedProcessSet(

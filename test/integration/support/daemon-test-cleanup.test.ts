@@ -65,9 +65,6 @@ test.each([false, true])(
       await cleanupDaemonTestState(paths.baseDir, {
         ...observed,
         processStartTime: missingBirth ? undefined : observed.processStartTime,
-        processStartTimeToken: missingBirth
-          ? undefined
-          : (observed.processStartTimeToken as string | undefined),
       });
       assert.ok(
         !isProcessAlive(replacement.pid) ||

@@ -19,9 +19,10 @@ import {
 import {
   buildDetachedRunnerLease,
   buildRunnerLease,
-  compareLeaseRunnerPidIdentity,
+  isLeaseRunnerProcessIntact,
   leasedRunnerEndpoint,
   readRunnerLeaseForAdoption,
+  verifyLeaseRunnerPidIdentity,
   writeRunnerLease,
   type RunnerLease,
   type RunnerLeaseAdoptionRefusal,
@@ -176,8 +177,6 @@ type RunnerAdoptionRefusal =
   | 'runner_pid_missing'
   | 'runner_process_dead'
   | 'runner_pid_recycled'
-  /** The leased pid's birth evidence is unknown (legacy raw record): not adopted, not called recycled. */
-  | 'runner_pid_unverified'
   | 'expected_derived_unresolved'
   | 'artifact_fingerprint_mismatch'
   /** The leased runner predates listener tokens, so it is cleaned up and replaced. */
@@ -242,13 +241,8 @@ export async function tryAdoptRunnerSessionFromLease(
   // The probe awaited network I/O — the xcodebuild can have exited and its pid
   // been recycled while the old port still answers. Re-verify before the
   // adopted lease re-stamps the pid; everything below is synchronous.
-  const postProbeComparison = compareLeaseRunnerPidIdentity(lease, runnerPid);
-  if (postProbeComparison === 'different') {
+  if (!isLeaseRunnerProcessIntact(lease, runnerPid)) {
     return skip('runner_pid_recycled', lease);
-  }
-  if (postProbeComparison !== 'match') {
-    // Unknown birth evidence after the awaited probe: not proof of reuse, and never adopted.
-    return skip('runner_pid_unverified', lease);
   }
 
   const session = buildAdoptedRunnerSession(device, lease, endpoint, runnerPid, expectedArtifact);
@@ -292,9 +286,7 @@ function verifyLeasedRunnerProcess(
   const runnerPid = lease.runnerPid;
   if (!runnerPid) return { refusal: 'runner_pid_missing' };
   if (!isProcessAlive(runnerPid)) return { refusal: 'runner_process_dead' };
-  const comparison = compareLeaseRunnerPidIdentity(lease, runnerPid);
-  if (comparison === 'different') return { refusal: 'runner_pid_recycled' };
-  if (comparison !== 'match') return { refusal: 'runner_pid_unverified' };
+  if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) return { refusal: 'runner_pid_recycled' };
   return { value: runnerPid };
 }
 

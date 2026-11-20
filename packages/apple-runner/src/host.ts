@@ -103,7 +103,6 @@ export type AppleRunnerHost = Pick<
     typeof HostProcess,
     | 'isProcessAlive'
     | 'isProcessGroupAlive'
-    | 'compareBirthTokens'
     | 'readProcessStartTime'
     | 'readProcessCommand'
     | 'signalPidsBestEffort'
@@ -157,9 +156,6 @@ export type AppleRunnerHost = Pick<
 /** The runner's deadline type is the host's read side; the {@link Deadline} shim below builds them. */
 export type Deadline = HostRetry.DeadlineClock;
 
-/** The one live-birth comparison result shared with host-kit. */
-export type BirthTokenComparison = HostProcess.BirthTokenComparison;
-
 let boundHost: AppleRunnerHost | undefined;
 
 /**
@@ -206,7 +202,6 @@ export const retryWithPolicy = delegate('retryWithPolicy');
 export const isEnvTruthy = delegate('isEnvTruthy');
 export const isProcessAlive = delegate('isProcessAlive');
 export const isProcessGroupAlive = delegate('isProcessGroupAlive');
-export const compareBirthTokens = delegate('compareBirthTokens');
 export const readProcessStartTime = delegate('readProcessStartTime');
 export const readProcessCommand = delegate('readProcessCommand');
 export const signalPidsBestEffort = delegate('signalPidsBestEffort');

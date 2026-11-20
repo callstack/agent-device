@@ -19,11 +19,6 @@ import {
 
 pinOwnProcessStartTime(hostProcess);
 
-/** A start time in the same provenanced format as `live` but naming a different lifetime. */
-function staleStartTimeLike(live: string | null): string {
-  return staleBirthTokenLike(live);
-}
-
 test('device status is daemonless and does not send a daemon request', async () => {
   const result = await runCliCapture(['device', 'status', '--json']);
   assert.equal(result.code, null);
@@ -475,7 +470,7 @@ test('keeps corrupt claims visible and requires --stale for uncertain reclaimabl
         ownerPid: owner.pid,
         // Same verified format as the live read but a different value, so the pid proves reuse;
         // a legacy-format token would be unverified rather than proof.
-        ownerStartTime: staleStartTimeLike(owner.startTime),
+        ownerStartTime: staleBirthTokenLike(owner.startTime),
         ownerToken: 'pid-reused-token',
         createdAtMs: 1,
         updatedAtMs: 1,

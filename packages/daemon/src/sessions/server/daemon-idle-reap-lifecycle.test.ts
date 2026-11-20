@@ -7,26 +7,11 @@ import {
   type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { readCurrentOwnerIdentity, writePersistedOwner } from '@agent-device/host-kit/process';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { createDaemonLifecycleAdmission, daemonShuttingDownResponse } from './daemon-idle-reap.ts';
-
-const RAW_START = 'Tue Nov 17 19:42:27 2026';
-const CANONICAL_START = 'posix:1794944547000';
-vi.mock('@agent-device/host-kit/process', async (original) => {
-  const actual = await original<typeof import('@agent-device/host-kit/process')>();
-  return {
-    ...actual,
-    readCurrentOwnerIdentity: () => ({ pid: process.pid, startTime: CANONICAL_START }),
-    writePersistedOwner: (identity: { pid: number; startTime: string | null }) =>
-      identity.pid === process.pid && identity.startTime === CANONICAL_START
-        ? { pid: identity.pid, startTime: RAW_START, birthToken: CANONICAL_START }
-        : actual.writePersistedOwner(identity),
-  };
-});
 
 const TOKEN = 'daemon-token';
 const FENCE = { pid: 4242, processStartTime: 'Fri Oct 17 09:00:00 2026' };
@@ -120,37 +105,6 @@ test('a lifecycle request is answered at the seam and never reaches the handler 
   await settled();
   assert.equal(drained.mock.calls.length, 1);
   assert.equal(served.mock.calls.length, 0);
-});
-
-test('a quiesce fence carrying the published legacy value is admitted', async () => {
-  const identity = readCurrentOwnerIdentity();
-  const record = writePersistedOwner(identity);
-  assert.ok(identity.startTime);
-  assert.equal(record.startTime, RAW_START);
-  assert.notEqual(record.startTime, identity.startTime);
-  const seam = makeSeam({ identity: { pid: identity.pid, processStartTime: identity.startTime } });
-  assert.deepEqual(
-    await seam.admit(seam.served)(
-      lifecycleRequest({ fence: { pid: record.pid, processStartTime: record.startTime } }),
-    ),
-    { ok: true, data: { outcome: 'draining' } },
-  );
-});
-
-test('a quiesce fence carrying a different raw start time is refused', async () => {
-  const identity = readCurrentOwnerIdentity();
-  const record = writePersistedOwner(identity);
-  assert.equal(record.startTime, RAW_START);
-  assert.notEqual(record.startTime, identity.startTime);
-  assert.ok(identity.startTime);
-  const seam = makeSeam({ identity: { pid: identity.pid, processStartTime: identity.startTime } });
-  const refusal = await seam.admit(seam.served)(
-    lifecycleRequest({
-      fence: { pid: record.pid, processStartTime: 'Wed Nov 18 08:00:00 2026' },
-    }),
-  );
-  assert.equal(reasonOf(refusal), 'daemon-instance-mismatch');
-  assert.equal(seam.drained.mock.calls.length, 0);
 });
 
 test('a host-owned runtime refuses quiesce and keeps serving', async () => {

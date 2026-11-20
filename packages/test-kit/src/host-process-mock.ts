@@ -18,8 +18,7 @@ export function pinOwnProcessStartTime(hostProcess: HostProcessModule): void {
 }
 
 function installPin(hostProcess: HostProcessModule): void {
-  // The shared canonical POSIX birth token: provenanced, so a different `posix:` token in a
-  // record still proves PID reuse while raw legacy renderings stay unknown.
+  // A start token, so a different token from the same source in a record still proves PID reuse.
   const ownStartTime = LIFETIME_TOKEN;
   vi.spyOn(hostProcess, 'readCurrentOwnerIdentity').mockImplementation(() => ({
     pid: process.pid,

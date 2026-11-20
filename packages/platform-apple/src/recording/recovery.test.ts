@@ -38,7 +38,6 @@ test('daemon-loss cleanup distinguishes live, dead, replaced, and corrupt simula
     ['owned-alive', 'cleaned', 1],
     ['missing', 'already-missing', 0],
     ['ownership-lost', 'cleanup-pending', 0],
-    ['unprovable', 'cleanup-pending', 0],
   ] as const) {
     const terminateProcess = vi.fn(async () => 'terminated' as const);
     const recovery = createAppleScreenRecordingOperations({
@@ -300,34 +299,6 @@ test('unreadable export coordinates refuse reattach before the recorder is probe
     ),
   ).resolves.toMatchObject({ status: 'unreattachable', reason: 'descriptor-invalid' });
   expect(inspectProcess).not.toHaveBeenCalled();
-});
-
-test.each([
-  ['missing', { status: 'missing' }],
-  ['owned-alive', { status: 'unreattachable', reason: 'transport-not-reattachable' }],
-  ['unprovable', { status: 'unreattachable', reason: 'transport-not-reattachable' }],
-  ['ownership-lost', { status: 'unreattachable', reason: 'transport-not-reattachable' }],
-] as const)('runner reattach preserves %s ownership evidence', async (ownership, expected) => {
-  const operations = createAppleScreenRecordingOperations({
-    host: appleRecordingHost(),
-    device: coreDevice,
-    owner: localRuntimeOwner('apple'),
-    signal: new AbortController().signal,
-  });
-  const started = await operations.screenRecordingStart(recordingInput({ scope: 'app' }));
-  const inspectRunner = vi.fn(async () => ownership);
-  const runRunner = vi.fn(async () => ({}));
-  const recovery = createAppleScreenRecordingOperations({
-    host: appleRecordingHost({ apple: { inspectRunner, runRunner } }),
-    device: coreDevice,
-    owner: localRuntimeOwner('apple'),
-    signal: new AbortController().signal,
-  });
-  await expect(
-    recovery.screenRecordingReattach({ envelope: started.envelope }),
-  ).resolves.toMatchObject(expected);
-  expect(inspectRunner).toHaveBeenCalledOnce();
-  expect(runRunner).not.toHaveBeenCalled();
 });
 
 test('runner recovery never stops a replacement session owner', async () => {

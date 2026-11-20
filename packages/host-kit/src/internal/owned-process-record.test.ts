@@ -49,8 +49,15 @@ function driveHost(): void {
     }
     if (!processState.starts.has(pid)) return { stdout: '', stderr: 'timed out', exitCode: 1 };
     const state = processState.zombiePids.has(pid) ? 'Z' : 'S';
-    return { stdout: `${pid} ${state} ${processState.starts.get(pid)}\n`, stderr: '', exitCode: 0 };
+    const lstart = psLstart(processState.starts.get(pid)!);
+    return { stdout: `${pid} ${state} ${lstart}\n`, stderr: '', exitCode: 0 };
   });
+}
+
+/** What a pinned `ps -o lstart=` prints for a `posix:<epochMs>` token on the first epoch day. */
+function psLstart(token: string): string {
+  const clock = new Date(Number(token.slice('posix:'.length))).toISOString().slice(11, 19);
+  return `Thu Jan  1 ${clock} 1970`;
 }
 
 import { createOwnedProcessRecordStore } from './owned-process-record.ts';

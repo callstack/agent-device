@@ -17,16 +17,7 @@ type PublishedDaemonRecord = { pid: number; processStartTime?: string } & Record
 function readPublishedDaemonRecord(infoPath: string): PublishedDaemonRecord | null {
   const read = readDaemonRecord(infoPath);
   if (read.status !== 'present' || typeof read.record.pid !== 'number') return null;
-  // In-memory reads compare against live canonical process reads, so the provenanced token
-  // wins over the legacy raw rendering the record also keeps for released readers.
-  const token =
-    typeof read.record.processStartTimeToken === 'string'
-      ? read.record.processStartTimeToken
-      : undefined;
-  return {
-    ...read.record,
-    processStartTime: token ?? (read.record.processStartTime as string | undefined),
-  } as PublishedDaemonRecord;
+  return read.record as PublishedDaemonRecord;
 }
 
 export const {

@@ -69,7 +69,6 @@ export {
 } from './host-execution.ts';
 export { pinOwnProcessStartTime } from './host-process-mock.ts';
 export {
-  LIFETIME_C_FORM,
   LIFETIME_TOKEN,
   LEGACY_RAW_START_TIME,
   STALE_LIFETIME_TOKEN,

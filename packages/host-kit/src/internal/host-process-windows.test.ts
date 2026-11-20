@@ -19,7 +19,6 @@ import {
   readProcessCommand,
   readProcessIdentityFacts,
   readProcessStartTime,
-  readProcessStartTimeRaw,
 } from './host-process.ts';
 import { classifyOwnerLiveness } from './owner-identity.ts';
 
@@ -74,14 +73,6 @@ test('the Windows start-time read asks CIM for the process birth, not for lstart
   assert.match(command, /Get-CimInstance -ClassName Win32_Process -Filter 'ProcessId=4242'/);
   assert.match(command, /CreationDate/);
   assert.match(command, /CommandLine/);
-});
-
-test('the released Windows start time uses the same CIM token', () => {
-  windowsPlatform(() => {
-    cimAnswers(`${DAEMON_ROW}\r\n`);
-    assert.equal(readProcessStartTimeRaw(DAEMON_PID), DAEMON_START);
-  });
-  assert.equal(mockRunCmdSync.mock.calls[0]![0], 'powershell.exe');
 });
 
 test('the Windows command read answers the daemon-identity pattern from CommandLine', () => {

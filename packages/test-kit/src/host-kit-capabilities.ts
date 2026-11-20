@@ -33,7 +33,6 @@ export async function loadRealHostKitCapabilities() {
       retry.Deadline.fromTimeoutMs(timeoutMs, nowMs),
     isProcessAlive: processModule.isProcessAlive,
     isProcessGroupAlive: processModule.isProcessGroupAlive,
-    compareBirthTokens: processModule.compareBirthTokens,
     readProcessStartTime: processModule.readProcessStartTime,
     readProcessCommand: processModule.readProcessCommand,
     signalPidsBestEffort: processModule.signalPidsBestEffort,

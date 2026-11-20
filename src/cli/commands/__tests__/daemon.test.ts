@@ -139,11 +139,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
     // same read stated: routing and retirement judge one observation.
     expect(mocks.stopDaemon).toHaveBeenCalledWith({
       paths: expect.objectContaining({ baseDir: stateDir }),
-      observed: {
-        pid: 123,
-        startTime: 'start',
-        ownership: 'detached',
-      },
+      observed: { pid: 123, startTime: 'start', ownership: 'detached' },
     });
     expect(mocks.cleanupDaemonOwner).toHaveBeenCalledWith({
       pid: 123,
@@ -457,11 +453,7 @@ test('daemon stop passes host ownership to shared retirement without detached cl
 
     expect(mocks.stopDaemon).toHaveBeenCalledWith({
       paths: expect.objectContaining({ baseDir: stateDir }),
-      observed: {
-        pid: 555,
-        startTime: 'start-time',
-        ownership: 'embedded',
-      },
+      observed: { pid: 555, startTime: 'start-time', ownership: 'embedded' },
     });
     expect(mocks.cleanupDaemonOwner).not.toHaveBeenCalled();
     expect(mocks.writeCommandOutput).not.toHaveBeenCalled();
