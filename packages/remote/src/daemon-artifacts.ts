@@ -535,9 +535,7 @@ async function downloadResponseArtifacts(
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
-  const recordStop = isRecordStop(req);
-  const destinationWarnings: RecordingDestinationWarning[] = [];
-  const recordingPaths: string[] = [];
+  const recording = isRecordStop(req) ? recordingDelivery() : undefined;
   for (const artifact of artifacts) {
     if (isSessionScriptArtifact(artifact)) {
       await scripts?.publish(artifact, nextData, nextArtifacts);
@@ -558,21 +556,10 @@ async function downloadResponseArtifacts(
       // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
       // `downloadRemoteArtifact`).
-      isDirectory: !recordStop && artifact.artifactType === 'test-artifacts',
-      stagedFile: recordStop,
+      isDirectory: recording === undefined && artifact.artifactType === 'test-artifacts',
+      stagedFile: recording !== undefined,
     });
-    if (recordStop) {
-      if (destination.fallback) {
-        destinationWarnings.push({
-          reason: RECORDING_DESTINATION_REASONS.notRequested,
-          field: artifact.field,
-          path: materializedPath,
-        });
-      }
-      if (artifact.field === 'outPath' || artifact.field === 'chunkPath') {
-        recordingPaths.push(materializedPath);
-      }
-    }
+    recording?.add(artifact.field, materializedPath, destination.fallback);
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
@@ -583,7 +570,7 @@ async function downloadResponseArtifacts(
     });
   }
   nextData.artifacts = nextArtifacts;
-  if (recordStop) reportRecordingDelivery(nextData, destinationWarnings, recordingPaths);
+  recording?.report(nextData);
   return { ok: true, data: nextData };
 }
 
@@ -597,28 +584,40 @@ type RecordingDestinationWarning = {
   path: string;
 };
 
-function reportRecordingDelivery(
-  data: Record<string, unknown>,
-  destinationWarnings: RecordingDestinationWarning[],
-  recordingPaths: string[],
-): void {
-  if (destinationWarnings.length > 0) {
-    data.recordingDestinationWarnings = destinationWarnings;
-    data.warnings = [
-      ...(Array.isArray(data.warnings) ? data.warnings : []),
-      ...destinationWarnings.map(
-        ({ path: written }) =>
-          `Saved remote recording file to ${written} in the current directory because this request named no destination.`,
-      ),
-    ];
-  }
-  // The daemon lists the first video and subsequent chunk artifacts in chunk order.
-  if (Array.isArray(data.chunks) && recordingPaths.length === data.chunks.length) {
-    data.chunks = data.chunks.map((chunk, index) => ({
-      ...chunk,
-      path: recordingPaths[index],
-    }));
-  }
+function recordingDelivery() {
+  const destinationWarnings: RecordingDestinationWarning[] = [];
+  const recordingPaths: string[] = [];
+  return {
+    add(field: string, written: string, fallback: boolean): void {
+      if (fallback) {
+        destinationWarnings.push({
+          reason: RECORDING_DESTINATION_REASONS.notRequested,
+          field,
+          path: written,
+        });
+      }
+      if (field === 'outPath' || field === 'chunkPath') recordingPaths.push(written);
+    },
+    report(data: Record<string, unknown>): void {
+      if (destinationWarnings.length > 0) {
+        data.recordingDestinationWarnings = destinationWarnings;
+        data.warnings = [
+          ...(Array.isArray(data.warnings) ? data.warnings : []),
+          ...destinationWarnings.map(
+            ({ path: written }) =>
+              `Saved remote recording file to ${written} in the current directory because this request named no destination.`,
+          ),
+        ];
+      }
+      // The daemon lists the first video and subsequent chunk artifacts in chunk order.
+      if (Array.isArray(data.chunks) && recordingPaths.length === data.chunks.length) {
+        data.chunks = data.chunks.map((chunk, index) => ({
+          ...chunk,
+          path: recordingPaths[index],
+        }));
+      }
+    },
+  };
 }
 
 function hasDownloadableArtifactId(
