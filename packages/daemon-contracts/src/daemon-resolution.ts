@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { admitPrivateRoot, expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import {
+  admitPrivateRoot,
+  expandUserHomePath,
+  resolveUserPath,
+  type PrivateRootAdmission,
+} from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -96,6 +101,7 @@ const STATE_ROOT_PROBLEMS = {
   ],
   'not-private': ['is open to accounts besides its owner.', 'chmod 700'],
   'not-a-directory': ['is not a directory.', MOVE_STATE_DIR_FIX],
+  unavailable: ['could not be checked or created.', MOVE_STATE_DIR_FIX],
   'parent-step': ['steps out of its parent with "..".', 'Name a real path, without a `..` step.'],
   'unsupported-windows-path': [
     'is not a supported Windows path shape.',
@@ -106,13 +112,24 @@ const STATE_ROOT_PROBLEMS = {
 export type DaemonStateRootProblem = keyof typeof STATE_ROOT_PROBLEMS;
 
 /** The walk's verdict for one step, in the terms an operator can act on. */
-const PROBLEM_FOR_EXPOSURE: Partial<Record<string, DaemonStateRootProblem>> = {
+const PROBLEM_FOR_EXPOSURE: Record<
+  Extract<PrivateRootAdmission, { status: 'refused' }>['exposure'],
+  DaemonStateRootProblem
+> = {
   planted_link: 'symlink',
   link_loop_exceeded: 'symlink',
   foreign_owned: 'foreign-owner',
-  not_a_directory: 'not-a-directory',
-  entry_appeared: 'not-a-directory',
   not_private: 'not-private',
+  world_writable: 'group-or-other-writable-ancestor',
+  shared_group_writable: 'group-or-other-writable-ancestor',
+  shared_parent: 'group-or-other-writable-ancestor',
+  not_a_directory: 'not-a-directory',
+  entry_appeared: 'unavailable',
+  parent_replaced: 'unavailable',
+  unresolvable_parent: 'unavailable',
+  unreachable_parent: 'unavailable',
+  relative_destination: 'unavailable',
+  unnamed_entry: 'unavailable',
 };
 
 /**
@@ -141,11 +158,7 @@ export function admitDaemonStateRoot(options: {
     uid: options.uid,
   });
   if (admitted.status !== 'refused') return;
-  throw unsafeStateRoot(
-    baseDir,
-    admitted.component,
-    PROBLEM_FOR_EXPOSURE[admitted.exposure] ?? 'group-or-other-writable-ancestor',
-  );
+  throw unsafeStateRoot(baseDir, admitted.component, PROBLEM_FOR_EXPOSURE[admitted.exposure]);
 }
 
 /**

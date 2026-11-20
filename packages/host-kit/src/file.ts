@@ -6,6 +6,7 @@ export {
 } from './internal/atomic-publish.ts';
 export {
   admitPrivateRoot,
+  type PrivateRootAdmission,
   confirmScriptDestination,
   prepareScriptDestination,
   publishScriptFileSync,
