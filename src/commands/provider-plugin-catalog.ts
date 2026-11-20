@@ -10,6 +10,11 @@ type ProviderPluginDeclaration = PluginReleaseDeclaration &
   Readonly<{
     provider: string;
     label: string;
+    /**
+     * The plugin's own `forgetsEndedConnectionLease` declaration, readable without loading the
+     * plugin. A command that loads no plugin store reads it for a connection that records no policy.
+     */
+    forgetsEndedConnectionLease?: boolean;
   }>;
 
 export const AWS_DEVICE_FARM: ProviderPluginDeclaration = {
@@ -31,6 +36,7 @@ export const LIMRUN: ProviderPluginDeclaration = {
   package: '@agent-device/limrun',
   label: 'Limrun',
   nightlyTag: 'nightly-0.22',
+  forgetsEndedConnectionLease: true,
 };
 
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [

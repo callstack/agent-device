@@ -13,6 +13,9 @@ import {
 } from './provider-policy.ts';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import limrun from '@agent-device/limrun';
+import awsDeviceFarm from '@agent-device/aws-device-farm';
+import browserstack from '@agent-device/browserstack';
+import { getProviderPluginDeclaration } from '../../commands/provider-plugin-catalog.ts';
 import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 test('provider policy projects provider identity into semantic capabilities', async () => {
@@ -133,4 +136,20 @@ test('a plugin that fails to load supplies no connection name even after priming
   expect(pluginLoadFailures(env).map(({ package: name, error }) => [name, error.reason])).toEqual([
     ['dup', 'duplicate_provider'],
   ]);
+});
+
+test('the plugin catalog copies the ended-lease declaration of each plugin', () => {
+  // The catalog answers for a connection that records no policy when no plugin is loaded, so its
+  // copy must equal what the plugin declares.
+  for (const [provider, plugin] of [
+    ['limrun', limrun()],
+    ['aws-device-farm', awsDeviceFarm()],
+    ['browserstack', browserstack()],
+  ] as const) {
+    assert.equal(
+      getProviderPluginDeclaration(provider)?.forgetsEndedConnectionLease === true,
+      declaredConnectionCapabilities(plugin)?.forgetsEndedConnectionLease === true,
+      provider,
+    );
+  }
 });

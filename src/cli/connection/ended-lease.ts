@@ -9,8 +9,8 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import {
-  connectionProviderCapabilities,
   declaredConnectionCapabilities,
+  providerForgetsEndedConnectionLease,
 } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
@@ -49,11 +49,10 @@ export function forgetEndedConnectionLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
-  // The recorded declaration needs no plugin. A connection stored without one reads what this
-  // process can answer without loading the plugin store.
+  // The recorded policy is the authority. A connection stored without one reads what this process
+  // answers without loading the plugin store.
   const forgetsEndedLease =
-    state.forgetsEndedLease ??
-    connectionProviderCapabilities(state.leaseProvider, host.env).forgetsEndedConnectionLease;
+    state.forgetsEndedLease ?? providerForgetsEndedConnectionLease(state.leaseProvider, host.env);
   if (!forgetsEndedLease) return;
   writeRemoteConnectionState({
     stateDir,

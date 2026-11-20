@@ -14,7 +14,12 @@ const LEASE_ID = 'abc123abc123abc1';
 
 // No plugin is installed in this file, and `close` and `disconnect` load no plugin store. The
 // stored connection is what a `connect limrun` with the plugin installed wrote.
-function storedLimrunConnection() {
+function storedConnection(
+  policy: { leaseProvider: string; forgetsEndedLease?: boolean } = {
+    leaseProvider: 'limrun',
+    forgetsEndedLease: true,
+  },
+) {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const remoteConfig = path.join(project, 'limrun.remote.json');
@@ -31,8 +36,7 @@ function storedLimrunConnection() {
       runId: 'run-close',
       leaseId: LEASE_ID,
       leaseBackend: 'android-instance',
-      leaseProvider: 'limrun',
-      forgetsEndedLease: true,
+      ...policy,
       platform: 'android',
       connectedAt: now,
       updatedAt: now,
@@ -42,7 +46,7 @@ function storedLimrunConnection() {
 }
 
 test('close forgets an ended Limrun lease without loading the plugin store', async () => {
-  const { root, home, project, stateDir } = storedLimrunConnection();
+  const { root, home, project, stateDir } = storedConnection();
   const result = await runCliCapture(
     ['close', '--session', 'limrun-close', '--state-dir', stateDir, '--json'],
     {
@@ -66,8 +70,49 @@ test('close forgets an ended Limrun lease without loading the plugin store', asy
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+async function closeWithEndedLease(stateDir: string, project: string, home: string) {
+  const result = await runCliCapture(
+    ['close', '--session', 'limrun-close', '--state-dir', stateDir, '--json'],
+    {
+      cwd: project,
+      env: { HOME: home },
+      defaultResponse: {
+        ok: true,
+        data: {
+          session: 'limrun-close',
+          endedLeases: [{ leaseId: LEASE_ID, outcome: 'released' }],
+        },
+      },
+    },
+  );
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  return readRemoteConnectionState({ stateDir, session: 'limrun-close' });
+}
+
+test('close forgets an ended Limrun lease on a connection that records no policy', async () => {
+  // A connection stored before the policy was recorded: the plugin catalog answers for Limrun.
+  const { root, home, project, stateDir } = storedConnection({ leaseProvider: 'limrun' });
+  assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, undefined);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('close keeps the lease of a provider neither a loaded plugin nor the catalog knows', async () => {
+  const { root, home, project, stateDir } = storedConnection({ leaseProvider: 'custom-provider' });
+  assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, LEASE_ID);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('a recorded policy wins over the catalog on close', async () => {
+  const { root, home, project, stateDir } = storedConnection({
+    leaseProvider: 'limrun',
+    forgetsEndedLease: false,
+  });
+  assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, LEASE_ID);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('disconnect removes a stored Limrun connection after the plugin is uninstalled', async () => {
-  const { root, home, project, stateDir } = storedLimrunConnection();
+  const { root, home, project, stateDir } = storedConnection();
   const result = await runCliCapture(
     ['disconnect', '--session', 'limrun-close', '--state-dir', stateDir, '--json'],
     { cwd: project, env: { HOME: home } },
