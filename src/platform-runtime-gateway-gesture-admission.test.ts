@@ -1,4 +1,6 @@
-import { webPlatformCompositionFixture } from './platform-runtime-web-provider.fixtures.ts';
+import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
+import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
+import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
@@ -7,7 +9,11 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 bindTestCommandHost();
 
 const gateway = createPlatformRuntimeGateway({
-  platforms: webPlatformCompositionFixture(),
+  // Both optional families this test probes are platform plugins, so the scenario supplies them.
+  platforms: composePlatformPlugins(
+    [webSelectionFixture().get(), vegaSelectionFixture().get()],
+    [],
+  ),
   host: createLiveTestHostEnvironment(),
   resolveSessionArtifacts: () => ({
     outputPath: '/sessions/gesture-admission/app.log',

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { afterAll, beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { VegaPlatformRegistration } from '@agent-device/contracts/platform-plugin';
+import type { PlatformHost } from 'agent-device/plugins';
 import { mkdtempForTestSync } from './__tests__/tmp-dir.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
@@ -12,7 +14,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { runCmd, whichCmd, withCommandHost } from '@agent-device/host-kit/command';
-import { vegaPlugin } from './index.ts';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import vegaPlatformPlugin from './index.ts';
 
 const VEGA_VVD = {
   platform: 'vega',
@@ -62,14 +65,6 @@ afterAll(() => {
   Object.assign(process.env, originalEnv);
 });
 
-function withProcessCommandHost<T>(run: () => Promise<T>): Promise<T> {
-  // The process command host names a third location; the per-call hosts below must win (#3794).
-  return withCommandHost(
-    { host: { env: process.env, cwd: process.cwd() }, requestEnv: undefined },
-    run,
-  );
-}
-
 beforeEach(() => {
   mockRunCmd.mockReset();
   mockWhichCmd.mockReset();
@@ -79,16 +74,60 @@ beforeEach(() => {
   mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 });
 
+function createPluginHost(): PlatformHost {
+  return {
+    env: process.env,
+    cwd: scratch,
+    stateDir: path.join(scratch, 'state'),
+    runCommand: runCmd,
+    emitDiagnostic,
+    withDiagnosticTimer,
+  };
+}
+
+/** `setup` answers the platform family's registration; the cast names what the host stores. */
+function setupVegaPlatform(): VegaPlatformRegistration {
+  return vegaPlatformPlugin().contributes[0].setup(createPluginHost()) as VegaPlatformRegistration;
+}
+
 function runExecutables(): string[] {
   return mockRunCmd.mock.calls.map(([executable]) => executable);
 }
 
-test('Vega plugin owns the Vega platform', () => {
-  assert.deepEqual(vegaPlugin.platforms, ['vega']);
+function withProcessCommandHost<T>(run: () => Promise<T>): Promise<T> {
+  // The process command host names a third location; the per-call hosts below must win (#3794).
+  return withCommandHost(
+    { host: { env: process.env, cwd: process.cwd() }, requestEnv: undefined },
+    run,
+  );
+}
+
+test('the Vega package contributes the Vega platform family', () => {
+  const plugin = vegaPlatformPlugin();
+  const [contribution] = plugin.contributes;
+
+  assert.equal(plugin.apiVersion, 3);
+  assert.equal(plugin.contributes.length, 1);
+  assert.equal(contribution.kind, 'platform');
+  assert.equal(contribution.family, 'vega');
 });
 
-test('Vega plugin creates the Vega interactor lazily', async () => {
-  const interactor = await vegaPlugin.createInteractor(
+test('setup registers the Vega modules, request scoping and operations', () => {
+  const registration = setupVegaPlatform();
+
+  assert.equal(registration.family, 'vega');
+  assert.equal(registration.inventoryModule.family, 'vega');
+  assert.equal(registration.runtimeModule.family, 'vega');
+  assert.equal(typeof registration.inventoryModule.loadInventory, 'function');
+  assert.equal(typeof registration.runtimeModule.loadRuntime, 'function');
+  assert.equal(typeof registration.withRequestProvider, 'function');
+  assert.equal(typeof registration.operations.toolchainCheck, 'function');
+});
+
+test('setup creates the Vega interactor lazily', async () => {
+  const registration = setupVegaPlatform();
+
+  const interactor = await registration.createInteractor(
     VEGA_VVD,
     {},
     {
@@ -102,12 +141,14 @@ test('Vega plugin creates the Vega interactor lazily', async () => {
   assert.equal(typeof interactor.home, 'function');
 });
 
-test('createInteractor binds each caller host into the interactor it returns', async () => {
-  // Removing the host-binding wrap in index.ts makes both calls fall through to the unbound
-  // scope default and refuse with `vega-adapter-host-unbound` (#3794).
+test('setup binds each caller host into the interactor it returns', async () => {
+  // Removing the host-binding wrap in the contribution's createInteractor makes both calls fall
+  // through to the unbound scope default and refuse with `vega-adapter-host-unbound` (#3794).
   await withProcessCommandHost(async () => {
-    const interactorA = await vegaPlugin.createInteractor(VEGA_VVD, {}, hostA);
-    const interactorB = await vegaPlugin.createInteractor(VEGA_VVD, {}, hostB);
+    const registration = setupVegaPlatform();
+
+    const interactorA = await registration.createInteractor(VEGA_VVD, {}, hostA);
+    const interactorB = await registration.createInteractor(VEGA_VVD, {}, hostB);
 
     await interactorA.back();
     assert.deepEqual(runExecutables(), ['vega']);
