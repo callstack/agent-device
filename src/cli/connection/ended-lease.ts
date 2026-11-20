@@ -6,29 +6,9 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
-  type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import {
-  declaredConnectionCapabilities,
-  providerForgetsEndedConnectionLease,
-} from './provider-policy.ts';
+import { providerForgetsEndedConnectionLease } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
-
-/**
- * Records on a connection whether its provider forgets an ended lease. Call it where the provider's
- * plugin is loaded: `connect` and connection materialization. `close` and `session` load no plugin,
- * so they read the recorded value. A recorded value is the authority and is not computed again. A
- * provider whose plugin is not loaded declares nothing, so nothing is recorded for it.
- */
-export function withEndedLeasePolicy(
-  state: RemoteConnectionState,
-  env: NodeJS.ProcessEnv,
-): RemoteConnectionState {
-  if (state.forgetsEndedLease !== undefined) return state;
-  const declared = declaredConnectionCapabilities(state.leaseProvider, env);
-  if (!declared) return state;
-  return { ...state, forgetsEndedLease: declared.forgetsEndedConnectionLease === true };
-}
 
 /**
  * Forgets the stored connection lease once a daemon reply says its request ended that lease, so the next
@@ -49,11 +29,9 @@ export function forgetEndedConnectionLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
-  // The recorded policy is the authority. A connection stored without one reads what this process
-  // answers without loading the plugin store.
-  const forgetsEndedLease =
-    state.forgetsEndedLease ?? providerForgetsEndedConnectionLease(state.leaseProvider, host.env);
-  if (!forgetsEndedLease) return;
+  // `close` and `session` load no plugin store, so this reads what answers without one: the
+  // provider's loaded declaration, then the plugin catalog.
+  if (!providerForgetsEndedConnectionLease(state.leaseProvider, host.env)) return;
   writeRemoteConnectionState({
     stateDir,
     state: { ...state, leaseId: undefined, updatedAt: new Date().toISOString() },

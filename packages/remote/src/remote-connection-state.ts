@@ -48,11 +48,6 @@ export type RemoteConnectionState = {
   leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
-  /**
-   * The provider's declaration that an ended lease is forgotten, recorded while its plugin is
-   * loaded. A command that never loads the plugin store reads this instead of the plugin.
-   */
-  forgetsEndedLease?: boolean;
   deviceKey?: string;
   clientId?: string;
   platform?: CliFlags['platform'];
@@ -629,7 +624,6 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
       'deviceKey',
       'clientId',
     ]) &&
-    (record.forgetsEndedLease === undefined || typeof record.forgetsEndedLease === 'boolean') &&
     isOptionalRemoteConnectionDaemonState(record.daemon) &&
     isOptionalRecord(record.leaseDeviceSpec)
   );
