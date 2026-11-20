@@ -1,5 +1,5 @@
 import { settleWithin } from '@agent-device/host-kit/retry';
-import { escapeTerminalText } from '@agent-device/kernel/success-text';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
