@@ -11,7 +11,7 @@ export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
 export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
 /**
  * `scroll refresh` is a directional scroll with these defaults. iOS commits a refresh only for a
- * slow pull that starts on the list: 0/5 at the 400ms default, 5/5 from 800ms.
+ * slow pull that starts on the list: 0/5 at the 400ms default, 5/5 at 1200ms.
  */
 export const DEFAULT_REFRESH_PULL_DURATION_MS = 1200;
 export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
