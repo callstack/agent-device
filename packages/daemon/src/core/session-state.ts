@@ -1,3 +1,4 @@
+import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { AppLogFailure, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
@@ -173,6 +174,15 @@ export type SessionState = {
     ownerStartTime: string | null;
   };
   device: DeviceInfo;
+  /**
+   * #4162: this session's `open` booted the local simulator or emulator it now holds, so a plain
+   * `close` stops it and leaves the device as the session found it. Recorded only when device
+   * selection reports the boot (`selection.bootOccurred`), which never happens for a provider or
+   * physical target, nor for a device that was already running. The open-state publisher sets it
+   * through `SessionStore.updateOpenDevice`; changing device identity clears it. Close only reads it.
+   */
+  bootedByOpen?: true;
+  androidLaunchIdentity?: AndroidEmulatorLaunchIdentity;
   createdAt: number;
   surface?: SessionSurface;
   appBundleId?: string;

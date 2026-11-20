@@ -1,5 +1,5 @@
 import { appleSessionObservation } from './platform-runtime-apple-resources.ts';
-import { deviceBootObservation } from './platform-runtime-device-boot.ts';
+import { deviceBootObservation, launchedDeviceProcess } from './platform-runtime-device-boot.ts';
 import { ensureLocalPlatformDeviceReady } from './platform-runtime-device-ready.ts';
 import {
   resolveRequestedOpenSurface,
@@ -18,6 +18,7 @@ export function createDaemonPlatformServices(): DaemonPlatformServices {
   return Object.freeze({
     appleSessionObservation,
     deviceBootObservation,
+    launchedDeviceProcess,
     ensureLocalDeviceReady: ensureLocalPlatformDeviceReady,
     resolveRequestedOpenSurface,
     validateOpenRelaunchTarget,

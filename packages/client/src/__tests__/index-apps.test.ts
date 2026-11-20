@@ -434,3 +434,13 @@ test('apps.installFromSource derives Android launchTarget from packageName when 
     },
   });
 });
+
+test.each(['apps', 'sessions'] as const)('%s.close preserves response warnings', async (api) => {
+  const setup = createClientTransport(async (req) => {
+    assert.equal(req.command, 'close');
+    return { ok: true, data: { session: 'qa', warnings: ['Device remains running.', 42] } };
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+  const result = await client[api].close({ session: 'qa' });
+  assert.deepEqual(result.warnings, ['Device remains running.']);
+});

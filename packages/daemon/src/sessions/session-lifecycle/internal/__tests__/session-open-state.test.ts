@@ -56,3 +56,96 @@ test('a re-open of a session that never armed records nothing', () => {
   assert.equal(next.scriptPublication, undefined);
   assert.equal(isSessionRecording(next), false);
 });
+
+// --- #4162: the boot-ownership fact belongs to the open that published it ---
+//
+// Ownership survives reopens of the same target. A replacement owns only its own boot.
+
+function firstOpen(bootedByOpen: boolean | undefined) {
+  const store = makeSessionStore();
+  return publishOpenSession({
+    req: { token: 't', command: 'open', positionals: [], session: 's' },
+    sessionStore: store,
+    sessionName: 's',
+    device: IOS_SIMULATOR,
+    surface: 'app',
+    bootedByOpen,
+  }).session;
+}
+
+test('#4162: an open whose selection reported the boot records it on the new session', () => {
+  assert.equal(firstOpen(true).bootedByOpen, true);
+});
+
+test.each([false, undefined] as const)(
+  '#4162: an open whose selection reported no boot records nothing',
+  (bootedByOpen) => {
+    assert.equal(firstOpen(bootedByOpen).bootedByOpen, undefined);
+  },
+);
+
+const bootOwnershipFacts: readonly (true | undefined)[] = [true, undefined];
+
+test.each([false, true])('replacement target owns only its own boot: %s', (replacementBooted) => {
+  const store = makeSessionStore();
+  const existing = makeIosSession('s', { bootedByOpen: true });
+  const ref = store.publish(existing.name, existing);
+  const next = store.requireCurrent(
+    publishOpenSession({
+      req: { token: 't', command: 'open', positionals: [], session: existing.name },
+      sessionStore: store,
+      sessionName: existing.name,
+      existingRef: ref,
+      device: { ...IOS_SIMULATOR, id: 'replacement-simulator' },
+      surface: 'app',
+      bootedByOpen: replacementBooted,
+    }),
+  );
+  assert.equal(next.bootedByOpen, replacementBooted ? true : undefined);
+});
+
+test.each(bootOwnershipFacts)(
+  '#4162: a re-open that reports a boot owns the device from then on',
+  (bootedByOpen) => {
+    const store = makeSessionStore();
+    const existing = makeIosSession('s', bootedByOpen === undefined ? {} : { bootedByOpen });
+    const ref = store.publish(existing.name, existing);
+
+    const next = store.requireCurrent(
+      publishOpenSession({
+        req: { token: 't', command: 'open', positionals: [], session: existing.name },
+        sessionStore: store,
+        sessionName: existing.name,
+        existingRef: ref,
+        device: IOS_SIMULATOR,
+        surface: 'app',
+        bootedByOpen: true,
+      }),
+    );
+
+    assert.equal(next.bootedByOpen, true);
+  },
+);
+
+test.each(bootOwnershipFacts)(
+  '#4162: a re-open that reports no boot leaves the ownership unchanged',
+  (bootedByOpen) => {
+    const store = makeSessionStore();
+    const existing = makeIosSession('s', bootedByOpen === undefined ? {} : { bootedByOpen });
+    const ref = store.publish(existing.name, existing);
+
+    const next = store.requireCurrent(
+      publishOpenSession({
+        req: { token: 't', command: 'open', positionals: [], session: existing.name },
+        sessionStore: store,
+        sessionName: existing.name,
+        existingRef: ref,
+        device: IOS_SIMULATOR,
+        surface: 'app',
+        bootedByOpen: false,
+      }),
+    );
+
+    assert.equal(next.bootedByOpen, bootedByOpen);
+  },
+);
