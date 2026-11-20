@@ -1,15 +1,9 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 
 export type TestmuOptions = {
   /** Used instead of `LT_USERNAME` and `LT_ACCESS_KEY` when set. */
   credentials?: { username: string; accessKey: string };
 };
-
-// The connection and WebDriver code load when they are first used, so importing the package for its
-// declaration stays small.
-async function loadConnection(host: ProviderPluginHost) {
-  return (await import('./connection.ts')).createTestMuConnection(host);
-}
 
 /**
  * TestMu AI as a plugin. The credentials come from `options.credentials`, with the
@@ -17,7 +11,7 @@ async function loadConnection(host: ProviderPluginHost) {
  * leave out. The plugin declares only the variables it reads from the environment; credentials passed
  * as options are not part of the environment the daemon fingerprints.
  */
-function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
+function testmu(options: TestmuOptions = {}): ProviderAgentDevicePlugin {
   const { credentials } = options;
   const withCredentials = (host: ProviderPluginHost): ProviderPluginHost =>
     credentials
@@ -37,30 +31,38 @@ function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
     ...(credentials?.username ? [] : ['LT_USERNAME']),
     ...(credentials?.accessKey ? [] : ['LT_ACCESS_KEY']),
   ];
+  // The connection code loads when `connect` runs it, so importing the package for its declaration
+  // stays small.
+  const loadTestMuConnection = async (host: ProviderPluginHost) =>
+    (await import('./connection.ts')).createTestMuConnection(withCredentials(host));
   return {
-    apiVersion: 2,
-    provider: 'testmu',
-    credentials: { variables: environmentVariables },
-    connection: {
-      capabilities: {
-        leaseKind: 'direct-device-provider',
-        requiresAppAttachment: false,
-        requiresRemoteDaemon: false,
-        supportsArtifacts: true,
-        supportsDeferredAppSelection: false,
-        supportsDirectPortReverse: false,
-        usesCloudWebDriverLease: true,
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: 'testmu',
+        credentials: { variables: environmentVariables },
+        connection: {
+          capabilities: {
+            leaseKind: 'direct-device-provider',
+            requiresAppAttachment: false,
+            requiresRemoteDaemon: false,
+            supportsArtifacts: true,
+            supportsDeferredAppSelection: false,
+            supportsDirectPortReverse: false,
+            usesCloudWebDriverLease: true,
+          },
+          resolve: async (context) => (await loadTestMuConnection(context.host)).resolve(context),
+          verify: async (context) =>
+            await (await loadTestMuConnection(context.host)).verify(context),
+        },
+        setup: async (host) => ({
+          webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
+            withCredentials(host),
+          ),
+        }),
       },
-      resolve: async (context) =>
-        (await loadConnection(withCredentials(context.host))).resolve(context),
-      verify: async (context) =>
-        await (await loadConnection(withCredentials(context.host))).verify(context),
-    },
-    setup: async (host) => ({
-      webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
-        withCredentials(host),
-      ),
-    }),
+    ],
   };
 }
 

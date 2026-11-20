@@ -1,6 +1,13 @@
 {
   "name": "@agent-device/provider-limrun",
   "version": "0.0.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "agent-device": {
+    "apiVersion": 3,
+    "provider": "limrun"
+  },
   "private": true,
   "type": "module",
   "description": "Limrun provider runtime for agent-device. Internal workspace package bundled into the published artifact.",

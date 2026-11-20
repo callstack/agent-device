@@ -10,10 +10,12 @@ export function pluginHome() {
 }
 
 /**
- * Installs a plugin package: no `agentDevicePlugin` manifest, an `./agent-device` export, options
+ * Installs a plugin package: an `agent-device` metadata field, an `./agent-device` export, options
  * recorded. `exports` and `manifest` override the package.json fields, `files` adds extra files.
+ * The metadata's static claims are derived from the source's `provider: "..."` unless `claims`
+ * says otherwise.
  */
-export function selectV2Plugin(
+export function selectPlugin(
   home: string,
   name: string,
   source: string,
@@ -22,17 +24,25 @@ export function selectV2Plugin(
     manifest?: Record<string, unknown>;
     files?: Record<string, string>;
     selectionOptions?: unknown;
+    claims?: Record<string, unknown>;
   } = {},
 ) {
   const installation = crypto.randomUUID();
   const directory = path.join(home, 'plugins', installation, 'node_modules', name);
   fs.mkdirSync(directory, { recursive: true });
+  const provider = /provider: "([a-z0-9-]+)"/.exec(source)?.[1];
+  const agentDevice = options.claims ?? {
+    apiVersion: 3,
+    ...(provider ? { provider } : {}),
+  };
   fs.writeFileSync(
     path.join(directory, 'package.json'),
     JSON.stringify({
       name,
       version: '2.0.0',
       type: 'module',
+      engines: { node: '>=22.12' },
+      'agent-device': agentDevice,
       exports:
         'exports' in options ? options.exports : { './agent-device': { import: './plugin.mjs' } },
       ...options.manifest,
@@ -86,28 +96,31 @@ const CONSUMED_PROFILE_FIELDS: Record<ProviderProfileField, 'consumed'> = {
 };
 
 /**
- * A plugin factory module. `extra` is spliced into the returned plugin object, so a test can add
+ * A plugin factory module. `extra` is spliced into the provider contribution, so a test can add
  * `connection` or override `credentials`; `shutdownFile` is written when the runtime shuts down.
  */
-export function v2RegistrationSource(
+export function pluginSource(
   provider: string,
   options: { shutdownFile?: string; extra?: string; credentials?: string } = {},
 ) {
   return `import fs from 'node:fs';
     export default (options = {}) => ({
-      apiVersion: 2,
-      provider: ${JSON.stringify(provider)},
-      credentials: ${options.credentials ?? '{ variables: [] }'},
-      ${options.extra ?? ''}
-      setup: async host => ({
-        runtime: { provider: ${JSON.stringify(provider)},
-          ownsDevice: () => false, getInteractor: () => undefined,
-          deviceInventoryProvider: async () => [], leaseLifecycle: {},
-          shutdown: async () => { ${options.shutdownFile ? `fs.writeFileSync(${JSON.stringify(options.shutdownFile)}, 'shutdown');` : ''} },
-          options, hostEnv: host.env },
-        platformModule: { owner: { kind: 'provider-runtime', provider: ${JSON.stringify(provider)}, instance: 'test' },
-          loadRuntime: async () => { throw new Error('lazy'); } }
-      })
+      apiVersion: 3,
+      contributes: [{
+        kind: 'provider',
+        provider: ${JSON.stringify(provider)},
+        credentials: ${options.credentials ?? '{ variables: [] }'},
+        ${options.extra ?? ''}
+        setup: async host => ({
+          runtime: { provider: ${JSON.stringify(provider)},
+            ownsDevice: () => false, getInteractor: () => undefined,
+            deviceInventoryProvider: async () => [], leaseLifecycle: {},
+            shutdown: async () => { ${options.shutdownFile ? `fs.writeFileSync(${JSON.stringify(options.shutdownFile)}, 'shutdown');` : ''} },
+            options, hostEnv: host.env },
+          platformModule: { owner: { kind: 'provider-runtime', provider: ${JSON.stringify(provider)}, instance: 'test' },
+            loadRuntime: async () => { throw new Error('lazy'); } }
+        })
+      }]
     });`;
 }
 
@@ -129,7 +142,12 @@ export function webDriverPluginSource(
     requestPolicy: { retryAttempts: 0 },
   };
   return `export default () => ({
-    apiVersion: 2, provider: ${JSON.stringify(provider)}, credentials: { variables: [] },
-    setup: async () => ({ webDriver: ${JSON.stringify(webDriver)} }),
+    apiVersion: 3,
+    contributes: [{
+      kind: 'provider',
+      provider: ${JSON.stringify(provider)},
+      credentials: { variables: [] },
+      setup: async () => ({ webDriver: ${JSON.stringify(webDriver)} }),
+    }],
   });`;
 }
