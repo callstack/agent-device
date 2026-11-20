@@ -16,7 +16,7 @@ import {
 const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
 
 /** A published destination, `undefined` when no record matches, or a typed delivery failure. */
-export type PublishOutcome =
+type PublishOutcome =
   | Readonly<{ published: string | undefined }>
   | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
 

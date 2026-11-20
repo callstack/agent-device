@@ -11,6 +11,7 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
 Both script publishers commit through host-kit's `publishScriptFileSync`, inside the judged directory.
 Remote script delivery holds a version in memory and caps bytes as they arrive.
+It stops reading an error answer after 65,536 characters.
 
 ## Proposed in #4669
 

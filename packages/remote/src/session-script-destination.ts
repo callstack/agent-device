@@ -83,8 +83,9 @@ async function settleScriptReceipt(
   data: Record<string, unknown>,
 ): Promise<ReceiptSettlement> {
   const { endpoint, req, stateDir } = context;
-  const failures = [...(receipt.failures ?? [])];
-  for (const failure of failures) discloseDeliveryFailure(data, req, failure, undefined);
+  for (const failure of receipt.failures ?? []) {
+    discloseDeliveryFailure(data, req, failure, undefined);
+  }
   const file = recordPath(stateDir, endpoint.baseUrl, req, receipt.publicationId);
   const record = readRecord(file);
   if (!record) {
@@ -93,7 +94,7 @@ async function settleScriptReceipt(
       phase: 'session_script_artifact_dropped',
       data: { session: req.session, publicationId: receipt.publicationId },
     });
-    return { failures };
+    return {};
   }
   // The daemon names a close only for a step that ran one, so the receipt's close retires the record.
   const closes = receipt.close !== undefined;
@@ -109,7 +110,6 @@ async function settleScriptReceipt(
     ...(destination !== undefined && receipt.version?.artifactId !== undefined
       ? { artifactId: receipt.version.artifactId, published: destination }
       : {}),
-    failures,
   };
 }
 
@@ -117,7 +117,6 @@ type ReceiptSettlement = {
   retire?: string;
   published?: string;
   artifactId?: string;
-  failures: ScriptDeliveryFailure[];
 };
 
 /** Retires a record without letting a failure here replace the request's own outcome. */

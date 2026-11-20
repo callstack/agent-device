@@ -3,7 +3,7 @@ import fs from 'node:fs';
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
 import type http from 'node:http';
 import path from 'node:path';
-import { Transform, Writable } from 'node:stream';
+import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -16,6 +16,9 @@ import {
 } from '@agent-device/contracts/daemon-http';
 
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
+
+/** An error answer is read this far for the diagnostic, then the response is dropped. */
+const MAX_ERROR_BODY_CHARS = 65_536;
 
 type RemoteArtifactRequest = {
   artifactUrl: URL;
@@ -34,13 +37,7 @@ export type RemoteArtifactDownload = RemoteArtifactRequest & {
 /** An artifact held in memory, stopped once it crosses `maxBytes`, whatever `Content-Length` announced. */
 export type RemoteArtifactFetch = RemoteArtifactRequest & { maxBytes: number };
 
-type ArtifactSink<T> = {
-  prepare(): Promise<void>;
-  cleanupOnError(): Promise<void>;
-  materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
-};
-
-function buildDownloadDestination(params: RemoteArtifactDownload): ArtifactSink<string> {
+function buildDownloadDestination(params: RemoteArtifactDownload) {
   const { destinationPath } = params;
   if (params.isDirectory) {
     return {
@@ -50,7 +47,8 @@ function buildDownloadDestination(params: RemoteArtifactDownload): ArtifactSink<
       // The root belongs to the caller and may contain earlier runs. Directory materialization
       // owns and cleans its hidden staging directory, so the root itself is never removed.
       cleanupOnError: async () => {},
-      materialize: (res, signal) => materializeDirectoryArtifact(res, destinationPath, signal),
+      materialize: (res: http.IncomingMessage, signal: AbortSignal) =>
+        materializeDirectoryArtifact(res, destinationPath, signal),
     };
   }
   return {
@@ -58,7 +56,7 @@ function buildDownloadDestination(params: RemoteArtifactDownload): ArtifactSink<
       await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     },
     cleanupOnError: () => fs.promises.rm(destinationPath, { force: true }),
-    materialize: async (res, signal) => {
+    materialize: async (res: http.IncomingMessage, signal: AbortSignal) => {
       await pipeline(res, fs.createWriteStream(destinationPath), { signal });
       return destinationPath;
     },
@@ -71,37 +69,44 @@ export async function fetchRemoteArtifactFromUrl(params: RemoteArtifactFetch): P
     prepare: async () => {},
     cleanupOnError: async () => {},
     materialize: async (res, signal) => {
-      const chunks: Buffer[] = [];
-      const memory = new Writable({
-        write(chunk: Buffer, _encoding, callback) {
-          chunks.push(chunk);
-          callback();
-        },
-      });
-      await pipeline(res, limitBytes(params.maxBytes, params.artifactId), memory, { signal });
-      return Buffer.concat(chunks);
+      const memory = boundedMemory(params.maxBytes, params.artifactId);
+      await pipeline(res, memory.sink, { signal });
+      return memory.bytes();
     },
   });
 }
 
-function limitBytes(maxBytes: number, artifactId: string): Transform {
-  let received = 0;
-  return new Transform({
-    transform(chunk: Buffer, _encoding, callback) {
-      received += chunk.length;
-      if (received <= maxBytes) {
-        callback(null, chunk);
+/**
+ * Collects a body into ONE buffer that doubles up to `maxBytes` and refuses the chunk that crosses it, so
+ * what is allocated depends on the bytes received and never on how many chunks carried them.
+ */
+function boundedMemory(maxBytes: number, artifactId: string) {
+  let buffer = Buffer.allocUnsafe(Math.min(maxBytes, 64 * 1024));
+  let length = 0;
+  const sink = new Writable({
+    write(chunk: Buffer, _encoding, callback) {
+      const needed = length + chunk.length;
+      if (needed > maxBytes) {
+        callback(
+          new AppError('COMMAND_FAILED', `The remote artifact is larger than ${maxBytes} bytes.`, {
+            reason: 'artifact_too_large',
+            artifactId,
+            maxBytes,
+          }),
+        );
         return;
       }
-      callback(
-        new AppError('COMMAND_FAILED', `The remote artifact is larger than ${maxBytes} bytes.`, {
-          reason: 'artifact_too_large',
-          artifactId,
-          maxBytes,
-        }),
-      );
+      if (needed > buffer.length) {
+        const grown = Buffer.allocUnsafe(Math.min(maxBytes, Math.max(needed, buffer.length * 2)));
+        buffer.copy(grown, 0, 0, length);
+        buffer = grown;
+      }
+      chunk.copy(buffer, length);
+      length = needed;
+      callback();
     },
   });
+  return { sink, bytes: () => buffer.subarray(0, length) };
 }
 
 /** Downloads an artifact and returns the exact file or directory published on the client. */
@@ -113,7 +118,11 @@ export async function downloadRemoteArtifactFromUrl(
 
 async function requestRemoteArtifact<T>(
   params: RemoteArtifactRequest,
-  destination: ArtifactSink<T>,
+  destination: {
+    prepare(): Promise<void>;
+    cleanupOnError(): Promise<void>;
+    materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
+  },
 ): Promise<T> {
   const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
   await destination.prepare();
@@ -160,10 +169,6 @@ async function requestRemoteArtifact<T>(
         if (res.statusCode !== 200) {
           let body = '';
           res.setEncoding('utf8');
-          res.on('data', (chunk) => {
-            const remainingChars = 65536 - body.length;
-            if (remainingChars > 0) body += chunk.slice(0, remainingChars);
-          });
           const fail = () => {
             settle(
               undefined,
@@ -175,6 +180,13 @@ async function requestRemoteArtifact<T>(
               }),
             );
           };
+          res.on('data', (chunk: string) => {
+            body += chunk.slice(0, MAX_ERROR_BODY_CHARS - body.length);
+            if (body.length < MAX_ERROR_BODY_CHARS) return;
+            // The diagnostic is full: the rest of an error answer is never read.
+            fail();
+            res.destroy();
+          });
           res.on('end', fail);
           res.on('error', fail);
           res.on('aborted', fail);

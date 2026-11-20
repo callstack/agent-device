@@ -287,6 +287,78 @@ test('an in-memory fetch returns a body of exactly its cap and refuses one byte 
   }
 });
 
+test('an in-memory fetch returns a body that arrives in very small chunks unchanged', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact fetch small chunks')) return;
+  // Past the first allocation, so the buffer grows more than once, and no two neighbouring bytes repeat.
+  const body = Buffer.from(Array.from({ length: 300_000 }, (_, index) => (index * 31) % 251));
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200);
+    res.socket?.setNoDelay(true);
+    let sent = 0;
+    const write = () => {
+      for (let burst = 0; burst < 2_000 && sent < body.length; burst += 1, sent += 3) {
+        res.write(body.subarray(sent, sent + 3));
+      }
+      if (sent < body.length) setImmediate(write);
+      else res.end();
+    };
+    write();
+  });
+  const port = await listenOnLoopback(server);
+
+  try {
+    const fetched = await fetchFrom(port, body.length);
+    assert.equal(fetched.length, body.length);
+    assert.equal(fetched.equals(body), true);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+for (const route of ['in-memory fetch', 'file download', 'directory download'] as const) {
+  test(`an error answer to the ${route} is dropped once its diagnostic is full`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'artifact error body cap')) return;
+    const tempRoot = mkdtempForTestSync('agent-device-artifact-error-cap-');
+    let released: () => void = () => {};
+    const responseReleased = new Promise<void>((resolve) => {
+      released = resolve;
+    });
+    // A 500 whose body never ends: only the client dropping the response finishes this request.
+    const server = http.createServer((_req, res) => {
+      res.on('close', released);
+      res.writeHead(500);
+      const write = () => {
+        if (!res.destroyed) res.write('x'.repeat(16 * 1024), () => setImmediate(write));
+      };
+      write();
+    });
+    const port = await listenOnLoopback(server);
+    const attempt = {
+      'in-memory fetch': () => fetchFrom(port, 1024),
+      'file download': () => downloadTo(tempRoot, port),
+      'directory download': () =>
+        downloadTo(tempRoot, port, { destinationPath: tempRoot, isDirectory: true }),
+    }[route];
+
+    try {
+      await assert.rejects(attempt, (error: unknown) => {
+        assert.equal((error as Error).message, 'Failed to download remote artifact');
+        const details = (error as { details?: Record<string, unknown> }).details;
+        assert.equal(details?.statusCode, 500);
+        assert.equal(details?.artifactId, 'artifact');
+        assert.equal(details?.body, 'x'.repeat(65_536));
+        return true;
+      });
+      await responseReleased;
+      // The file route makes its parent directory before it asks; no route leaves a file behind.
+      const left = fs.readdirSync(tempRoot, { recursive: true });
+      assert.deepEqual(left, route === 'file download' ? ['artifacts'] : []);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  });
+}
+
 test('a cleanup that fails after a failed download keeps the download error and raises no unhandled rejection', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'artifact download cleanup-failure coverage')) return;
   const tempRoot = mkdtempForTestSync('agent-device-artifact-cleanup-failure-');
