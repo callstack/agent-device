@@ -197,7 +197,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     session,
     plan: resolveSnapshotRuntimePlan({
       customActions: req.flags?.snapshotCustomActions === true,
-      nativeAudit: command === 'audit' && req.flags?.nativeAudit === true,
+      audit: command === 'audit',
       hasActiveApp: session?.appBundleId !== undefined,
     }),
     inspectFacts: params.inspectFacts,
@@ -294,14 +294,14 @@ async function bindSnapshotCaptureRuntime(
   // add selector operation projection; the discriminants differ solely so the compiler can narrow
   // `plan.use` per family. No parallel plan-to-operation dispatch is introduced.
   switch (plan.kind) {
-    case 'native-audit-active-app': {
+    case 'audit-active-app': {
       const runtime = await bindReady(device, plan.use);
       return {
         ...selectActiveAppSnapshot(runtime),
         accessibilityAudit: runtime.operations.accessibilityAudit,
       };
     }
-    case 'native-audit-without-active-app': {
+    case 'audit-without-active-app': {
       const runtime = await bindReady(device, plan.use);
       return {
         ...selectSnapshotWithoutActiveApp(runtime),
@@ -469,7 +469,6 @@ async function snapshotPlanUnavailableResponse(
   // find's combined plans add the mutating-leg operations: their refusal is the same
   // owner-fact wording every runtime admission produces, not the session hint below.
   if (
-    params.operation === 'accessibilityAudit' ||
     params.operation === 'captureSnapshot' ||
     params.operation === 'focusPoint' ||
     params.operation === 'typeText'

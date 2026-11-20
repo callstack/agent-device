@@ -552,27 +552,31 @@ export const snapshotRuntimePlanUses = Object.freeze([
   captureSnapshotWithCustomActionsWithoutActiveAppUse,
 ] as const);
 
-const nativeAuditUse = defineUse({ required: ['captureSnapshot', 'accessibilityAudit'] });
-const nativeAuditWithoutActiveAppUse = defineUse({
-  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'accessibilityAudit'],
+/**
+ * `audit` reports heuristic findings from one capture on every owner. The owner's native
+ * accessibility audit is CONDITIONAL (ADR 0019 §2): an owner that advertises it adds its findings
+ * to the same answer, and an owner that does not answers with the heuristic findings alone.
+ */
+const auditUse = defineUse({
+  required: ['captureSnapshot'],
+  conditional: ['accessibilityAudit'],
 });
-export const auditRuntimePlanUses = Object.freeze([
-  captureSnapshotUse,
-  captureSnapshotWithoutActiveAppUse,
-  nativeAuditUse,
-  nativeAuditWithoutActiveAppUse,
-] as const);
+const auditWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+  conditional: ['accessibilityAudit'],
+});
+export const auditRuntimePlanUses = Object.freeze([auditUse, auditWithoutActiveAppUse] as const);
 
 export type SnapshotRuntimePlan =
   | Readonly<{
-      kind: 'native-audit-active-app';
+      kind: 'audit-active-app';
       operation: 'captureSnapshot';
-      use: typeof nativeAuditUse;
+      use: typeof auditUse;
     }>
   | Readonly<{
-      kind: 'native-audit-without-active-app';
+      kind: 'audit-without-active-app';
       operation: 'captureSnapshotWithoutActiveApp';
-      use: typeof nativeAuditWithoutActiveAppUse;
+      use: typeof auditWithoutActiveAppUse;
     }>
   | Readonly<{
       kind: 'active-app';
@@ -707,20 +711,16 @@ function selectorCapturePlan<const Intent extends SelectorCaptureRuntimeIntent>(
 /** Selects one owner-fact-backed capture plan from normalized command/session intent. */
 export function resolveSnapshotRuntimePlan(input: {
   customActions: boolean;
-  nativeAudit?: boolean;
+  audit?: boolean;
   hasActiveApp: boolean;
 }): SnapshotRuntimePlan {
-  if (input.nativeAudit) {
+  if (input.audit) {
     return input.hasActiveApp
-      ? Object.freeze({
-          kind: 'native-audit-active-app',
-          operation: 'captureSnapshot',
-          use: nativeAuditUse,
-        })
+      ? Object.freeze({ kind: 'audit-active-app', operation: 'captureSnapshot', use: auditUse })
       : Object.freeze({
-          kind: 'native-audit-without-active-app',
+          kind: 'audit-without-active-app',
           operation: 'captureSnapshotWithoutActiveApp',
-          use: nativeAuditWithoutActiveAppUse,
+          use: auditWithoutActiveAppUse,
         });
   }
   if (!input.customActions) {

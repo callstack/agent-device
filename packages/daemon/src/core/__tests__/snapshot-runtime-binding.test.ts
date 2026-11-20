@@ -204,45 +204,26 @@ test('snapshot and diff shorten idle only when every observation guard still hol
   }
 });
 
-test.each([
-  { ...IOS_SIMULATOR, platform: 'android', appleOs: undefined, kind: 'emulator' },
-  { ...IOS_SIMULATOR, appleOs: 'tvos', target: 'tv' },
-  { ...IOS_SIMULATOR, appleOs: 'macos', kind: 'device', target: 'desktop' },
-  { ...IOS_SIMULATOR, platform: 'web', appleOs: undefined },
-  { ...IOS_SIMULATOR, kind: 'device', iosPhysicalDeviceBackend: 'coredevice' },
-] as DeviceInfo[])(
-  'native audit refuses unsupported targets before binding: $platform/$appleOs/$kind',
-  async (device) => {
+test('audit binds the heuristic capture alone on an owner without a native audit', async () => {
+  for (const make of [makeAndroidSession, makeIosSession]) {
+    const fixture = snapshotRuntimeFixture();
     const sessionStore = makeSessionStore();
-    sessionStore.publish(
-      'native-audit',
-      makeIosSession('native-audit', { device, appBundleId: 'com.example.app' }),
-    );
-    const bindDevice = vi.fn();
-    const { inspectFacts } = snapshotRuntimeFixture();
+    sessionStore.publish('audit', make('audit', { appBundleId: 'com.example.app' }));
     const resolved = await resolveBoundSnapshotCaptureRuntime(
       {
         createCommandSurface: fakeCreateCommandSurface,
-        platformServices: daemonPlatformServicesFixture(),
-        req: {
-          command: 'audit',
-          session: 'native-audit',
-          positionals: [],
-          token: 'test-token',
-          flags: { nativeAudit: true },
-        },
-        sessionName: 'native-audit',
-        logPath: '/tmp/native-audit.log',
-        inspectFacts,
+        platformServices: fixture.platformServices,
+        req: { command: 'audit', session: 'audit', positionals: [], token: 'test-token' },
+        sessionName: 'audit',
+        logPath: '/tmp/audit.log',
+        inspectFacts: fixture.inspectFacts,
         sessionStore,
-        bindDevice,
+        bindDevice: fixture.bindDevice,
       },
       'audit',
     );
-    expect(resolved).toMatchObject({
-      ok: false,
-      response: { error: { code: 'UNSUPPORTED_OPERATION' } },
-    });
-    expect(bindDevice).not.toHaveBeenCalled();
-  },
-);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) throw new Error('Expected a bound audit capture');
+    expect(resolved.accessibilityAudit).toBeUndefined();
+  }
+});

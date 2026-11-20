@@ -224,9 +224,8 @@ Coverage:
   Audit covers the visible screen only. On a long list, run agent-device scroll down 0.8, then run audit again.
 
 Native checks on iOS 17+:
-  Run agent-device audit --native --platform ios to include Apple's contrast, element detection, hit region, description, and trait checks.
-  Apple's Dynamic Type and clipped-text checks are not run, because they resize the app's text while they run. Use the large text check below.
-  This requires the XCTest runner. Android, TV, macOS, web, and physical devices without the runner refuse --native.
+  On an iOS 17+ target served by the XCTest runner, audit also runs Apple's contrast, element detection, hit region, description, and trait checks. Other targets run the heuristic checks only. Apple's Dynamic Type and clipped-text checks are not run, because they resize the app's text; use the large text check below.
+  The first audit after an install or update builds the runner once, which takes longer. A system alert over the app stops Apple's checks: audit fails with reason native_audit_blocked_by_alert and names the alert. Run agent-device alert accept or agent-device alert dismiss, then run audit again.
   Native findings have source: "native", auditType, description, and rect in snapshot points when Apple supplies an element. A unique frame match includes the snapshot ref, role, and name. Otherwise, match the rect against a fresh snapshot before acting. A finding without a rect names no element: report it without acting on it. A native hitRegion finding on the frame of a small-target finding is left out, because small-target reports that control with its ref and size.
 
 Additional manual checks:

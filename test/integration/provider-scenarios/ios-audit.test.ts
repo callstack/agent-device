@@ -82,6 +82,15 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
   };
 }
 
+/** The native audit `audit` runs after its capture on an XCTest-served iOS target: no issues. */
+const NO_NATIVE_ISSUES: ProviderScenarioProviderEntry = {
+  command: 'ios.runner.accessibilityAudit',
+  deviceId: DEVICE_ID,
+  platform: 'apple',
+  repeat: true,
+  result: { auditIssues: [] },
+};
+
 const TAP_ENTRY: ProviderScenarioProviderEntry = {
   command: 'ios.runner.tap',
   deviceId: DEVICE_ID,
@@ -135,6 +144,7 @@ test('Provider-backed integration audit publishes pinned finding refs and keeps 
       TAP_ENTRY,
       snapshotEntry(FINDING_NODES),
       TAP_ENTRY,
+      NO_NATIVE_ISSUES,
     ],
     async (daemon, tapRequests) => {
       assertRpcOk(await daemon.callCommand('snapshot'));
@@ -179,6 +189,7 @@ test('Provider-backed integration an audit without findings leaves an expired fr
       snapshotEntry(FINDING_NODES),
       TAP_ENTRY,
       snapshotEntry(CLEAN_NODES),
+      NO_NATIVE_ISSUES,
     ],
     async (daemon) => {
       assertRpcOk(await daemon.callCommand('snapshot'));
@@ -231,7 +242,7 @@ test('Provider-backed integration native audit preserves Apple issues beside heu
       snapshotEntry(FINDING_NODES),
     ],
     async (daemon) => {
-      const result = assertRpcOk(await daemon.callCommand('audit', [], { nativeAudit: true }));
+      const result = assertRpcOk(await daemon.callCommand('audit', []));
       assert.equal(nativeCalls, 1);
       assert.equal(order.at(-1), 'audit');
       assert.ok(order.slice(0, -1).every((call) => call === 'snapshot'));
@@ -265,14 +276,9 @@ test('Provider-backed integration native audit preserves Apple issues beside heu
         findings.filter((finding) => finding.kind !== 'native').map((finding) => finding.kind),
         ['small-target', 'missing-name'],
       );
-      const second = assertRpcOk(await daemon.callCommand('audit', [], { nativeAudit: true }));
+      const second = assertRpcOk(await daemon.callCommand('audit', []));
       assert.equal(nativeCalls, 2);
       assert.deepEqual(second.findings, result.findings);
-      const plain = assertRpcOk(await daemon.callCommand('audit'));
-      assert.deepEqual(
-        plain.findings,
-        findings.filter((finding) => finding.kind !== 'native'),
-      );
     },
   );
 });
@@ -299,7 +305,7 @@ test('Provider-backed integration publishes a native-only matched ref without an
       TAP_ENTRY,
     ],
     async (daemon, tapRequests) => {
-      const result = assertRpcOk(await daemon.callCommand('audit', [], { nativeAudit: true }));
+      const result = assertRpcOk(await daemon.callCommand('audit', []));
       assert.deepEqual(result.findings, [
         {
           source: 'native',

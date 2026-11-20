@@ -26,6 +26,14 @@ Output after the change: [read-only-native.txt](read-only-native.txt), 8 warning
 
 A system alert over the app makes Apple's audit fail with `Invalid target app <pid>`; `audit --native` then exits 1. Plain `audit` is not affected.
 
+## Default native checks, the alert refusal, and the build message
+
+Same device, branch-built `node bin/agent-device.mjs`, at the commit that adds this section. The `--native` flag is removed: `audit --native` now exits 1 with `Unknown flag: --native`.
+
+- Plain `audit` on iOS Settings returns the heuristic and native findings together: [default-audit.txt](default-audit.txt), 8 warnings and 1 observation. Warm runs took 1.0–1.8 s.
+- The first `audit` after the runner Swift changed took 29.4 s. The `open` before it printed `Building Apple runner (one-time per agent-device version)...`.
+- With the "Allow “Maps” to use your location?" prompt over Maps (`xcrun simctl privacy <udid> reset location com.apple.Maps`, then `open Maps --relaunch`), `audit` exits 1 with reason `native_audit_blocked_by_alert`, `dispatched: no`, and the hint: [alert-blocked.txt](alert-blocked.txt). After `alert dismiss`, `audit` on the same screen exits 0 with 11 warnings.
+
 The six focused XCTest tests below passed again with the review revision's unit-test runner. Provider scenarios exercise native audit before an explicit snapshot command, capture ordering, repeated native calls, unknown names, and native-only ref publication. The exact final commit and affected-gate receipt are recorded in the PR comment.
 
 ## Final-head capture

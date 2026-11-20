@@ -539,7 +539,7 @@ function auditGuidance(
 export function matchNativeAuditFindings(
   findings: readonly NativeAuditFinding[],
   nodes: readonly SnapshotNode[],
-  heuristicFindings: readonly AuditFinding[] = [],
+  heuristicFindings: readonly AuditFinding[],
 ): NativeAuditFinding[] {
   const smallTargetRects = heuristicFindings.flatMap((finding) =>
     finding.kind === 'small-target' && finding.rect ? [finding.rect] : [],

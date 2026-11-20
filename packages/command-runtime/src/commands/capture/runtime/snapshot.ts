@@ -203,8 +203,8 @@ export const auditSnapshotCommand: RuntimeCommand<
     pixelDensity: capture.annotations.androidSnapshot?.pixelDensity,
     truncated: snapshotTruncationForResult(capture.snapshot),
   });
-  const nativeFindings = options.nativeAudit
-    ? await requireAccessibilityAudit(runtime)({
+  const nativeFindings = runtime.backend.accessibilityAudit
+    ? await runtime.backend.accessibilityAudit({
         appBundleId: capture.result.appBundleId ?? capture.session?.appBundleId,
         requestId: options.requestId,
         signal: options.signal ?? runtime.signal,
@@ -220,14 +220,6 @@ export const auditSnapshotCommand: RuntimeCommand<
     ...(capture.warnings.length > 0 ? { warnings: capture.warnings } : {}),
   };
 };
-
-function requireAccessibilityAudit(runtime: AgentDeviceRuntime) {
-  if (runtime.backend.accessibilityAudit) return runtime.backend.accessibilityAudit;
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'Native accessibility audit is not supported by this backend',
-  );
-}
 
 async function captureRuntimeSnapshot(
   runtime: AgentDeviceRuntime,

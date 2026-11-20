@@ -39,6 +39,10 @@ let readOnlyAuditTypes: XCUIAccessibilityAuditType = [
 #endif
 
 extension RunnerTests {
+  static let auditAlertProbeTimeout: TimeInterval = 2
+  static let auditBlockedByAlertHint =
+    "Run agent-device alert accept or agent-device alert dismiss, then run agent-device audit again."
+
   @MainActor
   func executeAccessibilityAudit(app: XCUIApplication) -> Response {
 #if os(iOS)
@@ -56,6 +60,16 @@ extension RunnerTests {
         }
         return Response(ok: true, data: DataPayload(auditIssues: issues))
       } catch {
+        // Apple's audit refuses an app that a system alert covers. Name the alert, so the caller
+        // can answer it and run the audit again.
+        let deadline = Date().addingTimeInterval(Self.auditAlertProbeTimeout)
+        if case .resolved(let alert) = resolveBlockingSystemModal(deadline: deadline) {
+          return Response(ok: false, error: ErrorPayload(
+            code: RunnerWireErrorCode.nativeAuditBlockedByAlert,
+            message: "A system alert covers the app, so the accessibility audit did not run: \(preferredSystemModalTitle(alert.root))",
+            hint: Self.auditBlockedByAlertHint
+          ))
+        }
         return Response(ok: false, error: ErrorPayload(
           code: "COMMAND_FAILED", message: "Native accessibility audit failed: \(error.localizedDescription)"
         ))

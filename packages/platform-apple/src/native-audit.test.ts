@@ -6,7 +6,8 @@ import {
   TVOS_SIMULATOR,
   MACOS_DEVICE,
 } from '@agent-device/test-kit';
-import { withAppleRunnerProvider } from '@agent-device/apple-runner';
+import { withAppleRunnerProvider, type AppleRunnerProvider } from '@agent-device/apple-runner';
+import { AppError } from '@agent-device/kernel/errors';
 import { recordingRunnerProvider } from './__tests__/recording-runner-provider.ts';
 import { collectNativeAudit } from './native-audit.ts';
 import { isRunnerServedIos } from './native-audit-support.ts';
@@ -106,4 +107,37 @@ test('preserves new runner type names as unknown issues', async () => {
     'unknown:futureAppleCheck',
     'unknown:1024',
   ]);
+});
+
+test('a runner that cannot run the native audit contributes no findings', async () => {
+  const provider: AppleRunnerProvider = {
+    hasLiveSession: () => true,
+    runCommand: async () => {
+      throw new AppError('UNSUPPORTED_OPERATION', 'Native accessibility audit requires iOS 17+', {
+        runnerErrorCode: 'NATIVE_AUDIT_UNAVAILABLE',
+        reason: 'native_audit_unavailable',
+      });
+    },
+  };
+  const findings = await withAppleRunnerProvider(provider, { deviceId: IOS_SIMULATOR.id }, () =>
+    collectNativeAudit(IOS_SIMULATOR, {}, new AbortController().signal),
+  );
+  expect(findings).toEqual([]);
+});
+
+test('another runner failure of the native audit is not swallowed', async () => {
+  const provider: AppleRunnerProvider = {
+    hasLiveSession: () => true,
+    runCommand: async () => {
+      throw new AppError('COMMAND_FAILED', 'A system alert covers the app', {
+        runnerErrorCode: 'NATIVE_AUDIT_BLOCKED_BY_ALERT',
+        reason: 'native_audit_blocked_by_alert',
+      });
+    },
+  };
+  await expect(
+    withAppleRunnerProvider(provider, { deviceId: IOS_SIMULATOR.id }, () =>
+      collectNativeAudit(IOS_SIMULATOR, {}, new AbortController().signal),
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'native_audit_blocked_by_alert' } });
 });

@@ -31,6 +31,7 @@ extension RunnerTests {
     static let hardwareControlUnavailable = "HARDWARE_CONTROL_UNAVAILABLE"
     static let inAppBackControlUnavailable = "IN_APP_BACK_CONTROL_UNAVAILABLE"
     static let nativeAuditUnavailable = "NATIVE_AUDIT_UNAVAILABLE"
+    static let nativeAuditBlockedByAlert = "NATIVE_AUDIT_BLOCKED_BY_ALERT"
     static let appScreenWindowUnresolved = "APP_SCREEN_WINDOW_UNRESOLVED"
     static let appScreenUnresolved = "APP_SCREEN_UNRESOLVED"
     static let appScreenCaptureUnrenderable = "APP_SCREEN_CAPTURE_UNRENDERABLE"

@@ -32,13 +32,16 @@ test('diff descriptor reuses the complete snapshot plan uses', () => {
   });
 });
 
-test('audit declares native capture plans beside heuristic-only plans', () => {
+test('audit requires the capture and takes the native audit when the owner advertises it', () => {
   const audit = commandDescriptors.find(({ name }) => name === 'audit');
   expect(audit?.platformExecution).toEqual({ kind: 'device-runtime', uses: auditRuntimePlanUses });
-  expect(auditRuntimePlanUses.map(({ required }) => required)).toEqual([
-    ['captureSnapshot'],
-    ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-    ['captureSnapshot', 'accessibilityAudit'],
-    ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'accessibilityAudit'],
+  expect(
+    auditRuntimePlanUses.map(({ required, conditional }) => ({ required, conditional })),
+  ).toEqual([
+    { required: ['captureSnapshot'], conditional: ['accessibilityAudit'] },
+    {
+      required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+      conditional: ['accessibilityAudit'],
+    },
   ]);
 });

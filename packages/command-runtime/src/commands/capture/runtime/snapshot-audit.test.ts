@@ -48,7 +48,7 @@ test('runtime audit appends native issues without altering heuristic findings or
     sessions: { get: () => undefined, set: () => {} },
     policy: localCommandPolicy(),
   });
-  const result = await device.capture.auditSnapshot({ nativeAudit: true });
+  const result = await device.capture.auditSnapshot({});
   assert.deepEqual(calls, ['snapshot', 'audit']);
   assert.equal(result.findings.filter((finding) => finding.kind === 'small-target').length, 1);
   assert.deepEqual(

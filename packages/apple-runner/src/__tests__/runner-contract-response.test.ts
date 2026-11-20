@@ -119,3 +119,21 @@ test('native audit availability uses the runner code and preserves the typed rea
   assert.equal(untyped.code, 'COMMAND_FAILED');
   assert.equal(untyped.details?.reason, undefined);
 });
+
+test('an audit a system alert blocked keeps the runner hint and proves no effect', () => {
+  const hint =
+    'Run agent-device alert accept or agent-device alert dismiss, then run agent-device audit again.';
+  const blocked = buildRunnerResponseError({
+    ok: false,
+    error: {
+      code: 'NATIVE_AUDIT_BLOCKED_BY_ALERT',
+      message:
+        'A system alert covers the app, so the accessibility audit did not run: Allow location?',
+      hint,
+    },
+  });
+  assert.equal(blocked.code, 'COMMAND_FAILED');
+  assert.equal(blocked.details?.reason, 'native_audit_blocked_by_alert');
+  assert.equal(blocked.details?.dispatched, 'no');
+  assert.equal(blocked.details?.hint, hint);
+});

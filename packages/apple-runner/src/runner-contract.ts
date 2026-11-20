@@ -420,12 +420,20 @@ export const RUNNER_ERROR_CODES = {
     reason: 'in_app_back_control_unavailable',
     diagnosticOnly: {},
   },
-  // `audit --native` on a target whose runner cannot run Apple's audit: an OS older than iOS 17, or a
+  // `audit` asked a runner that cannot run Apple's audit for it: an OS older than iOS 17, or a
   // platform other than iOS. The row keeps `unknown`, the disclosure this refusal had before the table.
   NATIVE_AUDIT_UNAVAILABLE: {
     dispatched: 'unknown',
     reason: 'native_audit_unavailable',
     diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
+  },
+  // Apple's audit failed while a system alert covered the app. The runner names the alert and its
+  // hint tells the caller to answer it. The audit types the runner requests change nothing in the
+  // app, so the reply proves no effect reached it.
+  NATIVE_AUDIT_BLOCKED_BY_ALERT: {
+    dispatched: 'no',
+    reason: 'native_audit_blocked_by_alert',
+    diagnosticOnly: {},
   },
   // The four runner codes meaning "this capture did not happen" (#2728), covering the display, the
   // image, and the panel. The runner emits them from every consumer of its one screen-capture helper —
@@ -975,4 +983,15 @@ function readSequenceResults(value: unknown): RunnerSequenceStepResult[] {
         typeof record.gestureEndUptimeMs === 'number' ? record.gestureEndUptimeMs : undefined,
     };
   });
+}
+
+/**
+ * True when the runner answered that it cannot run Apple's accessibility audit
+ * (`NATIVE_AUDIT_UNAVAILABLE`): its OS is older than iOS 17, or it is not an iOS runner.
+ */
+export function isRunnerNativeAuditUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.runnerErrorCode === ('NATIVE_AUDIT_UNAVAILABLE' satisfies RunnerTableErrorCode)
+  );
 }

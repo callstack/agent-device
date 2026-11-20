@@ -23,21 +23,21 @@ const button: SnapshotNode = {
 };
 
 test('matches native point frames within layout tolerance to one named snapshot ref', () => {
-  expect(matchNativeAuditFindings([issue], [{ ...button, rect: { ...rect, x: 10.3 } }])).toEqual([
-    { ...issue, ref: '@e1', role: 'button', label: 'Save' },
-  ]);
+  expect(
+    matchNativeAuditFindings([issue], [{ ...button, rect: { ...rect, x: 10.3 } }], []),
+  ).toEqual([{ ...issue, ref: '@e1', role: 'button', label: 'Save' }]);
 });
 
 test('leaves ambiguous, missing and different frames unbound', () => {
-  expect(matchNativeAuditFindings([issue], [button, { ...button, index: 1, ref: 'e2' }])).toEqual([
-    issue,
-  ]);
-  expect(matchNativeAuditFindings([issue], [{ ...button, rect: { ...rect, x: 11 } }])).toEqual([
+  expect(
+    matchNativeAuditFindings([issue], [button, { ...button, index: 1, ref: 'e2' }], []),
+  ).toEqual([issue]);
+  expect(matchNativeAuditFindings([issue], [{ ...button, rect: { ...rect, x: 11 } }], [])).toEqual([
     issue,
   ]);
   const { rect: omitted, ...withoutFrame } = issue;
   void omitted;
-  expect(matchNativeAuditFindings([withoutFrame], [button])).toEqual([withoutFrame]);
+  expect(matchNativeAuditFindings([withoutFrame], [button], [])).toEqual([withoutFrame]);
 });
 
 test('drops a native hit region that a heuristic small-target finding already reports', () => {

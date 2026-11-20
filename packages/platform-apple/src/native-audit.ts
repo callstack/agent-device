@@ -5,22 +5,32 @@ import type {
 } from '@agent-device/contracts/capture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { isRunnerNativeAuditUnavailableError } from '@agent-device/apple-runner';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 
+/**
+ * Apple's native findings for the session app. A runner on an OS older than iOS 17 has no native
+ * audit, so it contributes no findings and `audit` answers with its heuristic findings alone.
+ */
 export async function collectNativeAudit(
   device: DeviceInfo,
   input: AccessibilityAuditInput,
   signal: AbortSignal,
 ): Promise<NativeAuditFinding[]> {
-  const data = await runAppleRunnerCommand(
-    device,
-    {
-      command: 'accessibilityAudit',
-      appBundleId: input.appBundleId,
-    },
-    { ...input, signal: input.signal ? AbortSignal.any([signal, input.signal]) : signal },
-  );
-  return mapNativeAuditIssues(data);
+  try {
+    const data = await runAppleRunnerCommand(
+      device,
+      {
+        command: 'accessibilityAudit',
+        appBundleId: input.appBundleId,
+      },
+      { ...input, signal: input.signal ? AbortSignal.any([signal, input.signal]) : signal },
+    );
+    return mapNativeAuditIssues(data);
+  } catch (error) {
+    if (isRunnerNativeAuditUnavailableError(error)) return [];
+    throw error;
+  }
 }
 
 /**

@@ -19,7 +19,6 @@ export async function dispatchSnapshotAuditViaRuntime(
       const result = await agentRuntime.capture.auditSnapshot({
         session: sessionName,
         target: device.target,
-        nativeAudit: params.req.flags?.nativeAudit,
       });
       const session = getSession();
       const refs = result.findings.flatMap((finding) => (finding.ref ? [finding.ref] : []));

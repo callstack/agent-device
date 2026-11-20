@@ -607,7 +607,7 @@ test('ensureXctestrunArtifact emits build progress on cache miss', async () => {
     {
       type: 'command',
       status: 'progress',
-      message: 'Building Apple runner...',
+      message: 'Building Apple runner (one-time per agent-device version)...',
     },
   ]);
 });

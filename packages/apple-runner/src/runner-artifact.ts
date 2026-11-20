@@ -677,7 +677,7 @@ async function buildXctestrunArtifact(params: {
   emitRequestProgress({
     type: 'command',
     status: 'progress',
-    message: 'Building Apple runner...',
+    message: 'Building Apple runner (one-time per agent-device version)...',
   });
   await buildRunnerXctestrun(device, projectPath, derived, options, buildTimeoutMs);
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
