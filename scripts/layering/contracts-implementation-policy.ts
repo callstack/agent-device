@@ -1,10 +1,11 @@
 // Catches: packages/contracts production source calling host, process, or timer mechanics
-//   directly — contracts owns vocabulary only, and a mechanic call there means an adapter's
-//   concern leaked into the shared-vocabulary package every zone imports, invisible to
-//   consumers because the call itself is fully typed and legal Node code.
+//   directly, or a gesture vocabulary module declaring a function — contracts owns vocabulary
+//   only, and a mechanic call there means an adapter's concern leaked into the shared-vocabulary
+//   package every zone imports, invisible to consumers because the call itself is fully typed
+//   and legal Node code.
 // Evidence: 8f98d23f14 (#1750) gave R18 its own number after an id collision; 057ab1c82d (#1746)
 //   fixed double-reporting in this same authority check.
-// Cost: 387 LOC (226 rule + 161 test).
+// Cost: 451 LOC (260 rule + 191 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that contracts owning
 //   vocabulary only no longer matters. package.json cannot replace it: node: built-ins are not
 //   dependencies and timer globals need no import. The A4 spike found `types: []` would break
@@ -26,6 +27,17 @@ const FORBIDDEN_TIMER_CALLS = new Set([
   'setImmediate',
   'setInterval',
   'setTimeout',
+]);
+/**
+ * The gesture payload and plan vocabulary. Reading, normalization, and plan geometry over it belong
+ * in @agent-device/gestures, so these modules hold types and constants and no function at all.
+ */
+const GESTURE_VOCABULARY_MODULE =
+  /^packages\/contracts\/src\/gesture-(?:input|normalization|plan)(?:[-.][^/]*)?\.ts$/;
+const FUNCTION_NODE_TYPES = new Set([
+  'ArrowFunctionExpression',
+  'FunctionDeclaration',
+  'FunctionExpression',
 ]);
 const IOS_SNAPSHOT_CONTRACT = 'packages/contracts/src/ios-snapshot.ts';
 /**
@@ -69,6 +81,8 @@ export function contractsImplementationAuthorityViolations(
     if (networkTrafficViolation) violations.push(networkTrafficViolation);
     const iosSnapshotViolation = iosSnapshotContractViolation(file.path, file.source, parsed);
     if (iosSnapshotViolation) violations.push(iosSnapshotViolation);
+    const gestureViolation = gestureVocabularyViolation(file.path, file.source, parsed.program);
+    if (gestureViolation) violations.push(gestureViolation);
     for (const site of moduleSpecifiers(parsed.module, file.source)) {
       if (!FORBIDDEN_HOST_MODULES.test(site.spec)) continue;
       violations.push(
@@ -118,6 +132,26 @@ function iosSnapshotContractViolation(
     file,
     disallowedImport.line,
     `iOS snapshot contracts may import only kernel vocabulary and the producer registry; '${disallowedImport.spec}' would bring planning algorithms or provider/lifecycle implementation into contracts`,
+  );
+}
+
+function gestureVocabularyViolation(
+  file: string,
+  source: string,
+  program: unknown,
+): LayeringViolation | undefined {
+  if (!GESTURE_VOCABULARY_MODULE.test(file)) return undefined;
+  let firstFunction: number | undefined;
+  visit(program, (node) => {
+    if (!FUNCTION_NODE_TYPES.has(String(node.type))) return;
+    const start = Number(node.start ?? 0);
+    if (firstFunction === undefined || start < firstFunction) firstFunction = start;
+  });
+  if (firstFunction === undefined) return undefined;
+  return violation(
+    file,
+    lineAt(source, firstFunction),
+    'contracts gesture modules own types and constants only; gesture reading, normalization, and plan algorithms belong in @agent-device/gestures',
   );
 }
 
