@@ -81,7 +81,7 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
     screenshotDiff: objectSchema(
       {
         changedFromBefore: booleanSchema(
-          'Whether the frame dimensions differed or the compared pixels differed. true can report a dimension change alone: a rotation, for example. changedPixelRatio is absent then, because no pixels were compared.',
+          'Whether the frame dimensions differed or the compared pixels differed; changedPixelRatio is absent on a dimension change.',
         ),
         changedPixelRatio: numberSchema(
           'Share of compared pixels that changed, when frame dimensions match.',

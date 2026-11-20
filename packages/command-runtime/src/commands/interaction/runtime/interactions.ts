@@ -9,6 +9,7 @@ import type {
   ScreenshotVerification,
 } from '@agent-device/contracts/interaction';
 import { isSemanticTouchTarget } from '@agent-device/selectors/touch-semantics';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
@@ -312,7 +313,7 @@ async function tapRefPlanCommand(
   // flag instead of silently dropping the pair it promises.
   if (observation.verify) {
     throw new AppError('INVALID_ARGS', 'A multi-ref press plan cannot carry --verify', {
-      reason: 'verify-unsupported-on-ref-plan',
+      reason: INTERACTION_ERROR_REASONS.verifyUnsupportedOnRefPlan,
       hint: 'Run --verify on a single press; the plan already dispatches tree-visible refs.',
     });
   }
