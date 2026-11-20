@@ -6,7 +6,15 @@ import {
   type ComponentType,
   type RefObject,
 } from 'react';
-import { Image, Platform, Pressable, Text, View, type GestureResponderEvent } from 'react-native';
+import {
+  Animated,
+  Image,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 import {
   Directions,
   FlingGestureHandler,
@@ -96,6 +104,10 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
   const [reorderOrder, setReorderOrder] = useState<string[]>(initialReorderOrder);
   const [reorderHoldActivated, setReorderHoldActivated] = useState(false);
   const [reorderLastDy, setReorderLastDy] = useState(0);
+  const [reorderDrag, setReorderDrag] = useState<{ label: string; dy: number } | null>(null);
+  const reorderPreview = reorderDrag
+    ? movedBy(reorderOrder, reorderDrag.label, Math.round(reorderDrag.dy / reorderRowHeightPx))
+    : reorderOrder;
   const [panDurationStatus, setPanDurationStatus] = useState('pending');
   const [multiTap, setMultiTap] = useState<MultiTapState>(initialMultiTap);
   const multiTapRoundContactsRef = useRef(0);
@@ -503,27 +515,29 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
         </View>
       </GestureDetector>
 
-      <View testID="reorder-list">
-        {reorderOrder.map((label) => (
+      <View style={{ height: reorderOrder.length * reorderRowHeightPx }} testID="reorder-list">
+        {initialReorderOrder.map((label) => (
           <ReorderRow
+            dragDy={reorderDrag?.label === label ? reorderDrag.dy : null}
+            index={reorderPreview.indexOf(label)}
             key={label}
             label={label}
-            onHoldActivated={() => setReorderHoldActivated(true)}
-            onMoveDy={(dy) => setReorderLastDy(dy)}
-            onSwap={(direction) =>
-              setReorderOrder((current) => {
-                const index = current.indexOf(label);
-                const target = index + direction;
-                if (index < 0 || target < 0 || target >= current.length) {
-                  return current;
-                }
-                const next = [...current];
-                next[index] = current[target]!;
-                next[target] = label;
-                return next;
-              })
+            onDrag={(dy) => {
+              setReorderLastDy(dy);
+              setReorderDrag({ label, dy });
+            }}
+            onDragEnd={() => setReorderDrag(null)}
+            onDrop={(dy) =>
+              setReorderOrder((current) =>
+                movedBy(current, label, Math.round(dy / reorderRowHeightPx)),
+              )
             }
+            onHoldActivated={() => {
+              setReorderHoldActivated(true);
+              setReorderDrag({ label, dy: 0 });
+            }}
             pageScrollRef={props.pageScrollRef}
+            startIndex={reorderOrder.indexOf(label)}
           />
         ))}
       </View>
@@ -542,34 +556,78 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
 
 /**
  * One reorderable row. The handle is a labelled button, so it carries an @ref; it starts
- * dragging only after a hold and then keeps the touch from the page scroll view.
+ * dragging only after a hold and then keeps the touch from the page scroll view. While it is
+ * dragged the row lifts and follows the touch, and the other rows slide to the order a release
+ * would commit. The rows keep their place in the view tree and move by transform only: moving
+ * the dragged row's view mid-drag would cancel the touch.
  */
 function ReorderRow(props: {
+  /** The drag travel while this row is the one being dragged, otherwise null. */
+  dragDy: number | null;
+  /** Where the row sits in the order a release would commit. */
+  index: number;
   label: string;
   pageScrollRef: PageScrollRef;
+  /** Where the row sat when the drag started. */
+  startIndex: number;
+  onDrag: (dy: number) => void;
+  /** The touch is over, whether or not it became a drag. */
+  onDragEnd: () => void;
+  onDrop: (dy: number) => void;
   onHoldActivated: () => void;
-  onMoveDy: (dy: number) => void;
-  onSwap: (direction: 1 | -1) => void;
 }) {
   const colors = useAppColors();
   const styles = createGestureLabStyles(colors);
-  // A handle the way sortable-list libraries build it: a native pan that activates after a
-  // hold and then owns the touch, so the surrounding scroll view cannot take the drag back.
+  const dragging = props.dragDy !== null;
+  const offsetY = useRef(new Animated.Value(props.index * reorderRowHeightPx)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (props.dragDy !== null) {
+      offsetY.setValue(
+        clamp(
+          props.startIndex * reorderRowHeightPx + props.dragDy,
+          0,
+          (initialReorderOrder.length - 1) * reorderRowHeightPx,
+        ),
+      );
+      return;
+    }
+    Animated.spring(offsetY, {
+      bounciness: 4,
+      speed: 20,
+      toValue: props.index * reorderRowHeightPx,
+      useNativeDriver: true,
+    }).start();
+  }, [offsetY, props.dragDy, props.index, props.startIndex]);
+
+  useEffect(() => {
+    Animated.spring(lift, { toValue: dragging ? 1 : 0, useNativeDriver: true }).start();
+  }, [dragging, lift]);
+
   const handleGesture = Gesture.Pan()
     .activateAfterLongPress(reorderHoldArmMs)
     .runOnJS(true)
     // The builder types this ref as a component type; at runtime it takes the scroll view instance.
     .blocksExternalGesture(props.pageScrollRef as unknown as RefObject<ComponentType | null>)
     .onStart(() => props.onHoldActivated())
-    .onUpdate((event) => props.onMoveDy(event.translationY))
-    // The order changes on release: moving the row's view mid-drag would cancel the touch.
-    .onEnd((event) => {
-      const steps = Math.round(event.translationY / reorderRowHeightPx);
-      for (let step = 0; step < Math.abs(steps); step += 1) props.onSwap(steps > 0 ? 1 : -1);
-    });
+    .onUpdate((event) => props.onDrag(event.translationY))
+    .onEnd((event) => props.onDrop(event.translationY))
+    .onFinalize(() => props.onDragEnd());
 
   return (
-    <View style={styles.reorderRow}>
+    <Animated.View
+      style={[
+        styles.reorderRow,
+        dragging && styles.reorderRowDragging,
+        {
+          transform: [
+            { translateY: offsetY },
+            { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) },
+          ],
+        },
+      ]}
+    >
       {/* The handle leads the row: the dev client's floating Tools button covers the right edge. */}
       <GestureDetector gesture={handleGesture}>
         <View
@@ -590,8 +648,16 @@ function ReorderRow(props: {
       <Text style={styles.reorderLabel} testID={`reorder-label-${props.label}`}>
         {props.label}
       </Text>
-    </View>
+    </Animated.View>
   );
+}
+
+/** `order` with `label` moved `steps` places, stopping at either end. */
+function movedBy(order: readonly string[], label: string, steps: number): string[] {
+  const from = order.indexOf(label);
+  const next = order.filter((entry) => entry !== label);
+  next.splice(clamp(from + steps, 0, order.length - 1), 0, label);
+  return next;
 }
 
 function clamp(value: number, min: number, max: number): number {
