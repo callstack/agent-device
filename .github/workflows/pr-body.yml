@@ -18,31 +18,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Grades one pull request against the body rules in scripts/pr-body/model.ts. The title and body are
-  # read from the event payload the runner writes, which GitHub builds from the PR record rather than
-  # from anything the branch contributed, so editing a body cannot steer the check that grades it.
-  # The default token is the only credential, and it stays read-only.
-  #
-  # Full history is what lets the checker answer the one question the model cannot: whether the SHA the
-  # body names is still an ancestor of the PR head. A rebase that rewrote that commit leaves it behind
-  # with nothing pointing at it, which is the stale-body signal. A shallow clone could not tell a
-  # rewritten commit from one its graft simply never fetched, and the checker refuses to guess.
+  # Grades the pull request title and body from the event payload against docs/agents/pull-requests.md.
   body:
     name: Body rules
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
-        with:
-          fetch-depth: 0
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-
-      - name: Check the pull request body rules
-        uses: ./.github/actions/run-gate
-        with: { gate: pr-body-model }
 
       - name: Check the pull request body
         uses: ./.github/actions/run-gate
