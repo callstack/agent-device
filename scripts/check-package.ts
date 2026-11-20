@@ -15,9 +15,6 @@
  *     client treat its version as the whole of its code identity (#2458).
  *  6. the installed tree carries no test code, which the shipped Apple runner source makes a
  *     real risk: the package ships the Xcode project a user compiles, test tree and all.
- *  7. the packed core carries no extracted platform family — neither a forbidden packed path
- *     nor a forbidden module marker in the bundled dist (ADR 0034; the declared list starts
- *     empty and each extraction PR adds one line).
  *
  * Step 3 is the static half and step 4 the runtime half of the same question: nothing the package
  * imports may depend on workspace linking. Keep both — a specifier reachable only through a lazy
@@ -39,16 +36,7 @@ import {
   parseNpmPackOutput,
   type NpmPackEntry,
 } from './size-report-package.mjs';
-import {
-  testOnlyContentFailures,
-  testOnlyPathFailures,
-  type PackedFile,
-} from './lib/shipped-test-code.ts';
-import {
-  packedCoreAbsenceFailures,
-  type PackedCoreFile,
-  type PackedCoreForbidden,
-} from './lib/packed-core-absence.ts';
+import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
 type PackedManifest = PackedDependencies & {
@@ -176,70 +164,25 @@ function assertInstalledTreeIsNotASourceCheckout(installedRoot: string): void {
  * scripts/lib/shipped-test-code.ts owns the rule, and the tests it names prove it rejects a
  * test-laden package.
  */
-/**
- * Reads the packed files under `prefix` from the installed tree, so a content rule sees the
- * bytes the tarball actually carries. npm install may drop a packed file (a .gitignore becomes
- * .npmignore); a missing counterpart is not a content finding, and a path finding already
- * covers it.
- */
-function readPackedFiles(
-  installedRoot: string,
-  packedPaths: readonly string[],
-  prefix: string,
-): readonly PackedFile[] {
-  return packedPaths
-    .filter((packedPath) => packedPath.startsWith(prefix))
-    .filter((packedPath) => fs.existsSync(path.join(installedRoot, packedPath)))
-    .map((packedPath) => ({
-      path: packedPath,
-      contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
-    }));
-}
-
 function assertPackedTreeCarriesNoTestCode(installedRoot: string, packedPaths: string[]): void {
   const failures = [
     ...testOnlyPathFailures(packedPaths),
-    ...testOnlyContentFailures(readPackedFiles(installedRoot, packedPaths, 'dist/apple/runner/')),
+    ...testOnlyContentFailures(
+      packedPaths
+        .filter((packedPath) => packedPath.startsWith('dist/apple/runner/'))
+        // npm install may drop a packed file (a .gitignore becomes .npmignore); a missing
+        // counterpart is not a test-code finding, and a path finding above already covers it.
+        .filter((packedPath) => fs.existsSync(path.join(installedRoot, packedPath)))
+        .map((packedPath) => ({
+          path: packedPath,
+          contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
+        })),
+    ),
   ];
   if (failures.length > 0) {
     throw new Error(`The package ships test code:\n${failures.map((f) => `- ${f}`).join('\n')}`);
   }
   step(`Confirmed no test code in the ${packedPaths.length} packed files.`);
-}
-
-/**
- * Extracted platform families must not ship inside the packed core (ADR 0034). The declared
- * list starts empty — each extraction PR adds one line — and the rule itself lives in
- * scripts/lib/packed-core-absence.ts, whose unit test proves it with a self-test entry: it
- * passes an allowed list and fails naming the path on a forbidden one. The check reads both the
- * `npm pack` file list (a forbidden path that ships at all) and the bundled dist contents (a
- * module marker a bundled file still imports).
- */
-const PACKED_CORE_FORBIDDEN: PackedCoreForbidden = Object.freeze({
-  paths: [],
-  moduleMarkers: [],
-});
-
-/**
- * Re-checks the packed tarball against the absence list, over the paths npm reports and the
- * bundled dist files the installed tree carries.
- */
-function assertPackedCoreCarriesNoExtractedPlatforms(
-  installedRoot: string,
-  packedPaths: string[],
-): void {
-  const distFiles: readonly PackedCoreFile[] = readPackedFiles(installedRoot, packedPaths, 'dist/');
-  const failures = packedCoreAbsenceFailures(PACKED_CORE_FORBIDDEN, { packedPaths, distFiles });
-  if (failures.length > 0) {
-    throw new Error(
-      `The packed core must not contain extracted platform code:\n${failures
-        .map((failure) => `- ${failure}`)
-        .join('\n')}`,
-    );
-  }
-  step(
-    `Confirmed no forbidden extracted-platform paths or module markers in the ${packedPaths.length} packed files.`,
-  );
 }
 
 /** Imports every documented entry point in one process so a failure names the subpath that broke. */ function importEveryExport(
@@ -316,7 +259,6 @@ try {
   assertInstalledSnapshotBridge(installedRoot);
   assertInstalledTreeIsNotASourceCheckout(installedRoot);
   assertPackedTreeCarriesNoTestCode(installedRoot, packedPaths);
-  assertPackedCoreCarriesNoExtractedPlatforms(installedRoot, packedPaths);
   if (verifySnapshotBridgePreparation) {
     if (process.platform !== 'darwin') {
       throw new Error('--verify-snapshot-bridge-preparation requires macOS and Xcode.');

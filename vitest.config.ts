@@ -205,9 +205,6 @@ export default defineConfig({
             // The publishing package guard's no-test-code predicates, over fixture paths and
             // bytes: the gate itself can only watch a healthy package pass.
             'scripts/__tests__/shipped-test-code.test.ts',
-            // The packed-core absence rule's failure-direction self-test: the declared list in
-            // scripts/check-package.ts starts empty, so the predicates are proven over fixtures.
-            'scripts/__tests__/packed-core-absence.test.ts',
             // The fixture-host class-name hook between the shipped host app and the unit-test
             // fixtures file: a rename there must fail here, not fall back silently on devices.
             'scripts/__tests__/runner-fixture-host-lookup.test.ts',

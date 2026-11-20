@@ -22,6 +22,7 @@ import {
   createEmbeddedProviderRuntimeComposition,
 } from './provider-device-runtimes.ts';
 import { readDaemonProviderCredentials } from './provider-credential-fingerprint.ts';
+import { readVersion } from '@agent-device/host-kit/version';
 import { getInteractor } from './core/interactors.ts';
 import {
   androidObservation,
@@ -126,8 +127,12 @@ export async function composeDaemonRuntimeDeps(
       providerComposition.resolveReplayExecution,
     );
     const providerDeviceRuntimes = [...providerComposition.runtimes];
+    // The typed absent-family outcome names the plugin release this core can install, so the
+    // composition that knows its own version passes it to the registries it composes.
+    const coreVersion = readVersion();
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
+      coreVersion,
       assertShutdownAllowed,
       providerRuntimes: providerDeviceRuntimes,
       providerModules: providerComposition.platformModules,
@@ -152,6 +157,7 @@ export async function composeDaemonRuntimeDeps(
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
       host,
+      coreVersion,
       providerRuntimeProviders.deviceInventorySource,
     );
     // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.

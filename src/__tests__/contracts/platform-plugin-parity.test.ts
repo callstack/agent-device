@@ -14,9 +14,10 @@ import {
   registerBuiltinPlatformPlugins,
   type BuiltinPluginsCoverRequiredPlatforms,
 } from '../../core/interactors/register-builtins.ts';
+import { missingPlatformPlugin } from '../../core/platform-plugin-absence.ts';
 
 // Idempotently populate the root-owned registry for this test module.
-registerBuiltinPlatformPlugins();
+registerBuiltinPlatformPlugins(missingPlatformPlugin);
 
 // Independent copy of the internal platform accept-set. The CLI `--platform`
 // enum derives separately from `PLATFORM_SELECTORS`; this oracle keeps registry
@@ -115,7 +116,7 @@ test('getPlugin throws UNSUPPORTED_PLATFORM (verbatim) for an unregistered platf
 
 test('registering a duplicate platform is a hard error', () => {
   assert.throws(
-    () => registerPlatformPlugin(BUILTIN_PLATFORM_PLUGINS[0]),
+    () => registerPlatformPlugin(BUILTIN_PLATFORM_PLUGINS[0], missingPlatformPlugin),
     /already registered for platform/,
   );
 });

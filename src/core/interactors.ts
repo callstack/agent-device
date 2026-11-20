@@ -4,11 +4,12 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { getPlugin } from './platform-plugin-registry.ts';
+import { missingPlatformPlugin } from './platform-plugin-absence.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 
 // Populate the platform-plugin registry once, at module load (only registers
 // lazy closures — no leaf code is imported here, so CLI cold-start is unaffected).
-registerBuiltinPlatformPlugins();
+registerBuiltinPlatformPlugins(missingPlatformPlugin);
 
 export async function getInteractor(
   device: DeviceInfo,

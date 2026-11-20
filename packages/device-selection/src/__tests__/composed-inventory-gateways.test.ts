@@ -17,6 +17,9 @@ import { PLATFORMS, type DeviceInfo, type Platform } from '@agent-device/kernel/
 import { describe, expect, test, vi } from 'vitest';
 import { createComposedDeviceInventoryGateways } from '../composed-inventory-gateways.ts';
 
+// A core version no release channel pins, so an absent family's install hint names the bare package.
+const CORE_VERSION = '0.0.0-test';
+
 const scope: PlatformRequestScope = Object.freeze({
   signal: new AbortController().signal,
   diagnostics: Object.freeze({ emit: () => {} }),
@@ -253,7 +256,7 @@ describe('composed device inventory gateway', () => {
         },
       }),
     );
-    const registry = createPlatformModuleRegistry(modules);
+    const registry = createPlatformModuleRegistry(modules, CORE_VERSION);
     const gateways = createComposedDeviceInventoryGateways({
       registry,
       loadHost: async () => host,
@@ -358,7 +361,7 @@ function inventoryWorld(
     },
   }));
   return {
-    registry: createPlatformModuleRegistry(modules),
+    registry: createPlatformModuleRegistry(modules, CORE_VERSION),
     loadHost: async () => {
       hosts += 1;
       return host;

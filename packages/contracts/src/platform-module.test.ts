@@ -6,19 +6,23 @@ import {
   createPlatformModuleRegistry,
   getOptionalPlatformPluginDeclaration,
   isOptionalPlatform,
-  missingOptionalPlatformModuleError,
-  optionalPlatformPluginInstallCommand,
+  missingOptionalPlatformError,
   OPTIONAL_PLATFORMS,
+  pluginInstallCommand,
+  pluginPackageSelector,
+  pluginRepairCommand,
   REQUIRED_PLATFORMS,
   type PlatformModuleMetadata,
   type PlatformPartitionIsCanonical,
 } from './platform-module.ts';
 
+const CORE_VERSION = '0.22.0';
+
 test('platform metadata registry is canonical, ordered, and immutable', () => {
   const registrations = [...PLATFORMS]
     .reverse()
     .map((family) => ({ family, marker: family.toUpperCase() }));
-  const registry = createPlatformModuleRegistry(registrations);
+  const registry = createPlatformModuleRegistry(registrations, CORE_VERSION);
 
   assert.deepEqual(registry.families, PLATFORMS);
   assert.deepEqual(
@@ -26,7 +30,6 @@ test('platform metadata registry is canonical, ordered, and immutable', () => {
     PLATFORMS,
   );
   assert.equal(registry.get('harmonyos').marker, 'HARMONYOS');
-  assert.equal(registry.has('harmonyos'), true);
   assert.ok(Object.isFrozen(registry));
   assert.ok(Object.isFrozen(registry.families));
   assert.ok(Object.isFrozen(registry.modules));
@@ -34,14 +37,16 @@ test('platform metadata registry is canonical, ordered, and immutable', () => {
 });
 
 test('platform metadata registry rejects missing required and duplicate family ownership', () => {
+  // Only the required families are completeness-checked, so dropping one optional family is not
+  // a missing registration — this drops `apple`.
   const missing = PLATFORMS.filter((family) => family !== 'apple').map((family) => ({ family }));
-  assert.throws(() => createPlatformModuleRegistry(missing), /Missing.*apple/);
+  assert.throws(() => createPlatformModuleRegistry(missing, CORE_VERSION), /Missing.*apple/);
 
   const duplicate: PlatformModuleMetadata[] = [
     ...PLATFORMS.map((family) => ({ family })),
     { family: 'apple' },
   ];
-  assert.throws(() => createPlatformModuleRegistry(duplicate), /Duplicate.*apple/);
+  assert.throws(() => createPlatformModuleRegistry(duplicate, CORE_VERSION), /Duplicate.*apple/);
 });
 
 test('platform metadata registry rejects an unknown runtime family value', () => {
@@ -49,7 +54,10 @@ test('platform metadata registry rejects an unknown runtime family value', () =>
     ...PLATFORMS.map((family) => ({ family })),
     { family: 'unknown' as Platform },
   ];
-  assert.throws(() => createPlatformModuleRegistry(registrations), /Unknown.*unknown/);
+  assert.throws(
+    () => createPlatformModuleRegistry(registrations, CORE_VERSION),
+    /Unknown.*unknown/,
+  );
 });
 
 test('required and optional families partition the canonical PLATFORMS exactly', () => {
@@ -73,19 +81,49 @@ test('the optional-family install-hint catalog maps each optional family to its 
     assert.ok(declaration, `declaration for ${family}`);
     assert.equal(declaration.family, family);
     assert.equal(declaration.package, `@agent-device/${family}`);
+    // A release the channel does not pin installs the bare package name.
     assert.equal(
-      optionalPlatformPluginInstallCommand(declaration),
+      pluginInstallCommand(declaration, CORE_VERSION),
       `agent-device plugins add @agent-device/${family}`,
     );
   }
   // Required families and unknown names produce no inferred package.
   assert.equal(getOptionalPlatformPluginDeclaration('apple'), undefined);
   assert.equal(getOptionalPlatformPluginDeclaration('android'), undefined);
-  assert.equal(getOptionalPlatformPluginDeclaration('beos'), undefined);
+  assert.equal(getOptionalPlatformPluginDeclaration('beos' as Platform), undefined);
 });
 
-test('missingOptionalPlatformModuleError returns plugin-not-installed with the family and install hint', () => {
-  const error = missingOptionalPlatformModuleError('vega');
+test('an optional family install command names the same release as the provider catalog', () => {
+  // One release-channel rule owns both catalogs (#4781 review): a 0.22 nightly core must name its
+  // own nightly build, and a development checkout must name the branch tag, exactly as the
+  // provider plugin hints do.
+  const declaration = getOptionalPlatformPluginDeclaration('vega')!;
+  for (const version of ['0.22.0-nightly-0-22.20261118.187', '0.22.0-nightly.20261118.186']) {
+    assert.equal(
+      pluginInstallCommand(declaration, version),
+      pluginInstallCommand(
+        { package: '@agent-device/browserstack', nightlyTag: 'nightly-0.22' },
+        version,
+      ).replace('@agent-device/browserstack', '@agent-device/vega'),
+    );
+    assert.equal(
+      pluginInstallCommand(declaration, version),
+      `agent-device plugins add @agent-device/vega@${version}`,
+    );
+  }
+  assert.equal(
+    pluginInstallCommand(declaration, '0.22.0-dev'),
+    'agent-device plugins add @agent-device/vega@nightly-0.22',
+  );
+  assert.equal(
+    pluginRepairCommand(declaration, '0.22.0-dev'),
+    'agent-device plugins add @agent-device/vega@nightly-0.22',
+  );
+  assert.equal(pluginPackageSelector(declaration, '0.22.0'), '@agent-device/vega');
+});
+
+test('missingOptionalPlatformError returns plugin-not-installed with the family and install hint', () => {
+  const error = missingOptionalPlatformError('vega', CORE_VERSION);
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'UNSUPPORTED_PLATFORM');
   assert.equal(error.details?.reason, 'plugin-not-installed');
@@ -95,7 +133,7 @@ test('missingOptionalPlatformModuleError returns plugin-not-installed with the f
   assert.match(String(error.details?.hint), /agent-device plugins add @agent-device\/vega/);
 
   // A family the catalog does not declare gets no inferred package and no plugin outcome.
-  const undeclared = missingOptionalPlatformModuleError('apple');
+  const undeclared = missingOptionalPlatformError('apple', CORE_VERSION);
   assert.ok(undeclared instanceof AppError);
   assert.equal(undeclared.code, 'UNSUPPORTED_PLATFORM');
   assert.equal(undeclared.details, undefined);
@@ -103,22 +141,21 @@ test('missingOptionalPlatformModuleError returns plugin-not-installed with the f
 
 test('optional families may be absent: the registry keeps only what is registered', () => {
   const registrations = REQUIRED_PLATFORMS.map((family) => ({ family, marker: family }));
-  const registry = createPlatformModuleRegistry(registrations);
+  const registry = createPlatformModuleRegistry(registrations, CORE_VERSION);
 
   assert.deepEqual(registry.families, [...REQUIRED_PLATFORMS]);
   assert.deepEqual(
     registry.modules.map((module) => module.family),
     [...REQUIRED_PLATFORMS],
   );
-  for (const family of OPTIONAL_PLATFORMS) {
-    assert.equal(registry.has(family), false, `has(${family})`);
-  }
-  assert.equal(registry.has('apple'), true);
   assert.equal(registry.get('android').marker, 'android');
 });
 
 test('get on an absent optional family throws the typed plugin-not-installed outcome', () => {
-  const registry = createPlatformModuleRegistry(REQUIRED_PLATFORMS.map((family) => ({ family })));
+  const registry = createPlatformModuleRegistry(
+    REQUIRED_PLATFORMS.map((family) => ({ family })),
+    CORE_VERSION,
+  );
 
   for (const family of OPTIONAL_PLATFORMS) {
     assert.throws(

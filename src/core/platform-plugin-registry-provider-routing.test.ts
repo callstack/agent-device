@@ -27,12 +27,13 @@ import {
 } from '@agent-device/test-kit';
 import { getPlugin, tryGetPlugin } from './platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
+import { missingPlatformPlugin } from './platform-plugin-absence.ts';
 import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
 } from '../platform-runtime.ts';
 
-registerBuiltinPlatformPlugins();
+registerBuiltinPlatformPlugins(missingPlatformPlugin);
 
 const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'androidAdbProvider',

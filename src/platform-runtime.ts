@@ -11,6 +11,7 @@ import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-ru
 import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import {
   type ComposedDeviceInventoryGateways,
+  type InventoryPlatformModule,
   createPlatformModuleRegistry,
 } from '@agent-device/contracts/platform-module';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
@@ -85,35 +86,40 @@ const shutdownLoaders = Object.freeze({
     await loadAndroidShutdownRuntime(dependencies),
 });
 
-// All six families stay registered in the packed core today. The registry now completeness-
-// checks only the required families (apple, android); an optional family (ADR 0034) may be
-// absent from a composition, and every lookup then reports plugin-not-installed with its
-// install hint instead of a contract error.
+// All six families stay registered in the packed core today. The registry completeness-checks only
+// the required families, so an optional family (ADR 0034) may be absent from a composition and every
+// lookup then reports plugin-not-installed with its install hint. The caller supplies `coreVersion`,
+// which that hint names: this root does not read host mechanics.
 export function createPlatformModuleRegistryForHost(
   env: Readonly<Record<string, string | undefined>>,
+  coreVersion: string,
 ) {
-  return createPlatformModuleRegistry([
-    appleInventoryModule,
-    createAndroidInventoryModule({
-      sdkRoots: configuredValues(env.ANDROID_SDK_ROOT, env.ANDROID_HOME),
-    }),
-    createHarmonyInventoryModule({
-      hdcSdkPath: env.HDC_SDK_PATH,
-      devecoSdkHome: env.DEVECO_SDK_HOME,
-      commandLineToolsHome: env.HARMONYOS_COMMAND_LINE_TOOLS,
-    }),
-    vegaInventoryModule,
-    linuxInventoryModule,
-    webInventoryModule,
-  ]);
+  return createPlatformModuleRegistry<InventoryPlatformModule>(
+    [
+      appleInventoryModule,
+      createAndroidInventoryModule({
+        sdkRoots: configuredValues(env.ANDROID_SDK_ROOT, env.ANDROID_HOME),
+      }),
+      createHarmonyInventoryModule({
+        hdcSdkPath: env.HDC_SDK_PATH,
+        devecoSdkHome: env.DEVECO_SDK_HOME,
+        commandLineToolsHome: env.HARMONYOS_COMMAND_LINE_TOOLS,
+      }),
+      vegaInventoryModule,
+      linuxInventoryModule,
+      webInventoryModule,
+    ],
+    coreVersion,
+  );
 }
 
 export async function createPlatformDeviceInventoryGateways(
   host: HostEnvironment,
+  coreVersion: string,
   provider?: ProviderDeviceInventorySource,
 ): Promise<ComposedDeviceInventoryGateways> {
   return await attachAppleSelectionProbes({
-    registry: createPlatformModuleRegistryForHost(host.env),
+    registry: createPlatformModuleRegistryForHost(host.env, coreVersion),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
       return createDeviceInventoryHost(host);
@@ -133,23 +139,25 @@ const androidRuntimeModule = createAndroidRuntimeModule({
 /** The root composition registry the platform runtime gateway reads. All six families are
  * registered today; an optional family absent from a composition fails lookups with the typed
  * `plugin-not-installed` outcome before any device binding (see platform-runtime-gateway.ts). */
-const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
-  Platform,
-  PlatformRuntimeModule
->([
-  ['apple', appleRuntimeModule],
-  ['android', androidRuntimeModule],
-  ['harmonyos', harmonyosRuntimeModule],
-  ['vega', vegaRuntimeModule],
-  ['linux', linuxRuntimeModule],
-  ['web', webRuntimeModule],
-]);
-
-type Platform = PlatformRuntimeModule['family'];
+function createPlatformRuntimeModuleRegistry(coreVersion: string) {
+  return createPlatformModuleRegistry<PlatformRuntimeModule>(
+    [
+      appleRuntimeModule,
+      androidRuntimeModule,
+      harmonyosRuntimeModule,
+      vegaRuntimeModule,
+      linuxRuntimeModule,
+      webRuntimeModule,
+    ],
+    coreVersion,
+  );
+}
 
 export function createPlatformRuntimeGateway(
   options: Readonly<{
     host: HostEnvironment;
+    /** The running core's version, which the typed absence outcome names in its install command. */
+    coreVersion: string;
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
@@ -159,7 +167,7 @@ export function createPlatformRuntimeGateway(
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
-    modules: platformRuntimeModules,
+    modules: createPlatformRuntimeModuleRegistry(options.coreVersion),
     loadHost: async () => {
       const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
         await import('./platform-runtime-operation-host.ts');

@@ -1,7 +1,9 @@
 import type { PlatformProviderRequestContext } from '@agent-device/contracts/platform-providers';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { PlatformPluginAbsence } from './platform-plugin-registry.ts';
 
 // Simulates a composition whose builtin plugins do not include the extracted `vega` family:
 // the module-level self-registration inside request-providers must then register only the five
@@ -11,9 +13,9 @@ vi.mock('./interactors/register-builtins.ts', async (importOriginal) => {
   const { registerPlatformPlugin } = await import('./platform-plugin-registry.ts');
   return {
     ...original,
-    registerBuiltinPlatformPlugins: () => {
+    registerBuiltinPlatformPlugins: (absent: PlatformPluginAbsence) => {
       for (const plugin of original.BUILTIN_PLATFORM_PLUGINS) {
-        if (plugin.id !== 'vega') registerPlatformPlugin(plugin);
+        if (plugin.id !== 'vega') registerPlatformPlugin(plugin, absent);
       }
     },
   };
@@ -56,4 +58,22 @@ test('the request-provider scope for an absent optional family gates nothing and
   assert.equal(taskRan, true);
   // The vega-gated resolver does not apply while no vega plugin is registered.
   assert.equal(resolverAsked, false);
+});
+
+test('getPlugin reports the same typed plugin-not-installed outcome for the absent family', async () => {
+  // The interactor lookup answers presence through the same outcome the module registry raises
+  // (#4781 review): the composition's reporter is what `registerBuiltinPlatformPlugins` received,
+  // so a caller of `getPlugin` needs no guard of its own.
+  const { getPlugin } = await import('./platform-plugin-registry.ts');
+  assert.throws(
+    () => getPlugin('vega'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_PLATFORM' &&
+      error.details?.reason === 'plugin-not-installed' &&
+      error.details.family === 'vega' &&
+      error.details.package === '@agent-device/vega' &&
+      typeof error.details.installCommand === 'string' &&
+      String(error.details.hint).includes(error.details.installCommand),
+  );
 });
