@@ -1,4 +1,5 @@
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
+import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
 import {
   resolveSessionDir,
   resolveSessionAppLogPath,
@@ -435,20 +436,24 @@ export class SessionStore {
   updateOpenDevice(
     ref: SessionRef,
     device: DeviceInfo,
-    bootOccurred: boolean,
+    bootOwnership: CloseBootOwnership,
     androidLaunchIdentity?: AndroidEmulatorLaunchIdentity,
   ): void {
     const current = this.requireCurrent(ref);
     const retainsBoot = sameDeviceIdentity(deviceIdentity(current.device), deviceIdentity(device));
-    const ownsBoot = bootOccurred || (retainsBoot && current.bootedByOpen === true);
+    const ownsBoot = bootOwnership.ownsBoot || (retainsBoot && current.bootedByOpen === true);
     this.update(ref, {
       device,
-      androidLaunchIdentity: bootOccurred
+      androidLaunchIdentity: bootOwnership.ownsBoot
         ? androidLaunchIdentity
         : retainsBoot
           ? current.androidLaunchIdentity
           : undefined,
       bootedByOpen: ownsBoot ? true : undefined,
+      // #4791: the reason is reported only alongside the ownership it refused. A re-open that disproves
+      // its OWN boot cannot erase a boot an earlier open of this same device proved and #4162 keeps, so
+      // that close stops on the preserved proof and says nothing.
+      bootOwnerUnverified: !ownsBoot && bootOwnership.bootOwnerUnverified ? true : undefined,
     });
   }
 

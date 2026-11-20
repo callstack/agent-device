@@ -50,6 +50,7 @@ import { closeCleanupError, runSessionCloseTeardown } from './session-close-life
 import type { PlatformResourceCleanup } from '../../../core/platform-resource-cleanup.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { resolveCloseTargetRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import { CLOSE_BOOT_OWNER_UNVERIFIED_REASONS } from '@agent-device/contracts/device-boot';
 import { admitRuntimeUse } from '../../../core/runtime-admission.ts';
 
 export type SessionCloseCommandInput = Readonly<{
@@ -380,6 +381,7 @@ export async function handleSessionCloseCommands(
     providerData: closed.providerData,
     implicitShutdownDeniedByPolicy: closed.implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost: closed.implicitShutdownClaimLost,
+    implicitShutdownBootOwnerUnverified: closed.implicitShutdownBootOwnerUnverified,
     implicitShutdownLaunchedProcessGone: closed.implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified: closed.implicitShutdownLaunchedProcessUnverified,
     shutdownStopUnconfirmed: closed.shutdownStopUnconfirmed,
@@ -415,6 +417,8 @@ type SessionCloseFinalization =
       /** #4162: the policy denied the stop this close owed its own boot, so the device kept running. */
       implicitShutdownDeniedByPolicy: boolean;
       implicitShutdownClaimLost: boolean;
+      /** #4791: the platform said its own boot step never booted this device, so close owed it no stop. */
+      implicitShutdownBootOwnerUnverified: boolean;
       /** #4585: the device has been rebooted outside this session since its open, so close left it running. */
       implicitShutdownLaunchedProcessGone: boolean;
       implicitShutdownLaunchedProcessUnverified: boolean;
@@ -463,6 +467,7 @@ async function runCloseTeardownAndRelease(params: {
     shutdownResult,
     implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost,
+    implicitShutdownBootOwnerUnverified,
     implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified,
     shutdownStopUnconfirmed,
@@ -530,6 +535,7 @@ async function runCloseTeardownAndRelease(params: {
     remoteScript: saveScriptOutcome.remote,
     implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost,
+    implicitShutdownBootOwnerUnverified,
     implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified,
     shutdownStopUnconfirmed,
@@ -546,6 +552,7 @@ function buildCloseSuccessResponse(params: {
   implicitShutdownClaimLost: boolean;
   implicitShutdownLaunchedProcessGone: boolean;
   implicitShutdownLaunchedProcessUnverified: boolean;
+  implicitShutdownBootOwnerUnverified: boolean;
   shutdownStopUnconfirmed: boolean;
 }): DaemonResponse {
   const {
@@ -558,6 +565,7 @@ function buildCloseSuccessResponse(params: {
     implicitShutdownClaimLost,
     implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified,
+    implicitShutdownBootOwnerUnverified,
     shutdownStopUnconfirmed,
   } = params;
   if (repair.aborted && requestedSaveScript) {
@@ -612,6 +620,15 @@ function buildCloseSuccessResponse(params: {
       session.androidLaunchIdentity
         ? "This session's open booted this device, but close could not verify its emulator process identity, so it did not request a stop and left the device as it found it."
         : "This session's open booted this device, but open recorded no emulator process identity, so close did not request a stop and left the device as it found it.",
+    );
+  }
+  // #4791: the open inferred a boot from a snapshot that said the simulator was stopped, and the
+  // platform's own boot step then said it never booted it. Whatever is running is somebody else's
+  // boot, so close leaves it running and says which reason it refused the stop for.
+  if (implicitShutdownBootOwnerUnverified) {
+    appendResponseWarning(
+      data,
+      `This session's open found this device stopped, but reported ${CLOSE_BOOT_OWNER_UNVERIFIED_REASONS.bootOwnerUnverified.reason}: its own boot step never booted the device, so close did not request a stop. The device is still running.`,
     );
   }
   if (shutdownStopUnconfirmed) {

@@ -23,6 +23,11 @@ import type {
   OpenApplicationTiming,
   OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  DeviceBootPerformance,
+  CloseBootOwnership,
+} from '@agent-device/contracts/device-boot';
+import { resolveSessionBootOwnership } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -276,6 +281,8 @@ export async function completeOpenCommand(params: {
   tookOverDeviceClaim?: TakenOverDeviceClaim;
   selection?: DeviceSelectionResult;
   androidLaunchIdentity?: AndroidEmulatorLaunchIdentity;
+  /** #4791: what the platform's own boot step reported about the preparation call this open made. */
+  bootPerformance?: DeviceBootPerformance;
 }): Promise<SessionOpenResult> {
   const {
     req,
@@ -306,6 +313,13 @@ export async function completeOpenCommand(params: {
     selection,
     lifecycle.owner.kind === 'local-family',
   );
+  // #4791: the snapshot that says "stopped" is an inference, and the platform's own boot step is the
+  // proof. The pair below is what the session records: who owns the stop, and what close must say when
+  // the inference is refused.
+  const bootOwnership = resolveSessionBootOwnership({
+    inferredFromSnapshot: preparedSelection?.bootOccurred === true,
+    bootPerformance: params.bootPerformance,
+  });
 
   const provisionalSession = await prepareOpenDispatchSession({
     req,
@@ -316,7 +330,7 @@ export async function completeOpenCommand(params: {
     sessionAppBundleId,
     appName,
     existingRef,
-    bootedByOpen: preparedSelection?.bootOccurred === true,
+    bootOwnership,
     androidLaunchIdentity: params.androidLaunchIdentity,
   });
   if (provisionalSession.type === 'response') return provisionalSession;
@@ -442,7 +456,7 @@ export async function completeOpenCommand(params: {
     appBundleId: sessionAppBundleId,
     appName,
     deviceClaim,
-    bootedByOpen: preparedSelection?.bootOccurred === true,
+    bootOwnership,
     androidLaunchIdentity: params.androidLaunchIdentity,
   });
   sessionStore.clearCloseEffectsUnconfirmed(nextRef);
@@ -477,7 +491,7 @@ async function prepareOpenDispatchSession(params: {
   sessionAppBundleId: string | undefined;
   appName: string | undefined;
   existingRef: SessionRef | undefined;
-  bootedByOpen: boolean;
+  bootOwnership: CloseBootOwnership;
   androidLaunchIdentity?: AndroidEmulatorLaunchIdentity;
 }): Promise<
   { type: 'session'; ref?: SessionRef } | { type: 'response'; response: DaemonResponse }
@@ -489,7 +503,7 @@ async function prepareOpenDispatchSession(params: {
       sessionStore.updateOpenDevice(
         existingRef,
         params.device,
-        params.bootedByOpen,
+        params.bootOwnership,
         params.androidLaunchIdentity,
       );
     return { type: 'session', ref: existingRef };
@@ -503,7 +517,7 @@ async function prepareOpenDispatchSession(params: {
     surface: params.surface,
     appBundleId: params.sessionAppBundleId,
     appName: params.appName,
-    bootedByOpen: params.bootedByOpen,
+    bootOwnership: params.bootOwnership,
     androidLaunchIdentity: params.androidLaunchIdentity,
   });
   const lifecycleResponse = await beforeDispatch();
@@ -665,6 +679,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       tookOverDeviceClaim,
       selection,
       androidLaunchIdentity: params.androidLaunchIdentity,
+      bootPerformance: details.details.bootPerformance,
     });
     if (!response.response.ok) await rollbackClaim();
     return response;
