@@ -33,7 +33,7 @@ const REPORTED_LOSSES: Readonly<Record<RegisteredDaemonOwnership['state'], boole
  *
  * The loss is invisible to the daemon itself: it keeps answering whatever client still reaches it. A
  * daemon that lost its record used to keep the lock it held, serve nobody, and then delete its
- * successor's metadata when it idled out (#3087).
+ * successor's metadata when it idled out (#3087). A detached daemon now closes when it sees the loss.
  */
 export function readDaemonMetadataLoss(params: {
   infoPath: string;
@@ -58,8 +58,8 @@ const METADATA_LOSS_POLL_MS = 15_000;
 
 /**
  * Reports the moment another process publishes over this daemon's registration or deletes it, then
- * stops: the successor owns the record from that point on, and a superseded daemon can outlive it by
- * hours, so continuing to poll would only re-ask a question already answered.
+ * stops: the record is not this daemon's from that point on, so continuing to poll would only re-ask
+ * a question already answered.
  */
 export function watchDaemonMetadataLoss(params: {
   infoPath: string;

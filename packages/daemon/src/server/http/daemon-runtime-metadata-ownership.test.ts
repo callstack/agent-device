@@ -33,8 +33,9 @@ type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
 // anything that verifies identity against the process table.
 const SUCCESSOR_PID = 999_999_999;
 
-function startRuntime(stateDir: string) {
+function startRuntime(stateDir: string, ownership?: 'embedded') {
   return startDaemonRuntime({
+    ownership,
     composeDeps: daemonRuntimeDepsFixture(() => ({
       // The post-lock, pre-publication step the runtime awaits first. Making it throw lands the
       // runtime in the startup-failure branch that also removes `daemon.json`, which is otherwise
@@ -232,6 +233,51 @@ test('a successor published during this daemon lifetime is recorded at detection
     );
 
     vi.useRealTimers();
+    await runtime?.close();
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+// A daemon whose record is gone or names a successor is one no new client can find. It used to keep
+// running with its sessions until it idled out, or for as long as a session stayed open.
+test.each([
+  ['replaced by a successor', (paths: DaemonPaths) => publishSuccessor(paths)],
+  ['deleted', (paths: DaemonPaths) => fs.rmSync(paths.infoPath)],
+])('a detached daemon whose registration is %s closes itself', async (_name, lose) => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-daemon-metadata-lost-closes-');
+  const paths = resolveDaemonPaths(stateDir);
+  try {
+    const runtime = await startRuntime(stateDir);
+    lose(paths);
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
+
+    await runtime?.closed;
+    expect(lifecycleEvents).toContain('gateway-shutdown');
+    expect(fs.existsSync(paths.lockPath), 'the closing daemon releases its own lock').toBe(false);
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('an embedded runtime that loses its registration keeps serving its host', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-daemon-metadata-lost-embedded-');
+  const paths = resolveDaemonPaths(stateDir);
+  try {
+    const runtime = await startRuntime(stateDir, 'embedded');
+    publishSuccessor(paths);
+    await vi.runOnlyPendingTimersAsync();
+    vi.useRealTimers();
+
+    expect(logEvents(stateDir)).toContainEqual(
+      expect.objectContaining({ phase: 'daemon_metadata_lost' }),
+    );
+    expect(lifecycleEvents).not.toContain('gateway-shutdown');
     await runtime?.close();
   } finally {
     vi.useRealTimers();

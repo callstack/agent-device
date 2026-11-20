@@ -140,6 +140,7 @@ daemon that the client retires deliberately.
 A closing daemon stops listening before it removes its registration, so it also reads as unreachable.
 A graceful retirement therefore waits 75 s after SIGTERM, longer than the bounded teardown, before it sends SIGKILL.
 Two retirements wait less: the cleanup of a client's own failed launch (3 s), and a takeover inside a startup, which the startup ceiling caps.
+A detached daemon that finds its registration deleted or replaced by another process closes by itself: no new client can find it. An embedded runtime keeps serving its host.
 
 The census counts what the contract names and nothing else.
 A resumable upload that is still streaming is outside the census. A host-administration
