@@ -86,6 +86,7 @@ export const ALL_CHECKS = [
   'docs-links',
   'docs-prose',
   'agent-guidance',
+  'pr-body',
   'xctest-selection',
   'runner-error-codes',
   'packaged-runner-swift',
