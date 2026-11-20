@@ -151,6 +151,16 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   ),
   gate('docs-links', 'Docs internal links and heading anchors', 'check:doc-links'),
   gate('docs-prose', 'Docs filler, marketing, and time-relative words', 'check:doc-prose'),
+  // Reads the pull request from the event payload the runner writes, so it has nothing to grade
+  // outside CI: locally it can only refuse for the want of one. Its rules are pure and covered by
+  // the `pr-body-model` gate, which runs the same way anywhere.
+  gate(
+    'pr-body',
+    'Pull request body sections, word budget, and tested SHA',
+    'check:pr-body',
+    false,
+  ),
+  gate('pr-body-model', 'Pull request body rules model', 'check:pr-body:test'),
   gate('agent-guidance', 'Agent guidance ownership and context budgets', 'check:agent-guidance'),
   // Parses ios.yml and the Swift sources; no Xcode, no simulator, so it runs anywhere.
   gate(

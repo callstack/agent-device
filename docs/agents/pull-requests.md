@@ -54,13 +54,13 @@ After a rebase, validate the new head. Keep old evidence attributed to its origi
 
 ## PR body
 
-Open as draft only when requested or incomplete.
-Keep the body below 250 words outside code blocks. Update it after each push.
+The `pr-body` gate enforces the sections and the 250-word limit.
+Update the body after each push. Open as draft only when requested or incomplete.
 
 - `## Summary`: the invariant and behavior, the reason, the linked issue, and scope expansion.
-- `## Before / after`: required when a caller can observe the change, output and errors included.
-  Show up to 3 calls at base and head, with the output that differs.
-- `## Value`: required for a refactor. Give 2–4 numbers measured at base and head.
+- `## Before / after`: for `feat` and `fix`, up to 3 calls at base and head, with the
+  output that differs. Or state `No observable change` with a reason.
+- `## Value`: for a refactor, 2–4 numbers measured at base and head.
 - `## Validation`: the tested SHA and receipt, command results, CI obligations, and unresolved risks.
   Use evidence accessible remotely.
   For docs-only changes, explain why runtime tests do not apply.

@@ -180,6 +180,8 @@
     "check:doc-links": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/check-doc-links.test.ts && pnpm --dir website build && node --experimental-strip-types scripts/check-doc-links.ts",
     "check:doc-prose": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/check-doc-prose.test.ts && node --experimental-strip-types scripts/check-doc-prose.ts",
     "check:agent-guidance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/agent-guidance-contract.test.ts",
+    "check:pr-body": "node --experimental-strip-types scripts/pr-body/check.ts",
+    "check:pr-body:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/pr-body/model.test.ts scripts/pr-body/check.test.ts",
     "check:replay-compat": "node --experimental-strip-types scripts/check-replay-compat-provenance.ts",
     "check:daemon-wire-compat": "node --experimental-strip-types scripts/wire-compat/run.ts",
     "check:daemon-wire-compat:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/wire-compat/model.test.ts",
