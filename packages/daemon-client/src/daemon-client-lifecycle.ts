@@ -77,8 +77,8 @@ LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 /**
  * Whether a timed-out request may retire the daemon it was waiting on. An attach client never may: the
- * daemon is not its to kill, and `ensureDaemon` is where an unresponsive one is replaced. Every other
- * caller asks the retirement, which judges the record's owner before it signals anything.
+ * daemon is not its to kill, and `ensureDaemon` reuses a compatible daemon without asking it anything,
+ * so a hung one is ended only by a deliberate stop. Every other caller asks the retirement, which judges the record's owner before it signals anything.
  */
 export function resolveTimeoutRecovery(
   settings: DaemonClientSettings,
