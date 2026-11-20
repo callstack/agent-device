@@ -342,6 +342,8 @@ test('a probe-level timeout is a typed ANDROID_BOOT_TIMEOUT terminal, not a raw 
       new AbortController().signal,
     ),
   ).rejects.toMatchObject({
+    // The readiness deadline was not reached, so the message names the adb layer that timed out.
+    message: 'adb timed out after 10000ms',
     details: { adbFailure: 'timeout', reason: 'ANDROID_BOOT_TIMEOUT', serial: 'emulator-5554' },
   });
   expect(run).toHaveBeenCalledTimes(1);

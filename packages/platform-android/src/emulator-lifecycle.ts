@@ -138,7 +138,7 @@ function throwAndroidBootFailure(params: {
   throw buildAndroidBootError(
     appError,
     reason,
-    params.timedOut,
+    params.timedOut || reason === 'ANDROID_BOOT_TIMEOUT',
     buildAndroidBootFailureDetails(params, reason),
   );
 }
@@ -170,15 +170,17 @@ function buildAndroidBootFailureDetails(
 
 /**
  * Shapes one terminal boot failure. Shared by every Android boot poller so the code, message and
- * cause stay identical across owners.
+ * cause stay identical across owners. `bootBudgetSpent` is the caller's statement that its boot
+ * budget ran out: only then does the message say that the device did not boot in time. A failure
+ * inside the budget keeps the message of the layer that failed.
  */
 export function buildAndroidBootError(
   appError: AppError,
   reason: BootFailureReason,
-  timedOut: boolean,
+  bootBudgetSpent: boolean,
   details: Record<string, unknown>,
 ): AppError {
-  if (timedOut || reason === 'ANDROID_BOOT_TIMEOUT') {
+  if (bootBudgetSpent) {
     return new AppError(
       'COMMAND_FAILED',
       'Android device did not finish booting in time',
