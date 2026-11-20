@@ -55,6 +55,15 @@ export const launchedDeviceProcess: LaunchedDeviceProcessService = Object.freeze
       await import('@agent-device/platform-android/device-boot');
     return await confirmAndroidEmulatorLaunchProcessStopped(identity);
   },
+  async stopLaunchedDeviceProcess(
+    device: DeviceInfo,
+    identity: AndroidEmulatorLaunchIdentity,
+  ): Promise<LaunchedProcessStopConfirmation> {
+    if (!isAndroidEmulator(device)) return 'stopped';
+    const { stopAndroidEmulatorLaunchProcess } =
+      await import('@agent-device/platform-android/device-boot');
+    return await stopAndroidEmulatorLaunchProcess(identity);
+  },
 });
 
 /** The one device kind whose boot this host starts as a process it can later name. */
