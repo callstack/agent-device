@@ -88,10 +88,10 @@ async function runDoctorWithFakeInstallOnPath(params: {
   const versionProbes: Array<readonly string[]> = [];
 
   const response = await withCommandExecutorOverride(
-    async (command, args) => {
+    (command, args) => {
       if (command === binaryPath && args[0] === '--version') {
         versionProbes.push(args);
-        return { stdout: params.versionOutput, stderr: '', exitCode: 0 };
+        return Promise.resolve({ stdout: params.versionOutput, stderr: '', exitCode: 0 });
       }
       return undefined;
     },
@@ -165,10 +165,10 @@ test('doctor reuses the drift verdict for the same PATH within the memo TTL', as
   const versionProbes: Array<readonly string[]> = [];
   const runDoctor = async (): Promise<DaemonResponse | null> =>
     await withCommandExecutorOverride(
-      async (command, args) => {
+      (command, args) => {
         if (command === binaryPath && args[0] === '--version') {
           versionProbes.push(args);
-          return { stdout: '9.9.9\n', stderr: '', exitCode: 0 };
+          return Promise.resolve({ stdout: '9.9.9\n', stderr: '', exitCode: 0 });
         }
         return undefined;
       },
