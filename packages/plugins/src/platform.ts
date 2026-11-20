@@ -2,10 +2,13 @@ import type { InventoryPlatformModule } from '@agent-device/contracts/platform-m
 import type { Platform } from '@agent-device/kernel/device';
 import type {
   PlatformPlugin,
+  VegaPlatformOperations,
+  VegaPlatformRegistration,
   WebPlatformOperations,
   WebPlatformRegistration,
 } from '@agent-device/contracts/platform-plugin';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
+import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
@@ -50,18 +53,28 @@ export type PlatformSetup<Family extends Platform = Platform> = Family extends P
             withRequestProvider<T>(provider: WebProvider, task: () => Promise<T>): Promise<T>;
             operations: WebPlatformOperations;
           }>
-        : unknown)
+        : Family extends 'vega'
+          ? Readonly<{
+              withRequestProvider<T>(
+                provider: VegaToolProvider,
+                task: () => Promise<T>,
+              ): Promise<T>;
+              operations: VegaPlatformOperations;
+            }>
+          : unknown)
   : never;
 
 export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family extends Platform
   ? Family extends 'web'
     ? WebPlatformRegistration
-    : Readonly<{
-        family: Family;
-        createInteractor: PlatformPlugin['createInteractor'];
-        inventoryModule: InventoryPlatformModule<Family>;
-        runtimeModule: PlatformRuntimeModule & { readonly family: Family };
-      }>
+    : Family extends 'vega'
+      ? VegaPlatformRegistration
+      : Readonly<{
+          family: Family;
+          createInteractor: PlatformPlugin['createInteractor'];
+          inventoryModule: InventoryPlatformModule<Family>;
+          runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+        }>
   : never;
 
 export type PlatformContribution = {

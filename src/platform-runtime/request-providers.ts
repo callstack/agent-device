@@ -10,10 +10,13 @@ import type {
 } from '@agent-device/platform-android/mechanics';
 import type { AppleRunnerCommandExecutor, AppleRunnerProvider } from '@agent-device/apple-runner';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
-import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
+import type {
+  VegaPlatformSelection,
+  WebPlatformSelection,
+} from '@agent-device/contracts/platform-plugin';
+import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { LinuxToolProvider } from '@agent-device/platform-linux';
-import type { VegaToolProvider } from '@agent-device/platform-vega';
 import { webBackendKeyOf, type DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
@@ -62,6 +65,7 @@ export type PlatformProviderResolvers = {
 export type RequestPlatformProviderOptions = Readonly<{
   providers?: PlatformProviderResolvers;
   web?: WebPlatformSelection;
+  vega?: VegaPlatformSelection;
 }>;
 
 type ResolvedRequestPlatformProviders = {
@@ -85,6 +89,12 @@ type ResolvedRequestPlatformProviders = {
 
 type RequestPlatformProviderScopeWrapper = <T>(task: () => Promise<T>) => Promise<T>;
 
+/** The platform selections one request scope may wrap providers into. */
+type RequestPlatformSelections = Readonly<{
+  web?: WebPlatformSelection;
+  vega?: VegaPlatformSelection;
+}>;
+
 type RequestPlatformProviderDescriptor = {
   resolverKey: keyof PlatformProviderResolvers;
   resolve: (
@@ -94,7 +104,7 @@ type RequestPlatformProviderDescriptor = {
   appendWrapper: (
     scopedProviders: ResolvedRequestPlatformProviders,
     wrappers: RequestPlatformProviderScopeWrapper[],
-    web?: WebPlatformSelection,
+    selections: RequestPlatformSelections,
   ) => Promise<void>;
 };
 
@@ -108,6 +118,7 @@ export function createComposedRequestPlatformProviders(
 ): RequestPlatformProviders {
   const providers = options.providers ?? {};
   const hasConfiguredResolvers = hasPlatformProviderResolvers(providers);
+  const selections = { web: options.web, vega: options.vega };
   return Object.freeze({
     hasConfiguredResolvers,
     run: async <T>(
@@ -119,7 +130,7 @@ export function createComposedRequestPlatformProviders(
       const scope: RequestPlatformProviderScope = {
         androidAdbExecutor: scopedProviders.androidAdb?.executor,
       };
-      const wrappers = await requestPlatformProviderScopeWrappers(scopedProviders, options.web);
+      const wrappers = await requestPlatformProviderScopeWrappers(scopedProviders, selections);
       return await runRequestPlatformProviderScopes(wrappers, async () => await task(scope));
     },
   });
@@ -215,13 +226,16 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'vegaToolProvider',
     resolve(providers, context) {
       const resolver = providers.vegaToolProvider;
-      if (!resolver || !platformGatedResolverApplies('vegaToolProvider', context.device)) return {};
+      if (!resolver || context.device.platform !== 'vega') return {};
       return { vegaTool: { provider: resolver(context) } };
     },
-    async appendWrapper(scopedProviders, wrappers) {
-      if (!scopedProviders.vegaTool?.provider) return;
-      const { withVegaToolProvider } = await import('@agent-device/platform-vega');
-      appendRequestProviderWrapper(wrappers, scopedProviders.vegaTool, withVegaToolProvider);
+    async appendWrapper(scopedProviders, wrappers, selections) {
+      if (!scopedProviders.vegaTool?.provider || !selections.vega) return;
+      appendRequestProviderWrapper(
+        wrappers,
+        scopedProviders.vegaTool,
+        selections.vega.get().withRequestProvider,
+      );
     },
   },
   {
@@ -245,9 +259,13 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
       if (!resolver || context.device.platform !== 'web') return {};
       return { web: { provider: resolver(context) } };
     },
-    async appendWrapper(scopedProviders, wrappers, web) {
-      if (!scopedProviders.web?.provider || !web) return;
-      appendRequestProviderWrapper(wrappers, scopedProviders.web, web.get().withRequestProvider);
+    async appendWrapper(scopedProviders, wrappers, selections) {
+      if (!scopedProviders.web?.provider || !selections.web) return;
+      appendRequestProviderWrapper(
+        wrappers,
+        scopedProviders.web,
+        selections.web.get().withRequestProvider,
+      );
     },
   },
   {
@@ -316,11 +334,11 @@ function platformGatedResolverApplies(
 
 async function requestPlatformProviderScopeWrappers(
   scopedProviders: ResolvedRequestPlatformProviders,
-  web?: WebPlatformSelection,
+  selections: RequestPlatformSelections,
 ): Promise<RequestPlatformProviderScopeWrapper[]> {
   const wrappers: RequestPlatformProviderScopeWrapper[] = [];
   for (const descriptor of REQUEST_PLATFORM_PROVIDER_DESCRIPTORS) {
-    await descriptor.appendWrapper(scopedProviders, wrappers, web);
+    await descriptor.appendWrapper(scopedProviders, wrappers, selections);
   }
   return wrappers;
 }

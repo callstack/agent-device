@@ -54,6 +54,11 @@ const EXCLUDED_IMPLEMENTATIONS = [
       'web_agent_browser_process_reap_failed',
     ],
   },
+  {
+    owner: 'vega platform',
+    paths: [/(?:^|\/)platform-vega\//, /^dist\/src\/vega-.*\.js$/],
+    markers: ['vega-adapter-host-unbound', 'Install Vega Developer Tools'],
+  },
 ] as const;
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

@@ -6,20 +6,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { PlatformPluginAbsence } from './platform-plugin-registry.ts';
 
-// Simulates a composition whose builtin plugins do not include the extracted `vega` family: the
-// module-level composition inside request-providers must then register only the remaining
-// builtins, leaving `vega` absent from the platform-plugin registry.
-vi.mock('./interactors/builtin-platform-plugin-set.ts', async () => {
-  const { BUILTIN_PLATFORM_PLUGINS } = await import('./interactors/register-builtins.ts');
-  const { registerPlatformPluginSet } = await import('./platform-plugin-registry.ts');
-  const { missingPlatformPlugin } = await import('./platform-plugin-absence.ts');
-  return {
-    builtinPlatformPlugins: registerPlatformPluginSet(
-      BUILTIN_PLATFORM_PLUGINS.filter((plugin) => plugin.id !== 'vega'),
-      missingPlatformPlugin,
-    ),
-  };
-});
+// `vega` ships as a platform plugin, so the builtin set this process composes never owns it. The
+// scenario below reads that real composition: the request-provider scope must gate nothing for the
+// absent family, and the interactor lookup must answer with the installation outcome.
 
 function pluginOwning(id: string, platforms: readonly Platform[]): PlatformPlugin {
   return {
@@ -68,11 +57,12 @@ test('the request-provider scope for an absent optional family gates nothing, le
   });
 
   assert.equal(taskRan, true);
-  // The vega-gated resolver does not apply while no vega plugin is registered.
-  assert.equal(resolverAsked, false);
+  // The family's own request scope is not composed, so nothing wraps the task even though the
+  // resolver itself is platform-shaped and runs.
+  assert.equal(resolverAsked, true);
 
   // The interactor lookup answers presence through the same outcome the module registry raises
-  // (#4781 review): the reporter is the one the composed set was given, so a caller of `getPlugin`
+  // (#4781 review): the reporter is the one the composed set was given, so a caller of the set
   // needs no guard of its own.
   const { builtinPlatformPlugins } = await import('./interactors/builtin-platform-plugin-set.ts');
   assert.throws(

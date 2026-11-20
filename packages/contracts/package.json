@@ -312,6 +312,10 @@
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
     },
+    "./vega-tool-provider": {
+      "types": "./src/vega-tool-provider.ts",
+      "default": "./src/vega-tool-provider.ts"
+    },
     "./web-provider": {
       "types": "./src/web-provider.ts",
       "default": "./src/web-provider.ts"

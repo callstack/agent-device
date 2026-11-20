@@ -1,4 +1,7 @@
-import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
+import type {
+  VegaPlatformSelection,
+  WebPlatformSelection,
+} from '@agent-device/contracts/platform-plugin';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
@@ -16,6 +19,7 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 export function createHostDiagnostics(
   host: HostEnvironment,
   web?: WebPlatformSelection,
+  vega?: VegaPlatformSelection,
 ): HostDiagnostics {
   const { env } = host;
   return Object.freeze({
@@ -28,8 +32,8 @@ export function createHostDiagnostics(
         return await androidToolchainCheck(env, process.platform);
       }
       if (platform === 'vega') {
-        const { vegaToolchainCheck } = await import('@agent-device/platform-vega');
-        return await vegaToolchainCheck(context, host);
+        if (!vega?.active) return undefined;
+        return await vega.active.operations.toolchainCheck(context);
       }
       if (platform === 'harmonyos') {
         const { harmonyToolchainCheck } = await import('@agent-device/platform-harmonyos');

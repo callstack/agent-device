@@ -228,6 +228,7 @@ Vega OS:
   Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
   Initial support is VVD-only. Physical devices that run Vega OS remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
   Use --platform vega --target tv for the running Vega Virtual Device.
+  agent-device plugins add @agent-device/vega
   vega virtual-device start
   agent-device devices --platform vega --target tv
   agent-device open <component-id> --platform vega --target tv --session vega-tv

@@ -93,16 +93,24 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ...buildDeviceMatrix(),
 ];
 
+const PLUGIN_OWNED_KEYS: PlatformGatedProviderResolverKey[] = ['vegaToolProvider', 'webProvider'];
+const BUILT_IN_KEYS = GATED_KEYS.filter((key) => !PLUGIN_OWNED_KEYS.includes(key));
+
 test('built-in provider facets retain the former routing', () => {
+  // The plugin-owned families carry their own request scope, so the builtin facets declare only
+  // the resolvers the packed core still owns.
   for (const device of SAMPLE_DEVICES) {
     const facet = builtinPlatformPlugins.tryGet(device.platform)?.plugin.providers;
     const expected = gatedResolversByHand(device);
-    for (const key of GATED_KEYS) {
+    for (const key of BUILT_IN_KEYS) {
       const applies = facet?.platformGatedResolvers.includes(key) ?? false;
+      assert.equal(applies, expected.has(key), `gate for ${key} on ${device.id}`);
+    }
+    for (const key of PLUGIN_OWNED_KEYS) {
       assert.equal(
-        applies,
-        key !== 'webProvider' && expected.has(key),
-        `gate for ${key} on ${device.id}`,
+        facet?.platformGatedResolvers.includes(key) ?? false,
+        false,
+        `${key} belongs to a platform plugin, not to a builtin facet`,
       );
     }
   }
@@ -116,10 +124,6 @@ test('every family carries the providers facet with the resolvers it owns', () =
   assert.deepEqual(
     [...builtinPlatformPlugins.get('android').plugin.providers!.platformGatedResolvers],
     ['androidAdbProvider'],
-  );
-  assert.deepEqual(
-    [...builtinPlatformPlugins.get('vega').plugin.providers!.platformGatedResolvers],
-    ['vegaToolProvider'],
   );
   assert.deepEqual(
     [...builtinPlatformPlugins.get('linux').plugin.providers!.platformGatedResolvers],

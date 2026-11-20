@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
@@ -9,6 +10,7 @@ import {
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { createHostDiagnostics } from './platform-runtime-host-diagnostics.ts';
+import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
   mockAppleRunnerWarmupCheck: vi.fn(),
@@ -69,17 +71,24 @@ test('vega toolchain check finds the CLI through the host it was composed with',
   const scratch = mkdtempForTestSync('vega-doctor-host-home-');
   const hostHome = path.join(scratch, 'host-home');
   mkdirSync(path.join(hostHome, 'vega', 'bin'), { recursive: true });
-  const vega = path.join(hostHome, 'vega', 'bin', 'vega');
+  const vegaCli = path.join(hostHome, 'vega', 'bin', 'vega');
   writeFileSync(
-    vega,
+    vegaCli,
     '#!/bin/sh\ncase "$*" in\n  *--version*) echo "Vega CLI 9.9.9" ;;\n  *) echo "VirtualDevice : running" ;;\nesac\n',
   );
-  chmodSync(vega, 0o755);
+  chmodSync(vegaCli, 0o755);
 
-  const check = await createHostDiagnostics({
+  const host: HostEnvironment = {
     env: { PATH: path.join(scratch, 'empty-path'), HOME: hostHome },
     cwd: scratch,
-  }).toolchainCheck('vega', context);
+  };
+  // Vega is a platform plugin, so the scenario supplies it: the assertion covers which host the
+  // plugin's doctor binds, not the builtin family set.
+  const check = await createHostDiagnostics(
+    host,
+    undefined,
+    vegaSelectionFixture(host),
+  ).toolchainCheck('vega', context);
 
   expect(check?.status).toBe('pass');
   expect(check?.summary).toContain('Vega CLI 9.9.9');
