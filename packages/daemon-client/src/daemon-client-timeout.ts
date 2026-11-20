@@ -192,10 +192,10 @@ export function resolveRequestTimeoutHint(params: {
   if (resetDaemon) {
     // The reset SIGKILLs the daemon pid only; child processes it owned (Apple runners included)
     // are not proven stopped from here, so the hint claims nothing about them.
-    return 'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.';
+    return 'The daemon did not answer the liveness probes and was reset after the timeout. Read the request log for the timed-out step.';
   }
   if (stopCommand) {
-    return `The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}. Then retry; an SDK client calls ensureDaemon() after the stop, because it reuses a daemon that still accepts connections.`;
+    return `The daemon did not answer the liveness probes, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}. Then retry; an SDK client calls ensureDaemon() after the stop, because it reuses a daemon that still accepts connections.`;
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot
