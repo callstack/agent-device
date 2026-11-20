@@ -62,20 +62,15 @@ agent-device boot --platform android --device Pixel_9_Pro_XL --headless
 agent-device boot --platform ios --pick newest
 agent-device shutdown --platform ios
 agent-device shutdown --platform android --device Pixel_9_Pro_XL
-agent-device open [app|url] [url]
 agent-device open --platform macos --surface frontmost-app
 agent-device open --platform macos --surface desktop
 agent-device close [app]
 agent-device back
 agent-device back --in-app
 agent-device back --system
-agent-device home
 agent-device orientation portrait
 agent-device orientation landscape-left
 agent-device orientation auto
-agent-device app-switcher
-agent-device action-button
-agent-device shake
 agent-device hardware-button volume-up
 agent-device hardware-button volume-down
 agent-device hardware-button power
@@ -93,6 +88,41 @@ agent-device daemon status --json
 
 Boot and shut down:
 
+<!-- generated:command boot -->
+
+Boot target device/simulator.
+
+```bash
+agent-device boot [--headless] [--pick newest] [--timeout <ms>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--headless` | Boot: launch Android emulator without a GUI window |
+| `--pick newest` | Boot: when several equally preferred matches are all shut down, boot one (mobile over TV, newest OS, then name) instead of failing; booted ties still fail |
+
+Also accepts: [common options](#common-options): `--timeout <ms>`.
+
+Supported targets: [Get the device ready and boot simulators and emulators](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help boot`.
+
+<!-- /generated -->
+
+<!-- generated:command shutdown -->
+
+Shutdown target simulator/emulator.
+
+```bash
+agent-device shutdown
+```
+
+Supported targets: [Shut down a simulator or emulator](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help shutdown`.
+
+<!-- /generated -->
+
 - `boot` gets the selected target ready without launching an app. It needs an active session or a device selector. You mainly need it when `open` fails because no simulator or emulator is booted.
 - `boot --pick newest` boots one device when the request names none and several equally preferred devices match, all shut down. Without it, `boot` fails with `AMBIGUOUS_MATCH` and its hint names the option. Device ranking applies to ordinary selection and the `AMBIGUOUS_MATCH` count as well as this option: among Apple devices of the same kind, an iPhone ranks above an iPad, then tvOS, then visionOS, then watchOS. Among the tied devices, it prefers a mobile target over a TV, then the newest OS version, then the first name in name order. Name order compares numbers by value, so iPhone 9 comes before iPhone 17, but it is not device age: with equal OS versions, iPhone 16e comes before iPhone 17. Stopped Android AVDs report no OS version, so the name decides between them. It never picks between booted devices or provider devices. The response names the device and reports `selection.reason: newest-bootable-local`.
 - Android: `boot --platform android --device <avd-name>` launches that emulator with a window; add `--headless` to launch it without one. On macOS the window opens behind the focused app, which keeps focus (also when `open` boots a stopped AVD). This is best-effort: the emulator can still take focus if the focused app cannot be read, or if its window appears after the startup budget runs out.
@@ -107,6 +137,44 @@ Select a device:
 
 Device claims and the daemon:
 
+<!-- generated:command device -->
+
+Inspect and recover enforced local device ownership without a daemon.
+
+```bash
+agent-device device status|release [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--stale` | Device status: show only claims with a provably stale owner |
+
+Exact behavior: `agent-device help device`.
+
+<!-- /generated -->
+
+<!-- generated:command daemon -->
+
+Stop a local daemon or show the providers it registered.
+
+```bash
+agent-device daemon stop [--clean] [--state-dir <path>] | daemon status [--state-dir <path>]
+```
+
+**`daemon stop`**
+
+| Option | What it does |
+| --- | --- |
+| `--clean` | Daemon stop: remove retained runner processes and leases after stopping |
+
+**`daemon status`**
+
+Reads no options.
+
+Exact behavior: `agent-device help daemon`.
+
+<!-- /generated -->
+
 - `device status` lists host-local device claims without starting or contacting a daemon; `--stale` shows the stale claims it hides by default (owner exited, PID reused, state directory deleted, or daemon replaced), some of whose owners may still be running. Scope it with `--platform` plus `--udid` (Apple) or `--serial` (Android). A claim held by another live or uncertain owner blocks `open`, unless the device rebooted after the claim was taken: then `open` settles that owner's durable resources, takes the claim, and reports the release in `warnings`.
 - `device status --json` also reports each claimed device once, with `acquirable` for whether a new session can take it now. It is an inspection, not a promise: status cannot see a reboot and runs no recovery, so `open` may decide differently. `blockedBy` names why a device is not acquirable. `owner` names the claim's owner when its record decodes: the holder that blocks the device or, on an acquirable device, the reclaimable dead owner `open` would settle. A daemon's own abandoned claim is reported as blocked by that live owner, but `open` through that same daemon may still take it. A dead or replaced owner that retains no durable resource does not block by itself. `hiddenStaleClaims` counts the claim records this view hides and is not an availability signal, so read `acquirable`: a hidden owner whose PID was reused or whose state directory is gone, and pending resource cleanup, each still block the device.
 - `device release --stale` settles the durable resources of an owner that provably can't release its claim (its process exited or a newer daemon replaced it), then clears the claim. Live, uncertain, PID-reused, corrupt, and deleted-state-directory claims are refused with the reason. See [Sessions](/docs/sessions#release-a-device-another-session-or-workspace-holds).
@@ -118,6 +186,69 @@ Device claims and the daemon:
 - A `--state-dir` or `AGENT_DEVICE_STATE_DIR` you pass to these commands must be a private directory of your own account, because the daemon's record, lock, log, and recordings live in it. agent-device checks it before it reads anything and refuses one another account owns or can write, with the step that ends the refusal in the error. See [Supported environment variables](/docs/configuration#supported-environment-variables).
 
 Open apps and links:
+
+<!-- generated:command open -->
+
+Open an app, deep link or URL, save replays.
+
+```bash
+agent-device open [appOrUrl] [url] [--activity <component>] [--launch-console <path>] [--launch-args <arg>] [--test-ime] [--no-test-ime] [--save-script [path]] [--force, --overwrite] [--no-record] [--relaunch] [--foreground] [--timeout <ms>] [--wait <ms>] [--surface app|frontmost-app|desktop|menubar] [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>] [--launch-url <url>] [--os <version|range>] [--image-tag <tag>] [--device-mode <slim|full>] [--device-baseline <name>] [--physical]
+```
+
+Aliases: `launch`, `relaunch`.
+
+| Option | What it does |
+| --- | --- |
+| `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
+| `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
+| `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
+| `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |
+| `--device-baseline <name>` | Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend |
+| `--physical` | Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend |
+| `--surface app\|frontmost-app\|desktop\|menubar` | macOS session surface for open (defaults to app) |
+| `--metro-host <host>` | Session-scoped Metro/debug host hint |
+| `--metro-port <port>` | Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host |
+| `--bundle-url <url>` | Session-scoped bundle URL hint |
+| `--launch-url <url>` | Session-scoped deep link / launch URL hint |
+| `--test-ime` | open/test/replay: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices; on test/replay it applies to the sessions the flow opens) |
+| `--no-test-ime` | open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens) |
+| `--activity <component>` | Android launch activity (package/Class, .Class, or Class) or HarmonyOS ability name; not for URL opens |
+| `--launch-console <path>` | open: capture the initial local or Limrun iOS simulator launch console window to a file |
+| `--launch-args <arg>` | open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args). Linux and macOS reject the flag. |
+| `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
+| `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
+| `--relaunch` | open: terminate app process before launching it |
+| `--foreground` | open: keep normal app/device selection and return an initial snapshot of the first screen (a local iOS simulator waits up to 10s for it); without an app, resolve the sole running app on the sole booted iOS simulator |
+| `--no-record` | Do not record this action |
+| `--wait <ms>` | Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE |
+
+Also accepts: [common options](#common-options): `--timeout <ms>`.
+
+Supported targets: [Open and close apps, URLs, and deep links](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help open`.
+
+<!-- /generated -->
+
+<!-- generated:command close -->
+
+Close an app or end the session.
+
+```bash
+agent-device close [app] [--save-script [path]] [--force, --overwrite] [--shutdown]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
+| `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
+| `--shutdown` | close: shutdown associated simulator/emulator after ending session |
+
+Supported targets: [Open and close apps, URLs, and deep links](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help close`.
+
+<!-- /generated -->
 
 - `open [app|url] [url]` boots the selected device when needed and opens the target in a session. `open <url>` opens deep links on Android and iOS, and `open <app> <url>` opens a deep link in that app on iOS. See [Desktop targets](#desktop-targets) for macOS activation behavior.
 - Remote daemons refuse `file:` URLs in `open` targets and launch URLs with reason `REMOTE_HOST_INPUT_DENIED`. Serve local web content over HTTP(S) instead.
@@ -148,6 +279,111 @@ iOS Simulator launch behavior:
 
 Back, orientation, and hardware buttons:
 
+<!-- generated:command back -->
+
+Navigate back in the app or system.
+
+```bash
+agent-device back [--in-app|--system] [--settle]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--in-app` | Back: use app-provided back UI when available; on iOS, the one hittable navigation bar back button, confirmed by a bar change, else the verified left-edge back swipe |
+| `--system` | Back: use system back input or gesture when available; on iOS, the same back as --in-app |
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`.
+
+Supported targets: [Back](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help back`.
+
+<!-- /generated -->
+
+<!-- generated:command home -->
+
+Go to the device home screen.
+
+```bash
+agent-device home
+```
+
+Supported targets: [Home](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help home`.
+
+<!-- /generated -->
+
+<!-- generated:command app-switcher -->
+
+Open the device app switcher.
+
+```bash
+agent-device app-switcher
+```
+
+Supported targets: [App switcher](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help app-switcher`.
+
+<!-- /generated -->
+
+<!-- generated:command orientation -->
+
+Set device orientation.
+
+```bash
+agent-device orientation <portrait|portrait-upside-down|landscape-left|landscape-right|auto>
+```
+
+Supported targets: [Set screen orientation](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help orientation`.
+
+<!-- /generated -->
+
+<!-- generated:command action-button -->
+
+Press the iPhone, iPad, or Apple Watch Ultra Action Button.
+
+```bash
+agent-device action-button
+```
+
+Supported targets: [iPhone Action Button](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help action-button`.
+
+<!-- /generated -->
+
+<!-- generated:command shake -->
+
+Shake an iOS simulator or Android emulator.
+
+```bash
+agent-device shake
+```
+
+Supported targets: [Shake](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help shake`.
+
+<!-- /generated -->
+
+<!-- generated:command hardware-button -->
+
+Press a phone hardware button once.
+
+```bash
+agent-device hardware-button <volume-up|volume-down|power|mute|sleep|wake|media-play-pause|media-next|media-previous|media-rewind|media-fast-forward>
+```
+
+Supported targets: [Phone hardware buttons](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help hardware-button`.
+
+<!-- /generated -->
+
 - `back` uses app-owned back navigation: the back keyevent on Android, the visible back control on macOS, and the Siri Remote Menu button on tvOS. `--in-app` names this default explicitly. macOS finds that control by the app's own back identifier or "Back" label; an app that exposes neither refuses with `error.details.reason: in_app_back_control_unavailable` under `COMMAND_FAILED` and `dispatched: no`, pressing nothing, so press the app's visible back control by its ref.
 - iOS has no system back. On iOS, `back` only pops the navigation stack, by the back button or the edge swipe below. It does not dismiss a modal or a sheet: press that screen's own Close or Cancel control. Android's system back is different: it also closes dialogs and modal screens.
 - On iOS, `back` first looks for the navigation bar's system back button (a button with the identifier `BackButton` inside a navigation bar, or, when none is, one floating below it, such as on the iPhone Duo). It presses that button only when exactly one live, hittable one is found, the app's accessibility tree is readable (it is not read when XCTest could not query it earlier in the session), and the bar state has held still, so a screen that is still being pushed is not taken for the screen to go back from. It succeeds once one of these changes after the tap: the number of navigation bars, the number of back buttons (for example, the button is gone at the root screen), or a back button's title. A back button with no title of its own, such as the Duo's floating one, is confirmed by its navigation bar's title instead; when no bar has a title, or a title keeps changing, that button is not pressed and `back` swipes. If none changes, it reports `back_swipe_unverified` and does not swipe. For a back button that has its own title, a bar's title never counts, because a title can update itself, such as a countdown timer. A back button that only moves never counts either, because a tap that goes nowhere can still move it, such as when a large title collapses. So a pop that leaves the back button as it was, for example between two screens whose back buttons show the same title (such as an app that titles every back button "Back"), also reports `back_swipe_unverified`. A back button whose own title updates itself, or a navigation bar that retitles itself under a back button with no title, can still be misread as a navigation. When an XCTest query hangs, `back` sends nothing more: before the tap it reports `back_swipe_not_dispatched`, and after the tap `back_swipe_unverified`. Only the system back button counts: a custom bar button titled "Back", or a "Back" button in a toolbar, is never pressed. With no such button, with two or more (such as a sheet over a stack), when the tree cannot be read, when the bar state does not hold still, or when the tap is refused before it is sent, `back` is the left-edge back swipe, with or without `--in-app` or `--system`. When XCTest cannot resolve the app's window, the swipe samples the device's only screen: on a single-screen iPhone, or on an iPad only while the app provably fills its screen; otherwise it refuses with `APP_SCREEN_UNRESOLVED`. The swipe succeeds only when the app's screen changes after it; a small spinner may not count as a change, while a larger animation can. Before it swipes, `back` waits for the screen to stop changing; a screen that repaints on its own never settles, and `back` reports `back_swipe_unverified`. A screen that changes on its own right around the swipe can be misread as a back navigation; verify with `snapshot` when the screen has auto-advancing content.
@@ -173,6 +409,24 @@ Back, orientation, and hardware buttons:
 
 Fold a foldable device:
 
+<!-- generated:command fold -->
+
+Fold or unfold a foldable iPhone simulator or Android emulator.
+
+```bash
+agent-device fold [closed|half-open|open] [--keyframes <json>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--keyframes <json>` | Fold: timed {atMs, angle} keyframes; final atMs is motion duration (up to 60000ms) |
+
+Supported targets: [Foldable pose](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help fold`.
+
+<!-- /generated -->
+
 - `fold closed|half-open|open` sets the pose of a foldable iPhone simulator (iPhone Duo) or a foldable Android emulator (`pixel_9_pro_fold`, `pixel_10_pro_fold`, `7.6in Foldable`) and reports the pose only after confirming it on the device. Re-snapshot after every fold, even an interrupted one; refs and coordinates from before it are stale. On iOS, expect 2–4 seconds once the helper is built; `half-open` is reported once agreeing hinge reads confirm it. The first fold on a host or Xcode also compiles the helper and takes longer.
 - The iOS response names the lit panel and its size, marked `coordinateSpace: "native-panel"`. That size is not the next snapshot's viewport and cannot place a tap.
 - iOS only: `--keyframes` plays a timed trajectory instead of a preset, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":3333,"angle":100},{"atMs":5000,"angle":180}]'`. Use 2–64 keyframes starting at 0ms, strictly increasing integer timestamps up to 60,000ms, and angles from 0 to 180°.
@@ -182,6 +436,20 @@ Fold a foldable device:
 - On Android, `fold` confirms the pose from the device state the emulator commits and reports `hingeAngleDegrees` as the hinge sensor reads it. That reading can differ from the AVD profile's per-posture angles, such as 0°, 90°, and 180° on the Pixel folds or 15°, 90°, and 165° on the generic 7.6in Foldable. It also dismisses the lock screen that folding to the cover display can raise. For panels, poses, and timings, see `agent-device help foldable`.
 
 Simulate an incoming call or SMS:
+
+<!-- generated:command telephony -->
+
+Simulate an incoming call or SMS on an Android emulator over adb.
+
+```bash
+agent-device telephony call|accept|cancel <number> | telephony sms <number> <text>
+```
+
+Supported targets: [Call and SMS simulation](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help telephony`.
+
+<!-- /generated -->
 
 - `telephony call <number>` starts an incoming call from `<number>` on an Android emulator; `telephony accept <number>` answers it and `telephony cancel <number>` ends it. `telephony sms <number> <text>` delivers a text message from `<number>`. Use it to check how an app reacts when a call or message arrives, for example whether video playback pauses and resumes.
 - The events go through the emulator console (`adb emu gsm call|accept|cancel`, `adb emu sms send`), so they work on Android emulators reached through the local adb executor. Other adb executors, such as an ADB provider, have not been verified. Physical Android devices refuse with `UNSUPPORTED_OPERATION` and `reason: unsupported-device-kind`; iOS, macOS, tvOS, web, Linux, HarmonyOS, Vega, and Limrun and WebDriver (Appium) sessions refuse with `UNSUPPORTED_OPERATION` too: agent-device sends telephony only through adb and does not drive Appium's own call or SMS simulation.
@@ -208,6 +476,18 @@ agent-device metro reload
 
 ## Human Takeover
 
+<!-- generated:command takeover -->
+
+Pause agent interactions while a person controls a device.
+
+```bash
+agent-device takeover [status | release <hold-id>] [--session <name>]
+```
+
+Exact behavior: `agent-device help takeover`.
+
+<!-- /generated -->
+
 Use `takeover` with an active remote connection when a person needs to use its leased device
 without racing the agent:
 
@@ -223,6 +503,18 @@ needs a device-scoped remote lease, so local sessions aren't supported. Holds do
 restart; reconnect and take the hold again. See [Remote proxy](/docs/remote-proxy#human-takeover).
 
 ## Web Automation
+
+<!-- generated:command web -->
+
+Manage web automation backend.
+
+```bash
+agent-device web setup | web doctor
+```
+
+Exact behavior: `agent-device help web`.
+
+<!-- /generated -->
 
 `--platform web` drives a browser through [agent-browser](https://github.com/vercel-labs/agent-browser) and requires Node 24+. Use it when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or Node.js client flow. For standalone browser automation, use `agent-browser` directly.
 
@@ -275,8 +567,31 @@ agent-device devices --platform android --android-device-allowlist emulator-5554
 
 ## Device discovery
 
+<!-- generated:command devices -->
+
+List available devices and simulators.
+
 ```bash
 agent-device devices
+```
+
+Exact behavior: `agent-device help devices`.
+
+<!-- /generated -->
+
+<!-- generated:command capabilities -->
+
+List supported commands for the selected device.
+
+```bash
+agent-device capabilities
+```
+
+Exact behavior: `agent-device help capabilities`.
+
+<!-- /generated -->
+
+```bash
 agent-device devices --platform ios
 agent-device devices --platform android
 agent-device devices --platform harmonyos
@@ -302,6 +617,23 @@ HarmonyOS support uses HDC and ArkUI `uitest`. On API 24 devices it supports lif
 
 ## Diagnostics
 
+<!-- generated:command doctor -->
+
+Diagnose device, app, dev-server, and RN/Expo readiness.
+
+```bash
+agent-device doctor [--platform ios|android|harmonyos|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--app <id-or-name>` | Target an app without opening it: doctor verifies an installed app by id or name; settings applies an app-scoped change (permission, iOS location) to a bundle id or package |
+| `--remote` | Doctor: check remote connection setup instead of local device inventory |
+
+Exact behavior: `agent-device help doctor`.
+
+<!-- /generated -->
+
 ```bash
 agent-device doctor
 agent-device doctor --platform ios
@@ -315,6 +647,22 @@ agent-device doctor --remote --json
 - `--remote` runs only the checks that don't need a booted device; use it in CI bootstrap.
 
 ## Prepare Apple runner
+
+<!-- generated:command prepare -->
+
+Pre-warm platform helpers before automation.
+
+```bash
+agent-device prepare ios-runner --platform ios|macos [--timeout <ms>]
+```
+
+Also accepts: [common options](#common-options): `--timeout <ms>`.
+
+Supported targets: [Prepare the Apple runner](/docs/capabilities#apps-and-devices).
+
+Exact behavior: `agent-device help prepare`.
+
+<!-- /generated -->
 
 ```bash
 agent-device prepare ios-runner --platform ios --timeout 240000
@@ -331,6 +679,24 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 - Runner build and start output goes to the session's `runner.log`; `daemon.log` covers daemon startup.
 
 ## TV targets
+
+<!-- generated:command tv-remote -->
+
+Press a TV remote navigation, media, or hardware button.
+
+```bash
+agent-device tv-remote [press|longpress] <up|down|left|right|select|menu|home|back|volume-up|volume-down|mute|power|sleep|wake|media-play-pause|media-play|media-pause|media-stop|media-next|media-previous|media-rewind|media-fast-forward|channel-up|channel-down|last-channel|guide|info|captions|tv-input|color-red|color-green|color-yellow|color-blue|android-keycode:<n>> [--duration-ms <ms>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported |
+
+Supported targets: [TV remote keys](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help tv-remote`.
+
+<!-- /generated -->
 
 ```bash
 agent-device open YouTube --platform android --target tv
