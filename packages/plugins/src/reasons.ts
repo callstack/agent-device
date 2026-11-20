@@ -11,8 +11,6 @@ export const PLUGIN_REASONS = {
   duplicateReplayBackend: { reason: 'duplicate_replay_backend' },
   // A request tries to load a plugin after the registry closed.
   registryClosed: { reason: 'plugin-registry-closed' },
-  // The requested plugin is absent from the registry.
-  notInstalled: { reason: 'plugin-not-installed' },
   // The package exports no plugin entry or declares no provider contract this build can load.
   incompatiblePlugin: { reason: 'incompatible_plugin' },
   // The plugin's metadata or code could not be read, resolved, or loaded.
@@ -25,6 +23,18 @@ export const PLUGIN_REASONS = {
   // package version, provider id, credentials or connection, no default factory or `setup(host)`,
   // or a runtime or WebDriver descriptor that lacks a required field.
   invalidPlugin: { reason: 'invalid_plugin' },
+  // A plugin declares an unsupported API version or omits its API metadata.
+  incompatiblePluginApi: { reason: 'incompatible-plugin-api' },
+  // The running Node version is below the minimum a plugin declares.
+  nodeBelowFloor: { reason: 'node-below-floor' },
+  // A platform contribution requires a platform host for setup.
+  platformHostMissing: { reason: 'platform_host_missing' },
+  // A replay backend claims an id reserved for native execution.
+  reservedReplayBackend: { reason: 'reserved_replay_backend' },
+  // Two plugins claim the same platform family.
+  duplicatePlatform: { reason: 'duplicate_platform' },
+  // Two plugins claim the same replay execution id.
+  duplicateReplayExecution: { reason: 'duplicate_replay_execution' },
 } as const satisfies ReasonTable<'plugins'>;
 
 /** One {@link PLUGIN_REASONS} spelling a plugin refusal may carry. */

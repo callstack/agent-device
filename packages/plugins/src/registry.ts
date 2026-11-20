@@ -1,3 +1,5 @@
+import { PLUGIN_REASONS, type PluginFailureReason } from './reasons.ts';
+import { PLUGIN_INSTALLATION_REASONS } from '@agent-device/contracts/plugin-installation';
 import type { PlatformHost, RegisteredPlatformSetup } from './platform.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
@@ -252,7 +254,7 @@ async function loadSlot(
         return failure ? { ...claim, slot, failure } : { ...claim, slot, contribution };
       });
   } catch (error) {
-    const failure = asPluginFailure(error, 'plugin_load_failed');
+    const failure = asPluginFailure(error, PLUGIN_REASONS.loadFailed.reason);
     slot.failure = failure;
     slot.claims = failedLoadClaims(slot, claimed, reservations, raw, failure);
   }
@@ -292,7 +294,7 @@ function assertDeclaredClaims(candidate: PluginCandidate, returned: readonly Plu
       'INVALID_ARGS',
       `Plugin factory claims do not match its package metadata: ${candidate.package ?? 'candidate'}`,
       {
-        reason: 'invalid_plugin',
+        reason: PLUGIN_REASONS.invalidPlugin.reason,
         declared: sortedDeclared,
         returned: sortedReturned,
       },
@@ -332,7 +334,7 @@ export async function startProviderRegistry(
     resolveReplayBackend: async (id, host, packageName) => {
       if (closed)
         throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
-          reason: 'plugin-registry-closed',
+          reason: PLUGIN_REASONS.registryClosed.reason,
         });
       const claim = requireReplayClaim(
         resolved,
@@ -345,7 +347,7 @@ export async function startProviderRegistry(
     resolveReplayExecution: async (packageName) => {
       if (closed)
         throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
-          reason: 'plugin-registry-closed',
+          reason: PLUGIN_REASONS.registryClosed.reason,
         });
       const claim = requireReplayClaim(
         resolved,
@@ -378,7 +380,7 @@ async function setUpClaims(
     try {
       await setUpClaim(claim, host, policy, scope);
     } catch (error) {
-      claim.failure = asPluginFailure(error, 'plugin_setup_failed');
+      claim.failure = asPluginFailure(error, PLUGIN_REASONS.setupFailed.reason);
       claim.registration = undefined;
       claim.replaySetup = undefined;
       claim.platformSetup = undefined;
@@ -401,7 +403,7 @@ async function setUpClaim(
     if (scope === 'replay-backends') return;
     if (!policy.platformHost)
       throw new AppError('COMMAND_FAILED', 'Platform setup requires a platform host', {
-        reason: 'platform_host_missing',
+        reason: PLUGIN_REASONS.platformHostMissing.reason,
       });
     const result = await contribution.setup(policy.platformHost);
     claim.platformSetup = Object.freeze(
@@ -436,7 +438,7 @@ async function resolveRegisteredReplayBackend(
       return backend;
     } catch (error) {
       claim.replayLoading = undefined;
-      claim.replayFailure = asPluginFailure(error, 'plugin_load_failed');
+      claim.replayFailure = asPluginFailure(error, PLUGIN_REASONS.loadFailed.reason);
       refreshInventory();
       throw replayClaimError(claim);
     }
@@ -459,7 +461,7 @@ async function resolveRegisteredReplayExecution(
       return runtime;
     } catch (error) {
       claim.executionLoading = undefined;
-      claim.replayFailure = asPluginFailure(error, 'plugin_load_failed');
+      claim.replayFailure = asPluginFailure(error, PLUGIN_REASONS.loadFailed.reason);
       refreshInventory();
       throw replayClaimError(claim);
     }
@@ -523,13 +525,13 @@ function requireReplayClaim(
     throw replayClaimError(found);
   }
   throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${claim.id}`, {
-    reason: 'plugin-not-installed',
+    reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
     backend: claim.id,
   });
 }
 
 function replayClaimError(claim: ClaimEntry): AppError {
-  const error = asPluginFailure(claimFailure(claim), 'plugin_load_failed');
+  const error = asPluginFailure(claimFailure(claim), PLUGIN_REASONS.loadFailed.reason);
   const packageName = claim.slot.candidate.package;
   return new AppError(
     error.code,
@@ -670,7 +672,7 @@ async function cleanUpRejectedSetup(result: unknown): Promise<void> {
 }
 
 /** A thrown value that is not already typed becomes a typed failure the inventory can key on. */
-function asPluginFailure(error: unknown, reason: 'plugin_load_failed' | 'plugin_setup_failed') {
+function asPluginFailure(error: unknown, reason: PluginFailureReason) {
   if (error instanceof AppError) {
     return typeof error.details?.reason === 'string'
       ? error
