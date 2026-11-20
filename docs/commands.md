@@ -462,8 +462,52 @@ agent-device close
 
 ## Snapshot and inspect
 
+<!-- generated:command snapshot -->
+
+Capture or diff the accessibility tree.
+
 ```bash
 agent-device snapshot [--diff] [-i] [--depth, -d <depth>] [--scope, -s <scope>] [--raw] [--actions] [--observe-only] [--force-full] [--timeout <ms>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--diff` | Snapshot: show structural diff against the previous session baseline |
+| `--record` | Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record) |
+| `-i` | Snapshot: interactive elements only |
+| `--actions` | Snapshot: name the affordances merged inside an element (iOS sim); not directly invokable — reach them via the detail screen, labeled children, or coordinates |
+| `--observe-only` | Snapshot: observe the iOS session app without activation or foreground repair |
+| `--force-full` | Snapshot: re-emit the full tree even when unchanged |
+
+Also accepts: [common options](#common-options): `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Accessibility snapshot, snapshot diff, and audit](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help snapshot`.
+
+<!-- /generated -->
+
+<!-- generated:command get -->
+
+Read element text or attributes.
+
+```bash
+agent-device get text|attrs <@ref|selector>
+```
+
+| Option | What it does |
+| --- | --- |
+| `--record` | Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record) |
+
+Also accepts: [common options](#common-options): `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Refs, selectors, element lookup, and attribute reads](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help get`.
+
+<!-- /generated -->
+
+```bash
 agent-device diff snapshot [-i] [-d <depth>] [-s <scope>] [--raw]
 agent-device get text @e1
 agent-device get attrs @e1
@@ -479,9 +523,19 @@ agent-device get attrs @e1
 
 ### Audit the current screen
 
+<!-- generated:command audit -->
+
+Report advisory accessibility findings.
+
 ```bash
 agent-device audit
 ```
+
+Supported targets: [Accessibility snapshot, snapshot diff, and audit](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help audit`.
+
+<!-- /generated -->
 
 `audit` captures the current screen once and reports advisory accessibility findings. Findings are review prompts, not failures, and `audit` changes nothing on the device.
 
@@ -502,6 +556,36 @@ Controls are recognized by role (button, link, switch, checkbox, radio, slider, 
 Like `find`, `audit` publishes only the refs it returns. The text prints each as `@eN~s<refsGeneration>`; press that pinned ref. A plain ref from before the audit stays refused after the frame expired, and an audit with no findings issues no refs. An audit with findings also ends the snapshot's complete frame, so take a new snapshot before you use refs that the audit did not return. Each finding shows its role. Missing-name findings omit labels rejected by the name check and show the captured identifier when available. Other findings include the captured label when available. A control can get its name from a child or placeholder even when it has no label of its own, and the shared-name check reads that same resolved name. Guidance follows once per finding kind, with Apple HIG sizes on iOS and Material sizes on Android. `--json` returns `findings` (with `label` and `identifier` when available), `guidance` keyed by finding kind, `checks`, `limitations`, and `refsGeneration` (only with findings). `checks.snapshot` is `unknown` when the capture cannot report truncation, such as Appium page source.
 
 ## Wait and alerts
+
+<!-- generated:command wait -->
+
+Wait for a duration, text, selector, strict absence, or stable UI.
+
+```bash
+agent-device wait <ms>|text <text>|@ref|<selector>|absent <selector> [timeoutMs]|stable [quietMs] [timeoutMs]
+```
+
+Also accepts: [common options](#common-options): `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Wait for text, selectors, and timeouts](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help wait`.
+
+<!-- /generated -->
+
+<!-- generated:command alert -->
+
+Inspect, accept, or dismiss a platform alert.
+
+```bash
+agent-device alert [get|accept|dismiss|wait] [timeout]
+```
+
+Supported targets: [Read, accept, and dismiss system alerts](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help alert`.
+
+<!-- /generated -->
 
 ```bash
 agent-device wait 1500
@@ -548,6 +632,73 @@ agent-device alert dismiss
 - If a sheet or permission prompt is visible but `alert` reports none, `alert` did not recognize it. Run `snapshot -i -s "<visible label>"`, then `press @ref` on the visible button. Android alert support is snapshot-derived, and not every iOS simulator permission surface is a native alert.
 
 ## Interactions
+
+<!-- generated:command click -->
+
+Click or tap a UI target.
+
+```bash
+agent-device click <x y|@ref|@ref,...|selector>
+```
+
+| Option | What it does |
+| --- | --- |
+| `--count <n>` | Repeat count for press, swipe and gesture tap series |
+| `--interval-ms <ms>` | Delay between press iterations |
+| `--hold-ms <ms>` | Press or gesture tap hold duration for each iteration; for gesture pan, the hold before the move |
+| `--jitter-px <n>` | Deterministic per-axis coordinate jitter in pixels |
+| `--double-tap` | Use double-tap gesture per press iteration |
+| `--verify` | Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot |
+| `--button primary\|secondary\|middle` | Click: choose mouse button (middle reserved for future macOS support) |
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Tap, press, and fill](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help click`.
+
+<!-- /generated -->
+
+<!-- generated:command press -->
+
+Short-press a UI target.
+
+```bash
+agent-device press <x y|@ref|@ref,...|selector>
+```
+
+Aliases: `tap`.
+
+| Option | What it does |
+| --- | --- |
+| `--count <n>` | Repeat count for press, swipe and gesture tap series |
+| `--interval-ms <ms>` | Delay between press iterations |
+| `--hold-ms <ms>` | Press or gesture tap hold duration for each iteration; for gesture pan, the hold before the move |
+| `--jitter-px <n>` | Deterministic per-axis coordinate jitter in pixels |
+| `--double-tap` | Use double-tap gesture per press iteration |
+| `--verify` | Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot |
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Tap, press, and fill](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help press`.
+
+<!-- /generated -->
+
+<!-- generated:command focus -->
+
+Focus input at screen coordinates.
+
+```bash
+agent-device focus <x> <y>
+```
+
+Supported targets: [Refs, selectors, element lookup, and attribute reads](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help focus`.
+
+<!-- /generated -->
 
 ```bash
 agent-device click @e1
@@ -598,6 +749,47 @@ A comma-separated ref plan — `press @e13,@e14` or the same form on `click` —
 
 ### Text entry
 
+<!-- generated:command fill -->
+
+Replace text in a UI input.
+
+```bash
+agent-device fill <x> <y> <text> | fill <@ref|selector> <text> | fill <x y|@ref|selector> --text-stdin
+```
+
+| Option | What it does |
+| --- | --- |
+| `--delay-ms <ms>` | Delay between typed characters |
+| `--record-as <VAR>` | Fill: send the live text but publish ${VAR} in an armed .ad recording |
+| `--text-stdin` | Fill: read the text from stdin (max 64 KiB, one trailing newline removed) instead of argv |
+| `--verify` | Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot |
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Tap, press, and fill](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help fill`.
+
+<!-- /generated -->
+
+<!-- generated:command type -->
+
+Append text to the focused input.
+
+```bash
+agent-device type <text> [--delay-ms <ms>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--delay-ms <ms>` | Delay between typed characters |
+
+Supported targets: [Type into the focused field](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help type`.
+
+<!-- /generated -->
+
 - `fill` replaces the field value. `type` appends to the focused field and accepts text only: use `fill @ref "text"` to target a field, or `press @ref` then `type "text"`.
 - iOS, including Limrun, `fill` avoids another focus tap when the current command identifies the target input, reads its keyboard focus, and finds no other input under its point. For readable focused inputs, clearing tries select-all/delete and reads the result before moving the caret for delete-burst fallback. Newly focused inputs retain caret preparation. A masked input, such as a secure field, is not cleared when it shows nothing or a placeholder that is not a mask. Otherwise it gets deletes with read-back first, and the caret tap at the field's right edge, where a show/hide control often sits, runs only when the read-back shows neither an empty value nor a masked placeholder. If the deletes can't reach the text, for example after the caret was moved off the end, and that text shows as many bullets as the placeholder, the read-back can't tell it from empty, so the new text is typed at the caret, next to the old text.
 - Use plain `fill` or `type` first. Add `--delay-ms` only when a debounced or search-as-you-type field misses characters, or the app must receive each incremental update; delayed typing enters characters one at a time instead of using a clipboard-style fallback.
@@ -627,6 +819,116 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 ```
 
 ### Pointer and gestures
+
+<!-- generated:command longpress -->
+
+Hold a UI target to open a context menu.
+
+```bash
+agent-device longpress <x y|@ref|selector> [durationMs]
+```
+
+Aliases: `long-press`.
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Long press](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help longpress`.
+
+<!-- /generated -->
+
+<!-- generated:command hover -->
+
+Hover the pointer over a UI target (web only).
+
+```bash
+agent-device hover <x y|@ref|selector>
+```
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Hover and viewport size](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help hover`.
+
+<!-- /generated -->
+
+<!-- generated:command swipe -->
+
+Fling between coordinates.
+
+```bash
+agent-device swipe <x1> <y1> <x2> <y2> [--count <n>] [--pause-ms <ms>] [--pattern one-way|ping-pong]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--count <n>` | Repeat count for press, swipe and gesture tap series |
+| `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
+| `--pause-ms <ms>` | Delay between swipe or gesture tap iterations |
+| `--pattern one-way\|ping-pong` | Swipe repeat pattern |
+
+Supported targets: [Gesture plans and swipes](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help swipe`.
+
+<!-- /generated -->
+
+<!-- generated:command gesture -->
+
+Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures.
+
+```bash
+agent-device gesture <pan|fling|swipe|pinch|rotate|transform|tap|drag> ...
+```
+
+**`gesture pan`**
+
+| Option | What it does |
+| --- | --- |
+| `--pointer-count <1\|2>` | Gesture pan: number of touch pointers (default 1) |
+| `--hold-ms <ms>` | Press or gesture tap hold duration for each iteration; for gesture pan, the hold before the move |
+
+**`gesture tap`**
+
+| Option | What it does |
+| --- | --- |
+| `--count <n>` | Repeat count for press, swipe and gesture tap series |
+| `--hold-ms <ms>` | Press or gesture tap hold duration for each iteration; for gesture pan, the hold before the move |
+| `--pause-ms <ms>` | Delay between swipe or gesture tap iterations |
+
+**`gesture fling`**
+
+Reads no options.
+
+**`gesture swipe`**
+
+| Option | What it does |
+| --- | --- |
+| `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
+
+**`gesture pinch`**
+
+Reads no options.
+
+**`gesture rotate`**
+
+Reads no options.
+
+**`gesture transform`**
+
+Reads no options.
+
+**`gesture drag`**
+
+Reads no options.
+
+Supported targets: [Gesture plans and swipes](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help gesture`.
+
+<!-- /generated -->
 
 - `click --button secondary` opens a macOS context menu; `--button middle` is unsupported on macOS.
 - `longpress` is supported on iOS and Android. `hover` is web only: it moves the pointer over a target without pressing so hover-gated UI appears, and `--settle` returns what it revealed. Touch platforms reject it; use `longpress` for the hold gesture.
@@ -714,6 +1016,28 @@ These refusals carry `dispatched: no` and a typed `error.details.reason`, so bra
 
 ## Find (semantic)
 
+<!-- generated:command find -->
+
+Find an element and act.
+
+```bash
+agent-device find <locator|text> [action] [value] [--first|--last]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--record` | Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record) |
+| `--first` | Find: pick the first match when ambiguous |
+| `--last` | Find: pick the last match when ambiguous |
+
+Also accepts: [common options](#common-options): `--depth, -d <depth>`, `--raw`.
+
+Supported targets: [Refs, selectors, element lookup, and attribute reads](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help find`.
+
+<!-- /generated -->
+
 ```bash
 agent-device find "Sign In" click
 agent-device find label "Email" fill "user@example.com"
@@ -724,6 +1048,26 @@ agent-device find "Follow" list
 `find` locates an element by text, label, or role and runs an action on it (`click` by default). See [Selectors](/docs/selectors) for the action list, ambiguous matches, and `--first`/`--last`.
 
 ## Assertions
+
+<!-- generated:command is -->
+
+Check a UI predicate on a selector.
+
+```bash
+agent-device is <predicate> <selector> [value] [--depth, -d <depth>] [--scope, -s <scope>] [--raw]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--record` | Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record) |
+
+Also accepts: [common options](#common-options): `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Refs, selectors, element lookup, and attribute reads](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help is`.
+
+<!-- /generated -->
 
 ```bash
 agent-device is visible 'role="button" label="Continue"'
@@ -753,6 +1097,69 @@ agent-device is text 'id="greeting"' "Welcome back"
 
 ## Replay
 
+<!-- generated:command replay -->
+
+Replay a recorded session or Maestro flow.
+
+```bash
+agent-device replay <path> | replay export <file.ad> [--out <path>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
+| `--metro-host <host>` | Session-scoped Metro/debug host hint |
+| `--metro-port <port>` | Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host |
+| `--bundle-url <url>` | Session-scoped bundle URL hint |
+| `--test-ime` | open/test/replay: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices; on test/replay it applies to the sessions the flow opens) |
+| `--no-test-ime` | open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens) |
+| `--save-script [path]` | Arm a repair transaction from this replay (ADR 0012): recording starts at step 1, and the healed script commits when the repair-armed session tears down (close, close --save-script, or idle-reap). Independent of the open/close authoring arm-on-open. Optional custom output path. |
+| `--update, -u` | Replay: retired as a rewrite (ADR 0012) — never edits the .ad file; every divergence already carries ranked selector suggestions, --update or not |
+| `--from <n>` | Replay: resume at 1-based plan step n, skipping 1..n-1 without executing them (requires --plan-digest; see a divergence report's resume field). replay only, not test |
+| `--plan-digest <sha256>` | Replay: the plan digest a --from resume must match (from a prior divergence report); mismatch, edits, or include/platform-expansion changes fail INVALID_ARGS before any action |
+| `--keep-session` | Replay: leave the session active by suppressing exactly an authored terminal close in a native .ad script; replay only, not test or Maestro YAML |
+| `--maestro` | Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. See agent-device help maestro for commands and boundaries |
+| `-e KEY=VALUE, --env KEY=VALUE` | Replay/Test: inject or override a ${KEY} variable for the script (repeatable) |
+
+Also accepts: [common options](#common-options): `--timeout <ms>`, `--out <path>`.
+
+Exact behavior: `agent-device help replay`.
+
+<!-- /generated -->
+
+<!-- generated:command test -->
+
+Run replay test suites.
+
+```bash
+agent-device test <path-or-glob>...
+```
+
+| Option | What it does |
+| --- | --- |
+| `--metro-host <host>` | Session-scoped Metro/debug host hint |
+| `--metro-port <port>` | Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host |
+| `--bundle-url <url>` | Session-scoped bundle URL hint |
+| `--test-ime` | open/test/replay: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices; on test/replay it applies to the sessions the flow opens) |
+| `--no-test-ime` | open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens) |
+| `--update, -u` | Replay: retired as a rewrite (ADR 0012) — never edits the .ad file; every divergence already carries ranked selector suggestions, --update or not |
+| `--maestro` | Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. See agent-device help maestro for commands and boundaries |
+| `-e KEY=VALUE, --env KEY=VALUE` | Replay/Test: inject or override a ${KEY} variable for the script (repeatable) |
+| `--fail-fast` | Test: stop the suite after the first failing script; with sharding, each shard stops independently |
+| `--retries <n>` | Test: retry each failed script up to n additional times |
+| `--record-video` | Test: record each replay attempt to recording.mp4 in its attempt artifacts |
+| `--artifacts-dir <path>` | Test: root directory for suite artifacts |
+| `--reporter <name-or-path>` | Test: add a replay suite reporter; use default, junit:&lt;path>, or a custom reporter path (repeatable) |
+| `--report-junit <path>` | Test: compatibility alias for --reporter junit:&lt;path> |
+| `--shard-all <n>` | Test: run the full suite on each of n devices; combine with --device id1,id2 for explicit connected devices; AD_SHARD_INDEX is zero-based |
+| `--shard-split <n>` | Test: split runnable suite entries across n devices; AD_SHARD_INDEX is zero-based |
+
+Also accepts: [common options](#common-options): `--timeout <ms>`.
+
+Exact behavior: `agent-device help test`.
+
+<!-- /generated -->
+
 ```bash
 agent-device open Settings --platform ios --session e2e --save-script [path]
 agent-device replay ./session.ad      # Run deterministic replay from .ad script
@@ -772,13 +1179,33 @@ See [Replay and E2E testing](/docs/replay-e2e) for recording and CI workflow det
 
 ## Batch
 
+<!-- generated:command batch -->
+
+Run multiple commands.
+
+```bash
+agent-device batch [--steps <json> | --steps-file <path>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--steps <json>` | Batch: JSON array of {"command","input"} steps |
+| `--steps-file <path>` | Batch: read steps JSON from file |
+| `--on-error stop` | Batch: stop when a step fails |
+| `--max-steps <n>` | Batch: maximum number of allowed steps |
+
+Also accepts: [common options](#common-options): `--out <path>`.
+
+Exact behavior: `agent-device help batch`.
+
+<!-- /generated -->
+
 ```bash
 agent-device batch --steps-file /tmp/batch-steps.json --json
 agent-device batch --steps '[{"command":"open","input":{"app":"settings"}}]'
 ```
 
 - `batch` runs a JSON array of `{ command, input, runtime? }` steps in a single daemon request and stops at the first failing step.
-- `--max-steps <n>` sets the per-request step limit.
 - In non-JSON mode, successful batches print a short per-step summary.
 
 See [Batching](/docs/batching) for payload format, response shape, and usage guidelines.
