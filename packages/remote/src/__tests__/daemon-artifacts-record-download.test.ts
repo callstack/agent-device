@@ -20,7 +20,11 @@ async function withRecordingServer(
   const root = mkdtempForTestSync('agent-device-record-download-');
   const cwd = path.join(root, 'cwd');
   fs.mkdirSync(cwd);
-  const server = http.createServer((req, res) => res.end(path.basename(req.url ?? '')));
+  // Each artifact's bytes are its own id, served as binary so the body is never read as HTML.
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/octet-stream' });
+    res.end(path.basename(req.url ?? ''));
+  });
   try {
     const port = await listenOnLoopback(server);
     await run(cwd, recordStop(`http://127.0.0.1:${port}`, cwd, path.join(root, 'state')));
