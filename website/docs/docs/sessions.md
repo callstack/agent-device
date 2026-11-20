@@ -126,6 +126,10 @@ agent-device open --platform ios --device iPhone_17_Pro
 agent-device close            # the simulator this open booted ends shut down
 ```
 
+For an Apple simulator, the proof that `open` booted it is that `open`'s own boot step performed the
+boot. If something else booted the simulator first, such as a concurrent `xcrun simctl boot`, plain
+`close` leaves it running and reports `boot-owner-unverified` in `warnings`.
+
 For an Android emulator, that stop is owed to the emulator process this session's `open`
 launched, so `close` checks that process before it asks for the stop. When it is gone, or when the
 host cannot answer for it, plain `close` leaves the emulator running and reports why in `warnings`.

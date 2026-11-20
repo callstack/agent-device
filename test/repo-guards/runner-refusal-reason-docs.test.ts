@@ -38,6 +38,11 @@ const REASON_TABLES = [
     cliHelpWorkflows,
   ]),
   reasonTable('DeviceClaimConflictReason', 'packages/contracts/src/device-inventory.ts', 'union'),
+  reasonTable(
+    'CLOSE_BOOT_OWNER_UNVERIFIED_REASONS',
+    'packages/contracts/src/device-boot.ts',
+    'object',
+  ),
 ];
 
 test('every reason of every exported published-reason table is documented at its surfaces', () => {

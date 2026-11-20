@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import type { DeviceBootPerformance } from '@agent-device/contracts/device-boot';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { platformRuntimeHostFixture } from '../runtime.fixtures.ts';
@@ -296,6 +297,78 @@ test('a cold boot reveals Simulator.app without taking focus from the frontmost 
     expect.objectContaining({ executable: 'open', args: ['-g', '-a', 'Simulator'] }),
     expect.anything(),
   );
+});
+
+// --- #4791: the boot step answers for the boot it performed ---
+//
+// The report is what lets a later plain `close` stop the simulator. These pin each shape of the
+// answer against the simctl traffic that produced it.
+
+test('a cold boot reports that this readiness call performed the boot', async () => {
+  const { host } = coldSimulatorHost({});
+  const reports: DeviceBootPerformance[] = [];
+
+  await ensureAppleReady(host, simulator(), new AbortController().signal, {
+    onSimulatorBoot: (report) => reports.push(report),
+  });
+
+  expect(reports).toEqual([{ performed: true }]);
+});
+
+test('a boot refused as already booted reports no boot and says why', async () => {
+  // The foreign-boot race: the listing said Shutdown, and by the time `simctl boot` ran somebody
+  // else's boot had won. `ensureBootedSimulator` absorbs the refusal, so this is the only answer
+  // that can reach the session.
+  const { host } = coldSimulatorHost({
+    bootFailure: {
+      exitCode: 149,
+      stderr: 'Unable to boot device in current state: Booted\nCurrent device state: Booted',
+    },
+  });
+  const reports: DeviceBootPerformance[] = [];
+
+  const readied = await ensureAppleReady(host, simulator(), new AbortController().signal, {
+    onSimulatorBoot: (report) => reports.push(report),
+  });
+
+  expect(reports).toEqual([{ performed: false, reason: 'already-booted' }]);
+  // The open still succeeds: the simulator is up, just not because of this call.
+  expect(readied.booted).toBe(true);
+});
+
+test('a readiness call that never reaches the boot step reports no boot attempt', async () => {
+  // Selection found the simulator already running, so nothing was booted and nothing is owed.
+  const run = vi.fn(async () => ({
+    stdout: JSON.stringify({ devices: { ios: [{ udid: 'sim-1', state: 'Booted' }] } }),
+    stderr: '',
+    exitCode: 0,
+  }));
+  const host = platformRuntimeHostFixture();
+  const reports: DeviceBootPerformance[] = [];
+
+  await ensureAppleReady(
+    { ...host, appleTools: { ...host.appleTools, run } },
+    simulator({ booted: true }),
+    new AbortController().signal,
+    { onSimulatorBoot: (report) => reports.push(report) },
+  );
+
+  expect(reports).toEqual([{ performed: false, reason: 'already-booted' }]);
+});
+
+test('a physical device readiness reports no simulator boot attempt', async () => {
+  const host = platformRuntimeHostFixture();
+  const ensureConnected = vi.fn(async () => {});
+  const reports: DeviceBootPerformance[] = [];
+
+  await ensureAppleReady(
+    { ...host, deviceReadiness: { ...host.deviceReadiness, applePhysical: { ensureConnected } } },
+    simulator({ kind: 'device', booted: true }),
+    new AbortController().signal,
+    { onSimulatorBoot: (report) => reports.push(report) },
+  );
+
+  expect(reports).toEqual([{ performed: false, reason: 'no-boot-attempt' }]);
 });
 
 /** A Shutdown Simulator whose boot and bootstatus run the given hooks first. */
