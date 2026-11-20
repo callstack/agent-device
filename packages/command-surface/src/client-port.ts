@@ -80,6 +80,7 @@ import type {
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
   SettingsUpdateOptions,
+  ShakeCommandOptions,
   SwipeGestureOptions,
   SwipeOptions,
   TelephonyCommandOptions,
@@ -116,6 +117,7 @@ export type AgentDeviceCommandClient = {
   fold: (options: FoldCommandOptions) => Promise<CommandResult<'fold'>>;
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   actionButton: (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>;
+  shake: (options?: ShakeCommandOptions) => Promise<CommandResult<'shake'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   hardwareButton: (
     options: HardwareButtonCommandOptions,

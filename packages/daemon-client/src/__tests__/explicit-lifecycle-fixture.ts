@@ -1,6 +1,8 @@
+import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { vi, type Mock } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   listenOnLoopback,
   mkdtempForTestSync,
@@ -189,4 +191,21 @@ export function launchesFreshDaemonAt(
       },
     ]),
   );
+}
+
+export function identityIn(
+  error: AppError,
+  key: 'daemon' | 'client',
+): { pid?: number; version?: string } {
+  return (error.details?.[key] ?? {}) as { pid?: number; version?: string };
+}
+
+export async function failureOf(run: Promise<unknown>): Promise<AppError> {
+  try {
+    await run;
+  } catch (error) {
+    assert.ok(error instanceof AppError, 'expected a typed AppError');
+    return error;
+  }
+  return assert.fail('expected the call to reject');
 }

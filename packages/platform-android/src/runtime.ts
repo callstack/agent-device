@@ -105,6 +105,20 @@ const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Android has no key event for this system button.',
 );
+/** The emulator console's accelerometer override is the only shake control adb reaches. */
+const shakeKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'shake overrides the accelerometer through the Android emulator console; a physical device has no console, so shake it by hand.',
+);
+/** Shake is a handheld gesture, and the accelerometer override is unverified on a TV image. */
+const shakeTvUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'shake is supported on Android phone and tablet emulators only.',
+);
+function androidShakeFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'emulator') return shakeKindUnavailable;
+  return device.target === 'tv' ? shakeTvUnavailable : available;
+}
 const headlessUnavailable = unavailableFact(
   'unsupported-device-kind',
   'Headless boot is supported only for Android emulators.',
@@ -356,6 +370,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
+          shake: androidShakeFact(device),
           ...androidHardwareButtonFacts(device),
         }),
         ...androidFoldableFacts(device),

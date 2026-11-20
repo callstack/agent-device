@@ -27,7 +27,7 @@ enum RunnerHttpRequestRejection: Equatable {
   }
 
   /// Framing rejects a request before the runner's session and listener-token model exists, so
-  /// this type stays standalone and names its two codes itself. The parity guard scans this file
+  /// this type stays standalone and names its two codes itself. The literal guard scans this file
   /// and waives its two code literals.
   var code: String {
     self == .unauthorized ? "UNAUTHORIZED" : "INVALID_ARGS"

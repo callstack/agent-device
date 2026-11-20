@@ -486,6 +486,12 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         },
       },
       {
+        id: 'shake',
+        label: 'Shake',
+        commands: ['shake'],
+        link: docs('commands', 'navigation'),
+      },
+      {
         id: 'fold',
         label: 'Foldable pose',
         commands: ['fold'],

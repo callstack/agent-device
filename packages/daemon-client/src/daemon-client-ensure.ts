@@ -5,7 +5,10 @@ import type {
 } from '@agent-device/contracts/client';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
-import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process';
+import {
+  DAEMON_TEARDOWN_GRACE_MS,
+  waitForDaemonExit,
+} from '@agent-device/daemon-contracts/daemon-process';
 import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
@@ -32,8 +35,11 @@ import {
 // A racing `ensureDaemon` in another process can retire or replace the daemon this call judged, or
 // a daemon this call quiesced can still be leaving. A judgement that went stale is made again after
 // a short wait, for as long as a drain can take.
-const ENSURE_ATTEMPTS = 40;
 const JUDGE_AGAIN_DELAY_MS = 250;
+// The budget is counted in waits, not on a clock: each attempt that judges again waits once, so the
+// waits alone add up to the teardown grace. The work inside an attempt is not counted, so a state
+// directory that another process keeps replacing can hold this call for longer.
+const ENSURE_ATTEMPTS = Math.ceil(DAEMON_TEARDOWN_GRACE_MS / JUDGE_AGAIN_DELAY_MS);
 const DRAIN_POLL_MS = 250;
 
 type EnsureStep =

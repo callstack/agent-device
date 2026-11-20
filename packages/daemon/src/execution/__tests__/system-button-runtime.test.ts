@@ -20,6 +20,7 @@ import {
   mediaPreviousRuntimeUse,
   mediaRewindRuntimeUse,
   muteRuntimeUse,
+  shakeRuntimeUse,
   powerRuntimeUse,
   sleepRuntimeUse,
   volumeDownRuntimeUse,
@@ -110,11 +111,17 @@ const EXPECTED: Record<
     message: 'Pressed Action Button',
     refusedOn: iosSimulator,
   },
+  shake: {
+    button: 'shake',
+    use: shakeRuntimeUse,
+    message: 'Shook the device',
+    refusedOn: androidPhone,
+  },
 };
 
 test('the registry names exactly the commands the press route serves', () => {
-  // The denominator is the route's own predicate over the registry: the three argumentless
-  // presses plus the positional-selected `hardware-button`, so a press command joining (or
+  // The denominator is the route's own predicate over the registry: the argumentless
+  // rows plus the positional-selected `hardware-button`, so a press command joining (or
   // leaving) the route without a row here or in the route set fails.
   const routeCommands = commandDescriptors
     .map((descriptor) => descriptor.name)

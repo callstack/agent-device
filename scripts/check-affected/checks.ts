@@ -158,6 +158,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     'Runner XCTest selection and package-source boundary',
     'check:xctest-selection',
   ),
+  // Renders the Swift enums from the TypeScript declarations and compares them with the checked-in
+  // file; no Xcode.
+  gate(
+    'runner-error-codes',
+    'Generated runner error-code enums match runner-contract.ts',
+    'check:runner-error-codes',
+  ),
   // Line parity needs no toolchain; the `swiftc -parse` half reports itself skipped on a host
   // without Swift, so the gate is declared on the macOS lane where both halves run.
   gate(

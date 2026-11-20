@@ -61,6 +61,12 @@ export const ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvi
     [C.actionButton],
     'Android refuses the action-button fact on every kind',
   );
+export const ANDROID_SHAKE_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.shake],
+    'Android admits the shake fact on emulators and refuses every other kind',
+  );
 export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/platform-android/src/runtime.test.ts',
@@ -116,6 +122,10 @@ export const APPLE_NAVIGATION_FACTS_EVIDENCE: RepositoryEvidence = {
 export const APPLE_ACTION_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
   test: 'classifies the action-button fact for the %s leaf',
+};
+export const APPLE_SHAKE_FACT_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/navigation/shake.test.ts',
+  test: 'classifies the shake fact for the %s leaf',
 };
 export const APPLE_HARDWARE_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',

@@ -16,6 +16,7 @@ import type {
   BackCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
+  ShakeCommandResult,
   TvRemoteCommandResult,
 } from '@agent-device/contracts/navigation';
 import type { ClipboardCommandResult } from '@agent-device/contracts/clipboard';
@@ -63,6 +64,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const keyboard: Equal<CommandResult<'keyboard'>, KeyboardCommandResult> = true;
   const tvRemote: Equal<CommandResult<'tv-remote'>, TvRemoteCommandResult> = true;
   const telephony: Equal<CommandResult<'telephony'>, TelephonyCommandResult> = true;
+  const shake: Equal<CommandResult<'shake'>, ShakeCommandResult> = true;
   const wait: Equal<CommandResult<'wait'>, WaitCommandResult> = true;
   const prepare: Equal<CommandResult<'prepare'>, PrepareCommandResult> = true;
   const push: Equal<CommandResult<'push'>, PushCommandResult> = true;
@@ -95,6 +97,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     keyboard,
     tvRemote,
     telephony,
+    shake,
     wait,
     prepare,
     push,
@@ -140,6 +143,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'keyboard'
     | 'tv-remote'
     | 'telephony'
+    | 'shake'
     | 'wait'
     | 'scroll'
     | 'prepare'

@@ -33,6 +33,8 @@ export type {
 } from './runner-physical-device.ts';
 export {
   mintRunnerToken,
+  RUNNER_ERROR_CODES,
+  RUNNER_PASS_THROUGH_CODES,
   RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE,
   buildRunnerSequenceCommand,
