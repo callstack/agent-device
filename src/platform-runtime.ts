@@ -37,10 +37,6 @@ import {
   loadShutdownRuntime as loadAndroidShutdownRuntime,
 } from '@agent-device/platform-android';
 import {
-  createHarmonyInventoryModule,
-  runtimeModule as harmonyosRuntimeModule,
-} from '@agent-device/platform-harmonyos';
-import {
   captureLinuxSurfaceSnapshot,
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
@@ -89,11 +85,6 @@ export function createPlatformModuleRegistryForHost(
       createAndroidInventoryModule({
         sdkRoots: configuredValues(env.ANDROID_SDK_ROOT, env.ANDROID_HOME),
       }),
-      createHarmonyInventoryModule({
-        hdcSdkPath: env.HDC_SDK_PATH,
-        devecoSdkHome: env.DEVECO_SDK_HOME,
-        commandLineToolsHome: env.HARMONYOS_COMMAND_LINE_TOOLS,
-      }),
       linuxInventoryModule,
       ...(platforms?.inventoryModules ?? []),
     ],
@@ -111,7 +102,7 @@ export async function createPlatformDeviceInventoryGateways(
     registry: createPlatformModuleRegistryForHost(host.env, platforms),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
-      return createDeviceInventoryHost(host);
+      return createDeviceInventoryHost(host, platforms?.harmony);
     },
     provider,
     env: host.env,
@@ -127,13 +118,7 @@ const androidRuntimeModule = createAndroidRuntimeModule({
 
 function createPlatformRuntimeModuleRegistry(platforms: PlatformModuleSelection) {
   return createPlatformModuleRegistry<PlatformRuntimeModule>(
-    [
-      appleRuntimeModule,
-      androidRuntimeModule,
-      harmonyosRuntimeModule,
-      linuxRuntimeModule,
-      ...platforms.runtimeModules,
-    ],
+    [appleRuntimeModule, androidRuntimeModule, linuxRuntimeModule, ...platforms.runtimeModules],
     platforms.reportAbsent,
     platforms.assertSelectionCurrent,
   );
@@ -160,6 +145,7 @@ export function createPlatformRuntimeGateway(
       return createPlatformRuntimeHost({
         host: options.host,
         web: options.platforms.web,
+        harmony: options.platforms.harmony,
         interactors: options.platforms.interactors,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,

@@ -46,6 +46,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
 import { createHarmonyPerfOperations } from './perf/runtime.ts';
 import {
+  createHarmonyRecordingHost,
   createHarmonyScreenRecordingOperations,
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
@@ -327,7 +328,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ensureReady: async () => ({ ...request.device, booted: true }),
           ...(recordingFacts.available
             ? createHarmonyScreenRecordingOperations({
-                host,
+                host: createHarmonyRecordingHost(host),
                 device: request.device,
                 owner,
                 signal: request.scope.signal,
@@ -351,7 +352,6 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           }),
           ...whenAdmitted(facts.operations.perfFrames, () =>
             createHarmonyPerfOperations({
-              resolveHost: () => host.perf.harmony,
               device: request.device,
             }),
           ),

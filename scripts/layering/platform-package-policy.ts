@@ -53,7 +53,6 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
   'src/platform-runtime-operation-host.ts',
   'src/platform-runtime-perf-host.ts',
   'src/platform-runtime-resource-cleanup.ts',
-  'src/platform-runtime-screen-recording-harmony-host.ts',
   'src/platform-runtime-screen-recording-web-host.ts',
   'src/platform-runtime-toolchain-host.ts',
 ]);
@@ -107,13 +106,13 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/tool-provider',
   ],
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
-  harmonyos: ['@agent-device/platform-harmonyos/interactor'],
   linux: ['@agent-device/platform-linux/interactor'],
   web: ['@agent-device/platform-web/interactor'],
 };
 const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   web: '@agent-device/web',
   vega: '@agent-device/vega',
+  harmonyos: '@agent-device/harmonyos',
 };
 
 const INTERACTOR_COMPOSITION_FILE = 'src/core/interactors/register-builtins.ts';
@@ -498,5 +497,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
+  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
 }

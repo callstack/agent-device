@@ -1,18 +1,24 @@
-import type { HarmonyPerfHost } from '@agent-device/contracts/perf-runtime-host';
 import {
   missingPerfAppMetric,
   settlePerfMetric,
 } from '@agent-device/contracts/perf-runtime-operation-builder';
 import type { PerfRuntimeOperations } from '@agent-device/contracts/perf-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { sampleHarmonyMemoryPerf } from '../perf.ts';
 
+/**
+ * The HarmonyOS performance cells. Memory sampling reads `/proc/<pid>/status` over HDC, which the
+ * family owns; no shared host facet carries it.
+ */
 export function createHarmonyPerfOperations(
   params: Readonly<{
-    resolveHost(): HarmonyPerfHost;
     device: DeviceInfo;
+    /** The HDC memory read; the binding supplies the package's own sampler so a test can stub it. */
+    sampleMemory?: (device: DeviceInfo, appId: string) => Promise<object>;
   }>,
 ): Pick<PerfRuntimeOperations, 'perfFrames' | 'perfMemorySample' | 'perfMemorySnapshot'> {
-  const { resolveHost, device } = params;
+  const { device } = params;
+  const sampleMemory = params.sampleMemory ?? sampleHarmonyMemoryPerf;
   const frameUnavailable = {
     available: false,
     reason:
@@ -22,7 +28,7 @@ export function createHarmonyPerfOperations(
     perfFrames: async () => ({ metric: frameUnavailable, sampling: frameUnavailable }),
     perfMemorySample: async ({ appId }) => ({
       metric: appId
-        ? await settlePerfMetric(resolveHost().sampleMemory(device, appId))
+        ? await settlePerfMetric(sampleMemory(device, appId))
         : missingPerfAppMetric('HarmonyOS', 'bundle'),
       sampling: {
         method: 'hdc-shell-proc-status',

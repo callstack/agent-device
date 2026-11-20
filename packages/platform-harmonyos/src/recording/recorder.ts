@@ -1,8 +1,44 @@
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
+import { runHarmonyHdc, runHarmonyShell } from '../hdc.ts';
 
-export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['harmony'] {
+/**
+ * The device-side HarmonyOS screen recorder, driven entirely through HDC. It is the family's own
+ * transport: the shared screen-recording host keeps output preparation and video finalization, and
+ * nothing else needs to know the recorder's ability ids or media-tool commands.
+ */
+export type HarmonyScreenRecorder = Readonly<{
+  start(device: DeviceInfo, fileName: string, signal?: AbortSignal): Promise<HostCommandResult>;
+  stop(device: DeviceInfo, signal?: AbortSignal): Promise<HostCommandResult>;
+  findMedia(
+    device: DeviceInfo,
+    fileName: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined>;
+  stageMedia(
+    device: DeviceInfo,
+    input: Readonly<{ mediaUri: string; remotePath: string }>,
+    signal?: AbortSignal,
+  ): Promise<boolean>;
+  stagedFileSize(
+    device: DeviceInfo,
+    remotePath: string,
+    signal?: AbortSignal,
+  ): Promise<number | undefined>;
+  pull(
+    device: DeviceInfo,
+    input: Readonly<{ remotePath: string; outputPath: string }>,
+    signal?: AbortSignal,
+  ): Promise<HostCommandResult>;
+  remove(device: DeviceInfo, remotePath: string, signal?: AbortSignal): Promise<boolean>;
+  removeMedia(device: DeviceInfo, mediaUri: string, signal?: AbortSignal): Promise<boolean>;
+}>;
+
+const SCREEN_RECORDER_ABILITY = 'com.huawei.hmos.screenrecorder';
+const SCREEN_RECORDER_SERVICE_ABILITY = 'com.huawei.hmos.screenrecorder.ServiceExtAbility';
+
+export function createHarmonyScreenRecorder(): HarmonyScreenRecorder {
   return Object.freeze({
     start: async (device, fileName, signal) =>
       await hdcShell(
@@ -11,9 +47,9 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
           'aa',
           'start',
           '-b',
-          'com.huawei.hmos.screenrecorder',
+          SCREEN_RECORDER_ABILITY,
           '-a',
-          'com.huawei.hmos.screenrecorder.ServiceExtAbility',
+          SCREEN_RECORDER_SERVICE_ABILITY,
           '--ps',
           'CustomizedFileName',
           fileName,
@@ -23,14 +59,7 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
     stop: async (device, signal) =>
       await hdcShell(
         device,
-        [
-          'aa',
-          'start',
-          '-b',
-          'com.huawei.hmos.screenrecorder',
-          '-a',
-          'com.huawei.hmos.screenrecorder.ServiceExtAbility',
-        ],
+        ['aa', 'start', '-b', SCREEN_RECORDER_ABILITY, '-a', SCREEN_RECORDER_SERVICE_ABILITY],
         signal,
       ),
     findMedia: async (device, fileName, signal) =>
@@ -56,11 +85,9 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
 }
 
 async function hdc(device: DeviceInfo, args: string[], signal?: AbortSignal) {
-  const { runHarmonyHdc } = await import('@agent-device/platform-harmonyos');
   return await runHarmonyHdc(device, args, { allowFailure: true, signal });
 }
 
 async function hdcShell(device: DeviceInfo, words: readonly ShellWord[], signal?: AbortSignal) {
-  const { runHarmonyShell } = await import('@agent-device/platform-harmonyos');
   return await runHarmonyShell(device, words, { allowFailure: true, signal });
 }

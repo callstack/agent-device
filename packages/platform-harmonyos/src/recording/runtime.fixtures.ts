@@ -1,7 +1,7 @@
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
-import type { createHarmonyScreenRecordingOperations } from './runtime.ts';
+import type { HarmonyScreenRecorder } from './recorder.ts';
 
 export const harmonyDevice = Object.freeze({
   platform: 'harmonyos' as const,
@@ -31,15 +31,37 @@ export function harmonyCommandSuccess() {
   return { stdout: 'start ability successfully', stderr: '', exitCode: 0 };
 }
 
-type HarmonyHost = Parameters<typeof createHarmonyScreenRecordingOperations>[0]['host'];
-
+/**
+ * The host and recorder pair the recording operations consume. Every recorder port is a stub the
+ * test overrides, so no HDC process is spawned from these tests.
+ */
 export function harmonyRecordingHost(
-  overrides: Partial<ScreenRecordingRuntimeHost['harmony']> & {
+  overrides: Partial<HarmonyScreenRecorder> & {
     complete?: ScreenRecordingRuntimeHost['finalize']['complete'];
     prepare?: ScreenRecordingRuntimeHost['outputs']['prepare'];
   } = {},
-): HarmonyHost {
-  const harmony: ScreenRecordingRuntimeHost['harmony'] = {
+): Readonly<{
+  screenRecording: Pick<ScreenRecordingRuntimeHost, 'finalize' | 'outputs'>;
+  clock: Readonly<{ now: () => number; sleep: (ms?: number) => Promise<void> }>;
+  recorder: HarmonyScreenRecorder;
+}> {
+  return {
+    screenRecording: {
+      outputs: {
+        ...recordingFileStore().outputs,
+        prepare: overrides.prepare ?? (async () => {}),
+      },
+      finalize: { sniff: async () => {}, complete: overrides.complete ?? (async () => ({})) },
+    },
+    clock: { now: () => 0, sleep: async () => {} },
+    recorder: harmonyRecordingRecorder(overrides),
+  };
+}
+
+function harmonyRecordingRecorder(
+  overrides: Partial<HarmonyScreenRecorder> = {},
+): HarmonyScreenRecorder {
+  return {
     start: overrides.start ?? (async () => harmonyCommandSuccess()),
     stop: overrides.stop ?? (async () => harmonyCommandSuccess()),
     findMedia: overrides.findMedia ?? (async () => 'file://media/video'),
@@ -48,16 +70,5 @@ export function harmonyRecordingHost(
     pull: overrides.pull ?? (async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     remove: overrides.remove ?? (async () => true),
     removeMedia: overrides.removeMedia ?? (async () => true),
-  };
-  return {
-    screenRecording: {
-      harmony,
-      outputs: {
-        ...recordingFileStore().outputs,
-        prepare: overrides.prepare ?? (async () => {}),
-      },
-      finalize: { sniff: async () => {}, complete: overrides.complete ?? (async () => ({})) },
-    },
-    clock: { now: () => 0, sleep: async () => {} },
   };
 }
