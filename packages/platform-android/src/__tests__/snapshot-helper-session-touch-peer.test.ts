@@ -8,7 +8,10 @@ import {
   retireFailedAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
 } from '../snapshot-helper-session-lifecycle.ts';
-import { isAndroidSnapshotHelperSessionPeerUnverified } from '../snapshot-helper-session-protocol.ts';
+import {
+  isAndroidSnapshotHelperSessionPeerUnverified,
+  sendAndroidSnapshotHelperSessionCommand,
+} from '../snapshot-helper-session-protocol.ts';
 import { runAndroidSnapshotHelperSessionTouchCommand } from '../snapshot-helper-session.ts';
 import { FIXTURE_SESSION_SECRET, onSessionCommand } from './snapshot-helper-session.fixtures.ts';
 
@@ -179,3 +182,32 @@ test.each([
     }
   },
 );
+
+test.each([
+  {
+    label: 'a valid hello followed by more bytes in the same chunk',
+    answer: (clientNonce: string) =>
+      `${'ef'.repeat(32)} ${serverProof(clientNonce, 'ef'.repeat(32))}\nagentDeviceProtocol=x\n\n`,
+  },
+  { label: '4 KiB with no newline', answer: () => 'a'.repeat(4096) },
+])('$label is refused after at most one hello line', async ({ answer }) => {
+  const received: string[] = [];
+  const listener = await listenOnce((socket) => {
+    socket.on('data', (chunk) => received.push(chunk.toString('utf8')));
+    socket.once('data', (chunk) => socket.write(answer(chunk.toString('utf8').trim())));
+  });
+  try {
+    const refusal = await sendAndroidSnapshotHelperSessionCommand(
+      { port: listener.port, secret: SECRET },
+      'input req-1 e30=',
+      2_000,
+    ).catch((error: unknown) => error);
+    assert.ok(isAndroidSnapshotHelperSessionPeerUnverified(refusal));
+    const receivedBytes = (refusal as AppError).details?.receivedBytes;
+    assert.ok(typeof receivedBytes === 'number' && receivedBytes <= 130, `kept ${receivedBytes}`);
+    // The client proof and the command never left the host.
+    assert.match(received.join(''), /^[0-9a-f]{64}\n$/);
+  } finally {
+    await listener.close();
+  }
+});

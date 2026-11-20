@@ -152,6 +152,8 @@ export function sendAndroidSnapshotHelperSessionCommand(
           port,
           reason: SESSION_PEER_UNVERIFIED_REASON,
           dispatched: 'no',
+          // How much of the unverified answer was kept: never more than one hello line.
+          receivedBytes: hello.length,
         }),
       );
     };
@@ -165,18 +167,21 @@ export function sendAndroidSnapshotHelperSessionCommand(
     socket.on('data', (chunk) => {
       if (phase === 'proven') return void chunks.push(Buffer.from(chunk));
       if (phase === 'refused') return;
-      hello = Buffer.concat([hello, chunk]);
-      // The hello is exactly `<64 hex nonce> <64 hex proof>\n`; both fields are checked before any
-      // HMAC is computed, and a longer line or a newline anywhere else is refused.
-      const newline = hello.indexOf(0x0a);
-      if (newline < 0 && hello.length <= HELLO_LINE_BYTES) return;
+      // Keep at most the one hello line, `<64 hex nonce> <64 hex proof>\n`. An honest helper sends
+      // nothing more before the client proof, so any byte past that window, or a line of any other
+      // shape, is refused; both fields are checked before any HMAC is computed.
+      const take = chunk.subarray(0, HELLO_LINE_BYTES + 1 - hello.length);
+      hello = Buffer.concat([hello, take]);
+      if (take.length < chunk.length) return refuse();
+      if (hello.length <= HELLO_LINE_BYTES) return void (hello.includes(0x0a) && refuse());
       const fields =
-        newline === HELLO_LINE_BYTES
-          ? /^([0-9a-f]{64}) ([0-9a-f]{64})$/.exec(hello.subarray(0, newline).toString('latin1'))
+        hello[HELLO_LINE_BYTES] === 0x0a
+          ? /^([0-9a-f]{64}) ([0-9a-f]{64})$/.exec(
+              hello.subarray(0, HELLO_LINE_BYTES).toString('latin1'),
+            )
           : null;
       if (!fields) return refuse();
       const [, serverNonce = '', proof = ''] = fields;
-      chunks.push(hello.subarray(newline + 1));
       const expected = Buffer.from(sessionProof(secret, SERVER_LABEL, clientNonce, serverNonce));
       if (!timingSafeEqual(expected, Buffer.from(proof))) return refuse();
       phase = 'proven';
