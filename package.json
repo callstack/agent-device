@@ -324,6 +324,7 @@
     "@agent-device/daemon-client": "workspace:*",
     "@agent-device/daemon-contracts": "workspace:*",
     "@agent-device/device-selection": "workspace:*",
+    "@agent-device/gestures": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/host-swift": "workspace:*",
     "@agent-device/kernel": "workspace:*",

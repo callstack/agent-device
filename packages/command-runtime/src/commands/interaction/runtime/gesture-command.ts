@@ -5,7 +5,7 @@ import type {
   GestureIntent,
   GestureSemanticInput,
 } from '@agent-device/contracts/gesture-plan-types';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';

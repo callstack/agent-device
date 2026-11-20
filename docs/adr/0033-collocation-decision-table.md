@@ -34,6 +34,29 @@ Re-evaluate those files against their remaining edges.
 Contracts keeps a vocabulary only when consumers in at least two higher-ranked zones use it; a single consumer zone cannot own it without an R5 spine inversion.
 A vocabulary that only one zone uses, and that names that zone's own operations, belongs in that zone.
 
+## Contracts holds vocabulary, not algorithms
+
+Contracts keeps types and constants.
+A pure algorithm over a contracts vocabulary belongs in a package above contracts and below every consumer of that algorithm.
+R18 states that contracts owns vocabulary only, and an algorithm there breaks that rule without a gate failure.
+
+Gesture payload reading, public gesture normalization, and gesture plan geometry live in `@agent-device/gestures`.
+That package depends only on contracts and kernel.
+The gesture payload and plan types stay in contracts, because other contracts vocabularies name them.
+The owner is a new package because ad-script and the platform packages call these functions, and no existing package is below both.
+R13 names gestures as platform substrate.
+R18 rejects a function in a contracts gesture input, plan, or normalization module.
+Contracts cannot import gestures: its only workspace dependency is kernel.
+
+The remaining logic in contracts moves in these slices, in this order:
+
+1. Scroll and swipe geometry in `packages/contracts/src/scroll-gesture.ts` moves to gestures. It calls snapshot visibility, so that call moves first or with it.
+2. Tap keyboard occlusion, with the Android input-ownership and snapshot text readers it calls, moves below the platform packages and selectors.
+3. The settings parser in `packages/contracts/src/settings.ts` needs an owner below command-surface and the platform packages.
+4. Snapshot visibility, model, text, diagnostics, and annotation logic moves toward capture-kit. The contracts snapshot facade publishes it, so the facade changes with it.
+5. Lease scope, daemon HTTP, device rotation, device inventory, screenshot, TV remote, audio probe, and application lifecycle logic each need an owner audit.
+6. The runtime binding modules stay until their contracts callers, the local interactor operation set and the unavailable-runtime table, move with them.
+
 ## Placement decisions
 
 The detailed table retains the individual audit decisions.
@@ -42,6 +65,7 @@ Their ownership rationale follows.
 | Owner | Decision and rationale |
 | --- | --- |
 | capture-kit | The capture admission ledger and durable JSON keep decisions rested on the managed-allocation cycle, so they no longer bind; re-evaluate them against their remaining edges. The rejection of durable JSON into contracts (R18) still binds. Keep snapshot evidence, freshness policy, and touch reference geometry below their platform, interaction, and daemon consumers. |
+| gestures | Gesture payload reading, normalization, and plan geometry moved here from contracts. Keep them below ad-script, the platform packages, and the command and daemon zones. |
 | contracts | Keep shared Android observation and system chrome, app events and state, device boot, interaction guarantees, and wait runtime vocabulary below their consumers. Keep the published contracts facade at the package boundary. The managed-device allocation port moved beside its sole implementing operations before that package was removed. |
 | device-selection | Keep inventory context, selection resolver, dispatch resolution, and open-target vocabulary below daemon, remote, replay, and CLI consumers. |
 | host-kit | Keep diagnostics, request cancellation and request contracts as shared seams. Keep session-path grammar below daemon, CLI, and platform consumers. |
@@ -82,6 +106,9 @@ The shared daemon-contracts zone sits below both daemon and client; R11 and pack
 ## Rejected alternatives
 
 - Move every ≥80% community match into its dominant zone: rejected because the measure describes consumers and reversed dependencies invert the spine.
+- Move each contracts logic file to its single consumer zone: rejected because the audit found almost no file with one consumer zone.
+- Split contracts into role packages for wire, platform SDK, interaction, and observation: rejected because the groups import the types of each other in both directions.
+- Give gesture algorithms to capture-kit, selectors, or command-runtime: rejected because none of them is below ad-script.
 - Move request-progress envelope validation to contracts: rejected because R18 excludes envelope validation mechanics.
 - Move durable JSON mechanics to contracts: rejected because they validate durable-descriptor persistence, while R18 restricts contracts to wire vocabulary.
 - Move ledgers to managed-allocation with capture-kit importing them back: rejected as proposed because the reverse edge would complete a package cycle. Removing the required import first would permit reconsideration; the allocator withdrawal now applies.
@@ -89,5 +116,6 @@ The shared daemon-contracts zone sits below both daemon and client; R11 and pack
 ## Consequences
 
 Shared foundations stay below their consumers instead of moving to the largest consumer's zone.
+Contracts still holds logic outside the gesture modules; R18 does not reject it until its slice moves.
 Path-keyed guards constrain relocation but do not settle ownership.
 A future move can reconsider a rejected direction after its cycle-closing edge is removed.

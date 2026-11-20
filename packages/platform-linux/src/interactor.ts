@@ -28,7 +28,7 @@ import {
   typeLinux,
   writeLinuxClipboard,
 } from './index.ts';
-import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
+import { singlePointerPlanEndpoints } from '@agent-device/gestures/gesture-plan';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 
 export function createLinuxInteractor(host: HostEnvironment): Interactor {

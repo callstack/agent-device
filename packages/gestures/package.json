@@ -1,0 +1,29 @@
+{
+  "name": "@agent-device/gestures",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Private gesture algorithms for agent-device: payload reading, public gesture normalization, and pointer plan geometry over the contracts gesture vocabulary.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
+  },
+  "exports": {
+    "./gesture-payload-reader": {
+      "types": "./src/gesture-payload-reader.ts",
+      "default": "./src/gesture-payload-reader.ts"
+    },
+    "./gesture-normalization": {
+      "types": "./src/gesture-normalization.ts",
+      "default": "./src/gesture-normalization.ts"
+    },
+    "./gesture-plan": {
+      "types": "./src/gesture-plan.ts",
+      "default": "./src/gesture-plan.ts"
+    }
+  }
+}

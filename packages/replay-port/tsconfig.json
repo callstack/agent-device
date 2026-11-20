@@ -17,6 +17,7 @@
     { "path": "../command-registry" },
     { "path": "../contracts" },
     { "path": "../device-selection" },
+    { "path": "../gestures" },
     { "path": "../host-kit" },
     { "path": "../kernel" },
     { "path": "../maestro" },

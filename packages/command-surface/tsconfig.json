@@ -17,6 +17,7 @@
     { "path": "../capture-kit" },
     { "path": "../command-registry" },
     { "path": "../contracts" },
+    { "path": "../gestures" },
     { "path": "../host-kit" },
     { "path": "../kernel" },
     { "path": "../provision-kit" },

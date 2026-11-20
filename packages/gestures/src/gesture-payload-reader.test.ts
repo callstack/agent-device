@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readGesturePayload } from './gesture-input.ts';
+import { readGesturePayload } from './gesture-payload-reader.ts';
 
 test('structured gesture input rejects durations outside the planner range', () => {
   const cases = [

@@ -1,5 +1,5 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
+import { singlePointerPlanEndpoints } from '@agent-device/gestures/gesture-plan';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
   type CoordinateTapTextInputEvidence,

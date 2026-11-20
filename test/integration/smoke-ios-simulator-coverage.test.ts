@@ -3,13 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import {
   gesturePayloadFromPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
   swipePayloadFromPositionals,
-} from '@agent-device/contracts/gesture-normalization';
+} from '@agent-device/gestures/gesture-normalization';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { isValidSelectorExpression } from '@agent-device/selectors';

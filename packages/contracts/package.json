@@ -228,14 +228,6 @@
       "types": "./src/gesture-input.ts",
       "default": "./src/gesture-input.ts"
     },
-    "./gesture-normalization": {
-      "types": "./src/gesture-normalization.ts",
-      "default": "./src/gesture-normalization.ts"
-    },
-    "./gesture-plan": {
-      "types": "./src/gesture-plan.ts",
-      "default": "./src/gesture-plan.ts"
-    },
     "./gesture-plan-types": {
       "types": "./src/gesture-plan-types.ts",
       "default": "./src/gesture-plan-types.ts"

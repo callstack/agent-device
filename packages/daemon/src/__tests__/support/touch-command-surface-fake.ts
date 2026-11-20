@@ -21,7 +21,7 @@ import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interact
 import {
   buildDragGesturePlan,
   singlePointerPlanEndpoints,
-} from '@agent-device/contracts/gesture-plan';
+} from '@agent-device/gestures/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import { rectContains } from '@agent-device/kernel/rect';
 import type {

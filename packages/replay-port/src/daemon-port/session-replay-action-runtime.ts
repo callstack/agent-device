@@ -7,7 +7,7 @@ import {
   describeReplayGestureFlagError,
   gesturePayloadFromPositionals,
   swipePayloadFromPositionals,
-} from '@agent-device/contracts/gesture-normalization';
+} from '@agent-device/gestures/gesture-normalization';
 import { buildDisplayPositionals } from '@agent-device/session-journal/session-event-action';
 import { appendReplayTraceEvent } from '@agent-device/replay-port/session-replay-trace';
 import { inferFillText, readRecordedInputVariableName } from '@agent-device/ad-script';

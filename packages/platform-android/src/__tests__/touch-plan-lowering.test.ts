@@ -3,7 +3,7 @@ import { buildScrollGesturePlan } from '@agent-device/contracts/scroll-gesture';
 import { PROPERTY_RUNS_SMALL, scrollInViewportArb } from './touch-plan-lowering.fixtures.ts';
 import assert from 'node:assert/strict';
 import { expectTypeOf, test } from 'vitest';
-import { buildDragGesturePlan, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildDragGesturePlan, buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import type { SinglePointerGesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { lowerAndroidTouchPlan, type AndroidLoweredTouchPlan } from '../touch-plan-lowering.ts';
 import { longPressPlan } from './touch-helper.fixtures.ts';
