@@ -103,15 +103,24 @@ export function unavailableConnectPluginError(
   );
 }
 
+/**
+ * The capabilities a provider declares: the daemon's own routing for `proxy`, `cloud` and no
+ * provider, or a loaded plugin's declaration. Undefined when the provider's plugin is not loaded.
+ */
+export function declaredConnectionCapabilities(
+  provider: string | undefined,
+  env: NodeJS.ProcessEnv,
+): ConnectionProviderCapabilities | undefined {
+  if (provider === 'proxy') return remoteDaemonConnection('proxy');
+  if (provider === undefined || provider === 'cloud')
+    return remoteDaemonConnection('remote-provider');
+  return pluginConnectionCapabilities(provider, env);
+}
+
 /** Installed providers declare their capabilities; the rest is the daemon's own routing. */
 export function connectionProviderCapabilities(
   provider: string | undefined,
   env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities {
-  if (provider === 'proxy') return remoteDaemonConnection('proxy');
-  const declared =
-    provider === undefined || provider === 'cloud'
-      ? undefined
-      : pluginConnectionCapabilities(provider, env);
-  return declared ?? remoteDaemonConnection('remote-provider');
+  return declaredConnectionCapabilities(provider, env) ?? remoteDaemonConnection('remote-provider');
 }

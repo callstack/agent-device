@@ -8,21 +8,26 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { connectionProviderCapabilities } from './provider-policy.ts';
+import {
+  connectionProviderCapabilities,
+  declaredConnectionCapabilities,
+} from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
 /**
  * Records on a connection whether its provider forgets an ended lease. Call it where the provider's
  * plugin is loaded: `connect` and connection materialization. `close` and `session` load no plugin,
- * so they read the recorded value.
+ * so they read the recorded value. A recorded value is the authority and is not computed again. A
+ * provider whose plugin is not loaded declares nothing, so nothing is recorded for it.
  */
 export function withEndedLeasePolicy(
   state: RemoteConnectionState,
   env: NodeJS.ProcessEnv,
 ): RemoteConnectionState {
-  const forgetsEndedLease =
-    connectionProviderCapabilities(state.leaseProvider, env).forgetsEndedConnectionLease === true;
-  return state.forgetsEndedLease === forgetsEndedLease ? state : { ...state, forgetsEndedLease };
+  if (state.forgetsEndedLease !== undefined) return state;
+  const declared = declaredConnectionCapabilities(state.leaseProvider, env);
+  if (!declared) return state;
+  return { ...state, forgetsEndedLease: declared.forgetsEndedConnectionLease === true };
 }
 
 /**

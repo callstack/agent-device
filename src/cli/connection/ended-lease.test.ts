@@ -9,7 +9,7 @@ import {
   type StoredConnectionSeed,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import { forgetEndedConnectionLease } from './ended-lease.ts';
+import { forgetEndedConnectionLease, withEndedLeasePolicy } from './ended-lease.ts';
 import { primeProviderConnection } from './provider-policy.ts';
 
 vi.mock('@agent-device/plugins/store', async (importOriginal) =>
@@ -93,4 +93,29 @@ test('an ended host-allocated lease stays stored', async () => {
   for (const leaseProvider of [undefined, 'revyl', 'browserstack', 'custom-provider']) {
     assert.equal(storedLeaseIdAfter(reply, { leaseProvider }), LEASE_ID);
   }
+});
+
+test('a provider whose plugin is not loaded leaves the recorded ended-lease policy as it is', () => {
+  const now = new Date().toISOString();
+  const recorded = {
+    version: 1 as const,
+    session: 'adc-custom',
+    remoteConfigPath: '/unused/remote.json',
+    remoteConfigHash: 'hash',
+    tenant: 'custom',
+    runId: 'run',
+    leaseProvider: 'custom-provider',
+    forgetsEndedLease: true,
+    connectedAt: now,
+    updatedAt: now,
+  };
+  // The plugin was uninstalled after `connect`: nothing declares the policy, so nothing rewrites it.
+  assert.equal(withEndedLeasePolicy(recorded, createTestHostEnvironment().env), recorded);
+  const unrecorded = { ...recorded, forgetsEndedLease: undefined };
+  assert.equal(withEndedLeasePolicy(unrecorded, createTestHostEnvironment().env), unrecorded);
+  // The daemon's own routing always declares it, and the first record is the authority.
+  const proxy = withEndedLeasePolicy({ ...unrecorded, leaseProvider: 'proxy' }, {});
+  assert.equal(proxy.forgetsEndedLease, true);
+  const recordedFalse = { ...proxy, forgetsEndedLease: false };
+  assert.equal(withEndedLeasePolicy(recordedFalse, {}), recordedFalse);
 });
