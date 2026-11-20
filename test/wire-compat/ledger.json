@@ -62,7 +62,7 @@
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
     "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:dd40589df65202521964ba66b6678e547dbd782aff40df1bc946023140e6880b",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:bde38d707f30a0d0361634505a9ea639371c43b67c40503f370701df2123c616",
+    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:7d26a53973dab7b683f6b26b623c2b7a488738a2ef52eabc37802e80deca5973",
     "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:47ff0055c3f9650819b66b5ef819e7b03e678aac4ed273ae211359d6e5f01211",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:a14e6666cd4a8c1adc37cf8687925c5ca5a3331e9a5cfd426561c75e2107c676",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
@@ -159,8 +159,8 @@
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
-    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:a05ea11c462928c1eb96eedd3cd4fd69e26f6bca4990e6cffd2e51feb75324f7",
-    "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:0d6f56e996727f3af7861b8aec45e705584b2a3394ce3c15dd909c90c28556c8",
+    "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:72501a5aeebe32cd5d610e4f608ee65b82c43168a9a2e0c5fb7895f00275f284",
+    "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:b0ba4c155bbefe846ab5770c8acbd72ccf46d83de147e685a4d8ef605ff571f1",
     "packages/remote/src/upload-client-artifact.ts#PreparedUploadArtifact": "sha256:5c40027d47feda3c946e836372b9f08ad866ab1612708b0d506551545f931ea4",
     "packages/remote/src/upload-client.ts#ARTIFACT_HASH_ALGORITHM": "sha256:328c135ea5f9d89fd2c142b440d5402a61d19f9044bf0504dfc2c525e58c1909",
     "packages/remote/src/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
@@ -434,8 +434,8 @@
     },
     {
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics",
-      "digest": "sha256:a05ea11c462928c1eb96eedd3cd4fd69e26f6bca4990e6cffd2e51feb75324f7",
-      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). #4518 (client-side only): a caller abort stops the record download and removes the partial file; the request is unchanged."
+      "digest": "sha256:72501a5aeebe32cd5d610e4f608ee65b82c43168a9a2e0c5fb7895f00275f284",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006). #4518 (client-side only): cancellation stops the record download and removes its private staging file. The client publishes only a complete record. The request is unchanged."
     },
     {
       "declaration": "packages/remote/src/upload-client.ts#uploadDirectArtifact",
@@ -599,8 +599,8 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
-      "digest": "sha256:bde38d707f30a0d0361634505a9ea639371c43b67c40503f370701df2123c616",
-      "rationale": "#4518 client-side only: the RPC error branch takes the caller's AbortSignal. A caller abort skips the batch receipt settlement, and an abort during it stops the script download before anything publishes. The error fields read and the error the caller receives are unchanged. For a remote daemon only, the error details drop a peer's savedScript, recordingDestinationWarnings and artifact localPath, which only this client's own delivery may set; a local daemon's details are unchanged. #4518 (client-side only): remote record stop error details keep only named facts, a failure of this handler reaches the reject callback, and a canceled request fetches no diagnostics record."
+      "digest": "sha256:7d26a53973dab7b683f6b26b623c2b7a488738a2ef52eabc37802e80deca5973",
+      "rationale": "#4518 client-side only: the RPC error branch takes the caller's AbortSignal. A caller abort skips the batch receipt settlement, and an abort during it stops the script download before anything publishes. The error fields read and the error the caller receives are unchanged. For a remote daemon only, the error details drop a peer's savedScript, recordingDestinationWarnings and artifact localPath, which only this client's own delivery may set; a local daemon's details are unchanged. #4518 (client-side only): remote record stop error details keep only named facts, a failure of this handler reaches the reject callback, and a canceled request fetches no diagnostics record and drops the peer's logPath."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext",
@@ -674,7 +674,7 @@
     },
     {
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError",
-      "digest": "sha256:0d6f56e996727f3af7861b8aec45e705584b2a3394ce3c15dd909c90c28556c8",
+      "digest": "sha256:b0ba4c155bbefe846ab5770c8acbd72ccf46d83de147e685a4d8ef605ff571f1",
       "rationale": "#4518 (client-side only): it takes the caller's signal and fetches no record for a canceled request."
     }
   ]

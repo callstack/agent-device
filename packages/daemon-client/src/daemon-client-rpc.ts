@@ -135,7 +135,7 @@ async function rejectDaemonHttpRpcError(
   const payload = { ...local, details: await projectRemoteErrorDetails(req, local.details) };
   // A caller abort already rejected this request, so no diagnostics record is fetched for it.
   if (signal?.aborted) {
-    reject(appErrorFromDaemonError(payload, requestId));
+    reject(appErrorFromDaemonError({ ...payload, logPath: undefined }, requestId));
     return;
   }
   const localized = await localizeRemoteDaemonError(payload, {

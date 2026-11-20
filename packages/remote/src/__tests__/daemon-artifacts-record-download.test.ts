@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   closeLoopbackServer,
   createTestHostEnvironment,
@@ -17,6 +17,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
+import { sendRemoteScriptOpen } from '../session-script-destination.ts';
 
 type World = { root: string; cwd: string; baseUrl: string };
 
@@ -109,7 +110,8 @@ test('a stop never writes to a daemon localPath and warns about the cwd fallback
 
 test('a stop writes to the destination its own request names, without a warning', async (t) => {
   await withServer(t, serveVideo, async (world) => {
-    const requested = path.join(world.root, 'out', 'demo.mp4');
+    const requested = path.join(world.root, 'demo.mp4');
+    fs.writeFileSync(requested, 'previous video');
     const data = await materialize(world, [artifact({ field: 'outPath', localPath: '/x.mp4' })], {
       meta: { clientArtifactPaths: { outPath: requested } },
     });
@@ -119,19 +121,32 @@ test('a stop writes to the destination its own request names, without a warning'
   });
 });
 
-test('a link at the fallback name is replaced and its target is untouched', async (t) => {
-  await withServer(t, serveVideo, async (world) => {
-    const target = path.join(world.root, 'victim.txt');
-    fs.writeFileSync(target, 'original');
-    const linked = path.join(world.cwd, 'x.mp4');
-    fs.symlinkSync(target, linked);
-    await materialize(world, [artifact({ field: 'outPath' })]);
-    expect(fs.readFileSync(target, 'utf8')).toBe('original');
-    expect(fs.lstatSync(linked).isFile()).toBe(true);
-    expect(fs.readFileSync(linked, 'utf8')).toBe('video-bytes');
-    expect(stagingEntries(world.cwd)).toEqual([]);
-  });
-});
+test.for(['link', 'file', 'case variant'] as const)(
+  'an occupied cwd fallback preserves the existing %s',
+  async (taken, t) => {
+    await withServer(t, serveVideo, async (world) => {
+      const target = path.join(world.root, 'target.txt');
+      fs.writeFileSync(target, 'original');
+      const existing = path.join(world.cwd, taken === 'case variant' ? 'X.mp4' : 'x.mp4');
+      if (taken === 'link') fs.symlinkSync(target, existing);
+      else fs.writeFileSync(existing, 'earlier');
+
+      const candidate = path.join(world.cwd, 'x.mp4');
+      const pending = materialize(world, [artifact({ field: 'outPath' })]);
+      if (fs.existsSync(candidate)) {
+        await expect(pending).rejects.toMatchObject({
+          details: { reason: 'artifact_publish_failed' },
+        });
+      } else {
+        await expect(pending).resolves.toMatchObject({ outPath: candidate });
+      }
+      expect(fs.readFileSync(target, 'utf8')).toBe('original');
+      if (taken === 'link') expect(fs.lstatSync(existing).isSymbolicLink()).toBe(true);
+      else expect(fs.readFileSync(existing, 'utf8')).toBe('earlier');
+      expect(stagingEntries(world.cwd)).toEqual([]);
+    });
+  },
+);
 
 test('a recording reply that claims the directory type downloads one file', async (t) => {
   await withServer(t, serveVideo, async (world) => {
@@ -198,9 +213,8 @@ test('a parent swapped during the transfer is refused without touching the new d
     const failure = (await pending) as AppError;
     expect(failure.details?.reason).toBe('artifact_destination_replaced');
     expect(fs.readdirSync(world.cwd)).toEqual([]);
-    const staging = String(failure.details?.stagingPath);
-    expect(path.dirname(staging)).toBe(world.cwd);
-    expect(fs.existsSync(path.join(moved, path.basename(staging)))).toBe(true);
+    expect(failure.details?.stagingPath).toBeUndefined();
+    expect(stagingEntries(moved)).toHaveLength(1);
   });
 });
 
@@ -466,6 +480,24 @@ test.for([
     ],
   },
   {
+    name: 'a session script sharing an id with the recording',
+    artifacts: [
+      { artifactId: 'a', field: 'savedScript', artifactType: 'session-script', scriptRevision: 1 },
+      { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4' },
+    ],
+  },
+  {
+    name: 'an outPath artifact that contradicts chunk 0',
+    artifacts: [{ artifactId: 'a', field: 'outPath', path: '/daemon/other.mp4' }],
+  },
+  {
+    name: 'two roles with the same fallback name in another case',
+    artifacts: [
+      { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4', fileName: 'clip.mp4' },
+      { artifactId: 'b', field: 'telemetryPath', path: '/daemon/a.json', fileName: 'CLIP.mp4' },
+    ],
+  },
+  {
     name: 'a chunk artifact relabelled for another chunk',
     artifacts: [
       { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4' },
@@ -481,49 +513,106 @@ test.for([
       res.end('video-bytes');
     },
     async (world) => {
+      const scriptPath = path.join(world.root, 'capture.ad');
+      const script = artifacts.find((entry) => entry.field === 'savedScript');
+      const scriptPublicationId = script && (await armScript(world, scriptPath));
       await expect(
         stopAnswer(world, {
           chunks: [
             { index: 0, path: '/daemon/a.mp4' },
             { index: 1, path: '/daemon/a.part-001.mp4' },
           ],
-          artifacts,
+          artifacts: artifacts.map((entry) =>
+            entry === script ? { ...entry, scriptPublicationId } : entry,
+          ),
         }),
       ).rejects.toMatchObject({ details: { reason: 'record_stop_answer_invalid' } });
       expect(hits).toBe(0);
+      expect(fs.existsSync(scriptPath)).toBe(false);
       expect(fs.readdirSync(world.cwd)).toEqual([]);
     },
   );
 });
 
-/** An abort signal that reports aborted from its second read on: a cancel that lands mid-delivery. */
-function abortsAfterFirstCheck(): AbortSignal {
-  let reads = 0;
-  return {
-    get aborted() {
-      reads += 1;
-      return reads > 1;
+async function armScript(world: World, scriptPath: string): Promise<string | undefined> {
+  let scriptPublicationId: string | undefined;
+  await sendRemoteScriptOpen(
+    { baseUrl: world.baseUrl, token: 'secret', capabilities: ['script-artifacts'] },
+    {
+      ...stopRequest(world, { clientArtifactPaths: { savedScript: scriptPath } }),
+      command: 'open',
+      positionals: ['Demo'],
     },
-    reason: new Error('canceled'),
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    throwIfAborted: () => {},
-  } as unknown as AbortSignal;
+    path.join(world.root, 'state'),
+    async (req) => {
+      scriptPublicationId = req.meta?.scriptPublicationId;
+      return { ok: true, data: { scriptPublicationId } };
+    },
+  );
+  expect(scriptPublicationId).toBeDefined();
+  return scriptPublicationId;
 }
+
+test('a recording fallback cannot claim a script destination in the same answer', async (t) => {
+  const requestedArtifacts: string[] = [];
+  await withServer(
+    t,
+    (req, res) => {
+      requestedArtifacts.push(req.url ?? '');
+      res.end(req.url === '/artifacts/script' ? 'open Demo\n' : 'video');
+    },
+    async (world) => {
+      const scriptPath = path.join(world.cwd, 'capture.ad');
+      const scriptPublicationId = await armScript(world, scriptPath);
+      await expect(
+        stopAnswer(world, {
+          artifacts: [
+            artifact({ field: 'outPath', fileName: 'capture.ad' }),
+            {
+              artifactId: 'script',
+              field: 'savedScript',
+              artifactType: 'session-script',
+              scriptRevision: 1,
+              scriptPublicationId,
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ details: { reason: 'record_stop_answer_invalid' } });
+      expect(requestedArtifacts).toEqual(['/artifacts/script']);
+      expect(fs.readFileSync(scriptPath, 'utf8')).toBe('open Demo\n');
+    },
+  );
+});
 
 test('an abort while a staged delivery fails during preparation is request_canceled', async (t) => {
   await withServer(t, serveVideo, async (world) => {
-    const notADirectory = path.join(world.root, 'file');
-    fs.writeFileSync(notADirectory, '');
-    await expect(
-      materializeRemoteArtifacts(
-        { baseUrl: world.baseUrl, token: 'secret' },
-        stopRequest(world, { cwd: notADirectory }),
-        { ok: true, data: { artifacts: [artifact({ field: 'outPath' })] } },
-        createTestHostEnvironment(),
-        path.join(world.root, 'state'),
-        abortsAfterFirstCheck(),
-      ),
-    ).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+    const controller = new AbortController();
+    const mkdir = vi.spyOn(fs.promises, 'mkdir').mockImplementationOnce(async () => {
+      controller.abort();
+      throw Object.assign(new Error(), { code: 'ENOTDIR' });
+    });
+    try {
+      await expect(
+        materialize(world, [artifact({ field: 'outPath' })], { signal: controller.signal }),
+      ).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+    } finally {
+      mkdir.mockRestore();
+    }
+  });
+});
+
+test('a remote record stop keeps an artifact type only when it is a string', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const data = await stopAnswer(world, {
+      artifacts: [{ ...artifact({ field: 'outPath' }), artifactType: { localPath: '/client/x' } }],
+    });
+    expect(data.artifacts).toEqual([
+      {
+        artifactId: 'a1',
+        field: 'outPath',
+        fileName: 'x.mp4',
+        localPath: path.join(world.cwd, 'x.mp4'),
+      },
+    ]);
   });
 });

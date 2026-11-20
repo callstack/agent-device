@@ -27,6 +27,7 @@ import {
   materializeRemoteArtifacts,
   sendRemoteScriptOpen,
 } from '@agent-device/remote/daemon-artifacts';
+import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { handleDaemonHttpResponseBody } from '../daemon-client-rpc.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
@@ -665,6 +666,7 @@ test('a canceled remote error answer fetches no diagnostics record', async (t) =
               code: 'COMMAND_FAILED',
               message: 'stop failed',
               diagnosticsRecord: { session: 's', requestId: 'r1' },
+              logPath: '/daemon/logs/r1.log',
             },
           },
         }),
@@ -681,8 +683,64 @@ test('a canceled remote error answer fetches no diagnostics record', async (t) =
     });
     assert.ok(error instanceof AppError);
     assert.equal(diagnosticsHits, 0);
+    assert.equal(error.details?.logPath, undefined);
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test.for([false, true])(
+  'abort before the diagnostics response preserves prior file state (%s)',
+  async (hasPriorLog, t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'diagnostics cancel before response')) return;
+    const cwd = mkdtempForTestSync('agent-device-diagnostics-midway-');
+    const stateDir = path.join(cwd, 'state');
+    const controller = new AbortController();
+    let diagnosticsHits = 0;
+    const server = http.createServer((_req, res) => {
+      diagnosticsHits += 1;
+      controller.abort();
+      res.end('new record');
+    });
+    const port = await listenOnLoopback(server);
+    const ref = { session: 's', requestId: 'r1' };
+    const recordPath = resolveRemoteRequestDiagnosticsPath(stateDir, ref);
+    fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+    if (hasPriorLog) fs.writeFileSync(recordPath, 'earlier record');
+    try {
+      const error = await new Promise<unknown>((resolve) => {
+        handleDaemonHttpResponseBody(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              message: 'stop failed',
+              data: { code: 'COMMAND_FAILED', message: 'stop failed', diagnosticsRecord: ref },
+            },
+          }),
+          {
+            info: { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` },
+            req: { ...request(PUBLIC_COMMANDS.record), positionals: ['stop'], meta: { cwd } },
+            stateDir,
+            host: createTestHostEnvironment(),
+            signal: controller.signal,
+            resolve: () => resolve(undefined),
+            reject: resolve,
+          },
+        );
+      });
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.logPath, undefined);
+      assert.equal(diagnosticsHits, 1);
+      assert.deepEqual(
+        fs.readdirSync(path.dirname(recordPath)),
+        hasPriorLog ? [path.basename(recordPath)] : [],
+      );
+      if (hasPriorLog) assert.equal(fs.readFileSync(recordPath, 'utf8'), 'earlier record');
+    } finally {
+      await closeLoopbackServer(server);
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  },
+);

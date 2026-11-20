@@ -609,44 +609,61 @@ async function deliverRecordStop(
 ): Promise<DaemonResponse> {
   const answer = await import('./record-stop-answer.ts');
   const plan = answer.planRecordingDownloads(response.data);
-  const planned = new Set<unknown>(plan.downloads.map(({ artifact }) => artifact));
-  const artifacts = (Array.isArray(response.data?.artifacts) ? response.data.artifacts : []).filter(
-    (artifact) => isSessionScriptArtifact(artifact) || planned.has(artifact),
-  );
+  const downloads = plan.downloads.map((entry) => ({
+    ...entry,
+    destination: resolveMaterializedArtifactPath(entry.artifact, req, client.host),
+  }));
+  const paths = downloads.map(({ destination }) => destination.path);
+  answer.claimDistinctDestinations(paths);
   const local: Record<string, unknown> = {};
   const delivered: DaemonArtifact[] = [];
-  const { fallbacks } = client;
-  try {
-    await downloadEachArtifact(endpoint, req, artifacts, {
-      ...client,
-      nextData: local,
-      nextArtifacts: delivered,
-    });
-  } catch (error) {
-    // Files already written to cwd stay on disk, so the failure still names them.
-    throw fallbacks.length === 0 ? error : withRecordingFallbacks(error, fallbacks);
+  // A script can replace an earlier version. Check its destination before any recording write.
+  for (const script of plan.scripts) await client.scripts?.publish(script, local, delivered);
+  if (delivered.length > 0) {
+    answer.claimDistinctDestinations([
+      ...paths,
+      ...delivered.flatMap(({ localPath }) => (localPath ? [localPath] : [])),
+    ]);
   }
   const chunkPaths = new Map<number, string>();
-  for (const { artifact, chunkIndex } of plan.downloads) {
-    const written = delivered.find((entry) => entry.artifactId === artifact.artifactId)?.localPath;
-    if (chunkIndex !== undefined && typeof written === 'string')
-      chunkPaths.set(chunkIndex, written);
+  try {
+    for (const { artifact, chunkIndex, destination } of downloads) {
+      const written = await downloadRemoteArtifact({
+        ...endpoint,
+        artifactId: artifact.artifactId,
+        destinationPath: destination.path,
+        requestScope: req.meta,
+        signal: client.signal,
+        // A recording is one staged file; a cwd fallback never replaces an existing file.
+        mode: destination.fallback ? 'staged-new-file' : 'staged-file',
+      });
+      if (destination.fallback) {
+        client.fallbacks.push({
+          reason: 'recording_destination_not_requested',
+          field: artifact.field,
+          path: written,
+        });
+      }
+      local[artifact.field] = written;
+      if (chunkIndex !== undefined) chunkPaths.set(chunkIndex, written);
+      delivered.push({ ...artifact, localPath: written });
+    }
+  } catch (error) {
+    // Files already written to cwd stay on disk, so the failure still names them.
+    throw client.fallbacks.length === 0 ? error : withRecordingFallbacks(error, client.fallbacks);
   }
-  local.artifacts = delivered.map(({ artifactId, field, artifactType, fileName, localPath }) => ({
-    artifactId,
-    field,
-    ...(artifactType === undefined ? {} : { artifactType }),
-    ...(typeof fileName === 'string' ? { fileName } : {}),
-    localPath,
-  }));
-  if (fallbacks.length > 0) {
-    local.recordingDestinationWarnings = fallbacks;
-    const previous = Array.isArray(local.warnings) ? local.warnings : [];
-    local.warnings = [...previous, ...fallbacks.map(fallbackWarningText)];
+  if (client.fallbacks.length > 0) {
+    Object.assign(local, recordingFallbackDetails(local, client.fallbacks));
   }
   return {
     ok: true,
-    data: answer.projectRecordStopResult(response.data, local, chunkPaths, plan.chunkIndexes),
+    data: answer.projectRecordStopResult(
+      response.data,
+      local,
+      delivered,
+      chunkPaths,
+      plan.chunkIndexes,
+    ),
   };
 }
 
@@ -673,7 +690,6 @@ async function downloadEachArtifact(
     signal: AbortSignal | undefined;
     nextData: Record<string, unknown>;
     nextArtifacts: DaemonArtifact[];
-    fallbacks: RecordingDestinationWarning[];
   }>,
 ): Promise<void> {
   const { host, scripts, nextData, nextArtifacts } = client;
@@ -698,17 +714,9 @@ async function downloadEachArtifact(
       // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
       // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
-      // `downloadRemoteArtifact`). A recording is always one staged file, chosen from the request,
-      // never from the reply's artifact type (#4518).
+      // `downloadRemoteArtifact`).
       mode: destinationMode(req, artifact),
     });
-    if (destination.fallback && req.command === 'record') {
-      client.fallbacks.push({
-        reason: 'recording_destination_not_requested',
-        field: artifact.field,
-        path: materializedPath,
-      });
-    }
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
@@ -720,7 +728,6 @@ async function downloadEachArtifact(
   }
 }
 
-/** A recording is one staged file, chosen from the request; a test-artifacts reply is a directory. */
 function destinationMode(
   req: DaemonWireRequest,
   artifact: DaemonArtifact,
@@ -749,17 +756,26 @@ function withRecordingFallbacks(
   fallbacks: RecordingDestinationWarning[],
 ): AppError {
   const failure = asAppError(error);
-  const warnings = Array.isArray(failure.details?.warnings) ? failure.details.warnings : [];
   return new AppError(
     failure.code,
     failure.message,
     {
       ...failure.details,
-      recordingDestinationWarnings: fallbacks,
-      warnings: [...warnings, ...fallbacks.map(fallbackWarningText)],
+      ...recordingFallbackDetails(failure.details, fallbacks),
     },
     failure.cause,
   );
+}
+
+function recordingFallbackDetails(
+  data: Record<string, unknown> | undefined,
+  fallbacks: RecordingDestinationWarning[],
+) {
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+  return {
+    recordingDestinationWarnings: fallbacks,
+    warnings: [...warnings, ...fallbacks.map(fallbackWarningText)],
+  };
 }
 
 function hasDownloadableArtifactId(

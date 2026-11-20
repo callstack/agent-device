@@ -32,10 +32,15 @@ type RemoteArtifactRequest = {
 
 /**
  * How a download lands at `destinationPath`: one file written in place, a caller-owned root that
- * receives one extracted directory, or one file staged privately beside the destination and renamed
- * into place (#4518), where no link at the name or replaced parent redirects the bytes.
+ * receives one extracted directory, or one file staged privately beside the destination (#4518),
+ * where no link at the name or replaced parent redirects the bytes. `staged-file` renames over the
+ * caller's destination; `staged-new-file` refuses an occupied destination.
  */
-export type RemoteArtifactDestinationMode = 'file' | 'directory' | 'staged-file';
+export type RemoteArtifactDestinationMode =
+  | 'file'
+  | 'directory'
+  | 'staged-file'
+  | 'staged-new-file';
 
 export type RemoteArtifactDownload = RemoteArtifactRequest & {
   destinationPath: string;
@@ -71,7 +76,9 @@ export type RemoteArtifactFetch = RemoteArtifactRequest & { maxBytes: number };
 
 function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination<string> {
   const { destinationPath } = params;
-  if (params.mode === 'staged-file') return stagedFileDestination(params);
+  if (params.mode === 'staged-file' || params.mode === 'staged-new-file') {
+    return stagedFileDestination(params);
+  }
   if (params.mode === 'directory') {
     return {
       prepare: async () => {
@@ -138,13 +145,13 @@ function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestinat
           {
             reason: ARTIFACT_DOWNLOAD_REASONS.destinationReplaced,
             artifactId,
-            stagingPath: staging,
           },
         );
       }
+      const target = path.join(anchor!.path, path.basename(destinationPath));
       try {
-        // A rename replaces a link at the destination name instead of writing through it.
-        fs.renameSync(staged, path.join(anchor!.path, path.basename(destinationPath)));
+        if (params.mode === 'staged-new-file') fs.linkSync(staged, target);
+        else fs.renameSync(staged, target);
       } catch (error) {
         throw publishError(artifactId, error);
       }

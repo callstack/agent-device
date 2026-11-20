@@ -71,6 +71,7 @@ export const RECORDING_COMMAND_OUTPUT_SCHEMAS = {
           showTouches: booleanSchema(),
           warning: stringSchema(),
           overlayWarning: stringSchema(),
+          daemonWarnings: { type: 'array', items: stringSchema() },
           chunks: { type: 'array', items: looseObjectSchema() },
         },
         ['recording', 'outPath', 'artifacts', 'durationMs', 'showTouches'],

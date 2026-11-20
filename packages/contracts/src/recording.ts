@@ -47,6 +47,8 @@ export type RecordingStopCommandResult = {
   showTouches: boolean;
   warning?: string;
   overlayWarning?: string;
+  /** A remote daemon's own warning text (`warning`, `overlayWarning`, `warnings`) on a remote stop. */
+  daemonWarnings?: string[];
   chunks?: Array<{
     index: number;
     path: string;

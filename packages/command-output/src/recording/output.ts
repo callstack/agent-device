@@ -11,8 +11,9 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
   const outPath = typeof data.outPath === 'string' ? data.outPath : '';
   const chunks = readRecordingChunks(data);
+  const stderr = daemonWarningLines(data);
   if (chunks.length <= 1) {
-    return { data, text: formatRecordSingleOutput(data, outPath) };
+    return { data, text: formatRecordSingleOutput(data, outPath), ...(stderr ? { stderr } : {}) };
   }
 
   const lines = ['Recording chunks:'];
@@ -22,7 +23,7 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
   if (typeof data.telemetryPath === 'string') {
     lines.push(`Telemetry: ${data.telemetryPath}`);
   }
-  return { data, text: withRecordWarnings(lines, data) };
+  return { data, text: withRecordWarnings(lines, data), ...(stderr ? { stderr } : {}) };
 }
 
 export const recordingCliOutputFormatters = {
@@ -37,18 +38,20 @@ function formatRecordSingleOutput(data: Record<string, unknown>, outPath: string
   return withRecordWarnings(lines, data);
 }
 
-/**
- * The overlay warning and a remote daemon's own warning text, which are not response warnings; the
- * dispatcher prints the response warnings once.
- */
+/** The overlay warning, which is not a response warning; the dispatcher prints the response warning once. */
 function withRecordWarnings(lines: string[], data: Record<string, unknown>): string {
   if (typeof data.overlayWarning === 'string') {
     lines.push(`Overlay warning: ${collapseWarningText(data.overlayWarning)}`);
   }
-  for (const warning of Array.isArray(data.daemonWarnings) ? data.daemonWarnings : []) {
-    if (typeof warning === 'string') lines.push(`Daemon warning: ${collapseWarningText(warning)}`);
-  }
   return lines.join('\n');
+}
+
+/** A remote daemon's own warning text goes to stderr, so stdout stays the parseable path. */
+function daemonWarningLines(data: Record<string, unknown>): string | undefined {
+  const lines = (Array.isArray(data.daemonWarnings) ? data.daemonWarnings : [])
+    .filter((warning): warning is string => typeof warning === 'string')
+    .map((warning) => `Daemon warning: ${collapseWarningText(warning)}\n`);
+  return lines.length > 0 ? lines.join('') : undefined;
 }
 
 function readRecordingChunks(
