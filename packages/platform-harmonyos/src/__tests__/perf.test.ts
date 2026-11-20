@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
-
-const { runHarmonyShell } = vi.hoisted(() => ({ runHarmonyShell: vi.fn() }));
-
-vi.mock('../hdc.ts', () => ({ runHarmonyShell }));
+import { beforeEach, test } from 'vitest';
+import { createHarmonyHdcRunnerStub, type HarmonyHdcRunnerStub } from '../toolbox.fixtures.ts';
 
 import { parseHarmonyPid, parseHarmonyProcStatusMemory, sampleHarmonyMemoryPerf } from '../perf.ts';
 
@@ -16,8 +13,10 @@ const DEVICE = {
   booted: true,
 };
 
+let hdc: HarmonyHdcRunnerStub;
+
 beforeEach(() => {
-  runHarmonyShell.mockReset();
+  hdc = createHarmonyHdcRunnerStub();
 });
 
 test('HarmonyOS perf parsers read process-scoped memory samples', () => {
@@ -34,20 +33,15 @@ test('HarmonyOS perf parsers reject incomplete process output', () => {
 });
 
 test('HarmonyOS perf samples resolve a process before collecting memory', async () => {
-  runHarmonyShell
-    .mockResolvedValueOnce({ exitCode: 0, stdout: '42\n', stderr: '' })
-    .mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: 'VmRSS:\t  256 kB\nVmHWM:\t  512 kB\n',
-      stderr: '',
-    });
+  hdc.answer({ stdout: '42\n' });
+  hdc.answer({ stdout: 'VmRSS:\t  256 kB\nVmHWM:\t  512 kB\n' });
 
-  const memory = await sampleHarmonyMemoryPerf(DEVICE, 'com.example.application');
+  const memory = await sampleHarmonyMemoryPerf(hdc, DEVICE, 'com.example.application');
 
   assert.deepEqual(memory.totalRssKb, 256);
   assert.equal(memory.peakRssKb, 512);
   assert.deepEqual(
-    runHarmonyShell.mock.calls.map(([, args]) => args),
+    hdc.calls.map((call) => call.args),
     [
       ['pidof', 'com.example.application'],
       ['cat', '/proc/42/status'],
@@ -56,17 +50,18 @@ test('HarmonyOS perf samples resolve a process before collecting memory', async 
 });
 
 test('HarmonyOS perf reports missing processes and incomplete samples', async () => {
-  runHarmonyShell.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'not found' });
+  const missing = createHarmonyHdcRunnerStub([{ exitCode: 1, stderr: 'not found' }]);
   await assert.rejects(
-    () => sampleHarmonyMemoryPerf(DEVICE, 'com.example.application'),
+    () => sampleHarmonyMemoryPerf(missing, DEVICE, 'com.example.application'),
     /running process/,
   );
 
-  runHarmonyShell
-    .mockResolvedValueOnce({ exitCode: 0, stdout: '42\n', stderr: '' })
-    .mockResolvedValueOnce({ exitCode: 0, stdout: 'VmSize:\t  1 kB\n', stderr: '' });
+  const incomplete = createHarmonyHdcRunnerStub([
+    { stdout: '42\n' },
+    { stdout: 'VmSize:\t  1 kB\n' },
+  ]);
   await assert.rejects(
-    () => sampleHarmonyMemoryPerf(DEVICE, 'com.example.application'),
+    () => sampleHarmonyMemoryPerf(incomplete, DEVICE, 'com.example.application'),
     /resident memory/,
   );
 });

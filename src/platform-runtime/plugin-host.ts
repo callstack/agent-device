@@ -17,5 +17,9 @@ export function createPlatformPluginHost(
       const { runCmd } = await import('@agent-device/host-kit/command');
       return await runCmd(executable, args, options);
     },
+    isFileExecutable: async (path) => {
+      const { isExecutablePath } = await import('@agent-device/host-kit/command');
+      return await isExecutablePath(path);
+    },
   } satisfies PlatformHost);
 }

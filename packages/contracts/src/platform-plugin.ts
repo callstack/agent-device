@@ -7,7 +7,7 @@ import type { WebProvider } from './web-provider.ts';
 import type { VegaToolProvider } from './vega-tool-provider.ts';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
@@ -114,19 +114,13 @@ export type VegaPlatformSelection = Readonly<{
 }>;
 
 /**
- * What the core asks of the HarmonyOS plugin. The toolchain probe answers `doctor --platform
- * harmonyos`; the toolchain preparation runs the plugin's own device discovery and log streaming,
- * which need the host's documented SDK roots. Every other HarmonyOS operation — HDC discovery,
- * probing, interaction, capture, recording, performance — the package owns.
+ * What the core asks of the HarmonyOS plugin: the toolchain probe that answers `doctor --platform
+ * harmonyos`. Every other HarmonyOS operation — HDC discovery, probing, interaction, capture,
+ * recording, performance, and the plugin's own toolchain `PATH` — the package owns, because it runs
+ * them through the host it was set up with.
  */
 export type HarmonyPlatformOperations = Readonly<{
   toolchainCheck(): Promise<DoctorCheck>;
-  /**
-   * Prepends the HarmonyOS toolchain roots that hold an `hdc` binary to `env`'s PATH, so a spawn
-   * sees the same HDC an interactive shell does. The core hands over the host environment it
-   * captured: the plugin must not read `process.env` itself (ADR 0019).
-   */
-  prepareToolchain(env: EnvMap): Promise<void>;
 }>;
 
 export type HarmonyPlatformRegistration = Readonly<{

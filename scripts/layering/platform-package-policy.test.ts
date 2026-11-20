@@ -914,3 +914,47 @@ test('managed platform code enters core only through the registry', () => {
     ),
   );
 });
+
+// A managed plugin ships its own copy of host-kit, so the daemon's command scope and request
+// diagnostic store never enter it: a runtime import of either runs outside the request the plugin was
+// asked to serve. The plugin binds to the host its `setup` receives instead.
+for (const family of ['web', 'vega', 'harmonyos'] as const) {
+  test(`a managed platform package reaches the host-kit command or diagnostics scope only in its listed migration files (${family})`, () => {
+    const file = `packages/platform-${family}/src/new-surface.ts`;
+    for (const specifier of [
+      '@agent-device/host-kit/command',
+      '@agent-device/host-kit/diagnostics',
+    ]) {
+      const found = messages(
+        new Map([
+          ...validSources(),
+          [file, `import { runCmd } from '${specifier}';\nvoid runCmd;`],
+        ]),
+      );
+      assert.ok(
+        found.some(
+          (message) =>
+            message.includes(`@agent-device/${family} may not import the host-kit`) &&
+            message.includes('PlatformHost given to setup'),
+        ),
+        `${family} must not spawn or trace through its own host-kit copy: ${specifier}`,
+      );
+    }
+  });
+}
+
+test('a type-only host-kit import stays legal in a managed platform package', () => {
+  const sources = new Map([
+    ...validSources(),
+    [
+      'packages/platform-harmonyos/src/new-surface.ts',
+      "import type { HostCommandResult } from '@agent-device/host-kit/command';\nexport type R = HostCommandResult;",
+    ],
+  ]);
+  assert.deepEqual(
+    checkPlatformPackagePolicy(sources, declarations()).filter((violation) =>
+      violation.message.includes('host-kit'),
+    ),
+    [],
+  );
+});

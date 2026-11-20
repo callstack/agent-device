@@ -13,7 +13,12 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   return { ...actual, runCmd: vi.fn(), whichCmd: vi.fn() };
 });
 
-import { runCmd, whichCmd, withCommandHost } from '@agent-device/host-kit/command';
+import {
+  runCmd,
+  whichCmd,
+  withCommandHost,
+  isExecutablePath,
+} from '@agent-device/host-kit/command';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import vegaPlatformPlugin from './index.ts';
 
@@ -80,6 +85,7 @@ function createPluginHost(): PlatformHost {
     cwd: scratch,
     stateDir: path.join(scratch, 'state'),
     runCommand: runCmd,
+    isFileExecutable: isExecutablePath,
     emitDiagnostic,
     withDiagnosticTimer,
   };

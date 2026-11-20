@@ -2,6 +2,7 @@ import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { HarmonyScreenRecorder } from './recorder.ts';
+import type { HarmonyScreenRecordingOperationHost } from './runtime.ts';
 
 export const harmonyDevice = Object.freeze({
   platform: 'harmonyos' as const,
@@ -33,18 +34,15 @@ export function harmonyCommandSuccess() {
 
 /**
  * The host and recorder pair the recording operations consume. Every recorder port is a stub the
- * test overrides, so no HDC process is spawned from these tests.
+ * test overrides, so no HDC process is spawned from these tests; `recorder.test.ts` covers what the
+ * real recorder asks the host to spawn.
  */
 export function harmonyRecordingHost(
   overrides: Partial<HarmonyScreenRecorder> & {
     complete?: ScreenRecordingRuntimeHost['finalize']['complete'];
     prepare?: ScreenRecordingRuntimeHost['outputs']['prepare'];
   } = {},
-): Readonly<{
-  screenRecording: Pick<ScreenRecordingRuntimeHost, 'finalize' | 'outputs'>;
-  clock: Readonly<{ now: () => number; sleep: (ms?: number) => Promise<void> }>;
-  recorder: HarmonyScreenRecorder;
-}> {
+): HarmonyScreenRecordingOperationHost {
   return {
     screenRecording: {
       outputs: {
@@ -55,7 +53,7 @@ export function harmonyRecordingHost(
     },
     clock: { now: () => 0, sleep: async () => {} },
     recorder: harmonyRecordingRecorder(overrides),
-  };
+  } as unknown as HarmonyScreenRecordingOperationHost;
 }
 
 function harmonyRecordingRecorder(

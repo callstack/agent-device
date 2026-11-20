@@ -13,7 +13,6 @@ export { decodeDurableDescriptor } from './durable-descriptor-codec.ts';
 export { createRetryableCleanup } from '@agent-device/contracts/durable-resource';
 export { createScreenRecordingLiveHandle } from './screen-recording-live-handle.ts';
 export { createScreenRecordingCompletion } from './screen-recording-completion.ts';
-export { createTransportRecordingSnapshot } from './screen-recording-transport.ts';
 export { assertScreenRecordingOptionsSupported } from './screen-recording-options.ts';
 export {
   cleanupManagedAppLogProcess,
