@@ -35,6 +35,68 @@ extension RunnerTests {
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["OK"], action: "accept", vocabulary: byAnEnglishLabel), 0)
   }
 
+  /// The built-in table is the only vocabulary a physical device has, so every row must resolve
+  /// exactly like the English label it translates: the row's action takes it, the other action
+  /// refuses it, and no row names both actions (#3627). A new row joins this test's coverage
+  /// without an edit here.
+  func testDeviceVocabularyResolvesEachEntryLikeTheEnglishLabelItTranslates() throws {
+    for translation in RunnerAlertLabelVocabulary.deviceTranslations {
+      let action = try XCTUnwrap(
+        RunnerAlertButtonChoice.action(of: translation.english, wholeLabel: true),
+        "\(translation.english) is no whole preference label, so the row would be dropped"
+      )
+      let other = action == "accept" ? "dismiss" : "accept"
+      XCTAssertEqual(
+        RunnerAlertButtonChoice.buttonIndex(for: [translation.localized], action: action, vocabulary: .device),
+        0, translation.localized
+      )
+      XCTAssertNil(
+        RunnerAlertButtonChoice.buttonIndex(for: [translation.localized], action: other, vocabulary: .device),
+        "\(translation.localized) must not name \(other)"
+      )
+    }
+  }
+
+  /// A Chinese device words the notification, tracking, and location prompts in labels no English
+  /// entry matches, which answered ALERT_BUTTON_NOT_FOUND before the built-in table.
+  func testChineseDeviceVocabularyResolvesTheSystemPermissionPrompts() {
+    let notifications = ["不允许", "允许"]
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "dismiss", vocabulary: .device), 0)
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: notifications, action: "accept", vocabulary: .device), 1)
+
+    let tracking = ["要求 App 不跟踪", "允许"]
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "dismiss", vocabulary: .device), 0)
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: tracking, action: "accept", vocabulary: .device), 1)
+
+    let location = ["仅本次允许", "仅在使用期间允许", "不允许"]
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: location, action: "dismiss", vocabulary: .device), 2)
+    XCTAssertEqual(
+      RunnerAlertButtonChoice.buttonIndex(for: location, action: "accept", vocabulary: .device),
+      1,
+      "the lasting grant outranks the one-time grant in every language"
+    )
+  }
+
+  /// The built-in table adds localized labels only: an English prompt resolves through the
+  /// English lists exactly as without the vocabulary.
+  func testDeviceVocabularyLeavesEnglishResolutionUnchanged() {
+    let prompts: [[String]] = [
+      ["Allow Once", "Allow While Using App", "Don't Allow"],
+      ["Cancel", "OK"],
+      ["Ask App Not to Track", "Allow"],
+      ["Keep Browsing", "Open"]
+    ]
+    for labels in prompts {
+      for action in ["accept", "dismiss"] {
+        XCTAssertEqual(
+          RunnerAlertButtonChoice.buttonIndex(for: labels, action: action, vocabulary: .device),
+          RunnerAlertButtonChoice.buttonIndex(for: labels, action: action, vocabulary: .english),
+          "\(action) must resolve \(labels) the same with and without the device table"
+        )
+      }
+    }
+  }
+
   /// A source string only translates a button label when the whole string is that label: the
   /// prefix-matched "Confirm…" family must not pull in sentences that merely start with it.
   func testAlertTranslationSourceMustBeAWholeButtonLabel() {
@@ -78,6 +140,17 @@ extension RunnerTests {
     XCTAssertNil(
       RunnerAlertButtonChoice.buttonIndex(for: ["Nicht erlauben", "Erlauben"], action: "dismiss", vocabulary: vocabulary)
     )
+  }
+}
+#endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && !(os(iOS) && targetEnvironment(simulator))
+extension RunnerTests {
+  /// A device's runner cannot read the OS string files, so `system` is the built-in table and a
+  /// device prompt resolves like its English original instead of refusing.
+  func testSystemVocabularyOnADeviceIsTheBuiltInTable() {
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["不允许", "允许"], action: "accept", vocabulary: .system), 1)
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["不允许", "允许"], action: "dismiss", vocabulary: .system), 0)
   }
 }
 #endif
