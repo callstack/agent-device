@@ -135,7 +135,7 @@ test('Provider-backed integration proxy materializes tenant-owned test artifacts
                 artifactId,
                 destinationPath: rejectedArchivePath,
                 requestScope: { tenantId: OTHER_TENANT },
-                mode: 'directory',
+                isDirectory: true,
               }),
             (error: unknown) => {
               const normalized = normalizeAgentDeviceError(error);

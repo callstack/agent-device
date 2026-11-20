@@ -1,27 +1,25 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
-import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
+import type {
+  DaemonArtifact,
+  DaemonResponse,
+  DaemonResponseData,
+} from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
   buildRemoteTempArtifactDirPath,
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
-import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import {
-  assertScriptTargetVacant,
-  isOrdinaryEntryName,
-  resolveScriptDestination,
-} from '@agent-device/host-kit/file';
+import { AppError } from '@agent-device/kernel/errors';
+import { assertScriptTargetVacant, resolveScriptDestination } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
-import type { RemoteArtifactDestinationMode } from './artifact-download.ts';
 import type { SessionScriptDelivery } from './session-script-destination.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { withUploadPreparationDeadline } from './upload-stream.ts';
@@ -505,185 +503,122 @@ export async function materializeRemoteArtifacts(
   response: Extract<DaemonResponse, { ok: true }>,
   host: HostEnvironment,
   stateDir: string,
-  signal?: AbortSignal,
 ): Promise<DaemonResponse> {
   if (!info.baseUrl) return response;
   const endpoint = { baseUrl: info.baseUrl, token: info.token };
-  const fallbacks: RecordingDestinationWarning[] = [];
-  const canceled = () =>
-    createRequestCanceledError({ requestId: req.meta?.requestId }, signal?.reason);
-  try {
-    const download = (scripts?: SessionScriptDelivery) =>
-      downloadResponseArtifacts(endpoint, req, response, { host, scripts, signal, fallbacks });
-    const delivered = needsScriptDelivery(response.data)
-      ? await (
-          await import('./session-script-destination.ts')
-        )
-          .sessionScriptDelivery(endpoint, req, response, stateDir, fetchRemoteArtifact, signal)
-          .settleAfter(download)
-      : await download();
-    if (signal?.aborted) throw canceled();
-    return delivered;
-  } catch (error) {
-    const failure = signal?.aborted ? canceled() : error;
-    if (fallbacks.length === 0) throw failure;
-    const appError = asAppError(failure);
-    throw new AppError(
-      appError.code,
-      appError.message,
-      recordingFallbackDetails(appError.details, fallbacks),
-      appError.cause,
-    );
+  const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
+  const download = (scripts?: SessionScriptDelivery) =>
+    downloadResponseArtifacts(endpoint, req, response, host, scripts);
+  // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
+  // publication and no script artifact of its own (#4595).
+  if (
+    response.data?.scriptPublicationId === undefined &&
+    response.data?.scriptDeliveryReceipt === undefined &&
+    !artifacts.some(isSessionScriptArtifact)
+  ) {
+    return await download();
   }
+  const { sessionScriptDelivery } = await import('./session-script-destination.ts');
+  const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, fetchRemoteArtifact);
+  return await scripts.settleAfter(download);
 }
-
-function needsScriptDelivery(data: Extract<DaemonResponse, { ok: true }>['data']): boolean {
-  return (
-    data?.scriptPublicationId !== undefined ||
-    data?.scriptDeliveryReceipt !== undefined ||
-    (Array.isArray(data?.artifacts) && data.artifacts.some(isSessionScriptArtifact))
-  );
-}
-
-type ArtifactDeliveryContext = {
-  host: HostEnvironment;
-  scripts?: SessionScriptDelivery;
-  signal?: AbortSignal;
-  fallbacks: RecordingDestinationWarning[];
-};
 
 async function downloadResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
-  client: ArtifactDeliveryContext,
+  host: HostEnvironment,
+  scripts: SessionScriptDelivery | undefined,
 ): Promise<DaemonResponse> {
-  if (recordAction(req) === 'stop') return await deliverRecordStop(endpoint, req, response, client);
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  const data = withoutClientOwnedFields(response.data);
+  const data = withoutScriptFieldOwner(response.data);
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
-  const { host, scripts, signal } = client;
+  const recordStop = isRecordStop(req);
+  const destinationWarnings: RecordingDestinationWarning[] = [];
+  const recordingPaths: string[] = [];
   for (const artifact of artifacts) {
     if (isSessionScriptArtifact(artifact)) {
       await scripts?.publish(artifact, nextData, nextArtifacts);
       continue;
     }
     if (!hasDownloadableArtifactId(artifact)) {
-      // Nothing was written for it here, so it names no local path.
-      nextArtifacts.push(withoutPeerLocalPath(artifact) as DaemonArtifact);
+      nextArtifacts.push(artifact);
       continue;
     }
-    if (!isDownloadableField(artifact.field)) continue;
+    if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
     const destination = resolveMaterializedArtifactPath(artifact, req, host);
     const materializedPath = await downloadRemoteArtifact({
       ...endpoint,
       artifactId: artifact.artifactId,
       destinationPath: destination.path,
       requestScope: req.meta,
-      signal,
-      mode: artifact.artifactType === 'test-artifacts' ? 'directory' : 'file',
+      // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
+      // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
+      // racing the response headers (a directory destination must never be `rm`'d wholesale; see
+      // `downloadRemoteArtifact`).
+      isDirectory: !recordStop && artifact.artifactType === 'test-artifacts',
+      stagedFile: recordStop,
     });
-    // Directory downloads publish one entry under the requested root.
+    if (recordStop) {
+      if (destination.fallback) {
+        destinationWarnings.push({
+          reason: RECORDING_DESTINATION_REASONS.notRequested,
+          field: artifact.field,
+          path: materializedPath,
+        });
+      }
+      if (artifact.field === 'outPath' || artifact.field === 'chunkPath') {
+        recordingPaths.push(materializedPath);
+      }
+    }
+    // Directory artifacts download into a caller-owned root, then atomically publish their one
+    // top-level entry beneath it. Use the path the download actually published rather than the
+    // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
     nextData[artifact.field] = materializedPath;
-    nextArtifacts.push({ ...artifact, localPath: materializedPath });
+    nextArtifacts.push({
+      ...artifact,
+      localPath: materializedPath,
+    });
   }
   nextData.artifacts = nextArtifacts;
+  if (recordStop) reportRecordingDelivery(nextData, destinationWarnings, recordingPaths);
   return { ok: true, data: nextData };
 }
 
-async function deliverRecordStop(
-  endpoint: Required<DaemonArtifactEndpoint>,
-  req: DaemonWireRequest,
-  response: Extract<DaemonResponse, { ok: true }>,
-  client: ArtifactDeliveryContext,
-): Promise<DaemonResponse> {
-  const answer = await import('./record-stop-answer.ts');
-  const plan = answer.planRecordingDownloads(
-    response.data,
-    (id) => new URL(buildDaemonArtifactUrl(endpoint.baseUrl, id)),
-    {
-      recording: (artifact) => resolveMaterializedArtifactPath(artifact, req, client.host),
-      script: (artifact) => client.scripts?.plannedDestination(artifact),
-    },
-  );
-  const local: Record<string, unknown> = {};
-  const delivered: DaemonArtifact[] = [];
-  const chunks: { index: number; path: string }[] = [];
-  const { downloadRemoteArtifactFromUrl } = await import('./artifact-download.ts');
-  for (const entry of plan.deliveries) {
-    if (entry.kind === 'script') {
-      await client.scripts?.publish(entry.artifact, local, delivered);
-      continue;
-    }
-    const { artifact, destination, url } = entry;
-    const written = await downloadRemoteArtifactFromUrl({
-      token: endpoint.token,
-      artifactUrl: url,
-      artifactId: artifact.artifactId,
-      destinationPath: destination.path,
-      requestScope: req.meta,
-      signal: client.signal,
-      // A recording is one staged file; a cwd fallback never replaces an existing file.
-      mode: destination.fallback ? 'staged-new-file' : 'staged-file',
-    });
-    if (destination.fallback) {
-      client.fallbacks.push({
-        reason: 'recording_destination_not_requested',
-        field: artifact.field,
-        path: written,
-      });
-    }
-    if (artifact.role !== 'chunk') local[artifact.field] = written;
-    if (artifact.chunkIndex !== undefined)
-      chunks.push({ index: artifact.chunkIndex, path: written });
-    delivered.push({ ...artifact, localPath: written });
-  }
-  if (chunks.length) local.chunks = chunks.sort((left, right) => left.index - right.index);
-  const details = client.fallbacks.length
-    ? recordingFallbackDetails(local, client.fallbacks)
-    : local;
-  return {
-    ok: true,
-    data: answer.projectRecordStopResult(response.data, details, delivered, plan.missingRole),
-  };
-}
+const RECORDING_DESTINATION_REASONS = {
+  notRequested: 'recording_destination_not_requested',
+} as const;
 
-export async function projectRemoteErrorDetails(
-  req: DaemonWireRequest,
-  details: Record<string, unknown> | undefined,
-): Promise<Record<string, unknown> | undefined> {
-  if (recordAction(req) !== 'stop') return withoutClientOwnedFields(details);
-  const answer = await import('./record-stop-answer.ts');
-  return answer.projectRecordStopErrorDetails(details);
-}
-
-function recordAction(req: DaemonWireRequest): string | undefined {
-  return req.command === 'record' ? req.positionals?.[0]?.toLowerCase() : undefined;
-}
-
-type RecordingDestinationWarning = Readonly<{
-  reason: 'recording_destination_not_requested';
+type RecordingDestinationWarning = {
+  reason: typeof RECORDING_DESTINATION_REASONS.notRequested;
   field: string;
   path: string;
-}>;
+};
 
-function recordingFallbackDetails(
-  data: Record<string, unknown> | undefined,
-  fallbacks: RecordingDestinationWarning[],
-) {
-  return {
-    ...data,
-    recordingDestinationWarnings: fallbacks,
-    warnings: [
-      ...readResponseWarnings(data),
-      ...fallbacks.map(
-        ({ field, path }) =>
-          `The remote recording ${field} was saved to ${path} in the current directory, because the request named no destination for it.`,
+function reportRecordingDelivery(
+  data: Record<string, unknown>,
+  destinationWarnings: RecordingDestinationWarning[],
+  recordingPaths: string[],
+): void {
+  if (destinationWarnings.length > 0) {
+    data.recordingDestinationWarnings = destinationWarnings;
+    data.warnings = [
+      ...(Array.isArray(data.warnings) ? data.warnings : []),
+      ...destinationWarnings.map(
+        ({ path: written }) =>
+          `Saved remote recording file to ${written} in the current directory because this request named no destination.`,
       ),
-    ],
-  };
+    ];
+  }
+  // The daemon lists the first video and subsequent chunk artifacts in chunk order.
+  if (Array.isArray(data.chunks) && recordingPaths.length === data.chunks.length) {
+    data.chunks = data.chunks.map((chunk, index) => ({
+      ...chunk,
+      path: recordingPaths[index],
+    }));
+  }
 }
 
 function hasDownloadableArtifactId(
@@ -701,44 +636,27 @@ function isSessionScriptArtifact(artifact: DaemonArtifact | undefined): boolean 
   return artifact?.field === 'savedScript' || artifact?.artifactType === 'session-script';
 }
 
-function isDownloadableField(field: unknown): field is string {
+function isClientOwnedResponseField(field: string): boolean {
   return (
-    typeof field === 'string' &&
-    ![
-      'artifacts',
-      'savedScript',
-      'scriptDeliveryFailure',
-      'recordingDestinationWarnings',
-      'recordingArtifactWarning',
-      'warnings',
-    ].includes(field)
+    field === 'artifacts' ||
+    field === 'savedScript' ||
+    field === 'scriptDeliveryFailure' ||
+    field === 'warnings'
   );
 }
 
-function withoutClientOwnedFields<T extends Record<string, unknown> | undefined>(data: T): T {
-  if (data === undefined) return data;
-  const {
-    savedScript: _script,
-    recordingDestinationWarnings: _warnings,
-    recordingArtifactWarning: _artifactWarning,
-    ...kept
-  }: Record<string, unknown> = data;
-  if (Array.isArray(kept.artifacts)) kept.artifacts = kept.artifacts.map(withoutPeerLocalPath);
-  return kept as T;
-}
-
-function withoutPeerLocalPath(artifact: unknown): unknown {
-  if (typeof artifact !== 'object' || artifact === null || !('localPath' in artifact)) {
-    return artifact;
-  }
-  const { localPath: _peerPath, ...kept } = artifact as Record<string, unknown>;
+// Only a successfully published version can name a caller's savedScript destination.
+function withoutScriptFieldOwner(
+  data: DaemonResponseData | undefined,
+): DaemonResponseData | undefined {
+  if (data === undefined || !('savedScript' in data)) return data;
+  const { savedScript: _peerValue, ...kept } = data;
   return kept;
 }
 
 /**
- * Whether this request finishes a trace or perf capture whose destination this client named in an
- * EARLIER request. The daemon echoes that destination as `localPath`. A record stop never accepts
- * a `localPath` (#4518). The finishing actions mirror the daemon's own (`request-finalization.ts`).
+ * Whether this request finishes a trace or perf capture whose destination the daemon echoes
+ * from an earlier request. The finishing actions mirror `request-finalization.ts`.
  */
 function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
   const [first, second, third] = (req.positionals ?? []).map((value) => value.toLowerCase());
@@ -752,11 +670,13 @@ function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
   }
 }
 
+function isRecordStop(req: DaemonWireRequest): boolean {
+  return req.command === 'record' && req.positionals?.[0]?.toLowerCase() === 'stop';
+}
+
 /**
- * Where this client writes one downloaded artifact. The client chooses: a path it registered in
- * this request wins, and a response `localPath` is accepted only on a trace or perf stop or report
- * that echoes an earlier request's destination. Anything else, including every record artifact
- * the request named no path for, lands in cwd under the response file name's basename.
+ * A path from this request wins. A record stop without one can use only a plain name in cwd.
+ * Trace and perf stop or report can still use an echoed destination from an earlier request.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
@@ -765,27 +685,31 @@ function resolveMaterializedArtifactPath(
 ): { path: string; fallback: boolean } {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return { path: requestedPath, fallback: false };
+  if (isRecordStop(req)) {
+    const requested = artifact.field === 'outPath' ? req.positionals[1] : undefined;
+    if (hasNonEmptyString(requested)) {
+      return { path: resolveAbsoluteClientPath(requested, req.meta?.cwd, host), fallback: false };
+    }
+    const fileName = localFileName(artifact.fileName) ?? `recording-${crypto.randomUUID()}`;
+    return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: true };
+  }
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return { path: artifact.localPath, fallback: false };
   }
-  const cwd = path.resolve(req.meta?.cwd ?? host.cwd);
+  const responseName = path.basename(artifact.fileName?.trim() ?? '');
   const fileName =
-    localFileName(artifact.fileName) ??
-    localFileName(`${artifact.field}-${Date.now()}`) ??
-    `artifact-${Date.now()}`;
-  return { path: path.join(cwd, fileName), fallback: true };
+    responseName && responseName !== '.' && responseName !== '..'
+      ? responseName
+      : `${path.basename(artifact.field)}-${Date.now()}`;
+  return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: false };
 }
 
-/**
- * The last component of a peer-named file as ONE ordinary entry name under both POSIX and Windows
- * rules, or `undefined`, so the name cannot leave or switch the directory it is joined to.
- */
 function localFileName(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const name = value.trim().split(/[\\/]/).pop() ?? '';
-  return isOrdinaryEntryName(name, path.posix) && isOrdinaryEntryName(name, path.win32)
-    ? name
-    : undefined;
+  if (typeof value !== 'string' || value === '' || Buffer.byteLength(value) > 255) return;
+  if (/[<>:"/\\|?*\p{Cc}\p{Surrogate}]/u.test(value) || /[. ]$/.test(value)) return;
+  const stem = value.split('.')[0]?.trimEnd() ?? '';
+  if (/^(?:CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³]|CONIN\$|CONOUT\$)$/i.test(stem)) return;
+  return value;
 }
 
 type DownloadRemoteArtifactParams = {
@@ -795,10 +719,9 @@ type DownloadRemoteArtifactParams = {
   destinationPath: string;
   requestScope: DaemonWireRequest['meta'];
   timeoutMs?: number;
-  /** How the download lands (`artifact-download.ts`); defaults to one file written in place. */
-  mode?: RemoteArtifactDestinationMode;
-  /** The caller's cancellation (`artifact-download.ts`). */
-  signal?: AbortSignal;
+  /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
+  isDirectory?: boolean;
+  stagedFile?: boolean;
 };
 
 export async function downloadRemoteArtifact(
@@ -821,8 +744,6 @@ type FetchRemoteArtifactParams = {
   requestScope: DaemonWireRequest['meta'];
   /** The fetch stops once the body crosses this size. */
   maxBytes: number;
-  /** The caller's cancellation (`artifact-download.ts`). */
-  signal?: AbortSignal;
 };
 
 /** Fetches one artifact into memory, capped at `maxBytes` (`artifact-download.ts`). */

@@ -12,7 +12,7 @@ export {
   type ScriptDestinationOptions,
 } from './internal/script-destination.ts';
 export { scriptAncestryReason } from './internal/script-destination-refusal.ts';
-export { isOrdinaryEntryName, resolveScriptDestination } from './internal/entry-name.ts';
+export { resolveScriptDestination } from './internal/entry-name.ts';
 export {
   assertScriptTargetVacant,
   lstatIfPresent,

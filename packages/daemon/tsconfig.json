@@ -24,9 +24,6 @@
       "path": "../capture-kit"
     },
     {
-      "path": "../command-output"
-    },
-    {
       "path": "../command-registry"
     },
     {
@@ -58,9 +55,6 @@
     },
     {
       "path": "../proxy"
-    },
-    {
-      "path": "../remote"
     },
     {
       "path": "../replay-port"

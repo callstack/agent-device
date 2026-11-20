@@ -1,7 +1,7 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, ScriptDeliveryFailure } from '@agent-device/kernel/contracts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { publishScriptFileSync, scriptAncestryReason } from '@agent-device/host-kit/file';
 import type { DaemonArtifactEndpoint, fetchRemoteArtifact } from './daemon-artifacts.ts';
@@ -20,32 +20,6 @@ type PublishOutcome =
   | Readonly<{ published: string | undefined }>
   | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
 
-type ScriptVersionContext = {
-  endpoint: Required<DaemonArtifactEndpoint>;
-  req: DaemonWireRequest;
-  stateDir: string;
-  fetch: typeof fetchRemoteArtifact;
-  signal?: AbortSignal;
-};
-
-export function scriptVersionTarget(context: ScriptVersionContext, artifact: DaemonArtifact) {
-  const { endpoint, req, stateDir } = context;
-  const { scriptPublicationId: id, scriptRevision: revision, artifactId } = artifact;
-  if (
-    artifact.field !== 'savedScript' ||
-    artifact.artifactType !== 'session-script' ||
-    typeof id !== 'string' ||
-    typeof artifactId !== 'string' ||
-    typeof revision !== 'number' ||
-    !Number.isSafeInteger(revision) ||
-    revision <= 0
-  )
-    return undefined;
-  const file = recordPath(stateDir, endpoint.baseUrl, req, id);
-  const record = readRecord(file);
-  return record && { file, record, id, revision, artifactId };
-}
-
 /**
  * Publishes one version and returns the destination, `undefined` when no record of this client
  * matches the artifact, or a typed delivery failure. A version no newer than the one published is
@@ -58,37 +32,49 @@ export function scriptVersionTarget(context: ScriptVersionContext, artifact: Dae
  * unless the open granted `--force`.
  */
 export async function publishScriptVersion(
-  context: Readonly<ScriptVersionContext>,
+  context: Readonly<{
+    endpoint: Required<DaemonArtifactEndpoint>;
+    req: DaemonWireRequest;
+    stateDir: string;
+    fetch: typeof fetchRemoteArtifact;
+  }>,
   artifact: DaemonArtifact,
   closesRecording: boolean,
 ): Promise<PublishOutcome> {
-  const { endpoint, req } = context;
-  const target = scriptVersionTarget(context, artifact);
-  if (!target) {
+  const { endpoint, req, stateDir } = context;
+  const { scriptPublicationId: id, scriptRevision, artifactId } = artifact;
+  const file =
+    artifact.field === 'savedScript' &&
+    artifact.artifactType === 'session-script' &&
+    typeof id === 'string' &&
+    typeof artifactId === 'string' &&
+    Number.isSafeInteger(scriptRevision) &&
+    (scriptRevision as number) > 0
+      ? recordPath(stateDir, endpoint.baseUrl, req, id)
+      : undefined;
+  const record = file ? readRecord(file) : undefined;
+  if (!file || !record) {
     emitDiagnostic({
       level: 'warn',
       phase: 'session_script_artifact_dropped',
-      data: { session: req.session, artifactId: artifact.artifactId },
+      data: { session: req.session, artifactId },
     });
     return { published: undefined };
   }
-  const { file, record, id, revision, artifactId } = target;
+  const revision = scriptRevision as number;
   if (revision <= record.revision) return { published: record.destination };
   try {
     const contents = await context.fetch({
       ...endpoint,
-      artifactId,
+      artifactId: artifactId as string,
       requestScope: req.meta,
       maxBytes: MAX_SCRIPT_BYTES,
-      signal: context.signal,
     });
     return await withRecordLock(file, async () => {
       // Decided from the record as the lock holds it: a close or a newer version may have won meanwhile.
       const current = readRecord(file);
       if (!current) return { published: undefined };
       if (revision <= current.revision) return { published: current.destination };
-      // A caller abort while this publish waited for the lock wins: nothing is written (#4518).
-      if (context.signal?.aborted) throw createRequestCanceledError({}, context.signal.reason);
       const published = publishScriptFileSync({
         destination: current.destination,
         contents,
@@ -99,7 +85,7 @@ export async function publishScriptVersion(
     });
   } catch (error) {
     return {
-      failure: scriptDeliveryFailure(record.destination, id, error, closesRecording),
+      failure: scriptDeliveryFailure(record.destination, id as string, error, closesRecording),
       error,
     };
   }

@@ -21,7 +21,7 @@ export type RecordingStartCommandResult = {
 
 export type RecordingStopCommandResult = {
   recording: 'stopped';
-  outPath?: string;
+  outPath: string;
   telemetryPath?: string;
   artifacts: DaemonArtifact[];
   recordingBackend?: string;
@@ -47,9 +47,6 @@ export type RecordingStopCommandResult = {
   showTouches: boolean;
   warning?: string;
   overlayWarning?: string;
-  /** A remote daemon's own warning text (`warning`, `overlayWarning`, `warnings`) on a remote stop. */
-  daemonWarnings?: string[];
-  recordingArtifactWarning?: { reason: 'recording_artifact_role_missing' };
   chunks?: Array<{
     index: number;
     path: string;

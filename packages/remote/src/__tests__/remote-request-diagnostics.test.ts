@@ -1,4 +1,4 @@
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -215,37 +215,3 @@ for (const session of ['.', '..']) {
     }
   });
 }
-
-test('a cancel during diagnostics directory preparation sends no request and publishes no log', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-
-  const stateDir = mkdtempForTestSync('remote-diagnostics-cancel-');
-  const controller = new AbortController();
-  let requests = 0;
-  const server = http.createServer((_req, res) => {
-    requests += 1;
-    res.end(RECORD);
-  });
-  const port = await listenOnLoopback(server);
-  const makeDirectory = fs.promises.mkdir;
-  const mkdir = vi.spyOn(fs.promises, 'mkdir').mockImplementationOnce((...args) => {
-    controller.abort();
-    return makeDirectory(...args);
-  });
-  try {
-    const result = await localizeRemoteDaemonError(remoteError(), {
-      endpoint: { baseUrl: `http://127.0.0.1:${port}`, token: 'secret' },
-      stateDir,
-      signal: controller.signal,
-    });
-    assert.equal(result.logPath, undefined);
-    assert.equal(requests, 0);
-    assert.deepEqual(
-      fs.readdirSync(path.join(stateDir, 'remote-diagnostics', 'cwd_9f1_default', 'requests')),
-      [],
-    );
-  } finally {
-    mkdir.mockRestore();
-    await closeLoopbackServer(server);
-  }
-});

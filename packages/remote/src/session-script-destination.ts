@@ -19,7 +19,7 @@ import {
   removeRecord,
   withRecordLock,
 } from './script-publication-record.ts';
-import { publishScriptVersion, scriptVersionTarget } from './script-version-publisher.ts';
+import { publishScriptVersion } from './script-version-publisher.ts';
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
 
@@ -52,8 +52,6 @@ export async function sendRemoteScriptOpen(
 }
 
 export type SessionScriptDelivery = Readonly<{
-  /** The client-owned destination of a planned script artifact, before it is fetched. */
-  plannedDestination(artifact: DaemonArtifact): string | undefined;
   /** Publishes one script artifact and names it in `data`, or drops it from the response. */
   publish(
     artifact: DaemonArtifact,
@@ -80,7 +78,6 @@ async function settleScriptReceipt(
     req: DaemonWireRequest;
     stateDir: string;
     fetch: typeof fetchRemoteArtifact;
-    signal: AbortSignal | undefined;
   }>,
   receipt: ScriptDeliveryReceipt,
   data: Record<string, unknown>,
@@ -152,9 +149,8 @@ export function sessionScriptDelivery(
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
   fetch: typeof fetchRemoteArtifact,
-  signal?: AbortSignal,
 ): SessionScriptDelivery {
-  const context = { endpoint, req, stateDir, fetch, signal };
+  const context = { endpoint, req, stateDir, fetch };
   const receipt = req.command === 'batch' ? readScriptDeliveryReceipt(response) : undefined;
   const rejected =
     receipt === undefined &&
@@ -168,7 +164,6 @@ export function sessionScriptDelivery(
   // published destination from here rather than downloading anything a second time.
   let settled: ReceiptSettlement | undefined;
   const delivery: SessionScriptDelivery = {
-    plannedDestination: (artifact) => scriptVersionTarget(context, artifact)?.record.destination,
     publish: async (artifact, data, kept) => {
       if (artifact.field !== 'savedScript' || artifact.artifactType !== 'session-script') return;
       // The receipt is the one delivery instruction of this response; a step's or the batch's own
@@ -248,7 +243,6 @@ export async function settleScriptDeliveryReceiptOfFailure(
   error: DaemonError,
   stateDir: string,
   fetch: typeof fetchRemoteArtifact,
-  signal?: AbortSignal,
 ): Promise<DaemonError> {
   if (req.command !== 'batch') return error;
   const receipt = readScriptDeliveryReceipt({ ok: false, error });
@@ -259,11 +253,7 @@ export async function settleScriptDeliveryReceiptOfFailure(
     return { ...error, details };
   }
   const data: Record<string, unknown> = { ...(error.details ?? {}) };
-  const settled = await settleScriptReceipt(
-    { endpoint, req, stateDir, fetch, signal },
-    receipt,
-    data,
-  );
+  const settled = await settleScriptReceipt({ endpoint, req, stateDir, fetch }, receipt, data);
   if (settled.retire) await retireQuietly(req, settled.retire);
   const disclosure: Record<string, unknown> = {
     ...(data.scriptDeliveryFailure === undefined

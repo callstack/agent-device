@@ -199,8 +199,6 @@ export type DaemonArtifact = {
   // (reserveOutput, trackDownloadableArtifact) keep the required
   // `DaemonArtifactType | undefined` form so artifact owners must decide.
   artifactType?: DaemonArtifactType;
-  role?: 'recording' | 'telemetry' | 'chunk';
-  chunkIndex?: number;
   artifactId?: string;
   fileName?: string;
   localPath?: string;

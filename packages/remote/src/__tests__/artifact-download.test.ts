@@ -143,7 +143,7 @@ test('downloadRemoteArtifactFromUrl removes directory staging when a 2xx body fa
       () =>
         downloadTo(tempRoot, port, {
           destinationPath: artifactsRoot,
-          mode: 'directory',
+          isDirectory: true,
         }),
       (error: unknown) => {
         assert.equal(error instanceof Error, true);
@@ -341,7 +341,7 @@ for (const route of ['in-memory fetch', 'file download', 'directory download'] a
       'in-memory fetch': () => fetchFrom(port, 1024),
       'file download': () => downloadTo(tempRoot, port),
       'directory download': () =>
-        downloadTo(tempRoot, port, { destinationPath: tempRoot, mode: 'directory' }),
+        downloadTo(tempRoot, port, { destinationPath: tempRoot, isDirectory: true }),
     }[route];
 
     try {

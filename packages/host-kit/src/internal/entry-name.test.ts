@@ -2,12 +2,7 @@
 // that refuses a spelling whose last segment names none before it normalizes it away (ADR 0016).
 import { expect, test } from 'vitest';
 import path from 'node:path';
-import {
-  isOrdinaryEntryName,
-  resolveScriptDestination,
-  scriptEntryName,
-  unnamedEntryFailure,
-} from './entry-name.ts';
+import { resolveScriptDestination, scriptEntryName, unnamedEntryFailure } from './entry-name.ts';
 import {
   ancestryRoot as root,
   expectUntrusted,
@@ -149,22 +144,3 @@ test.each([
     else expect(failure.details?.hint).toMatch(/valid file name/);
   },
 );
-
-test.each([
-  { name: 'demo.mp4', rules: path.win32, ordinary: true },
-  { name: 'demo.mp4', rules: path.posix, ordinary: true },
-  { name: 'C:foo.mp4', rules: path.win32, ordinary: false },
-  { name: 'C:foo.mp4', rules: path.posix, ordinary: true },
-  { name: 'clips\\demo.mp4', rules: path.win32, ordinary: false },
-  { name: 'clips/demo.mp4', rules: path.posix, ordinary: false },
-  { name: 'CONIN$', rules: path.win32, ordinary: false },
-  { name: 'CONOUT$.mp4', rules: path.win32, ordinary: false },
-  { name: 'NUL .mp4', rules: path.win32, ordinary: false },
-  { name: 'demo.mp4 ', rules: path.win32, ordinary: false },
-  { name: 'demo\uD800.mp4', rules: path.posix, ordinary: false },
-  { name: 'a'.repeat(256), rules: path.posix, ordinary: false },
-  { name: `${'\u00e9'.repeat(128)}`, rules: path.posix, ordinary: false },
-  { name: '..', rules: path.posix, ordinary: false },
-])('isOrdinaryEntryName($name, $rules.sep) is $ordinary', ({ name, rules, ordinary }) => {
-  expect(isOrdinaryEntryName(name, rules)).toBe(ordinary);
-});

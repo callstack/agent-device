@@ -5,7 +5,7 @@ import type http from 'node:http';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import type { DaemonRequestMeta } from '@agent-device/kernel/contracts';
@@ -26,60 +26,31 @@ type RemoteArtifactRequest = {
   artifactId: string;
   requestScope: DaemonRequestMeta | undefined;
   timeoutMs?: number;
-  /** The caller's cancellation. An abort stops the transfer and any publish, then cleans up. */
-  signal?: AbortSignal;
 };
-
-/**
- * How a download lands at `destinationPath`: one file written in place, a caller-owned root that
- * receives one extracted directory, or one file staged privately beside the destination (#4518),
- * where no link at the name or replaced parent redirects the bytes. `staged-file` renames over the
- * caller's destination; `staged-new-file` refuses an occupied destination.
- */
-export type RemoteArtifactDestinationMode =
-  | 'file'
-  | 'directory'
-  | 'staged-file'
-  | 'staged-new-file';
 
 export type RemoteArtifactDownload = RemoteArtifactRequest & {
   destinationPath: string;
-  /** Defaults to `file`. */
-  mode?: RemoteArtifactDestinationMode;
-};
-
-/**
- * The `details.reason` values a staged remote recording download publishes (#4518), documented in
- * `website/docs/docs/commands.md`.
- */
-const ARTIFACT_DOWNLOAD_REASONS = {
-  /** The download's parent directory was replaced or became unreachable during the transfer. */
-  destinationReplaced: 'artifact_destination_replaced',
-  /** The staging directory could not be created, or the staged file could not be renamed. */
-  publishFailed: 'artifact_publish_failed',
-} as const;
-
-const PRIVATE_FILE_FLAGS =
-  fs.constants.O_WRONLY |
-  fs.constants.O_CREAT |
-  fs.constants.O_EXCL |
-  (fs.constants.O_NOFOLLOW ?? 0);
-
-type DownloadDestination<T> = {
-  prepare(): Promise<void>;
-  cleanupOnError(): Promise<void>;
-  materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
+  /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
+  isDirectory?: boolean;
+  stagedFile?: boolean;
 };
 
 /** An artifact held in memory, stopped once it crosses `maxBytes`, whatever `Content-Length` announced. */
 export type RemoteArtifactFetch = RemoteArtifactRequest & { maxBytes: number };
 
-function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination<string> {
+function buildDownloadDestination(params: RemoteArtifactDownload) {
   const { destinationPath } = params;
-  if (params.mode === 'staged-file' || params.mode === 'staged-new-file') {
-    return stagedFileDestination(params);
+  if (params.stagedFile) {
+    return {
+      prepare: async () => {
+        await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      },
+      cleanupOnError: async () => {},
+      materialize: (res: http.IncomingMessage, signal: AbortSignal) =>
+        materializeStagedFile(res, destinationPath, signal),
+    };
   }
-  if (params.mode === 'directory') {
+  if (params.isDirectory) {
     return {
       prepare: async () => {
         await fs.promises.mkdir(destinationPath, { recursive: true });
@@ -103,94 +74,21 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
   };
 }
 
-function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestination<string> {
-  const { destinationPath, artifactId } = params;
-  const parent = path.dirname(destinationPath);
-  // Staging, publishing and cleanup all use this one resolved parent and its identity.
-  let anchor: { path: string; identity: string | undefined } | undefined;
-  let staging: string | undefined;
-  let file: fs.promises.FileHandle | undefined;
-  /** Whether the anchored directory is still the one staging was created in. */
-  const anchorKept = (): boolean =>
-    anchor?.identity !== undefined && directoryIdentity(anchor.path) === anchor.identity;
-  /** Cleanup acts only inside the anchored directory, never inside one that replaced it. */
-  const removeStaging = async (): Promise<void> => {
-    await file?.close().catch(() => undefined);
-    if (staging && anchorKept()) fs.rmSync(staging, { recursive: true, force: true });
-  };
-  return {
-    prepare: async () => {
-      try {
-        await fs.promises.mkdir(parent, { recursive: true });
-        const physical = fs.realpathSync(parent);
-        anchor = { path: physical, identity: directoryIdentity(physical) };
-        if (anchor.identity === undefined) throw new Error(`${physical} is not a directory`);
-        staging = fs.mkdtempSync(path.join(physical, '.agent-device-download-'));
-        file = await fs.promises.open(path.join(staging, 'artifact'), PRIVATE_FILE_FLAGS, 0o600);
-      } catch (error) {
-        await removeStaging();
-        throw publishError(artifactId, error);
-      }
-    },
-    cleanupOnError: removeStaging,
-    materialize: async (res, signal) => {
-      const staged = path.join(staging!, 'artifact');
-      await pipeline(res, file!.createWriteStream(), { signal });
-      // The publish runs synchronously from here, so nothing interleaves after these checks.
-      signal.throwIfAborted();
-      if (!anchorKept() || realpathOrUndefined(parent) !== anchor!.path) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          'The download directory changed during the transfer.',
-          {
-            reason: ARTIFACT_DOWNLOAD_REASONS.destinationReplaced,
-            artifactId,
-          },
-        );
-      }
-      const target = path.join(anchor!.path, path.basename(destinationPath));
-      try {
-        if (params.mode === 'staged-new-file') fs.linkSync(staged, target);
-        else fs.renameSync(staged, target);
-      } catch (error) {
-        throw publishError(artifactId, error, target);
-      }
-      fs.rmSync(staging!, { recursive: true, force: true });
-      return destinationPath;
-    },
-  };
-}
-
-function publishError(artifactId: string, cause: unknown, target?: string): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    'The downloaded artifact could not be saved on this machine.',
-    {
-      reason: ARTIFACT_DOWNLOAD_REASONS.publishFailed,
-      artifactId,
-      destinationPath:
-        (cause as NodeJS.ErrnoException | undefined)?.code === 'EEXIST' ? target : undefined,
-    },
-    cause instanceof Error ? cause : undefined,
-  );
-}
-
-function realpathOrUndefined(directory: string): string | undefined {
+async function materializeStagedFile(
+  res: http.IncomingMessage,
+  destinationPath: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const parent = await fs.promises.realpath(path.dirname(destinationPath));
+  const staging = await fs.promises.mkdtemp(path.join(parent, '.agent-device-download-'));
+  const staged = path.join(staging, 'artifact');
   try {
-    return fs.realpathSync(directory);
-  } catch {
-    return undefined;
-  }
-}
-
-/** A directory's identity from `lstat`, or `undefined` when it is not a reachable directory. */
-function directoryIdentity(directory: string): string | undefined {
-  try {
-    const stat = fs.lstatSync(directory, { bigint: true });
-    return stat.isDirectory() ? `${stat.dev}:${stat.ino}` : undefined;
-  } catch {
-    // ENOENT, ENOTDIR or EACCES all mean the anchored directory can no longer be confirmed.
-    return undefined;
+    await pipeline(res, fs.createWriteStream(staged, { flags: 'wx', mode: 0o600 }), { signal });
+    signal.throwIfAborted();
+    await fs.promises.rename(staged, path.join(parent, path.basename(destinationPath)));
+    return destinationPath;
+  } finally {
+    await fs.promises.rm(staging, { recursive: true, force: true });
   }
 }
 
@@ -249,14 +147,12 @@ export async function downloadRemoteArtifactFromUrl(
 
 async function requestRemoteArtifact<T>(
   params: RemoteArtifactRequest,
-  destination: DownloadDestination<T>,
+  destination: {
+    prepare(): Promise<void>;
+    cleanupOnError(): Promise<void>;
+    materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
+  },
 ): Promise<T> {
-  const canceled = (): AppError =>
-    createRequestCanceledError(
-      { artifactId: params.artifactId, requestId: params.requestScope?.requestId },
-      params.signal?.reason,
-    );
-  if (params.signal?.aborted) throw canceled();
   const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
   await destination.prepare();
   return await new Promise<T>((resolve, reject) => {
@@ -265,18 +161,10 @@ async function requestRemoteArtifact<T>(
     let timeoutError: AppError | undefined;
     const operation = new AbortController();
     const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
-    // A caller abort stops the transfer like the timeout does, and settles only after cleanup.
-    const onCallerAbort = (): void => {
-      timeoutError ??= canceled();
-      operation.abort(timeoutError);
-      request.destroy(timeoutError);
-      if (!materializationStarted) fail(timeoutError);
-    };
     const settleOnce = (): boolean => {
       if (settled) return false;
       settled = true;
       clearTimeout(timeoutHandle);
-      params.signal?.removeEventListener('abort', onCallerAbort);
       return true;
     };
     const succeed = (result: T) => {
@@ -344,7 +232,7 @@ async function requestRemoteArtifact<T>(
       },
     );
     const timeoutHandle = setTimeout(() => {
-      timeoutError ??= new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
+      timeoutError = new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
         artifactId: params.artifactId,
         requestId: params.requestScope?.requestId,
         timeoutMs,
@@ -355,8 +243,6 @@ async function requestRemoteArtifact<T>(
       // or extraction could keep writing after the caller observes the timeout.
       if (!materializationStarted) fail(timeoutError);
     }, timeoutMs);
-    params.signal?.addEventListener('abort', onCallerAbort, { once: true });
-    if (params.signal?.aborted) onCallerAbort();
     request.on('error', (error) => {
       if (materializationStarted) return;
       if (error instanceof AppError) {

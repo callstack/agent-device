@@ -367,16 +367,3 @@ test('debug folds a multi-line warning onto one Warning line', async () => {
   expect(rendered.split('Warning: Symbols missing for one image').length - 1).toBe(1);
   expect(rendered).not.toContain('Symbols missing\nfor');
 });
-
-test('remote recording warnings go to stderr and leave the stdout path alone', async () => {
-  const output = await render('record', {
-    outPath: '/tmp/clip.mp4',
-    daemonWarnings: ['Overlay skipped'],
-    warnings: ['Using the working directory'],
-  });
-
-  expect(output.text).toBe('/tmp/clip.mp4');
-  expect(output.stderr).toBe(
-    'Daemon warning: Overlay skipped\nWarning: Using the working directory\n',
-  );
-});

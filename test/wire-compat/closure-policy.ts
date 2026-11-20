@@ -49,12 +49,8 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'packages/remote/src/artifact-download.ts#DownloadDestination':
-    "The CLIENT'S OWN prepare, cleanup and materialize callbacks for one download. They run on the client after the listed GET /artifacts/:id request; nothing in them crosses the wire.",
-  'packages/remote/src/artifact-download.ts#RemoteArtifactDestinationMode':
-    "The CLIENT'S OWN choice of how a download lands on disk (file, directory or staged-file). It is never sent; the listed artifact request is unchanged.",
   'packages/remote/src/daemon-artifacts.ts#RecordingDestinationWarning':
-    "The CLIENT'S OWN report of a recording file it wrote to cwd. The client adds it to its local response and error details; it never crosses the wire to the daemon.",
+    'The client adds this warning after a local write. It never crosses the daemon wire.',
   'packages/remote/src/script-version-publisher.ts#PublishOutcome':
     "The CLIENT'S OWN result of one publish attempt: the published path, or a failure plus the local error object behind it. Neither half crosses the wire as this shape: both are transformations into client-local output, the path into the listed `data.savedScript` string, and a failure into the listed packages/kernel/src/contracts.ts#ScriptDeliveryFailure. The `error` member is a local unknown thrown value that never reaches the peer.",
   'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':

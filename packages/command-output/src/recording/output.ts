@@ -11,9 +11,8 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
   const outPath = typeof data.outPath === 'string' ? data.outPath : '';
   const chunks = readRecordingChunks(data);
-  const stderr = daemonWarningLines(data);
-  if (chunks.length === 0 || (chunks.length === 1 && chunks[0]?.path === outPath)) {
-    return { data, text: formatRecordSingleOutput(data, outPath), ...(stderr ? { stderr } : {}) };
+  if (chunks.length <= 1) {
+    return { data, text: formatRecordSingleOutput(data, outPath) };
   }
 
   const lines = ['Recording chunks:'];
@@ -23,7 +22,7 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
   if (typeof data.telemetryPath === 'string') {
     lines.push(`Telemetry: ${data.telemetryPath}`);
   }
-  return { data, text: withRecordWarnings(lines, data), ...(stderr ? { stderr } : {}) };
+  return { data, text: withRecordWarnings(lines, data) };
 }
 
 export const recordingCliOutputFormatters = {
@@ -44,14 +43,6 @@ function withRecordWarnings(lines: string[], data: Record<string, unknown>): str
     lines.push(`Overlay warning: ${collapseWarningText(data.overlayWarning)}`);
   }
   return lines.join('\n');
-}
-
-/** A remote daemon's own warning text goes to stderr, so stdout stays the parseable path. */
-function daemonWarningLines(data: Record<string, unknown>): string | undefined {
-  const lines = (Array.isArray(data.daemonWarnings) ? data.daemonWarnings : [])
-    .filter((warning): warning is string => typeof warning === 'string')
-    .map((warning) => `Daemon warning: ${collapseWarningText(warning)}\n`);
-  return lines.length > 0 ? lines.join('') : undefined;
 }
 
 function readRecordingChunks(

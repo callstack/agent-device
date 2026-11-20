@@ -1,6 +1,4 @@
-import { describe, expect, expectTypeOf, test } from 'vitest';
-import type { RecordingStopCommandResult } from '@agent-device/contracts/recording';
-import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from './output-schemas.ts';
+import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { getCliCommandSchema } from '../schema/command-schema.ts';
 import {
@@ -31,17 +29,6 @@ describe('recording command interface', () => {
     expect(recordCommandFacet.definition.name).toBe('record');
     expect(traceCommandMetadata.name).toBe('trace');
     expect(traceCommandFacet.definition.name).toBe('trace');
-  });
-
-  test('declares remote warning strings in the stopped result contract', () => {
-    expectTypeOf<RecordingStopCommandResult>()
-      .toHaveProperty('daemonWarnings')
-      .toEqualTypeOf<string[] | undefined>();
-    const stopped = RECORDING_COMMAND_OUTPUT_SCHEMAS.record.oneOf[1];
-    expect(stopped?.required).not.toContain('outPath');
-    expect(stopped).toMatchObject({
-      properties: { daemonWarnings: { type: 'array', items: { type: 'string' } } },
-    });
   });
 
   test('reads record CLI input with recording flags', () => {

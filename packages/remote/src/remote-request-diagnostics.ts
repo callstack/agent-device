@@ -19,10 +19,7 @@
 
 import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import fs from 'node:fs';
-import type { IncomingMessage } from 'node:http';
 import path from 'node:path';
-import { addAbortSignal } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import type { DaemonError, DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import {
@@ -80,13 +77,7 @@ function stripDaemonLogPath(error: DaemonError): RemoteDaemonErrorPayload {
  */
 export async function localizeRemoteDaemonError(
   error: DaemonError,
-  params: {
-    endpoint: RemoteDiagnosticsEndpoint;
-    stateDir: string;
-    requestId?: string;
-    /** The caller's cancellation: an aborted request fetches no record, and an abort stops one. */
-    signal?: AbortSignal;
-  },
+  params: { endpoint: RemoteDiagnosticsEndpoint; stateDir: string; requestId?: string },
 ): Promise<DaemonError> {
   const payload = stripDaemonLogPath(error);
   const ref = error.diagnosticsRecord;
@@ -104,14 +95,11 @@ export async function localizeRemoteDaemonError(
 
   try {
     const destinationPath = resolveRemoteRequestDiagnosticsPath(params.stateDir, ref);
-    const failure = params.signal?.aborted
-      ? CANCELED
-      : await fetchRemoteRequestDiagnostics({
-          endpoint: params.endpoint,
-          ref,
-          destinationPath,
-          signal: params.signal,
-        });
+    const failure = await fetchRemoteRequestDiagnostics({
+      endpoint: params.endpoint,
+      ref,
+      destinationPath,
+    });
     if (failure) {
       return withUnavailableRecord(payload, params.endpoint, requestId, failure);
     }
@@ -141,34 +129,39 @@ function withUnavailableRecord(
 }
 
 /**
- * Stages one bounded diagnostics record. After the cancellation check, publish the complete
- * record atomically. Return a failure reason if the caller has no record to open.
+ * Downloads one record to `destinationPath`. Returns `undefined` on success, or
+ * the reason the caller has no record — never throws, because the request this
+ * belongs to already failed with its own error.
  */
 async function fetchRemoteRequestDiagnostics(params: {
   endpoint: RemoteDiagnosticsEndpoint;
   ref: DiagnosticsRecordRef;
   destinationPath: string;
-  signal: AbortSignal | undefined;
 }): Promise<string | undefined> {
-  const { endpoint, ref, destinationPath, signal } = params;
+  const { endpoint, ref, destinationPath } = params;
   let url: URL;
   try {
     url = new URL(buildRemoteRequestDiagnosticsUrl(endpoint.baseUrl, ref));
   } catch {
     return 'daemon base URL is not a valid URL';
   }
-  const timeout = AbortSignal.timeout(REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS);
-  const transfer = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  let staging: string | undefined;
   try {
     const transport = await loadNodeHttpRequester(url.protocol);
-    const parent = path.dirname(destinationPath);
-    await fs.promises.mkdir(parent, { recursive: true });
-    transfer.throwIfAborted();
-
-    staging = fs.mkdtempSync(path.join(parent, '.diagnostics-'));
-    const staged = path.join(staging, 'record');
-    const response = await new Promise<IncomingMessage>((resolve, reject) => {
+    await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+    return await new Promise<string | undefined>((resolve) => {
+      let settled = false;
+      const settle = (reason: string | undefined) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        if (reason === undefined) {
+          resolve(undefined);
+          return;
+        }
+        void fs.promises.rm(destinationPath, { force: true }).finally(() => {
+          resolve(reason);
+        });
+      };
       const request = transport.request(
         {
           protocol: url.protocol,
@@ -182,39 +175,46 @@ async function fetchRemoteRequestDiagnostics(params: {
             ...buildDaemonHttpLeaseHeaders(endpoint.leaseId),
           },
         },
-        resolve,
+        (res) => {
+          const statusCode = res.statusCode ?? 500;
+          if (statusCode !== 200) {
+            res.resume();
+            settle(`HTTP ${statusCode}`);
+            return;
+          }
+          const sink = fs.createWriteStream(destinationPath);
+          let bytes = 0;
+          res.on('data', (chunk: Buffer) => {
+            bytes += chunk.length;
+            if (bytes > REMOTE_DIAGNOSTICS_MAX_BYTES) {
+              request.destroy();
+              sink.destroy();
+              settle(`record exceeds ${REMOTE_DIAGNOSTICS_MAX_BYTES} bytes`);
+            }
+          });
+          res.on('error', (error: Error) => {
+            sink.destroy();
+            settle(error.message);
+          });
+          sink.on('error', (error: Error) => {
+            settle(error.message);
+          });
+          sink.on('finish', () => {
+            settle(undefined);
+          });
+          res.pipe(sink);
+        },
       );
-      request.once('error', reject);
-      addAbortSignal(transfer, request).end();
+      const timeoutHandle = setTimeout(() => {
+        settle(`fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`);
+        request.destroy();
+      }, REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS);
+      request.on('error', (error: Error) => {
+        settle(error.message);
+      });
+      request.end();
     });
-    if (response.statusCode !== 200) {
-      response.destroy();
-      return `HTTP ${response.statusCode ?? 500}`;
-    }
-    await pipeline(response, limitRecordSize, fs.createWriteStream(staged, { mode: 0o600 }), {
-      signal: transfer,
-    });
-    transfer.throwIfAborted();
-    fs.renameSync(staged, destinationPath);
-    return undefined;
   } catch (error) {
-    if (signal?.aborted) return CANCELED;
-    if (timeout.aborted) return `fetch timed out after ${REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS}ms`;
     return error instanceof Error ? error.message : String(error);
-  } finally {
-    if (staging) await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => {});
   }
 }
-
-async function* limitRecordSize(source: AsyncIterable<Buffer>): AsyncGenerator<Buffer> {
-  let bytes = 0;
-  for await (const chunk of source) {
-    bytes += chunk.length;
-    if (bytes > REMOTE_DIAGNOSTICS_MAX_BYTES) {
-      throw new Error(`record exceeds ${REMOTE_DIAGNOSTICS_MAX_BYTES} bytes`);
-    }
-    yield chunk;
-  }
-}
-
-const CANCELED = 'the request was canceled';

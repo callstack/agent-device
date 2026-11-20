@@ -546,15 +546,9 @@ importers:
       '@agent-device/apple-runner':
         specifier: workspace:*
         version: link:../apple-runner
-      '@agent-device/command-output':
-        specifier: workspace:*
-        version: link:../command-output
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy
-      '@agent-device/remote':
-        specifier: workspace:*
-        version: link:../remote
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit

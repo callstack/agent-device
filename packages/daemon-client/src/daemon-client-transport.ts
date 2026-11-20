@@ -536,18 +536,7 @@ function remainingRemoteRequestTimeoutMs(
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
-  return error instanceof RemoteInstanceMismatchError;
-}
-
-const INSTANCE_MISMATCH_REASONS = { rejected: 'remote_instance_mismatch' } as const;
-
-class RemoteInstanceMismatchError extends AppError {
-  constructor(daemonBaseUrl: string | undefined) {
-    super('COMMAND_FAILED', 'Remote daemon instance changed', {
-      reason: INSTANCE_MISMATCH_REASONS.rejected,
-      daemonBaseUrl,
-    });
-  }
+  return error instanceof AppError && error.details?.reason === 'remote_instance_mismatch';
 }
 
 function isRemoteTransportFailure(error: unknown): boolean {
@@ -846,18 +835,12 @@ async function sendHttpRequest(
       detachCallerAbort();
       reject(error);
     };
-    // Once artifact delivery starts, it owns the caller abort and settles after cleanup.
-    let delivering = false;
     const handleBody = (body: string): void => {
       handleDaemonHttpResponseBody(body, {
         info,
         req,
         stateDir: statePaths.baseDir,
         host: options.host,
-        signal: callerSignal,
-        onDelivery: () => {
-          delivering = true;
-        },
         resolve: resolveOnce,
         reject: rejectOnce,
       });
@@ -875,7 +858,12 @@ async function sendHttpRequest(
         if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
           res.resume();
           if (timeoutHandle) clearTimeout(timeoutHandle);
-          rejectOnce(new RemoteInstanceMismatchError(info.baseUrl));
+          rejectOnce(
+            new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
+              reason: 'remote_instance_mismatch',
+              daemonBaseUrl: info.baseUrl,
+            }),
+          );
           return;
         }
         if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
@@ -928,7 +916,7 @@ async function sendHttpRequest(
     // first so the `error` the destroy surfaces arrives after `settled` and cannot rewrite the
     // typed cancellation into a transport failure.
     const onCallerAbort = (): void => {
-      if (settled || delivering) return;
+      if (settled) return;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       rejectOnce(
         abortedRequestError(callerSignal!, requestSent ? 'unknown' : 'no', req.meta?.requestId),

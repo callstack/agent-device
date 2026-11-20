@@ -170,7 +170,7 @@ test('directory downloads stage beside the destination and finish timeout cleanu
       artifactId: 'stalled-directory',
       destinationPath: clientRoot,
       requestScope: {},
-      mode: 'directory',
+      isDirectory: true,
       timeoutMs: 80,
     });
     let settledBeforeTimeout: { error?: unknown } | undefined;

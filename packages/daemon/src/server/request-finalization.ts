@@ -116,8 +116,6 @@ function registerDownloadableArtifacts(
           ? { displayRotation: artifact.displayRotation }
           : {}),
       }),
-      ...(artifact.role === undefined ? {} : { role: artifact.role }),
-      ...(artifact.chunkIndex === undefined ? {} : { chunkIndex: artifact.chunkIndex }),
       fileName: artifact.fileName,
       localPath: artifact.localPath,
       scriptPublicationId: artifact.scriptPublicationId,

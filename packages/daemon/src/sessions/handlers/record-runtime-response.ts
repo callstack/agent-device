@@ -106,8 +106,6 @@ export function recordingStopArtifacts(completion: ScreenRecordingCompletion): D
     artifacts.push(
       ...completion.chunks.slice(1).map((chunk) => ({
         field: 'chunkPath',
-        role: 'chunk' as const,
-        chunkIndex: chunk.index,
         artifactType: 'screen-recording-chunk' as const,
         path: chunk.path,
         localPath: chunk.clientOutPath,
@@ -121,12 +119,10 @@ export function recordingStopArtifacts(completion: ScreenRecordingCompletion): D
       : undefined;
     artifacts.push({
       field: 'telemetryPath',
-      role: 'telemetry',
       artifactType: 'screen-recording-telemetry',
       path: completion.telemetryPath,
       localPath: clientTelemetryPath,
-      // Named from the caller's start path, like the video, so a remote cwd fallback keeps that name.
-      fileName: path.basename(clientTelemetryPath ?? completion.telemetryPath),
+      fileName: path.basename(completion.telemetryPath),
     });
   }
   return artifacts;
@@ -135,8 +131,6 @@ export function recordingStopArtifacts(completion: ScreenRecordingCompletion): D
 function recordingArtifact(completion: ScreenRecordingCompletion): DaemonArtifact {
   return {
     field: 'outPath',
-    role: 'recording',
-    chunkIndex: completion.chunks?.[0]?.index,
     artifactType: 'screen-recording',
     path: completion.outPath,
     localPath: completion.clientOutPath,

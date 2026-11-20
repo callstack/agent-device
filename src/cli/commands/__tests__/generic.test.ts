@@ -191,7 +191,7 @@ async function terminalOutputOf(command: string, data: Record<string, unknown>, 
     runGenericClientBackedCommand({
       host: createTestHostEnvironment(),
       command: command as ClientBackedCliCommandName,
-      positionals: command === 'open' ? ['Demo'] : command === 'record' ? ['stop'] : [],
+      positionals: command === 'open' ? ['Demo'] : [],
       flags: { json } as CliFlags,
       client,
     }),
@@ -272,25 +272,4 @@ test('get attrs prints the node as JSON that parses exactly despite a C1 charact
 
   assert.equal(stdout.includes('\u009b'), false);
   assert.deepEqual(JSON.parse(stdout), node);
-});
-
-// #4518: a remote record stop names files from daemon-chosen names; the writer still escapes them.
-test('a remote record stop writes escaped chunk paths and fallback warnings', async () => {
-  const chunk = '/work/demo\u009b.mp4';
-  const warning = `The remote recording outPath was saved to ${chunk} in the current directory, because the request named no destination for it.`;
-  const { all } = await terminalOutputOf('record', {
-    recording: 'stopped',
-    outPath: chunk,
-    chunks: [
-      { index: 0, path: chunk },
-      { index: 1, path: '/work/demo\u001b[8m.part-001.mp4' },
-    ],
-    warnings: [warning],
-    recordingDestinationWarnings: [
-      { reason: 'recording_destination_not_requested', field: 'outPath', path: chunk },
-    ],
-  });
-
-  assert.ok(all.includes(String.raw`/work/demo\u009b.mp4`), all);
-  assert.deepEqual(rawControls(all), []);
 });

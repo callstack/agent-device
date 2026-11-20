@@ -13,13 +13,11 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
   fetchRemoteArtifact,
   materializeRemoteArtifacts,
-  projectRemoteErrorDetails,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
-import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
-import { isRecord } from '@agent-device/kernel/record';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
@@ -29,48 +27,27 @@ export function handleDaemonHttpResponseBody(
     req: DaemonWireRequest;
     stateDir: string;
     host: HostEnvironment;
-    /** The caller's cancellation, which still stops artifact delivery after the answer arrived. */
-    signal?: AbortSignal;
-    /** Called once artifact delivery, which observes `signal`, takes over the caller abort. */
-    onDelivery?: () => void;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, host, signal, onDelivery, resolve, reject } = options;
+  const { info, req, stateDir, host, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, signal, reject }).catch(reject);
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
       return;
     }
-    const result: unknown = parsed.result;
-    if (!isRemoteDaemon(info)) {
-      if (typeof result === 'object' && result !== null) resolve(result as DaemonResponse);
-      else reject(invalidDaemonResponse(req));
-      return;
-    }
-    // #4518: a remote answer is classified once, by one predicate. Only a result whose `ok` is
-    // exactly `true` is delivered. Any other result with an `error` object leaves through the error
-    // path, which strips client-owned fields and localizes the log. Every other result is invalid.
-    if (isDeliverableResult(result)) {
-      void resolveDaemonHttpResult(
-        info,
-        req,
-        result,
-        { host, stateDir, signal, onDelivery },
-        resolve,
-        reject,
+    if (!parsed.result || typeof parsed.result !== 'object') {
+      reject(
+        new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
+          requestId: req.meta?.requestId,
+          reason: 'daemon_response_invalid',
+        }),
       );
-    } else if (isRecord(result) && isRecord(result.error)) {
-      const message = typeof result.error.message === 'string' ? result.error.message : undefined;
-      rejectDaemonHttpRpcError(
-        { message, data: result.error },
-        { info, req, stateDir, signal, reject },
-      ).catch(reject);
-    } else {
-      reject(invalidDaemonResponse(req));
+      return;
     }
+    void resolveDaemonHttpResult(info, req, parsed.result, { host, stateDir }, resolve, reject);
   } catch (err) {
     reject(
       new AppError(
@@ -85,17 +62,6 @@ export function handleDaemonHttpResponseBody(
       ),
     );
   }
-}
-
-function isDeliverableResult(value: unknown): value is Extract<DaemonResponse, { ok: true }> {
-  return isRecord(value) && value.ok === true;
-}
-
-function invalidDaemonResponse(req: DaemonWireRequest): AppError {
-  return new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
-    requestId: req.meta?.requestId,
-    reason: 'daemon_response_invalid',
-  });
 }
 
 function parseDaemonHttpResponseBody(body: string): {
@@ -120,22 +86,14 @@ async function rejectDaemonHttpRpcError(
     info: DaemonInfo;
     req: DaemonWireRequest;
     stateDir: string;
-    signal?: AbortSignal;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
-  const { info, req, stateDir, signal, reject } = options;
+  const { info, req, stateDir, reject } = options;
   const requestId = req.meta?.requestId;
-  const local = toDaemonHttpRpcError(error);
+  const payload = toDaemonHttpRpcError(error);
   if (!info.baseUrl) {
-    reject(appErrorFromDaemonError(local, requestId));
-    return;
-  }
-  // A remote peer cannot supply the fields only this client's own delivery sets (#4518).
-  const payload = { ...local, details: await projectRemoteErrorDetails(req, local.details) };
-  // A caller abort already rejected this request, so no diagnostics record is fetched for it.
-  if (signal?.aborted) {
-    reject(appErrorFromDaemonError({ ...payload, logPath: undefined }, requestId));
+    reject(appErrorFromDaemonError(payload, requestId));
     return;
   }
   const localized = await localizeRemoteDaemonError(payload, {
@@ -147,11 +105,10 @@ async function rejectDaemonHttpRpcError(
     },
     stateDir,
     requestId,
-    signal,
   });
   reject(
     appErrorFromDaemonError(
-      await settleFailedDeliveryReceipt(info, req, stateDir, localized, signal),
+      await settleFailedDeliveryReceipt(info, req, stateDir, localized),
       requestId,
     ),
   );
@@ -167,10 +124,8 @@ async function settleFailedDeliveryReceipt(
   req: DaemonWireRequest,
   stateDir: string,
   error: DaemonError,
-  signal: AbortSignal | undefined,
 ): Promise<DaemonError> {
-  // A caller abort already rejected this request, so nothing is delivered for it any more.
-  if (!info.baseUrl || signal?.aborted) return error;
+  if (!info.baseUrl) return error;
   try {
     return await settleScriptDeliveryReceiptOfFailure(
       { baseUrl: info.baseUrl, token: info.token },
@@ -178,7 +133,6 @@ async function settleFailedDeliveryReceipt(
       error,
       stateDir,
       fetchRemoteArtifact,
-      signal,
     );
   } catch {
     return error;
@@ -192,13 +146,8 @@ function toDaemonHttpRpcError(error: {
   const data = error.data ?? {};
   const cause = readDaemonErrorCause(data.cause);
   return {
-    code: toAppErrorCode(typeof data.code === 'string' ? data.code : undefined, 'COMMAND_FAILED'),
-    message:
-      typeof data.message === 'string'
-        ? data.message
-        : typeof error.message === 'string'
-          ? error.message
-          : 'Daemon RPC request failed',
+    code: toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
+    message: String(data.message ?? error.message ?? 'Daemon RPC request failed'),
     cause,
     details:
       typeof data.details === 'object' && data.details
@@ -236,31 +185,19 @@ function appErrorFromDaemonError(error: DaemonError, requestId: string | undefin
   );
 }
 
-/** Delivers a remote success answer: artifact delivery takes over the caller abort first. */
 async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
-  result: Extract<DaemonResponse, { ok: true }>,
-  client: {
-    host: HostEnvironment;
-    stateDir: string;
-    signal?: AbortSignal;
-    onDelivery?: () => void;
-  },
+  result: DaemonResponse,
+  client: { host: HostEnvironment; stateDir: string },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
-    client.onDelivery?.();
     resolve(
-      await materializeRemoteArtifacts(
-        info,
-        req,
-        result,
-        client.host,
-        client.stateDir,
-        client.signal,
-      ),
+      info.baseUrl && result.ok
+        ? await materializeRemoteArtifacts(info, req, result, client.host, client.stateDir)
+        : result,
     );
   } catch (error) {
     // The daemon answered, so the request ran; only bringing its artifacts here failed.
