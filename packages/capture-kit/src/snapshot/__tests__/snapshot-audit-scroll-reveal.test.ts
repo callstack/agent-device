@@ -277,7 +277,6 @@ test('drops the covered-control finding for a RecyclerView row under a BottomNav
       index: 2,
       depth: 0,
       type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
-      clickable: true,
       rect: { x: 0, y: 791, width: 402, height: 83 },
     },
   ];
@@ -319,7 +318,6 @@ test('keeps the finding when the strip above the bottom bar is shorter than the 
       index: 2,
       depth: 0,
       type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
-      clickable: true,
       rect: { x: 0, y: 791, width: 402, height: 83 },
     },
   ];
