@@ -18,12 +18,22 @@ const inventoryModuleNames = {
   web: 'webInventoryModule',
 } as const;
 
+const MANAGED_FAMILIES = ['web', 'vega'] as const;
+
+function isManagedFamily(family: string): boolean {
+  return (MANAGED_FAMILIES as readonly string[]).includes(family);
+}
+
+function managedPackageName(family: string): string {
+  return `@agent-device/${family}`;
+}
+
 function declarations(): PlatformPackageDeclaration[] {
   return CANONICAL_PLATFORM_FAMILIES.map((family) => ({
     dir: `packages/platform-${family}`,
     family,
-    name: family === 'web' ? '@agent-device/web' : `@agent-device/platform-${family}`,
-    ...(family === 'web'
+    name: isManagedFamily(family) ? managedPackageName(family) : `@agent-device/platform-${family}`,
+    ...(isManagedFamily(family)
       ? {
           managedClaim: { platform: family, apiVersion: 3 },
           publishedSubpaths: ['./agent-device'],
@@ -60,8 +70,8 @@ function declarations(): PlatformPackageDeclaration[] {
               '@agent-device/platform-android/snapshot-capture-fixtures',
               '@agent-device/platform-android/ui-hierarchy-fixtures',
             ]
-          : family === 'web'
-            ? ['@agent-device/web/agent-device']
+          : isManagedFamily(family)
+            ? [`${managedPackageName(family)}/agent-device`]
             : family === 'harmonyos' || family === 'linux'
               ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
               : [`@agent-device/platform-${family}`],
@@ -762,7 +772,7 @@ test('composition imports are category-based for future contracts and host adapt
 
 test('Node resolves only each platform package root facade', () => {
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
-    if (family === 'web') continue;
+    if (isManagedFamily(family)) continue;
     const specifier = `@agent-device/platform-${family}`;
     assert.ok(import.meta.resolve(specifier).endsWith(`packages/platform-${family}/src/index.ts`));
     assert.throws(
@@ -782,6 +792,21 @@ test('only the plugin scope resolves the managed web entry', () => {
     /platform-web[/\\]src[/\\]index\.ts$/,
   );
   assert.throws(() => resolveWeb.resolve('@agent-device/web'), /No "exports" main/);
+});
+
+test('only the plugin scope resolves the managed Vega entry', () => {
+  assert.throws(
+    () => import.meta.resolve('@agent-device/vega/agent-device'),
+    /Cannot find package/,
+  );
+  const resolveVega = createRequire(
+    new URL('../../packages/platform-vega/package.json', import.meta.url),
+  );
+  assert.match(
+    resolveVega.resolve('@agent-device/vega/agent-device'),
+    /platform-vega[/\\]src[/\\]index\.ts$/,
+  );
+  assert.throws(() => resolveVega.resolve('@agent-device/vega'), /No "exports" main/);
 });
 
 test('the retired src/platforms zone rejects every production, test, and fixture file', () => {

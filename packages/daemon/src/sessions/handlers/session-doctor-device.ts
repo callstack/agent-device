@@ -15,11 +15,12 @@ import {
   type PlatformSelector,
   type PublicPlatform,
 } from '@agent-device/kernel/device';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { DeviceInventoryDiscovery } from '@agent-device/contracts/platform-module';
+import { PLUGIN_INSTALLATION_REASONS } from '@agent-device/contracts/plugin-installation';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 
 export type DoctorDeviceInventory = {
@@ -161,13 +162,26 @@ async function readDoctorDeviceInventory(selector: DeviceInventoryRequest): Prom
   const discoveries: DeviceInventoryDiscovery[] = [];
   const failures: DoctorInventoryFailure[] = [];
   settled.forEach((result, index) => {
-    if (result.status === 'fulfilled') discoveries.push(result.value);
-    else
+    if (result.status === 'fulfilled') {
+      discoveries.push(result.value);
+    } else if (!isFamilyNotInstalledFailure(result.reason)) {
       failures.push(
         inventoryFailure(LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS[index]!, result.reason),
       );
+    }
   });
   return { ...combineDiscoveries(discoveries), failures };
+}
+
+// An optional family the user did not install is a choice, not a broken device read: the unscoped
+// sweep leaves it out, exactly as unscoped `devices` skips it. A family the caller named keeps its
+// typed outcome, because that read is the single explicit request above.
+function isFamilyNotInstalledFailure(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled &&
+    typeof error.details.family === 'string'
+  );
 }
 
 function combineDiscoveries(discoveries: readonly DeviceInventoryDiscovery[]): {
