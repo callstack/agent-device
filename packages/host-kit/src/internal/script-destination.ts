@@ -19,7 +19,12 @@ import {
  * account database, so the answer does not depend on which name services run (ADR 0016). Every judgment below
  * decides over the fields of one `lstat`, so each is testable on its values.
  */
-export type ScriptDestinationTrust = Readonly<{ uid: number; privateAncestry?: boolean }>;
+export type ScriptDestinationTrust = Readonly<{
+  uid: number;
+  privateAncestry?: boolean;
+  /** Set for a private root: its ancestry refuses a group-writable directory this user owns too. */
+  closedToOwnGroup?: boolean;
+}>;
 
 /**
  * How strictly a caller's destination is judged. `privateAncestry` is for executable state, such as the Swift
@@ -53,8 +58,19 @@ export function untrustedAncestryExposure(
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
   if (directory.mode & 0o1000 && !trust.privateAncestry) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
-  if (directory.mode & 0o020) return 'shared_group_writable';
+  if (groupAddsEntriesIn(directory, trust)) return 'shared_group_writable';
   return undefined;
+}
+
+/**
+ * Whether the group's write bit counts as opening `directory` to other accounts. The script rule accepts the
+ * group of a directory this non-root user owns as that owner's responsibility; it accepts no group on a
+ * directory root owns, and executable state and a private root accept no group at all (ADR 0016).
+ */
+function groupAddsEntriesIn(directory: DirectoryAuthority, trust: ScriptDestinationTrust): boolean {
+  if (!(directory.mode & 0o020)) return false;
+  if (trust.privateAncestry || trust.closedToOwnGroup) return true;
+  return directory.uid === 0 || directory.uid !== trust.uid;
 }
 
 /**
@@ -68,7 +84,7 @@ export function othersCreateEntriesIn(
 ): boolean {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
   if (directory.mode & 0o002) return true;
-  return Boolean(directory.mode & 0o020);
+  return groupAddsEntriesIn(directory, trust);
 }
 
 /**
@@ -113,8 +129,8 @@ export function publishScriptFileSync(options: {
 const SCRIPT_FILE_MODE = 0o600;
 
 /**
- * A directory a publish creates is itself judged on the way to a later version, so it is created at the mode
- * the rule accepts under every umask — the shared-checkout umask 002 would otherwise leave it 0775 and refuse.
+ * A directory a publish creates holds private recordings, so it is created owner-only under every umask — the
+ * shared-checkout umask 002 would otherwise leave it 0775, open to its group.
  */
 const SCRIPT_DIR_MODE = 0o700;
 
@@ -312,8 +328,8 @@ function walkSpelledParent(
   trust: ScriptDestinationTrust,
   create: boolean,
 ): WalkGround {
-  const refuse = (ancestor: string, exposure: ScriptAncestryExposure): never => {
-    throw scriptAncestryFailure(destination, ancestor, exposure);
+  const refuse: RefuseAncestor = (ancestor, exposure, callerOwnsAncestor) => {
+    throw scriptAncestryFailure(destination, ancestor, exposure, callerOwnsAncestor);
   };
   let state = standOn('/', pathComponents(parent), trust, 0, refuse);
   let created = false;
@@ -351,6 +367,13 @@ function walkSpelledParent(
   }
 }
 
+/** Refuses the walk at `ancestor`; a directory judgment also says whether the caller owns it. */
+type RefuseAncestor = (
+  ancestor: string,
+  exposure: ScriptAncestryExposure,
+  callerOwnsAncestor?: boolean,
+) => never;
+
 /** Where one named entry leaves the walk: standing on a judged directory, or short of the chain. */
 type EntryStep =
   | Readonly<{ ended: 'stand'; state: WalkState }>
@@ -365,7 +388,7 @@ function stepIntoEntry(
   component: string,
   rest: readonly string[],
   trust: ScriptDestinationTrust,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): EntryStep {
   const entry = path.join(state.deepest, component);
   const stats = lstatEntry(entry);
@@ -381,7 +404,7 @@ function stepIntoEntry(
   if (!stats.isDirectory()) refuse(entry, 'not_a_directory');
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) refuse(entry, exposure);
+  if (exposure) refuse(entry, exposure, authority.uid === trust.uid);
   return {
     ended: 'stand',
     state: {
@@ -401,7 +424,7 @@ function hopThroughLink(
   stats: fs.BigIntStats,
   rest: readonly string[],
   trust: ScriptDestinationTrust,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): EntryStep {
   const exposure = untrustedLinkExposure({ uid: Number(stats.uid) }, state.authority, trust);
   if (exposure) refuse(link, exposure);
@@ -426,13 +449,13 @@ function standOn(
   queue: readonly string[],
   trust: ScriptDestinationTrust,
   hops: number,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): WalkState {
   const stats = lstatEntry(directory);
   if (stats === undefined || !stats.isDirectory()) refuse(directory, 'not_a_directory');
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) refuse(directory, exposure);
+  if (exposure) refuse(directory, exposure, authority.uid === trust.uid);
   return { deepest: directory, authority, identity: identityOf(stats), queue, hops };
 }
 
@@ -508,7 +531,9 @@ function createMissingLevel(
   }
   const authority = directoryAuthority(seen);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) throw scriptAncestryFailure(destination, level, exposure);
+  if (exposure) {
+    throw scriptAncestryFailure(destination, level, exposure, authority.uid === trust.uid);
+  }
   if (created) {
     // `mkdir` ANDs its mode with the umask, and a umask can take an OWNER bit away: umask 200 would leave
     // this level 0500, where this call could not create the name below it. One `chmod` makes the level the
@@ -543,7 +568,7 @@ export function admitPrivateRoot(options: {
   /** Names below the root this caller traverses, judged by the same rule. */
   managedDirs?: readonly string[];
 }): PrivateRootAdmission {
-  const trust = scriptTrust({});
+  const trust: ScriptDestinationTrust = { ...scriptTrust({}), closedToOwnGroup: true };
   const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
   if (!path.isAbsolute(root))
     return { status: 'refused', component: root, exposure: 'relative_destination' };

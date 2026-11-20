@@ -5,6 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   FOREIGN_UID,
   ancestryRoot as root,
+  currentUid,
   directoryWith,
   expectUntrusted,
   expectUntrustedReplaced,
@@ -23,8 +24,7 @@ const PRIVATE_DIR_MODE = 0o700;
 
 /**
  * A directory this test owns and trusts, created at {@link PRIVATE_DIR_MODE} rather than at whatever umask the
- * runner carries. A mode-less `mkdir` under a permissive umask creates 0775, which the ancestry rule refuses for
- * a reason that has nothing to do with what the case is about.
+ * runner carries, so each case states the one mode it is about.
  */
 function privateDir(directory: string): string {
   fs.mkdirSync(directory, { mode: PRIVATE_DIR_MODE });
@@ -44,6 +44,8 @@ function judgedDirectory(destination: string): string {
 }
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
+/** A case about a directory this NON-ROOT user owns: root's own directories are root-owned, a different row. */
+const skipOnWindowsAndAsRoot = currentUid === 0 ? test.skip : skipOnWindows;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -142,15 +144,26 @@ skipOnWindows('refuses a destination created inside a directory others can add e
   expect(fs.existsSync(path.join(shared, 'journey.ad'))).toBe(false);
 });
 
+skipOnWindowsAndAsRoot('passes through a group-writable directory this user owns', () => {
+  // The ordinary checkout under umask 002: every level a `mkdir` made is 0775, and its owner answers for it.
+  const team = directoryWith(path.join(root(), 'team'), 0o775);
+  const sub = directoryWith(path.join(team, 'sub'), 0o775);
+
+  publish(path.join(sub, 'flows', 'journey.ad'));
+
+  expect(fs.readFileSync(path.join(sub, 'flows', 'journey.ad'), 'utf8')).toBe('context\n');
+  expect(modeOf(path.join(sub, 'flows'))).toBe(0o700);
+});
+
 skipOnWindows(
-  'refuses to pass through a group-writable directory above the directory it creates',
+  'refuses to pass through a group-writable directory root owns above a private directory',
   () => {
-    // The unsafe part is the level this user does NOT create: `sub` is created at 0700 and is safe, and the
-    // refusal still names `team` above it, because another member of that group can replace `sub` with one of
-    // their own before the entry is written.
+    // `sub` is private and safe, and the refusal still names `team` above it: a member of a group this user
+    // does not answer for can replace `sub` with one of their own before the entry is written.
     const team = directoryWith(path.join(root(), 'team'), 0o775);
     const sub = path.join(team, 'sub');
     privateDir(sub);
+    serveOwnership({ [team]: 0 });
 
     expectUntrusted(() => publish(path.join(sub, 'journey.ad')), 'shared_group_writable', team);
     expect(fs.readdirSync(sub)).toEqual([]);
@@ -621,29 +634,68 @@ skipOnWindows('refuses a path component that cannot carry a publish', () => {
   );
 });
 
-// --- a group-writable directory is refused, whoever owns the group (ADR 0016) ---
+// --- a group-writable directory is judged by who owns it, never by who belongs to the group (ADR 0016) ---
 
-skipOnWindows('refuses a group-writable 0775 directory this user owns, with a hint', () => {
-  // Ownership of the directory is not enough, because the GROUP can add the destination's name here first and
-  // the mode bits cannot say who belongs to it. Reading /etc/group would not settle it either: systemd userdb
-  // answers members those files never show. So the mode decides and the hint names the fix.
-  const home = directoryWith(path.join(root(), 'home'), 0o775);
-  let hint = '';
-  try {
+skipOnWindowsAndAsRoot.each(['775', '2775', '1770'])(
+  'creates the script directly in a group-writable directory this user owns (mode %s)',
+  (mode) => {
+    const home = directoryWith(path.join(root(), 'home'), Number.parseInt(mode, 8));
+
     publish(path.join(home, 'journey.ad'));
-  } catch (error) {
-    hint = String((error as AppError).details?.hint);
-  }
 
-  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
-  expect(hint).toContain(`chmod g-w ${home}`);
-  expect(fs.readdirSync(home)).toEqual([]);
+    expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toBe('context\n');
+    expect(modeOf(path.join(home, 'journey.ad'))).toBe(0o600);
+  },
+);
+
+skipOnWindowsAndAsRoot('follows a link held in a group-writable directory this user owns', () => {
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o775);
+  const real = privateDir(path.join(directory, 'real'));
+  fs.symlinkSync(real, path.join(home, 'flows'));
+
+  publish(path.join(home, 'flows', 'journey.ad'));
+
+  expect(fs.readdirSync(real)).toEqual(['journey.ad']);
 });
 
+skipOnWindows(
+  'still refuses a world-writable directory this user owns that its group can write',
+  () => {
+    const home = directoryWith(path.join(root(), 'home'), 0o776);
+
+    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'world_writable', home);
+    expect(fs.readdirSync(home)).toEqual([]);
+  },
+);
+
+skipOnWindowsAndAsRoot(
+  'refuses a group-writable 0775 directory root owns, with a hint this user can follow',
+  () => {
+    // No non-root owner answers for root's group, and the mode bits cannot say who belongs to it. Reading /etc/group
+    // would not settle it either: systemd userdb answers members those files never show.
+    const home = directoryWith(path.join(root(), 'home'), 0o775);
+    serveOwnership({ [home]: 0 });
+    let hint = '';
+    try {
+      publish(path.join(home, 'journey.ad'));
+    } catch (error) {
+      hint = String((error as AppError).details?.hint);
+    }
+
+    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+    // This user cannot change the mode of root's directory, so the hint names the recovery that works.
+    expect(hint).toContain('Save the script under a directory you own');
+    expect(hint).not.toContain('chmod');
+    expect(fs.readdirSync(home)).toEqual([]);
+  },
+);
+
 skipOnWindows('accepts the same directory once its group write bit is removed', () => {
-  // The recovery the hint names, applied: `chmod g-w` leaves 0755, which shuts every other local user out of
-  // creating the destination's name, whatever the group holds.
+  // What root's `chmod g-w` leaves: 0755, which shuts every other local user out of creating the destination's
+  // name, whatever the group holds.
   const home = directoryWith(path.join(root(), 'home'), 0o775);
+  serveOwnership({ [home]: 0 });
   fs.chmodSync(home, 0o755);
 
   publish(path.join(home, 'journey.ad'));
@@ -651,9 +703,10 @@ skipOnWindows('accepts the same directory once its group write bit is removed', 
   expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
-skipOnWindows('refuses a setgid group-writable directory', () => {
+skipOnWindows('refuses a setgid group-writable directory root owns', () => {
   // setgid changes who inherits the group, not who belongs to it, so it changes nothing here.
   const home = directoryWith(path.join(root(), 'home'), 0o2775);
+  serveOwnership({ [home]: 0 });
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
 });
@@ -662,8 +715,7 @@ skipOnWindows('refuses a setgid group-writable directory', () => {
 const ACCOUNT_FILES = ['/etc/passwd', '/etc/group', '/etc/nsswitch.conf'];
 
 skipOnWindows('judges a group-writable directory without reading the host account files', () => {
-  // The whole reason the mode decides: the rule asks the kernel who owns a directory and what its bits say, and
-  // reads nothing else. A test cannot accidentally reintroduce a host dependency, because the answer to these
+  // The rule asks the kernel who owns a directory and what its bits say, and reads nothing else. A test cannot accidentally reintroduce a host dependency, because the answer to these
   // three names is a failure. It also says why one destination answers the same on a macOS laptop, a container
   // and an Ubuntu runner with a private primary group.
   const read: string[] = [];
@@ -674,6 +726,7 @@ skipOnWindows('judges a group-writable directory without reading the host accoun
     return (real as (...args: unknown[]) => unknown)(pathname, ...rest);
   }) as typeof fs.readFileSync);
   const home = directoryWith(path.join(root(), 'home'), 0o775);
+  serveOwnership({ [home]: 0 });
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
   expect(read).toEqual([]);
