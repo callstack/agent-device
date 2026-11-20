@@ -67,6 +67,8 @@
   ],
   "ignorePatterns": [
     "examples/test-app/**",
+    // Standalone debug-signed hvigor project: built by its own toolchain, not the workspace graph.
+    "examples/harmony-trajectory-driver/**",
     // The social card template: scripts/og.mjs serves it with generated /og/* files.
     "website/og/og.html",
     "scripts/perf/**",

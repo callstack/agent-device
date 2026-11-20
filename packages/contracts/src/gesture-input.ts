@@ -20,6 +20,7 @@ import {
   GESTURE_MAX_CONTACTS,
   GESTURE_TAP_MIN_CONTACTS,
   type GesturePointerCount,
+  type HumanTrajectoryTransport,
 } from './gesture-plan-types.ts';
 
 export const COORDINATE_GESTURE_KINDS = [
@@ -48,6 +49,7 @@ export type PanGesturePayload = {
   delta: Point;
   pointerCount?: GesturePointerCount;
   durationMs?: number;
+  trajectoryTransport?: HumanTrajectoryTransport;
 };
 
 export type FlingGesturePayload = {
@@ -125,6 +127,7 @@ export function readGesturePayload(input: unknown): GesturePayload {
         | GesturePointerCount
         | undefined,
       durationMs: readOptionalGestureDuration(record),
+      trajectoryTransport: readOptionalPanTrajectoryTransport(record),
     };
   }
   if (kind === 'drag') {
@@ -294,6 +297,19 @@ function readDragGesturePayload(record: Record<string, unknown>): DragGesturePay
     moveMs,
     destinationHoldMs,
   };
+}
+
+function readOptionalPanTrajectoryTransport(
+  record: Record<string, unknown>,
+): HumanTrajectoryTransport | undefined {
+  const value = record.trajectoryTransport;
+  if (value === undefined) return undefined;
+  if (value !== 'carrier') {
+    throw new AppError('INVALID_ARGS', 'trajectoryTransport supports only the carrier transport', {
+      hint: '--trajectory-transport carrier opts a locked-down build into the test-HAP carrier.',
+    });
+  }
+  return value;
 }
 
 function readOptionalGestureDuration(record: Record<string, unknown>): number | undefined {

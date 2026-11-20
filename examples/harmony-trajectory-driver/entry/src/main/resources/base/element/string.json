@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "agent-device trajectory carrier host"
+    },
+    {
+      "name": "ability_desc",
+      "value": "Carrier home; injection lives in the ohosTest module"
+    },
+    {
+      "name": "ability_label",
+      "value": "AD Trajectory Driver"
+    }
+  ]
+}

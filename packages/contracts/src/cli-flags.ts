@@ -3,6 +3,7 @@ import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type { BackMode } from './back-mode.ts';
 import type { ClickButton } from './click-button.ts';
 import type { SwipePattern } from './scroll-gesture.ts';
+import type { HumanTrajectoryTransport } from './gesture-plan-types.ts';
 import type { BootPickPolicy, DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type {
@@ -106,6 +107,7 @@ export type CliFlags = CloudProviderProfileFields &
     appsFilter?: 'user-installed' | 'all';
     count?: number;
     pointerCount?: number;
+    trajectoryTransport?: HumanTrajectoryTransport;
     fps?: number;
     quality?: RecordingExportQuality | string;
     hideTouches?: boolean;

@@ -37,6 +37,17 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: true,
   },
   {
+    key: 'trajectoryTransport',
+    names: ['--trajectory-transport'],
+    type: 'enum',
+    enumValues: ['carrier'],
+    usageLabel: '--trajectory-transport <carrier>',
+    usageDescription:
+      'Gesture pan: opt a locked-down build into the experimental test-HAP carrier transport',
+    projectConfig: true,
+    recorded: true,
+  },
+  {
     key: 'fps',
     names: ['--fps'],
     type: 'int',

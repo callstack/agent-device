@@ -1,0 +1,10 @@
+{
+  app: {
+    bundleName: 'com.stringzhao.adtrajdriver',
+    vendor: 'agent-device',
+    versionCode: 1000000,
+    versionName: '1.0.0',
+    icon: '$media:icon',
+    label: '$string:app_name',
+  },
+}

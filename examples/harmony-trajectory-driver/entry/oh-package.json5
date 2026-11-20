@@ -1,0 +1,13 @@
+{
+  modelVersion: '5.0.0',
+  name: 'entry',
+  version: '1.0.0',
+  description: 'Trajectory injection carrier ability',
+  main: '',
+  author: '',
+  license: 'MIT',
+  dependencies: {},
+  devDependencies: {
+    '@ohos/hypium': '1.0.21',
+  },
+}

@@ -19,6 +19,7 @@ test('CLI and .ad positionals normalize at one explicit syntax seam', () => {
       delta: { x: 30, y: -40 },
       durationMs: 500,
       pointerCount: 2,
+      trajectoryTransport: undefined,
     },
   );
 });

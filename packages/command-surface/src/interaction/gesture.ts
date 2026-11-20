@@ -22,6 +22,7 @@ function gestureInputFromCli(positionals: string[], flags: CliFlags): Record<str
     ...commonInputFromFlags(flags),
     ...gesturePayloadFromPositionals(positionals, {
       pointerCount: flags.pointerCount,
+      trajectoryTransport: flags.trajectoryTransport,
       holdMs: flags.holdMs,
       count: flags.count,
       pauseMs: flags.pauseMs,

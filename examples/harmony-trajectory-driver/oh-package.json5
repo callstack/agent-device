@@ -1,0 +1,11 @@
+{
+  modelVersion: '5.0.0',
+  name: 'harmony-trajectory-driver',
+  version: '1.0.0',
+  description: 'agent-device HarmonyOS trajectory injection carrier: UiDriver.injectMultiPointerAction behind one want-parameterized ability',
+  main: '',
+  author: '',
+  license: 'MIT',
+  dependencies: {},
+  devDependencies: {},
+}

@@ -1,0 +1,13 @@
+# HVigor build artifacts and local deps
+node_modules/
+oh_modules/
+build/
+.hvigor/
+.cxx/
+**/build/
+
+# Signing material never enters git
+signing/
+*.p12
+*.p7b
+*.cer
