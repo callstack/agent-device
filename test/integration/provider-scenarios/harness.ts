@@ -1,3 +1,4 @@
+import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -172,6 +173,7 @@ export async function createProviderScenarioHarness(
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
+      coreVersion: readVersion(),
       host: input.host,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,

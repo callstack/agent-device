@@ -1,3 +1,4 @@
+import { readVersion } from '@agent-device/host-kit/version';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -20,6 +21,7 @@ test.each(unsupportedRecordingDevices)(
   async (device) => {
     const sessionsDir = mkdtempForTestSync('platform-runtime-recording-');
     const gateway = createPlatformRuntimeGateway({
+      coreVersion: readVersion(),
       host: createLiveTestHostEnvironment(),
       stateDir: sessionsDir,
       sessionsDir,
