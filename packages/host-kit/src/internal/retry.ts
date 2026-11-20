@@ -291,18 +291,9 @@ function publishRetryEvent(event: RetryTelemetryEvent): void {
   });
 }
 
-// --- Request scope ---------------------------------------------------------------------------
-// One request's share of time: the cutoff its work must respect, and the only place its result may
-// be published. A scope replaces a per-site timer, `AbortController` and timer flag: the timer wakes
-// blocked work, and `commit` decides publication on the clock, so a result that reaches its caller
-// after the cutoff is refused even when no timer callback has run (#4789). It lives beside
-// `Deadline` because the entry surfaces that bound work already evaluate this module, and ADR 0027
-// holds each of them to the module count of the merge-base.
-
 /**
  * How long a scope may run, and what its expiry reports. `armedMs` is the budget the scope was
- * given, so a typed timeout states the value its owner armed rather than what was left of a longer
- * one (ADR 0010).
+ * given, so a typed timeout states the value its owner armed (ADR 0010).
  */
 export type Limit = {
   maxMs: number;
@@ -310,183 +301,55 @@ export type Limit = {
 };
 
 /**
- * A deadline with the cancellation it inherits and the releases it owns. Pass one to the work it
- * bounds; nothing here reads an ambient request context.
+ * One bounded piece of work: the signal that wakes it at its cutoff, and the only place its result
+ * may be published (#4789).
  */
-export interface Scope {
-  /** The same scope narrowed to `limit`, for a stage that gets less time than its parent. */
-  child(limit?: Limit): Scope;
-  /**
-   * Seals publication, stops the scope's timer, and runs each deferred release once in reverse
-   * order. Every release runs even after one fails; the first failure is thrown once they have.
-   */
-  close(): Promise<void>;
+export type Scope = {
+  /** Seals publication and stops the timer. */
+  close(): void;
   /** Publishes `publish`'s result, or aborts and throws when the scope has already ended. */
   commit<T>(publish: () => T): T;
-  /** Absolute time on the scope's clock when its work must stop, or Infinity when unbounded. */
-  readonly deadline: number;
-  /** Records what this scope must release when it closes. */
-  defer(release: () => void | Promise<void>): void;
-  /**
-   * The signal to hand the work. Reading it arms the deadline, so work that blocks on a signal is
-   * woken at the cutoff; work that never observes one is stopped by `commit` instead.
-   */
+  /** The signal to hand the work. Reading it arms the timer that wakes blocked work. */
   readonly signal: AbortSignal;
-}
-
-/**
- * Opens a scope. `signal` is the cancellation it inherits — a caller's abort, or an enclosing
- * request's — and `limit` bounds its work. Without a `limit` the deadline stays unbounded and the
- * scope carries cancellation and releases only. `now` is the elapsed-time clock the deadline is
- * measured on: pass the clock the budget was measured on, and leave the default `performance.now()`
- * when the caller has none of its own.
- */
-export function openScope(signal?: AbortSignal, limit?: Limit, now: () => number = nowMs): Scope {
-  return openScopeNode(signal, limit, now, undefined);
-}
-
-function nowMs(): number {
-  return performance.now();
-}
-
-/** Why publication was refused because the scope had already closed. */
-class ScopeClosedError extends Error {
-  override readonly name = 'ScopeClosedError';
-
-  constructor() {
-    super('Request scope is closed');
-  }
-}
-
-/**
- * The limit that owns a deadline: one per deadline, shared by every scope that inherited it, so
- * expiry runs one error factory once and aborts one controller that all those scopes' signals
- * carry.
- */
-type WinningLimit = {
-  deadline: number;
-  armedMs: number;
-  limit: Limit;
-  controller: AbortController;
 };
 
-type ScopeNode = {
-  /** Set when this scope's signal was read, which is when its deadline gets a timer. */
-  armed: (() => void) | undefined;
-  readonly clock: () => number;
-  readonly owning: WinningLimit | undefined;
-  readonly parent: ScopeNode | undefined;
-  readonly signal: AbortSignal;
-  sealed: boolean;
-  releases: (() => void | Promise<void>)[];
-};
-
-function openScopeNode(
-  parentSignal: AbortSignal | undefined,
-  limit: Limit | undefined,
-  clock: () => number,
-  parent: ScopeNode | undefined,
+/**
+ * Opens a scope under `limit`, inheriting cancellation from `inherited`. `commit` decides
+ * publication on the clock, so a result that reaches its caller after the cutoff is refused even
+ * when no timer callback has run. `now` must be a monotonic elapsed-time clock.
+ */
+export function openScope(
+  inherited: AbortSignal | undefined,
+  limit: Limit,
+  now: () => number = () => performance.now(),
 ): Scope {
-  const inherited = parent?.owning;
-  const ownDeadline =
-    limit === undefined ? Number.POSITIVE_INFINITY : clock() + Math.max(0, limit.maxMs);
-  const wins = limit !== undefined && ownDeadline < (inherited?.deadline ?? Infinity);
-  const owning: WinningLimit | undefined = wins
-    ? { deadline: ownDeadline, armedMs: limit.maxMs, limit, controller: new AbortController() }
-    : inherited;
-  const signals = [
-    ...(parentSignal ? [parentSignal] : []),
-    ...(owning ? [owning.controller.signal] : []),
-  ];
-  const node: ScopeNode = {
-    armed: undefined,
-    clock,
-    owning,
-    parent,
-    signal: signals.length === 0 ? new AbortController().signal : AbortSignal.any(signals),
-    sealed: false,
-    releases: [],
+  const deadline = Deadline.fromTimeoutMs(limit.maxMs, now());
+  const controller = new AbortController();
+  const signal = inherited ? AbortSignal.any([inherited, controller.signal]) : controller.signal;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  // The one expiry operation, reached from the timer and from `commit`.
+  const expire = (): void => {
+    if (!controller.signal.aborted) controller.abort(limit.expired(limit.maxMs));
   };
-
   return {
-    get deadline() {
-      return node.owning?.deadline ?? Infinity;
+    close: () => {
+      closed = true;
+      clearTimeout(timer);
     },
-    get signal() {
-      arm(node);
-      return node.signal;
-    },
-    child: (childLimit) => openScopeNode(node.signal, childLimit, clock, node),
-    commit: <T>(publish: () => T): T => {
-      throwIfSealed(node);
-      // The clock, never a timer callback, is what proves the cutoff has passed. The signal is
-      // checked first, so a cancellation the scope inherited stays the reason instead of becoming
-      // this scope's timeout.
-      if (!node.signal.aborted && expired(node)) expire(node);
-      node.signal.throwIfAborted();
+    commit: (publish) => {
+      if (closed) throw new Error('Request scope is closed');
+      // An inherited cancellation stays the reason: the clock is read only while nothing aborted.
+      if (!signal.aborted && deadline.isExpired(now())) expire();
+      signal.throwIfAborted();
       return publish();
     },
-    defer: (release) => {
-      throwIfSealed(node);
-      node.releases.push(release);
-    },
-    close: async () => {
-      // Sealed first, so neither a release nor a task that settles late can publish through it.
-      node.sealed = true;
-      node.armed?.();
-      const releases = node.releases.splice(0, node.releases.length);
-      let firstFailure: unknown;
-      let failed = false;
-      for (const release of releases.reverse()) {
-        try {
-          await release();
-        } catch (error) {
-          if (failed) continue;
-          failed = true;
-          firstFailure = error;
-        }
+    get signal() {
+      if (timer === undefined && !closed && !signal.aborted) {
+        timer = setTimeout(expire, deadline.remainingMs(now()));
+        timer.unref();
       }
-      if (failed) throw firstFailure;
+      return signal;
     },
   };
-}
-
-/**
- * Points a timer at the deadline without keeping the process alive for it. An expired budget still
- * gets its wake-up: work blocked on the signal has to be released, not left waiting for its caller.
- */
-function arm(node: ScopeNode): void {
-  const owning = node.owning;
-  if (owning === undefined || node.armed !== undefined || node.signal.aborted) return;
-  const timer = setTimeout(() => expire(node), Math.max(0, owning.deadline - node.clock()));
-  timer.unref();
-  node.armed = () => clearTimeout(timer);
-}
-
-/**
- * The one expiry operation, reached from both the timer and `commit`: the winning limit's error
- * aborts the controller every scope of this deadline carries, so work in flight and the caller that
- * waits for it see one cause. Each caller judges the moment: the timer fires once the armed
- * duration has run, and `commit` reads the clock.
- */
-function expire(node: ScopeNode): void {
-  const owning = node.owning;
-  if (owning === undefined || owning.controller.signal.aborted) return;
-  owning.controller.abort(owning.limit.expired(owning.armedMs));
-}
-
-/** Whether the clock has passed the deadline this scope runs under. */
-function expired(node: ScopeNode): boolean {
-  const owning = node.owning;
-  return owning !== undefined && owning.deadline <= node.clock();
-}
-
-/**
- * Whether this scope, or one that bounds it, has closed. Sealing travels down the chain and never
- * up: closing one stage of a request must not seal the request.
- */
-function throwIfSealed(node: ScopeNode): void {
-  for (let current: ScopeNode | undefined = node; current; current = current.parent) {
-    if (current.sealed) throw new ScopeClosedError();
-  }
 }

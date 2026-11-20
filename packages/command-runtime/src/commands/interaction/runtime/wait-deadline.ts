@@ -1,6 +1,5 @@
 import { openScope, type Limit, type Scope } from '@agent-device/host-kit/retry';
 import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
-import { now } from '../../runtime-common.ts';
 
 /**
  * A timeout carries `error` when the deadline cancelled the task in flight. It carries no `error`
@@ -40,7 +39,14 @@ export async function runWithinWaitDeadline<T>(
     maxMs: remainingMs,
     expired: () => (expiry ??= new DOMException('Wait deadline exceeded', 'TimeoutError')),
   };
-  const scope: Scope = openScope(AbortSignal.any(parentSignals), limit, () => now(runtime));
+  // The runtime clock when a caller supplied one, else the scope's monotonic default: a wall-clock
+  // jump must not refuse a capture.
+  const clock = runtime.clock;
+  const scope: Scope = openScope(
+    AbortSignal.any(parentSignals),
+    limit,
+    clock ? () => clock.now() : undefined,
+  );
   // Whether the capture itself finished: what separates a value the scope refused from a capture the
   // deadline cancelled while it was still in flight.
   let captured = false;
@@ -56,6 +62,6 @@ export async function runWithinWaitDeadline<T>(
     // cancelled mid-flight carries its own cause along as the timeout's evidence.
     return captured ? { timedOut: true } : { timedOut: true, error };
   } finally {
-    await scope.close();
+    scope.close();
   }
 }
