@@ -28,8 +28,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   // construction, which names these same runtime families and keeps the same value-free direction
   // toward `packages/daemon/src/` (PR 6 of #3276's daemon extraction).
   'platform-runtime': [
-    'src/builtin-provider-ids.ts',
-    'src/builtin-provider-plugins.ts',
     'src/daemon-composition.ts',
     'src/platform-runtime-android-mechanics.ts',
     'src/platform-runtime-android-observation-host.ts',
@@ -65,6 +63,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-app-log-output.ts',
     'src/platform-runtime-app-log-process.ts',
     'src/platform-runtime-apple-application-tools.ts',
+    'src/provider-plugin-host-capabilities.ts',
     'src/platform-runtime-apple-automation-keep-hot.ts',
     'src/platform-runtime-apple-deployment-executor.ts',
     'src/platform-runtime-apple-physical-readiness.ts',
