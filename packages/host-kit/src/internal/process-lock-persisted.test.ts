@@ -20,7 +20,6 @@ test.each([
   // The raw reader always returns a `ps` rendering that differs from the token, so the expected
   // field shows which path ran: Linux/Windows keep the token, POSIX takes the `ps` rendering.
   host.legacy = 'mar. 17 nov. 19:42:27 2026';
-  const legacy = expected;
   const { readCurrentOwnerIdentity } = await import('./owner-identity.ts');
   const { tryAcquireProcessLock } = await import('./process-lock.ts');
   const lockDirPath = path.join(mkdtempForTestSync('persisted-lock-'), 'daemon.lock');
@@ -51,7 +50,7 @@ test.each([
       }
     })
     .find((value) => value?.token && value?.pid === process.pid);
-  expect(lock).toMatchObject({ startTime: legacy, birthToken: token });
-  expect(guard).toMatchObject({ startTime: legacy, birthToken: token });
+  expect(lock).toMatchObject({ startTime: expected, birthToken: token });
+  expect(guard).toMatchObject({ startTime: expected, birthToken: token });
   await attempt.acquisition.release();
 });

@@ -14,14 +14,19 @@ import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { createDaemonLifecycleAdmission, daemonShuttingDownResponse } from './daemon-idle-reap.ts';
 
-// The test must not depend on the host: pin the canonical token to a `posix:` value and the raw
-// (released) rendering to a distinct string, as the lock test does.
 const RAW_START = 'Tue Nov 17 19:42:27 2026';
-vi.mock('../../../../host-kit/src/internal/host-process.ts', async (original) => ({
-  ...(await original<typeof import('../../../../host-kit/src/internal/host-process.ts')>()),
-  readProcessStartTime: () => 'posix:1794944547000',
-  readProcessStartTimeRaw: () => RAW_START,
-}));
+const CANONICAL_START = 'posix:1794944547000';
+vi.mock('@agent-device/host-kit/process', async (original) => {
+  const actual = await original<typeof import('@agent-device/host-kit/process')>();
+  return {
+    ...actual,
+    readCurrentOwnerIdentity: () => ({ pid: process.pid, startTime: CANONICAL_START }),
+    writePersistedOwner: (identity: { pid: number; startTime: string | null }) =>
+      identity.pid === process.pid && identity.startTime === CANONICAL_START
+        ? { pid: identity.pid, startTime: RAW_START, birthToken: CANONICAL_START }
+        : actual.writePersistedOwner(identity),
+  };
+});
 
 const TOKEN = 'daemon-token';
 const FENCE = { pid: 4242, processStartTime: 'Fri Oct 17 09:00:00 2026' };

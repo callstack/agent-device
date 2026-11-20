@@ -3,10 +3,14 @@ import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const host = vi.hoisted(() => ({ token: '', raw: 'Tue Nov 17 19:42:27 2026' }));
-vi.mock('../../host-kit/src/internal/host-process.ts', async (original) => ({
-  ...(await original<typeof import('../../host-kit/src/internal/host-process.ts')>()),
-  readProcessStartTime: () => host.token,
-  readProcessStartTimeRaw: () => host.raw,
+vi.mock('@agent-device/host-kit/process', async (original) => ({
+  ...(await original<typeof import('@agent-device/host-kit/process')>()),
+  readCurrentOwnerIdentity: () => ({ pid: process.pid, startTime: host.token }),
+  writePersistedOwner: (identity: { pid: number; startTime: string | null }) => ({
+    pid: identity.pid,
+    startTime: identity.startTime?.startsWith('posix:') ? host.raw : identity.startTime,
+    birthToken: identity.startTime,
+  }),
 }));
 
 test.each([
