@@ -1,7 +1,10 @@
 import type { RegisteredPlatformSetup } from './platform.ts';
 import { isPlatform, type Platform } from '@agent-device/kernel/device-identity';
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
-import type { WebPlatformOperations } from '@agent-device/contracts/platform-plugin';
+import type {
+  VegaPlatformOperations,
+  WebPlatformOperations,
+} from '@agent-device/contracts/platform-plugin';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import type { ReplayBackendSetup, ReplayExecutionSetup } from './replay-backend.ts';
@@ -340,6 +343,10 @@ const WEB_OPERATIONS: Record<keyof WebPlatformOperations, true> = {
   resolveRequestProvider: true,
 };
 
+const VEGA_OPERATIONS: Record<keyof VegaPlatformOperations, true> = {
+  toolchainCheck: true,
+};
+
 const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unknown>) => void>> = {
   web(value) {
     const operations = value.operations;
@@ -349,6 +356,16 @@ const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unk
       Object.keys(WEB_OPERATIONS).some((operation) => typeof operations[operation] !== 'function')
     ) {
       throw invalidPlugin('Web platform setup must supply request scoping and web operations');
+    }
+  },
+  vega(value) {
+    const operations = value.operations;
+    if (
+      typeof value.withRequestProvider !== 'function' ||
+      !isRecord(operations) ||
+      Object.keys(VEGA_OPERATIONS).some((operation) => typeof operations[operation] !== 'function')
+    ) {
+      throw invalidPlugin('Vega platform setup must supply request scoping and Vega operations');
     }
   },
 };

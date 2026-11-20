@@ -1,19 +1,51 @@
 {
-  "name": "@agent-device/platform-vega",
-  "version": "0.0.0",
+  "name": "@agent-device/vega",
+  "version": "0.22.0-dev",
   "private": true,
   "type": "module",
-  "description": "Vega-family platform runtime metadata and implementations for agent-device.",
-  "dependencies": {
-    "@agent-device/contracts": "workspace:*",
-    "@agent-device/host-kit": "workspace:*",
-    "@agent-device/kernel": "workspace:*",
-    "@agent-device/provision-kit": "workspace:*"
-  },
+  "description": "Managed Vega platform plugin for agent-device.",
   "exports": {
-    ".": {
+    "./agent-device": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     }
-  }
+  },
+  "devDependencies": {
+    "@agent-device/build-config": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "agent-device": {
+    "apiVersion": 3,
+    "platform": "vega"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types build.mjs",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "exports": {
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/platform-vega"
+  },
+  "homepage": "https://agent-device.dev/docs/commands#vega-os"
 }

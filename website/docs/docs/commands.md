@@ -717,6 +717,7 @@ agent-device tv-remote android-keycode:300 --platform android --target tv
 agent-device screenshot tv-focus.png --overlay-refs --platform android --target tv
 agent-device open Settings --platform ios --target tv
 agent-device screenshot apple-tv.png --platform ios --target tv
+agent-device plugins add @agent-device/vega
 vega virtual-device start
 agent-device devices --platform vega --target tv
 agent-device open com.example.app.main --platform vega --target tv --session vega-tv
@@ -735,7 +736,7 @@ vega virtual-device stop
 - Android TV: app listing reads `LEANBACK_LAUNCHER` and `LAUNCHER` activities together; app launch prefers `LEANBACK_LAUNCHER` and falls back to `LAUNCHER` when the app declares no leanback activity. `tv-remote` sends ADB keyevents; `longpress <button>` selects the long-press preset, and any positive `--duration-ms` uses Android's longpress keyevent, which has no exact hold time.
 - Fire TV: a Fire TV device or emulator running Fire OS connects as an Android TV device over ADB. On the device, enable ADB debugging in Settings > My Fire TV > Developer options, then `adb connect <device-ip>:5555` and use `--platform android --target tv`. Discovery reads the `amazon.hardware.fire_tv` system feature, so a Fire TV that declares no leanback feature is still detected as a TV target and runs the Android TV backend. The Android snapshot helper requires Android 6.0 (API 23) or newer.
 - tvOS supports the same runner-driven commands as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and selector flows). `back` is the Siri Remote Menu button, `home` is Home, and the app switcher is a double Home press; `--duration-ms` is an exact hold. Helpers that are simulator-only on iOS, such as `settings` and `push`, are simulator-only on tvOS too. tvOS refuses multi-touch gestures such as `gesture pinch`.
-- Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and the eight navigation buttons listed above, with exact holds.
+- Vega OS: install the optional `@agent-device/vega` plugin first (`agent-device plugins add @agent-device/vega`). Use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and the eight navigation buttons listed above, with exact holds.
 - Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device: app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance report unsupported for Vega targets, and physical Vega OS devices are not supported. Use the VVD display as visual truth.
 - LG webOS TVs run through the optional `@agent-device/webos` plugin, which drives web apps over the Chrome DevTools Protocol. See [LG webOS](/docs/webos).
 - Samsung Tizen TVs run through the optional `@agent-device/tizen` plugin, which drives web apps over the Chrome DevTools Protocol. See [Samsung Tizen](/docs/tizen).

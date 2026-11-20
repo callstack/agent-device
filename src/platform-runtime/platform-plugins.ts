@@ -1,6 +1,8 @@
 import type {
   PlatformModuleSelection,
   PlatformPlugin,
+  VegaPlatformRegistration,
+  VegaPlatformSelection,
   WebPlatformSelection,
   WebPlatformRegistration,
 } from '@agent-device/contracts/platform-plugin';
@@ -13,7 +15,10 @@ import { BUILTIN_PLATFORM_PLUGINS } from '../core/interactors/register-builtins.
 import { registerPlatformPluginSet } from '../core/platform-plugin-registry.ts';
 import { missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
 
-type RuntimePlatformPlugin = PlatformPlugin & { web?: WebPlatformRegistration };
+type RuntimePlatformPlugin = PlatformPlugin & {
+  web?: WebPlatformRegistration;
+  vega?: VegaPlatformRegistration;
+};
 
 export function builtinPlatformCandidates(): readonly PluginCandidate[] {
   return [
@@ -76,6 +81,7 @@ export function composePlatformPlugins(
         platforms: [platform.family],
         createInteractor: platform.createInteractor.bind(platform),
         ...(platform.family === 'web' ? { web: platform } : {}),
+        ...(platform.family === 'vega' ? { vega: platform } : {}),
       })),
     ],
     reportAbsent,
@@ -91,9 +97,19 @@ export function composePlatformPlugins(
     },
   };
 
+  const vega: VegaPlatformSelection = {
+    active: interactors.tryGet('vega')?.plugin.vega,
+    get() {
+      const { vega } = interactors.get('vega').plugin;
+      if (!vega) throw new TypeError('Vega platform registration is missing its operations');
+      return vega;
+    },
+  };
+
   return {
     interactors,
     web,
+    vega,
     inventoryModules: platforms.map((platform) => platform.inventoryModule),
     runtimeModules: platforms.map((platform) => platform.runtimeModule),
     reportAbsent,

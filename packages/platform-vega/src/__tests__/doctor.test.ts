@@ -5,7 +5,7 @@ import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { VegaToolProvider } from '../tool-provider.ts';
+import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import { withVegaToolProvider } from '../tool-provider.ts';
 import { vegaToolchainCheck } from '../doctor.ts';
 

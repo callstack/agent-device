@@ -41,10 +41,6 @@ import {
   runtimeModule as harmonyosRuntimeModule,
 } from '@agent-device/platform-harmonyos';
 import {
-  inventoryModule as vegaInventoryModule,
-  runtimeModule as vegaRuntimeModule,
-} from '@agent-device/platform-vega';
-import {
   captureLinuxSurfaceSnapshot,
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
@@ -98,7 +94,6 @@ export function createPlatformModuleRegistryForHost(
         devecoSdkHome: env.DEVECO_SDK_HOME,
         commandLineToolsHome: env.HARMONYOS_COMMAND_LINE_TOOLS,
       }),
-      vegaInventoryModule,
       linuxInventoryModule,
       ...(platforms?.inventoryModules ?? []),
     ],
@@ -136,7 +131,6 @@ function createPlatformRuntimeModuleRegistry(platforms: PlatformModuleSelection)
       appleRuntimeModule,
       androidRuntimeModule,
       harmonyosRuntimeModule,
-      vegaRuntimeModule,
       linuxRuntimeModule,
       ...platforms.runtimeModules,
     ],

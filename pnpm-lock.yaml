@@ -92,9 +92,6 @@ importers:
       '@agent-device/platform-linux':
         specifier: workspace:*
         version: link:packages/platform-linux
-      '@agent-device/platform-vega':
-        specifier: workspace:*
-        version: link:packages/platform-vega
       '@agent-device/plugins':
         specifier: workspace:*
         version: link:packages/plugins
@@ -859,7 +856,10 @@ importers:
         version: link:../test-kit
 
   packages/platform-vega:
-    dependencies:
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -872,6 +872,9 @@ importers:
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:../provision-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/platform-web:
     devDependencies:

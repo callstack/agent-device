@@ -65,6 +65,41 @@ test('doctor android inventory timeout surfaces the wedged-adb-server hint', asy
   assert.match(androidCheck?.hint ?? '', /adb kill-server && adb start-server/);
 });
 
+test('doctor unscoped sweep skips an optional family whose plugin is not installed', async () => {
+  // The typed plugin-not-installed outcome means the user did not install that family, which an
+  // unscoped sweep reports as nothing — the same silence unscoped `devices` keeps. A real probe
+  // failure on another family still surfaces as its own warn row.
+  const checks: DoctorCheck[] = [];
+  const req = { token: 't', session: 'default', command: 'doctor' } as DaemonRequest;
+
+  await withDeviceInventoryProvider(
+    async (request) => {
+      if (request.platform === 'vega') {
+        throw new AppError(
+          'UNSUPPORTED_PLATFORM',
+          'Vega platform requires the @agent-device/vega plugin.',
+          {
+            reason: 'plugin-not-installed',
+            family: 'vega',
+            package: '@agent-device/vega',
+          },
+        );
+      }
+      if (request.platform === 'apple') return [BOOTED_IOS_SIMULATOR];
+      return [];
+    },
+    async () => {
+      await appendDeviceInventoryCheck(checks, req, undefined, process.env);
+    },
+  );
+
+  assert.equal(checks.find((check) => check.id === 'device')?.status, 'pass');
+  assert.equal(
+    checks.find((check) => check.id === 'device-vega'),
+    undefined,
+  );
+});
+
 test('doctor reads every platform inventory concurrently and keeps platform order', async () => {
   const req = { token: 't', session: 'default', command: 'doctor' } as DaemonRequest;
   let markAppleStarted!: () => void;

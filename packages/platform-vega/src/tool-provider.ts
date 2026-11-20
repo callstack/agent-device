@@ -1,24 +1,9 @@
-import type { VegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
+import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd, type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import { createVegaExecutableHostFromEnv, resolveVegaExecutable } from './vega-executable.ts';
-
-export type VegaToolProvider = {
-  isAvailable(): Promise<boolean>;
-  version(options?: ExecOptions): Promise<ExecResult>;
-  listDevices(options?: ExecOptions): Promise<ExecResult>;
-  checkConnected(deviceId: string, options?: ExecOptions): Promise<ExecResult>;
-  launchApp(deviceId: string, appName: string, options?: ExecOptions): Promise<ExecResult>;
-  terminateApp(deviceId: string, appName: string, options?: ExecOptions): Promise<ExecResult>;
-  pressRemote(
-    deviceId: string,
-    key: VegaTvRemoteKey,
-    durationMs?: number,
-    options?: ExecOptions,
-  ): Promise<ExecResult>;
-};
 
 export type VegaCliAdapter = {
   run(args: string[], options?: ExecOptions): Promise<ExecResult>;
