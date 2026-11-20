@@ -201,9 +201,9 @@ function throwBootProbeFailure(
     reason,
   };
   if (failure.code === 'TOOL_MISSING') {
-    throw new AppError('TOOL_MISSING', failure.message, details);
+    throw new AppError('TOOL_MISSING', failure.message, details, failure.cause);
   }
-  throw new AppError('COMMAND_FAILED', failure.message, details);
+  throw new AppError('COMMAND_FAILED', failure.message, details, failure.cause);
 }
 
 function bootTimeoutError(message: string, details: Record<string, unknown>): AppError {

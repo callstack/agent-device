@@ -261,6 +261,20 @@ test('a retriable device-not-found host refusal stays terminal', async () => {
   expect(run).toHaveBeenCalledTimes(1);
 });
 
+test('a terminal probe failure keeps the original cause', async () => {
+  const cause = new Error('spawn adb ENOENT');
+  const { host } = probeHost([new AppError('TOOL_MISSING', 'adb not found in PATH', {}, cause)]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: 'TOOL_MISSING', cause });
+});
+
 test('an unclassified nonzero probe exit stays terminal instead of becoming boot_timeout', async () => {
   const { host, run } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }]);
 
