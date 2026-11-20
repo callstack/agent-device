@@ -39,18 +39,24 @@ export function handleDaemonHttpResponseBody(
   const { info, req, stateDir, host, signal, onDelivery, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
-    // A remote failure answer leaves only through the error path, which strips client-owned fields
-    // and localizes the log, whether it came as a JSON-RPC error or as an ok:false result (#4518).
+    // #4518: a remote answer is classified once. Only a result object whose `ok` is exactly `true`
+    // is delivered. Any other result object with an `error` object leaves through the error path,
+    // which strips client-owned fields and localizes the log. Every other result is invalid.
+    const remote = Boolean(info.baseUrl);
+    const result: unknown = parsed.result;
     const remoteFailure =
-      info.baseUrl && parsed.result?.ok === false
-        ? { message: parsed.result.error?.message, data: parsed.result.error }
+      remote && isRecord(result) && result.ok !== true && isRecord(result.error)
+        ? { message: readMessage(result.error), data: result.error }
         : undefined;
     const failure = parsed.error ?? remoteFailure;
     if (failure) {
       void rejectDaemonHttpRpcError(failure, { info, req, stateDir, signal, reject });
       return;
     }
-    if (!parsed.result || typeof parsed.result !== 'object') {
+    const deliverable = remote
+      ? isRecord(result) && result.ok === true
+      : typeof result === 'object' && result !== null;
+    if (!deliverable) {
       reject(
         new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
           requestId: req.meta?.requestId,
@@ -62,7 +68,7 @@ export function handleDaemonHttpResponseBody(
     void resolveDaemonHttpResult(
       info,
       req,
-      parsed.result,
+      result as DaemonResponse,
       { host, stateDir, signal, onDelivery },
       resolve,
       reject,
@@ -81,6 +87,14 @@ export function handleDaemonHttpResponseBody(
       ),
     );
   }
+}
+
+function readMessage(error: Record<string, unknown>): string | undefined {
+  return typeof error.message === 'string' ? error.message : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parseDaemonHttpResponseBody(body: string): {
@@ -224,9 +238,9 @@ async function resolveDaemonHttpResult(
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
-    if (info.baseUrl && result.ok) client.onDelivery?.();
+    if (info.baseUrl && result.ok === true) client.onDelivery?.();
     resolve(
-      info.baseUrl && result.ok
+      info.baseUrl && result.ok === true
         ? await materializeRemoteArtifacts(
             info,
             req,

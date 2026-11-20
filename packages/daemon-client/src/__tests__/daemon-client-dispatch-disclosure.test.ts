@@ -537,8 +537,15 @@ test('a remote result artifact that is not downloaded names no local path', asyn
   }
 });
 
-// #4518: an ok:false result from a remote daemon leaves through the same strip as a JSON-RPC error.
-test('a remote ok:false result cannot carry client-owned fields to the caller', async (t) => {
+// #4518: a remote result whose ok is anything but true leaves through the same strip as a JSON-RPC
+// error.
+test.for([
+  { name: 'ok:false', ok: { ok: false } },
+  { name: 'no ok', ok: {} },
+  { name: 'ok:null', ok: { ok: null } },
+  { name: 'ok:0', ok: { ok: 0 } },
+  { name: "ok:''", ok: { ok: '' } },
+])('a remote $name result cannot carry client-owned fields to the caller', async ({ ok }, t) => {
   if (await skipWhenLoopbackUnavailable(t, 'client-owned ok:false details')) return;
   const cwd = mkdtempForTestSync('agent-device-peer-result-');
   const server = http.createServer((_req, res) => res.writeHead(500).end());
@@ -552,7 +559,7 @@ test('a remote ok:false result cannot carry client-owned fields to the caller', 
     };
     const { response, error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
       jsonrpc: '2.0',
-      result: { ok: false, error: { code: 'COMMAND_FAILED', message: 'x', details } },
+      result: { ...ok, error: { code: 'COMMAND_FAILED', message: 'x', details } },
     });
     assert.equal(response, undefined);
     assert.ok(error instanceof AppError);
@@ -579,6 +586,24 @@ test('a local daemon ok:false result keeps its repair savedScript', async () => 
     const failed = response as { ok: boolean; error?: { details?: Record<string, unknown> } };
     assert.equal(failed.ok, false);
     assert.equal(failed.error?.details?.savedScript, '/work/repair.ad');
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test.for([
+  { name: 'null', result: null },
+  { name: 'a string', result: 'x' },
+  { name: 'an array', result: [{ savedScript: '/daemon/x.ad' }] },
+  { name: 'an object without ok or error', result: { savedScript: '/daemon/x.ad' } },
+])('a remote result that is $name is invalid and carries no peer fields', async ({ result }) => {
+  const cwd = mkdtempForTestSync('agent-device-peer-invalid-');
+  try {
+    const { response, error } = await adapt('http://127.0.0.1:9', cwd, { jsonrpc: '2.0', result });
+    assert.equal(response, undefined);
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'daemon_response_invalid');
+    assert.equal(error.details?.savedScript, undefined);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
