@@ -62,4 +62,61 @@ export type LaunchedDeviceProcessService = Readonly<{
     device: DeviceInfo,
     identity: AndroidEmulatorLaunchIdentity,
   ): Promise<LaunchedProcessStopConfirmation>;
+
+  /**
+   * Stops the launch the caller caused, without asking the device to shut down first. A caller that
+   * never published a session has no device to ask, so this addresses only the process the host
+   * itself started: a launch the host does not record gets no signal and answers
+   * `unconfirmed`, and one the recorded start time no longer names gets no signal and answers
+   * `stopped`, because the process the host launched is gone. A host that refuses the stop itself reports an
+   * error, which a caller treats the same way: the launch must be assumed to be running. A device
+   * whose owner launches no host process answers `stopped`, because nothing of the caller's own is
+   * left running.
+   */
+  stopLaunchedDeviceProcess(
+    device: DeviceInfo,
+    identity: AndroidEmulatorLaunchIdentity,
+  ): Promise<LaunchedProcessStopConfirmation>;
 }>;
+
+/**
+ * The `details.failedOpenEmulatorCleanupReason` values a failed open publishes, from the owner of
+ * this outcome. Callers read a member; none writes a literal.
+ */
+export const FAILED_OPEN_KEPT_RUNNING_REASONS = {
+  daemonPolicyDenied: 'daemon-policy-denied',
+  noProcessIdentity: 'no-process-identity',
+  deviceInUse: 'device-in-use',
+} as const satisfies Record<string, string>;
+
+type FailedOpenKeptRunningReason =
+  (typeof FAILED_OPEN_KEPT_RUNNING_REASONS)[keyof typeof FAILED_OPEN_KEPT_RUNNING_REASONS];
+
+/**
+ * What happened to the device process an `open` launched when that open published no session, and so
+ * claimed nothing to stop it later. `stopped` confirms the process is gone; `kept_running` names why
+ * nothing was signaled: the daemon's policy denies `device-shutdown`, the launch recorded no process
+ * identity to signal, or another session or claim holds the booted device and this open must not stop
+ * what that owner is using; `not_confirmed` means the stop was made but the process was still running
+ * when the budget ended, or the host refused to answer for the stop at all.
+ */
+export type FailedOpenLaunchCleanup =
+  | Readonly<{ outcome: 'stopped' }>
+  | Readonly<{
+      outcome: 'kept_running';
+      reason: FailedOpenKeptRunningReason;
+    }>
+  | Readonly<{ outcome: 'not_confirmed' }>;
+
+/** The `details` entries for one launch cleanup, so every report of it agrees. */
+export function failedOpenLaunchCleanupDetails(cleanup: FailedOpenLaunchCleanup): Readonly<{
+  failedOpenEmulatorCleanup: FailedOpenLaunchCleanup['outcome'];
+  failedOpenEmulatorCleanupReason?: FailedOpenKeptRunningReason;
+}> {
+  return cleanup.outcome === 'kept_running'
+    ? {
+        failedOpenEmulatorCleanup: cleanup.outcome,
+        failedOpenEmulatorCleanupReason: cleanup.reason,
+      }
+    : { failedOpenEmulatorCleanup: cleanup.outcome };
+}

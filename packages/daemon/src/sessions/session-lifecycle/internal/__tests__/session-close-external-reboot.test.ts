@@ -105,7 +105,7 @@ function createRoutedSession() {
     if (command.selectsDevice) {
       vi.mocked(resolveTargetDevice).mockResolvedValue(STOPPED_AVD);
       mockEnsureReadyRuntime.mockImplementation(async (input) => {
-        if (!command.omitLaunchIdentity) input.onAndroidEmulatorLaunchIdentity?.(LAUNCH_IDENTITY);
+        if (!command.omitLaunchIdentity) input.onAndroidEmulatorLaunch?.(LAUNCH_IDENTITY);
         return BOOTED_EMULATOR;
       });
     }
