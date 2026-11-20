@@ -112,7 +112,7 @@ export async function startTransportScreenRecording<Collectible>(params: {
     throw error;
   }
   const handle = createScreenRecordingLiveHandle(
-    transportRecordingSnapshot(transport.backend, input),
+    createTransportRecordingSnapshot(transport.backend, input),
     {
       finish: async (current) => {
         const collectible = await stopOnce();
@@ -176,7 +176,12 @@ function memoizeStop<Collectible>(transport: ScreenRecordingTransport<Collectibl
     }));
 }
 
-function transportRecordingSnapshot(
+/**
+ * Builds the live snapshot a transport-backed recorder reports: the output path, the request's
+ * scope, and no in-process gesture stream. Providers that build their own snapshot, such as the
+ * HarmonyOS plugin, use this so the shape stays owned here.
+ */
+export function createTransportRecordingSnapshot(
   backend: string,
   input: ScreenRecordingStartInput,
 ): ScreenRecordingLiveSnapshot {

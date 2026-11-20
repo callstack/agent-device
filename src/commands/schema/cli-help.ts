@@ -97,7 +97,7 @@ Command shape:
 
 Bootstrap:
   open --foreground -> snapshot. Selection: explicit --device/--udid/--serial, then session, booted/bootable local, or provider; --platform/--target only filter. Ambiguous/empty fails with bounded retry selectors; no provider fallback.
-  An absent optional platform returns details.reason plugin-not-installed with its install command.
+  An absent optional platform returns details.reason plugin-not-installed with its install command. HarmonyOS is an optional platform: agent-device plugins add @agent-device/harmonyos.
   Install arguments are app/package id then artifact path: agent-device install com.example.app ./dist/app.apk --platform android, then open <id> --relaunch for fresh state. Use reinstall only when explicitly requested.
   Unknown app id: devices, then apps, then open <discovered-app-id>. Never open artifact paths or invent package ids; ask if lookup misses the target.
   Apple CI: prepare ios-runner after boot/install, before replay/test (help prepare). Remote/cloud: connect -> open -> commands -> close -> disconnect (help remote). Reusable scripts, secret-safe fills, replay repair: help scripting.

@@ -13,6 +13,7 @@ import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import {
   createScreenRecordingCompletion,
   createScreenRecordingLiveHandle,
+  createTransportRecordingSnapshot,
   assertScreenRecordingOptionsSupported,
 } from '@agent-device/capture-kit';
 import {
@@ -21,6 +22,8 @@ import {
   type HarmonyRecordingDescriptor,
 } from './recovery.ts';
 import { createHarmonyScreenRecorder, type HarmonyScreenRecorder } from './recorder.ts';
+
+const HARMONY_SCREEN_RECORDING_BACKEND = 'HarmonyOS ScreenRecorder';
 
 /**
  * The host the HarmonyOS recording operations consume: output preparation and video finalization
@@ -122,7 +125,7 @@ async function startHarmonyRecording(params: {
     await cleanupLiveHarmonyDescriptor(recorder, device, descriptor).catch(() => {});
     throw error;
   }
-  const initial = snapshot(input);
+  const initial = createTransportRecordingSnapshot(HARMONY_SCREEN_RECORDING_BACKEND, input);
   let recorderStopped = false;
   const stopRecorder = async () => {
     if (recorderStopped) return;
@@ -139,20 +142,6 @@ async function startHarmonyRecording(params: {
   return Object.freeze({
     pendingHandle: new PendingTransferGuard(handle),
     envelope: createHarmonyRecordingEnvelope({ device, owner, input, descriptor }),
-  });
-}
-
-function snapshot(input: ScreenRecordingStartInput): ScreenRecordingLiveSnapshot {
-  return Object.freeze({
-    backend: 'HarmonyOS ScreenRecorder',
-    outPath: input.outputPath,
-    ...(input.clientOutputPath === undefined ? {} : { clientOutPath: input.clientOutputPath }),
-    startedAt: Date.now(),
-    scope: input.scope,
-    showTouches: false,
-    recordOnlySession: input.recordOnlySession,
-    ...(input.activeSessionApp === undefined ? {} : { activeSessionApp: input.activeSessionApp }),
-    gestureEvents: [],
   });
 }
 
