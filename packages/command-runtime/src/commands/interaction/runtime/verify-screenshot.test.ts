@@ -167,7 +167,12 @@ test('gate admits the pair past a full-screen hittable container that IS the vie
   // viewport is the largest-containing-rect fallback — the container itself.
   const { pairRan } = await pressWithGateTree(
     [
-      node({ index: 0, type: 'FrameLayout', rect: { x: 0, y: 94, width: 1080, height: 2306 }, hittable: true }),
+      node({
+        index: 0,
+        type: 'FrameLayout',
+        rect: { x: 0, y: 94, width: 1080, height: 2306 },
+        hittable: true,
+      }),
       node({ index: 1, type: 'Text', rect: { x: 40, y: 300, width: 400, height: 40 } }),
     ],
     { x: 540, y: 1200 },
@@ -186,7 +191,11 @@ test('gate admits the iOS full-screen CollectionView and still blocks its coveri
     rect: { x: 0, y: 0, width: 440, height: 956 },
     hittable: true,
   });
-  const windowNode = node({ index: 2, type: 'Window', rect: { x: 0, y: 0, width: 440, height: 956 } });
+  const windowNode = node({
+    index: 2,
+    type: 'Window',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
   const opened = await pressWithGateTree([collectionView, windowNode], { x: 200, y: 700 });
   assert.equal(opened.pairRan, true);
 
@@ -198,17 +207,23 @@ test('gate admits the iOS full-screen CollectionView and still blocks its coveri
     parentIndex: 0,
     label: 'General',
   });
-  const blocked = await pressWithGateTree(
-    [collectionView, cellUnderThePoint, windowNode],
-    { x: 200, y: 700 },
-  );
+  const blocked = await pressWithGateTree([collectionView, cellUnderThePoint, windowNode], {
+    x: 200,
+    y: 700,
+  });
   assert.equal(blocked.pairRan, false);
 });
 
 test('gate keeps a full-screen semantic touch target blocking', async () => {
   const { pairRan } = await pressWithGateTree(
     [
-      node({ index: 0, type: 'Button', rect: { x: 0, y: 0, width: 1080, height: 2400 }, hittable: true, label: 'Continue' }),
+      node({
+        index: 0,
+        type: 'Button',
+        rect: { x: 0, y: 0, width: 1080, height: 2400 },
+        hittable: true,
+        label: 'Continue',
+      }),
     ],
     { x: 540, y: 1200 },
   );
@@ -222,7 +237,12 @@ test('gate exempts a hittable scrim whose rect contains the whole viewport', asy
   const { pairRan } = await pressWithGateTree(
     [
       node({ index: 0, type: 'Window', rect: { x: 0, y: 0, width: 440, height: 956 } }),
-      node({ index: 1, type: 'View', rect: { x: -100, y: -100, width: 640, height: 1156 }, hittable: true }),
+      node({
+        index: 1,
+        type: 'View',
+        rect: { x: -100, y: -100, width: 640, height: 1156 },
+        hittable: true,
+      }),
     ],
     { x: 200, y: 700 },
   );
@@ -232,7 +252,12 @@ test('gate exempts a hittable scrim whose rect contains the whole viewport', asy
 test('gate keeps a smaller hittable node under the point inside the container blocking', async () => {
   const { pairRan } = await pressWithGateTree(
     [
-      node({ index: 0, type: 'FrameLayout', rect: { x: 0, y: 94, width: 1080, height: 2306 }, hittable: true }),
+      node({
+        index: 0,
+        type: 'FrameLayout',
+        rect: { x: 0, y: 94, width: 1080, height: 2306 },
+        hittable: true,
+      }),
       node({
         index: 1,
         type: 'View',
@@ -254,10 +279,31 @@ test('gate admits the pair on the Redmi K60 Edge tree through the largest-contai
   // resolved viewport. Under the old gate every point on this tree closed
   // the pixel pair.
   const edgeTreeNodes: RawSnapshotNode[] = [
-    node({ index: 0, type: 'android.widget.FrameLayout', rect: { x: 0, y: 94, width: 1080, height: 2306 }, hittable: true }),
-    node({ index: 1, type: 'android.view.View', rect: { x: 0, y: 94, width: 1080, height: 120 }, parentIndex: 0 }),
-    node({ index: 2, type: 'android.widget.EditText', rect: { x: 40, y: 140, width: 600, height: 60 }, parentIndex: 0, label: 'Search or type URL' }),
-    node({ index: 3, type: 'android.view.View', rect: { x: 0, y: 260, width: 1080, height: 2140 }, parentIndex: 0 }),
+    node({
+      index: 0,
+      type: 'android.widget.FrameLayout',
+      rect: { x: 0, y: 94, width: 1080, height: 2306 },
+      hittable: true,
+    }),
+    node({
+      index: 1,
+      type: 'android.view.View',
+      rect: { x: 0, y: 94, width: 1080, height: 120 },
+      parentIndex: 0,
+    }),
+    node({
+      index: 2,
+      type: 'android.widget.EditText',
+      rect: { x: 40, y: 140, width: 600, height: 60 },
+      parentIndex: 0,
+      label: 'Search or type URL',
+    }),
+    node({
+      index: 3,
+      type: 'android.view.View',
+      rect: { x: 0, y: 260, width: 1080, height: 2140 },
+      parentIndex: 0,
+    }),
   ];
   const { pairRan } = await pressWithGateTree(edgeTreeNodes, { x: 540, y: 1200 });
   assert.equal(pairRan, true);

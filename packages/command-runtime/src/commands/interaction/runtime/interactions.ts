@@ -478,7 +478,11 @@ function formatTargetForWarning(result: {
  * per-platform type list. A full-screen marked button still blocks: semantic
  * targets never take the exemption.
  */
-function blocksPixelPairAtPoint(baselineNodes: SnapshotNode[], node: SnapshotNode, point: Point): boolean {
+function blocksPixelPairAtPoint(
+  baselineNodes: SnapshotNode[],
+  node: SnapshotNode,
+  point: Point,
+): boolean {
   if (!node.rect || !containsPoint(node.rect, point.x, point.y)) return false;
   if (isViewportRootNode(node)) return false;
   if (isSemanticTouchTarget(node)) return true;
