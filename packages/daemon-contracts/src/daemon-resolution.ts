@@ -62,7 +62,7 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   if (!value) {
     return resolveDefaultDaemonStateDir(options);
   }
-  // Refused before expansion, and only for the host's own separators: a POSIX file name may hold `\`.
+  // Before expansion, and of the host's own separators only: a POSIX file name may hold `\`.
   if (value.split(process.platform === 'win32' ? /[\\/]/ : '/').includes('..')) {
     throw unsafeStateRoot(value, value, 'parent-step');
   }
@@ -82,27 +82,34 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
 
 const MOVE_STATE_DIR_FIX =
   'Point AGENT_DEVICE_STATE_DIR (or --state-dir) at a real private directory you own, such as "$HOME/.agent-device".';
-const UNSAFE_ANCESTRY = 'is writable by group or others, so another account can steer the path.';
-const DRIVE_ABSOLUTE_FIX = String.raw`Use a drive-absolute path, such as C:\Users\you\.agent-device.`;
+const DAEMON_STATE_ROOT_REASONS = {
+  unsafe: 'daemon_state_root_unsafe',
+} as const satisfies Record<string, string>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
 const STATE_ROOT_PROBLEMS = {
   symlink: ['is a symbolic link.', MOVE_STATE_DIR_FIX],
   'foreign-owner': ['is owned by another local user.', MOVE_STATE_DIR_FIX],
-  'group-or-other-writable-ancestor': [UNSAFE_ANCESTRY, MOVE_STATE_DIR_FIX],
-  'not-private': ['is open to accounts besides its owner.', 'chmod 700'],
+  'group-or-other-writable-ancestor': [
+    'is writable by group or others, so another account can steer the path.',
+    MOVE_STATE_DIR_FIX,
+  ],
+  'not-private': [
+    'is open to accounts besides its owner.',
+    'Run `chmod 700 <dir>`, or point AGENT_DEVICE_STATE_DIR at a private directory you own if that is refused.',
+  ],
   'not-a-directory': ['is not a directory.', MOVE_STATE_DIR_FIX],
   unavailable: ['could not be checked or created.', MOVE_STATE_DIR_FIX],
   'parent-step': ['steps out of its parent with "..".', 'Name a real path, without a `..` step.'],
-  'unsupported-windows-path': ['is not a supported Windows path shape.', DRIVE_ABSOLUTE_FIX],
+  'unsupported-windows-path': [
+    'is not a supported Windows path shape.',
+    String.raw`Use a drive-absolute path, such as C:\Users\you\.agent-device.`,
+  ],
 } as const satisfies Record<string, readonly [string, string]>;
 
 type DaemonStateRootProblem = keyof typeof STATE_ROOT_PROBLEMS;
 
-/**
- * The walk's exposures, worded for an operator. `unavailable` stays what the walk could NOT decide; a new
- * exposure has to be placed here before the rule compiles.
- */
+/** Every exposure the walk answers with; `unavailable` is what it could NOT decide. */
 const STATE_ROOT_PROBLEM_BY_EXPOSURE: Record<
   Extract<PrivateRootAdmission, { status: 'refused' }>['exposure'],
   DaemonStateRootProblem
@@ -123,13 +130,11 @@ const STATE_ROOT_PROBLEM_BY_EXPOSURE: Record<
   parent_replaced: 'unavailable',
 };
 
-// A PASSED repair is remembered per process, so a client built after a CLI's own walk pays nothing for it.
-const repairedStateRoots = new Set<string>();
-
 /**
- * Admits the daemon's state root before an operation's first state-directory I/O: `establish` creates a
- * missing root, `repair` creates nothing, both close a root the umask left open, and a refusal answers
- * `daemon_state_root_unsafe`. On Windows only the path shape is judged (#4649, ADR 0016).
+ * Admits the daemon's state root: `establish` creates a missing root, `repair` creates nothing, both close a
+ * root the umask left open, and a refusal answers `daemon_state_root_unsafe`. Nothing is remembered between
+ * calls: an absent root is admitted and can become a planted link before the next one. On Windows only the
+ * path shape is judged (#4649, ADR 0016).
  */
 export function admitDaemonStateRoot(options: {
   paths: DaemonPaths;
@@ -137,30 +142,25 @@ export function admitDaemonStateRoot(options: {
 }): void {
   const { baseDir } = options.paths;
   const repair = options.mode === 'repair';
-  if (repair && repairedStateRoots.has(baseDir)) return;
   if (process.platform === 'win32') {
-    // The Windows shape rule, of `path.win32` whatever the host runs: a local drive-absolute route. Mode bits
-    // answer nothing about accounts here, and nothing else creates the directory the log is opened in.
+    // Of `path.win32` whatever the host runs: a local drive-absolute route. Mode bits answer nothing here.
     const route = /^[A-Za-z]:[\\/](.*)$/.exec(path.win32.normalize(baseDir))?.[1];
     if (route === undefined || route.includes(':'))
       throw unsafeStateRoot(baseDir, baseDir, 'unsupported-windows-path');
     if (!repair) fs.mkdirSync(baseDir, { recursive: true });
-  } else {
-    const admitted = admitPrivateRoot({
-      rootPath: baseDir,
-      mode: options.mode,
-      // The two names the daemon creates below its root, judged by the same rule as the root.
-      managedDirs: ['sessions', path.join('sessions', 'remote-scripts')],
-    });
-    if (admitted.status === 'refused') {
-      throw unsafeStateRoot(
-        baseDir,
-        admitted.component,
-        STATE_ROOT_PROBLEM_BY_EXPOSURE[admitted.exposure],
-      );
-    }
+    return;
   }
-  if (repair) repairedStateRoots.add(baseDir);
+  const admitted = admitPrivateRoot({
+    rootPath: baseDir,
+    mode: options.mode,
+    managedDirs: ['sessions', path.join('sessions', 'remote-scripts')],
+  });
+  if (admitted.status === 'refused')
+    throw unsafeStateRoot(
+      baseDir,
+      admitted.component,
+      STATE_ROOT_PROBLEM_BY_EXPOSURE[admitted.exposure],
+    );
 }
 
 function unsafeStateRoot(
@@ -169,12 +169,11 @@ function unsafeStateRoot(
   problem: DaemonStateRootProblem,
 ): AppError {
   const [cause, step] = STATE_ROOT_PROBLEMS[problem];
-  const fix = problem === 'not-private' ? `${step} ${component}` : step;
+  const fix = problem === 'not-private' ? step.replaceAll('<dir>', component) : step;
   return new AppError(
     'COMMAND_FAILED',
     `Refusing to use the daemon state directory ${stateDir}: ${component} ${cause}`,
-    // `daemon_state_root_unsafe` is what callers branch on, never the text.
-    { reason: 'daemon_state_root_unsafe', stateDir, component, problem, fix, hint: fix },
+    { reason: DAEMON_STATE_ROOT_REASONS.unsafe, stateDir, component, problem, fix, hint: fix },
   );
 }
 

@@ -235,9 +235,9 @@ test.skipIf(!posix)(
   },
 );
 
-// A mode this user cannot change is not theirs to make private: the root stays as it stands and the refusal names
-// the chmod that ends it. An unprivileged test process cannot refuse its own `chmod`, so the mode change is taken
-// away at the seam the repair uses.
+// A mode this user cannot change is not theirs to make private: the root stays as it stands, and the refusal
+// names both ways out — the chmod, and the move away the chmod itself cannot do. An unprivileged test process
+// cannot refuse its own `chmod`, so the mode change is taken away at the seam the repair uses.
 test.skipIf(!posix)('a root whose mode change is refused still refuses as not private', () => {
   const under = mkdtempForTestSync('state-admit-repair-refused-');
   const root = makePrivateRoot(under);
@@ -252,7 +252,8 @@ test.skipIf(!posix)('a root whose mode change is refused still refuses as not pr
       admitDaemonStateRoot({ paths: pathsOf(root), mode: 'establish' }),
     );
     expect(details).toMatchObject({ problem: 'not-private', component: root });
-    expect(details.fix).toBe(`chmod 700 ${root}`);
+    expect(details.fix).toContain(`chmod 700 ${root}`);
+    expect(details.fix).toContain('AGENT_DEVICE_STATE_DIR');
   } finally {
     vi.restoreAllMocks();
     realChmod(root, 0o700);
@@ -337,29 +338,24 @@ test.skipIf(!posix)(
   },
 );
 
-// The walk is asked once per base directory: a repair that passed is remembered, so the next caller in the
-// same process — the client a CLI invocation goes on to build, or a client's tenth request — pays nothing for
-// a route that was just judged. A refusal is not remembered, because the operator may have just fixed it.
-test.skipIf(!posix)('a repair that passed is walked once per base directory', () => {
-  const under = mkdtempForTestSync('state-admit-memo-');
-  const root = makePrivateRoot(under, 'walked-once');
-  const realLstat = fs.lstatSync;
-  let walks = 0;
-  vi.spyOn(fs, 'lstatSync').mockImplementation(((name: fs.PathLike, ...rest: unknown[]) => {
-    if (String(name).startsWith(root)) walks += 1;
-    return realLstat(name as string, ...(rest as []));
-  }) as typeof fs.lstatSync);
+// Nothing about a passed repair is remembered. A root can be absent and admitted and become a planted link
+// before the next call, and a long-lived client — an MCP server whose root sits under a shared sticky parent —
+// makes its next read at that moment. Every call walks (#4649).
+test.skipIf(!posix)(
+  'a repair re-judges the root on every call, so a link planted after one cannot be read',
+  () => {
+    const under = fs.realpathSync(mkdtempForTestSync('state-admit-again-'));
+    const root = path.join(under, 'state');
+    const target = makePrivateRoot(under, 'outside');
 
-  try {
     admitDaemonStateRoot({ paths: pathsOf(root), mode: 'repair' });
-    const afterFirst = walks;
-    expect(afterFirst).toBeGreaterThan(0);
-    admitDaemonStateRoot({ paths: pathsOf(root), mode: 'repair' });
-    expect(walks).toBe(afterFirst);
-  } finally {
-    vi.restoreAllMocks();
-  }
-});
+    fs.symlinkSync(target, root);
+
+    expect(
+      refusalOf(() => admitDaemonStateRoot({ paths: pathsOf(root), mode: 'repair' })),
+    ).toMatchObject({ problem: 'symlink', component: root });
+  },
+);
 
 // The shape CI hit: the root is created by a writer that asks for nothing (a `mkdir` under the host's umask),
 // and the launch that follows establishes it. The repair reaches the root's own name and no ancestor of it.

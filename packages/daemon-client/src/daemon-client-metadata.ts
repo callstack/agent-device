@@ -3,6 +3,7 @@ import { isProcessPid } from '@agent-device/host-kit/process';
 
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
+  admitDaemonStateRoot,
   readDaemonCapabilities,
   readDaemonOwnership,
   readDaemonRecord,
@@ -88,6 +89,11 @@ export async function readRegisteredDaemon(
   paths: DaemonPaths,
   options: { required?: boolean } = {},
 ): Promise<DaemonInfo | null> {
+  // This is the client's ONE reader of the lock and `daemon.json`, and every route reaches it: the ensured
+  // transport the CLI and the MCP server use, the AI SDK tools, `createAgentDeviceClient`, `ensureDaemon`,
+  // an attach client, and a caller of this export directly. None of them pass `src/cli.ts`, so the root is
+  // admitted here, before the first byte of it is opened. Repair: a client creates nothing (#4649).
+  admitDaemonStateRoot({ paths, mode: 'repair' });
   const { processLockHoldsDaemonIdentity } =
     await import('@agent-device/daemon-contracts/daemon-registration');
   const inspection = inspectProcessLock(paths.lockPath);

@@ -545,7 +545,8 @@ export function admitPrivateRoot(options: {
 }): PrivateRootAdmission {
   const trust = scriptTrust({});
   const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
-  if (!path.isAbsolute(root)) return refusedRoot(root, 'relative_destination');
+  if (!path.isAbsolute(root))
+    return { status: 'refused', component: root, exposure: 'relative_destination' };
   const create = options.mode === 'establish';
   try {
     const parent = walkSpelledParent(path.dirname(root), root, trust, create);
@@ -556,7 +557,7 @@ export function admitPrivateRoot(options: {
       ...(options.managedDirs ?? []).map((name) => path.join(root, name)),
     ]) {
       const fault = admitDirectory(directory, trust);
-      if (fault) return refusedRoot(directory, fault);
+      if (fault) return { status: 'refused', component: directory, exposure: fault };
     }
   } catch (error) {
     return verdictForAncestryFault(error, create);
@@ -593,9 +594,5 @@ function verdictForAncestryFault(error: unknown, create: boolean): PrivateRootAd
   // A route that is not there yet is an absent root, not an unsafe one, to a caller that creates nothing.
   if (!create && (exposure === 'unreachable_parent' || exposure === 'unresolvable_parent'))
     return { status: 'admitted' };
-  return refusedRoot(ancestor, exposure);
-}
-
-function refusedRoot(component: string, exposure: ScriptAncestryExposure): PrivateRootAdmission {
-  return { status: 'refused', component, exposure };
+  return { status: 'refused', component: ancestor, exposure };
 }
