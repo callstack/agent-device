@@ -1,3 +1,4 @@
+import { readVersion } from '@agent-device/host-kit/version';
 import { expect, test, vi } from 'vitest';
 import {
   bindTestCommandHost,
@@ -49,6 +50,7 @@ test('the composed close awaits the real runner release before dismissing alerts
     booted: true,
   };
   const gateway = createPlatformRuntimeGateway({
+    coreVersion: readVersion(),
     host,
     sessionsDir: root,
     resolveSessionArtifacts: (sessionId) => ({

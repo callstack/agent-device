@@ -1,13 +1,16 @@
 import { readVersion } from '@agent-device/host-kit/version';
+import {
+  type PluginReleaseDeclaration,
+  pluginInstallCommand,
+  pluginPackageSelector,
+  pluginRepairCommand,
+} from '@agent-device/contracts/platform-module';
 
-type ProviderPluginDeclaration = Readonly<{
-  provider: string;
-  package: string;
-  label: string;
-  // A 0.22.x-dev version carries no source branch. Use the 0.22 branch's nightly tag
-  // as the shared default for development builds, including main checkouts.
-  nightlyTag?: 'nightly-0.22';
-}>;
+type ProviderPluginDeclaration = PluginReleaseDeclaration &
+  Readonly<{
+    provider: string;
+    label: string;
+  }>;
 
 export const AWS_DEVICE_FARM: ProviderPluginDeclaration = {
   provider: 'aws-device-farm',
@@ -38,43 +41,27 @@ export function getProviderPluginDeclaration(
   return PROVIDER_PLUGIN_CATALOG.find((plugin) => plugin.provider === provider);
 }
 
-// The release workflow stamps the core and its public plugins with the same nightly version.
-const NIGHTLY_0_22_VERSION = /^0\.22\.\d+-nightly(?:-0-22)?\.\d{8}\.[1-9]\d*$/;
-const DEVELOPMENT_0_22_VERSION = /^0\.22\.\d+-dev$/;
-
-function providerPluginSelector(
-  declaration: ProviderPluginDeclaration,
-  coreVersion: string,
-): string {
-  if (declaration.nightlyTag === undefined) return declaration.package;
-  const version = coreVersion.trim();
-  if (NIGHTLY_0_22_VERSION.test(version)) return `${declaration.package}@${version}`;
-  if (DEVELOPMENT_0_22_VERSION.test(version)) {
-    return `${declaration.package}@${declaration.nightlyTag}`;
-  }
-  return declaration.package;
-}
+// The release-channel rule lives in @agent-device/contracts/platform-module, shared with the
+// optional platform families, so the two catalogs cannot drift apart on the nightly selector.
 
 export function providerPluginInstallCommand(
   declaration: ProviderPluginDeclaration,
   coreVersion: string = readVersion(),
 ): string {
-  return `agent-device plugins add ${providerPluginSelector(declaration, coreVersion)}`;
+  return pluginInstallCommand(declaration, coreVersion);
 }
 
 export function providerPluginRepairCommand(
   declaration: ProviderPluginDeclaration,
   coreVersion: string = readVersion(),
 ): string {
-  const selector = providerPluginSelector(declaration, coreVersion);
-  const action = selector === declaration.package ? 'update' : 'add';
-  return `agent-device plugins ${action} ${selector}`;
+  return pluginRepairCommand(declaration, coreVersion);
 }
 
 export function providerPluginHelp(coreVersion: string = readVersion()): string {
   const plugins = PROVIDER_PLUGIN_CATALOG.map(
     (plugin) =>
-      `${plugin.label} (connect ${plugin.provider}; ${providerPluginSelector(plugin, coreVersion)})`,
+      `${plugin.label} (connect ${plugin.provider}; ${pluginPackageSelector(plugin, coreVersion)})`,
   ).join(', ');
   return `  Plugins, installed separately: ${plugins}. Run agent-device plugins add <package>, then retry agent-device connect <provider> with your original arguments.`;
 }

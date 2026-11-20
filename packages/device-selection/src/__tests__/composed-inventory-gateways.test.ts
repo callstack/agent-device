@@ -17,6 +17,9 @@ import { PLATFORMS, type DeviceInfo, type Platform } from '@agent-device/kernel/
 import { describe, expect, test, vi } from 'vitest';
 import { createComposedDeviceInventoryGateways } from '../composed-inventory-gateways.ts';
 
+// A core version no release channel pins, so an absent family's install hint names the bare package.
+const CORE_VERSION = '0.0.0-test';
+
 const scope: PlatformRequestScope = Object.freeze({
   signal: new AbortController().signal,
   diagnostics: Object.freeze({ emit: () => {} }),
@@ -242,6 +245,55 @@ describe('composed device inventory gateway', () => {
     expect(local.sourceLoads()).toEqual(['android', 'harmonyos', 'apple', 'vega', 'linux']);
   });
 
+  test('an absent optional family is skipped by unfiltered discovery and refused with plugin-not-installed on explicit request', async () => {
+    const loaded: Platform[] = [];
+    const modules: InventoryPlatformModule[] = PLATFORMS.filter((family) => family !== 'vega').map(
+      (family) => ({
+        family,
+        loadInventory: async () => {
+          loaded.push(family);
+          return source([device(family)]);
+        },
+      }),
+    );
+    const registry = createPlatformModuleRegistry(modules, CORE_VERSION);
+    const gateways = createComposedDeviceInventoryGateways({
+      registry,
+      loadHost: async () => host,
+    });
+
+    // `devices` without a platform skips the absent optional family silently: its source is
+    // never loaded and no error surfaces.
+    const devices = await gateways.localOnly.discover({}, scope);
+    expect(devices.map(({ platform }) => platform)).toEqual([
+      'android',
+      'harmonyos',
+      'apple',
+      'linux',
+    ]);
+    expect(loaded).toEqual(['android', 'harmonyos', 'apple', 'linux']);
+
+    // An explicit request for the absent family fails with the typed plugin-not-installed
+    // outcome and its install hint, before any source load or device binding.
+    loaded.length = 0;
+    await expect(gateways.localOnly.discover({ platform: 'vega' }, scope)).rejects.toMatchObject({
+      code: 'UNSUPPORTED_PLATFORM',
+      details: {
+        reason: 'plugin-not-installed',
+        family: 'vega',
+        package: '@agent-device/vega',
+        installCommand: 'agent-device plugins add @agent-device/vega',
+      },
+    });
+    const failure = await gateways.localOnly
+      .discover({ platform: 'vega' }, scope)
+      .catch((error: unknown) => error);
+    expect(String((failure as { details?: { hint?: string } }).details?.hint)).toContain(
+      'agent-device plugins add @agent-device/vega',
+    );
+    expect(loaded).toEqual([]);
+  });
+
   test('explicit local failures propagate and family sources cannot return another family', async () => {
     const failing = inventoryWorld({ android: async () => source([], new Error('adb failed')) });
     await expect(
@@ -309,7 +361,7 @@ function inventoryWorld(
     },
   }));
   return {
-    registry: createPlatformModuleRegistry(modules),
+    registry: createPlatformModuleRegistry(modules, CORE_VERSION),
     loadHost: async () => {
       hosts += 1;
       return host;
