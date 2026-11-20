@@ -20,6 +20,7 @@ import { requestWebSession } from '../../../core/session-tenant-scope.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { resolveOpenTargetDeviceOptions } from '../../../core/open-target-device-resolution.ts';
 import { bootStoppedLocalAndroidDevice } from '../../../core/stopped-local-android-device.ts';
+import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import {
   invalidOpenArgs,
@@ -42,7 +43,10 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import { admitRuntimeOperations } from '../../../core/runtime-admission.ts';
-import { resolveExistingSessionDeviceSelection } from '@agent-device/device-selection/device-selection-resolver';
+import {
+  markSelectionBootOccurred,
+  resolveExistingSessionDeviceSelection,
+} from '@agent-device/device-selection/device-selection-resolver';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -321,8 +325,6 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     });
     if (details.type === 'response') return { type: 'response', response: details.response };
 
-    // Preparation may have booted the device to reach this surface, and a boot an owner caused for
-    // its own reopen cannot later read as a boot its owner walked away from.
     requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
     const reclaimed = await renewOpenSessionClaim(
       device,
@@ -406,7 +408,9 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   if (runtimePlanAdmission.type === 'response')
     return { type: 'response', response: runtimePlanAdmission.response };
   // A stopped AVD boots before the session claim and the open locks, so the session, its claim
-  // and its locks all key on the booted serial rather than the AVD name.
+  // and its locks all key on the booted serial rather than the AVD name. The boot fact is stamped
+  // on the pre-boot selection, because the booted serial is all the returned device shows.
+  let androidLaunchIdentity: AndroidEmulatorLaunchIdentity | undefined;
   const booted = await bootStoppedLocalAndroidDevice({
     device: resolved.device,
     owner: runtimePlanAdmission.admission.runtime.owner,
@@ -414,8 +418,11 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     flags: req.flags ?? {},
     env: params.host.env,
     deadlineAtMs: startupDeadline,
+    onAndroidEmulatorLaunchIdentity: (identity) => {
+      androidLaunchIdentity = identity;
+    },
   });
-  const selection = booted ? { ...resolved, device: booted } : resolved;
+  const selection = booted ? { ...markSelectionBootOccurred(resolved), device: booted } : resolved;
   const device = selection.device;
   if (booted) {
     await req.internal?.retainDeviceExecutionLock?.(device.id);
@@ -446,6 +453,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
         reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
         platformServices: params.platformServices,
         selection,
+        androidLaunchIdentity,
       }),
   );
 }

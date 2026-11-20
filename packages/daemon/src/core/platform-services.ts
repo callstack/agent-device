@@ -1,5 +1,8 @@
 import type { AppleSessionObservation } from '@agent-device/contracts/apple-session-observation';
-import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
+import type {
+  DeviceBootObservationService,
+  LaunchedDeviceProcessService,
+} from '@agent-device/contracts/device-boot';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -11,15 +14,16 @@ export type EnsureLocalDeviceReady = (device: DeviceInfo, signal: AbortSignal) =
 
 /**
  * Root-composed platform services the daemon asks of the host machine for work that binds no
- * device runtime, over mechanics the daemon must never name or load itself. The two observation
- * members are published contracts types; readiness and open-target classification are signatures
- * declared here over neutral types. Device execution is NOT in this port and never
+ * device runtime, over mechanics the daemon must never name or load itself. The observation and
+ * launched-process members are published contracts types; readiness and open-target classification
+ * are signatures declared here over neutral types. Device execution is NOT in this port and never
  * enters it (ADR 0019): it goes through the request-bound runtime binding
  * (`RequestExecutionScope.bindDevice`), whose owner facts stay the only admission authority.
  */
 export type DaemonPlatformServices = Readonly<{
   appleSessionObservation: AppleSessionObservation;
   deviceBootObservation: DeviceBootObservationService;
+  launchedDeviceProcess: LaunchedDeviceProcessService;
   ensureLocalDeviceReady: EnsureLocalDeviceReady;
   resolveRequestedOpenSurface(params: {
     device: DeviceInfo;
