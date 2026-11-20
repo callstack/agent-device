@@ -11,6 +11,7 @@ import type {
   HiddenContentHint,
   Point,
   RawSnapshotNode,
+  Rect,
   SnapshotNode,
 } from '@agent-device/kernel/snapshot';
 import type { ScrollEdge, ScrollEdgeState, ScrollEdgeTarget } from '../scroll-edge-state.ts';
@@ -86,16 +87,41 @@ export function resolveScrollPullContainer(
       ancestor.index === broad.containerIndex ? true : null,
     ) === true;
   const chosen = narrows ? { ...inner, canScroll: inner.canScroll || broad.canScroll } : broad;
-  // What survives of the chosen frame once the ancestor clipping it cuts away what no touch reaches.
   const container = nodeOf(visibility, chosen.containerIndex);
   const rect = chosen.containerRect;
   if (!container || !rect) return chosen;
-  const clipping = visibility.resolveEffectiveViewport(container);
-  return { ...chosen, pullRect: (clipping && intersectRects(rect, clipping)) ?? rect };
+  return { ...chosen, pullRect: visiblePullRect(rect, container, visibility) };
 }
 
 function nodeOf(visibility: SnapshotVisibility, index: number | undefined) {
   return index === undefined ? undefined : visibility.nodeByIndex.get(index);
+}
+
+/**
+ * What survives of a container's frame once every clipping ancestor — a scroller or window root
+ * above it, each of which compounds — has cut away what no touch reaches. One that hides the
+ * container entirely leaves a zero-height band at its own edge, so the pull is refused rather than
+ * planned onto pixels the list never receives; further ancestors cannot restore what is hidden.
+ */
+function visiblePullRect(
+  rect: Rect,
+  container: SnapshotNode,
+  visibility: SnapshotVisibility,
+): Rect {
+  let visible = rect;
+  visibility.findAncestor(container, (ancestor) => {
+    const clip = ancestor.rect;
+    if (visible.height === 0 || !clip) return null;
+    if (isScrollableNodeLike(ancestor) || isViewportRootNode(ancestor)) {
+      visible = intersectRects(visible, clip) ?? {
+        ...visible,
+        y: clip.y + clip.height,
+        height: 0,
+      };
+    }
+    return null;
+  });
+  return visible;
 }
 
 function selectScrollContainer(

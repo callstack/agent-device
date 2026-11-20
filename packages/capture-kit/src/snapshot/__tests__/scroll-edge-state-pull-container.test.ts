@@ -55,6 +55,32 @@ test('the pull band excludes the part of a nested scroller its clipping ancestor
   assert.deepEqual(pull?.pullRect, { x: 0, y: 650, width: 820, height: 350 });
 });
 
+test('the pull band honours every clipping ancestor, not only the nearest one', async () => {
+  // The list's nearest clipping ancestor (150..750) shows all 400px of it, but the ancestor above
+  // ends at 550. Honouring only the nearest would plan 50px of travel the outer clip hides.
+  const list = { x: 10, y: 200, width: 382, height: 400 };
+  const pull = await readScrollPullContainer([
+    app(),
+    scroller(2, 1, { x: 0, y: 100, width: 402, height: 450 }),
+    scroller(3, 2, { x: 0, y: 150, width: 402, height: 600 }),
+    scroller(4, 3, list, { identifier: 'refresh-list' }),
+  ]);
+  assert.deepEqual(pull?.containerRect, list);
+  assert.deepEqual(pull?.pullRect, { x: 10, y: 200, width: 382, height: 350 });
+});
+
+test('a list a clipping ancestor hides entirely yields an empty band, not its raw frame', async () => {
+  // Nothing of the list is on screen (200..600 against a 650..750 ancestor). The band is empty at
+  // that ancestor's edge rather than the raw 400px or the ancestor's own 100px, so the caller
+  // refuses the pull instead of planning it onto pixels the list never receives.
+  const pull = await readScrollPullContainer([
+    app(820, 1180),
+    scroller(2, 1, { x: 0, y: 650, width: 820, height: 100 }),
+    scroller(3, 2, { x: 0, y: 200, width: 820, height: 400 }, { identifier: 'refresh-list' }),
+  ]);
+  assert.deepEqual(pull?.pullRect, { x: 0, y: 750, width: 820, height: 0 });
+});
+
 test('a plain group between a list and its clipping ancestor cannot shrink the pull band', async () => {
   // The closest negative: only nodes that clip by definition bound the pull, so a group reporting a
   // frame it does not clip must not shorten a pull whose pixels are all on screen.

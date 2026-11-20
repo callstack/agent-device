@@ -603,6 +603,64 @@ test('bound scroll refresh refuses when the visible band a clipping ancestor lea
   assert.equal(plans.length, 0, 'a pull that cannot commit is never dispatched');
 });
 
+test('bound scroll refresh refuses when a clipping ancestor shows none of the selected container', async () => {
+  // The nested list reports a frame entirely above the ancestor clipping it (200..600 vs 650..750),
+  // so no pixel of it is on screen and the band is empty, not the raw 400px. Planning on the raw
+  // frame would dispatch a pull onto pixels the list never receives; the empty band refuses.
+  const hiddenScreen: SnapshotNode[] = [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 820, height: 1180 },
+    },
+    {
+      ref: 'e2',
+      index: 2,
+      parentIndex: 1,
+      depth: 1,
+      type: 'ScrollView',
+      rect: { x: 0, y: 650, width: 820, height: 100 },
+      hiddenContentBelow: true,
+    },
+    {
+      ref: 'e3',
+      index: 3,
+      parentIndex: 2,
+      depth: 2,
+      type: 'ScrollView',
+      identifier: 'refresh-list',
+      rect: { x: 0, y: 200, width: 820, height: 400 },
+      hiddenContentBelow: true,
+    },
+  ];
+  const plans: PullPlanCall[] = [];
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['refresh'],
+        {},
+        {
+          ...frozenCaptures([hiddenScreen]),
+          scroll: async () => ({}),
+          gesture: async (plan) => {
+            plans.push(plan as PullPlanCall);
+            return {};
+          },
+        },
+        { session: sessionWithStoredScreen(hiddenScreen) },
+      ),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) return false;
+      assert.equal(error.details?.reason, 'scroll_refresh_container_too_short');
+      assert.equal(error.details?.travelPixels, 0, 'no pixel of the list is pullable');
+      return true;
+    },
+  );
+  assert.equal(plans.length, 0, 'a pull with no visible band is never dispatched');
+});
+
 test('bound scroll refresh keeps the pull on the container it resolved when an unrelated scroller only overlaps its centre', async () => {
   // A dev client leaves its launcher list in the accessibility tree over the app's own. It is
   // smaller than the app's list and so sorts first at the broad container's centre, but it frames

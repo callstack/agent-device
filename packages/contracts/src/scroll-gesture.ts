@@ -4,10 +4,9 @@ import { isViewportRootNode } from './snapshot-visibility.ts';
 import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
-// `top`/`bottom` are scroll-to-extreme requests with no direction of their own, and `refresh` is
-// the pull-to-refresh request, which resolves to a downward pull anchored at the container's top
-// edge. Declared here rather than in the command runtime that resolves them, so the public
-// `ScrollOptions` can be stated without depending on `commands/`.
+// `top`/`bottom` are scroll-to-extreme requests with no direction of their own; `refresh` is the
+// pull-to-refresh request, resolving to a downward pull at the container's top edge. Declared here
+// so the public `ScrollOptions` does not depend on `commands/`.
 export const SCROLL_INPUT_DIRECTIONS = [
   'up',
   'down',
@@ -242,9 +241,8 @@ function insetContainerRange(
 
 /**
  * The pull fraction of the scroll container one `scroll refresh` drags by default, and the pixel
- * bounds the daemon clamps it into. The pull has to cross the refresh control's trigger distance,
- * which differs per platform and per app, so the default sits well above the small pulls that
- * only rubber-band (measured 0/5 below ~300px on an iOS RN list, 5/5 at 400px).
+ * bounds the daemon clamps it into. A pull has to cross the refresh control's trigger distance:
+ * measured 0/5 below ~300px on an iOS RN list, 5/5 at 400px.
  */
 export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
 export const REFRESH_PULL_MIN_PX = 320;
@@ -277,13 +275,11 @@ export type PullRefreshGesturePlan = {
 
 /**
  * The one pull `scroll refresh` dispatches: a downward lane anchored just inside the TOP of the
- * resolved vertical container, not the centred lane a directional scroll runs. Starting at the
- * container's top edge matters twice over — a pull that begins on a header above the list lands
- * outside the scroller and moves nothing, and a pull-to-refresh control only arms while its
- * scroller sits at the top. The lane stays inside the container's intersection with the padded
- * viewport (#2714), so the endpoints never land on the container's boundary row or the status bar.
- * Coordinates are absolute in the viewport's own space, which is also the snapshot space, so a
- * window with a non-zero origin (a split-view iPad) needs no conversion.
+ * resolved vertical container, not the centred lane a directional scroll runs. The top matters twice
+ * over: a pull begun on a header above the list moves nothing, and a refresh control arms only while
+ * its scroller sits at the top. The lane stays inside the container's intersection with the padded
+ * viewport (#2714), in the viewport's own space — which is the snapshot space, so a split-view
+ * window with a non-zero origin needs no conversion.
  */
 export function buildPullRefreshGesturePlan(
   options: PullRefreshGestureOptions,
@@ -320,7 +316,13 @@ export function buildPullRefreshGesturePlan(
     options.pixels !== undefined
       ? normalizeRequestedPixels(options.pixels)
       : Math.round(pullAmount * container.height);
-  const travelPixels = Math.max(1, Math.min(requestedPixels, band.max - band.min));
+  // Travel never exceeds the container's own height: a container whose inset band degenerates (too
+  // short to inset, or emptied by a clipping ancestor) falls back to the padded viewport lane, and
+  // the caller's too-short refusal must see the container's real reach, not the viewport's.
+  const travelPixels = Math.max(
+    0,
+    Math.min(requestedPixels, band.max - band.min, container.height),
+  );
   const y1 = band.min;
   const y2 = y1 + travelPixels;
   return {
@@ -455,8 +457,7 @@ export function inferGestureReferenceFrame(
 
 /**
  * The gesture viewport as a rect in the capture's own (screen-origin) space, so plan coordinates
- * computed against it need no frame conversion — a window with a non-zero origin (a split-view
- * iPad) keeps its origin instead of being re-based.
+ * need no frame conversion and a split-view window keeps its origin.
  */
 export function inferGestureViewportRect(
   nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],

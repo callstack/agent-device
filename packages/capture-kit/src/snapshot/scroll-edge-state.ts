@@ -29,9 +29,11 @@ export type ScrollEdgeState = {
   /** Which tree node `containerRect` frames: membership is a tree fact a frame cannot give. */
   containerIndex?: number;
   /**
-   * `containerRect` cut down to the pixels a touch on it can reach, per the ancestor clipping it. A
-   * nested list can report a frame starting above what shows it, and a pull planned there starts off
-   * the list. Only `readScrollPullContainer` reports it.
+   * `containerRect` cut down to the pixels a touch on it can reach: what survives every clipping
+   * ancestor. A nested list can report a frame starting above what shows it, and a pull planned
+   * there starts off the list. An ancestor that hides it entirely leaves a zero-height band, so the
+   * pull is refused rather than dispatched onto pixels nothing receives. Only
+   * `readScrollPullContainer` reports it.
    */
   pullRect?: Rect;
   /**
@@ -116,8 +118,8 @@ export async function readScrollEdgeState(
 
 /**
  * The container `scroll refresh` pulls, plus `pullRect` the band of it a touch can reach. The broad
- * edge read names the outermost scroller, where a pull starts on the header where no refresh control
- * sees it, so this narrows to the innermost one at that centre that descends from it.
+ * edge read names the outermost scroller, where a pull starts on the header no refresh control sees,
+ * so this narrows to the innermost one at that centre that descends from it.
  */
 export async function readScrollPullContainer(
   nodes: readonly (RawSnapshotNode | SnapshotNode)[],

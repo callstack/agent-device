@@ -176,17 +176,15 @@ export async function resolveBoundScrollRuntime(
       return await resolveBoundGenericRuntime(
         {
           ...admission,
-          // Each requirement the use mixes names its own refusal: the touch-scroll fact for a
-          // surface no finger pulls, the capture for a leaf that cannot read the screen, and the
-          // pan for a leaf that plans no gesture. None of them collapses into "requires snapshot".
+          // Each requirement the use mixes names its own refusal; none collapses into
+          // "requires snapshot".
           unavailableResponse: (unavailable, operation) =>
             refreshAdmissionRefusal(params.device, operation, unavailable.hint),
           use: plan.use,
         },
         async (runtime, dispatchContext) => {
-          // The refusal and the container both come from a fresh capture read before the gesture:
-          // the pull is what invalidates the tree, and the session's stored tree may already be
-          // stale from an earlier one (ADR 0014), so the stored snapshot cannot answer here.
+          // The refusal and the container both come from a fresh capture: the pull is what
+          // invalidates the tree, so the session's stored snapshot cannot answer here.
           const { state: topState, nodes } = await readCapturedTopEdgeState(
             runtime,
             dispatchContext,
@@ -233,8 +231,8 @@ export async function resolveBoundScrollRuntime(
             movementPlan,
             pull,
           );
-          // A refresh pull runs at the top edge by construction, so `at-edge` is not news to report
-          // back: an unchanged surface is answered as `unchanged`, never as "nothing to scroll".
+          // A refresh pull runs at the top edge by construction: an unchanged surface is answered
+          // as `unchanged`, never as "nothing to scroll".
           const movement = observed === 'at-edge' ? 'unchanged' : observed;
           return scrollResult(target, refreshOptions, 1, pull, movement);
         },
@@ -326,56 +324,41 @@ function scrollCaptureUnsupported(subject: string, hint: string | undefined) {
 }
 
 /**
- * The refusal one refresh requirement answers, named for the cell that failed. The refresh use
- * mixes a capability fact with two execution operations, so a leaf that runs gestures but cannot
- * read the screen, or reads the screen but plans no gesture, must not be told it lacks snapshot
- * support. Every branch carries the typed reason an agent branches on.
+ * The refusal one refresh requirement answers, named for the cell that failed: a leaf that runs
+ * gestures but cannot read the screen must not be told it lacks snapshot support. Every branch
+ * carries the typed reason an agent branches on.
  */
 function refreshAdmissionRefusal(
   device: DeviceInfo,
   operation: RuntimeOperationKey<PlatformRuntimeOperations>,
   hint: string | undefined,
 ) {
-  const withHint = hint === undefined ? undefined : { hint };
-  if (operation === 'touchScrollSurface') {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      `scroll refresh is not supported on ${publicPlatformString(device)}: it needs a touch scroll surface`,
-      { reason: 'scroll_refresh_unsupported_platform' },
-      withHint,
-    );
-  }
-  if (operation === 'performGesturePlan') {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      `scroll refresh is not supported on ${publicPlatformString(device)}: it dispatches the pull as a gesture plan`,
-      { reason: 'scroll_refresh_unsupported_platform' },
-      withHint,
-    );
-  }
+  const needs =
+    operation === 'touchScrollSurface'
+      ? 'needs a touch scroll surface'
+      : operation === 'performGesturePlan'
+        ? 'dispatches the pull as a gesture plan'
+        : 'reads the top edge of the scrollable area before pulling, which requires snapshot support';
   return errorResponse(
     'UNSUPPORTED_OPERATION',
-    `scroll refresh is not supported on ${publicPlatformString(device)}: it reads the top edge of the scrollable area before pulling, which requires snapshot support`,
+    `scroll refresh is not supported on ${publicPlatformString(device)}: it ${needs}`,
     { reason: 'scroll_refresh_unsupported_platform' },
-    withHint,
+    hint === undefined ? undefined : { hint },
   );
 }
 
 /**
  * The execution options one pull-to-refresh carries: a slow pull (a fast one reads as a fling and
- * rubber-bands back without committing the refresh control) whose distance defaults to a fraction
- * of the container height and is clamped into the measured-safe band — small pulls only
- * rubber-band (0/5 below ~300px on an iOS RN list) while large ones stay reliable. The pull
- * itself is planned top-anchored by `buildPullRefreshGesturePlan` and dispatched as one pan, so
- * no hold rides in these options: a holdMs-0 run committed the refresh 5/5 on both platforms.
+ * rubber-bands back without committing the control), with the distance defaulting to a fraction of
+ * the container and clamped into the measured-safe band. No hold rides here: a holdMs-0 run
+ * committed the refresh 5/5 on both platforms.
  */
 function resolveRefreshExecutionOptions(
   options: ScrollCommandOptions,
   visibleContainer: Rect,
 ): ResolvedScrollExecutionOptions {
   const pullAmount = options.amount ?? DEFAULT_REFRESH_PULL_AMOUNT;
-  // The pull distance always lands in the measured-safe band, whether it came from an explicit
-  // --pixels or from the container fraction: small pulls only rubber-band, large ones stay reliable.
+  // Both an explicit --pixels and the container fraction land in the measured-safe band.
   const pullPixels = Math.min(
     REFRESH_PULL_MAX_PX,
     Math.max(
@@ -393,11 +376,9 @@ function resolveRefreshExecutionOptions(
 
 /**
  * The one pull `scroll refresh` dispatches: the top-anchored lane computed once in TypeScript
- * against the resolved container, lowered to a single-contact pan and sent through the bound
- * gesture plan operation — the same path `gesture pan` takes, with the slow duration and no hold.
- * The plan's coordinates are absolute in the capture's screen-origin space, and the plan carries
- * its viewport, so the runner maps them onto the app window itself (a split-view iPad's
- * non-zero window origin included).
+ * against the visible band, lowered to a single-contact pan and sent through the bound gesture plan
+ * operation — the same path `gesture pan` takes. The plan carries its viewport, so the runner maps
+ * the coordinates onto the app window itself (a split-view iPad's origin included).
  */
 async function performRefreshPull(
   runtime: BoundScrollRefresh,
@@ -414,9 +395,8 @@ async function performRefreshPull(
     viewport,
   });
   // The planner keeps the lane inside the visible band, so one shorter than the measured-safe floor
-  // cannot carry a pull that commits (0/5 below ~300px on an iOS RN list). Dispatching it would
-  // report a refresh the pull provably cannot trigger, so the refusal names the band it measured:
-  // not the container's own frame once an ancestor clips it.
+  // cannot commit a refresh (0/5 below ~300px on an iOS RN list). Dispatching it would report a
+  // refresh the pull cannot trigger, so the refusal names the band it measured.
   if (pull.pixels < REFRESH_PULL_MIN_PX) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -468,10 +448,7 @@ async function performRefreshPull(
 }
 
 /**
- * The gesture viewport the pull is planned in: the owner's own live read when it admitted one,
- * else the viewport the fresh capture itself names — so the container rect and the plan share
- * one coordinate space by construction.
- */
+/** The viewport the pull is planned in: the owner's live read, else the capture's own. */
 async function refreshGestureViewport(
   runtime: BoundScrollRefresh,
   nodes: readonly (RawSnapshotNode | SnapshotNode)[],
@@ -503,9 +480,8 @@ async function refreshGestureViewport(
 
 /**
  * The top-edge verdict a `scroll refresh` refuses or plans on, read off a freshly captured tree
- * inside the executor, before the pull dispatches. The session's stored snapshot is not used: a
- * previous gesture may have expired it (ADR 0014), and the stored tree can no longer honestly answer
- * whether the scroller still hides content above.
+ * before the pull dispatches. The session's stored snapshot is not used: an earlier gesture may have
+ * expired it (ADR 0014), so it cannot answer whether content is still hidden above.
  */
 async function readCapturedTopEdgeState(
   runtime: BoundScrollRefresh,
