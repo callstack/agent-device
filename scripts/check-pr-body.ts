@@ -62,9 +62,12 @@ function withoutComments(text: string): string {
 }
 
 function bodyViolations(title: string, body: string): string[] {
-  const prose = withoutComments(body.split(BOT_FOOTER)[0] ?? '')
+  // A fenced block becomes a bare fence: it keeps its section non-empty, hides a `<!--` inside it
+  // from the comment strip, and adds no word to the count.
+  const fenceless = body
     .replaceAll('\r', '')
-    .replaceAll(/^(`{3,}|~{3,})[\s\S]*?^\1[^\n]*$/gm, '');
+    .replaceAll(/^(`{3,}|~{3,})[\s\S]*?^\1[^\n]*$/gm, '```');
+  const prose = withoutComments(fenceless.split(BOT_FOOTER)[0] ?? '');
   const violations = requiredSections(title)
     .filter((heading) => !sectionText(prose, heading))
     .map((heading) => `Add a "## ${heading}" section: ${SECTION_HINTS[heading]}.`);

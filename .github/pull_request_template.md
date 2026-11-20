@@ -1,6 +1,6 @@
 <!--
 Delete these comments. The `pr-body` gate in CI enforces the headings below, and reads no prose from
-one. Keep the body under 250 words outside code blocks and tables.
+one. Keep the body under 250 words outside code blocks.
 -->
 
 ## Summary
