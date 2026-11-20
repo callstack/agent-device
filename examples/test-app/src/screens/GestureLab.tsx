@@ -528,11 +528,14 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
               setReorderDrag({ label, dy });
             }}
             onDragEnd={() => setReorderDrag(null)}
-            onDrop={(dy) =>
+            onDrop={(dy) => {
+              // Commit and clear together: a render with the new order and the old travel would
+              // place the row one drag further than it was dropped.
               setReorderOrder((current) =>
                 movedBy(current, label, Math.round(dy / reorderRowHeightPx)),
-              )
-            }
+              );
+              setReorderDrag(null);
+            }}
             onHoldActivated={() => {
               setReorderHoldActivated(true);
               setReorderDrag({ label, dy: 0 });
