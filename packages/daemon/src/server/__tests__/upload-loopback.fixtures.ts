@@ -58,13 +58,24 @@ export type ParsedResponse = { status: number; headers: Record<string, string>; 
 /**
  * Collects the HTTP/1.1 responses a raw client socket receives. `responses(count)` resolves
  * once that many responses are complete (headers plus a Content-Length body), whatever the
- * TCP chunking; `ended` resolves on the server's FIN; `errors` records any reset.
+ * TCP chunking, and rejects when a reset or the server's FIN arrives first; `ended` resolves on
+ * the server's FIN; `errors` records any reset.
  */
 export function readResponses(socket: net.Socket) {
   let buffer = '';
   const parsed: ParsedResponse[] = [];
-  const waiters: Array<{ count: number; resolve: (responses: ParsedResponse[]) => void }> = [];
+  const waiters: Array<{
+    count: number;
+    resolve: (responses: ParsedResponse[]) => void;
+    reject: (reason: unknown) => void;
+  }> = [];
   const errors: unknown[] = [];
+  let finished: Error | undefined;
+  // A reset or a FIN before the awaited responses is the failure to report, not a 3 s wait.
+  const fail = (reason: Error): void => {
+    finished ??= reason;
+    for (const waiter of waiters.splice(0)) waiter.reject(reason);
+  };
   const parse = () => {
     for (;;) {
       const next = parseOneResponse(buffer);
@@ -82,15 +93,24 @@ export function readResponses(socket: net.Socket) {
       waiter.resolve(parsed.slice(0, waiter.count));
     }
   });
-  socket.on('error', (error) => errors.push(error));
+  socket.on('error', (error) => {
+    errors.push(error);
+    fail(error);
+  });
   const ended = new Promise<void>((resolve) => socket.once('end', () => resolve()));
+  socket.once('end', () =>
+    fail(new Error(`the connection ended after ${parsed.length} complete response(s)`)),
+  );
   return {
     errors,
     ended,
-    responses: (count: number) =>
-      parsed.length >= count
-        ? Promise.resolve(parsed.slice(0, count))
-        : new Promise<ParsedResponse[]>((resolve) => waiters.push({ count, resolve })),
+    responses: (count: number) => {
+      if (parsed.length >= count) return Promise.resolve(parsed.slice(0, count));
+      if (finished) return Promise.reject(finished);
+      return new Promise<ParsedResponse[]>((resolve, reject) =>
+        waiters.push({ count, resolve, reject }),
+      );
+    },
   };
 }
 
