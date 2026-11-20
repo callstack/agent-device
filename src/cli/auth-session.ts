@@ -380,9 +380,12 @@ async function resolveCliSessionAccess(options: {
 
 /**
  * Stores the credential that replaced the one this command sent. The session file is read
- * again first: when another command, a login or a logout changed it during the refresh, that
- * change wins and nothing is written. A failed write keeps the command's access token and
- * warns, because the cloud may already refuse the old credential.
+ * again first: a change that is visible on that read (another command's store, a login, a
+ * logout) wins, and nothing is written. The read and the write are not one atomic step. They
+ * need not be: under the rotation contract (see the refresh request) at most one replacement
+ * exists for a credential, so two commands never hold different replacements to store.
+ * A failed write keeps the command's access token and warns, because the cloud refuses the
+ * old credential after its grace period.
  */
 function storeRotatedCredential(options: {
   stateDir: string;
@@ -423,7 +426,11 @@ async function refreshAgentToken(options: {
     body: {
       refreshCredential: options.session.refreshCredential,
       // This CLI stores a replacement credential from the response, so the cloud may rotate it.
-      rotatesRefreshCredential: true,
+      // Commands run in parallel and each refreshes, so a cloud that rotates must: issue at most
+      // one replacement for a credential; answer a request that still presents the replaced
+      // credential with an access token and no further replacement; and keep the replaced
+      // credential valid for a grace period that covers commands already in flight.
+      acceptsRotatedRefreshCredential: true,
       tenant: options.flags.tenant,
       runId: options.flags.runId,
       daemonBaseUrl: options.flags.daemonBaseUrl,
