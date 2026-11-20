@@ -9,7 +9,13 @@ import type {
 } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
-import type { HarmonyInventoryConfig } from './inventory-config.ts';
+
+/** The raw HarmonyOS toolchain roots the plugin was configured with, captured inertly by its host. */
+export type HarmonyInventoryConfig = Readonly<{
+  hdcSdkPath?: string;
+  devecoSdkHome?: string;
+  commandLineToolsHome?: string;
+}>;
 
 const PROBE_TIMEOUT_MS = 10_000;
 

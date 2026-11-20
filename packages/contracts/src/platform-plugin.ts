@@ -7,7 +7,7 @@ import type { WebProvider } from './web-provider.ts';
 import type { VegaToolProvider } from './vega-tool-provider.ts';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
@@ -113,6 +113,41 @@ export type VegaPlatformSelection = Readonly<{
   get(): VegaPlatformRegistration;
 }>;
 
+/**
+ * What the core asks of the HarmonyOS plugin. The toolchain probe answers `doctor --platform
+ * harmonyos`; the toolchain preparation runs the plugin's own device discovery and log streaming,
+ * which need the host's documented SDK roots. Every other HarmonyOS operation — HDC discovery,
+ * probing, interaction, capture, recording, performance — the package owns.
+ */
+export type HarmonyPlatformOperations = Readonly<{
+  toolchainCheck(): Promise<DoctorCheck>;
+  /**
+   * Prepends the HarmonyOS toolchain roots that hold an `hdc` binary to `env`'s PATH, so a spawn
+   * sees the same HDC an interactive shell does. The core hands over the host environment it
+   * captured: the plugin must not read `process.env` itself (ADR 0019).
+   */
+  prepareToolchain(env: EnvMap): Promise<void>;
+}>;
+
+export type HarmonyPlatformRegistration = Readonly<{
+  family: 'harmonyos';
+  inventoryModule: InventoryPlatformModule<'harmonyos'>;
+  runtimeModule: PlatformRuntimeModule & { readonly family: 'harmonyos' };
+  createInteractor: PlatformPlugin['createInteractor'];
+  operations: HarmonyPlatformOperations;
+}>;
+
+/**
+ * How the running process answers for the HarmonyOS family, installed or not. `get()` raises the
+ * selection's own typed outcome when the plugin is absent or failed to load, and `toolchainCheck`
+ * of the toolchain row comes from it either way: `doctor --platform harmonyos` names the install
+ * command rather than reporting nothing.
+ */
+export type HarmonyPlatformSelection = Readonly<{
+  active?: HarmonyPlatformRegistration;
+  get(): HarmonyPlatformRegistration;
+}>;
+
 export type PlatformPluginSet<Plugin extends PlatformPlugin = PlatformPlugin> =
   PlatformModuleRegistry<{ family: Platform; plugin: Plugin }>;
 
@@ -120,6 +155,7 @@ export type PlatformModuleSelection = Readonly<{
   interactors: PlatformPluginSet;
   web: WebPlatformSelection;
   vega: VegaPlatformSelection;
+  harmony: HarmonyPlatformSelection;
   inventoryModules: readonly InventoryPlatformModule[];
   runtimeModules: readonly PlatformRuntimeModule[];
   reportAbsent(family: Platform): AppError;

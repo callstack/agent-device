@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
   ScreenRecordingLiveSnapshot,
   ScreenRecordingRuntimeOperations,
@@ -21,11 +20,29 @@ import {
   createHarmonyRecordingEnvelope,
   type HarmonyRecordingDescriptor,
 } from './recovery.ts';
+import { createHarmonyScreenRecorder, type HarmonyScreenRecorder } from './recorder.ts';
 
-type HarmonyScreenRecordingOperationHost = Readonly<{
-  screenRecording: Pick<ScreenRecordingRuntimeHost, 'harmony' | 'finalize' | 'outputs'>;
+/**
+ * The host the HarmonyOS recording operations consume: output preparation and video finalization
+ * from the shared runtime host, plus the HDC recorder this family drives. The recorder is part of
+ * the seam rather than a shared host facet, because no other family uses it.
+ */
+export type HarmonyScreenRecordingOperationHost = Readonly<{
+  screenRecording: Pick<PlatformRuntimeHost['screenRecording'], 'finalize' | 'outputs'>;
   clock: PlatformRuntimeHost['clock'];
+  recorder: HarmonyScreenRecorder;
 }>;
+
+/** Binds the shared runtime host's recording authorities to the HDC recorder this family drives. */
+export function createHarmonyRecordingHost(
+  host: PlatformRuntimeHost,
+): HarmonyScreenRecordingOperationHost {
+  return Object.freeze({
+    screenRecording: host.screenRecording,
+    clock: host.clock,
+    recorder: createHarmonyScreenRecorder(),
+  });
+}
 
 export function harmonyScreenRecordingFacts(device: DeviceInfo) {
   return device.kind === 'device'
@@ -44,9 +61,10 @@ export function createHarmonyScreenRecordingOperations(params: {
   signal: AbortSignal;
 }): ScreenRecordingRuntimeOperations {
   const { host, device, owner, signal } = params;
+  const { recorder } = host;
   return Object.freeze({
     screenRecordingStart: async (input) =>
-      await startHarmonyRecording({ host, device, owner, input, signal }),
+      await startHarmonyRecording({ host, recorder, device, owner, input, signal }),
     screenRecordingReattach: async () => ({
       status: 'unreattachable' as const,
       reason: 'transport-not-reattachable' as const,
@@ -59,12 +77,13 @@ export function createHarmonyScreenRecordingOperations(params: {
 
 async function startHarmonyRecording(params: {
   host: HarmonyScreenRecordingOperationHost;
+  recorder: HarmonyScreenRecorder;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   input: ScreenRecordingStartInput;
   signal: AbortSignal;
 }) {
-  const { host, device, owner, input, signal } = params;
+  const { host, recorder, device, owner, input, signal } = params;
   if (input.scope === 'app') {
     throw new AppError(
       'INVALID_ARGS',
@@ -87,11 +106,11 @@ async function startHarmonyRecording(params: {
   };
   let start;
   try {
-    start = await host.screenRecording.harmony.start(device, fileName, signal);
+    start = await recorder.start(device, fileName, signal);
     signal.throwIfAborted();
   } catch (error) {
     if (signal.aborted) {
-      await cleanupLiveHarmonyDescriptor(host, device, descriptor).catch(() => {});
+      await cleanupLiveHarmonyDescriptor(recorder, device, descriptor).catch(() => {});
       throw signal.reason;
     }
     throw error;
@@ -100,22 +119,22 @@ async function startHarmonyRecording(params: {
   try {
     signal.throwIfAborted();
   } catch (error) {
-    await cleanupLiveHarmonyDescriptor(host, device, descriptor).catch(() => {});
+    await cleanupLiveHarmonyDescriptor(recorder, device, descriptor).catch(() => {});
     throw error;
   }
   const initial = snapshot(input);
   let recorderStopped = false;
   const stopRecorder = async () => {
     if (recorderStopped) return;
-    const stop = await host.screenRecording.harmony.stop(device);
+    const stop = await recorder.stop(device);
     assertHarmonyRecorderCommandSucceeded(stop, 'stop');
     recorderStopped = true;
   };
   const handle = createScreenRecordingLiveHandle(initial, {
     finish: async (current) =>
-      await finishHarmonyRecording(host, device, current, descriptor, stopRecorder),
+      await finishHarmonyRecording(host, recorder, device, current, descriptor, stopRecorder),
     forceCleanup: async () =>
-      await cleanupLiveHarmonyDescriptor(host, device, descriptor, stopRecorder),
+      await cleanupLiveHarmonyDescriptor(recorder, device, descriptor, stopRecorder),
   });
   return Object.freeze({
     pendingHandle: new PendingTransferGuard(handle),
@@ -139,23 +158,24 @@ function snapshot(input: ScreenRecordingStartInput): ScreenRecordingLiveSnapshot
 
 async function finishHarmonyRecording(
   host: HarmonyScreenRecordingOperationHost,
+  recorder: HarmonyScreenRecorder,
   device: DeviceInfo,
   snapshot: ScreenRecordingLiveSnapshot,
   descriptor: HarmonyRecordingDescriptor,
   stopRecorder: () => Promise<void>,
 ) {
   await stopRecorder();
-  const mediaUri = await host.screenRecording.harmony.findMedia(device, descriptor.fileName);
+  const mediaUri = await recorder.findMedia(device, descriptor.fileName);
   if (!mediaUri)
     throw new Error(`failed to find finalized HarmonyOS recording '${descriptor.fileName}'`);
-  const staged = await stageHarmonyMedia(host, device, descriptor, mediaUri);
+  const staged = await stageHarmonyMedia(host, recorder, device, descriptor, mediaUri);
   if (!staged) {
     throw new Error(
       `failed to finalize HarmonyOS recording: ${descriptor.fileName} did not produce a non-empty media file`,
     );
   }
   try {
-    const pulled = await host.screenRecording.harmony.pull(device, {
+    const pulled = await recorder.pull(device, {
       remotePath: descriptor.remotePath,
       outputPath: snapshot.outPath,
     });
@@ -167,7 +187,7 @@ async function finishHarmonyRecording(
       targetLabel: 'HarmonyOS recording',
     });
     const cleanupWarning = await cleanupCompletedHarmonyArtifacts(
-      host,
+      recorder,
       device,
       descriptor,
       mediaUri,
@@ -187,25 +207,21 @@ async function finishHarmonyRecording(
       },
     );
   } catch (error) {
-    await host.screenRecording.harmony.remove(device, descriptor.remotePath).catch(() => {});
+    await recorder.remove(device, descriptor.remotePath).catch(() => {});
     throw error;
   }
 }
 
 async function cleanupCompletedHarmonyArtifacts(
-  host: HarmonyScreenRecordingOperationHost,
+  recorder: HarmonyScreenRecorder,
   device: DeviceInfo,
   descriptor: HarmonyRecordingDescriptor,
   mediaUri: string,
 ): Promise<string | undefined> {
   const unconfirmed: string[] = [];
-  if (
-    !(await confirmedRemoval(() =>
-      host.screenRecording.harmony.remove(device, descriptor.remotePath),
-    ))
-  )
+  if (!(await confirmedRemoval(() => recorder.remove(device, descriptor.remotePath))))
     unconfirmed.push('staging artifact');
-  if (!(await confirmedRemoval(() => host.screenRecording.harmony.removeMedia(device, mediaUri))))
+  if (!(await confirmedRemoval(() => recorder.removeMedia(device, mediaUri))))
     unconfirmed.push('media-library artifact');
   return unconfirmed.length === 0
     ? undefined
@@ -232,19 +248,20 @@ function appendCompletionWarning(
 
 async function stageHarmonyMedia(
   host: HarmonyScreenRecordingOperationHost,
+  recorder: HarmonyScreenRecorder,
   device: DeviceInfo,
   descriptor: HarmonyRecordingDescriptor,
   mediaUri: string,
 ): Promise<boolean> {
   let previousNonzeroSize: number | undefined;
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    await host.screenRecording.harmony.remove(device, descriptor.remotePath).catch(() => {});
-    const staged = await host.screenRecording.harmony.stageMedia(device, {
+    await recorder.remove(device, descriptor.remotePath).catch(() => {});
+    const staged = await recorder.stageMedia(device, {
       mediaUri,
       remotePath: descriptor.remotePath,
     });
     if (staged) {
-      const size = await host.screenRecording.harmony.stagedFileSize(device, descriptor.remotePath);
+      const size = await recorder.stagedFileSize(device, descriptor.remotePath);
       if (size !== undefined && size > 0 && size === previousNonzeroSize) return true;
       previousNonzeroSize = size !== undefined && size > 0 ? size : undefined;
     } else {
@@ -256,22 +273,26 @@ async function stageHarmonyMedia(
 }
 
 async function cleanupLiveHarmonyDescriptor(
-  host: HarmonyScreenRecordingOperationHost,
+  recorder: HarmonyScreenRecorder,
   device: DeviceInfo,
   descriptor: HarmonyRecordingDescriptor,
-  stopRecorder: () => Promise<void> = async () => {
-    const stop = await host.screenRecording.harmony.stop(device);
-    assertHarmonyRecorderCommandSucceeded(stop, 'stop');
-  },
+  stopRecorder?: () => Promise<void>,
 ): Promise<CleanupOutcome> {
   const failures = [
-    await cleanupFailure(stopRecorder),
+    await cleanupFailure(
+      stopRecorder ??
+        (async () => {
+          assertHarmonyRecorderCommandSucceeded(await recorder.stop(device), 'stop');
+        }),
+    ),
     await cleanupFailure(async () => {
-      if (!(await host.screenRecording.harmony.remove(device, descriptor.remotePath))) {
+      if (!(await recorder.remove(device, descriptor.remotePath))) {
         throw new Error('HarmonyOS recording staging artifact removal was not confirmed');
       }
     }),
-    await cleanupFailure(async () => await removeHarmonyMedia(host, device, descriptor.fileName)),
+    await cleanupFailure(
+      async () => await removeHarmonyMedia(recorder, device, descriptor.fileName),
+    ),
   ];
   const failure = failures.find((candidate) => candidate !== undefined);
   if (failure !== undefined) {
@@ -285,12 +306,12 @@ async function cleanupLiveHarmonyDescriptor(
 }
 
 async function removeHarmonyMedia(
-  host: HarmonyScreenRecordingOperationHost,
+  recorder: HarmonyScreenRecorder,
   device: DeviceInfo,
   fileName: string,
 ): Promise<void> {
-  const mediaUri = await host.screenRecording.harmony.findMedia(device, fileName);
-  if (mediaUri && !(await host.screenRecording.harmony.removeMedia(device, mediaUri))) {
+  const mediaUri = await recorder.findMedia(device, fileName);
+  if (mediaUri && !(await recorder.removeMedia(device, mediaUri))) {
     throw new Error('HarmonyOS recording media removal was not confirmed');
   }
 }

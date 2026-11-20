@@ -165,3 +165,72 @@ test('doctor without a Vega selector reports no Vega row when the plugin is abse
     ),
   ).toBeUndefined();
 });
+
+test('doctor targeted at HarmonyOS reports the absent plugin with its install command', async () => {
+  // Same contract as Vega: the row is the composition's own absence report, so it names the same
+  // package and command a HarmonyOS discovery request answers with.
+  const { harmony } = composePlatformPlugins([], []);
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    undefined,
+    harmony,
+  ).toolchainCheck('harmonyos', context);
+
+  expect(check?.id).toBe('toolchain');
+  expect(check?.status).toBe('fail');
+  expect(check?.summary).toContain('@agent-device/harmonyos');
+  expect(check?.hint).toContain('agent-device plugins add @agent-device/harmonyos');
+  expect(check?.command).toMatch(/^agent-device plugins add @agent-device\/harmonyos/);
+  expect(check?.evidence).toMatchObject({
+    code: 'UNSUPPORTED_PLATFORM',
+    reason: 'plugin-not-installed',
+    family: 'harmonyos',
+    package: '@agent-device/harmonyos',
+  });
+});
+
+test('doctor targeted at a HarmonyOS plugin that failed to load reports what the plugin said', async () => {
+  const { harmony } = composePlatformPlugins([], [
+    {
+      platform: 'harmonyos',
+      source: 'store',
+      package: '@agent-device/harmonyos',
+      version: '0.22.0-dev',
+      state: 'failed',
+      credentials: { variables: [], byBackend: {} },
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Plugin exited during setup',
+        reason: 'setup-threw',
+      },
+    },
+  ] satisfies readonly PluginInventoryEntry[]);
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    undefined,
+    harmony,
+  ).toolchainCheck('harmonyos', context);
+
+  expect(check?.status).toBe('fail');
+  expect(check?.summary).toContain('Plugin exited during setup');
+  expect(check?.evidence).toMatchObject({
+    code: 'COMMAND_FAILED',
+    reason: 'setup-threw',
+    family: 'harmonyos',
+    package: '@agent-device/harmonyos',
+  });
+});
+
+test('doctor without a HarmonyOS selector reports no HarmonyOS row when the plugin is absent', async () => {
+  const { harmony } = composePlatformPlugins([], []);
+  expect(
+    await createHostDiagnostics(
+      createLiveTestHostEnvironment(),
+      undefined,
+      undefined,
+      harmony,
+    ).toolchainCheck(undefined, context),
+  ).toBeUndefined();
+});

@@ -9,25 +9,15 @@ const { pressHarmonyKeyboardKey, snapshotHarmony } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('./index.ts', () => ({
-  appSwitcherHarmony: vi.fn(),
-  backHarmony: vi.fn(),
-  closeHarmonyApp: vi.fn(),
-  doubleClickHarmony: vi.fn(),
-  fillHarmony: vi.fn(),
-  homeHarmony: vi.fn(),
-  longPressHarmony: vi.fn(),
-  openHarmonyApp: vi.fn(),
-  performHarmonyGesture: vi.fn(),
-  pressHarmony: vi.fn(),
+// The interactor imports the owning modules directly, so the test stubs them where they live.
+vi.mock('./input-actions.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./input-actions.ts')>()),
   pressHarmonyKeyboardKey,
-  readHarmonyGestureViewport: vi.fn(),
-  screenshotHarmony: vi.fn(),
-  scrollHarmony: vi.fn(),
-  setHarmonyOrientation: vi.fn(),
-  setHarmonySetting: vi.fn(),
+}));
+
+vi.mock('./snapshot.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./snapshot.ts')>()),
   snapshotHarmony,
-  typeHarmony: vi.fn(),
 }));
 
 import { createHarmonyInteractor } from './interactor.ts';

@@ -1,6 +1,8 @@
 import type { InventoryPlatformModule } from '@agent-device/contracts/platform-module';
 import type { Platform } from '@agent-device/kernel/device';
 import type {
+  HarmonyPlatformOperations,
+  HarmonyPlatformRegistration,
   PlatformPlugin,
   VegaPlatformOperations,
   VegaPlatformRegistration,
@@ -61,7 +63,9 @@ export type PlatformSetup<Family extends Platform = Platform> = Family extends P
               ): Promise<T>;
               operations: VegaPlatformOperations;
             }>
-          : unknown)
+          : Family extends 'harmonyos'
+            ? Readonly<{ operations: HarmonyPlatformOperations }>
+            : unknown)
   : never;
 
 export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family extends Platform
@@ -69,12 +73,14 @@ export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family
     ? WebPlatformRegistration
     : Family extends 'vega'
       ? VegaPlatformRegistration
-      : Readonly<{
-          family: Family;
-          createInteractor: PlatformPlugin['createInteractor'];
-          inventoryModule: InventoryPlatformModule<Family>;
-          runtimeModule: PlatformRuntimeModule & { readonly family: Family };
-        }>
+      : Family extends 'harmonyos'
+        ? HarmonyPlatformRegistration
+        : Readonly<{
+            family: Family;
+            createInteractor: PlatformPlugin['createInteractor'];
+            inventoryModule: InventoryPlatformModule<Family>;
+            runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+          }>
   : never;
 
 export type PlatformContribution = {
