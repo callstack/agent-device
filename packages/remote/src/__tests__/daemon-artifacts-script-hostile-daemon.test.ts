@@ -7,8 +7,8 @@
 // request the way a hostile daemon would and asserts where the client's files ended up.
 //
 // The script route reaches the filesystem in two places only. A version is matched to a record by a HASH of
-// the publication identity, and its bytes are staged in a directory the client makes with `mkdtempSync` and
-// names `script.ad` itself. That is what this file pins: a response string that would resolve outside those
+// the publication identity, and its bytes are held in memory until host-kit commits them at the destination
+// that record names. That is what this file pins: a response string that would resolve outside those
 // two places has to be refused, and it has to be refused without creating anything the daemon named.
 //
 // Receipt cases send a real `batch`, because the client reads `scriptDeliveryReceipt` only on that command:
@@ -401,7 +401,7 @@ skipOnWindows(
         ),
         hostile,
       ).toEqual([]);
-      // One record, its exact name, the destination the CLIENT recorded, revision 1, and nothing staged.
+      // One record, its exact name, the destination the CLIENT recorded, revision 1, and nothing else.
       expect(recordsAsWritten(world, recordsAtSend), hostile).toEqual([
         {
           name: recordsAtSend[0],

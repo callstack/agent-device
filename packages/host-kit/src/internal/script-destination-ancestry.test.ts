@@ -358,9 +358,9 @@ skipOnWindows(
   () => {
     // `work -> priv/x`, `priv/y` is private and `home/y` is open to others. The kernel walks `work` into its
     // target and steps back from THERE, so the entry is created in `priv/y`. `path.dirname` of the same
-    // spelling answers `home/y`, so a publisher that stages beside the spelled parent writes its temp file
+    // spelling answers `home/y`, so a publisher that writes beside the spelled parent puts its temp file
     // into ground the rule never judged — where anyone can list it and put their own bytes behind that name
-    // before the rename. The staging directory has to be the walk's answer.
+    // before the rename. The temp file's directory has to be the walk's answer.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const sharedY = directoryWith(path.join(home, 'y'), 0o777);

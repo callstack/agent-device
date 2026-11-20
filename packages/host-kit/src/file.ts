@@ -9,7 +9,6 @@ export {
   type PrivateRootAdmission,
   prepareScriptDestination,
   publishScriptFileSync,
-  type ScriptDestination,
   type ScriptDestinationOptions,
 } from './internal/script-destination.ts';
 export { scriptAncestryReason } from './internal/script-destination-refusal.ts';

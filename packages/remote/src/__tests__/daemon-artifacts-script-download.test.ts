@@ -261,6 +261,24 @@ test('a recording whose first download failed still delivers later versions', as
   expect(records(stateDir)).toEqual([]);
 });
 
+test('a later version stays exclusive while no version was saved yet', async () => {
+  // Version 1 never arrived, so the record still says revision 0: version 2 is the first one saved.
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({
+    v1: { body: 'open Demo\n', broken: true },
+    v2: { body: 'open Demo\nclick Next\n' },
+  });
+  const { id, response } = await open(baseUrl, stateDir, destination);
+  expect(response).toEqual(deliveryFailure('script_download_failed'));
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.writeFileSync(destination, 'appeared\n');
+
+  await expect(
+    answer(baseUrl, stateDir, request('click'), { artifacts: [script('v2', 2, id)] }),
+  ).resolves.toEqual(deliveryFailure('script_target_exists'));
+  expect(fs.readFileSync(destination, 'utf8')).toBe('appeared\n');
+});
+
 test('a session-script artifact under another field writes nothing', async () => {
   const { root, stateDir, destination } = journey();
   const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' }, hostile: { body: 'x\n' } });

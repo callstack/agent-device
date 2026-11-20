@@ -132,25 +132,28 @@ async function requestRemoteArtifact<T>(
     let timeoutError: AppError | undefined;
     const operation = new AbortController();
     const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
-    const settle = (result: T | undefined, error?: Error) => {
-      if (settled) return;
+    const settleOnce = (): boolean => {
+      if (settled) return false;
       settled = true;
       clearTimeout(timeoutHandle);
-      if (error) {
-        // A cleanup that fails is reported on its own; the caller still receives the download's own error.
-        void destination
-          .cleanupOnError()
-          .catch((cleanupError: unknown) =>
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'remote_artifact_cleanup_failed',
-              data: { artifactId: params.artifactId, error: String(cleanupError) },
-            }),
-          )
-          .finally(() => reject(error));
-        return;
-      }
-      resolve(result as T);
+      return true;
+    };
+    const succeed = (result: T) => {
+      if (settleOnce()) resolve(result);
+    };
+    const fail = (error: Error) => {
+      if (!settleOnce()) return;
+      // A cleanup that fails is reported on its own; the caller still receives the download's own error.
+      void destination
+        .cleanupOnError()
+        .catch((cleanupError: unknown) =>
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'remote_artifact_cleanup_failed',
+            data: { artifactId: params.artifactId, error: String(cleanupError) },
+          }),
+        )
+        .finally(() => reject(error));
     };
     const request = transport.request(
       {
@@ -169,9 +172,8 @@ async function requestRemoteArtifact<T>(
         if (res.statusCode !== 200) {
           let body = '';
           res.setEncoding('utf8');
-          const fail = () => {
-            settle(
-              undefined,
+          const failWithStatus = () => {
+            fail(
               new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
                 artifactId: params.artifactId,
                 statusCode: res.statusCode,
@@ -184,22 +186,19 @@ async function requestRemoteArtifact<T>(
             body += chunk.slice(0, MAX_ERROR_BODY_CHARS - body.length);
             if (body.length < MAX_ERROR_BODY_CHARS) return;
             // The diagnostic is full: the rest of an error answer is never read.
-            fail();
+            failWithStatus();
             res.destroy();
           });
-          res.on('end', fail);
-          res.on('error', fail);
-          res.on('aborted', fail);
+          res.on('end', failWithStatus);
+          res.on('error', failWithStatus);
+          res.on('aborted', failWithStatus);
           return;
         }
         materializationStarted = true;
         void destination.materialize(res, operation.signal).then(
-          (materializedPath) => settle(materializedPath),
+          (materializedPath) => succeed(materializedPath),
           (error: unknown) =>
-            settle(
-              undefined,
-              timeoutError ?? (error instanceof Error ? error : new Error(String(error))),
-            ),
+            fail(timeoutError ?? (error instanceof Error ? error : new Error(String(error)))),
         );
       },
     );
@@ -213,16 +212,15 @@ async function requestRemoteArtifact<T>(
       request.destroy(timeoutError);
       // The abort-aware materializer cleans its staging area. Do not reject before it finishes,
       // or extraction could keep writing after the caller observes the timeout.
-      if (!materializationStarted) settle(undefined, timeoutError);
+      if (!materializationStarted) fail(timeoutError);
     }, timeoutMs);
     request.on('error', (error) => {
       if (materializationStarted) return;
       if (error instanceof AppError) {
-        settle(undefined, timeoutError ?? error);
+        fail(timeoutError ?? error);
         return;
       }
-      settle(
-        undefined,
+      fail(
         new AppError(
           'COMMAND_FAILED',
           'Failed to download remote artifact',

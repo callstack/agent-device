@@ -281,7 +281,11 @@ test('an in-memory fetch returns a body of exactly its cap and refuses one byte 
 
   try {
     assert.equal((await fetchFrom(port, 1024)).toString(), 'x'.repeat(1024));
-    await assert.rejects(() => fetchFrom(port, 1023));
+    await assert.rejects(
+      () => fetchFrom(port, 1023),
+      (error: unknown) =>
+        (error as { details?: Record<string, unknown> }).details?.reason === 'artifact_too_large',
+    );
   } finally {
     await closeLoopbackServer(server);
   }
