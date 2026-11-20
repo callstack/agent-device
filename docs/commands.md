@@ -539,6 +539,7 @@ agent-device hover @e12 --settle       # Web only: move the pointer without pres
 agent-device scroll down 0.5
 agent-device scroll down --pixels 320
 agent-device scroll down --until 'label="Sign in"'
+agent-device scroll refresh           # pull-to-refresh at the top of the list
 agent-device gesture pinch 2.0          # zoom in 2x
 agent-device gesture pinch 0.5 200 400 # zoom out at coordinates
 agent-device gesture rotate 35 200 420 # rotate app content
@@ -605,6 +606,7 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 ### Scroll
 
 - `scroll <direction> [amount]` takes the finger path as a fraction of the viewport (`0.5` is half), or `--pixels <n>` for a fixed distance. Large distances are clamped. The app's scroll physics decide the final offset, so a scroll does not land on an exact position.
+- `scroll refresh` is pull-to-refresh: one slow pull down (`scroll up 0.4 --duration-ms 1200` by default; an amount, `--pixels` or `--duration-ms` overrides it). Android aims the pull inside the scroll container. On iOS it runs down the middle of the screen, so a list that sits only in the top or bottom part of the screen is not pulled. A result of `movement: unchanged` means the pull changed nothing on screen, not that a refresh ran and found nothing new; check the app's own refresh indicator or content. It refuses with `reason: scroll_refresh_not_at_top` when content is hidden above; run `scroll top` first.
 - `scroll <direction> --until <selector>` repeats passes until the selector is on screen. A vertical search fails with `COMMAND_FAILED` and `reason: scroll_until_no_progress` if repeated captures show no progress in the selected scroll container. If content moved before stopping, the reason is `scroll_until_edge_reached`. If no container is found, it compares the visible tree. It stops after at most 12 gestures by default. For a longer list, use `scroll down --until 'id="row-512"' --max-passes 90` (1–200 gestures). The pass limit does not extend the 90-second request timeout. Large pass budgets can hit that timeout; inspect the current screen and continue with another search if that happens. Add an amount (`scroll down 0.8 --until <selector>`) to widen each pass. Use it in `.ad` scripts too, instead of fixed amounts that depend on screen size; see [Replay and E2E testing](/docs/replay-e2e).
 - Default snapshot text summarizes off-screen interactive content instead of listing refs. `scroll <direction> --settle` (and `back --settle`) waits for the UI to go quiet and returns the diff with fresh refs, so you don't need another `snapshot -i`. Settle is best-effort and never fails the action.
 - On Android, settle ignores an allowlist of system-bar containers and shade/keyguard status headers; other SystemUI overlays remain content. Appium settle also applies package rules for keyboard and system chrome.
