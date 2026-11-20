@@ -99,13 +99,6 @@ test.for<MaterializationCase>([
     expected: 'cwd/x',
   },
   {
-    name: 'a record stop accepts the echo of its start destination',
-    command: 'record',
-    localPath: 'client/clip.mp4',
-    fileName: 'clip.mp4',
-    expected: 'client/clip.mp4',
-  },
-  {
     name: 'a close does not authorize an unrelated response artifact destination',
     command: 'close',
     localPath: 'outside/shot.png',

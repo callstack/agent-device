@@ -32,6 +32,7 @@ export type RemoteArtifactDownload = RemoteArtifactRequest & {
   destinationPath: string;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
+  stagedFile?: boolean;
 };
 
 /** An artifact held in memory, stopped once it crosses `maxBytes`, whatever `Content-Length` announced. */
@@ -39,6 +40,16 @@ export type RemoteArtifactFetch = RemoteArtifactRequest & { maxBytes: number };
 
 function buildDownloadDestination(params: RemoteArtifactDownload) {
   const { destinationPath } = params;
+  if (params.stagedFile) {
+    return {
+      prepare: async () => {
+        await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      },
+      cleanupOnError: async () => {},
+      materialize: (res: http.IncomingMessage, signal: AbortSignal) =>
+        materializeStagedFile(res, destinationPath, signal),
+    };
+  }
   if (params.isDirectory) {
     return {
       prepare: async () => {
@@ -61,6 +72,24 @@ function buildDownloadDestination(params: RemoteArtifactDownload) {
       return destinationPath;
     },
   };
+}
+
+async function materializeStagedFile(
+  res: http.IncomingMessage,
+  destinationPath: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const parent = await fs.promises.realpath(path.dirname(destinationPath));
+  const staging = await fs.promises.mkdtemp(path.join(parent, '.agent-device-download-'));
+  const staged = path.join(staging, 'artifact');
+  try {
+    await pipeline(res, fs.createWriteStream(staged, { flags: 'wx', mode: 0o600 }), { signal });
+    signal.throwIfAborted();
+    await fs.promises.rename(staged, path.join(parent, path.basename(destinationPath)));
+    return destinationPath;
+  } finally {
+    await fs.promises.rm(staging, { recursive: true, force: true });
+  }
 }
 
 /** Fetches one artifact into memory. Nothing reaches the disk, so a failure leaves nothing behind. */

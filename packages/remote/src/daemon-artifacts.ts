@@ -535,6 +535,7 @@ async function downloadResponseArtifacts(
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
+  const recording = isRecordStop(req) ? recordingDelivery() : undefined;
   for (const artifact of artifacts) {
     if (isSessionScriptArtifact(artifact)) {
       await scripts?.publish(artifact, nextData, nextArtifacts);
@@ -545,18 +546,20 @@ async function downloadResponseArtifacts(
       continue;
     }
     if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
-    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
+    const destination = resolveMaterializedArtifactPath(artifact, req, host);
     const materializedPath = await downloadRemoteArtifact({
       ...endpoint,
       artifactId: artifact.artifactId,
-      destinationPath: downloadPath,
+      destinationPath: destination.path,
       requestScope: req.meta,
       // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
       // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
       // `downloadRemoteArtifact`).
-      isDirectory: artifact.artifactType === 'test-artifacts',
+      isDirectory: recording === undefined && artifact.artifactType === 'test-artifacts',
+      stagedFile: recording !== undefined,
     });
+    recording?.add(artifact.field, materializedPath, destination.fallback);
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
@@ -567,7 +570,54 @@ async function downloadResponseArtifacts(
     });
   }
   nextData.artifacts = nextArtifacts;
+  recording?.report(nextData);
   return { ok: true, data: nextData };
+}
+
+const RECORDING_DESTINATION_REASONS = {
+  notRequested: 'recording_destination_not_requested',
+} as const;
+
+type RecordingDestinationWarning = {
+  reason: typeof RECORDING_DESTINATION_REASONS.notRequested;
+  field: string;
+  path: string;
+};
+
+function recordingDelivery() {
+  const destinationWarnings: RecordingDestinationWarning[] = [];
+  const recordingPaths: string[] = [];
+  return {
+    add(field: string, written: string, fallback: boolean): void {
+      if (fallback) {
+        destinationWarnings.push({
+          reason: RECORDING_DESTINATION_REASONS.notRequested,
+          field,
+          path: written,
+        });
+      }
+      if (field === 'outPath' || field === 'chunkPath') recordingPaths.push(written);
+    },
+    report(data: Record<string, unknown>): void {
+      if (destinationWarnings.length > 0) {
+        data.recordingDestinationWarnings = destinationWarnings;
+        data.warnings = [
+          ...(Array.isArray(data.warnings) ? data.warnings : []),
+          ...destinationWarnings.map(
+            ({ path: written }) =>
+              `Saved remote recording file to ${written} in the current directory because this request named no destination.`,
+          ),
+        ];
+      }
+      // The daemon lists the first video and subsequent chunk artifacts in chunk order.
+      if (Array.isArray(data.chunks) && recordingPaths.length === data.chunks.length) {
+        data.chunks = data.chunks.map((chunk, index) => ({
+          ...chunk,
+          path: recordingPaths[index],
+        }));
+      }
+    },
+  };
 }
 
 function hasDownloadableArtifactId(
@@ -604,15 +654,12 @@ function withoutScriptFieldOwner(
 }
 
 /**
- * Whether this request finishes a capture whose destination this client named in an EARLIER
- * request (`record start`, a perf or trace start with an output path). The daemon echoes that
- * destination, and the paths it derives from it, as `localPath`, because this process kept no
- * record of it. The finishing actions mirror the daemon's own (`request-finalization.ts`).
+ * Whether this request finishes a trace or perf capture whose destination the daemon echoes
+ * from an earlier request. The finishing actions mirror `request-finalization.ts`.
  */
 function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
   const [first, second, third] = (req.positionals ?? []).map((value) => value.toLowerCase());
   switch (req.command) {
-    case 'record':
     case 'trace':
       return first === 'stop';
     case 'perf':
@@ -622,27 +669,46 @@ function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
   }
 }
 
+function isRecordStop(req: DaemonWireRequest): boolean {
+  return req.command === 'record' && req.positionals?.[0]?.toLowerCase() === 'stop';
+}
+
 /**
- * Where this client writes one downloaded artifact. The client chooses: a path it registered in
- * this request wins, and a response `localPath` is accepted only on a stop or report that echoes an
- * earlier request's destination. Anything else lands in cwd under the response file name's basename.
+ * A path from this request wins. A record stop without one can use only a plain name in cwd.
+ * Trace and perf stop or report can still use an echoed destination from an earlier request.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
-): string {
+): { path: string; fallback: boolean } {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
-  if (hasNonEmptyString(requestedPath)) return requestedPath;
+  if (hasNonEmptyString(requestedPath)) return { path: requestedPath, fallback: false };
+  if (isRecordStop(req)) {
+    const requested = artifact.field === 'outPath' ? req.positionals[1] : undefined;
+    if (hasNonEmptyString(requested)) {
+      return { path: resolveAbsoluteClientPath(requested, req.meta?.cwd, host), fallback: false };
+    }
+    const fileName = localFileName(artifact.fileName) ?? `recording-${crypto.randomUUID()}`;
+    return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: true };
+  }
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
-    return artifact.localPath;
+    return { path: artifact.localPath, fallback: false };
   }
   const responseName = path.basename(artifact.fileName?.trim() ?? '');
   const fileName =
     responseName && responseName !== '.' && responseName !== '..'
       ? responseName
       : `${path.basename(artifact.field)}-${Date.now()}`;
-  return path.resolve(req.meta?.cwd ?? host.cwd, fileName);
+  return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: false };
+}
+
+function localFileName(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value === '' || Buffer.byteLength(value) > 255) return;
+  if (/[<>:"/\\|?*\p{Cc}\p{Surrogate}]/u.test(value) || /[. ]$/.test(value)) return;
+  const stem = value.split('.')[0]?.trimEnd() ?? '';
+  if (/^(?:CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³]|CONIN\$|CONOUT\$)$/i.test(stem)) return;
+  return value;
 }
 
 type DownloadRemoteArtifactParams = {
@@ -654,6 +720,7 @@ type DownloadRemoteArtifactParams = {
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
+  stagedFile?: boolean;
 };
 
 export async function downloadRemoteArtifact(
