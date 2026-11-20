@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   confirmAndroidEmulatorLaunchProcessStopped: vi.fn(
     async (): Promise<LaunchedProcessStopConfirmation> => 'unconfirmed',
   ),
+  stopAndroidEmulatorLaunchProcess: vi.fn(
+    async (): Promise<LaunchedProcessStopConfirmation> => 'unconfirmed',
+  ),
 }));
 
 vi.mock('@agent-device/platform-apple/simulator-boot', () => mocks);
@@ -91,6 +94,9 @@ test('an Android emulator is the only device whose launch has a process to check
 
   await launchedDeviceProcess.confirmLaunchedProcessStopped(ANDROID_EMULATOR, LAUNCH_IDENTITY);
   expect(mocks.confirmAndroidEmulatorLaunchProcessStopped).toHaveBeenCalledWith(LAUNCH_IDENTITY);
+
+  await launchedDeviceProcess.stopLaunchedDeviceProcess(ANDROID_EMULATOR, LAUNCH_IDENTITY);
+  expect(mocks.stopAndroidEmulatorLaunchProcess).toHaveBeenCalledWith(LAUNCH_IDENTITY);
 });
 
 test('a device with no host launch process is answered without loading a probe', async () => {
@@ -101,9 +107,14 @@ test('a device with no host launch process is answered without loading a probe',
     expect(await launchedDeviceProcess.confirmLaunchedProcessStopped(device, LAUNCH_IDENTITY)).toBe(
       'stopped',
     );
+    // Nothing of the caller's own is left running for a device this host never launched.
+    expect(await launchedDeviceProcess.stopLaunchedDeviceProcess(device, LAUNCH_IDENTITY)).toBe(
+      'stopped',
+    );
   }
   expect(mocks.checkAndroidEmulatorLaunchProcess).not.toHaveBeenCalled();
   expect(mocks.confirmAndroidEmulatorLaunchProcessStopped).not.toHaveBeenCalled();
+  expect(mocks.stopAndroidEmulatorLaunchProcess).not.toHaveBeenCalled();
 });
 
 test('an Android launch that recorded no process is refused before the process is read', async () => {

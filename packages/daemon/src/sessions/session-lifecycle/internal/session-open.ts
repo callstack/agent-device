@@ -20,6 +20,7 @@ import { requestWebSession } from '../../../core/session-tenant-scope.ts';
 import { isWebSession } from '../../web-session-names.ts';
 import { resolveOpenTargetDeviceOptions } from '../../../core/open-target-device-resolution.ts';
 import { bootStoppedLocalAndroidDevice } from '../../../core/stopped-local-android-device.ts';
+import { requestCwd } from '../../../core/context.ts';
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import {
@@ -60,6 +61,7 @@ import {
   type RuntimeHintApplyOperation,
   type OpenRuntimeHintClearOperation,
 } from './session-open-execution.ts';
+import { withFailedOpenLaunchCleanup } from './session-open-launch-cleanup.ts';
 import { requireOpenSessionAdmission } from './session-open-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
@@ -75,6 +77,8 @@ export type SessionOpenCommandInput = Readonly<{
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  /** This daemon's policy denies `device-shutdown`, so a failed open may not stop its own launch. */
+  deviceShutdownDenied?: boolean;
 }>;
 
 // One lock table per session store, which is to say per daemon runtime.
@@ -405,12 +409,15 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
-  let runtimePlanAdmission = await admitDevice(resolved.device);
+  const runtimePlanAdmission = await admitDevice(resolved.device);
   if (runtimePlanAdmission.type === 'response')
     return { type: 'response', response: runtimePlanAdmission.response };
   // A stopped AVD boots before the session claim and the open locks, so the session, its claim
   // and its locks all key on the booted serial rather than the AVD name. The boot fact is stamped
   // on the pre-boot selection, because the booted serial is all the returned device shows.
+  // The launch report is what tells this open whether it started a device process at all, and
+  // whether the host could name it: a device that was already running reports nothing.
+  let launchReported = false;
   let androidLaunchIdentity: AndroidEmulatorLaunchIdentity | undefined;
   const booted = await bootStoppedLocalAndroidDevice({
     device: resolved.device,
@@ -419,44 +426,58 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     flags: req.flags ?? {},
     env: params.host.env,
     deadlineAtMs: startupDeadline,
-    onAndroidEmulatorLaunchIdentity: (identity) => {
+    onAndroidEmulatorLaunch: (identity) => {
+      launchReported = true;
       androidLaunchIdentity = identity;
     },
   });
   const selection = booted ? { ...markSelectionBootOccurred(resolved), device: booted } : resolved;
   const device = selection.device;
-  if (booted) {
-    await req.internal?.retainDeviceExecutionLock?.(device.id);
-    runtimePlanAdmission = await admitDevice(device);
-    if (runtimePlanAdmission.type === 'response')
-      return { type: 'response', response: runtimePlanAdmission.response };
-  }
-  const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
-  return await withKeyedLock(
-    firstSessionOpenLocks(sessionStore),
-    firstSessionOpenLockKey(device),
-    async () =>
-      await openNewSessionWithDeviceClaim({
-        host: params.host,
-        req,
-        startupDeadlineAtMs: startupDeadline,
-        sessionName,
-        logPath,
-        sessionStore,
-        device,
-        surface: surfaceResult,
-        openTarget,
-        lifecycle: admission.runtime,
-        runtimeHintPlan,
-        applyRuntimeHints: admission.applyRuntimeHints,
-        clearRuntimeHints: admission.clearRuntimeHints,
-        reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
-        platformServices: params.platformServices,
-        selection,
-        androidLaunchIdentity,
-      }),
-  );
+  // Everything after the boot is what may still fail, throw, or be canceled with this launch
+  // running and no session to own it.
+  return await withFailedOpenLaunchCleanup({
+    device,
+    launch: { attempted: launchReported, identity: androidLaunchIdentity },
+    sessionStore,
+    sessionName,
+    workspace: requestCwd(req, params.host),
+    deviceShutdownDenied: params.deviceShutdownDenied === true,
+    launchedProcess: params.platformServices.launchedDeviceProcess,
+    run: async () => {
+      let admitted: OpenRuntimePlanAdmission = runtimePlanAdmission;
+      if (booted) {
+        await req.internal?.retainDeviceExecutionLock?.(device.id);
+        admitted = await admitDevice(device);
+      }
+      if (admitted.type === 'response') return admitted;
+      const { admission, runtimeHintPlan } = admitted;
+      return await withKeyedLock(
+        firstSessionOpenLocks(sessionStore),
+        firstSessionOpenLockKey(device),
+        async () =>
+          await openNewSessionWithDeviceClaim({
+            host: params.host,
+            req,
+            startupDeadlineAtMs: startupDeadline,
+            sessionName,
+            logPath,
+            sessionStore,
+            device,
+            surface: surfaceResult,
+            openTarget,
+            lifecycle: admission.runtime,
+            runtimeHintPlan,
+            applyRuntimeHints: admission.applyRuntimeHints,
+            clearRuntimeHints: admission.clearRuntimeHints,
+            reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+            platformServices: params.platformServices,
+            selection,
+            androidLaunchIdentity,
+          }),
+      );
+    },
+  });
 }
 
 export async function handleSessionOpenCommands(

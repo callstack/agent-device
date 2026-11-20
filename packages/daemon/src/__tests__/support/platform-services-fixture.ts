@@ -8,6 +8,7 @@ import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-ga
 import {
   checkLaunchedProcessFixture,
   confirmLaunchedProcessStoppedFixture,
+  stopLaunchedDeviceProcessFixture,
 } from './launched-process-owner-fixture.ts';
 /**
  * The `DaemonPlatformServices` port as the daemon suites answer it: every member is a plain
@@ -33,6 +34,7 @@ export function daemonPlatformServicesFixture(
     launchedDeviceProcess: Object.freeze({
       checkLaunchedProcess: checkLaunchedProcessFixture,
       confirmLaunchedProcessStopped: confirmLaunchedProcessStoppedFixture,
+      stopLaunchedDeviceProcess: stopLaunchedDeviceProcessFixture,
     }),
     ensureLocalDeviceReady: ensureLocalDeviceReadyFixture,
     resolveRequestedOpenSurface: resolveRequestedOpenSurfaceFixture,

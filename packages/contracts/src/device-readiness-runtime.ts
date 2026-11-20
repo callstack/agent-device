@@ -7,7 +7,13 @@ export const BOOT_TIMEOUT_REASON = 'boot_timeout';
 export type AndroidEmulatorLaunchIdentity = Readonly<{ pid: number; startTime: string }>;
 
 export type EnsureReadyInput = Readonly<{
-  onAndroidEmulatorLaunchIdentity?: (identity: AndroidEmulatorLaunchIdentity) => void;
+  /**
+   * Reports the emulator process THIS boot launched, once the host knows about it: the recorded
+   * identity when the host could read the process's start time, and nothing when it could not. A boot
+   * that found the device already running reports nothing at all, so a caller that hears this can
+   * never mistake somebody else's running emulator for its own launch.
+   */
+  onAndroidEmulatorLaunch?: (identity: AndroidEmulatorLaunchIdentity | undefined) => void;
   serial?: string;
   androidSerialAllowlist?: readonly string[];
   /**

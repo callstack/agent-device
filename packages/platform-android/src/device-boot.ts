@@ -99,9 +99,21 @@ export async function checkAndroidEmulatorLaunchProcess(
 export async function confirmAndroidEmulatorLaunchProcessStopped(
   identity: AndroidEmulatorLaunchIdentity,
 ): Promise<LaunchedProcessStopConfirmation> {
-  const { stopProcessAndConfirmExit, waitForProcessExit } =
-    await import('@agent-device/host-kit/process');
+  const { waitForProcessExit } = await import('@agent-device/host-kit/process');
   if (await waitForProcessExit(identity.pid, GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS)) return 'stopped';
+  return await stopAndroidEmulatorLaunchProcess(identity);
+}
+
+/**
+ * Stops the emulator process this host launched for a device nobody owns: it stops the process
+ * directly, because no shutdown was ever asked of the device. Host-kit signals the pid only while the
+ * recorded start time still names it, so a launch that has already been replaced gets no signal and
+ * answers `stopped`: the launched process is gone, and somebody else's emulator is left alone.
+ */
+export async function stopAndroidEmulatorLaunchProcess(
+  identity: AndroidEmulatorLaunchIdentity,
+): Promise<LaunchedProcessStopConfirmation> {
+  const { stopProcessAndConfirmExit } = await import('@agent-device/host-kit/process');
   const stop = await stopProcessAndConfirmExit(
     { pid: identity.pid, identity: { startTime: identity.startTime } },
     LAUNCHED_PROCESS_STOP_BUDGET,
@@ -116,10 +128,8 @@ export async function confirmAndroidEmulatorLaunchProcessStopped(
  */
 const PROCESS_IDENTITY_TIMEOUT_MS = 1_000;
 
-/**
- * The graceful `adb emu kill` already had its own 15 s to work. Waiting the same again on a process
- * that is demonstrably ignoring it would double what one close may spend, so this confirms the exit
- * briefly and then escalates.
- */
+/** The graceful `adb emu kill` had its own 15 s; the close path confirms briefly, then escalates. */
 const GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS = 3_000;
+
+/** One stop costs at most 3 s: 1.5 s for SIGTERM, then 1.5 s for SIGKILL. */
 const LAUNCHED_PROCESS_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;
