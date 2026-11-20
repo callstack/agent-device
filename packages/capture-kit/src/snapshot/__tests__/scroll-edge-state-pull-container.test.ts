@@ -81,6 +81,19 @@ test('a list a clipping ancestor hides entirely yields an empty band, not its ra
   assert.deepEqual(pull?.pullRect, { x: 0, y: 750, width: 820, height: 0 });
 });
 
+test('an ancestor reporting a degenerate frame does not empty the pull band', async () => {
+  // A zero-height scroller frame is a capture artifact, not a clip: the root collection already
+  // skips such rects, so the band keeps every pixel the real clipping ancestors leave on screen.
+  const list = { x: 0, y: 200, width: 402, height: 400 };
+  const pull = await readScrollPullContainer([
+    app(),
+    scroller(2, 1, { x: 0, y: 100, width: 402, height: 0 }, { hiddenContentBelow: false }),
+    scroller(3, 2, list, { identifier: 'refresh-list' }),
+  ]);
+  assert.deepEqual(pull?.containerRect, list);
+  assert.deepEqual(pull?.pullRect, list);
+});
+
 test('a plain group between a list and its clipping ancestor cannot shrink the pull band', async () => {
   // The closest negative: only nodes that clip by definition bound the pull, so a group reporting a
   // frame it does not clip must not shorten a pull whose pixels are all on screen.

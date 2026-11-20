@@ -447,7 +447,6 @@ async function performRefreshPull(
   };
 }
 
-/**
 /** The viewport the pull is planned in: the owner's live read, else the capture's own. */
 async function refreshGestureViewport(
   runtime: BoundScrollRefresh,

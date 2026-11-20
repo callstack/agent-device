@@ -6,7 +6,7 @@ import {
   type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { formatRole } from '@agent-device/kernel/snapshot';
-import { intersectRects } from '@agent-device/kernel/rect';
+import { intersectRects, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type {
   HiddenContentHint,
   Point,
@@ -111,7 +111,7 @@ function visiblePullRect(
   let visible = rect;
   visibility.findAncestor(container, (ancestor) => {
     const clip = ancestor.rect;
-    if (visible.height === 0 || !clip) return null;
+    if (visible.height === 0 || !isPositiveFiniteRect(clip)) return null;
     if (isScrollableNodeLike(ancestor) || isViewportRootNode(ancestor)) {
       visible = intersectRects(visible, clip) ?? {
         ...visible,
