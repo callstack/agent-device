@@ -285,7 +285,7 @@ function androidHelperWorld(failRestoreOnce = false) {
         packageName: 'com.callstack.agentdevice.imehelper',
         versionCode: 1,
         serviceComponent: helperIme,
-        broadcastProtocol: 'android-ime-helper-v1' as const,
+        broadcastProtocol: 'android-ime-helper-v2' as const,
       },
     },
     exec: async (args: readonly string[]) => {
