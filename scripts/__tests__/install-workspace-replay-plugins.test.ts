@@ -58,10 +58,12 @@ test('a non-source workspace install keeps the manifest fields the store reads b
   // The written manifest is what the store validates before it imports anything: the typed claims of
   // the `agent-device` field, and the `engines.node` floor.
   const claims = Object.fromEntries(
-    (['maestro', 'replay'] as const).map((packageId) => [
-      packageId,
-      readPluginPackageClaims(installedManifest(home, packageId)['agent-device']),
-    ]),
+    await Promise.all(
+      (['maestro', 'replay'] as const).map(async (packageId) => [
+        packageId,
+        readPluginPackageClaims(installedManifest(home, packageId)['agent-device']),
+      ]),
+    ),
   );
   assert.deepEqual(claims, {
     maestro: [{ kind: 'replay-backend', id: 'maestro' }],

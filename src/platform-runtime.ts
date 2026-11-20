@@ -49,10 +49,7 @@ import {
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
 } from '@agent-device/platform-linux';
-import {
-  inventoryModule as webInventoryModule,
-  runtimeModule as webRuntimeModule,
-} from '@agent-device/platform-web';
+import type { PlatformModuleSelection } from '@agent-device/contracts/platform-plugin';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
@@ -86,13 +83,9 @@ const shutdownLoaders = Object.freeze({
     await loadAndroidShutdownRuntime(dependencies),
 });
 
-// All six families stay registered in the packed core today. The registry completeness-checks only
-// the required families, so an optional family (ADR 0034) may be absent from a composition and every
-// lookup then reports plugin-not-installed with its install hint. The caller supplies `coreVersion`,
-// which that hint names: this root does not read host mechanics.
 export function createPlatformModuleRegistryForHost(
   env: Readonly<Record<string, string | undefined>>,
-  coreVersion: string,
+  platforms?: PlatformModuleSelection,
 ) {
   return createPlatformModuleRegistry<InventoryPlatformModule>(
     [
@@ -107,19 +100,20 @@ export function createPlatformModuleRegistryForHost(
       }),
       vegaInventoryModule,
       linuxInventoryModule,
-      webInventoryModule,
+      ...(platforms?.inventoryModules ?? []),
     ],
-    coreVersion,
+    platforms?.reportAbsent,
+    platforms?.assertSelectionCurrent,
   );
 }
 
 export async function createPlatformDeviceInventoryGateways(
   host: HostEnvironment,
-  coreVersion: string,
   provider?: ProviderDeviceInventorySource,
+  platforms?: PlatformModuleSelection,
 ): Promise<ComposedDeviceInventoryGateways> {
   return await attachAppleSelectionProbes({
-    registry: createPlatformModuleRegistryForHost(host.env, coreVersion),
+    registry: createPlatformModuleRegistryForHost(host.env, platforms),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
       return createDeviceInventoryHost(host);
@@ -136,10 +130,7 @@ const androidRuntimeModule = createAndroidRuntimeModule({
   },
 });
 
-/** The root composition registry the platform runtime gateway reads. All six families are
- * registered today; an optional family absent from a composition fails lookups with the typed
- * `plugin-not-installed` outcome before any device binding (see platform-runtime-gateway.ts). */
-function createPlatformRuntimeModuleRegistry(coreVersion: string) {
+function createPlatformRuntimeModuleRegistry(platforms: PlatformModuleSelection) {
   return createPlatformModuleRegistry<PlatformRuntimeModule>(
     [
       appleRuntimeModule,
@@ -147,17 +138,18 @@ function createPlatformRuntimeModuleRegistry(coreVersion: string) {
       harmonyosRuntimeModule,
       vegaRuntimeModule,
       linuxRuntimeModule,
-      webRuntimeModule,
+      ...platforms.runtimeModules,
     ],
-    coreVersion,
+    platforms.reportAbsent,
+    platforms.assertSelectionCurrent,
   );
 }
 
 export function createPlatformRuntimeGateway(
   options: Readonly<{
     host: HostEnvironment;
-    /** The running core's version, which the typed absence outcome names in its install command. */
-    coreVersion: string;
+    /** The process's one platform selection: it carries the optional families and their absence. */
+    platforms: PlatformModuleSelection;
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
@@ -168,13 +160,15 @@ export function createPlatformRuntimeGateway(
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
-    modules: createPlatformRuntimeModuleRegistry(options.coreVersion),
+    modules: createPlatformRuntimeModuleRegistry(options.platforms),
     loadHost: async () => {
       const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
         await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         host: options.host,
         stateDir: options.stateDir,
+        web: options.platforms.web,
+        interactors: options.platforms.interactors,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,

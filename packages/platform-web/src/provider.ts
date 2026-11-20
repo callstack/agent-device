@@ -1,86 +1,11 @@
-import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import type { SessionSurface } from '@agent-device/contracts/session';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 
-/**
- * Why the un-composed web provider refuses: a request reached a web device with no composed
- * provider, which is a composition bug, so every capability answers closed instead of borrowing a
- * host it was never given (#3794).
- */
 const WEB_PROVIDER_COMPOSITION_REFUSAL_REASONS = {
   // A web-device request arrived with no composed provider for it.
   providerMissing: { reason: 'web-provider-missing' },
 } as const satisfies ReasonTable<'web provider'>;
-import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type {
-  BackendDumpNetworkOptions,
-  BackendDumpNetworkResult,
-} from '@agent-device/contracts/backend-diagnostics';
-import type { AudioProbeResult } from '@agent-device/contracts/audio-probe-result';
-
-export type WebOpenOptions = {
-  url?: string;
-};
-
-export type WebScreenshotOptions = {
-  fullscreen?: boolean;
-  stabilize?: boolean;
-  surface?: SessionSurface;
-};
-
-export type WebSnapshotOptions = {
-  interactiveOnly?: boolean;
-  depth?: number;
-  scope?: string;
-  includeRects?: boolean;
-  surface?: SessionSurface;
-  signal?: AbortSignal;
-};
-
-export type WebSnapshotResult = {
-  nodes: RawSnapshotNode[];
-  truncated?: boolean;
-};
-
-export type WebAudioProbeAction = 'start' | 'status' | 'stop';
-
-export type WebAudioProbeOptions = {
-  action: WebAudioProbeAction;
-  durationMs?: number;
-  bucketMs?: number;
-};
-
-export type WebAudioProbeResult = AudioProbeResult & {
-  source: 'media-elements';
-  mediaElementCount: number;
-};
-
-export type WebProvider = {
-  open(target: string, options?: WebOpenOptions): Promise<void>;
-  close(target?: string): Promise<void>;
-  startRecording?(outPath: string): Promise<void>;
-  stopRecording?(): Promise<void>;
-  snapshot(options?: WebSnapshotOptions): Promise<WebSnapshotResult>;
-  screenshot(outPath: string, options?: WebScreenshotOptions): Promise<void>;
-  setViewport(width: number, height: number): Promise<void>;
-  click(x: number, y: number): Promise<void>;
-  clickRef?(ref: string): Promise<void>;
-  /** Move the pointer to a point without pressing, raising the page's hover state. */
-  hover?(x: number, y: number): Promise<void>;
-  /** Hover a snapshot ref through the provider's own element handle. */
-  hoverRef?(ref: string): Promise<void>;
-  fill(x: number, y: number, text: string, options?: { delayMs?: number }): Promise<void>;
-  fillRef?(ref: string, text: string, options?: { delayMs?: number }): Promise<void>;
-  typeText(text: string, options?: { delayMs?: number }): Promise<void>;
-  scroll(
-    direction: ScrollDirection,
-    options?: { amount?: number; pixels?: number; durationMs?: number },
-  ): Promise<Record<string, unknown> | void>;
-  readText?(x: number, y: number): Promise<string>;
-  dumpNetwork?(options?: BackendDumpNetworkOptions): Promise<BackendDumpNetworkResult>;
-  probeAudio?(options: WebAudioProbeOptions): Promise<WebAudioProbeResult>;
-};
 
 /**
  * The un-composed fallback: a request that reaches a web device without a composed provider is a

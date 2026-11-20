@@ -473,9 +473,10 @@ Exact behavior: `agent-device help web`.
 
 `--platform web` drives a browser through [agent-browser](https://github.com/vercel-labs/agent-browser) and requires Node 24+. Use it when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or Node.js client flow. For standalone browser automation, use `agent-browser` directly.
 
-Set up and verify the managed web backend before you open a web session:
+Install the web plugin and set up its backend before you open a web session.
 
 ```bash
+agent-device plugins add @agent-device/web
 agent-device web setup
 agent-device web doctor
 agent-device open "https://example.com" --platform web

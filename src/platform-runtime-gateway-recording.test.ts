@@ -1,9 +1,9 @@
-import { readVersion } from '@agent-device/host-kit/version';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
+import { builtinPlatformSelectionFixture } from './platform-runtime-builtin-platforms.fixtures.ts';
 
 const unsupportedRecordingDevices = [
   {
@@ -21,9 +21,9 @@ test.each(unsupportedRecordingDevices)(
   async (device) => {
     const sessionsDir = mkdtempForTestSync('platform-runtime-recording-');
     const gateway = createPlatformRuntimeGateway({
-      coreVersion: readVersion(),
       host: createLiveTestHostEnvironment(),
       stateDir: sessionsDir,
+      platforms: builtinPlatformSelectionFixture(),
       sessionsDir,
       resolveSessionArtifacts: (sessionId) => ({
         outputPath: path.join(sessionsDir, sessionId, 'app.log'),

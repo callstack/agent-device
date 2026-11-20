@@ -40,7 +40,8 @@ function nodeRangeFloor(range: string): string | undefined {
   let lowest: Version | undefined;
   for (const branch of range.split('||')) {
     let branchFloor: Version | undefined;
-    for (const comparator of branch.trim().split(/\s+/)) {
+    const [lowerBound = ''] = branch.split(' - ', 1);
+    for (const comparator of lowerBound.trim().split(/\s+/)) {
       const parsed = parseComparator(comparator);
       if (parsed === undefined) continue;
       if (branchFloor === undefined || compareVersionsTuple(parsed, branchFloor) > 0) {

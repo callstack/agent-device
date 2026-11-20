@@ -1,3 +1,4 @@
+import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type {
@@ -13,7 +14,7 @@ import {
 import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
 import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
-import { resolveRequestScopedWebProvider, type WebProvider } from '@agent-device/platform-web';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 import {
   resolveAppleRunnerScreenRecordingTransport,
   type AppleRunnerScreenRecordingTransport,
@@ -22,6 +23,9 @@ import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
 } from './platform-runtime.ts';
+
+const web = webSelectionFixture();
+const resolveRequestScopedWebProvider = web.get().operations.resolveRequestProvider;
 
 const OTHER_IOS_SIMULATOR = {
   platform: 'apple',
@@ -281,7 +285,7 @@ async function withRequestPlatformProviderScope<T>(
   providers: PlatformProviderResolvers,
   task: (scope: RequestPlatformProviderScope) => Promise<T>,
 ): Promise<T> {
-  const scoped = createRequestPlatformProviders({ providers });
+  const scoped = createRequestPlatformProviders({ providers, web });
   return await scoped.run(providerContext, task);
 }
 

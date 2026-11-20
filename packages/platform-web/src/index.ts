@@ -1,27 +1,15 @@
+import type { PlatformContribution, PlatformSetup } from 'agent-device/plugins';
 import type {
   InventoryPlatformModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform-module';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
 
-// fallow-ignore-next-line code-duplication
-type DeferredFunction = (...args: never[]) => unknown;
-type Deferred<Fn extends DeferredFunction> = (
-  ...args: Parameters<Fn>
-) => Promise<Awaited<ReturnType<Fn>>>;
-
-function deferred<Fn extends DeferredFunction>(load: () => Promise<Fn>): Deferred<Fn> {
-  return (async (...args: Parameters<Fn>) =>
-    await (
-      await load()
-    )(...args)) as unknown as Deferred<Fn>;
-}
-
 const metadata = Object.freeze({
   family: 'web',
 } satisfies PlatformModuleMetadata);
 
-export const runtimeModule = Object.freeze({
+const runtimeModule = Object.freeze({
   ...metadata,
   loadRuntime: async (host) => {
     const { createWebPlatformRuntime } = await import('./runtime.ts');
@@ -29,7 +17,7 @@ export const runtimeModule = Object.freeze({
   },
 } satisfies PlatformRuntimeModule);
 
-export const inventoryModule: InventoryPlatformModule<'web'> = Object.freeze({
+const inventoryModule: InventoryPlatformModule<'web'> = Object.freeze({
   ...metadata,
   loadInventory: async () => {
     const { createWebInventory } = await import('./inventory.ts');
@@ -37,51 +25,80 @@ export const inventoryModule: InventoryPlatformModule<'web'> = Object.freeze({
   },
 });
 
-export const AGENT_BROWSER_TIMEOUT_MS = 30_000;
-
-export type { WebProvider } from './provider.ts';
-export type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
-export type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
-
-export const createAgentBrowserWebProvider = deferred<
-  (typeof import('./agent-browser-provider.ts'))['createAgentBrowserWebProvider']
->(async () => (await import('./agent-browser-provider.ts')).createAgentBrowserWebProvider);
-export const getManagedAgentBrowserStatus = deferred<
-  (typeof import('./agent-browser-tool.ts'))['getManagedAgentBrowserStatus']
->(async () => (await import('./agent-browser-tool.ts')).getManagedAgentBrowserStatus);
-export const setupManagedAgentBrowser = deferred<
-  (typeof import('./agent-browser-tool.ts'))['setupManagedAgentBrowser']
->(async () => (await import('./agent-browser-tool.ts')).setupManagedAgentBrowser);
-export const doctorManagedAgentBrowser = deferred<
-  (typeof import('./agent-browser-tool.ts'))['doctorManagedAgentBrowser']
->(async () => (await import('./agent-browser-tool.ts')).doctorManagedAgentBrowser);
-export const inspectManagedAgentBrowserProcesses = deferred<
-  (typeof import('./agent-browser-process-record.ts'))['inspectManagedAgentBrowserProcesses']
->(
-  async () =>
-    (await import('./agent-browser-process-record.ts')).inspectManagedAgentBrowserProcesses,
-);
-export const summarizeAgentBrowserProcesses = deferred<
-  (typeof import('./agent-browser-process-record.ts'))['summarizeAgentBrowserProcesses']
->(async () => (await import('./agent-browser-process-record.ts')).summarizeAgentBrowserProcesses);
-export const cleanupManagedAgentBrowserOrphans = deferred<
-  (typeof import('./agent-browser-lifecycle.ts'))['cleanupManagedAgentBrowserOrphans']
->(async () => (await import('./agent-browser-lifecycle.ts')).cleanupManagedAgentBrowserOrphans);
-export const webBrowserLifecycleCheck = deferred<
-  (typeof import('./doctor.ts'))['webBrowserLifecycleCheck']
->(async () => (await import('./doctor.ts')).webBrowserLifecycleCheck);
-
-export const resolveRequestScopedWebProvider = deferred<
-  (typeof import('./resolve-provider.ts'))['resolveRequestScopedWebProvider']
->(async () => (await import('./resolve-provider.ts')).resolveRequestScopedWebProvider);
-export const resolveWebProviderForHost = deferred<
-  (typeof import('./resolve-provider.ts'))['resolveWebProviderForHost']
->(async () => (await import('./resolve-provider.ts')).resolveWebProviderForHost);
-
-export async function withWebProvider<T>(
-  provider: import('./provider.ts').WebProvider | undefined,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const { withWebProvider: implementation } = await import('./provider.ts');
-  return await implementation(provider, fn);
+function webPlatformPlugin() {
+  return {
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'platform',
+        family: 'web',
+        setup(host): PlatformSetup<'web'> {
+          const { stateDir, openWebSessionNames, ownedProcessRecords } = host;
+          return {
+            family: 'web',
+            inventoryModule,
+            runtimeModule,
+            createInteractor: async () => {
+              const { createWebInteractor } = await import('./interactor.ts');
+              return await createWebInteractor(host, undefined, stateDir);
+            },
+            withRequestProvider: async (provider, task) => {
+              const { withWebProvider } = await import('./provider.ts');
+              return await withWebProvider(provider, task);
+            },
+            operations: {
+              setup: async (options) => {
+                const { setupManagedAgentBrowser } = await import('./agent-browser-tool.ts');
+                return await setupManagedAgentBrowser({
+                  stateDir: options.stateDir ?? stateDir,
+                  host,
+                });
+              },
+              doctor: async (options) => {
+                const { doctorManagedAgentBrowser } = await import('./agent-browser-tool.ts');
+                return await doctorManagedAgentBrowser({
+                  stateDir: options.stateDir ?? stateDir,
+                  host,
+                });
+              },
+              browserLifecycleCheck: async (dir) => {
+                const { webBrowserLifecycleCheck } = await import('./doctor.ts');
+                return await webBrowserLifecycleCheck(dir, host);
+              },
+              cleanupOrphans: async (openSessions) => {
+                const { getManagedAgentBrowserStatus } = await import('./agent-browser-tool.ts');
+                const status = getManagedAgentBrowserStatus({ stateDir, host });
+                if (!status.installed) return;
+                const { cleanupManagedAgentBrowserOrphans } =
+                  await import('./agent-browser-lifecycle.ts');
+                await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+                  env: host.env,
+                  openWebSessionNames: openSessions,
+                  ownedProcessRecords,
+                  emitDiagnostic: host.emitDiagnostic,
+                });
+              },
+              createProvider: async (session) => {
+                const { createAgentBrowserWebProvider } =
+                  await import('./agent-browser-provider.ts');
+                return await createAgentBrowserWebProvider({
+                  host,
+                  stateDir,
+                  session,
+                  openWebSessionNames,
+                  ownedProcessRecords,
+                });
+              },
+              resolveRequestProvider: async () => {
+                const { resolveRequestScopedWebProvider } = await import('./resolve-provider.ts');
+                return await resolveRequestScopedWebProvider();
+              },
+            },
+          };
+        },
+      },
+    ],
+  } satisfies { apiVersion: 3; contributes: [Extract<PlatformContribution, { family: 'web' }>] };
 }
+
+export { webPlatformPlugin as default };

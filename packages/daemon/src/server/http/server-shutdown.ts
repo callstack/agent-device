@@ -71,6 +71,7 @@ export type ShutdownReport = {
     failed: {
       provider?: string;
       backend?: string;
+      platform?: string;
       source?: PluginCleanupOutcome['source'];
       step: 'shutdown' | 'dispose';
       error: NormalizedError;
@@ -162,7 +163,9 @@ export function createPluginClose(params: {
 }): PluginClose {
   let closing: Promise<ShutdownReport['plugins']> | undefined;
   const cleanupOwners = params.inventory.flatMap((entry) =>
-    entry.state === 'active' ? [{ provider: entry.provider, backend: entry.backend }] : [],
+    entry.state === 'active'
+      ? [{ provider: entry.provider, backend: entry.backend, platform: entry.platform }]
+      : [],
   );
   return {
     close: () =>
@@ -189,9 +192,7 @@ export function createPluginClose(params: {
           return {
             disposed: [],
             failed: [],
-            pending: cleanupOwners.map(
-              ({ provider, backend }) => provider ?? `replay-backend:${backend}`,
-            ),
+            pending: cleanupOwners.map(pluginCleanupName),
           };
         }
         return reportCleanupOutcomes(outcome.value);
@@ -203,8 +204,7 @@ function reportCleanupOutcomes(
   outcomes: readonly PluginCleanupOutcome[],
 ): ShutdownReport['plugins'] {
   const report: ShutdownReport['plugins'] = { disposed: [], failed: [], pending: [] };
-  for (const { provider, backend, source, shutdown, dispose } of outcomes) {
-    const identity = provider === undefined ? { backend } : { provider };
+  for (const { source, shutdown, dispose, ...identity } of outcomes) {
     for (const [step, result] of [
       ['shutdown', shutdown],
       ['dispose', dispose],
@@ -219,9 +219,20 @@ function reportCleanupOutcomes(
       });
     }
     if (shutdown.status === 'ok' && dispose.status === 'ok')
-      report.disposed.push(provider ?? `replay-backend:${backend}`);
+      report.disposed.push(pluginCleanupName(identity));
   }
   return report;
+}
+
+function pluginCleanupName(identity: {
+  provider?: string;
+  backend?: string;
+  platform?: string;
+}): string {
+  return (
+    identity.provider ??
+    (identity.platform ? `platform:${identity.platform}` : `replay-backend:${identity.backend}`)
+  );
 }
 
 /** Undoes startup work in reverse order; a step that throws never stops the ones before it. */

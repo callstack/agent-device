@@ -6,8 +6,7 @@
 // no daemon, no credentials, and no network. Nothing here talks to a provider.
 
 import moduleHooks from 'node:module';
-import { createAgentBrowserWebProvider, withWebProvider } from '@agent-device/platform-web';
-import { createWebInteractor } from '@agent-device/platform-web/interactor';
+import { webSelectionFixture } from '../../src/platform-runtime-web-provider.fixtures.ts';
 import type { RunHostCommand } from '@agent-device/plugins/host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -43,11 +42,9 @@ function inert(pathname: string): unknown {
 // The daemon answers web facts through the agent-browser provider it composes
 // into every web request (src/platform-runtime/request-providers.ts); the seam
 // builds the same provider, so the provider's own surface decides each cell.
-async function matrixWebProvider() {
-  return await createAgentBrowserWebProvider({ host: HOST_ENVIRONMENT });
-}
-
-const HOST_ENVIRONMENT: HostEnvironment = { env: {} } as unknown as HostEnvironment;
+const HOST_ENVIRONMENT: HostEnvironment = { env: {}, cwd: process.cwd() };
+const web = webSelectionFixture(HOST_ENVIRONMENT);
+const webRegistration = web.get();
 
 const localProcessTransport = Object.freeze({
   mode: 'local' as const,
@@ -78,7 +75,10 @@ export function createStubHost(): PlatformRuntimeHost {
       // daemon's default provider is scoped, and the production resolver reads
       // that scope to choose its mode, so the fact must be collected the same way.
       resolve: async (device: Parameters<typeof resolveWebNetworkTransport>[0]) =>
-        await withWebProvider(await matrixWebProvider(), () => resolveWebNetworkTransport(device)),
+        await webRegistration.withRequestProvider(
+          await webRegistration.operations.createProvider('default'),
+          () => resolveWebNetworkTransport(device, web),
+        ),
     },
     screenRecording: {
       apple: {
@@ -90,15 +90,16 @@ export function createStubHost(): PlatformRuntimeHost {
         // Inside a web request the daemon scopes its default provider, so the
         // matrix scopes it the same way before asking the production resolver.
         resolve: async (device: Parameters<typeof resolveWebScreenRecordingTransport>[0]) =>
-          await withWebProvider(await matrixWebProvider(), () =>
-            resolveWebScreenRecordingTransport(device),
+          await webRegistration.withRequestProvider(
+            await webRegistration.operations.createProvider('default'),
+            () => resolveWebScreenRecordingTransport(device, web),
           ),
       },
     },
     localInteractors: {
       // The production web plugin path: the factory composes the default
       // agent-browser provider from this host when none is scoped.
-      resolve: async () => await createWebInteractor(HOST_ENVIRONMENT),
+      resolve: webRegistration.createInteractor,
     },
   };
   return new Proxy(real, {

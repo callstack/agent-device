@@ -78,6 +78,7 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => {
       return {
         runtimes: [],
         platformModules: [],
+        platforms: [],
         shutdown: async () => [],
         inventory: [
           ...(await (

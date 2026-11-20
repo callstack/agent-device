@@ -57,9 +57,6 @@
       "path": "../platform-apple"
     },
     {
-      "path": "../platform-web"
-    },
-    {
       "path": "../proxy"
     },
     {

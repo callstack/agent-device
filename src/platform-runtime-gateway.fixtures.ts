@@ -24,7 +24,7 @@ import {
   createUnavailableRuntimeFactsForTest,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
-import { readVersion } from '@agent-device/host-kit/version';
+import { missingPlatformPlugin } from './core/platform-plugin-absence.ts';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
@@ -52,7 +52,7 @@ export function runtimeModuleRegistryFixture(modules: readonly PlatformRuntimeMo
           }) as PlatformRuntimeModule,
       ),
     ],
-    readVersion(),
+    missingPlatformPlugin,
   );
 }
 

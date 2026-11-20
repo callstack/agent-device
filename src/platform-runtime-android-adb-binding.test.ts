@@ -1,4 +1,3 @@
-import { readVersion } from '@agent-device/host-kit/version';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 
@@ -27,6 +26,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
+import { builtinPlatformSelectionFixture } from './platform-runtime-builtin-platforms.fixtures.ts';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const sessionArtifacts = {
@@ -55,8 +55,8 @@ const device: DeviceInfo = {
 
 test('the composed gateway lists Android apps from inside the platform package', async () => {
   const gateway = createPlatformRuntimeGateway({
-    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
+    platforms: builtinPlatformSelectionFixture(),
     ...sessionArtifacts,
   });
   const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
@@ -84,8 +84,8 @@ test('the composed gateway lists Android apps from inside the platform package',
 
 test('the composed gateway reads Android app state from inside the platform package', async () => {
   const gateway = createPlatformRuntimeGateway({
-    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
+    platforms: builtinPlatformSelectionFixture(),
     ...sessionArtifacts,
   });
   const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });

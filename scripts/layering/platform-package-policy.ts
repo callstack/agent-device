@@ -36,6 +36,8 @@ export type PlatformPackageDeclaration = {
   family: string;
   name: string;
   private: boolean;
+  managedClaim?: { platform?: unknown; apiVersion?: unknown };
+  publishedSubpaths?: readonly string[];
   exportedSubpaths: readonly string[];
 };
 const COMPOSITION_FILE = 'src/platform-runtime.ts';
@@ -109,6 +111,10 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
   linux: ['@agent-device/platform-linux/interactor'],
   web: ['@agent-device/platform-web/interactor'],
 };
+const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
+  web: '@agent-device/web',
+};
+
 const INTERACTOR_COMPOSITION_FILE = 'src/core/interactors/register-builtins.ts';
 
 function isInteractorSubpathImport(
@@ -209,6 +215,31 @@ function isTestKitTestImport(file: string, specifier: string): boolean {
   return specifier === '@agent-device/test-kit' && !isProductionSourceFile(file);
 }
 
+function managedPlatformDeclarationFailures(
+  declaration: PlatformPackageDeclaration,
+  expectedName: string,
+): LayeringViolation[] {
+  const file = `${declaration.dir}/package.json`;
+  if (
+    declaration.name !== expectedName ||
+    declaration.managedClaim?.platform !== declaration.family ||
+    declaration.managedClaim?.apiVersion !== 3 ||
+    declaration.exportedSubpaths.length !== 1 ||
+    declaration.exportedSubpaths[0] !== `${expectedName}/agent-device` ||
+    declaration.publishedSubpaths?.length !== 1 ||
+    declaration.publishedSubpaths[0] !== './agent-device'
+  ) {
+    return [
+      violation(
+        file,
+        1,
+        `Managed platform must declare its family and export only ${expectedName}/agent-device`,
+      ),
+    ];
+  }
+  return [];
+}
+
 function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
@@ -225,6 +256,11 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
       continue;
     }
     const declaration = matches[0]!;
+    const managedName = MANAGED_PLATFORMS[family];
+    if (managedName) {
+      violations.push(...managedPlatformDeclarationFailures(declaration, managedName));
+      continue;
+    }
     const expectedName = packageName(family);
     if (declaration.name !== expectedName) {
       violations.push(
@@ -302,6 +338,18 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       violations.push(...appleRunnerPackageSiteViolations(file, site));
     }
     violations.push(...appleRunnerEntryImporterViolations(file, site));
+    const managedImport = Object.values(MANAGED_PLATFORMS).some(
+      (name) => site.spec === name || site.spec.startsWith(name + '/'),
+    );
+    if (managedImport && isProductionSourceFile(file)) {
+      violations.push(
+        violation(
+          file,
+          site.line,
+          'Load managed platform entries only through the plugin registry',
+        ),
+      );
+    }
     const importedFamily = concretePlatformFamily(site.spec);
     if (file.startsWith('packages/contracts/') && importedFamily) {
       violations.push(
@@ -374,9 +422,13 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(file, site.line, `platform-${ownerFamily} may not import sibling '${site.spec}'`),
       );
     }
+    const importsPluginTypes =
+      MANAGED_PLATFORMS[ownerFamily as PlatformFamily] &&
+      site.typeOnly &&
+      site.spec === 'agent-device/plugins';
     if (
       resolvesOutsidePackage(file, site.spec, ownerFamily) ||
-      /^agent-device(?:\/|$)/.test(site.spec)
+      (/^agent-device(?:\/|$)/.test(site.spec) && !importsPluginTypes)
     ) {
       violations.push(
         violation(file, site.line, `platform-${ownerFamily} may not reach root or daemon code`),
@@ -445,5 +497,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return `R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
+  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
 }
