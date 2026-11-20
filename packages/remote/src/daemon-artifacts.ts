@@ -605,7 +605,8 @@ async function downloadEachArtifact(
       continue;
     }
     if (!hasDownloadableArtifactId(artifact)) {
-      nextArtifacts.push(artifact);
+      // Nothing was written for it here, so it names no local path.
+      nextArtifacts.push(withoutPeerLocalPath(artifact) as DaemonArtifact);
       continue;
     }
     if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
@@ -716,18 +717,31 @@ function isClientOwnedResponseField(field: string): boolean {
 }
 
 /**
- * Drops the fields only this client may set from a peer's result data or error details: a
- * `savedScript` only a version this client published can name, and `recordingDestinationWarnings`
- * only this client's own recording downloads can report (#4518). The RPC adapter applies it to
- * error details too, so no daemon answer can claim a local write.
+ * Drops the fields only this client may set from a remote peer's result data or error details: a
+ * `savedScript` only a version this client published can name, `recordingDestinationWarnings` only
+ * this client's own recording downloads can report, and an artifact `localPath` only a completed
+ * local download can name (#4518). The RPC adapter applies it to remote error details too, so no
+ * remote answer can claim a local write.
  */
 export function withoutClientOwnedFields<T extends Record<string, unknown> | undefined>(
   data: T,
 ): T {
-  if (data === undefined || (!('savedScript' in data) && !('recordingDestinationWarnings' in data)))
-    return data;
-  const { savedScript: _peerScript, recordingDestinationWarnings: _peerWarnings, ...kept } = data;
+  if (data === undefined) return data;
+  const {
+    savedScript: _script,
+    recordingDestinationWarnings: _warnings,
+    ...kept
+  }: Record<string, unknown> = data;
+  if (Array.isArray(kept.artifacts)) kept.artifacts = kept.artifacts.map(withoutPeerLocalPath);
   return kept as T;
+}
+
+function withoutPeerLocalPath(artifact: unknown): unknown {
+  if (typeof artifact !== 'object' || artifact === null || !('localPath' in artifact)) {
+    return artifact;
+  }
+  const { localPath: _peerPath, ...kept } = artifact as Record<string, unknown>;
+  return kept;
 }
 
 /**

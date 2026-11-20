@@ -104,11 +104,13 @@ async function rejectDaemonHttpRpcError(
 ): Promise<void> {
   const { info, req, stateDir, signal, reject } = options;
   const requestId = req.meta?.requestId;
-  const payload = toDaemonHttpRpcError(error);
+  const local = toDaemonHttpRpcError(error);
   if (!info.baseUrl) {
-    reject(appErrorFromDaemonError(payload, requestId));
+    reject(appErrorFromDaemonError(local, requestId));
     return;
   }
+  // A remote peer cannot supply the fields only this client's own delivery sets (#4518).
+  const payload = { ...local, details: local.details && withoutClientOwnedFields(local.details) };
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {
       baseUrl: info.baseUrl,
@@ -165,10 +167,9 @@ function toDaemonHttpRpcError(error: {
     code: toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
     message: String(data.message ?? error.message ?? 'Daemon RPC request failed'),
     cause,
-    // A peer cannot supply the fields only this client's own delivery sets (#4518).
     details:
       typeof data.details === 'object' && data.details
-        ? withoutClientOwnedFields(data.details as Record<string, unknown>)
+        ? (data.details as Record<string, unknown>)
         : undefined,
     hint: typeof data.hint === 'string' ? data.hint : undefined,
     diagnosticId: typeof data.diagnosticId === 'string' ? data.diagnosticId : undefined,
