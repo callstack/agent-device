@@ -348,6 +348,8 @@ type CliRunContext = {
   daemonPaths: ReturnType<typeof resolveDaemonPaths>;
   sessionName: string;
   connectionDefaults: ReturnType<typeof resolveActiveConnectionDefaults>;
+  /** The lease provider an explicit remote config profile names; the flags do not carry it. */
+  remoteConfigLeaseProvider: string | undefined;
   explicitFlagKeys: Set<FlagKey>;
   // Mutated in place by resolveRemoteContext (auth, materialization) so the
   // failure handler always sees the same state the throwing phase saw.
@@ -419,6 +421,7 @@ async function resolveRunContextOrExit(
       daemonPaths,
       sessionName,
       connectionDefaults,
+      remoteConfigLeaseProvider: parsed.remoteConfigLeaseProvider,
       explicitFlagKeys,
       effectiveFlags,
       resolvedRuntime: connectionDefaults?.runtime,
@@ -462,6 +465,15 @@ async function resolveRemoteContext(
       throw new AppError('INVALID_ARGS', 'batch does not accept positional arguments.');
     }
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
+  }
+
+  // A missing provider plugin answers with its install command before any login or auth state.
+  if (ctx.command === 'connect' || ctx.effectiveFlags.remoteConfig) {
+    const { admitConnectionProvider } = await import('./cli/connection/provider-admission.ts');
+    await admitConnectionProvider({
+      ...ctx,
+      materializes: shouldMaterializeRemoteConnection(ctx.command),
+    });
   }
 
   if (shouldResolveRemoteAuth(ctx.command)) {
