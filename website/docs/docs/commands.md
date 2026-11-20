@@ -2516,7 +2516,7 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 ```
 
 - `connect` saves the connection and waits to lease a device and prepare Metro until a command needs them. `connect --remote-config <path>` uses a local profile instead of the cloud one.
-- Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`.
+- Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`. Interactive login prints the code that the browser page must show; approve only when they match. When the cloud rotates the session credential during a refresh, the CLI stores the replacement.
 - `AGENT_DEVICE_CLOUD_BASE_URL` is the bridge API origin, which is not always the dashboard.
 - On a connection with a lease provider, such as the cloud or `connect proxy`, every command must name the session with `--session`, `AGENT_DEVICE_SESSION`, or config, or it fails with `REMOTE_SESSION_REQUIRED`. On other profiles, commands without a session use the most recent connection, which is safe only for one sequential workflow. To replace a connection, pass `--session <name> --force`.
 - After `connect`, normal commands reuse the connection. `connection status` shows `leaseId=pending` until the first command that needs a device.
