@@ -122,6 +122,9 @@ export function bindAppleApplicationLifecycleWithServices(
                 .catch(() => {});
             }
           : undefined,
+        // #4791: this is the boot step `open` owns, so its answer is what the session records as boot
+        // ownership. Readiness always answers it, whether or not the caller asked.
+        onSimulatorBoot: input.onBootPerformance,
       });
       adoptReadiedDevice(readied);
     },

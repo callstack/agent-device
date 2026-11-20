@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { publishOpenSession } from '../session-open-state.ts';
 import { makeSessionStore } from './session-open-runtime.fixtures.ts';
+import { NO_BOOT_PROOF } from '../../../../__tests__/support/boot-ownership-fixtures.ts';
 import {
   authoringPublication,
   makeIosSession,
@@ -28,6 +29,7 @@ function reopen(existingSession: ReturnType<typeof makeIosSession>) {
       device: IOS_SIMULATOR,
       surface: 'app',
       appBundleId: 'com.example.other',
+      bootOwnership: NO_BOOT_PROOF,
     }),
   );
 }
@@ -69,7 +71,7 @@ function firstOpen(bootedByOpen: boolean | undefined) {
     sessionName: 's',
     device: IOS_SIMULATOR,
     surface: 'app',
-    bootedByOpen,
+    bootOwnership: { ownsBoot: bootedByOpen === true, bootOwnerUnverified: false },
   }).session;
 }
 
@@ -98,7 +100,7 @@ test.each([false, true])('replacement target owns only its own boot: %s', (repla
       existingRef: ref,
       device: { ...IOS_SIMULATOR, id: 'replacement-simulator' },
       surface: 'app',
-      bootedByOpen: replacementBooted,
+      bootOwnership: { ownsBoot: replacementBooted, bootOwnerUnverified: false },
     }),
   );
   assert.equal(next.bootedByOpen, replacementBooted ? true : undefined);
@@ -119,7 +121,7 @@ test.each(bootOwnershipFacts)(
         existingRef: ref,
         device: IOS_SIMULATOR,
         surface: 'app',
-        bootedByOpen: true,
+        bootOwnership: { ownsBoot: true, bootOwnerUnverified: false },
       }),
     );
 
@@ -142,10 +144,67 @@ test.each(bootOwnershipFacts)(
         existingRef: ref,
         device: IOS_SIMULATOR,
         surface: 'app',
-        bootedByOpen: false,
+        bootOwnership: NO_BOOT_PROOF,
       }),
     );
 
     assert.equal(next.bootedByOpen, bootedByOpen);
   },
 );
+
+test('#4791: an open the platform disproved records no boot and the reason close reports', () => {
+  const store = makeSessionStore();
+  const next = publishOpenSession({
+    req: { token: 't', command: 'open', positionals: [], session: 's' },
+    sessionStore: store,
+    sessionName: 's',
+    device: IOS_SIMULATOR,
+    surface: 'app',
+    bootOwnership: { ownsBoot: false, bootOwnerUnverified: true },
+  }).session;
+
+  assert.equal(next.bootedByOpen, undefined);
+  assert.equal(next.bootOwnerUnverified, true);
+});
+
+test('#4791: a re-open of the same target clears the disproved boot with its own proof', () => {
+  const store = makeSessionStore();
+  const existing = makeIosSession('s', { bootOwnerUnverified: true });
+  const ref = store.publish(existing.name, existing);
+
+  const next = store.requireCurrent(
+    publishOpenSession({
+      req: { token: 't', command: 'open', positionals: [], session: existing.name },
+      sessionStore: store,
+      sessionName: existing.name,
+      existingRef: ref,
+      device: IOS_SIMULATOR,
+      surface: 'app',
+      bootOwnership: NO_BOOT_PROOF,
+    }),
+  );
+
+  assert.equal(next.bootOwnerUnverified, undefined);
+});
+
+test('#4791: a disproved re-open cannot take back a boot an earlier open of the same device proved', () => {
+  const store = makeSessionStore();
+  const existing = makeIosSession('s', { bootedByOpen: true });
+  const ref = store.publish(existing.name, existing);
+
+  const next = store.requireCurrent(
+    publishOpenSession({
+      req: { token: 't', command: 'open', positionals: [], session: existing.name },
+      sessionStore: store,
+      sessionName: existing.name,
+      existingRef: ref,
+      device: IOS_SIMULATOR,
+      surface: 'app',
+      bootOwnership: { ownsBoot: false, bootOwnerUnverified: true },
+    }),
+  );
+
+  // Close stops on the preserved proof, so it must not also report a stop it withheld.
+  assert.equal(next.bootedByOpen, true);
+  assert.equal(next.bootOwnerUnverified, undefined);
+});
