@@ -93,8 +93,8 @@ The daemon itself cannot pick a device by these keys, so it refuses a named key 
 Remote screenshots, recordings, performance captures, and trace logs use generated output paths on
 the daemon. When you specify an output path through the CLI, SDK, or MCP, it selects the download
 destination on your machine. A recording is different: it downloads to the path named by the
-`record stop` request, or otherwise to the working directory with a warning. A path on
-`record start` does not select the download destination. Direct RPC callers receive artifact IDs and download each result with
+`record stop` request, or otherwise to the working directory with a warning. The directory of a
+`record start` path does not carry over; the working-directory fallback keeps only its file name. Direct RPC callers receive artifact IDs and download each result with
 `GET /artifacts/<id>` using the same authentication.
 
 By default, artifacts leave the inventory after download or after 15 minutes.
