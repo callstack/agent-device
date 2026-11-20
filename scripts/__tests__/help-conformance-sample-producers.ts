@@ -2,7 +2,7 @@ import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import {
   withCapturedStderrAsync,
   pluginHome,
-  selectV2Plugin,
+  selectPlugin,
   restoreEnv,
 } from '@agent-device/test-kit';
 import { primePluginConnections } from '@agent-device/plugins/connection';
@@ -457,11 +457,11 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     sample: BROWSERSTACK_CONNECT_SAMPLE,
     render: async () => {
       const { home } = pluginHome();
-      selectV2Plugin(
+      selectPlugin(
         home,
         '@agent-device/browserstack',
         `import browserstack from ${JSON.stringify(import.meta.resolve('@agent-device/browserstack'))}; export default browserstack;`,
-        { selectionOptions: {} },
+        { selectionOptions: {}, claims: { apiVersion: 3, provider: 'browserstack' } },
       );
       const previousHome = process.env.AGENT_DEVICE_HOME;
       process.env.AGENT_DEVICE_HOME = home;

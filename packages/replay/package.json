@@ -1,6 +1,13 @@
 {
   "name": "@agent-device/replay",
   "version": "0.0.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "agent-device": {
+    "apiVersion": 3,
+    "replayExecution": true
+  },
   "private": true,
   "sideEffects": false,
   "type": "module",

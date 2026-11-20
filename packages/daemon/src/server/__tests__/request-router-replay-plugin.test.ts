@@ -5,7 +5,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import { bindReplayBackendResolver } from '@agent-device/replay-port/replay-backend-registry';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import {
-  selectV2Plugin,
+  selectPlugin,
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
@@ -156,7 +156,7 @@ test('a changed store needs a daemon restart and embedded runtimes never consult
   const env = { AGENT_DEVICE_HOME: home };
   const f = await fixture(env);
   try {
-    selectV2Plugin(
+    selectPlugin(
       home,
       '@agent-device/replay',
       'throw new Error("must not import while detecting stale daemon");',

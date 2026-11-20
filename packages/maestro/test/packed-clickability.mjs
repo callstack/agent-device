@@ -18,7 +18,7 @@ const { default: maestroPlugin } = await import(
   pathToFileURL(path.join(plugin, 'dist/agent-device.mjs'))
 );
 const target = 'maestro-clickable-first-target';
-const setup = maestroPlugin().setup();
+const setup = maestroPlugin().contributes[0].setup();
 const host = {
   ...createReplayBackendHost(),
   resolveTargetDevice: () => {

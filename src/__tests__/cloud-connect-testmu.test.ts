@@ -15,13 +15,14 @@ import { resolveConnectProviderProfile } from '../cli/connection/connect-provide
 import {
   mkdtempForTestSync,
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
   bindTestCommandHost,
 } from '@agent-device/test-kit';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
+import { declaredConnectionCapabilities } from './test-utils/plugin-declaration.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -53,11 +54,11 @@ beforeEach(() => {
   const { home } = pluginHome();
   // The store declares the plugin installed with TestMu's capabilities; the mocked loader above
   // supplies the workspace factory those assertions exercise.
-  selectV2Plugin(
+  selectPlugin(
     home,
     manifest.name,
-    v2RegistrationSource('testmu', {
-      extra: `connection: { capabilities: ${JSON.stringify(testmu().connection?.capabilities)}, resolve() {}, verify() {} },`,
+    pluginSource('testmu', {
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(testmu()))}, resolve() {}, verify() {} },`,
       credentials: '{ variables: ["LT_USERNAME", "LT_ACCESS_KEY"] }',
     }),
   );

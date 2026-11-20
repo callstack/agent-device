@@ -49,7 +49,11 @@ async function backendThatCannotStop(): Promise<string> {
 test('a Revyl device the shutdown could not stop is named in the message and hint the host keeps', async () => {
   const apiUrl = await backendThatCannotStop();
   const resolved = await resolveProviderPlugins([
-    { source: 'embedder', provider: 'revyl', load: () => revyl({ apiKey: 'test-key', apiUrl }) },
+    {
+      source: 'embedder',
+      declaredClaims: [{ kind: 'provider', id: 'revyl' }],
+      load: () => revyl({ apiKey: 'test-key', apiUrl }),
+    },
   ]);
   const registry = await startProviderRegistry(
     resolved,
