@@ -2,11 +2,82 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { compareVersions } from '@agent-device/host-kit/version';
+import { readPluginPackageClaims, type PluggedClaim } from './validate.ts';
 
-const PROVIDER_ID = /^[a-z][a-z0-9-]*$/;
+/**
+ * The static claims a plugin package declares in its `agent-device` package.json field, in kind
+ * order. Read before any import: the apiVersion must be the supported one, and every declared claim
+ * must be unreserved. After the factory runs, its returned claims must equal these, in any order.
+ */
+export function readAgentDeviceClaims(manifest: Record<string, unknown>): readonly PluggedClaim[] {
+  return readPluginPackageClaims(manifest['agent-device']);
+}
 
-export function isProviderId(value: unknown): value is string {
-  return typeof value === 'string' && PROVIDER_ID.test(value);
+/**
+ * The Node floor a package's `engines.node` range establishes, checked before import. Only the
+ * lower bound matters: upper bounds and unparseable comparators impose no floor.
+ */
+export function assertNodeFloor(manifest: Record<string, unknown>): void {
+  const engines = manifest.engines;
+  if (!isRecord(engines) || typeof engines.node !== 'string') return;
+  const floor = nodeRangeFloor(engines.node);
+  if (floor === undefined) return;
+  const node = process.versions.node;
+  if (compareVersions(node, floor) < 0) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Plugin requires Node ${engines.node}; this host runs Node ${node}`,
+      { reason: 'node-below-floor', engines: engines.node, node },
+    );
+  }
+}
+
+type Version = readonly [number, number, number];
+
+/** The lowest version a semver range can admit, as `assertNodeFloor` reads it. */
+function nodeRangeFloor(range: string): string | undefined {
+  let lowest: Version | undefined;
+  for (const branch of range.split('||')) {
+    let branchFloor: Version | undefined;
+    for (const comparator of branch.trim().split(/\s+/)) {
+      const parsed = parseComparator(comparator);
+      if (parsed === undefined) continue;
+      if (branchFloor === undefined || compareVersionsTuple(parsed, branchFloor) > 0) {
+        branchFloor = parsed;
+      }
+    }
+    if (
+      branchFloor !== undefined &&
+      (lowest === undefined || compareVersionsTuple(branchFloor, lowest) < 0)
+    ) {
+      lowest = branchFloor;
+    }
+  }
+  return lowest === undefined ? undefined : lowest.join('.');
+}
+
+/** The floor one comparator admits: lower bounds and exact/caret/tilde versions, never upper bounds. */
+function parseComparator(comparator: string): Version | undefined {
+  const match = /^(>=|>|<=|<|=|\^|~)?(.+)$/.exec(comparator);
+  if (!match) return undefined;
+  const op = match[1] ?? '';
+  if (op === '<' || op === '<=') return undefined;
+  return parseVersion(match[2] ?? '');
+}
+
+function parseVersion(text: string): Version | undefined {
+  const match = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(text.trim());
+  if (!match) return undefined;
+  return [Number(match[1]), Number(match[2] ?? 0), Number(match[3] ?? 0)];
+}
+
+function compareVersionsTuple(a: Version, b: Version): number {
+  for (let index = 0; index < 3; index++) {
+    const diff = a[index]! - b[index]!;
+    if (diff !== 0) return diff;
+  }
+  return 0;
 }
 
 /** The subpath a plugin package exports; its default export is the plugin factory. */

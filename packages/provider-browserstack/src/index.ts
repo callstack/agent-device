@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 import { HOSTED_WEBDRIVER_CONNECTION } from '@agent-device/provider-webdriver/providers';
 import { BROWSERSTACK_CREDENTIAL_VARIABLES } from './providers.ts';
 
@@ -7,12 +7,6 @@ export type BrowserStackOptions = {
   credentials?: { username?: string; accessKey?: string };
 };
 
-// The connection and WebDriver code load when they are first used, so importing the package for its
-// declaration stays small.
-async function loadConnection(host: ProviderPluginHost) {
-  return (await import('./connection.ts')).createBrowserStackConnection(host);
-}
-
 /**
  * BrowserStack as a plugin. The credentials come from `options.credentials`, with the
  * `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY` environment variables as the fallback for
@@ -20,7 +14,7 @@ async function loadConnection(host: ProviderPluginHost) {
  * environment; credentials passed as options are not part of the environment the daemon
  * fingerprints.
  */
-function browserstack(options: BrowserStackOptions = {}): AgentDevicePlugin {
+function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlugin {
   const { credentials } = options;
   const withCredentials = (host: ProviderPluginHost): ProviderPluginHost =>
     credentials
@@ -44,22 +38,31 @@ function browserstack(options: BrowserStackOptions = {}): AgentDevicePlugin {
     ...(credentials?.username !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.username]),
     ...(credentials?.accessKey !== undefined ? [] : [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]),
   ];
+  // The connection code loads when `connect` runs it, so importing the package for its declaration
+  // stays small. The loader keeps the credentials it was given on the host it builds.
+  const loadBrowserStackConnection = async (host: ProviderPluginHost) =>
+    (await import('./connection.ts')).createBrowserStackConnection(withCredentials(host));
   return {
-    apiVersion: 2,
-    provider: 'browserstack',
-    credentials: { variables: environmentVariables },
-    connection: {
-      capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
-      resolve: async (context) =>
-        (await loadConnection(withCredentials(context.host))).resolve(context),
-      verify: async (context) =>
-        await (await loadConnection(withCredentials(context.host))).verify(context),
-    },
-    setup: async (host) => ({
-      webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(
-        withCredentials(host),
-      ),
-    }),
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: 'browserstack',
+        credentials: { variables: environmentVariables },
+        connection: {
+          capabilities: { ...HOSTED_WEBDRIVER_CONNECTION },
+          resolve: async (context) =>
+            (await loadBrowserStackConnection(context.host)).resolve(context),
+          verify: async (context) =>
+            await (await loadBrowserStackConnection(context.host)).verify(context),
+        },
+        setup: async (host) => ({
+          webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(
+            withCredentials(host),
+          ),
+        }),
+      },
+    ],
   };
 }
 

@@ -1,4 +1,4 @@
-import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderAgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 import { REVYL_PROVIDER } from './device.ts';
 import { REVYL_API_KEY_VARIABLE, REVYL_API_URL_VARIABLE } from './credentials.ts';
 import { setupRevylPlugin } from './plugin-setup.ts';
@@ -19,7 +19,7 @@ export type RevylPluginOptions = {
  * environment: a credential passed as an option is not part of the environment the daemon
  * fingerprints.
  */
-function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
+function revyl(options: RevylPluginOptions = {}): ProviderAgentDevicePlugin {
   // Each option replaces its own variable and nothing else: an `apiUrl` with no `apiKey` still has
   // the key read from the environment, and a `apiKey` with no `apiUrl` still reads the URL there.
   const overridden: Record<string, string> = {};
@@ -34,35 +34,40 @@ function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
     ...(options.apiUrl === undefined ? [REVYL_API_URL_VARIABLE] : []),
   ];
   return {
-    apiVersion: 2,
-    provider: REVYL_PROVIDER,
-    credentials: { variables: environmentVariables },
-    connection: {
-      capabilities: {
-        leaseKind: 'direct-device-provider',
-        requiresAppAttachment: false,
-        requiresRemoteDaemon: false,
-        supportsArtifacts: false,
-        // Deferred app selection means `open <uploaded-asset-name>` creates the device from an asset
-        // already uploaded to the provider. Revyl starts a device with or without an app and puts a
-        // build on a running one with `install`, so the first device command allocates as usual.
-        supportsDeferredAppSelection: false,
-        supportsDirectPortReverse: false,
-        usesCloudWebDriverLease: false,
-        holdsCloudDevice: true,
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'provider',
+        provider: REVYL_PROVIDER,
+        credentials: { variables: environmentVariables },
+        connection: {
+          capabilities: {
+            leaseKind: 'direct-device-provider',
+            requiresAppAttachment: false,
+            requiresRemoteDaemon: false,
+            supportsArtifacts: false,
+            // Deferred app selection means `open <uploaded-asset-name>` creates the device from an asset
+            // already uploaded to the provider. Revyl starts a device with or without an app and puts a
+            // build on a running one with `install`, so the first device command allocates as usual.
+            supportsDeferredAppSelection: false,
+            supportsDirectPortReverse: false,
+            usesCloudWebDriverLease: false,
+            holdsCloudDevice: true,
+          },
+          resolve: (context) =>
+            import('./connection.ts').then(({ createRevylConnection }) =>
+              createRevylConnection(withCredentials(context.host)).resolve(context),
+            ),
+          verify: async (context) =>
+            await (
+              await import('./connection.ts')
+            )
+              .createRevylConnection(withCredentials(context.host))
+              .verify(context),
+        },
+        setup: async (host) => await setupRevylPlugin(withCredentials(host)),
       },
-      resolve: (context) =>
-        import('./connection.ts').then(({ createRevylConnection }) =>
-          createRevylConnection(withCredentials(context.host)).resolve(context),
-        ),
-      verify: async (context) =>
-        await (
-          await import('./connection.ts')
-        )
-          .createRevylConnection(withCredentials(context.host))
-          .verify(context),
-    },
-    setup: async (host) => await setupRevylPlugin(withCredentials(host)),
+    ],
   };
 }
 

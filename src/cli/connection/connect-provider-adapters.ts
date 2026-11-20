@@ -88,7 +88,7 @@ async function providerConnection(
   provider: string,
   host: HostEnvironment,
 ): Promise<PluginConnectionCallbacks> {
-  if (provider === 'limrun') return await builtinLimrunConnection(host);
+  if (provider === 'limrun') return await builtinLimrunConnection();
   return await withPluginConnection(
     provider,
     BUILTIN_PROVIDER_IDS,

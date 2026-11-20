@@ -139,7 +139,7 @@ test('the built-in connection answers connect with the provider callbacks and it
     cwd: process.cwd(),
   };
 
-  const connection = await builtinLimrunConnection(host);
+  const connection = await builtinLimrunConnection();
   // Composing the connection reads nothing about a runtime: the host adapters are what `setup`
   // asks for, and `connect` never calls it.
   assert.deepEqual(runtimeDependencies.create.mock.calls, []);
@@ -188,7 +188,7 @@ test('the built-in connection verifies the iOS platform another connect call sel
     env: { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_STATE_DIR: stateDir },
     cwd: process.cwd(),
   };
-  const connection = await builtinLimrunConnection(host);
+  const connection = await builtinLimrunConnection();
   const verification = await connection.verify({
     flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
     cwd: host.cwd,

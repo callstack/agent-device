@@ -14,7 +14,7 @@ import {
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginCandidate } from './registry.ts';
-
+import type { PluggedClaim } from './validate.ts';
 export type PluginSelection = {
   installation: string;
   version?: string;
@@ -133,6 +133,7 @@ type StoreInstallation = {
   directory: string;
   selection: PluginSelection;
   entry: string;
+  declaredClaims: readonly PluggedClaim[];
 };
 
 async function describeInstallation(
@@ -140,7 +141,8 @@ async function describeInstallation(
   directory: string,
   selection: PluginSelection,
 ): Promise<StoreInstallation> {
-  const { discoverPluginEntry, readPackageJson } = await import('./discovery.ts');
+  const { assertNodeFloor, discoverPluginEntry, readAgentDeviceClaims, readPackageJson } =
+    await import('./discovery.ts');
   const packageJson = readPackageJson(directory);
   if (packageJson.name !== name)
     throw new AppError('INVALID_ARGS', `Plugin package identity mismatch: ${name}`);
@@ -159,7 +161,12 @@ async function describeInstallation(
     throw new AppError('INVALID_ARGS', `Invalid artifact plugin metadata: ${name}`, {
       reason: 'invalid_plugin',
     });
-  return { name, version, directory, selection, entry: discoverPluginEntry(directory) };
+  const entry = discoverPluginEntry(directory);
+  // Before any import: the supported contract version, the Node floor, and the static claims. The
+  // claims the factory returns must equal these once it runs with its options.
+  const declaredClaims = readAgentDeviceClaims(packageJson);
+  assertNodeFloor(packageJson);
+  return { name, version, directory, selection, entry, declaredClaims };
 }
 
 async function readInstallation(home: string, name: string, selection: PluginSelection) {
@@ -183,8 +190,9 @@ async function loadInstallation({ name, entry, selection }: StoreInstallation) {
 /**
  * The store's contribution to the provider registry, in package-name order. Nothing here runs
  * plugin code: a selection or package that cannot be read becomes a candidate that fails when
- * loaded, so one damaged installation never hides the others. A store package names its provider
- * only once its factory runs, and the registry settles a duplicate then.
+ * loaded, so one damaged installation never hides the others. A store package's static claims are
+ * read from its metadata before import and reserved when the registry reaches it, so a duplicate is
+ * settled by first claim even when the winning package never loads.
  */
 export async function storePluginCandidates(env: NodeJS.ProcessEnv): Promise<PluginCandidate[]> {
   return (await readPluginSnapshot(env)).candidates;
@@ -211,6 +219,7 @@ async function readPluginSnapshot(env: NodeJS.ProcessEnv): Promise<{
           package: name,
           selectionStamp: selectionStamp(selection),
           version: installation.version,
+          declaredClaims: installation.declaredClaims,
           ...(selection.options ? { hostOptions: selection.options } : {}),
           load: () => loadInstallation(installation),
         };

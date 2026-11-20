@@ -18,13 +18,14 @@ import {
 import {
   mkdtempForTestSync,
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
   bindTestCommandHost,
 } from '@agent-device/test-kit';
 import manifest from '@agent-device/aws-device-farm/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from '../../__tests__/test-utils/connect-command.ts';
+import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -95,11 +96,11 @@ beforeEach(() => {
   pluginHomeDir = home;
   // The store declares the plugin installed with AWS Device Farm's capabilities; the mocked loader
   // above supplies the workspace factory those assertions exercise.
-  selectV2Plugin(
+  selectPlugin(
     home,
     manifest.name,
-    v2RegistrationSource('aws-device-farm', {
-      extra: `connection: { capabilities: ${JSON.stringify(awsDeviceFarm().connection?.capabilities)}, resolve() {}, verify() {} },`,
+    pluginSource('aws-device-farm', {
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(awsDeviceFarm()))}, resolve() {}, verify() {} },`,
     }),
   );
   vi.stubEnv('AGENT_DEVICE_HOME', home);

@@ -1,30 +1,38 @@
 import type { ReplayBackendPlugin } from '@agent-device/contracts/replay-backend';
-import type {
+import {
   NATIVE_REPLAY_BACKEND,
-  ReplayExecutionPlugin,
+  type ReplayExecutionPlugin,
 } from '@agent-device/contracts/replay-execution';
-import type { ProviderPluginHost } from './host.ts';
+import type { ReplaySetupHost } from './host.ts';
 
-/** A managed v2 replay engine. The host retains sessions, dispatch, cancellation and cleanup. */
-export type ReplayEnginePlugin<TBackend extends string = string> = Readonly<{
-  apiVersion: 2;
-  kind: 'replay-backend';
-  backend: TBackend;
-  setup(
-    host: ProviderPluginHost,
-  ): Promise<ReplayEngineSetup<TBackend>> | ReplayEngineSetup<TBackend>;
+/** A format backend's setup result: the lazy engine factory plus the registration's own cleanup. */
+export type ReplayBackendSetup = Readonly<{
+  replayBackend: ReplayBackendPlugin;
+  dispose?(): Promise<void> | void;
 }>;
 
-type NativeExecutionSetup = { execution: ReplayExecutionPlugin; replayBackend?: never };
-type FormatBackendSetup = { replayBackend: ReplayBackendPlugin; execution?: never };
+/** Native replay's setup result: the lazy execution factory plus the registration's own cleanup. */
+export type ReplayExecutionSetup = Readonly<{
+  execution: ReplayExecutionPlugin;
+  dispose?(): Promise<void> | void;
+}>;
 
-/** Native execution belongs to ad; other backend ids supply a format engine. */
-export type ReplayEngineSetup<TBackend extends string = string> = Readonly<
-  { dispose?(): Promise<void> | void } & (TBackend extends typeof NATIVE_REPLAY_BACKEND
-    ? NativeExecutionSetup
-    : string extends TBackend
-      ? NativeExecutionSetup | FormatBackendSetup
-      : FormatBackendSetup)
->;
+/**
+ * A format replay engine contribution, such as Maestro. The host retains sessions, dispatch,
+ * cancellation and cleanup; `replayBackend.create(host)` receives the full replay backend host
+ * lazily, only when the backend is selected.
+ */
+export type ReplayBackendContribution<TBackend extends string = string> = Readonly<{
+  kind: 'replay-backend';
+  backend: TBackend;
+  setup(host: ReplaySetupHost): Promise<ReplayBackendSetup> | ReplayBackendSetup;
+}>;
+
+/** The native `ad` replay and test execution contribution. */
+export type ReplayExecutionContribution = Readonly<{
+  kind: 'replay-execution';
+  id: typeof NATIVE_REPLAY_BACKEND;
+  setup(host: ReplaySetupHost): Promise<ReplayExecutionSetup> | ReplayExecutionSetup;
+}>;
 
 export type { ReplayBackendResolver } from '@agent-device/contracts/replay-backend';

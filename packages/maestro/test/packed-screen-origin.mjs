@@ -10,7 +10,7 @@ const [plugin, scratch] = process.argv.slice(2);
 const { default: maestroPlugin } = await import(
   pathToFileURL(path.join(plugin, 'dist/agent-device.mjs'))
 );
-const setup = maestroPlugin().setup();
+const setup = maestroPlugin().contributes[0].setup();
 const backend = await setup.replayBackend.create({
   ...createReplayBackendHost(),
   resolveTargetDevice: () => {
