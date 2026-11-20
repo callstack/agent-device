@@ -312,6 +312,10 @@
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
     },
+    "./web-provider": {
+      "types": "./src/web-provider.ts",
+      "default": "./src/web-provider.ts"
+    },
     "./managed-web-backend": {
       "types": "./src/managed-web-backend.ts",
       "default": "./src/managed-web-backend.ts"

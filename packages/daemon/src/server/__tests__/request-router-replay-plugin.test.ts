@@ -21,7 +21,7 @@ async function fixture(storeEnv?: NodeJS.ProcessEnv) {
     await resolveProviderPlugins([]),
     { env: {}, cwd: '/' },
     {
-      assertReplaySelectionCurrent: storeEnv ? createPluginSelectionGuard([], storeEnv) : undefined,
+      assertSelectionCurrent: storeEnv ? createPluginSelectionGuard([], storeEnv) : undefined,
       adaptWebDriver: async () => {
         throw new Error('no provider');
       },

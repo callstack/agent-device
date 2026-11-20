@@ -10,8 +10,10 @@ import { readPluginPackageClaims, type PluggedClaim } from './validate.ts';
  * order. Read before any import: the apiVersion must be the supported one, and every declared claim
  * must be unreserved. After the factory runs, its returned claims must equal these, in any order.
  */
-export function readAgentDeviceClaims(manifest: Record<string, unknown>): readonly PluggedClaim[] {
-  return readPluginPackageClaims(manifest['agent-device']);
+export async function readAgentDeviceClaims(
+  manifest: Record<string, unknown>,
+): Promise<readonly PluggedClaim[]> {
+  return await readPluginPackageClaims(manifest['agent-device']);
 }
 
 /**

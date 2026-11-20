@@ -668,6 +668,7 @@ async function startDaemonRuntimeOnHost(
   for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
     await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
       provider: plugin.provider,
+      platform: plugin.platform,
       package: plugin.package,
       source: plugin.source,
       code: plugin.error?.code,

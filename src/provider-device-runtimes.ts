@@ -32,7 +32,7 @@ export async function createDaemonProviderRuntimeComposition(
   const candidates = await storePluginCandidates(host.env);
   return await composeProviderRuntime(host, candidates, {
     ...PROVIDER_PLUGIN_POLICY,
-    assertReplaySelectionCurrent: createPluginSelectionGuard(candidates, host.env),
+    assertSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
   });
 }
 
