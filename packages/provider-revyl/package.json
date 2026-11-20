@@ -1,6 +1,13 @@
 {
   "name": "@agent-device/revyl",
   "version": "0.22.0-dev",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "agent-device": {
+    "apiVersion": 3,
+    "provider": "revyl"
+  },
   "type": "module",
   "description": "Revyl cloud iOS simulator and Android emulator plugin for agent-device.",
   "files": [

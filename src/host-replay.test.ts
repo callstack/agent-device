@@ -4,7 +4,8 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { prepareDaemonCommandRequest } from '@agent-device/command-surface';
 import { createAgentDeviceClient } from '@agent-device/client';
-import type { ReplayEnginePlugin } from '@agent-device/plugins/replay-backend';
+import type { AgentDevicePlugin } from './sdk/plugins.ts';
+import type { ReplayBackendContribution } from '@agent-device/plugins/replay-backend';
 import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { storePluginCandidates } from '@agent-device/plugins/store';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
@@ -114,19 +115,28 @@ function fixture() {
   return { root, entry, host, stateDir: path.join(root, 'state') };
 }
 
-async function nativePlugin() {
+async function nativePlugin(): Promise<AgentDevicePlugin> {
   const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
-  const plugin = resolved.slots.find((slot) => slot.backend === 'ad')?.replayPlugin;
-  if (!plugin) throw new Error('Native replay test installation is missing');
-  return plugin;
+  const claim = resolved.claims.find(
+    (claim) => claim.kind === 'replay-execution' && claim.id === 'ad',
+  );
+  if (!claim?.contribution) throw new Error('Native replay test installation is missing');
+  return {
+    apiVersion: 3,
+    contributes: [claim.contribution as AgentDevicePlugin['contributes'][number]],
+  } satisfies AgentDevicePlugin;
 }
 
 async function trackedPlugin() {
   const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
-  const maestro = resolved.slots.find((slot) => slot.backend === 'maestro')?.replayPlugin;
-  if (!maestro) throw new Error('Maestro test installation is missing');
+  const claim = resolved.claims.find(
+    (claim) => claim.kind === 'replay-backend' && claim.id === 'maestro',
+  );
+  const maestro = claim?.contribution;
+  if (!maestro || maestro.kind !== 'replay-backend')
+    throw new Error('Maestro test installation is missing');
   const calls = { setup: 0, create: 0, collect: 0, run: 0, dispose: 0 };
-  const plugin: ReplayEnginePlugin = {
+  const contribution: ReplayBackendContribution = {
     ...maestro,
     setup: async (host) => {
       calls.setup += 1;
@@ -158,7 +168,10 @@ async function trackedPlugin() {
       };
     },
   };
-  return { plugin, calls };
+  return {
+    plugin: { apiVersion: 3, contributes: [contribution] } satisfies AgentDevicePlugin,
+    calls,
+  };
 }
 
 test.each(['replay', 'test', 'batch-test'] as const)(
@@ -218,6 +231,8 @@ test('isolated embedded clients ignore a conflicting store and never borrow anot
       name: '@agent-device/maestro',
       version: '0.0.0',
       type: 'module',
+      engines: { node: '>=22.12' },
+      'agent-device': { apiVersion: 3, replayBackend: 'maestro' },
       exports: { './agent-device': './plugin.mjs' },
     }),
   );

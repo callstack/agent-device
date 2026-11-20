@@ -202,10 +202,14 @@ export async function resourceAdmissionWorld(
                 {
                   source: 'embedder' as const,
                   load: () => ({
-                    apiVersion: 2,
-                    kind: 'replay-backend',
-                    backend: backend.id,
-                    setup: () => ({ replayBackend: { create: () => backend } }),
+                    apiVersion: 3,
+                    contributes: [
+                      {
+                        kind: 'replay-backend',
+                        backend: backend.id,
+                        setup: () => ({ replayBackend: { create: () => backend } }),
+                      },
+                    ],
                   }),
                 },
               ]

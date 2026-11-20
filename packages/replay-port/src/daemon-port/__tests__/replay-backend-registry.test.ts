@@ -5,7 +5,7 @@ import { expect, test } from 'vitest';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { getReplayBackendDeclaration } from '../replay-backend-declarations.ts';
 import { getReplayBackend, openReplayBackend } from '../replay-backend-registry.ts';
-import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 
 test('help declares the exact optional package without requiring a working plugin', () => {
   expect(
@@ -31,7 +31,7 @@ test('the runtime registry memoizes the installed backend capabilities', async (
 test('client replay absence does not evaluate unrelated provider packages', async () => {
   const { home, env } = pluginHome();
   const evaluated = path.join(home, 'provider-evaluated');
-  selectV2Plugin(
+  selectPlugin(
     home,
     '@example/unrelated',
     `import fs from 'node:fs';

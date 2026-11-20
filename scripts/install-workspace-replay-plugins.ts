@@ -53,12 +53,18 @@ function installWorkspacePlugin(
     fs.mkdirSync(directory);
     fs.cpSync(path.join(workspace, 'dist'), path.join(directory, 'dist'), { recursive: true });
     const manifest = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'));
+    // The written file keeps every field the store reads before import: the `agent-device` claims and
+    // `engines.node`, alongside the published `exports` that name the plugin entry.
     fs.writeFileSync(
       path.join(directory, 'package.json'),
       JSON.stringify({
         name: manifest.name,
         version: manifest.version,
         type: 'module',
+        ...(manifest.engines !== undefined ? { engines: manifest.engines } : {}),
+        ...(manifest['agent-device'] !== undefined
+          ? { 'agent-device': manifest['agent-device'] }
+          : {}),
         exports: manifest.publishConfig.exports,
       }),
     );
