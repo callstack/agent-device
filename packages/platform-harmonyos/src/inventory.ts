@@ -1,30 +1,22 @@
-import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  DeviceInventoryHostFor,
-  HostCommandResult,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
-
-/** The raw HarmonyOS toolchain roots the plugin was configured with, captured inertly by its host. */
-export type HarmonyInventoryConfig = Readonly<{
-  hdcSdkPath?: string;
-  devecoSdkHome?: string;
-  commandLineToolsHome?: string;
-}>;
+import { type HarmonyHdcRunner } from './hdc.ts';
+import type { HarmonyToolbox } from './toolbox.ts';
 
 const PROBE_TIMEOUT_MS = 10_000;
 
-export function createHarmonyInventory(
-  host: DeviceInventoryHostFor<'harmonyos'>,
-  config: HarmonyInventoryConfig = {},
-): DeviceInventorySource {
+/**
+ * HarmonyOS device discovery. It runs entirely over the plugin's own HDC route, so the toolchain
+ * roots the plugin was configured with are already honored — the core prepares no HarmonyOS
+ * toolchain and resolves no HDC for it. A machine without HDC fails in that route with the curated
+ * missing-toolchain error, so discovery only answers for what a started HDC reported.
+ */
+export function createHarmonyInventory(toolbox: HarmonyToolbox): DeviceInventorySource {
   return {
-    discover: async (request, scope) => await discoverHarmonyDevices(host, config, request, scope),
+    discover: async (request, scope) => await discoverHarmonyDevices(toolbox.hdc, request, scope),
   };
 }
 
@@ -36,19 +28,15 @@ export function parseHarmonyTargetList(rawOutput: string): string[] {
 }
 
 async function discoverHarmonyDevices(
-  host: DeviceInventoryHostFor<'harmonyos'>,
-  config: HarmonyInventoryConfig,
+  hdc: HarmonyHdcRunner,
   request: Readonly<DeviceInventoryRequest>,
   scope: PlatformRequestScope,
 ): Promise<readonly DeviceInfo[]> {
-  await host.toolchains.prepare('harmonyos');
-  const hdc = await resolveHdc(host, configuredToolchainRoots(config));
-  if (!hdc) {
-    throw new AppError('TOOL_MISSING', 'hdc not found in PATH', {
-      hint: 'Install HarmonyOS Command Line Tools, then add its sdk/default/openharmony/toolchains directory to PATH.',
-    });
-  }
-  const result = await runHdc(host, hdc, ['list', 'targets'], scope);
+  const result = await hdc.launch(['list', 'targets'], {
+    allowFailure: true,
+    timeoutMs: PROBE_TIMEOUT_MS,
+    signal: scope.signal,
+  });
   if (result.exitCode !== 0) {
     throw new AppError('COMMAND_FAILED', 'hdc list targets failed', {
       stderr: result.stderr,
@@ -58,56 +46,20 @@ async function discoverHarmonyDevices(
   const targets = parseHarmonyTargetList(result.stdout).filter(
     (target) => !request.serial || request.serial === target,
   );
-  const devices = await Promise.all(
-    targets.map(async (target) => await probeHarmonyDevice(host, hdc, target, scope)),
+  return await Promise.all(
+    targets.map(async (target) => await probeHarmonyDevice(hdc, target, scope)),
   );
-  return devices;
-}
-
-function configuredToolchainRoots(config: HarmonyInventoryConfig): readonly string[] {
-  return [
-    config.hdcSdkPath,
-    config.devecoSdkHome && path.join(config.devecoSdkHome, 'default', 'openharmony', 'toolchains'),
-    config.commandLineToolsHome &&
-      path.join(config.commandLineToolsHome, 'sdk', 'default', 'openharmony', 'toolchains'),
-  ].filter((root): root is string => root !== undefined);
-}
-
-async function resolveHdc(
-  host: DeviceInventoryHostFor<'harmonyos'>,
-  toolchainRoots: readonly string[],
-): Promise<string | undefined> {
-  for (const root of toolchainRoots) {
-    const candidate = path.join(root, 'hdc');
-    if (await host.files.isExecutable(candidate)) return candidate;
-  }
-  return await host.commands.which('hdc');
 }
 
 async function probeHarmonyDevice(
-  host: DeviceInventoryHostFor<'harmonyos'>,
-  hdc: string,
+  hdc: HarmonyHdcRunner,
   target: string,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo> {
+  const device = { id: target };
   const [nameResult, characteristicsResult] = await Promise.all([
-    runHdc(
-      host,
-      hdc,
-      deviceShellArgv('hdc', 'shell', ['param', 'get', 'const.product.name'], ['-t', target]),
-      scope,
-    ),
-    runHdc(
-      host,
-      hdc,
-      deviceShellArgv(
-        'hdc',
-        'shell',
-        ['param', 'get', 'const.build.characteristics'],
-        ['-t', target],
-      ),
-      scope,
-    ),
+    probe(hdc, device, ['param', 'get', 'const.product.name'], scope),
+    probe(hdc, device, ['param', 'get', 'const.build.characteristics'], scope),
   ]);
   const name = nameResult.exitCode === 0 ? nameResult.stdout.trim() : '';
   const emulator = name.toLowerCase() === 'emulator';
@@ -121,19 +73,15 @@ async function probeHarmonyDevice(
   };
 }
 
-async function runHdc(
-  host: DeviceInventoryHostFor<'harmonyos'>,
-  executable: string,
-  args: readonly string[],
+async function probe(
+  hdc: HarmonyHdcRunner,
+  device: { id: string },
+  words: readonly string[],
   scope: PlatformRequestScope,
-): Promise<HostCommandResult> {
-  return await host.commands.run(
-    {
-      executable,
-      args,
-      allowFailure: true,
-      timeoutMs: PROBE_TIMEOUT_MS,
-    },
-    scope.signal,
-  );
+) {
+  return await hdc.runShell(device, words, {
+    allowFailure: true,
+    timeoutMs: PROBE_TIMEOUT_MS,
+    signal: scope.signal,
+  });
 }

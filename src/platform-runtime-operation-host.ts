@@ -1,5 +1,4 @@
 import type {
-  HarmonyPlatformSelection,
   PlatformPluginSet,
   WebPlatformSelection,
 } from '@agent-device/contracts/platform-plugin';
@@ -58,7 +57,6 @@ export async function loadMacOsSurfaceSnapshot(
 export function createPlatformRuntimeHost(options: {
   host: HostEnvironment;
   web?: WebPlatformSelection;
-  harmony?: HarmonyPlatformSelection;
   interactors?: PlatformPluginSet;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
@@ -89,7 +87,7 @@ export function createPlatformRuntimeHost(options: {
     hostEnvironment: host,
     commands,
     appleTools,
-    toolchains: createHostToolchainPreparer(env, options.harmony),
+    toolchains: createHostToolchainPreparer(env),
     artifacts: Object.freeze({ resolveSession: options.resolveSessionArtifacts }),
     outputs: Object.freeze({
       openAppend: async (pathname: string) =>

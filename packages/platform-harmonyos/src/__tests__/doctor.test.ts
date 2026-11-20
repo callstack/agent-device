@@ -1,24 +1,15 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
-
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn() };
-});
-
-import { runCmd } from '@agent-device/host-kit/command';
+import path from 'node:path';
+import { createHarmonyHostStub, createHarmonyToolchainRoot } from '../toolbox.fixtures.ts';
 import { harmonyToolchainCheck } from '../doctor.ts';
 
-const mockRunCmd = vi.mocked(runCmd);
-
-beforeEach(() => {
-  mockRunCmd.mockReset();
-});
-
 test('HarmonyOS doctor reports the HDC version', async () => {
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'HDC 3.2.0d\n', stderr: '' } as never);
-  const check: DoctorCheck = await harmonyToolchainCheck();
+  const stub = createHarmonyHostStub();
+  stub.answer({ stdout: 'HDC 3.2.0d\n' });
+
+  const check: DoctorCheck = await harmonyToolchainCheck(stub.toolbox.commands);
 
   assert.deepEqual(check, {
     id: 'toolchain',
@@ -26,5 +17,36 @@ test('HarmonyOS doctor reports the HDC version', async () => {
     summary: 'HarmonyOS toolchain: HDC 3.2.0d.',
     evidence: { hdcVersion: 'HDC 3.2.0d' },
   });
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.slice(0, 2), ['hdc', ['-v']]);
+  assert.deepEqual(stub.commands[0], {
+    executable: 'hdc',
+    args: ['-v'],
+    env: { PATH: '/usr/bin' },
+    timeoutMs: 3_000,
+    allowFailure: true,
+    signal: undefined,
+  });
+});
+
+test('HarmonyOS doctor probes the HDC a configured root carries', async () => {
+  const root = createHarmonyToolchainRoot();
+  const stub = createHarmonyHostStub({ env: { HDC_SDK_PATH: root, PATH: '/usr/bin' } });
+  stub.answer({ stdout: 'HDC 3.2.0d\n' });
+
+  const check = await harmonyToolchainCheck(stub.toolbox.commands);
+
+  // A root outside the host PATH still answers its own version, because the probe names it.
+  assert.equal(stub.commands[0]?.executable, path.join(root, 'hdc'));
+  assert.equal(check.status, 'pass');
+});
+
+test('HarmonyOS doctor reports an unusable toolchain as info with the install hint', async () => {
+  const stub = createHarmonyHostStub();
+
+  const check = await harmonyToolchainCheck(stub.toolbox.commands);
+
+  assert.equal(check.status, 'info');
+  assert.equal(
+    check.hint,
+    'Install HarmonyOS Command Line Tools, then add sdk/default/openharmony/toolchains to PATH or set HDC_SDK_PATH.',
+  );
 });

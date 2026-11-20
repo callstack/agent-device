@@ -1,5 +1,4 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { HarmonyPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type {
   DeviceInventoryHost,
   HostOperatingSystem,
@@ -15,10 +14,7 @@ import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.t
 import { createHostCommandRunner } from './platform-runtime-host-command-runner.ts';
 import { hostHomeDirectoryFromEnv } from '@agent-device/host-kit/host-file';
 
-export function createDeviceInventoryHost(
-  host: HostEnvironment,
-  harmony?: HarmonyPlatformSelection,
-): DeviceInventoryHost {
+export function createDeviceInventoryHost(host: HostEnvironment): DeviceInventoryHost {
   const env = host.env;
   // The host names its own home; families derive default-install paths from it (#3794). A host
   // that names none (HOME and USERPROFILE both absent, e.g. env -i or a systemd unit without
@@ -28,7 +24,7 @@ export function createDeviceInventoryHost(
   return Object.freeze({
     commands: createHostCommandRunner(host),
     appleTools: createAppleToolHost(),
-    toolchains: createHostToolchainPreparer(env, harmony),
+    toolchains: createHostToolchainPreparer(env),
     files: Object.freeze({
       isExecutable: async (candidate: string) => await isExecutable(candidate),
       createTemporaryTextFile: async (options: { prefix: string; suffix: string }) =>

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HarmonyPlatformRegistration } from '@agent-device/contracts/platform-plugin';
-import type { DeviceInventoryHostFor } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import { isExecutablePath } from '@agent-device/host-kit/command';
+import path from 'node:path';
 import harmonyPlatformPlugin from './index.ts';
+import { createHarmonyToolchainRoot } from './toolbox.fixtures.ts';
 
 const HARMONY_DEVICE = {
   platform: 'harmonyos',
@@ -16,13 +18,29 @@ const HARMONY_DEVICE = {
   booted: true,
 } satisfies DeviceInfo;
 
+/** One command the plugin asked the host to run. */
+type HostCommand = Readonly<{
+  executable: string;
+  args: readonly string[];
+  env: PlatformHost['env'] | undefined;
+}>;
+
 /** The host the composition hands the plugin: one captured environment, no device authority. */
-function createPluginHost(env: PlatformHost['env'] = {}): PlatformHost {
+function createPluginHost(
+  env: PlatformHost['env'] = {},
+  commands: HostCommand[] = [],
+): PlatformHost {
   return {
     env,
     cwd: '/host-cwd',
     stateDir: '/host-state',
-    runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    runCommand: async (executable, args, options) => {
+      commands.push({ executable, args, env: options.env });
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+    // The real host probe: a test that names a toolchain root proves the plugin resolves HDC from
+    // a file on disk, not from a verdict this fixture hands it.
+    isFileExecutable: isExecutablePath,
     emitDiagnostic,
     withDiagnosticTimer,
   };
@@ -59,75 +77,44 @@ test('setup registers the HarmonyOS modules and operations', () => {
   assert.equal(typeof registration.inventoryModule.loadInventory, 'function');
   assert.equal(typeof registration.runtimeModule.loadRuntime, 'function');
   assert.equal(typeof registration.operations.toolchainCheck, 'function');
-  assert.equal(typeof registration.operations.prepareToolchain, 'function');
 });
 
-test('setup hands the host it was set up with to the inventory module it registers', async () => {
-  // The plugin never reads `process.env`: the documented HarmonyOS roots reach discovery through
-  // the setup host only. Discovery asks the host to prepare its toolchain first, then resolves HDC
-  // through the roots and PATH that preparation owns, so a host without either answers its own
-  // missing-toolchain reason. The process environment names a different root on purpose, so an
-  // implementation that read it instead of the host fails here on any machine.
-  const originalRoots = {
-    HDC_SDK_PATH: process.env.HDC_SDK_PATH,
-    DEVECO_SDK_HOME: process.env.DEVECO_SDK_HOME,
-    HARMONYOS_COMMAND_LINE_TOOLS: process.env.HARMONYOS_COMMAND_LINE_TOOLS,
-  };
-  process.env.HDC_SDK_PATH = '/process-tools/hdc';
-  process.env.DEVECO_SDK_HOME = '/process-tools/deveco';
-  delete process.env.HARMONYOS_COMMAND_LINE_TOOLS;
-  try {
-    const registration = setupHarmonyPlatform(
-      createPluginHost({
-        HDC_SDK_PATH: ' /host-tools/hdc ',
+test('the HarmonyOS inventory loads with no host from the core', async () => {
+  // The family owns its host: discovery runs over the setup host, so the core hands the inventory
+  // module nothing. A signature that still demanded a core host would fail here.
+  const registration = setupHarmonyPlatform();
+  const source = await registration.inventoryModule.loadInventory();
+  assert.equal(typeof source.discover, 'function');
+});
+
+test('setup runs discovery on the host it was set up with, not on the process environment', async () => {
+  // The plugin never reads `process.env`: the documented HarmonyOS roots reach discovery through the
+  // setup host only. The process environment names a different root on purpose, so an implementation
+  // that read it instead of the host fails here on any machine.
+  vi.stubEnv('HDC_SDK_PATH', '/process-tools/toolchains');
+  vi.stubEnv('DEVECO_SDK_HOME', '/process-tools/deveco');
+  vi.stubEnv('HARMONYOS_COMMAND_LINE_TOOLS', undefined);
+  const hostRoot = createHarmonyToolchainRoot();
+  const commands: HostCommand[] = [];
+  const registration = setupHarmonyPlatform(
+    createPluginHost(
+      {
+        HDC_SDK_PATH: hostRoot,
         DEVECO_SDK_HOME: '/host-tools/deveco',
         HARMONYOS_COMMAND_LINE_TOOLS: '',
         PATH: '/bin',
-      }),
-    );
-    const lookedUp: string[] = [];
-    let prepares = 0;
-    const inventoryHost = {
-      toolchains: {
-        prepare: async () => {
-          prepares += 1;
-        },
       },
-      commands: {
-        which: async (command: string) => {
-          lookedUp.push(command);
-          return undefined;
-        },
-        run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      },
-      files: {
-        isExecutable: async (candidate: string) => {
-          lookedUp.push(candidate);
-          return false;
-        },
-      },
-      hostOs: 'darwin',
-      hostName: 'test-host',
-    } as unknown as DeviceInventoryHostFor<'harmonyos'>;
+      commands,
+    ),
+  );
 
-    const source = await registration.inventoryModule.loadInventory(inventoryHost);
-    await assert.rejects(
-      async () => await source.discover({}, scope),
-      (error: Error) => error.message === 'hdc not found in PATH',
-    );
-    assert.equal(prepares, 1);
-    // Each root the setup host named is probed, trimmed, and derived; the empty root and the
-    // process environment's roots are not.
-    assert.deepEqual(lookedUp, [
-      '/host-tools/hdc/hdc',
-      '/host-tools/deveco/default/openharmony/toolchains/hdc',
-      'hdc',
-    ]);
-  } finally {
-    Object.assign(process.env, originalRoots);
-    if (originalRoots.HARMONYOS_COMMAND_LINE_TOOLS === undefined)
-      delete process.env.HARMONYOS_COMMAND_LINE_TOOLS;
-  }
+  const source = await registration.inventoryModule.loadInventory();
+  await source.discover({}, scope);
+
+  // Only the host's root, which really carries an executable HDC, is spawned and prepended to PATH.
+  assert.equal(commands[0]?.executable, path.join(hostRoot, 'hdc'));
+  assert.equal(commands[0]?.env?.PATH?.split(path.delimiter)[0], hostRoot);
+  assert.ok(!commands[0]!.env!.PATH!.includes('/process-tools/toolchains'));
 });
 
 test('setup creates the HarmonyOS interactor lazily', async () => {

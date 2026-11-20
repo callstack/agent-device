@@ -11,6 +11,7 @@
     }
   },
   "devDependencies": {
+    "@agent-device/test-kit": "workspace:*",
     "rolldown": "1.2.5"
   }
 }

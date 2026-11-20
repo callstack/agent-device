@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createHarmonyHostStub } from './toolbox.fixtures.ts';
 
 const { pressHarmonyKeyboardKey, snapshotHarmony } = vi.hoisted(() => ({
   pressHarmonyKeyboardKey: vi.fn(async () => undefined),
@@ -31,18 +32,26 @@ const device: DeviceInfo = {
 };
 
 test('harmonyos snapshot stamps its channel and producer', async () => {
-  const result = await createHarmonyInteractor(device).snapshot();
+  const { toolbox } = createHarmonyHostStub();
+  const result = await createHarmonyInteractor(toolbox, device).snapshot();
 
   if ('stage' in result) throw new Error('HarmonyOS snapshot must be presented');
   expect(result.backend).toBe('harmonyos-arkui');
   expect(result.producer).toBe('harmonyos-uitest');
   expect(result.nodes).toEqual([{ index: 0, type: 'Button', label: 'Continue' }]);
+  expect(snapshotHarmony).toHaveBeenCalledWith(expect.objectContaining({}), device, undefined);
 });
 
 test('harmonyos keyboard dismiss invalidates gesture viewport through the Back route', async () => {
-  await expect(createHarmonyInteractor(device).keyboardDismiss?.()).resolves.toEqual({
+  const { toolbox } = createHarmonyHostStub();
+
+  await expect(createHarmonyInteractor(toolbox, device).keyboardDismiss?.()).resolves.toEqual({
     kind: 'acknowledged',
   });
 
-  expect(pressHarmonyKeyboardKey).toHaveBeenCalledWith(device, 'Back');
+  expect(pressHarmonyKeyboardKey).toHaveBeenCalledWith(
+    expect.objectContaining({ runShell: expect.any(Function) }),
+    device,
+    'Back',
+  );
 });

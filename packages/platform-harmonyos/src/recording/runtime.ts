@@ -13,15 +13,16 @@ import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import {
   createScreenRecordingCompletion,
   createScreenRecordingLiveHandle,
-  createTransportRecordingSnapshot,
   assertScreenRecordingOptionsSupported,
 } from '@agent-device/capture-kit';
+import { createTransportRecordingSnapshot } from '@agent-device/capture-kit/screen-recording-transport';
 import {
   cleanupRecoveredHarmonyRecording,
   createHarmonyRecordingEnvelope,
   type HarmonyRecordingDescriptor,
 } from './recovery.ts';
 import { createHarmonyScreenRecorder, type HarmonyScreenRecorder } from './recorder.ts';
+import type { HarmonyToolbox } from '../toolbox.ts';
 
 const HARMONY_SCREEN_RECORDING_BACKEND = 'HarmonyOS ScreenRecorder';
 
@@ -39,11 +40,12 @@ export type HarmonyScreenRecordingOperationHost = Readonly<{
 /** Binds the shared runtime host's recording authorities to the HDC recorder this family drives. */
 export function createHarmonyRecordingHost(
   host: PlatformRuntimeHost,
+  toolbox: HarmonyToolbox,
 ): HarmonyScreenRecordingOperationHost {
   return Object.freeze({
     screenRecording: host.screenRecording,
     clock: host.clock,
-    recorder: createHarmonyScreenRecorder(),
+    recorder: createHarmonyScreenRecorder(toolbox.hdc),
   });
 }
 

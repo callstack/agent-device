@@ -297,6 +297,9 @@ importers:
 
   packages/build-config:
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       rolldown:
         specifier: 1.2.5
         version: 1.2.5
@@ -825,9 +828,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/provision-kit':
-        specifier: workspace:*
-        version: link:../provision-kit
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit

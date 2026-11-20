@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
-import { runHarmonyHdc, runHarmonyShell } from '../hdc.ts';
+import type { HarmonyHdcRunner } from '../hdc.ts';
 
 /**
  * The device-side HarmonyOS screen recorder, driven entirely through HDC. It is the family's own
@@ -38,7 +38,19 @@ export type HarmonyScreenRecorder = Readonly<{
 const SCREEN_RECORDER_ABILITY = 'com.huawei.hmos.screenrecorder';
 const SCREEN_RECORDER_SERVICE_ABILITY = 'com.huawei.hmos.screenrecorder.ServiceExtAbility';
 
-export function createHarmonyScreenRecorder(): HarmonyScreenRecorder {
+/** Binds the recorder to the plugin's HDC route, so every HDC call runs on the host. */
+export function createHarmonyScreenRecorder(hdc: HarmonyHdcRunner): HarmonyScreenRecorder {
+  const hdcShell = async (
+    device: DeviceInfo,
+    words: readonly ShellWord[],
+    signal?: AbortSignal,
+  ): Promise<HostCommandResult> =>
+    await hdc.runShell(device, words, { allowFailure: true, signal });
+  const hdcCommand = async (
+    device: DeviceInfo,
+    args: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<HostCommandResult> => await hdc.run(device, args, { allowFailure: true, signal });
   return Object.freeze({
     start: async (device, fileName, signal) =>
       await hdcShell(
@@ -76,18 +88,10 @@ export function createHarmonyScreenRecorder(): HarmonyScreenRecorder {
       return Number.isSafeInteger(size) && size > 0 ? size : undefined;
     },
     pull: async (device, input, signal) =>
-      await hdc(device, ['file', 'recv', input.remotePath, input.outputPath], signal),
+      await hdcCommand(device, ['file', 'recv', input.remotePath, input.outputPath], signal),
     remove: async (device, remotePath, signal) =>
       (await hdcShell(device, ['rm', '-f', remotePath], signal)).exitCode === 0,
     removeMedia: async (device, mediaUri, signal) =>
       (await hdcShell(device, ['mediatool', 'delete', mediaUri], signal)).exitCode === 0,
   });
-}
-
-async function hdc(device: DeviceInfo, args: string[], signal?: AbortSignal) {
-  return await runHarmonyHdc(device, args, { allowFailure: true, signal });
-}
-
-async function hdcShell(device: DeviceInfo, words: readonly ShellWord[], signal?: AbortSignal) {
-  return await runHarmonyShell(device, words, { allowFailure: true, signal });
 }

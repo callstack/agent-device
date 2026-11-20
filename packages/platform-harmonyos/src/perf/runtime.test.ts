@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createHarmonyHostStub } from '../toolbox.fixtures.ts';
 import { createHarmonyPerfOperations } from './runtime.ts';
 
 const device: DeviceInfo = {
@@ -13,7 +14,8 @@ const device: DeviceInfo = {
 
 test('keeps HarmonyOS perf limited to its existing memory sample', async () => {
   const sampleMemory = vi.fn(async () => ({ residentKb: 256 }));
-  const operations = createHarmonyPerfOperations({ device, sampleMemory });
+  const { toolbox } = createHarmonyHostStub();
+  const operations = createHarmonyPerfOperations({ hdc: toolbox.hdc, device, sampleMemory });
 
   await expect(operations.perfMemorySample({ appId: 'com.example.app' })).resolves.toMatchObject({
     metric: { available: true, residentKb: 256 },

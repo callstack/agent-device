@@ -5,6 +5,7 @@ import {
 import type { PerfRuntimeOperations } from '@agent-device/contracts/perf-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { sampleHarmonyMemoryPerf } from '../perf.ts';
+import type { HarmonyHdcRunner } from '../hdc.ts';
 
 /**
  * The HarmonyOS performance cells. Memory sampling reads `/proc/<pid>/status` over HDC, which the
@@ -12,13 +13,17 @@ import { sampleHarmonyMemoryPerf } from '../perf.ts';
  */
 export function createHarmonyPerfOperations(
   params: Readonly<{
+    hdc: HarmonyHdcRunner;
     device: DeviceInfo;
     /** The HDC memory read; the binding supplies the package's own sampler so a test can stub it. */
     sampleMemory?: (device: DeviceInfo, appId: string) => Promise<object>;
   }>,
 ): Pick<PerfRuntimeOperations, 'perfFrames' | 'perfMemorySample' | 'perfMemorySnapshot'> {
-  const { device } = params;
-  const sampleMemory = params.sampleMemory ?? sampleHarmonyMemoryPerf;
+  const { hdc, device } = params;
+  const sampleMemory =
+    params.sampleMemory ??
+    (async (device: DeviceInfo, appId: string) =>
+      await sampleHarmonyMemoryPerf(hdc, device, appId));
   const frameUnavailable = {
     available: false,
     reason:

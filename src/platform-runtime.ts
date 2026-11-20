@@ -102,7 +102,7 @@ export async function createPlatformDeviceInventoryGateways(
     registry: createPlatformModuleRegistryForHost(host.env, platforms),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
-      return createDeviceInventoryHost(host, platforms?.harmony);
+      return createDeviceInventoryHost(host);
     },
     provider,
     env: host.env,
@@ -145,7 +145,6 @@ export function createPlatformRuntimeGateway(
       return createPlatformRuntimeHost({
         host: options.host,
         web: options.platforms.web,
-        harmony: options.platforms.harmony,
         interactors: options.platforms.interactors,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,

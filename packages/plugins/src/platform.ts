@@ -33,6 +33,12 @@ export type PlatformHost = HostEnvironment &
         stdin?: string;
       },
     ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    /**
+     * True when `path` is a file the host can execute. A plugin that resolves a tool from a
+     * directory it was configured with asks the host rather than reading the filesystem itself, so
+     * the probe uses the same host authority as the spawn it authorizes.
+     */
+    isFileExecutable(path: string): Promise<boolean>;
     emitDiagnostic(event: DiagnosticEventInput): void;
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;

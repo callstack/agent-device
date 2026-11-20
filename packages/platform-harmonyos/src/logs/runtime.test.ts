@@ -5,6 +5,7 @@ import type {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
+import { createHarmonyHostStub, createHarmonyToolchainRoot } from '../toolbox.fixtures.ts';
 import { createHarmonyAppLogEnvelope, harmonyAppLogDescriptorCodec } from './descriptor.ts';
 import { createHarmonyAppLogRuntime } from './runtime.ts';
 
@@ -33,7 +34,7 @@ test('rejects durable HarmonyOS descriptors without the canonical process marker
 
 test('starts HarmonyOS hilog with the resolved application pid', async () => {
   const fixture = hostFixture();
-  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+  const binding = await createHarmonyAppLogRuntime(fixture.host, fixture.toolbox).bind({
     device,
     intent: { kind: 'ordinary' },
     scope,
@@ -55,7 +56,7 @@ test('starts HarmonyOS hilog with the resolved application pid', async () => {
 
 test('rejects cross-session start and recovery paths before host authority is used', async () => {
   const fixture = hostFixture();
-  const runtimeOwner = createHarmonyAppLogRuntime(fixture.host);
+  const runtimeOwner = createHarmonyAppLogRuntime(fixture.host, fixture.toolbox);
   const binding = await runtimeOwner.bind({ device, intent: { kind: 'ordinary' }, scope });
   const envelope = createHarmonyAppLogEnvelope({
     sessionId: 'session',
@@ -91,7 +92,7 @@ test('rejects cross-session start and recovery paths before host authority is us
 
 test('rejects a missing HDC tool before opening output or starting a process', async () => {
   const fixture = hostFixture({ whichHdc: async () => undefined });
-  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+  const binding = await createHarmonyAppLogRuntime(fixture.host, fixture.toolbox).bind({
     device,
     intent: { kind: 'ordinary' },
     scope,
@@ -115,18 +116,11 @@ test('rejects a missing HDC tool before opening output or starting a process', a
   expect(fixture.backgroundCommands).toEqual([]);
 });
 
-test('provider-selected HarmonyOS logs prepare configured HDC without local inventory discovery', async () => {
-  const events: string[] = [];
-  const prepare = vi.fn(async () => {
-    events.push('prepare');
-  });
-  const whichHdc = vi.fn(async () => {
-    expect(events).toEqual(['prepare']);
-    events.push('which');
-    return '/configured/toolchains/hdc';
-  });
-  const fixture = hostFixture({ prepare, whichHdc });
-  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+test('HarmonyOS logs name the HDC a configured toolchain root carries and skip the PATH lookup', async () => {
+  const root = createHarmonyToolchainRoot();
+  const whichHdc = vi.fn(async () => 'hdc');
+  const fixture = hostFixture({ whichHdc, env: { HDC_SDK_PATH: root, PATH: '/usr/bin' } });
+  const binding = await createHarmonyAppLogRuntime(fixture.host, fixture.toolbox).bind({
     device,
     intent: { kind: 'ordinary' },
     scope,
@@ -139,28 +133,21 @@ test('provider-selected HarmonyOS logs prepare configured HDC without local inve
     fence: { token: 'fence', generation: 1 },
   });
 
-  expect(prepare).toHaveBeenCalledWith('harmonyos');
-  expect(whichHdc).toHaveBeenCalledWith('hdc');
-  expect(events).toEqual(['prepare', 'which']);
+  // The plugin owns its documented roots, so it never asks the host to resolve HDC it already has.
+  expect(whichHdc).not.toHaveBeenCalled();
   expect(fixture.backgroundCommands).toEqual([
-    ['/configured/toolchains/hdc', '-t', 'harmony-1', 'shell', 'hilog', '-P', '456'],
+    [`${root}/hdc`, '-t', 'harmony-1', 'shell', 'hilog', '-P', '456'],
   ]);
   await started?.pendingHandle.transfer().finish();
 });
 
-test('HarmonyOS log preflight preserves cancellation when toolchain preparation rejects differently', async () => {
+test('HarmonyOS log preflight answers an already-aborted request before any HDC lookup', async () => {
   const controller = new AbortController();
   const reason = new Error('cancelled');
-  const transportError = new Error('toolchain preparation failed');
+  controller.abort(reason);
   const whichHdc = vi.fn(async () => 'hdc');
-  const fixture = hostFixture({
-    prepare: async () => {
-      controller.abort(reason);
-      throw transportError;
-    },
-    whichHdc,
-  });
-  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+  const fixture = hostFixture({ whichHdc });
+  const binding = await createHarmonyAppLogRuntime(fixture.host, fixture.toolbox).bind({
     device,
     intent: { kind: 'ordinary' },
     scope: { ...scope, signal: controller.signal },
@@ -189,7 +176,7 @@ test('HarmonyOS log preflight preserves cancellation when HDC lookup rejects dif
       throw transportError;
     },
   });
-  const binding = await createHarmonyAppLogRuntime(fixture.host).bind({
+  const binding = await createHarmonyAppLogRuntime(fixture.host, fixture.toolbox).bind({
     device,
     intent: { kind: 'ordinary' },
     scope: { ...scope, signal: controller.signal },
@@ -209,8 +196,9 @@ test('HarmonyOS log preflight preserves cancellation when HDC lookup rejects dif
 
 function hostFixture(
   options: {
-    prepare?: AppLogRuntimeHost['toolchains']['prepare'];
     whichHdc?: AppLogRuntimeHost['commands']['which'];
+    /** The environment the plugin's own setup host names, including its toolchain roots. */
+    env?: Readonly<Record<string, string | undefined>>;
   } = {},
 ) {
   const backgroundCommands: string[][] = [];
@@ -237,7 +225,7 @@ function hostFixture(
         throw new Error('unused');
       },
     },
-    toolchains: { prepare: options.prepare ?? (async () => undefined) },
+    toolchains: { prepare: async () => undefined },
     artifacts: {
       resolveSession: () => ({ outputPath: '/tmp/app.log', pidPath: '/tmp/app-log.pid' }),
     },
@@ -267,8 +255,11 @@ function hostFixture(
     },
     clock: { now: () => 10, sleep: waitForMonitorWake },
   };
+  // The plugin's toolbox is built from the host it was set up with, same as in composition.
+  const { toolbox } = createHarmonyHostStub({ env: options.env });
   return {
     host,
+    toolbox,
     backgroundCommands,
     markerReads: () => markerReads,
     outputOpens: () => outputOpens,

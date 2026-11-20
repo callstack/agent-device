@@ -350,7 +350,6 @@ const VEGA_OPERATIONS: Record<keyof VegaPlatformOperations, true> = {
 
 const HARMONY_OPERATIONS: Record<keyof HarmonyPlatformOperations, true> = {
   toolchainCheck: true,
-  prepareToolchain: true,
 };
 
 const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unknown>) => void>> = {
