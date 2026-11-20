@@ -161,8 +161,6 @@ test('connect limrun generates a local daemon remote profile', async () => {
     assert.equal(state.runId, 'run-a');
     assert.equal(state.leaseBackend, 'android-instance');
     assert.equal(state.leaseProvider, 'limrun');
-    // Recorded while the plugin is loaded, so a later `close` needs no plugin to forget the lease.
-    assert.equal(state.forgetsEndedLease, true);
     assert.equal(state.platform, 'android');
     assert.equal(state.daemon?.baseUrl, undefined);
     assert.match(

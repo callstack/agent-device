@@ -107,7 +107,7 @@ export function unavailableConnectPluginError(
  * The capabilities a provider declares: the daemon's own routing for `proxy`, `cloud` and no
  * provider, or a loaded plugin's declaration. Undefined when the provider's plugin is not loaded.
  */
-export function declaredConnectionCapabilities(
+function declaredConnectionCapabilities(
   provider: string | undefined,
   env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities | undefined {

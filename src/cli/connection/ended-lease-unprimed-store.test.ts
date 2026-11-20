@@ -12,14 +12,8 @@ import { runCliCapture } from '../../__tests__/cli-capture.ts';
 
 const LEASE_ID = 'abc123abc123abc1';
 
-// No plugin is installed in this file, and `close` and `disconnect` load no plugin store. The
-// stored connection is what a `connect limrun` with the plugin installed wrote.
-function storedConnection(
-  policy: { leaseProvider: string; forgetsEndedLease?: boolean } = {
-    leaseProvider: 'limrun',
-    forgetsEndedLease: true,
-  },
-) {
+// No plugin is installed in this file, and `close` and `disconnect` load no plugin store.
+function storedConnection(leaseProvider = 'limrun') {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const remoteConfig = path.join(project, 'limrun.remote.json');
@@ -36,12 +30,22 @@ function storedConnection(
       runId: 'run-close',
       leaseId: LEASE_ID,
       leaseBackend: 'android-instance',
-      ...policy,
+      leaseProvider,
       platform: 'android',
       connectedAt: now,
       updatedAt: now,
     },
   });
+  // An earlier build of this branch recorded a policy field on the connection. It is ignored now,
+  // and a record that still carries it reads as before.
+  const connections = path.join(stateDir, 'remote-connections');
+  for (const name of fs.readdirSync(connections)) {
+    const file = path.join(connections, name);
+    if (!fs.statSync(file).isFile()) continue;
+    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (record.leaseProvider === undefined) continue;
+    fs.writeFileSync(file, JSON.stringify({ ...record, forgetsEndedLease: false }));
+  }
   return { root, home, project, stateDir };
 }
 
@@ -91,22 +95,13 @@ async function closeWithEndedLease(stateDir: string, project: string, home: stri
 
 test('close forgets an ended Limrun lease on a connection that records no policy', async () => {
   // A connection stored before the policy was recorded: the plugin catalog answers for Limrun.
-  const { root, home, project, stateDir } = storedConnection({ leaseProvider: 'limrun' });
+  const { root, home, project, stateDir } = storedConnection();
   assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, undefined);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('close keeps the lease of a provider neither a loaded plugin nor the catalog knows', async () => {
-  const { root, home, project, stateDir } = storedConnection({ leaseProvider: 'custom-provider' });
-  assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, LEASE_ID);
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('a recorded policy wins over the catalog on close', async () => {
-  const { root, home, project, stateDir } = storedConnection({
-    leaseProvider: 'limrun',
-    forgetsEndedLease: false,
-  });
+  const { root, home, project, stateDir } = storedConnection('custom-provider');
   assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, LEASE_ID);
   fs.rmSync(root, { recursive: true, force: true });
 });
