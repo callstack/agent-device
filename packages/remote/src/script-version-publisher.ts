@@ -12,7 +12,7 @@ import {
   prepareScriptDestination,
   type ScriptDestination,
 } from '@agent-device/host-kit/file';
-import type { ArtifactDownload, DaemonArtifactEndpoint } from './daemon-artifacts.ts';
+import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
 import {
   readRecord,
   recordPath,
@@ -56,7 +56,9 @@ export async function publishScriptVersion(
     endpoint: Required<DaemonArtifactEndpoint>;
     req: DaemonWireRequest;
     stateDir: string;
-    download: ArtifactDownload;
+    download: typeof downloadRemoteArtifact;
+    /** The caller's cancellation: the download takes it, and the rename re-checks it under the lock. */
+    signal?: AbortSignal;
   }>,
   artifact: DaemonArtifact,
   closesRecording: boolean,
@@ -100,6 +102,7 @@ export async function publishScriptVersion(
         destinationPath: staged,
         requestScope: req.meta,
         privateFile: { maxBytes: MAX_SCRIPT_BYTES },
+        signal: context.signal,
       });
     } catch (error) {
       // Another delivery may have committed this version meanwhile, or installed it and been interrupted; a
@@ -123,7 +126,7 @@ export async function publishScriptVersion(
       // What host-kit answered above, carried for the one confirmation before the rename.
       prepared,
       pending,
-      signal: context.download.signal,
+      signal: context.signal,
     };
     return await withRecordLock(file, async () => publishStaged(file, version));
   } catch (error) {

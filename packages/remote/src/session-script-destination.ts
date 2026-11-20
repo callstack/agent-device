@@ -13,7 +13,7 @@ import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { ArtifactDownload, DaemonArtifactEndpoint } from './daemon-artifacts.ts';
+import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
 import {
   createRecord,
   readRecord,
@@ -83,7 +83,8 @@ async function settleScriptReceipt(
     endpoint: Required<DaemonArtifactEndpoint>;
     req: DaemonWireRequest;
     stateDir: string;
-    download: ArtifactDownload;
+    download: typeof downloadRemoteArtifact;
+    signal: AbortSignal | undefined;
   }>,
   receipt: ScriptDeliveryReceipt,
   data: Record<string, unknown>,
@@ -167,9 +168,10 @@ export function sessionScriptDelivery(
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
-  download: ArtifactDownload,
+  download: typeof downloadRemoteArtifact,
+  signal?: AbortSignal,
 ): SessionScriptDelivery {
-  const context = { endpoint, req, stateDir, download };
+  const context = { endpoint, req, stateDir, download, signal };
   const receipt = req.command === 'batch' ? readScriptDeliveryReceipt(response) : undefined;
   const rejected =
     receipt === undefined &&
@@ -298,7 +300,8 @@ export async function settleScriptDeliveryReceiptOfFailure(
   req: DaemonWireRequest,
   error: DaemonError,
   stateDir: string,
-  download: ArtifactDownload,
+  download: typeof downloadRemoteArtifact,
+  signal?: AbortSignal,
 ): Promise<DaemonError> {
   if (req.command !== 'batch') return error;
   const receipt = readScriptDeliveryReceipt({ ok: false, error });
@@ -321,7 +324,7 @@ export async function settleScriptDeliveryReceiptOfFailure(
     receipt.close === undefined || (failedStep !== undefined && receipt.close.step < failedStep);
   const data: Record<string, unknown> = { ...(error.details ?? {}) };
   const settled = await settleScriptReceipt(
-    { endpoint, req, stateDir, download },
+    { endpoint, req, stateDir, download, signal },
     honored ? receipt : withoutClose(receipt),
     data,
   );

@@ -544,34 +544,10 @@ async function deliverResponseArtifacts(
     req,
     response,
     client.stateDir,
-    cancelableArtifactDownload(signal, req.meta?.requestId),
+    downloadRemoteArtifact,
+    signal,
   );
   return await scripts.settleAfter(download);
-}
-
-/** An artifact download, with the caller's signal a script publish re-checks before its rename. */
-export type ArtifactDownload = typeof downloadRemoteArtifact & { readonly signal?: AbortSignal };
-
-/**
- * The artifact download for a delivery that must stop on the caller's abort: the transfer takes the
- * signal, an abort after the bytes arrived fails the download, and a script publish checks the same
- * signal again under its record lock, right before the rename.
- */
-export function cancelableArtifactDownload(
-  signal: AbortSignal | undefined,
-  requestId: string | undefined,
-): ArtifactDownload {
-  const download: typeof downloadRemoteArtifact = async (params) => {
-    const downloaded = await downloadRemoteArtifact({ ...params, signal });
-    throwIfCanceled(signal, requestId);
-    return downloaded;
-  };
-  return Object.assign(download, { signal });
-}
-
-function throwIfCanceled(signal: AbortSignal | undefined, requestId: string | undefined): void {
-  if (!signal?.aborted) return;
-  throw createRequestCanceledError({ requestId }, signal.reason);
 }
 
 async function downloadResponseArtifacts(
