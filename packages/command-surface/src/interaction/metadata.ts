@@ -1,10 +1,7 @@
 import { CLICK_BUTTONS } from '@agent-device/contracts/click-button';
 import type { ElementTarget } from '@agent-device/contracts/client';
-import {
-  GESTURE_KINDS,
-  type GesturePayload,
-  readGesturePayload,
-} from '@agent-device/contracts/gesture-input';
+import { GESTURE_KINDS, type GesturePayload } from '@agent-device/contracts/gesture-input';
+import { readGesturePayload } from '@agent-device/gestures/gesture-input';
 import {
   GESTURE_DURATION_MAX_MS,
   GESTURE_DURATION_MIN_MS,

@@ -13,6 +13,10 @@
     "fast-check": "^4.9.0"
   },
   "exports": {
+    "./gesture-input": {
+      "types": "./src/gesture-input.ts",
+      "default": "./src/gesture-input.ts"
+    },
     "./gesture-normalization": {
       "types": "./src/gesture-normalization.ts",
       "default": "./src/gesture-normalization.ts"

@@ -1,7 +1,8 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import { readOptionalInteger } from '@agent-device/contracts/command';
-import { type GesturePayload, readGesturePayload } from '@agent-device/contracts/gesture-input';
+import type { GesturePayload } from '@agent-device/contracts/gesture-input';
+import { readGesturePayload } from '@agent-device/gestures/gesture-input';
 import {
   type SwipePayload,
   assertNoRemovedSwipeInput,

@@ -1,10 +1,7 @@
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  readGesturePayload,
-  type GESTURE_KINDS,
-  type GesturePayload,
-} from '@agent-device/contracts/gesture-input';
+import type { GESTURE_KINDS, GesturePayload } from '@agent-device/contracts/gesture-input';
+import { readGesturePayload } from './gesture-input.ts';
 import type {
   GestureCommandInput,
   GestureSemanticInput,
