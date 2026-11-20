@@ -519,7 +519,7 @@ export async function materializeRemoteArtifacts(
     return await download();
   }
   const { sessionScriptDelivery } = await import('./session-script-destination.ts');
-  const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, downloadRemoteArtifact);
+  const scripts = sessionScriptDelivery(endpoint, req, response, stateDir, fetchRemoteArtifact);
   return await scripts.settleAfter(download);
 }
 
@@ -654,8 +654,6 @@ type DownloadRemoteArtifactParams = {
   timeoutMs?: number;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
-  /** A capped download into a new private file (`artifact-download.ts`). */
-  privateFile?: Readonly<{ maxBytes: number }>;
 };
 
 export async function downloadRemoteArtifact(
@@ -667,6 +665,25 @@ export async function downloadRemoteArtifact(
   const { baseUrl, ...download } = params;
   return await downloadRemoteArtifactFromUrl({
     ...download,
+    artifactUrl: new URL(buildDaemonArtifactUrl(baseUrl, params.artifactId)),
+  });
+}
+
+type FetchRemoteArtifactParams = {
+  baseUrl: string;
+  token: string;
+  artifactId: string;
+  requestScope: DaemonWireRequest['meta'];
+  /** The fetch stops once the body crosses this size. */
+  maxBytes: number;
+};
+
+/** Fetches one artifact into memory, capped at `maxBytes` (`artifact-download.ts`). */
+export async function fetchRemoteArtifact(params: FetchRemoteArtifactParams): Promise<Buffer> {
+  const { fetchRemoteArtifactFromUrl } = await import('./artifact-download.ts');
+  const { baseUrl, ...fetch } = params;
+  return await fetchRemoteArtifactFromUrl({
+    ...fetch,
     artifactUrl: new URL(buildDaemonArtifactUrl(baseUrl, params.artifactId)),
   });
 }

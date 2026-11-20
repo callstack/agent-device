@@ -15,7 +15,7 @@ import {
   publish,
   withSharedUmask,
 } from './script-destination-host.fixtures.ts';
-import { confirmScriptDestination, prepareScriptDestination } from './script-destination.ts';
+import { prepareScriptDestination } from './script-destination.ts';
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
 
@@ -119,27 +119,6 @@ skipOnWindows('answers the created directory as the one to publish into', () => 
   expect(judged).toBe(path.join(home, 'nested', 'deeper'));
   expect(modeOf(path.join(home, 'nested'))).toBe(0o700);
   expect(modeOf(judged)).toBe(0o700);
-});
-
-skipOnWindows('refuses a destination whose parent is gone by the time the answer is used', () => {
-  // The one walk that creates is host-kit's own, so what this pins is the other half: an ANSWER is only
-  // usable while the chain it named still stands. `missing` goes away after the answer was given, so there
-  // is no directory the entry belongs in. Answering the nearest ancestor that did stand would write
-  // `root/journey.ad` for a destination spelling `root/missing/journey.ad` — a file nobody asked for, in a
-  // directory whose permissions were never what the answer promised.
-  const directory = root();
-  const missing = path.join(directory, 'missing');
-  const destination = path.join(missing, 'journey.ad');
-  const prepared = prepareScriptDestination(destination);
-
-  fs.rmSync(missing, { recursive: true, force: true });
-
-  expectUntrusted(
-    () => confirmScriptDestination(destination, prepared),
-    'unreachable_parent',
-    directory,
-  );
-  expect(fs.readdirSync(directory)).toEqual([]);
 });
 
 skipOnWindows(
@@ -327,19 +306,6 @@ test('refuses a destination that is not absolute on every platform, and creates 
 
   expectUntrusted(
     () => prepareScriptDestination(relative),
-    'relative_destination',
-    path.join('recordings'),
-  );
-  // The confirm call refuses from the same check, before its platform branch: on Windows no walk runs at
-  // all, so a relative name cannot be left to the walk to catch.
-  expectUntrusted(
-    () =>
-      confirmScriptDestination(relative, {
-        directory: relative,
-        identity: undefined,
-        name: 'journey.ad',
-        entry: relative,
-      }),
     'relative_destination',
     path.join('recordings'),
   );

@@ -21,8 +21,8 @@ import { sendRemoteScriptOpen } from '../session-script-destination.ts';
 /**
  * The client half of the batch delivery receipt (ADR 0016, #4595). Every case answers a batch the
  * way a daemon does and materializes the answer the way the real client does, so a receipt that
- * would make this client deliver the wrong version, retire a recording that never closed, or drop a
- * failure is caught here rather than in a step-result interpreter.
+ * would make this client deliver the wrong version or drop a failure is caught here rather than in
+ * a step-result interpreter.
  */
 
 const servers: http.Server[] = [];
@@ -160,50 +160,7 @@ test('a batch receipt delivers the newest full-script version to the caller file
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait "label=\\"Apps\\""\n');
 });
 
-test('a batch receipt whose close its plan does not carry retires nothing', async () => {
-  const { stateDir, destination } = world();
-  const baseUrl = await artifactServer({
-    'open-v1': 'open Demo\n',
-    'step-v2': 'open Demo\nwait\n',
-  });
-  const id = await opened(baseUrl, stateDir, destination);
-
-  await answer(
-    baseUrl,
-    stateDir,
-    batchRequest([{ command: 'wait', input: {} }]),
-    receipt(id, {
-      version: script('step-v2', 2, id),
-      close: { step: 2 },
-    }),
-  );
-
-  expect(records(stateDir)).toHaveLength(1);
-  expect(fs.existsSync(destination)).toBe(true);
-});
-
-test('a batch receipt whose close names a step beyond the plan retires nothing', async () => {
-  const { stateDir, destination } = world();
-  const baseUrl = await artifactServer({
-    'open-v1': 'open Demo\n',
-    'close-v2': 'open Demo\nclose\n',
-  });
-  const id = await opened(baseUrl, stateDir, destination);
-
-  await answer(
-    baseUrl,
-    stateDir,
-    batchRequest([
-      { command: 'wait', input: {} },
-      { command: 'tap', input: {} },
-    ]),
-    receipt(id, { version: script('close-v2', 2, id), close: { step: 3 } }),
-  );
-
-  expect(records(stateDir)).toHaveLength(1);
-});
-
-test('a batch receipt whose close its plan carries delivers the final script and retires', async () => {
+test('a batch receipt that names a close delivers the final script and retires the record', async () => {
   const { stateDir, destination } = world();
   const baseUrl = await artifactServer({
     'open-v1': 'open Demo\n',
@@ -393,11 +350,8 @@ test('a receipt close with a failed final version still retires the record and d
   expect(response.ok).toBe(true);
   const data = (response as Extract<DaemonResponse, { ok: true }>).data ?? {};
   expect(data.scriptDeliveryFailure).toEqual(failure);
-  // The final version is the one already saved, so it is answered from the record with its recovery hint.
-  expect(data.warnings).toEqual([
-    expect.stringContaining(failure.hint),
-    `Revision 1 of the recording was already saved to ${destination}. It is not checked again. If that file is missing, reuse your original open command with --save-script=${destination} --force.`,
-  ]);
+  // The final version is the one already saved, so it is answered from the record with no warning of its own.
+  expect(data.warnings).toEqual([expect.stringContaining(failure.hint)]);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(records(stateDir)).toEqual([]);
 });
@@ -527,44 +481,9 @@ test('a malformed close receipt cannot throw or fall back to batch script artifa
   expect(records(stateDir)).toHaveLength(1);
 });
 
-test.each([
-  { name: 'a position past the plan', details: { step: 3, command: 'close' } },
-  { name: 'a different command', details: { step: 1, command: 'close' } },
-  { name: 'a position that is not a number', details: { step: 'two', command: 'close' } },
-])('a failed batch with $name authorizes no delivery', async ({ details }) => {
-  const { settleScriptDeliveryReceiptOfFailure } = await import('../daemon-artifacts.ts');
-  const { downloadRemoteArtifact } = await import('../daemon-artifacts.ts');
-  const { stateDir, destination } = world();
-  const baseUrl = await artifactServer({ 'open-v1': 'open Demo\n', v2: 'untrusted\n' });
-  const id = await opened(baseUrl, stateDir, destination);
-  const error = {
-    code: 'COMMAND_FAILED' as const,
-    message: 'original batch failure',
-    details: {
-      ...details,
-      ...receipt(id, { version: script('v2', 2, id), close: { step: 2 } }),
-    },
-  };
-  const settled = await settleScriptDeliveryReceiptOfFailure(
-    { baseUrl, token: 't' },
-    batchRequest([
-      { command: 'wait', input: {} },
-      { command: 'close', input: {} },
-    ]),
-    error,
-    stateDir,
-    downloadRemoteArtifact,
-  );
-  expect(settled).toEqual(error);
-  expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
-  expect(records(stateDir)).toHaveLength(1);
-});
-
-test('a failed batch whose close the plan never reached delivers the version and retires nothing', async () => {
-  // The position is reconciled with the plan and proves the close step never ran, so the version
-  // the completed steps wrote is still delivered — but nothing retires the record.
-  const { settleScriptDeliveryReceiptOfFailure } = await import('../daemon-artifacts.ts');
-  const { downloadRemoteArtifact } = await import('../daemon-artifacts.ts');
+test('a failed batch whose receipt names no close delivers the version and keeps the record', async () => {
+  const { settleScriptDeliveryReceiptOfFailure, fetchRemoteArtifact } =
+    await import('../daemon-artifacts.ts');
   const { stateDir, destination } = world();
   const baseUrl = await artifactServer({
     'open-v1': 'open Demo\n',
@@ -580,27 +499,21 @@ test('a failed batch whose close the plan never reached delivers the version and
     {
       code: 'COMMAND_FAILED' as const,
       message: 'original batch failure',
-      details: {
-        step: 1,
-        command: 'wait',
-        ...receipt(id, { version: script('v2', 2, id), close: { step: 2 } }),
-      },
+      details: { step: 2, command: 'close', ...receipt(id, { version: script('v2', 2, id) }) },
     },
     stateDir,
-    downloadRemoteArtifact,
+    fetchRemoteArtifact,
   );
   expect(settled.message).toBe('original batch failure');
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait\n');
   expect(records(stateDir)).toHaveLength(1);
 });
 
-test('a failed batch that names no position delivers the version and discloses, and retires nothing', async () => {
-  // A request deadline or a step that throws into the runner fails the batch with no step position.
-  // The version and failures are still facts about this client's publication, and dropping them
-  // would leave the caller file stale with no warning. An answer that cannot name where it stopped
-  // proves no close, so nothing retires.
-  const { settleScriptDeliveryReceiptOfFailure } = await import('../daemon-artifacts.ts');
-  const { downloadRemoteArtifact } = await import('../daemon-artifacts.ts');
+test('a failed batch whose receipt names a close delivers the version, discloses, and retires the record', async () => {
+  // The daemon names a close only for a step that ran one, so the receipt's close retires the record
+  // whatever position the batch failure itself names.
+  const { settleScriptDeliveryReceiptOfFailure, fetchRemoteArtifact } =
+    await import('../daemon-artifacts.ts');
   const { stateDir, destination } = world();
   const baseUrl = await artifactServer({
     'open-v1': 'open Demo\n',
@@ -629,14 +542,14 @@ test('a failed batch that names no position delivers the version and discloses, 
       }),
     },
     stateDir,
-    downloadRemoteArtifact,
+    fetchRemoteArtifact,
   );
   expect(settled.message).toBe('original batch failure');
   expect(settled.details?.scriptDeliveryReceipt).toBeDefined();
   expect(settled.details?.scriptDeliveryFailure).toEqual(failure);
   expect(settled.details?.warnings).toEqual([`${failure.message} ${failure.hint}`]);
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\nwait\nclose\n');
-  expect(records(stateDir)).toHaveLength(1);
+  expect(records(stateDir)).toEqual([]);
 });
 
 test('script artifacts aimed at the disclosure fields erase neither a failure nor a publication', async () => {
@@ -678,7 +591,7 @@ test('script artifacts aimed at the disclosure fields erase neither a failure no
   expect(data.warnings).toEqual([expect.stringContaining('could not be saved')]);
   expect(data.savedScript).toBeUndefined();
   expect(data.artifacts).toEqual([]);
-  // The file keeps the version it had, and the close the plan carries still retires the record.
+  // The file keeps the version it had, and the close the receipt names still retires the record.
   expect(fs.readFileSync(destination, 'utf8')).toBe('open Demo\n');
   expect(records(stateDir)).toEqual([]);
 });
@@ -742,14 +655,14 @@ test.each(['success', 'failure'])(
       expect(response.ok).toBe(true);
       data = (response as Extract<DaemonResponse, { ok: true }>).data ?? {};
     } else {
-      const { settleScriptDeliveryReceiptOfFailure, downloadRemoteArtifact } =
+      const { settleScriptDeliveryReceiptOfFailure, fetchRemoteArtifact } =
         await import('../daemon-artifacts.ts');
       const error = await settleScriptDeliveryReceiptOfFailure(
         { baseUrl, token: 't' },
         plan,
         { code: 'COMMAND_FAILED', message: 'original error', details: invalid },
         stateDir,
-        downloadRemoteArtifact,
+        fetchRemoteArtifact,
       );
       expect(error.message).toBe('original error');
       data = error.details ?? {};
@@ -792,7 +705,7 @@ test.each(['publicationId', 'artifactId', 'message', 'hint', 'cause'] as const)(
 
 test.each([
   {
-    name: 'a close its plan carries',
+    name: 'a close',
     steps: [
       { command: 'wait', input: {} },
       { command: 'close', input: {} },
@@ -877,7 +790,7 @@ test.each(['success', 'failure'] as const)(
       expect(response.ok).toBe(true);
       if (response.ok) disclosed = response.data;
     } else {
-      const { settleScriptDeliveryReceiptOfFailure, downloadRemoteArtifact } =
+      const { settleScriptDeliveryReceiptOfFailure, fetchRemoteArtifact } =
         await import('../daemon-artifacts.ts');
       const error = await settleScriptDeliveryReceiptOfFailure(
         { baseUrl, token: 't' },
@@ -888,7 +801,7 @@ test.each(['success', 'failure'] as const)(
           details: { step: 2, command: 'press', ...delivery },
         },
         stateDir,
-        downloadRemoteArtifact,
+        fetchRemoteArtifact,
       );
       expect(error.message).toBe('Original batch failure');
       disclosed = error.details;

@@ -10,7 +10,7 @@ import {
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { downloadRemoteArtifactFromUrl } from '../artifact-download.ts';
+import { downloadRemoteArtifactFromUrl, fetchRemoteArtifactFromUrl } from '../artifact-download.ts';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 type DownloadParams = Parameters<typeof downloadRemoteArtifactFromUrl>[0];
@@ -235,15 +235,23 @@ test('rejects redirect bodies and interrupted error bodies, and downloads succes
   }
 });
 
-test('a private file that cannot be opened releases the response', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'artifact download response release')) return;
-  const tempRoot = mkdtempForTestSync('agent-device-artifact-private-open-');
-  const destinationPath = path.join(tempRoot, 'script.ad');
-  fs.symlinkSync(path.join(tempRoot, 'elsewhere.ad'), destinationPath);
+function fetchFrom(port: number, maxBytes: number): Promise<Buffer> {
+  return fetchRemoteArtifactFromUrl({
+    artifactUrl: new URL(`http://127.0.0.1:${port}/agent-device/artifacts/artifact`),
+    token: 'remote-secret',
+    artifactId: 'artifact',
+    requestScope: { requestId: 'req-artifact-fetch' },
+    maxBytes,
+  });
+}
+
+test('an in-memory fetch stops a body that crosses its cap and releases the response', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact fetch cap')) return;
   let released: () => void = () => {};
   const responseReleased = new Promise<void>((resolve) => {
     released = resolve;
   });
+  // No Content-Length, and no end: only the cap applied to arriving bytes stops this body.
   const server = http.createServer((_req, res) => {
     res.on('close', released);
     res.writeHead(200);
@@ -255,28 +263,25 @@ test('a private file that cannot be opened releases the response', async (t) => 
   const port = await listenOnLoopback(server);
 
   try {
-    await assert.rejects(() =>
-      downloadTo(tempRoot, port, { destinationPath, privateFile: { maxBytes: 1024 * 1024 } }),
+    await assert.rejects(
+      () => fetchFrom(port, 4096),
+      (error: unknown) =>
+        (error as { details?: Record<string, unknown> }).details?.reason === 'artifact_too_large',
     );
     await responseReleased;
-    assert.equal(fs.existsSync(path.join(tempRoot, 'elsewhere.ad')), false);
   } finally {
     await closeLoopbackServer(server);
   }
 });
 
-test('a private file download never recreates a removed staging directory', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'private artifact download parent')) return;
-  const tempRoot = mkdtempForTestSync('agent-device-artifact-private-parent-');
-  const destinationPath = path.join(tempRoot, 'retired-staging', 'script.ad');
-  const server = http.createServer((_req, res) => res.end('open Demo\n'));
+test('an in-memory fetch returns a body of exactly its cap and refuses one byte more', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact fetch cap boundary')) return;
+  const server = http.createServer((_req, res) => res.end('x'.repeat(1024)));
   const port = await listenOnLoopback(server);
 
   try {
-    await assert.rejects(() =>
-      downloadTo(tempRoot, port, { destinationPath, privateFile: { maxBytes: 1024 } }),
-    );
-    assert.equal(fs.existsSync(path.dirname(destinationPath)), false);
+    assert.equal((await fetchFrom(port, 1024)).toString(), 'x'.repeat(1024));
+    await assert.rejects(() => fetchFrom(port, 1023));
   } finally {
     await closeLoopbackServer(server);
   }

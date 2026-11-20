@@ -7,7 +7,6 @@ export {
 export {
   admitPrivateRoot,
   type PrivateRootAdmission,
-  confirmScriptDestination,
   prepareScriptDestination,
   publishScriptFileSync,
   type ScriptDestination,

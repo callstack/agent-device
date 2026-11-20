@@ -3,7 +3,7 @@ import fs from 'node:fs';
 // HTTP stack loads through `loadNodeHttpRequester` only when a remote daemon returns an artifact.
 import type http from 'node:http';
 import path from 'node:path';
-import { Transform } from 'node:stream';
+import { Transform, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -17,35 +17,30 @@ import {
 
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
 
-export type RemoteArtifactDownload = {
+type RemoteArtifactRequest = {
   artifactUrl: URL;
   token: string;
   artifactId: string;
-  destinationPath: string;
   requestScope: DaemonRequestMeta | undefined;
   timeoutMs?: number;
+};
+
+export type RemoteArtifactDownload = RemoteArtifactRequest & {
+  destinationPath: string;
   /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
   isDirectory?: boolean;
-  /**
-   * Writes a new private file: created exclusively at 0600, never through a symbolic link, and
-   * stopped once it crosses `maxBytes`, whatever `Content-Length` announced.
-   */
-  privateFile?: Readonly<{ maxBytes: number }>;
 };
 
-const PRIVATE_FILE_FLAGS =
-  fs.constants.O_WRONLY |
-  fs.constants.O_CREAT |
-  fs.constants.O_EXCL |
-  (fs.constants.O_NOFOLLOW ?? 0);
+/** An artifact held in memory, stopped once it crosses `maxBytes`, whatever `Content-Length` announced. */
+export type RemoteArtifactFetch = RemoteArtifactRequest & { maxBytes: number };
 
-type DownloadDestination = {
+type ArtifactSink<T> = {
   prepare(): Promise<void>;
   cleanupOnError(): Promise<void>;
-  materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<string>;
+  materialize(res: http.IncomingMessage, signal: AbortSignal): Promise<T>;
 };
 
-function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDestination {
+function buildDownloadDestination(params: RemoteArtifactDownload): ArtifactSink<string> {
   const { destinationPath } = params;
   if (params.isDirectory) {
     return {
@@ -59,30 +54,34 @@ function buildDownloadDestination(params: RemoteArtifactDownload): DownloadDesti
     };
   }
   return {
-    // A private file goes into a directory its caller allocated, which is never recreated here.
     prepare: async () => {
-      if (!params.privateFile)
-        await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
     },
     cleanupOnError: () => fs.promises.rm(destinationPath, { force: true }),
     materialize: async (res, signal) => {
-      const { privateFile } = params;
-      if (!privateFile) {
-        await pipeline(res, fs.createWriteStream(destinationPath), { signal });
-        return destinationPath;
-      }
-      // A file that cannot be opened never consumes the response, so release its socket here.
-      const file = await fs.promises
-        .open(destinationPath, PRIVATE_FILE_FLAGS, 0o600)
-        .catch((error) => {
-          res.destroy();
-          throw error;
-        });
-      const limit = limitBytes(privateFile.maxBytes, params.artifactId);
-      await pipeline(res, limit, file.createWriteStream(), { signal });
+      await pipeline(res, fs.createWriteStream(destinationPath), { signal });
       return destinationPath;
     },
   };
+}
+
+/** Fetches one artifact into memory. Nothing reaches the disk, so a failure leaves nothing behind. */
+export async function fetchRemoteArtifactFromUrl(params: RemoteArtifactFetch): Promise<Buffer> {
+  return await requestRemoteArtifact(params, {
+    prepare: async () => {},
+    cleanupOnError: async () => {},
+    materialize: async (res, signal) => {
+      const chunks: Buffer[] = [];
+      const memory = new Writable({
+        write(chunk: Buffer, _encoding, callback) {
+          chunks.push(chunk);
+          callback();
+        },
+      });
+      await pipeline(res, limitBytes(params.maxBytes, params.artifactId), memory, { signal });
+      return Buffer.concat(chunks);
+    },
+  });
 }
 
 function limitBytes(maxBytes: number, artifactId: string): Transform {
@@ -109,16 +108,22 @@ function limitBytes(maxBytes: number, artifactId: string): Transform {
 export async function downloadRemoteArtifactFromUrl(
   params: RemoteArtifactDownload,
 ): Promise<string> {
+  return await requestRemoteArtifact(params, buildDownloadDestination(params));
+}
+
+async function requestRemoteArtifact<T>(
+  params: RemoteArtifactRequest,
+  destination: ArtifactSink<T>,
+): Promise<T> {
   const transport = await loadNodeHttpRequester(params.artifactUrl.protocol);
-  const destination = buildDownloadDestination(params);
   await destination.prepare();
-  return await new Promise<string>((resolve, reject) => {
+  return await new Promise<T>((resolve, reject) => {
     let settled = false;
     let materializationStarted = false;
     let timeoutError: AppError | undefined;
     const operation = new AbortController();
     const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
-    const settle = (result?: string, error?: Error) => {
+    const settle = (result: T | undefined, error?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutHandle);
@@ -136,7 +141,7 @@ export async function downloadRemoteArtifactFromUrl(
           .finally(() => reject(error));
         return;
       }
-      resolve(result ?? params.destinationPath);
+      resolve(result as T);
     };
     const request = transport.request(
       {

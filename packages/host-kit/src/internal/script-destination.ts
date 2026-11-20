@@ -109,7 +109,7 @@ export function untrustedLinkExposure(
  */
 export function publishScriptFileSync(options: {
   destination: string;
-  contents: string;
+  contents: string | Uint8Array;
   publish?: AtomicPublishMode;
 }): string {
   // The entry is the one the rule authorized, never the caller's spelling: a `..` or a link sends the entry
@@ -142,20 +142,8 @@ export function prepareScriptDestination(
   destination: string,
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
-  return scriptDestination(destination, true, options);
-}
-
-/**
- * ADR 0016's judgment of one destination. `create` says whether the caller needs the missing tail created:
- * a walk that stops short is an answer for that caller and a refusal for the other.
- */
-function scriptDestination(
-  destination: string,
-  create: boolean,
-  options: ScriptDestinationOptions = {},
-): ScriptDestination {
   if (process.platform === 'win32') {
-    return windowsScriptDestination(destination, create);
+    return windowsScriptDestination(destination);
   }
   // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
   const spelled = spelledParent(destination);
@@ -164,23 +152,21 @@ function scriptDestination(
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
   // walk the missing directories are this call's own to create, and asking it before creation would refuse
   // `mkdir -p <sticky shared>/recordings`, where those levels are 0700 of this call's own (ADR 0016).
-  const arrived = walkSpelledParent(spelled, destination, trust, create);
+  const arrived = walkSpelledParent(spelled, destination, trust, true);
   if (othersCreateEntriesIn(arrived.authority, trust)) {
     throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
-  return authorizedEntry(arrived.deepest, arrived.identity, name);
+  return authorizedEntry(arrived.deepest, name);
 }
 
-function windowsScriptDestination(destination: string, create: boolean): ScriptDestination {
+function windowsScriptDestination(destination: string): ScriptDestination {
   const rules = path.win32;
   const root = requireWindowsScriptVolume(destination, destination);
   const name = entryNameOrRefuse(destination, rules);
   const directory = rules.dirname(rules.normalize(destination));
   requireWindowsScriptDirectory(destination, root);
-  if (directory === root) return authorizedEntry(directory, 'windows', name);
-  if (create) createWindowsScriptParents(destination, root, directory);
-  else requireWindowsScriptDirectory(destination, directory);
-  return authorizedEntry(directory, 'windows', name);
+  if (directory !== root) createWindowsScriptParents(destination, root, directory);
+  return authorizedEntry(directory, name);
 }
 
 function createWindowsScriptParents(destination: string, root: string, directory: string): void {
@@ -231,42 +217,19 @@ function isWindowsShareUnavailable(file: string, error: unknown): boolean {
   );
 }
 
-function authorizedEntry(
-  directory: string,
-  identity: string | undefined,
-  name: string,
-): ScriptDestination {
-  return { directory, identity, name, entry: hostPathRules().join(directory, name) };
+function authorizedEntry(directory: string, name: string): ScriptDestination {
+  return { directory, name, entry: hostPathRules().join(directory, name) };
 }
 
 /**
- * The entry a script is created as: the PHYSICAL directory the rule judged, that directory's identity as the
- * walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename — and the
- * validated name. `entry` is the one path a publisher creates.
+ * The entry a script is created as: the PHYSICAL directory the rule judged and the validated name. `entry` is
+ * the one path a publisher creates.
  */
 export type ScriptDestination = Readonly<{
   directory: string;
-  identity: string | undefined;
   name: string;
   entry: string;
 }>;
-
-/**
- * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller
- * that stages bytes owes, for the reason ADR 0016 states. The entry is authorized only when this walk reaches
- * the same directory.
- */
-export function confirmScriptDestination(
-  destination: string,
-  prepared: ScriptDestination,
-): ScriptDestination {
-  const current = scriptDestination(destination, false);
-  // The directory is compared too: Windows answers one constant identity for every directory.
-  if (current.identity !== prepared.identity || current.directory !== prepared.directory) {
-    throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
-  }
-  return current;
-}
 
 /**
  * The parent of `destination` exactly as the caller spells it, refusing a RELATIVE destination on every
@@ -280,11 +243,10 @@ function spelledParent(destination: string): string {
   return parent;
 }
 
-/** Where the walk stands: a judged directory, the identity its own `lstat` answered, names left to resolve. */
+/** Where the walk stands: a judged directory and the names left to resolve. */
 type WalkState = Readonly<{
   deepest: string;
   authority: DirectoryAuthority;
-  identity: string;
   /** Path components left to resolve, nearest first. */
   queue: readonly string[];
   /** Link targets expanded so far. */
@@ -292,14 +254,12 @@ type WalkState = Readonly<{
 }>;
 
 /**
- * The ground a walk answered: the PHYSICAL directory the entry is created in, with the authority and identity
- * it was judged under, so the caller never asks the host about ground the walk already read.
+ * The ground a walk answered: the PHYSICAL directory the entry is created in, with the authority it was judged
+ * under, so the caller never asks the host about ground the walk already read.
  */
 type WalkGround = Readonly<{
   deepest: string;
   authority: DirectoryAuthority;
-  /** That directory's identity, as this walk's `lstat` of it answered. */
-  identity: string;
 }>;
 
 /** The tail a walk stopped below: the nearest judged directory and the spelled names absent beneath it. */
@@ -338,7 +298,7 @@ function walkSpelledParent(
     const [component, ...rest] = state.queue;
     // The only ending that ARRIVES: an empty queue, every name the parent spelled resolved and judged.
     if (component === undefined) {
-      return { deepest: state.deepest, authority: state.authority, identity: state.identity };
+      return { deepest: state.deepest, authority: state.authority };
     }
     // `..` is the parent of the directory PHYSICALLY stood in, not of the spelling: where `work` is a link,
     // `.../work/../x` steps back from the link's target and lands beside it.
@@ -407,13 +367,7 @@ function stepIntoEntry(
   if (exposure) refuse(entry, exposure, authority.uid === trust.uid);
   return {
     ended: 'stand',
-    state: {
-      deepest: entry,
-      authority,
-      identity: identityOf(stats),
-      queue: rest,
-      hops: state.hops,
-    },
+    state: { deepest: entry, authority, queue: rest, hops: state.hops },
   };
 }
 
@@ -456,20 +410,12 @@ function standOn(
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
   if (exposure) refuse(directory, exposure, authority.uid === trust.uid);
-  return { deepest: directory, authority, identity: identityOf(stats), queue, hops };
+  return { deepest: directory, authority, queue, hops };
 }
 
 /** Owner and mode of the ENTRY one `lstat` answer describes. */
 function directoryAuthority(stats: fs.BigIntStats): DirectoryAuthority {
   return { uid: Number(stats.uid), mode: Number(stats.mode) };
-}
-
-/**
- * The device and inode an `lstat` answer names. BIGINT stats: a numeric `ino` cannot hold every inode a
- * filesystem hands out, so two distinct large inodes would collapse onto one identity.
- */
-function identityOf(stats: fs.BigIntStats): string {
-  return `${stats.dev}:${stats.ino}`;
 }
 
 /** The only lookup this rule makes: `lstat` with bigint ids, absence as `undefined`. */
