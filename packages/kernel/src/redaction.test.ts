@@ -111,9 +111,14 @@ test.each([
     'target is not accepted as a tool argument. Pass deviceTarget.',
   ],
   [
-    'a path with a capitalized segment reads as mixed case and is redacted: the rule is conservative',
+    'a capitalized media path names a location the reader opens, so it keeps its text',
     'pull /storage/emulated/0/Download/recording-2026.m4a',
-    'pull <redacted len=47>',
+    'pull /storage/emulated/0/Download/recording-2026.m4a',
+  ],
+  [
+    'the project config path in a device-pin conflict names the file the reader fixes',
+    'Batch step 1: device "iPhone 16" conflicts with the device pin from project config file /private/tmp/agent-device-test-run-59442-ELNJ5D/agent-device-config-ArPrB8/project/agent-device.json.',
+    'Batch step 1: device "iPhone 16" conflicts with the device pin from project config file /private/tmp/agent-device-test-run-59442-ELNJ5D/agent-device-config-ArPrB8/project/agent-device.json.',
   ],
   [
     'ordinary short arguments display unchanged',

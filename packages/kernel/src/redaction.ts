@@ -178,13 +178,16 @@ export function escapeTerminalText(text: string): string {
 // the wrong slot. A token whose word is past 12 characters and mixes upper and lower case with
 // a digit or a symbol reads as that credential; ordinary arguments (refs, paths, ids, lowercase
 // names) do not. The word is the token without punctuation attached to its edges, so a sentence
-// period or quotes never make an identifier like `deviceTarget` read as a secret.
+// period or quotes never make an identifier like `deviceTarget` read as a secret. A token that
+// carries a path separator is a location, not a credential: an INVALID_ARGS message names a
+// config file or an artifact so the reader can open or fix it, and the scrub keeps that text.
 
 const SECRET_LIKE_MIN_LENGTH = 12;
 const TOKEN_EDGE_PUNCTUATION = /^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g;
 
 /** True when `token` is long and varied enough to read as a credential rather than an argument. */
 function isSecretLikeToken(token: string): boolean {
+  if (/[/\\]/.test(token)) return false;
   const word = token.replaceAll(TOKEN_EDGE_PUNCTUATION, '');
   if (word.length <= SECRET_LIKE_MIN_LENGTH) return false;
   return /[a-z]/.test(word) && /[A-Z]/.test(word) && /[^a-zA-Z]/.test(word);
