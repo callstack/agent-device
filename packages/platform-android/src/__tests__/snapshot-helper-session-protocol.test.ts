@@ -1,11 +1,60 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
+  androidSnapshotHelperSessionLaunchArgs,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   parseAndroidSnapshotHelperSessionTouchResponse,
   parseAndroidSnapshotHelperSessionSnapshotResponse,
 } from '../snapshot-helper-session-protocol.ts';
+import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX,
+} from '../snapshot-helper-types.ts';
+
+test('a session launch owns one abstract socket name and the forward targets it', () => {
+  // The name is a routing label derived from the port, never a credential: the helper admits a
+  // connection only on the forwarded peer's adbd uid (#4519).
+  assert.equal(
+    androidSnapshotHelperSessionLaunchArgs(18093).socketName,
+    'agentdevice-snapshot-helper-18093',
+  );
+  assert.equal(
+    androidSnapshotHelperSessionLaunchArgs(18093).forwardTarget,
+    'localabstract:agentdevice-snapshot-helper-18093',
+  );
+  assert.notEqual(
+    androidSnapshotHelperSessionLaunchArgs(1).forwardTarget,
+    androidSnapshotHelperSessionLaunchArgs(2).forwardTarget,
+  );
+});
+
+test('the host socket namespace, session mode and byte cap agree with the Android helper', () => {
+  const java = readFileSync(
+    new URL(
+      '../../../../android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/SessionPeerPolicy.java',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const prefix = /SESSION_SOCKET_PREFIX = "([^"]+)";/.exec(java);
+  const mode = /AUTHENTICATED_SESSION_MODE = "([^"]+)";/.exec(java);
+  const cap = /MAX_COMMAND_LINE_BYTES = (\d+) \* (\d+);/.exec(java);
+  assert.ok(prefix, 'expected a socket prefix in SessionPeerPolicy');
+  assert.ok(mode, 'expected the session activation mode in SessionPeerPolicy');
+  assert.ok(cap, 'expected the command byte cap in SessionPeerPolicy');
+  // The host owns the name and the helper only refuses a name outside this namespace, so the two
+  // prefixes have to agree or every session launch is refused by the helper.
+  assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX, prefix[1]);
+  assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_MODE, mode[1]);
+  assert.equal(
+    androidSnapshotHelperSessionLaunchArgs(18093).forwardTarget,
+    `localabstract:${prefix[1]}18093`,
+  );
+  assert.equal(ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES, Number(cap[1]) * Number(cap[2]));
+});
 
 test('parses the session envelope and snapshot metadata', () => {
   const xml = '<hierarchy><node text="catalog" /></hierarchy>';
@@ -155,7 +204,11 @@ test('helper timeout diagnostics omit encoded text input', async () => {
   const encoded = Buffer.from(JSON.stringify({ text: 'private fill value' })).toString('base64');
   try {
     await assert.rejects(
-      sendAndroidSnapshotHelperSessionCommand(address.port, `input request-1 ${encoded}`, 20),
+      sendAndroidSnapshotHelperSessionCommand(
+        { port: address.port, secret: Buffer.alloc(32) },
+        `input request-1 ${encoded}`,
+        20,
+      ),
       (error) => {
         assert(error instanceof AppError);
         assert(!JSON.stringify(error).includes(encoded));

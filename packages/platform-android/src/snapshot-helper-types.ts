@@ -23,6 +23,22 @@ export const ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_QUIET_MS = 100;
 export const ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS = 5_000;
 export const ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 export const ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS = 30_000;
+/**
+ * The `mode` argument that starts a persistent session, and the only one the host ever sends for one.
+ * A helper build that does not implement it rejects the launch in `onStart`, before it binds
+ * anything, so no launch can put an unverified build in session service (#4519).
+ * `SessionPeerPolicy.java` carries the same value.
+ */
+export const ANDROID_SNAPSHOT_HELPER_SESSION_MODE = 'authenticated-session-v1';
+/**
+ * Prefix of the abstract device socket a session helper binds. The host owns the whole name and
+ * declares it in the launch (`-e sessionSocket <name>`), so the helper binds what it is told and the
+ * two ends cannot drift apart. The name carries no secret: the helper admits a connection only after
+ * reading the forwarded peer's adbd uid via `LocalSocket.getPeerCredentials()`, before any command
+ * byte is read, so the name is a routing label, not a credential, and nothing sensitive travels in
+ * argv beyond it.
+ */
+export const ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX = 'agentdevice-snapshot-helper-';
 
 /**
  * Who releases the helper's persistent instrumentation session.

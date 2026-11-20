@@ -16,7 +16,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
@@ -25,32 +24,43 @@ final class AutomationCommandHandler {
   private AutomationCommandHandler() {}
 
   static void writeSessionResponse(
-      OutputStream output,
+      SessionResponseWriter.FrameSink sink,
       String requestId,
       String action,
       String payload,
       UiAutomation automation,
       Context context)
       throws IOException {
-    Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
     InputDispatch dispatch = new InputDispatch();
-    try {
-      if ("app".equals(action)) {
-        ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
-      } else if ("screenshot".equals(action)) {
-        screenshot(result, automation, context);
-      } else if ("focus".equals(action)) {
-        focus(result, automation);
-      } else {
-        input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), dispatch);
-      }
-      result.putString("ok", "true");
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    } catch (Throwable error) {
-      SessionResponseWriter.putSessionError(result, error);
-      if ("input".equals(action) && !dispatch.attempted) result.putString("injected", "false");
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    }
+    SessionResponseWriter.respondOnce(
+        sink,
+        () -> {
+          Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
+          if ("app".equals(action)) {
+            ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
+          } else if ("screenshot".equals(action)) {
+            screenshot(result, automation, context);
+          } else if ("focus".equals(action)) {
+            focus(result, automation);
+          } else {
+            input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), dispatch);
+          }
+          result.putString("ok", "true");
+          return SessionResponseWriter.encodeSessionResponse(result, new byte[0]);
+        },
+        error -> errorFrame(requestId, action, dispatch.attempted, error));
+  }
+
+  /**
+   * The error frame for a failed automation command. It is built from fresh headers, so a failure
+   * while encoding a screenshot never encodes the screenshot again. An input that never reached
+   * the injector says so, so the host knows nothing was dispatched.
+   */
+  static SessionResponseWriter.Frame errorFrame(
+      String requestId, String action, boolean inputAttempted, Throwable error) {
+    return "input".equals(action) && !inputAttempted
+        ? SessionResponseWriter.errorFrame(requestId, error, "injected", "false")
+        : SessionResponseWriter.errorFrame(requestId, error);
   }
 
   private static final class InputDispatch {

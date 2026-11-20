@@ -12,9 +12,11 @@ import type {
 } from './snapshot-helper-types.ts';
 import { resolveAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
+  ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
   isAndroidSnapshotHelperSessionRequestTimeout,
   parseAndroidSnapshotHelperSessionTouchResponse,
   requestAndroidSnapshotHelperSessionSnapshot,
+  isAndroidSnapshotHelperSessionPeerUnverified,
   sendAndroidSnapshotHelperSessionCommand,
 } from './snapshot-helper-session-protocol.ts';
 import {
@@ -43,7 +45,7 @@ export async function captureFromAndroidSnapshotHelperSession(
   const reused = session.capturedCount > 0;
   try {
     const output = await requestAndroidSnapshotHelperSessionSnapshot({
-      port: session.port,
+      endpoint: session,
       commandTimeoutMs: resolved.commandTimeoutMs,
       signal: options.signal,
       idleWait: options.idleWait,
@@ -112,8 +114,11 @@ export function discloseHelperTouchDispatch(
   error: unknown,
 ): unknown {
   if ((action !== 'gesture' && action !== 'input') || !(error instanceof AppError)) return error;
-  return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
+  const neverSent = isAdbHostRefusal(error) || error.details?.dispatched === 'no';
+  return discloseDispatch(error, neverSent ? 'no' : 'unknown');
 }
+
+const SESSION_COMMAND_TOO_LARGE_REASON = 'android_snapshot_helper_session_command_too_large';
 
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;
@@ -146,16 +151,48 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   const command = params.payloadBase64
     ? `${params.action} ${requestId} ${params.payloadBase64}`
     : `${params.action} ${requestId}`;
+  const commandBytes = Buffer.byteLength(command);
+  if (commandBytes > ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES) {
+    // The caller's one-shot path is correct for this frame alone: the session stays live for the
+    // commands that fit. Record the decline so the fallback is visible in the request diagnostics.
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_snapshot_helper_session_command_declined',
+      data: {
+        deviceKey: params.deviceKey,
+        action: params.action,
+        commandBytes,
+        maxCommandBytes: ANDROID_SNAPSHOT_HELPER_SESSION_MAX_COMMAND_BYTES,
+        reason: SESSION_COMMAND_TOO_LARGE_REASON,
+      },
+    });
+    return undefined;
+  }
   let headers: Record<string, string>;
+  const sentAtMs = Date.now();
   try {
     const response = await sendAndroidSnapshotHelperSessionCommand(
-      session.port,
+      session,
       command,
       params.timeoutMs,
       params.signal,
     );
     headers = parseAndroidSnapshotHelperSessionTouchResponse(response, requestId);
   } catch (error) {
+    if (isAndroidSnapshotHelperSessionPeerUnverified(error)) {
+      // The listener got no command, so this call runs one-shot, and the session earns the timed
+      // backoff a failed capture does: the next commands do not restart it only to refuse it again.
+      await retireFailedAndroidSnapshotHelperSession({
+        deviceKey: params.deviceKey,
+        identity: session.identity,
+        failedAfterMs: Date.now() - sentAtMs,
+        fallbackBudgetMs: params.timeoutMs,
+        reusedSessionTimedOut: false,
+        signal: params.signal,
+        cause: error,
+      });
+      return undefined;
+    }
     // Transport-level failure: the session process can no longer be trusted. Stop it so the next
     // command runs against a fresh helper instead of a wedged socket.
     await stopAndroidSnapshotHelperSession(params.deviceKey, {
