@@ -181,7 +181,7 @@ function assertClaimAvailable(claim: PluggedClaim): void {
  */
 export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
   if (!isRecord(value)) return [];
-  const claims: PluggedClaim[] = [];
+  const claims: PluggedClaim[] = [...versionTwoReplayClaims(value)];
   for (const kind of CLAIM_KIND_ORDER) {
     const spec = CLAIM_KINDS[kind];
     const declared = claimIdSpelledBy(kind, value[spec.metadataField]);
@@ -197,6 +197,19 @@ export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
     }
   }
   return claims;
+}
+
+/**
+ * The version 2 replay shape, `{ kind: 'replay-backend', backend }` at the top level, which the host
+ * refuses. Its reserved id `ad` named native execution, so a refused candidate still names its claim.
+ */
+function versionTwoReplayClaims(value: Record<string, unknown>): readonly PluggedClaim[] {
+  if (value.kind !== 'replay-backend' || !isClaimId(value.backend)) return [];
+  return [
+    value.backend === NATIVE_REPLAY_BACKEND
+      ? { kind: 'replay-execution', id: NATIVE_REPLAY_BACKEND }
+      : { kind: 'replay-backend', id: value.backend },
+  ];
 }
 
 /** The id this value spells for a kind, or nothing when it does not spell one. */

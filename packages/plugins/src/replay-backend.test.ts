@@ -62,7 +62,9 @@ test('one backend disposer cannot delay another backend disposer', async () => {
   const first = engine('first');
   const second = engine('second');
   let release!: () => void;
-  first.dispose.mockImplementation(
+  // Close starts with the claim activated last. That one hangs, so a serial teardown would never
+  // reach the other claim before the release.
+  second.dispose.mockImplementation(
     () =>
       new Promise<void>((resolve) => {
         release = resolve;
@@ -74,9 +76,9 @@ test('one backend disposer cannot delay another backend disposer', async () => {
     policy,
   );
   const closing = registry.close();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
   expect(second.dispose).toHaveBeenCalledTimes(1);
+  expect(first.dispose).toHaveBeenCalledTimes(1);
   release();
   expect(await closing).toHaveLength(2);
 });
@@ -183,6 +185,36 @@ test('an embedder candidate on another contract version answers native execution
   await expect(registry.resolveReplayExecution('@agent-device/replay')).rejects.toMatchObject({
     details: { reason: 'incompatible-plugin-api', declaredApiVersion: 99 },
   });
+  await registry.close();
+});
+
+test('the shipped version 2 replay shapes answer their selection with incompatible-plugin-api', async () => {
+  // The real version 2 return values of @agent-device/replay and @agent-device/maestro: a top-level
+  // `kind` and `backend`, with no `contributes`.
+  const versionTwoReplay = { apiVersion: 2, kind: 'replay-backend', backend: 'ad', setup: vi.fn() };
+  const versionTwoMaestro = {
+    apiVersion: 2,
+    kind: 'replay-backend',
+    backend: 'maestro',
+    setup: vi.fn(),
+  };
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([candidate(versionTwoReplay), candidate(versionTwoMaestro)]),
+    { env: {}, cwd: '/' },
+    policy,
+  );
+  expect(registry.inventory).toMatchObject([
+    { state: 'failed', error: { reason: 'incompatible-plugin-api' } },
+    { backend: 'maestro', state: 'failed', error: { reason: 'incompatible-plugin-api' } },
+  ]);
+  await expect(registry.resolveReplayExecution('@agent-device/replay')).rejects.toMatchObject({
+    details: { reason: 'incompatible-plugin-api', declaredApiVersion: 2 },
+  });
+  await expect(registry.resolveReplayBackend('maestro', host)).rejects.toMatchObject({
+    details: { reason: 'incompatible-plugin-api', declaredApiVersion: 2 },
+  });
+  expect(versionTwoReplay.setup).not.toHaveBeenCalled();
+  expect(versionTwoMaestro.setup).not.toHaveBeenCalled();
   await registry.close();
 });
 

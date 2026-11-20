@@ -180,7 +180,7 @@ To move a package:
 
 1. Return `apiVersion: 3` with `contributes: [{ kind: 'provider', provider, credentials, connection?, setup }]`; the default export stays a function the host calls with the selection's options.
 2. Add `"agent-device": { "apiVersion": 3, "provider": "example" }` and `"engines": { "node": ">=22.12" }` to `package.json`, with the same claims the factory returns.
-3. A replay plugin's `setup` now receives only `clientVersion` and `createError`, not the version 2 host with `env`, `options` and `runHostCommand`. Move work that runs a host command or reads the environment into the lazy `create(host)`.
+3. A replay plugin's `setup` now receives only `clientVersion` and `createError`, not the version 2 host with `env`, `options` and `runHostCommand`. A replay backend moves its host-command work into the lazy `replayBackend.create(host)`, whose host offers `runCommand`. A replay execution's `execution.create()` receives no host.
 
 ```diff
  export default () => ({
