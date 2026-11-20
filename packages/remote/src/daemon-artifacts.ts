@@ -782,17 +782,9 @@ function resolveMaterializedArtifactPath(
     localFileName(artifact.fileName) ??
     localFileName(`${artifact.field}-${Date.now()}`) ??
     `artifact-${Date.now()}`;
-  const fallback = path.join(cwd, fileName);
-  if (path.dirname(fallback) !== cwd) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'The artifact fallback name leaves the working directory.',
-      {
-        reason: 'artifact_destination_invalid',
-        fileName,
-      },
-    );
-  }
+  const named = path.join(cwd, fileName);
+  // The parent must be the working directory itself; a generated name is the last resort.
+  const fallback = path.dirname(named) === cwd ? named : path.join(cwd, `artifact-${Date.now()}`);
   return { path: fallback, fallback: true };
 }
 

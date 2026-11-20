@@ -41,6 +41,17 @@ export type RemoteArtifactDownload = {
   signal?: AbortSignal;
 };
 
+/**
+ * The `details.reason` values a staged remote recording download publishes (#4518), documented in
+ * `website/docs/docs/commands.md`.
+ */
+const ARTIFACT_DOWNLOAD_REASONS = {
+  /** The download's parent directory was replaced or became unreachable during the transfer. */
+  destinationReplaced: 'artifact_destination_replaced',
+  /** The staging directory could not be created, or the staged file could not be renamed. */
+  publishFailed: 'artifact_publish_failed',
+} as const;
+
 const PRIVATE_FILE_FLAGS =
   fs.constants.O_WRONLY |
   fs.constants.O_CREAT |
@@ -134,7 +145,7 @@ function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestinat
           'COMMAND_FAILED',
           'The download directory changed during the transfer.',
           {
-            reason: 'artifact_destination_replaced',
+            reason: ARTIFACT_DOWNLOAD_REASONS.destinationReplaced,
             artifactId,
             stagingPath: staging,
           },
@@ -156,7 +167,7 @@ function publishError(artifactId: string, cause: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'The downloaded artifact could not be saved on this machine.',
-    { reason: 'artifact_publish_failed', artifactId },
+    { reason: ARTIFACT_DOWNLOAD_REASONS.publishFailed, artifactId },
     cause instanceof Error ? cause : undefined,
   );
 }
