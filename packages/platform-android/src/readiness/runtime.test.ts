@@ -349,6 +349,42 @@ test('a probe-level timeout is a typed ANDROID_BOOT_TIMEOUT terminal, not a raw 
   expect(run).toHaveBeenCalledTimes(1);
 });
 
+test('a probe failure that lands on the readiness deadline reports the spent budget', async () => {
+  const { host } = probeHost([]);
+  // The probe uses the last of the budget before it fails: the clock passes the deadline.
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 5_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    message: 'Android device did not finish booting in time',
+    details: { reason: 'ANDROID_BOOT_TIMEOUT' },
+  });
+});
+
+test('a probe that throws a plain Error fails as a command failure, not UNKNOWN', async () => {
+  const { host } = probeHost([new Error('spawn adb EACCES')]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'spawn adb EACCES' });
+});
+
 test('a thrown offline wording without typed details does not retry, proving text cannot drive the verdict', async () => {
   const { host, run } = probeHost([new AppError('COMMAND_FAILED', 'device offline')]);
 
