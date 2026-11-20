@@ -252,6 +252,10 @@
       "types": "./src/is-predicate.ts",
       "default": "./src/is-predicate.ts"
     },
+    "./key-suggestions": {
+      "types": "./src/key-suggestions.ts",
+      "default": "./src/key-suggestions.ts"
+    },
     "./interaction-guarantees": {
       "types": "./src/interaction-guarantees.ts",
       "default": "./src/interaction-guarantees.ts"

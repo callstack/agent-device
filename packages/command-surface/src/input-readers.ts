@@ -107,16 +107,26 @@ export function assertAllowedKeys(
   allowedKeys: readonly string[],
   label: string,
   hint?: string,
+  options?: { nestedInputKeys?: readonly string[] },
 ): void {
   const allowed = new Set(allowedKeys);
   const unknownKeys = Object.keys(record).filter((key) => !allowed.has(key));
-  if (unknownKeys.length > 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `${label} has unknown field(s): ${unknownKeys.join(', ')}.`,
-      hint === undefined ? undefined : { hint },
-    );
-  }
+  if (unknownKeys.length === 0) return;
+  // A step-level refusal only guides when it says where the field belongs: a
+  // key that the step's own command accepts as structured input was written at
+  // the step's top level (`--settle` spelled as a step field), and naming the
+  // destination beats the bare unknown-field list (#2062 follow-up).
+  const nestedInputKeys =
+    options?.nestedInputKeys === undefined ? undefined : new Set(options.nestedInputKeys);
+  const misplacedKeys =
+    nestedInputKeys === undefined ? [] : unknownKeys.filter((key) => nestedInputKeys.has(key));
+  const misplacedGuidance =
+    misplacedKeys.length === 0 ? '' : ` Pass ${misplacedKeys.join(', ')} inside the step's input.`;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${label} has unknown field(s): ${unknownKeys.join(', ')}.${misplacedGuidance}`,
+    hint === undefined ? undefined : { hint },
+  );
 }
 
 export function compactRecord(record: Record<string, unknown>): Record<string, unknown> {

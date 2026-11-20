@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   BATCH_STEP_SHAPE_HINT,
@@ -31,4 +31,70 @@ test('shape refusals carry the shared hint, or the caller-supplied one', () => {
   expect(hintOf(() => readBatchStepInputObject({ command: 'press' }, 1, 'surface hint'))).toBe(
     'surface hint',
   );
+});
+
+describe('input key admission', () => {
+  const ACCEPTED = ['path', 'fullscreen', 'platform'];
+
+  test('an undeclared input key is refused with the closest accepted key', () => {
+    expect(() =>
+      readBatchStepInputObject(
+        { command: 'screenshot', input: { fullscreenn: true } },
+        2,
+        BATCH_STEP_SHAPE_HINT,
+        ACCEPTED,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        message: 'Batch step 2 input has unknown field(s): fullscreenn. Did you mean fullscreen?',
+      }),
+    );
+  });
+
+  test('a refusal with no confident match states the unknown keys only', () => {
+    expect(() =>
+      readBatchStepInputObject(
+        { command: 'screenshot', input: { output: 'x' } },
+        1,
+        BATCH_STEP_SHAPE_HINT,
+        ACCEPTED,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        message: 'Batch step 1 input has unknown field(s): output.',
+      }),
+    );
+  });
+
+  test('an undeclared key refusal still carries the caller-supplied hint', () => {
+    expect(
+      hintOf(() =>
+        readBatchStepInputObject(
+          { command: 'screenshot', input: { fullscren: true } },
+          3,
+          'surface hint',
+          ACCEPTED,
+        ),
+      ),
+    ).toBe('surface hint');
+  });
+
+  test('declared keys pass through untouched', () => {
+    expect(
+      readBatchStepInputObject(
+        { command: 'screenshot', input: { path: 'a.png', platform: 'ios' } },
+        1,
+        BATCH_STEP_SHAPE_HINT,
+        ACCEPTED,
+      ),
+    ).toEqual({ path: 'a.png', platform: 'ios' });
+  });
+
+  test('without accepted keys the read stays shape-only', () => {
+    expect(
+      readBatchStepInputObject({ command: 'screenshot', input: { anything: true } }, 1),
+    ).toEqual({ anything: true });
+  });
 });

@@ -1,6 +1,7 @@
 import { daemonRuntimeSchema, type SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from './json.ts';
+import { suggestClosestKey } from './key-suggestions.ts';
 
 export const DEFAULT_BATCH_MAX_STEPS = 100;
 
@@ -44,6 +45,7 @@ export function readBatchStepInputObject(
   record: Record<string, unknown>,
   stepNumber: number,
   hint: string = BATCH_STEP_SHAPE_HINT,
+  allowedKeys?: readonly string[],
 ): Record<string, unknown> {
   const input = record.input;
   if (!isRecord(input)) {
@@ -51,7 +53,34 @@ export function readBatchStepInputObject(
       hint,
     });
   }
+  if (allowedKeys !== undefined) assertBatchStepInputKeys(input, stepNumber, allowedKeys, hint);
   return input;
+}
+
+/**
+ * A step's structured input used to be a pass-through: any key the nested
+ * command's field reader does not declare was silently dropped, so a step like
+ * `{"command":"screenshot","input":{"out":...}}` ran without its output path
+ * and reported success. When the caller passes the nested command's accepted
+ * keys, every undeclared key is refused with the closest accepted key, and the
+ * refusal still carries the step-shape hint.
+ */
+function assertBatchStepInputKeys(
+  input: Record<string, unknown>,
+  stepNumber: number,
+  allowedKeys: readonly string[],
+  hint: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  const unknownKeys = Object.keys(input).filter((key) => !allowed.has(key));
+  if (unknownKeys.length === 0) return;
+  const suggestion = suggestClosestKey(unknownKeys[0]!, allowedKeys);
+  throw new AppError(
+    'INVALID_ARGS',
+    `Batch step ${stepNumber} input has unknown field(s): ${unknownKeys.join(', ')}.` +
+      (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
+    { hint },
+  );
 }
 
 export function parseBatchStepRuntime(

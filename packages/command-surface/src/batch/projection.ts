@@ -5,12 +5,14 @@ import {
   readStructuredBatchCommandName,
 } from '@agent-device/command-registry/batch-policy';
 import {
+  BATCH_STEP_SHAPE_HINT,
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
   type DaemonBatchStep,
 } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
+import { commandInputKeys } from '../command-metadata.ts';
 import { request } from '../cli-grammar/common.ts';
 import type {
   AsyncDaemonWriter,
@@ -71,7 +73,16 @@ async function readBatchDaemonStep(
 ): Promise<DaemonBatchStep> {
   const record = readBatchStepRecord(step, stepNumber);
   const command = readBatchStepCommand(record, stepNumber);
-  const input = readBatchStepInputObject(record, stepNumber) as CommandInput;
+  // The last reader every surface's steps cross, so the nested command's
+  // unknown-key refusal runs here too: a Node client step skips the CLI and
+  // tool readers, and its undeclared keys would otherwise reach the field
+  // projection and be dropped without a trace.
+  const input = readBatchStepInputObject(
+    record,
+    stepNumber,
+    BATCH_STEP_SHAPE_HINT,
+    commandInputKeys(command),
+  ) as CommandInput;
   assertNoStdinFillStep(command, input, stepNumber);
   const runtime = parseBatchStepRuntime(record.runtime, stepNumber);
   const prepared = await prepareDaemonCommandRequest(command, input, stepNumber);
