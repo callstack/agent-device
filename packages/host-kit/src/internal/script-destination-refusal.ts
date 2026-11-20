@@ -82,7 +82,7 @@ export function scriptAncestryFailure(
   );
 }
 
-/** What to do about it. A group-writable directory is the one refusal the caller can fix in place. */
+/** What to do about it. A group-writable directory is the one refusal a mode change fixes in place. */
 function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';

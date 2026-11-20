@@ -19,7 +19,12 @@ import {
  * account database, so the answer does not depend on which name services run (ADR 0016). Every judgment below
  * decides over the fields of one `lstat`, so each is testable on its values.
  */
-export type ScriptDestinationTrust = Readonly<{ uid: number; privateAncestry?: boolean }>;
+export type ScriptDestinationTrust = Readonly<{
+  uid: number;
+  privateAncestry?: boolean;
+  /** Set for a private root: its ancestry refuses a group-writable directory this user owns too. */
+  closedToOwnGroup?: boolean;
+}>;
 
 /**
  * How strictly a caller's destination is judged. `privateAncestry` is for executable state, such as the Swift
@@ -53,8 +58,19 @@ export function untrustedAncestryExposure(
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
   if (directory.mode & 0o1000 && !trust.privateAncestry) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
-  if (directory.mode & 0o020) return 'shared_group_writable';
+  if (groupAddsEntriesIn(directory, trust)) return 'shared_group_writable';
   return undefined;
+}
+
+/**
+ * Whether the group's write bit opens `directory` to accounts this user did not admit. A directory this
+ * non-root user owns carries a group its owner chose, so the script rule honors it; root's group is nobody's
+ * choice here, and executable state and a private root honor no group at all (ADR 0016).
+ */
+function groupAddsEntriesIn(directory: DirectoryAuthority, trust: ScriptDestinationTrust): boolean {
+  if (!(directory.mode & 0o020)) return false;
+  if (trust.privateAncestry || trust.closedToOwnGroup) return true;
+  return directory.uid === 0 || directory.uid !== trust.uid;
 }
 
 /**
@@ -68,7 +84,7 @@ export function othersCreateEntriesIn(
 ): boolean {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
   if (directory.mode & 0o002) return true;
-  return Boolean(directory.mode & 0o020);
+  return groupAddsEntriesIn(directory, trust);
 }
 
 /**
@@ -113,8 +129,8 @@ export function publishScriptFileSync(options: {
 const SCRIPT_FILE_MODE = 0o600;
 
 /**
- * A directory a publish creates is itself judged on the way to a later version, so it is created at the mode
- * the rule accepts under every umask — the shared-checkout umask 002 would otherwise leave it 0775 and refuse.
+ * A directory a publish creates holds private recordings, so it is created owner-only under every umask — the
+ * shared-checkout umask 002 would otherwise leave it 0775, open to a group nobody chose for it.
  */
 const SCRIPT_DIR_MODE = 0o700;
 
@@ -543,7 +559,7 @@ export function admitPrivateRoot(options: {
   /** Names below the root this caller traverses, judged by the same rule. */
   managedDirs?: readonly string[];
 }): PrivateRootAdmission {
-  const trust = scriptTrust({});
+  const trust: ScriptDestinationTrust = { ...scriptTrust({}), closedToOwnGroup: true };
   const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
   if (!path.isAbsolute(root))
     return { status: 'refused', component: root, exposure: 'relative_destination' };

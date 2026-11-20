@@ -197,10 +197,10 @@ skipOnWindows(
 );
 
 skipOnWindows(
-  'refuses a missing level that appeared group-writable, rather than adopting it',
+  'refuses a missing level that appeared group-writable and root-owned, rather than adopting it',
   () => {
-    // The mode decides, because membership cannot be proven (ADR 0016): an appeared directory at 0775 is one
-    // the group can add names in, so the destination's own name can be made there by another member first.
+    // Root's group is not this user's choice (ADR 0016): the destination's own name can be made there by a
+    // member of it first.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const appeared = path.join(home, 'recordings');
@@ -214,6 +214,12 @@ skipOnWindows(
     }) as typeof fs.mkdirSync);
 
     const destination = path.join(appeared, 'journey.ad');
+    const realLstatSync = fs.lstatSync.bind(fs);
+    vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: never, ...rest: never[]) => {
+      const stats = realLstatSync(pathname, ...rest);
+      if (String(pathname) !== appeared || stats === undefined) return stats;
+      return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, { uid: 0n });
+    }) as typeof fs.lstatSync);
 
     expectUntrusted(() => prepareScriptDestination(destination), 'shared_group_writable', appeared);
   },

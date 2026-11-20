@@ -257,13 +257,13 @@ test.skipIf(process.platform === 'win32').each([
   { version: 'first', force: true, change: 'retarget' },
   { version: 'replacement', force: false, change: 'retarget' },
   { version: 'first', force: false, change: 'replace' },
-  { version: 'first', force: false, change: 'group-writable' },
+  { version: 'first', force: false, change: 'world-writable' },
 ] as const)(
   'a remote recording refuses a $version version (force: $force) whose directory changed by $change while it downloaded',
   async ({ version, force, change }) => {
     // Once the staged file is open, the destination's directory changes: `retarget` points `alias` from
     // `judged` to `other` (both private, so only identity tells), `replace` removes `judged` and makes a
-    // new private one at the same path, and `group-writable` opens `judged` to its group. Only the
+    // new private one at the same path, and `world-writable` opens `judged` to every user. Only the
     // confirmation after the download catches each one.
     const root = scratchRoot('script-ancestry-');
     const judged = directoryWith(path.join(root, 'judged'), 0o700);
@@ -280,7 +280,7 @@ test.skipIf(process.platform === 'win32').each([
         fs.rmSync(judged, { recursive: true, force: true });
         directoryWith(judged, 0o700);
       },
-      'group-writable': () => fs.chmodSync(judged, 0o770),
+      'world-writable': () => fs.chmodSync(judged, 0o777),
     }[change];
     const stateDir = path.join(root, 'state');
     const baseUrl = await artifactServer({
@@ -315,7 +315,7 @@ test.skipIf(process.platform === 'win32').each([
 
     expect(retargeted).toBe(true);
     const cause =
-      change === 'group-writable' ? 'script_ancestor_untrusted' : 'script_ancestry_replaced';
+      change === 'world-writable' ? 'script_ancestor_untrusted' : 'script_ancestry_replaced';
     const warnings = expectDeliveryRefused(refused, cause);
     const ancestor = change === 'retarget' ? other : judged;
     expect(warnings).toEqual([expect.stringContaining(`under ${ancestor}:`)]);

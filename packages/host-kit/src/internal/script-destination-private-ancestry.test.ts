@@ -64,10 +64,10 @@ skipOnWindows('without private ancestry, the same sticky ancestor is still passe
   expect(directory).toBe(path.join(shared, 'cache'));
 });
 
-skipOnWindows(
-  'a group-writable ancestor is refused with private ancestry, and nothing is created',
-  () => {
-    const shared = directoryWith(path.join(root, 'group'), 0o770);
+skipOnWindows.each(['770', '775'])(
+  'a group-writable ancestor this user owns (mode %s) is refused with private ancestry, and nothing is created',
+  (mode) => {
+    const shared = directoryWith(path.join(root, 'group'), Number.parseInt(mode, 8));
 
     expectUntrusted(
       () => prepareScriptDestination(path.join(shared, 'cache', 'entry'), PRIVATE),
