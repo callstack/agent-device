@@ -72,7 +72,7 @@ test('a settle capture that answers after the budget reports never settled, not 
       },
       tap: async () => ({ ok: true }),
     } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: before }]),
     policy: localCommandPolicy(),
     clock,
