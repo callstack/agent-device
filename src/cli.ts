@@ -41,6 +41,7 @@ import {
   applyDefaultPlatformBinding,
   type DevicePin,
   getCommandSchema,
+  isFlagSupportedForCommand,
   readCliBatchStepsJson,
   resolveBindingSettings,
 } from '@agent-device/command-surface';
@@ -787,10 +788,9 @@ function resolveActiveConnectionDefaults(options: {
   if (
     options.command === 'connect' ||
     options.command === 'connection' ||
-    options.command === 'daemon' ||
-    options.command === 'plugins' ||
-    options.command === 'device' ||
-    options.command === 'proxy'
+    // A command that cannot take a session (`auth`, `daemon`, `plugins`, `device`, `proxy`) runs
+    // on no connection. Reading the active one would refuse it for a session it cannot name.
+    !isFlagSupportedForCommand('session', options.command)
   ) {
     return null;
   }

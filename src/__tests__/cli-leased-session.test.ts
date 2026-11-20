@@ -348,6 +348,31 @@ test('a macos-app remote config with a host-allocated lease needs a session and 
   fs.rmSync(solo.root, { recursive: true, force: true });
 });
 
+test('a command that takes no session runs while a leased connection is active', async () => {
+  const solo = workspace();
+  writeStoredConnection(solo, {
+    session: 'limrun-a',
+    tenant: 'limrun',
+    runId: 'run-limrun-a',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'limrun',
+    platform: 'ios',
+  });
+
+  // The active leased connection still makes a connection command name its session...
+  assertSessionRequired(await runAgentCommand(solo, ['snapshot']));
+  // ...but `auth` runs on no connection, and `--session` is not one of its flags.
+  const environments: Record<string, string>[] = [{}, { AGENT_DEVICE_SESSION: 'demo' }];
+  for (const env of environments) {
+    const result = await runAgentCommand(solo, ['auth', 'status'], env);
+    assert.equal(result.code, null, result.stdout);
+    assert.equal(JSON.parse(result.stdout).data.authenticated, false);
+    assert.deepEqual(result.calls, []);
+  }
+
+  fs.rmSync(solo.root, { recursive: true, force: true });
+});
+
 function writeLeasedProfile(workspace: Workspace): string {
   const remoteConfig = path.join(workspace.project, 'shared.remote.json');
   fs.writeFileSync(
