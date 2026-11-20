@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import { escapeTerminalText, redactDiagnosticData } from '@agent-device/kernel/redaction';
 import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
@@ -201,7 +201,8 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
       appendDiagnosticLine(scope, scope.traceLogPath, fileLine);
     }
     if (scope.debug && !scope.logPath && !scope.traceLogPath) {
-      process.stderr.write(`${DIAGNOSTIC_STDERR_PREFIX}${fileLine}`);
+      // The file form stays exact; the terminal copy is escaped, and its `\u00NN` form keeps the JSON parseable.
+      process.stderr.write(`${DIAGNOSTIC_STDERR_PREFIX}${escapeTerminalText(fileLine)}`);
     }
   } catch {
     // Best-effort diagnostics should not break request flow.

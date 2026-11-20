@@ -140,3 +140,36 @@ function redactUrl(value: string): string | null {
     return null;
   }
 }
+
+// Terminal-safe output: text the CLI writes can name values a peer or a device chose (paths, labels,
+// messages), so C0, DEL and C1 characters are shown as escapes instead of reaching the terminal raw.
+
+/** C0 except newline and tab, DEL, and C1. Newline and tab are layout; every other one is escaped. */
+function isEscapedControl(code: number): boolean {
+  return (code < 0x20 && code !== 0x0a && code !== 0x09) || (code >= 0x7f && code <= 0x9f);
+}
+
+/** Replaces each character `escape` matches with its `render`ing, returning the input itself when none does. */
+function replaceCodes(
+  text: string,
+  escape: (code: number) => boolean,
+  render: (code: number) => string,
+): string {
+  let out = '';
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (!escape(code)) continue;
+    out += text.slice(start, index) + render(code);
+    start = index + 1;
+  }
+  return start === 0 ? text : out + text.slice(start);
+}
+
+/**
+ * Text with C0 (except newline and tab), DEL and C1 characters shown as `\u00NN`. That is a JSON string escape too, so
+ * JSON text written through it still parses to the exact values. Text with nothing to escape is returned as is.
+ */
+export function escapeTerminalText(text: string): string {
+  return replaceCodes(text, isEscapedControl, (code) => `\\u${code.toString(16).padStart(4, '0')}`);
+}

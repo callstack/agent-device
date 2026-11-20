@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 import { compareVersions } from '@agent-device/host-kit/version';
+import { writeStderr } from './process-exit.ts';
 
 const PACKAGE_NAME = 'agent-device';
 const UPDATE_CHECK_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -42,7 +43,7 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   const cache = readUpdateCheckCache(cachePath);
 
   if (shouldShowUpgradeNotice(cache, options.currentVersion)) {
-    process.stderr.write(
+    writeStderr(
       `Update available: ${PACKAGE_NAME} ${options.currentVersion} -> ${cache.latestVersion}. ` +
         `Run \`npm install -g ${PACKAGE_NAME}@${distTagFor(options.currentVersion)}\` to upgrade the CLI.\n`,
     );

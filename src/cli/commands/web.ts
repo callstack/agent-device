@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { printJson } from '../../commands/output/json.ts';
 import { createManagedWebBackend } from '../../platform-runtime-managed-web-backend.ts';
+import { writeStdout } from '../process-exit.ts';
 
 const managedWebBackendFor = (host: HostEnvironment) => createManagedWebBackend(host);
 
@@ -42,7 +43,7 @@ export async function runWebCommand(
 
 function printWebSetupStart(json: boolean | undefined): void {
   if (json) return;
-  process.stdout.write('Setting up managed agent-browser backend (downloads if needed)...\n');
+  writeStdout('Setting up managed agent-browser backend (downloads if needed)...\n');
 }
 
 function printWebSetupResult(json: boolean | undefined, status: ManagedWebBackendStatus): void {
@@ -50,9 +51,7 @@ function printWebSetupResult(json: boolean | undefined, status: ManagedWebBacken
     printJson({ success: true, data: { status: toPublicAgentBrowserToolStatus(status) } });
     return;
   }
-  process.stdout.write(
-    `Managed web backend installed.\nagent-browser available at: ${status.binaryPath}\n`,
-  );
+  writeStdout(`Managed web backend installed.\nagent-browser available at: ${status.binaryPath}\n`);
 }
 
 function printWebResult(json: boolean | undefined, message: string, data: Record<string, unknown>) {
@@ -60,7 +59,7 @@ function printWebResult(json: boolean | undefined, message: string, data: Record
     printJson({ success: true, data: toPublicWebResult(data) });
     return;
   }
-  process.stdout.write(`${message}\n`);
+  writeStdout(`${message}\n`);
 }
 
 function toPublicAgentBrowserToolStatus(

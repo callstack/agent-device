@@ -13,7 +13,7 @@ import {
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { exitAfterFlush } from './cli/process-exit.ts';
+import { exitAfterFlush, writeStderr, writeStdout } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
 import {
@@ -100,7 +100,7 @@ function writeDaemonReplacedNotice(replaced: {
   const identity = previous.version
     ? `pid ${previous.pid}, v${previous.version}`
     : `pid ${previous.pid}`;
-  process.stderr.write(
+  writeStderr(
     reason === 'unreachable'
       ? `Replaced unreachable daemon (${identity}) in ${stateDir}.\n`
       : `Replaced idle daemon (${identity}) in ${stateDir}: it did not match this client.\n`,
@@ -273,11 +273,11 @@ async function parseCliInputOrExit(
   }
 
   for (const warning of parsed.warnings) {
-    process.stderr.write(`Warning: ${warning}\n`);
+    writeStderr(`Warning: ${warning}\n`);
   }
 
   if (parsed.flags.version) {
-    process.stdout.write(`${options.version}\n`);
+    writeStdout(`${options.version}\n`);
     return exitAfterFlush(0);
   }
 
@@ -289,21 +289,21 @@ async function parseCliInputOrExit(
     }
     const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
     if (!helpTarget) {
-      process.stdout.write(`${await usage()}\n`);
+      writeStdout(`${await usage()}\n`);
       return exitAfterFlush(0);
     }
     const commandHelp = await usageForCommand(helpTarget);
     if (commandHelp) {
-      process.stdout.write(commandHelp);
+      writeStdout(commandHelp);
       return exitAfterFlush(0);
     }
     await printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
-    process.stdout.write(`${await usage()}\n`);
+    writeStdout(`${await usage()}\n`);
     return exitAfterFlush(1);
   }
 
   if (!parsed.command) {
-    process.stdout.write(`${await usage()}\n`);
+    writeStdout(`${await usage()}\n`);
     return exitAfterFlush(1);
   }
 
@@ -521,7 +521,7 @@ async function resolveRemoteContext(
       hadConnectionDefaults: Boolean(ctx.connectionDefaults),
     })
   ) {
-    process.stderr.write(
+    writeStderr(
       'Warning: open is using explicit remote daemon or tenant flags without saved Metro runtime hints. React Native apps may launch without bundle/runtime hints; prefer connect --remote-config <path> first or pass --remote-config <path> on this command.\n',
     );
   }
@@ -907,7 +907,7 @@ function createCliProgressTransport(options: CliDaemonTransportSetup): AgentDevi
   const onProgress =
     command === 'test' && replayTestReporterRuntime
       ? replayTestReporterRuntime.onProgress
-      : createStderrCommandProgressSink(options.commandProgress);
+      : createStderrCommandProgressSink(options.commandProgress, options.host.env);
   return async (req, context) => {
     const transportOptions = { ...context, onProgress };
     return await sendClientRequestToCliTransport(
@@ -981,7 +981,7 @@ function startDaemonLogTail(logPath: string): (() => void) | null {
           fs.readSync(fd, buffer, 0, buffer.length, offset);
           offset = stats.size;
           if (buffer.length > 0) {
-            process.stdout.write(buffer.toString('utf8'));
+            writeStdout(buffer.toString('utf8'));
           }
         } finally {
           fs.closeSync(fd);

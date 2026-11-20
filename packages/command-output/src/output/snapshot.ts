@@ -18,7 +18,7 @@ import {
 } from '@agent-device/contracts/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
-import { pinnedRefText } from '../output-common.ts';
+import { collapseWarningText, pinnedRefText } from '../output-common.ts';
 
 type SnapshotTextOptions = {
   raw?: boolean;
@@ -273,7 +273,8 @@ function buildSnapshotNotices(
   options: SnapshotTextOptions,
   helperPresentation: AndroidHelperPresentationInput = { nodes, filteredCount: 0 },
 ): string[] {
-  const notices = [...readSnapshotWarnings(data), ...fallbackScreenshotNotices(data)];
+  // Response warnings are printed once by the dispatcher, after the snapshot.
+  const notices = [...fallbackScreenshotNotices(data)];
   // The structured snapshot quality verdict already carries a sharper version of this hint.
   if (shouldRenderLegacySparseSnapshotHint(data)) {
     const sparseSnapshotHint = formatSparseSnapshotHint(nodes, options);
@@ -322,7 +323,10 @@ function formatSparseSnapshotHint(
 
 export function readSnapshotWarnings(data: Record<string, unknown>): string[] {
   // Snapshot text additionally drops empty notes; the field contract is the shared parser's.
-  return readResponseWarnings(data).filter((warning) => warning.length > 0);
+  // Folded like every response warning, so each one stays on its own line.
+  return readResponseWarnings(data)
+    .map(collapseWarningText)
+    .filter((warning) => warning.length > 0);
 }
 
 type SnapshotDisplayLine = ReturnType<typeof buildSnapshotDisplayLines>[number];

@@ -1,5 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,14 +49,21 @@ export async function prepareRemoteRequestArtifacts(
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
+  onProgress?: RequestProgressSink,
 ): Promise<PreparedRemoteRequest> {
   if (!isRemoteDaemon(info)) {
-    return await prepareRemoteRequestArtifactsWithinBudget(req, info, signal, host);
+    return await prepareRemoteRequestArtifactsWithinBudget(req, info, signal, host, onProgress);
   }
   return await withUploadPreparationDeadline(
     signal,
     async (preparationSignal) =>
-      await prepareRemoteRequestArtifactsWithinBudget(req, info, preparationSignal, host),
+      await prepareRemoteRequestArtifactsWithinBudget(
+        req,
+        info,
+        preparationSignal,
+        host,
+        onProgress,
+      ),
   );
 }
 
@@ -64,13 +72,14 @@ async function prepareRemoteRequestArtifactsWithinBudget(
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
   host: HostEnvironment,
+  onProgress: RequestProgressSink | undefined,
 ): Promise<PreparedRemoteRequest> {
   const positionals = [...(req.positionals ?? [])];
   let flags = req.flags ? { ...req.flags } : undefined;
   let installSource = req.meta?.installSource;
   const clientArtifactPaths: Record<string, string> = {};
   let uploadedArtifactId: string | undefined;
-  const uploadProgress = createStderrUploadProgressReporter(host.env);
+  const uploadProgress = createStderrUploadProgressReporter(host.env, onProgress);
 
   if (!isRemoteDaemon(info)) {
     return createPreparedRemoteRequest({

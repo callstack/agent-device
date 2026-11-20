@@ -5,11 +5,13 @@ import {
   buildDaemonHttpBaseUrl,
   normalizeDaemonPublicOrigin,
 } from '@agent-device/contracts/daemon-http';
-import { ensureProxyUpstreamDaemon } from '@agent-device/daemon-client';
+import { ensureProxyUpstreamDaemon, formatDaemonTakeoverNotice } from '@agent-device/daemon-client';
 import { AppError } from '@agent-device/kernel/errors';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { colorize, supportsColor } from '@agent-device/command-output';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
+import { writeStderr } from '../process-exit.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
 type ProxyStartup = {
@@ -29,7 +31,9 @@ export const proxyCommand: ClientCommandHandler = async ({
     throw new AppError('INVALID_ARGS', 'proxy does not accept positional arguments.');
   }
   const startup = await startProxy(flags, clientHost);
-  await writeCommandOutput(flags, startup, () => renderProxyStartup(startup));
+  await writeCommandOutput(flags, startup, () => renderProxyStartup(startup), {
+    terminalSafe: true,
+  });
   await waitForever();
   return true;
 };
@@ -43,7 +47,11 @@ async function startProxy(flags: CliFlags, clientHost: HostEnvironment): Promise
       throw new AppError('INVALID_ARGS', 'Invalid --public-origin', {}, error);
     }
   }
-  const daemon = await ensureProxyUpstreamDaemon({ stateDir: flags.stateDir, host: clientHost });
+  const daemon = await ensureProxyUpstreamDaemon({
+    stateDir: flags.stateDir,
+    host: clientHost,
+    onTakeover: writeDaemonTakeoverNotice,
+  });
   const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.httpPort);
   const token = resolveProxyClientToken(flags);
   const server = createDaemonProxyServer({
@@ -120,7 +128,13 @@ function formatProxyOutputValue(
   format: Parameters<typeof colorize>[1],
   useColor: boolean,
 ): string {
-  return useColor ? colorize(value, format, { validateStream: false }) : value;
+  // The startup text is written raw to keep its colors, so a value is escaped with color off too.
+  return useColor ? colorize(value, format, { validateStream: false }) : escapeTerminalText(value);
+}
+
+/** The daemon ensuring is about to retire, written through the escaping CLI writer. */
+function writeDaemonTakeoverNotice(notice: Parameters<typeof formatDaemonTakeoverNotice>[0]): void {
+  writeStderr(formatDaemonTakeoverNotice(notice));
 }
 
 function waitForever(): Promise<never> {

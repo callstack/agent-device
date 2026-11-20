@@ -10,7 +10,7 @@
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpUrl": "sha256:d38f1f8877588fbcb1fea8c52a5cb7dc205043e3fc698b3d78fdcf821fa80471",
     "packages/contracts/src/daemon-http.ts#isTenantOwnedSessionName": "sha256:c3cff883507d462548846554b89779cb815ceb265714575e57bee022b57c4bd1",
-    "packages/contracts/src/request-progress.ts#CommandProgressEvent": "sha256:2dc6ff7f3b619d9b917210d47ebf9eee8095563389c8956b4e9f2bd994e1942d",
+    "packages/contracts/src/request-progress.ts#CommandProgressEvent": "sha256:5ed7aee1157326d6ed99232c4b14375640ca7aef829131eb6c98bb54f3b1aed0",
     "packages/contracts/src/request-progress.ts#ReplayTestProgressEvent": "sha256:61df00308d0e21f2acfc4f73cb2c07cd0c251e827f1c87628e2d08338e1b5c84",
     "packages/contracts/src/request-progress.ts#ReplayTestSuiteProgressEvent": "sha256:2d6599bfcf1e94596c61f85a8a986874b59b8c05e82e5e00dd31e381a5b0fe84",
     "packages/contracts/src/request-progress.ts#RequestProgressEvent": "sha256:2516c4d0a4e831f779d68e692158b863f6b42c78a7eaac6607ebbffe2d4b6ce5",
@@ -635,6 +635,11 @@
       "declaration": "packages/daemon/src/server/upload-http.ts#authorizeUpload",
       "digest": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
       "rationale": "#4441 moves the upload routes' existing authorize call into one helper: the same command 'upload', the same per-route positionals and the same token/auth-hook gate, now under the ingress signal. No request, response or status framing changes for a released peer. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
+    },
+    {
+      "declaration": "packages/contracts/src/request-progress.ts#CommandProgressEvent",
+      "digest": "sha256:5ed7aee1157326d6ed99232c4b14375640ca7aef829131eb6c98bb54f3b1aed0",
+      "rationale": "Adds the optional marker field (pass, fail, warn or skip) to a command progress event, set on a doctor check line. A new daemon sends the line uncolored with its marker, and a new CLI colors the marker after escaping the text. A released CLI ignores the unknown field and prints the message, which is a complete uncolored line. A released daemon never sends the field, and colored its doctor lines itself when its stderr was a TTY or FORCE_COLOR was set: against a new CLI those colored lines now print with their color codes shown escaped (for example \\u001b[32m), and uncolored lines print as before. The event type, status and message are unchanged, and no route, status or framing changes."
     }
   ]
 }

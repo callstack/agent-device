@@ -36,6 +36,7 @@ import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export type { DaemonRequest, DaemonResponse };
 export { readRegisteredDaemon };
+export { formatDaemonTakeoverNotice } from './daemon-client-metadata.ts';
 
 /** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(
@@ -126,6 +127,7 @@ async function sendToDaemonOnHost(
         settings,
         requestWithoutAuthFlag,
         options.signal,
+        options.onProgress,
       ),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
@@ -388,6 +390,7 @@ async function protectArtifactUploadWithLeaseBeats(
   settings: DaemonClientSettings,
   request: Omit<DaemonRequest, 'token'>,
   callerSignal: AbortSignal | undefined,
+  onProgress: DaemonTransportOptions['onProgress'],
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
   if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
@@ -396,6 +399,7 @@ async function protectArtifactUploadWithLeaseBeats(
       info,
       callerSignal ?? new AbortController().signal,
       settings.host,
+      onProgress,
     );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
@@ -410,6 +414,7 @@ async function protectArtifactUploadWithLeaseBeats(
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
         settings.host,
+        onProgress,
       ),
     callerSignal,
   });

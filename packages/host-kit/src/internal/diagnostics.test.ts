@@ -8,7 +8,9 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
   withDiagnosticTimer,
+  DIAGNOSTIC_STDERR_PREFIX,
 } from './diagnostics.ts';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 test('diagnostics redacts sensitive fields', async () => {
@@ -347,3 +349,29 @@ test.each([
     });
   },
 );
+
+test('a --debug diagnostic with no log path is written to stderr escaped and still parses', async () => {
+  let stderr = '';
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    stderr += String(chunk);
+    return true;
+  });
+  try {
+    await withDiagnosticsScope({ debug: true }, () => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'cli_parse_failed',
+        data: { argument: 'bad\u009b\u007f' },
+      });
+    });
+  } finally {
+    write.mockRestore();
+  }
+
+  const line = stderr.split('\n').find((candidate) => candidate.includes('cli_parse_failed')) ?? '';
+  assert.equal(escapeTerminalText(line), line);
+  const parsed = JSON.parse(line.slice(DIAGNOSTIC_STDERR_PREFIX.length)) as {
+    data?: { argument?: string };
+  };
+  assert.equal(parsed.data?.argument, 'bad\u009b\u007f');
+});

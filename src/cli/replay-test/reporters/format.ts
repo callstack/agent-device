@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { collapseWarningText } from '@agent-device/command-output';
+import { foldWarningText } from '@agent-device/command-output';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 export type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;
@@ -109,7 +109,7 @@ export function appendReplayTestShardMetadata(
 
 export function replayTestWarningLines(result: ReplaySuiteTestResult): string[] {
   const warnings = 'warnings' in result ? result.warnings : undefined;
-  return (warnings ?? []).map((warning) => `warning: ${collapseWarningText(warning)}`);
+  return (warnings ?? []).map((warning) => `warning: ${foldWarningText(warning)}`);
 }
 
 export function appendOptionalLine(lines: string[], line: string | undefined): void {

@@ -1,4 +1,5 @@
 import { settleWithin } from '@agent-device/host-kit/retry';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -26,4 +27,21 @@ function drainStream(stream: NodeJS.WriteStream): Promise<void> {
   return new Promise((resolve) => {
     stream.once('drain', resolve);
   });
+}
+
+/**
+ * The cli zone's stdout and stderr writes. The plain ones escape C0 (except newline and tab), DEL and C1 characters,
+ * so no value a peer or a device chose can drive the terminal. The raw one is for text that already escaped its own
+ * values to carry intended color. Lower zones apply the same `escapeTerminalText` themselves.
+ */
+export function writeStdout(text: string): void {
+  process.stdout.write(escapeTerminalText(text));
+}
+
+export function writeStderr(text: string): void {
+  process.stderr.write(escapeTerminalText(text));
+}
+
+export function writeStdoutRaw(text: string): void {
+  process.stdout.write(text);
 }
