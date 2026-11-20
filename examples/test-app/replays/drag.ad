@@ -11,4 +11,9 @@ wait "drag completed no" 5000
 gesture drag id="drag-source" id="drag-destination" 600 500 0
 wait "drag completed yes" 5000
 
+scroll down --until id="reorder-handle-Gamma"
+wait "reorder order Alpha,Beta,Gamma" 5000
+gesture drag id="reorder-handle-Alpha" id="reorder-handle-Gamma"
+wait "reorder order Beta,Gamma,Alpha" 5000
+
 close

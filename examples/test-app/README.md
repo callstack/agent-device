@@ -11,7 +11,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 
 ## Screens
 
-- `Home`: visible-text checks, dismissible banner, modal open/close, async loading, status badge, switch state
+- `Home`: visible-text checks, dismissible banner, modal open/close, async loading, status badge, switch state, and the Gesture lab card, whose reorder list has a labelled handle per row (`Reorder Alpha`) that drags only after a 600 ms hold and reports the result in `reorder order`
 - `Catalog`: search debounce, filter chips, direction-aware scroll canary, favorite toggles, cart updates, drill-in navigation
 - `Product detail`: back navigation, quantity stepper, multiline notes, save action
 - `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard enter (the email field's Done return key hides the keyboard), success summary

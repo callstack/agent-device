@@ -1,4 +1,6 @@
-import { Alert, ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 
 import { ActionButton, InlineBadge, ScreenTitle, SectionCard, ToggleRow } from '../components';
 import { useAppColors, type AppColors } from '../theme';
@@ -19,6 +21,8 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen(props: HomeScreenProps) {
+  // Left untyped: the scroll view and the handle gesture that blocks it both accept this ref.
+  const scrollRef = useRef(null);
   const colors = useAppColors();
   const styles = createStyles(colors);
 
@@ -42,7 +46,11 @@ export function HomeScreen(props: HomeScreenProps) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.content}
+      ref={scrollRef}
+      showsVerticalScrollIndicator={false}
+    >
       <ScreenTitle
         badge={`${props.cartCount} in cart`}
         subtitle="An app for testing all the functionality of agent-device."
@@ -50,7 +58,7 @@ export function HomeScreen(props: HomeScreenProps) {
         title="Agent Device Tester"
       />
 
-      <GestureLab />
+      <GestureLab pageScrollRef={scrollRef} />
 
       {props.noticeVisible ? (
         <SectionCard
