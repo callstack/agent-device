@@ -115,7 +115,8 @@ export function stopDaemon(repoRoot: string, stateDir: string): void {
       cwd: repoRoot,
       env: { ...process.env, AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1' },
       encoding: 'utf8',
-      timeout: 60_000,
+      // Longer than the 75 s a stop gives the daemon to finish its teardown, plus the forced exit.
+      timeout: 90_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
