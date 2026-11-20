@@ -49,6 +49,10 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
+  'packages/remote/src/artifact-download.ts#DownloadDestination':
+    "The CLIENT'S OWN prepare, cleanup and materialize callbacks for one download. They run on the client after the listed GET /artifacts/:id request; nothing in them crosses the wire.",
+  'packages/remote/src/artifact-download.ts#RemoteArtifactDestinationMode':
+    "The CLIENT'S OWN choice of how a download lands on disk (file, directory or staged-file). It is never sent; the listed artifact request is unchanged.",
   'packages/remote/src/daemon-artifacts.ts#RecordingDestinationWarning':
     "The CLIENT'S OWN report of a recording file it wrote to cwd. The client adds it to its local response and error details; it never crosses the wire to the daemon.",
   'packages/remote/src/script-version-publisher.ts#PublishOutcome':

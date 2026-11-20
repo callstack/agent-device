@@ -576,8 +576,14 @@ async function downloadResponseArtifacts(
   const { fallbacks } = client;
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const data = withoutClientOwnedFields(response.data);
-  if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
-  const nextData: Record<string, unknown> = { ...(data ?? {}) };
+  // #4518: a remote record stop reports a local output path only for a file this client published.
+  const recordStop = recordAction(req) === 'stop';
+  if (artifacts.length === 0 && !recordStop) {
+    return data === response.data ? response : { ok: true, data };
+  }
+  const nextData: Record<string, unknown> = recordStop
+    ? withoutRecordingOutputs(data)
+    : { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
   try {
     await downloadEachArtifact(endpoint, req, artifacts, { ...client, nextData, nextArtifacts });
@@ -586,7 +592,7 @@ async function downloadResponseArtifacts(
     throw fallbacks.length === 0 ? error : withRecordingFallbacks(error, fallbacks);
   }
   nextData.artifacts = nextArtifacts;
-  if (req.command === 'record') projectPublishedChunks(nextData, nextArtifacts);
+  if (recordStop) projectPublishedChunks(nextData, nextArtifacts);
   if (fallbacks.length > 0) {
     nextData.recordingDestinationWarnings = fallbacks;
     const previous = Array.isArray(nextData.warnings) ? nextData.warnings : [];
@@ -632,12 +638,7 @@ async function downloadEachArtifact(
       // racing the response headers (a directory destination must never be `rm`'d wholesale; see
       // `downloadRemoteArtifact`). A recording is always one staged file, chosen from the request,
       // never from the reply's artifact type (#4518).
-      mode:
-        req.command === 'record'
-          ? 'staged-file'
-          : artifact.artifactType === 'test-artifacts'
-            ? 'directory'
-            : 'file',
+      mode: destinationMode(req, artifact),
     });
     if (destination.fallback && req.command === 'record') {
       client.fallbacks.push({
@@ -668,11 +669,41 @@ function projectPublishedChunks(data: Record<string, unknown>, artifacts: Daemon
     ...artifacts.filter((artifact) => artifact.field === 'outPath'),
     ...artifacts.filter((artifact) => artifact.field === 'chunkPath'),
   ].map((artifact) => artifact.localPath);
-  data.chunks = data.chunks.map((chunk: unknown, index: number) =>
-    typeof chunk === 'object' && chunk !== null && typeof published[index] === 'string'
-      ? { ...chunk, path: published[index] }
-      : chunk,
-  );
+  data.chunks = data.chunks.map((chunk: unknown, index: number) => {
+    if (typeof chunk !== 'object' || chunk === null) return chunk;
+    const { path: _peerPath, ...kept } = chunk as Record<string, unknown>;
+    const local = published[index];
+    return typeof local === 'string' ? { ...kept, path: local } : kept;
+  });
+}
+
+/** A recording is one staged file, chosen from the request; a test-artifacts reply is a directory. */
+function destinationMode(
+  req: DaemonWireRequest,
+  artifact: DaemonArtifact,
+): RemoteArtifactDestinationMode {
+  if (req.command === 'record') return 'staged-file';
+  return artifact.artifactType === 'test-artifacts' ? 'directory' : 'file';
+}
+
+function recordAction(req: DaemonWireRequest): string | undefined {
+  return req.command === 'record' ? req.positionals?.[0]?.toLowerCase() : undefined;
+}
+
+/**
+ * The recording outputs a remote record stop reports only from this client's own completed
+ * downloads: the download loop sets each one again from the file it published.
+ */
+function withoutRecordingOutputs(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const {
+    outPath: _outPath,
+    telemetryPath: _telemetryPath,
+    chunkPath: _chunkPath,
+    ...kept
+  } = data ?? {};
+  return kept;
 }
 
 /** #4518: a recording file that landed in cwd because the request named no destination for it. */

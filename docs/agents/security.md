@@ -11,8 +11,8 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
 Both script publishers commit in the judged directory.
 Remote script delivery caps in-memory bytes and error answers.
-Remote record stop never takes a daemon path: use the request's path or one plain cwd file name, and warn (#4518).
-Stage recordings privately in one resolved parent, then rename. A parent other users can write is the caller's choice.
+Remote record stop writes to the request's path or one plain cwd name, and warns (#4518).
+Stage recordings privately in one resolved parent, then rename.
 
 ## Proposed in #4669
 

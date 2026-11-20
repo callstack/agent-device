@@ -322,3 +322,45 @@ test.for(['EACCES', 'ENOTDIR'] as const)(
     });
   },
 );
+
+// #4518: a remote record stop reports a local output path only for a file this client wrote.
+test.for([
+  {
+    name: 'an outPath artifact without an id',
+    artifacts: [{ field: 'outPath', path: '/daemon/clip.mp4', fileName: 'clip.mp4' }],
+  },
+  { name: 'an outPath with no artifacts at all', artifacts: [] },
+])('a stop with $name reports no outPath', async ({ artifacts }, t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const response = await materializeRemoteArtifacts(
+      { baseUrl: world.baseUrl, token: 'secret' },
+      stopRequest(world),
+      {
+        ok: true,
+        data: {
+          outPath: '/daemon/clip.mp4',
+          telemetryPath: '/daemon/clip.gesture-telemetry.json',
+          chunks: [{ index: 0, path: '/daemon/clip.mp4' }],
+          artifacts: artifacts as DaemonArtifact[],
+        },
+      },
+      createTestHostEnvironment(),
+      path.join(world.root, 'state'),
+    );
+    const data = response.ok ? (response.data ?? {}) : {};
+    expect(data.outPath).toBeUndefined();
+    expect(data.telemetryPath).toBeUndefined();
+    expect(data.chunks).toEqual([{ index: 0 }]);
+    expect(fs.readdirSync(world.cwd)).toEqual([]);
+  });
+});
+
+test('a stop that downloads its recording reports the path this client wrote', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const data = await materialize(world, [
+      artifact({ field: 'outPath', path: '/daemon/clip.mp4', fileName: 'clip.mp4' }),
+    ]);
+    expect(data.outPath).toBe(path.join(world.cwd, 'clip.mp4'));
+    expect(fs.readFileSync(path.join(world.cwd, 'clip.mp4'), 'utf8')).toBe('video-bytes');
+  });
+});

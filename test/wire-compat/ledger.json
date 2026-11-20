@@ -147,15 +147,15 @@
     "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute": "sha256:d744044d036a46221c3b8220179cc30e1e66b8619a4e5cd3f7dd5f8582817aba",
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:8a8873eb6437a32f7045c87a7b16226a48ff7fc4d61c5de459809e2558758768",
-    "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:6230fb1efacc0bdb7223ce4d66bc2dc754fdaca475268fe75ada0facd4e734ac",
+    "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:6dd1b1e4a9670396c8e482ae2c252c2372e4f1e2b28454c0526deaf34c46cfb1",
     "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:4772ec65900be31f0ac6fb889967a9f35a4a565f6bb87e72458e3ab6e54cc941",
     "packages/remote/src/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
-    "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
+    "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:b2c4c8e4dbce0727e1679dc93e81f981edbdd28feb60d9e73a92cb6c76c98ac7",
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:6d9aba219e6fafbdbcef76d30ed99fbb4f61dcc525242a0a76c3dc1bdacd24e2",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:660320cd62dfaeb4da80b86d6c072a5bcdbce3399723d43208a22d70b6e4a243",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:49fad081782d3ffdc9a5fea1a3828abf14d20aaa69ac4bfea44933aaa3bbae67",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:f50bf3548edb2d0df594b6bee6efa9e33e142a046eb88f6d2aa48898edbbabca",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -212,19 +212,19 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:9e8ee5e5870cdca2a0c87bd5d403f138e84e1cd6d36eb30837660d9549cdd3b7",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:da430cae5b06344830133d64483ef8848b0ae2a0e2a4f35c3fc3314c29236444",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
-    "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:b37b9391d20f535ca9c0858f92ed37943297c7acbf1fb10f8cad5cd5b53423eb",
+    "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:91be966acf412179ae3a682243b24042772a03c79dcd754c9acaa588372de2c9",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
     "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
-    "packages/remote/src/daemon-artifacts.ts#FetchRemoteArtifactParams": "sha256:f90ae571961d6147a09973791178d369dfb8550990a1e0ebf120e97336540824",
+    "packages/remote/src/daemon-artifacts.ts#FetchRemoteArtifactParams": "sha256:04fc6879c828c14bd48ae9bf936744b4d321ef607229d6002047e8c0c69bbaff",
     "packages/remote/src/daemon-artifacts.ts#fetchRemoteArtifact": "sha256:871f675d744dfa2bbf50237ac14b7f8957f973b126b774f4011da65573c8548f",
-    "packages/remote/src/artifact-download.ts#RemoteArtifactRequest": "sha256:6cce66499f34bb18139917df592e554395936964025089024d6c6f67e4fa4b98",
+    "packages/remote/src/artifact-download.ts#RemoteArtifactRequest": "sha256:062559d5e8e0d06fabb294beb84579b733914a331358935a81a6ef8659bcbf0b",
     "packages/remote/src/artifact-download.ts#RemoteArtifactFetch": "sha256:e83939ec48a66917df9ec84becf53b6ca3c8115cfdada10731046381ac9e32c1",
     "packages/remote/src/artifact-download.ts#fetchRemoteArtifactFromUrl": "sha256:de6e71abdc758f760beffba0dc260473f88a8c60b13540b9c14d39f1a3d5e3a1",
-    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:cafb5fd5838819719b2fac62c5e108276dd800a58b4614462d138cf1ed2f7d6e"
+    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:db9612a72c9a12cc50d7df849439c432d7f9ff5ed54b45701b757e776b5c8d8b"
   },
   "compatibleChanges": [
     {
@@ -594,8 +594,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:9e8ee5e5870cdca2a0c87bd5d403f138e84e1cd6d36eb30837660d9549cdd3b7",
-      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published paths. A response's own recordingDestinationWarnings is dropped: only the client's completed recording downloads fill that field. A released daemon's fields are read as before."
+      "digest": "sha256:da430cae5b06344830133d64483ef8848b0ae2a0e2a4f35c3fc3314c29236444",
+      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published paths. A response's own recordingDestinationWarnings is dropped: only the client's completed recording downloads fill that field. A released daemon's fields are read as before. #4518 (client-side only): a remote record stop reports outPath, telemetryPath and chunk paths only from files this client downloaded; a peer value without a published file is dropped."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
@@ -624,8 +624,8 @@
     },
     {
       "declaration": "packages/remote/src/artifact-download.ts#RemoteArtifactDownload",
-      "digest": "sha256:6230fb1efacc0bdb7223ce4d66bc2dc754fdaca475268fe75ada0facd4e734ac",
-      "rationale": "Removes the client-local privateFile option and moves the request fields into RemoteArtifactRequest, which the type still includes. None of it was ever sent. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
+      "digest": "sha256:6dd1b1e4a9670396c8e482ae2c252c2372e4f1e2b28454c0526deaf34c46cfb1",
+      "rationale": "Removes the client-local privateFile option and moves the request fields into RemoteArtifactRequest, which the type still includes. None of it was ever sent. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes. #4518 (client-side only): one client-local destination mode, file, directory or staged-file, replaces the isDirectory flag; it is never sent, and the GET /artifacts/:id framing is unchanged."
     },
     {
       "declaration": "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl",
@@ -634,18 +634,18 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#DownloadRemoteArtifactParams",
-      "digest": "sha256:ba6d2f6ac51e05ccc5e0c940b355d62374e018b1ae6f6f744becf6e1760cbb63",
-      "rationale": "Removes the client-local privateFile option, which was never serialized or sent. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
+      "digest": "sha256:b2c4c8e4dbce0727e1679dc93e81f981edbdd28feb60d9e73a92cb6c76c98ac7",
+      "rationale": "Removes the client-local privateFile option, which was never serialized or sent. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes. #4518 (client-side only): the client-local destination mode and caller signal replace isDirectory; they are never sent."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:6d9aba219e6fafbdbcef76d30ed99fbb4f61dcc525242a0a76c3dc1bdacd24e2",
+      "digest": "sha256:49fad081782d3ffdc9a5fea1a3828abf14d20aaa69ac4bfea44933aaa3bbae67",
       "rationale": "Passes the in-memory fetchRemoteArtifact to the session-script owner instead of the file download. Which artifacts are requested is unchanged, and the wire fields are unchanged; the client no longer adds a repeat warning to its own output. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
     },
     {
       "declaration": "packages/remote/src/script-version-publisher.ts#publishScriptVersion",
-      "digest": "sha256:b37b9391d20f535ca9c0858f92ed37943297c7acbf1fb10f8cad5cd5b53423eb",
-      "rationale": "A script version is fetched into memory, capped at 8 MiB, and committed by the local script publisher under the record lock; a version no newer than the record is answered from the record with no warning. The client reads the same artifact fields (field, artifactType, artifactId, scriptPublicationId, scriptRevision) and requests the same artifact route. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
+      "digest": "sha256:91be966acf412179ae3a682243b24042772a03c79dcd754c9acaa588372de2c9",
+      "rationale": "A script version is fetched into memory, capped at 8 MiB, and committed by the local script publisher under the record lock; a version no newer than the record is answered from the record with no warning. The client reads the same artifact fields (field, artifactType, artifactId, scriptPublicationId, scriptRevision) and requests the same artifact route. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes. #4518 (client-side only): its context carries the caller's signal, which the fetch takes; an abort that lands while the publish waits for the record lock writes nothing."
     },
     {
       "declaration": "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen",
@@ -656,6 +656,21 @@
       "declaration": "packages/remote/src/script-version-publisher.ts#PublishOutcome",
       "digest": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
       "rationale": "Removes the client-local repeat member and the export; the type never left the client. No request field, response field, route, status or header changes."
+    },
+    {
+      "declaration": "packages/remote/src/artifact-download.ts#RemoteArtifactRequest",
+      "digest": "sha256:062559d5e8e0d06fabb294beb84579b733914a331358935a81a6ef8659bcbf0b",
+      "rationale": "#4518 (client-side only): adds the optional client-local caller signal, which aborts the transfer; it is never sent."
+    },
+    {
+      "declaration": "packages/remote/src/artifact-download.ts#requestRemoteArtifact",
+      "digest": "sha256:db9612a72c9a12cc50d7df849439c432d7f9ff5ed54b45701b757e776b5c8d8b",
+      "rationale": "#4518 (client-side only): a caller abort stops the transfer and settles after cleanup, like the timeout; the request, headers and framing are unchanged."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#FetchRemoteArtifactParams",
+      "digest": "sha256:04fc6879c828c14bd48ae9bf936744b4d321ef607229d6002047e8c0c69bbaff",
+      "rationale": "#4518 (client-side only): adds the optional client-local caller signal; it is never sent."
     }
   ]
 }
