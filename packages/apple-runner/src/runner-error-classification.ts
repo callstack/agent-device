@@ -78,7 +78,7 @@ const hasRunnerTokenUnsupportedReason: RunnerErrorDetailsMatch = (details) =>
  * which also marks producers that must not be resent.
  */
 const hasRunnerBusyCode: RunnerErrorDetailsMatch = (details) =>
-  runnerErrorCodeRow(details.runnerErrorCode as string | undefined)?.reason === 'runner_busy';
+  runnerErrorCodeRow(details.runnerErrorCode)?.reason === 'runner_busy';
 /**
  * The host's own `DevToolsSecurity -status` read, published as typed details by the probe that
  * takes it. The build-failure rule below keys on this field and never on the probe's message, so
@@ -714,8 +714,7 @@ export function runnerMainThreadOccupancyReport(error: unknown): RunnerMainThrea
 export function isRunnerMainThreadTimeoutError(error: unknown): boolean {
   return (
     error instanceof AppError &&
-    runnerErrorCodeRow(error.details?.runnerErrorCode as string | undefined)?.reason ===
-      'runner_main_thread_timeout'
+    runnerErrorCodeRow(error.details?.runnerErrorCode)?.reason === 'runner_main_thread_timeout'
   );
 }
 

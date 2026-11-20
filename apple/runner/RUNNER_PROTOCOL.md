@@ -372,10 +372,10 @@ declaration for the current rules.
   [`RunnerTests+CommandDispatch.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift), and `MAIN_THREAD_TIMEOUT` from
   the main-thread watchdog in [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift). The daemon
   classifies a runner-reported code in `classifyRunnerReportedError`
-  ([`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)): codes listed in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`
+  ([`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)): codes whose `RUNNER_ERROR_CODES` row is `diagnosticOnly`
   arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, unless their row names the wire code the
-  caller already reads that family under. Other codes pass through as typed codes. A code with a
-  `RUNNER_REPORTED_ERROR_REASONS` row also publishes `details.reason`, so a caller never reads the
+  caller already reads that family under. Other codes pass through as typed codes. A code whose row
+  (`runnerErrorCodeRow`) names a `reason` also publishes `details.reason`, so a caller never reads the
   refusal off `message`. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
   `RUNNER_ERROR_RULES` and the helpers beside it
   ([`runner-error-classification.ts`](../../packages/apple-runner/src/runner-error-classification.ts)).
