@@ -456,7 +456,7 @@ export type RunnerErrorCodeRowView = Readonly<{
 }>;
 
 /** The one row for a runner-reported code, or undefined for a code the table does not declare. */
-export function runnerErrorCodeRow(
+function runnerErrorCodeRow(
   runnerErrorCode: string | undefined,
 ): RunnerErrorCodeRowView | undefined {
   if (runnerErrorCode === undefined || !Object.hasOwn(RUNNER_ERROR_CODES, runnerErrorCode)) {
