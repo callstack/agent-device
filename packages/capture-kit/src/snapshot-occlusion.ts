@@ -135,10 +135,12 @@ export function annotateCoveredSnapshotNodes(
     if (!isCandidateTouchNode(node)) continue;
     const coveringNode = findCoveringNode(scan, position, node, options);
     if (!coveringNode) continue;
-    const coveredBy = describeCoveringNode(
-      coveringNode,
-      snapshotBarKind(coveringNode, options.producer),
-    );
+    const barKind = snapshotBarKind(coveringNode, options.producer);
+    const described = describeCoveringNode(coveringNode, barKind);
+    const coveredBy =
+      described && barKind && scrollCanRevealTarget(scan, node, coveringNode)
+        ? { ...described, scrollCanReveal: true as const }
+        : described;
     coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
@@ -191,6 +193,59 @@ function describeCoveringNode(
     ...(rect ? { rect } : {}),
     ...(barKind ? { persistentBar: true } : {}),
   };
+}
+
+/**
+ * Whether scrolling can reveal a target a persistent bar covers. This predicate is the single owner
+ * of the rule, and it uses only facts every producer emits: for each scrollable ancestor of the
+ * target, the ancestor reports hidden content toward the bar (`hiddenContentBelow` with its frame
+ * reaching above the bar, or `hiddenContentAbove` with its frame reaching below the bar), so a
+ * scroll in that ancestor moves the node off the bar and the node has somewhere clear to go. A bar
+ * that contains the scroller's whole frame leaves no clear area. A target with no scrollable ancestor
+ * is fixed, so no scroll reveals it either. Without that, no scroll the scroller can perform moves
+ * the node clear of the bar, so no `scrollCanReveal` is published — a list already scrolled to its
+ * end keeps its last row reported under the bar. Producers own the scroll axis when they publish
+ * hidden content, so a horizontal-only scroller reports neither flag and cannot qualify here.
+ */
+function scrollCanRevealTarget(
+  scan: OcclusionScan,
+  target: RawSnapshotNode,
+  cover: RawSnapshotNode,
+): boolean {
+  const coverRect = positiveRect(cover.rect);
+  const targetRect = positiveRect(target.rect);
+  if (!coverRect || !targetRect) return false;
+  for (const scroller of scrollableAncestorsOf(target, scan.byIndex)) {
+    const scrollerRect = positiveRect(scroller.rect);
+    if (!scrollerRect) continue;
+    // The clear strip on the side the content scrolls toward must be tall enough to hold the target.
+    const stripAbove = coverRect.y - scrollerRect.y;
+    const stripBelow = scrollerRect.y + scrollerRect.height - (coverRect.y + coverRect.height);
+    const revealsFromAbove =
+      scroller.hiddenContentBelow === true && stripAbove >= targetRect.height;
+    const revealsFromBelow =
+      scroller.hiddenContentAbove === true && stripBelow >= targetRect.height;
+    if (revealsFromAbove || revealsFromBelow) return true;
+  }
+  return false;
+}
+
+/** Every scrollable ancestor of the target, nearest first; a scroll in any of them moves the target. */
+function scrollableAncestorsOf(
+  target: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+): RawSnapshotNode[] {
+  const scrollers: RawSnapshotNode[] = [];
+  let current =
+    typeof target.parentIndex === 'number' ? byIndex.get(target.parentIndex) : undefined;
+  const visited = new Set<number>();
+  while (current && !visited.has(current.index)) {
+    visited.add(current.index);
+    if (isScrollableNodeLike(current)) scrollers.push(current);
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+  }
+  return scrollers;
 }
 
 /** What a backend hit test observed on top of a node, described like a scanned cover. */

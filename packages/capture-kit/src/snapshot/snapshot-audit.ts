@@ -436,8 +436,19 @@ function ambiguousNameFinding(
 function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | undefined {
   const role = coveredRole(node, scan);
   if (node.interactionBlocked !== 'covered' || role === undefined) return undefined;
+  if (isScrollRevealedByCover(node)) return undefined;
   if (isOnlyChildOfReportedCover(node, scan)) return undefined;
   return { ...findingBase(node, role), kind: 'covered-control', severity: 'observation' };
+}
+
+/**
+ * A persistent bar over scrollable content does not block the node for good: when the scan
+ * published `scrollCanReveal` on the cover, a scroll can reveal the node clear of the bar, so the
+ * audit stays silent. Only this advisory finding drops; the touch refusal still stands at the
+ * current scroll position. `scrollCanReveal` is only ever set on a persistent-bar cover.
+ */
+function isScrollRevealedByCover(node: SnapshotNode): boolean {
+  return node.coveredBy?.scrollCanReveal === true;
 }
 
 function coveredRole(node: SnapshotNode, scan: AuditScan): string | undefined {

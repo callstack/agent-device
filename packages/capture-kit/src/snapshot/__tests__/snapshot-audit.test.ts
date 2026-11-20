@@ -774,59 +774,22 @@ test.for<CoverPublication>([
     name: 'Android bottom navigation',
     type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
   },
-])('reports both covered controls under a scanned bar from the $name publication', (cover) => {
-  const nodes = scannedCoverTree(cover);
-  expect(nodes[3]).toMatchObject({
-    interactionBlocked: 'covered',
-    coveredBy: { persistentBar: true },
-  });
-  expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
-  expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e3', 'covered-control @e4']);
-});
-
-test('keeps the covered-control finding for a button in a horizontal scroller wholly behind a bottom bar', () => {
-  // The bar contains the scroller's whole usable viewport (400x65 inside the 400x75 bar), so no
-  // scroll can reveal the button: the audit keeps the finding instead of excluding it as scroll
-  // chrome. The occlusion scan produces the `coveredBy`, as in a real capture.
-  const raw: RawSnapshotNode[] = [
-    { index: 0, depth: 0, type: 'Window', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      depth: 1,
-      type: 'android.widget.HorizontalScrollView',
-      rect: { x: 0, y: 725, width: 400, height: 65 },
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      depth: 2,
-      type: 'Button',
-      label: 'Buy now',
-      hittable: true,
-      rect: { x: 20, y: 735, width: 120, height: 50 },
-    },
-    {
-      index: 3,
-      parentIndex: 0,
-      depth: 1,
-      type: 'com.google.android.material.bottomnavigation.BottomNavigationView',
-      hittable: true,
-      rect: { x: 0, y: 725, width: 400, height: 75 },
-    },
-  ];
-  const nodes = annotateCoveredSnapshotNodes(raw, { producer: 'android-uiautomator' }).map(
-    (scanned) => ({
-      ...scanned,
-      ref: `e${scanned.index}`,
-    }),
-  );
-  expect(nodes[2]).toMatchObject({
-    interactionBlocked: 'covered',
-    coveredBy: { persistentBar: true },
-  });
-  expect(summarize(audit(nodes, ANDROID).findings)).toEqual(['covered-control @e2']);
-});
+])(
+  'reports the fixed control but not the scroll-revealed row under a scanned bar from the $name publication',
+  (cover) => {
+    const nodes = scannedCoverTree(cover);
+    // The row sits in a full-viewport scroll container the bar does not wholly contain, so a scroll
+    // can reveal it: the scan publishes `scrollCanReveal` on the cover and the audit drops the row.
+    expect(nodes[3]).toMatchObject({
+      interactionBlocked: 'covered',
+      coveredBy: { persistentBar: true, scrollCanReveal: true },
+    });
+    // The fixed control has no scrollable ancestor, so no scroll can reveal it: it stays reported.
+    expect(nodes[4]?.coveredBy).toMatchObject({ persistentBar: true });
+    expect(nodes[4]?.coveredBy?.scrollCanReveal).toBeUndefined();
+    expect(summarize(audit(nodes).findings)).toEqual(['covered-control @e4']);
+  },
+);
 
 test.for<CoverPublication>([
   { name: 'sheet', type: 'Sheet' },
