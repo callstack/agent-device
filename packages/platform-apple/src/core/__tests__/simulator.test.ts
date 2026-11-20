@@ -190,6 +190,30 @@ test('ensureBootedSimulator retries a transient simctl boot failure and boots on
   );
 });
 
+test('ensureBootedSimulator absorbs a boot CoreSimulator refuses as already booted', async () => {
+  // #4791: this is the same one read `ensureAppleReady` uses (simctlBootRefusedAlreadyBooted), so
+  // the exact refusal CoreSimulator answers a foreign-boot race with must stay absorbed here too —
+  // a caller like screenshot or app-launch must not fail on a Simulator that is up.
+  mockRunCmdResponses({
+    'xcrun simctl list devices -j': simulatorStateSequence('Shutdown', 'Booted'),
+    'xcrun simctl boot sim-1': () => ({
+      exitCode: 149,
+      stdout: '',
+      stderr: 'Unable to boot device in current state: Booted',
+    }),
+    'xcrun simctl bootstatus sim-1 -b': OK_RESULT,
+    'open -g -a Simulator': OK_RESULT,
+  });
+
+  await settleBoot(ensureBootedSimulator(IOS_TEST_SIMULATOR));
+
+  assert.equal(
+    mockRunCmd.mock.calls.filter(([, args]) => args.includes('boot') && args.includes('sim-1'))
+      .length,
+    1,
+  );
+});
+
 test('ensureBootedSimulator gives up without retrying a boot that reports a timeout', async () => {
   mockRunCmdResponses({
     'xcrun simctl list devices -j': simulatorListDevicesResult('Shutdown'),
