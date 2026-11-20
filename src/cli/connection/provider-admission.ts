@@ -1,7 +1,7 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { RemoteConnectionRequestMetadata } from '@agent-device/remote/remote-connection-state';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { primeProviderConnection } from './provider-policy.ts';
+import { connectionLeaseProvider, primeProviderConnection } from './provider-policy.ts';
 
 type AdmissionContext = Readonly<{
   host: HostEnvironment;
@@ -34,5 +34,8 @@ function connectionProviderToAdmit(context: AdmissionContext): string | undefine
     );
   }
   if (!context.materializes) return undefined;
-  return context.remoteConfigLeaseProvider ?? context.connectionDefaults?.connection?.leaseProvider;
+  return connectionLeaseProvider(
+    context.connectionDefaults?.connection,
+    context.remoteConfigLeaseProvider,
+  );
 }

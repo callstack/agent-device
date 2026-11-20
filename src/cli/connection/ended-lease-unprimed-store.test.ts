@@ -36,20 +36,10 @@ function storedConnection(leaseProvider = 'limrun') {
       updatedAt: now,
     },
   });
-  // An earlier build of this branch recorded a policy field on the connection. It is ignored now,
-  // and a record that still carries it reads as before.
-  const connections = path.join(stateDir, 'remote-connections');
-  for (const name of fs.readdirSync(connections)) {
-    const file = path.join(connections, name);
-    if (!fs.statSync(file).isFile()) continue;
-    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (record.leaseProvider === undefined) continue;
-    fs.writeFileSync(file, JSON.stringify({ ...record, forgetsEndedLease: false }));
-  }
   return { root, home, project, stateDir };
 }
 
-test('close forgets an ended Limrun lease without loading the plugin store', async () => {
+test('close forgets an ended Limrun lease through the plugin catalog', async () => {
   const { root, home, project, stateDir } = storedConnection();
   const result = await runCliCapture(
     ['close', '--session', 'limrun-close', '--state-dir', stateDir, '--json'],
@@ -92,13 +82,6 @@ async function closeWithEndedLease(stateDir: string, project: string, home: stri
   assert.equal(result.code, null, result.stdout + result.stderr);
   return readRemoteConnectionState({ stateDir, session: 'limrun-close' });
 }
-
-test('close forgets an ended Limrun lease on a connection that records no policy', async () => {
-  // A connection stored before the policy was recorded: the plugin catalog answers for Limrun.
-  const { root, home, project, stateDir } = storedConnection();
-  assert.equal((await closeWithEndedLease(stateDir, project, home))?.leaseId, undefined);
-  fs.rmSync(root, { recursive: true, force: true });
-});
 
 test('close keeps the lease of a provider neither a loaded plugin nor the catalog knows', async () => {
   const { root, home, project, stateDir } = storedConnection('custom-provider');

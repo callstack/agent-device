@@ -33,6 +33,17 @@ function remoteDaemonConnection(
 }
 
 /**
+ * The provider a command on a remote connection uses: the stored connection's, then the remote
+ * config profile's. Admission and materialization both read it here, so they agree.
+ */
+export function connectionLeaseProvider(
+  stored: { leaseProvider?: string } | null | undefined,
+  profileLeaseProvider: string | undefined,
+): string | undefined {
+  return stored?.leaseProvider ?? profileLeaseProvider;
+}
+
+/**
  * Loads the plugin store before the first synchronous capability lookup for a provider, because a
  * plugin declares its capabilities in code, not in its manifest.
  */
