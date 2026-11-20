@@ -1,7 +1,8 @@
+import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import type { SessionRef } from '../../../core/session-state.ts';
+import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
 import { clearSessionSnapshot } from '../../../execution/session-snapshot.ts';
@@ -31,6 +32,9 @@ export function publishOpenSession(params: {
   appBundleId?: string;
   appName?: string;
   deviceClaim?: DeviceClaimSessionOwnership;
+  /** #4162: this open booted the local virtual device, so its plain close owns stopping it. */
+  bootedByOpen?: boolean;
+  androidLaunchIdentity?: AndroidEmulatorLaunchIdentity;
 }): SessionRef {
   const {
     req,
@@ -42,11 +46,17 @@ export function publishOpenSession(params: {
     appBundleId,
     appName,
     deviceClaim,
+    bootedByOpen,
   } = params;
   requireOpenSessionAdmission(store, sessionName, existingRef);
   if (existingRef) {
-    const session = store.update(existingRef, {
+    store.updateOpenDevice(
+      existingRef,
       device,
+      bootedByOpen === true,
+      params.androidLaunchIdentity,
+    );
+    const session = store.update(existingRef, {
       surface,
       appBundleId,
       appName,
@@ -56,7 +66,7 @@ export function publishOpenSession(params: {
     clearSessionSnapshot(session);
     return store.refresh(existingRef);
   }
-  return store.publish(sessionName, {
+  const draft: SessionState = {
     name: resolvePublicSessionName(req),
     sessionScope: req.internal?.resolvedSessionScope ?? resolveSessionScope(req),
     device,
@@ -67,5 +77,9 @@ export function publishOpenSession(params: {
     actions: [],
     lease: resolveSessionLeaseForRequest({ req }),
     deviceClaim,
-  });
+  };
+  const ref = store.publish(sessionName, draft);
+  if (bootedByOpen === true)
+    store.updateOpenDevice(ref, device, true, params.androidLaunchIdentity);
+  return store.refresh(ref);
 }

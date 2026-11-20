@@ -19,6 +19,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import {
   assertDaemonPolicyAdmitsRequest,
   restrictDeviceInventoryToDaemonPolicy,
@@ -52,14 +53,24 @@ function makeHandler(
     inventory?: readonly DeviceInfo[];
     providerInventory?: readonly DeviceInfo[];
     leaseRegistry?: LeaseRegistry;
+    bootedByOpen?: true;
   } = {},
 ) {
   const sessionStore = makeSessionStore('agent-device-daemon-policy-');
-  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  const host = createTestHostEnvironment({
+    env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: mkdtempForTestSync('policy-claims-') },
+  });
+  sessionStore.publish(
+    'default',
+    makeIosSession('default', {
+      appBundleId: 'com.example.app',
+      bootedByOpen: options.bootedByOpen,
+    }),
+  );
   const bind = vi.fn(lifecycleDeviceRuntimeGateway.bind);
   const inspectFacts = vi.fn(lifecycleDeviceRuntimeGateway.inspectFacts);
   const handler = createRequestHandler({
-    host: createTestHostEnvironment(),
+    host,
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon-policy'), 'daemon.log'),
     token: 'test-token',
@@ -81,7 +92,7 @@ function makeHandler(
     hostDiagnostics: hostDiagnosticsFixture(),
     daemonPolicy,
   });
-  return { handler, bind, inspectFacts };
+  return { handler, bind, inspectFacts, sessionStore, host };
 }
 
 function request(command: string, extra: Partial<DaemonRequest> = {}): DaemonRequest {
@@ -490,4 +501,29 @@ test('a policy that allows one web session device admits that session only, neve
   for (const denied of [other, WEB_DESKTOP_DEVICE]) {
     expectPolicyDenied(await handler(openWeb(denied)), 'device');
   }
+});
+
+test('plain close uses the loaded policy dependency and releases a boot-owned session without shutdown', async () => {
+  const { handler, sessionStore, host } = makeHandler(
+    policy({ capabilities: { deny: ['device-shutdown'] } }),
+    { bootedByOpen: true },
+  );
+  const session = sessionStore.get('default')!;
+  const claim = await acquireDeviceClaim({
+    env: host.env,
+    device: session.device,
+    session: 'default',
+    workspace: host.cwd,
+    stateDir: sessionStore.resolveDaemonStateDir(),
+    reconcileOrphanedDeviceClaim: async () => ({ status: 'reconciled' as const }),
+  });
+  if (claim.status !== 'acquired') throw new Error('Expected an owned device claim');
+  session.deviceClaim = claim.ownership;
+  const response = await handler(request('close'));
+  expect(response).toMatchObject({
+    ok: true,
+    data: { warnings: [expect.stringContaining('device-shutdown')] },
+  });
+  if (response.ok) expect(response.data?.shutdown).toBeUndefined();
+  expect(sessionStore.get('default')).toBeUndefined();
 });

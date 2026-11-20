@@ -30,8 +30,10 @@ A failed command can look like a fast success. Before you record its time, check
 ## Ownership and cleanup
 
 Use one session per purpose. To isolate daemon state, create a directory with `mktemp -d` and pass it to `--state-dir`.
-Close each session that you opened manually, including failed attempts, with its original session, platform, UDID, and state directory.
-If your session booted a local simulator or emulator, add `--shutdown`, unless the user asks to keep it running.
+Close every session you opened, even after failure. Reuse its session, platform, UDID, and state directory.
+Use plain `close` for a local device your `open` booted.
+If policy denies `device-shutdown`, read the warning.
+Keep prebooted devices running unless the user requests shutdown.
 
 For `DEVICE_IN_USE`:
 

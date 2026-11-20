@@ -59,6 +59,7 @@ type RequestHandlerChainParams = {
   androidObservation?: AndroidObservationAdapter;
   createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup?: PlatformResourceCleanup;
+  deviceShutdownDenied?: boolean;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   inspectFacts: InspectDeviceRuntimeFacts;
@@ -204,6 +205,7 @@ async function runSessionHandler(
       retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,
       platformResourceCleanup: params.platformResourceCleanup,
+      deviceShutdownDenied: params.deviceShutdownDenied,
     }),
   );
 }

@@ -171,7 +171,9 @@ export async function runReplayTestAttempt(
         ts: new Date().toISOString(),
         session: sessionName,
       });
-      await cleanupSession(sessionName);
+      const cleanupWarnings = await cleanupSession(sessionName);
+      if (outcome && cleanupWarnings)
+        for (const warning of cleanupWarnings) outcome = appendReplayTestWarning(outcome, warning);
       appendReplayTestTimingEvent(tracePath, {
         type: 'replay_test_cleanup_stop',
         ts: new Date().toISOString(),
@@ -250,7 +252,13 @@ async function cleanupSessionAfterLateReplay(params: {
     await replayPromise;
   } finally {
     try {
-      await cleanupSession(sessionName);
+      const warnings = await cleanupSession(sessionName);
+      for (const warning of warnings ?? [])
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'test_late_cleanup_warning',
+          data: { session: sessionName, requestId, warning },
+        });
     } catch (error) {
       const appErr = normalizeError(error);
       emitDiagnostic({
@@ -343,7 +351,7 @@ function markReplayTimeoutCleanupPending(
 }
 
 function appendReplayTestWarning(
-  outcome: Extract<ReplayTestAttemptOutcome, { status: 'passed' }>,
+  outcome: ReplayTestAttemptOutcome,
   warning: string,
 ): ReplayTestAttemptOutcome {
   return { ...outcome, warnings: [...outcome.warnings, warning] };
