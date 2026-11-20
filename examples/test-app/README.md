@@ -21,6 +21,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Sign-in sheet lab`: a real `ASWebAuthenticationSession` sheet hosted out of process in `com.apple.SafariViewService`, opened against a loopback fixture identity provider (see [Sign-in sheet lab](#sign-in-sheet-lab))
 - `Perf lab`: seeded JavaScript render problems for `react-devtools profile`, one per scenario (see [Perf lab](#perf-lab))
 - `Settle lab`: timed effects with known final screens for `--settle` regression runs (an in-place counter; results 500 and 800 ms after an immediate `Run N` acknowledgement; a 750 ms fading overlay; two-stage transitions with and without a spinner; a toast that precedes navigation), reached by the `agent-device-test-app://settle-lab` deep link
+- `Refresh lab`: a `RefreshControl` on a `FlatList` for pull-to-refresh runs (`refresh-count` increments per refresh, `refresh-state` shows `refreshing` with a spinner for a 1500 ms refresh, then `idle`), reached by the `agent-device-test-app://refresh-lab` deep link
 - `Heavy feed`: a Bluesky-shaped home feed whose accessibility tree is deeper than 65 levels (see [Heavy feed](#heavy-feed))
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.

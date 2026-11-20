@@ -17,6 +17,23 @@ test('scroll carries the CLI long-search budget to the daemon', () => {
   expect(request.options.maxPasses).toBe(90);
 });
 
+test('scroll refresh parses as the refresh direction and travels positionally', () => {
+  const input = interactionCliReaders.scroll(['refresh'], BASE_FLAGS);
+  expect(input.direction).toBe('refresh');
+  const request = interactionDaemonWriters.scroll(input);
+  expect(request.positionals).toEqual(['refresh']);
+});
+
+test('scroll direction hint names refresh among the accepted directions', () => {
+  try {
+    interactionCliReaders.scroll(['reload'], BASE_FLAGS);
+    expect.unreachable('scroll should reject an unknown direction');
+  } catch (error) {
+    const appError = error as AppError;
+    expect(appError.details?.hint).toMatch(/refresh/);
+  }
+});
+
 test('swipe writes only typed daemon input', () => {
   const request = interactionDaemonWriters.swipe({
     from: { x: 10, y: 20 },

@@ -4,10 +4,18 @@ import { isViewportRootNode } from './snapshot-visibility.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
-// `top`/`bottom` are scroll-to-extreme requests with no direction of their own. Declared here
-// rather than in the command runtime that resolves them, so the public `ScrollOptions` can be
-// stated without depending on `commands/`.
-export const SCROLL_INPUT_DIRECTIONS = ['up', 'down', 'left', 'right', 'top', 'bottom'] as const;
+// `top`/`bottom` are scroll-to-extreme requests with no direction of their own, and `refresh` is one
+// slow pull down at the top. Declared here rather than in the command runtime that resolves them,
+// so the public `ScrollOptions` can be stated without depending on `commands/`.
+export const SCROLL_INPUT_DIRECTIONS = [
+  'up',
+  'down',
+  'left',
+  'right',
+  'top',
+  'bottom',
+  'refresh',
+] as const;
 export type ScrollInputDirection = (typeof SCROLL_INPUT_DIRECTIONS)[number];
 
 export const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;

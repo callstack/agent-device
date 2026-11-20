@@ -13,7 +13,7 @@ test('root help is a bounded first-success decision card', async () => {
   assert.match(help, /All \d+ commands: agent-device help commands/);
   assert.match(help, /starting a task with a known app/);
   assert.match(help, /agent-device open <app> --foreground/);
-  assert.match(help, /scroll <direction\|top\|bottom> \[amount\] --settle; back --settle/);
+  assert.match(help, /scroll <direction\|top\|bottom\|refresh> \[amount\] --settle; back --settle/);
   assert.match(help, /Do not probe first with devices, apps, appstate, snapshot, or screenshot/);
   assert.match(help, /Copy refs exactly: @e12, @e12~s4/);
   assert.match(help, /Coordinates are last resort/);
