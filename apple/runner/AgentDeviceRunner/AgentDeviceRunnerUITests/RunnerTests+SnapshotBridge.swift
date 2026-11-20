@@ -28,7 +28,7 @@ extension RunnerTests {
       return Response(
         ok: false,
         error: ErrorPayload(
-          code: "INVALID_ARGS",
+          code: RunnerWireErrorCode.invalidArgs,
           message: "snapshotBridge requires appBundleId and a snapshotBridge payload"
         )
       )

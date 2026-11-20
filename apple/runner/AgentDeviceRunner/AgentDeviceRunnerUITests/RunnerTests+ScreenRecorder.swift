@@ -355,7 +355,7 @@ extension RunnerTests {
   /// generic record error it used to collapse into; a genuine writer failure keeps its message.
   static func recordingStartErrorPayload(for error: Error) -> ErrorPayload {
     if let failure = error as? RunnerAppScreenCaptureFailure {
-      return ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+      return ErrorPayload(code: failure.wireCode, message: failure.message, hint: failure.hint)
     }
     return ErrorPayload(message: "failed to start recording: \(error.localizedDescription)")
   }

@@ -3,14 +3,7 @@ import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   COMMAND_ALREADY_FINISHED_RUNNER_CODE,
-  HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE,
-  IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE,
-  KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE,
-  KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE,
-  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
-  NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
-  RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
-  TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE,
+  RUNNER_ERROR_CODES,
   classifyRunnerReportedError,
 } from '../runner-contract.ts';
 import {
@@ -113,8 +106,7 @@ test('the main-thread runner codes publish details.reason beside details.runnerE
 // The literal is what the Swift runner encodes, so it is the contract and not the constant name:
 // a rename on one side has to fail here rather than silently split the pair.
 test('a coordinate fill refused for a point with no input keeps its code and publishes its reason', () => {
-  assert.equal(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'NO_TEXT_INPUT_AT_POINT');
-  const refusal = classifyRunnerReportedError(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE);
+  const refusal = classifyRunnerReportedError('NO_TEXT_INPUT_AT_POINT');
   assert.equal(refusal.code, 'NO_TEXT_INPUT_AT_POINT');
   assert.equal(refusal.details.reason, 'no_text_input_at_point');
   assert.equal(refusal.details.dispatched, 'no');
@@ -133,14 +125,13 @@ test('a coordinate fill refused for a point with no input keeps its code and pub
 // The two coordinate-fill refusals answer different questions and must never collapse into one
 // another: an empty point is a fact about the screen, a blind lookup is a fact about the channel.
 test('a coordinate fill refused on an unreadable point reports its own code, not no-input', () => {
-  assert.equal(TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'TEXT_INPUT_PROBE_UNAVAILABLE');
-  const refusal = classifyRunnerReportedError(TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE);
+  const refusal = classifyRunnerReportedError('TEXT_INPUT_PROBE_UNAVAILABLE');
   assert.equal(refusal.code, 'TEXT_INPUT_PROBE_UNAVAILABLE');
   assert.equal(refusal.details.reason, 'text_input_probe_unavailable');
   assert.equal(refusal.details.dispatched, 'no');
   assert.notEqual(
     refusal.details.reason,
-    classifyRunnerReportedError(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE).details.reason,
+    classifyRunnerReportedError('NO_TEXT_INPUT_AT_POINT').details.reason,
   );
   assert.equal(isRetryableRunnerError(new AppError(refusal.code, '', refusal.details)), false);
 });
@@ -181,8 +172,7 @@ test('a back swipe that proved nothing stays COMMAND_FAILED, unknown, with its o
 // Swift runner encodes, so it is the contract and not the constant name: a rename on one side has to
 // fail here rather than silently split the pair.
 test('a keyboard dismiss refused for having no dismiss key keeps its code and publishes its reason', () => {
-  assert.equal(KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE, 'KEYBOARD_DISMISS_UNAVAILABLE');
-  const refusal = classifyRunnerReportedError(KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE);
+  const refusal = classifyRunnerReportedError('KEYBOARD_DISMISS_UNAVAILABLE');
   // The code contract for `keyboard dismiss` is unchanged: the refusal travels under the code that
   // command already refused with, so a caller keyed on the code sees what it saw before.
   assert.equal(refusal.code, 'UNSUPPORTED_OPERATION');
@@ -218,8 +208,7 @@ test('a keyboard dismiss refused for having no dismiss key keeps its code and pu
 // nothing disclose `no`, and `keyboard enter` cannot, because its sole-field route taps the field
 // before typing.
 test('the hardware-control refusal keeps UNSUPPORTED_OPERATION and says nothing was pressed', () => {
-  assert.equal(HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE, 'HARDWARE_CONTROL_UNAVAILABLE');
-  const refusal = classifyRunnerReportedError(HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE);
+  const refusal = classifyRunnerReportedError('HARDWARE_CONTROL_UNAVAILABLE');
   assert.equal(refusal.code, 'UNSUPPORTED_OPERATION');
   assert.deepEqual(refusal.details, {
     runnerErrorCode: 'HARDWARE_CONTROL_UNAVAILABLE',
@@ -233,8 +222,7 @@ test('the hardware-control refusal keeps UNSUPPORTED_OPERATION and says nothing 
 });
 
 test('the keyboard-return refusal keeps UNSUPPORTED_OPERATION and reports an unknown dispatch', () => {
-  assert.equal(KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE, 'KEYBOARD_RETURN_UNAVAILABLE');
-  const refusal = classifyRunnerReportedError(KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE);
+  const refusal = classifyRunnerReportedError('KEYBOARD_RETURN_UNAVAILABLE');
   assert.equal(refusal.code, 'UNSUPPORTED_OPERATION');
   // The refusal says nothing about dispatch: the sole-text-field route taps the field before typing the
   // return, so a refusal can follow a tap that landed.
@@ -252,8 +240,7 @@ test('the keyboard-return refusal keeps UNSUPPORTED_OPERATION and reports an unk
 });
 
 test('the macOS in-app back refusal publishes its reason under the code a code-less reply had', () => {
-  assert.equal(IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE, 'IN_APP_BACK_CONTROL_UNAVAILABLE');
-  const refusal = classifyRunnerReportedError(IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE);
+  const refusal = classifyRunnerReportedError('IN_APP_BACK_CONTROL_UNAVAILABLE');
   // That reply carried no code, so the host read COMMAND_FAILED; naming it must not move the command
   // to a code its callers never saw.
   assert.equal(refusal.code, 'COMMAND_FAILED');
@@ -559,16 +546,24 @@ test('runner_endpoint_probe_exhausted is decided by the typed reason, not the me
   );
 });
 
-// The literals are what the Swift runner encodes, so they are the contract and not the constant
-// names: a rename on one side has to fail here rather than silently split the pair (#2728).
+// The literals are what the Swift runner encodes, so they are the contract and not a constant
+// name: a rename on one side has to fail here rather than silently split the pair (#2728).
 test('a refused screen capture keeps the runner reason and stays off the wire code', () => {
-  assert.deepEqual([...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].sort(), [
+  const CAPTURE_REFUSAL_CODES = [
+    'APP_SCREEN_WINDOW_UNRESOLVED',
+    'APP_SCREEN_UNRESOLVED',
     'APP_SCREEN_CAPTURE_UNRENDERABLE',
     'APP_SCREEN_OFF_LIT_PANEL',
-    'APP_SCREEN_UNRESOLVED',
-    'APP_SCREEN_WINDOW_UNRESOLVED',
-  ]);
-  for (const runnerCode of RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES) {
+  ] as const;
+  // The family is exactly the table's capture rows, so the runner's capture helper cannot lose a
+  // refusal without this check and the row parting ways.
+  assert.deepEqual(
+    Object.keys(RUNNER_ERROR_CODES)
+      .filter((code) => code.startsWith('APP_SCREEN_'))
+      .sort(),
+    [...CAPTURE_REFUSAL_CODES].sort(),
+  );
+  for (const runnerCode of CAPTURE_REFUSAL_CODES) {
     const classified = classifyRunnerReportedError(runnerCode);
     assert.equal(classified.code, 'COMMAND_FAILED');
     assert.equal(classified.details.runnerErrorCode, runnerCode);
@@ -649,7 +644,7 @@ test('the runner declares the wire codes the daemon reads for occupancy', () => 
 
   assert.equal(
     swift.timeoutCode,
-    MAIN_THREAD_TIMEOUT_RUNNER_CODE,
+    'MAIN_THREAD_TIMEOUT',
     'the runner must encode the watchdog timeout under the code the daemon keys occupancy on',
   );
   assert.equal(
@@ -662,7 +657,7 @@ test('the runner declares the wire codes the daemon reads for occupancy', () => 
 test('the runner declares the wire code the keyboard-dismiss refusal publishes its reason under', () => {
   assert.equal(
     requireSwiftKeyboardDismissRefusalWireCode(),
-    KEYBOARD_DISMISS_UNAVAILABLE_RUNNER_CODE,
+    'KEYBOARD_DISMISS_UNAVAILABLE',
     'the runner must encode its no-dismiss-key refusal under the code the daemon maps to ' +
       'details.reason, or that reason becomes unreachable',
   );
@@ -672,19 +667,19 @@ test('the runner declares the wire codes the control refusals publish their reas
   const swift = requireSwiftControlRefusalWireCodes();
   assert.equal(
     swift.keyboardReturnCode,
-    KEYBOARD_RETURN_UNAVAILABLE_RUNNER_CODE,
+    'KEYBOARD_RETURN_UNAVAILABLE',
     'the runner must encode its nothing-to-submit refusal under the code the daemon maps to ' +
       'details.reason, or that reason becomes unreachable',
   );
   assert.equal(
     swift.hardwareControlCode,
-    HARDWARE_CONTROL_UNAVAILABLE_RUNNER_CODE,
+    'HARDWARE_CONTROL_UNAVAILABLE',
     'the runner must encode its cannot-press-here refusal under the code the daemon maps to ' +
       'details.reason, or that reason becomes unreachable',
   );
   assert.equal(
     swift.inAppBackControlCode,
-    IN_APP_BACK_CONTROL_UNAVAILABLE_RUNNER_CODE,
+    'IN_APP_BACK_CONTROL_UNAVAILABLE',
     'the runner must encode its macOS no-back-control refusal under the code the daemon maps to ' +
       'details.reason, or that reason becomes unreachable',
   );

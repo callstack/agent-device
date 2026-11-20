@@ -32,7 +32,7 @@ extension RunnerTests {
       return Response(
         ok: false,
         error: ErrorPayload(
-          code: "INVALID_ARGS",
+          code: RunnerWireErrorCode.invalidArgs,
           message: "status requires statusCommandId",
           hint: "Set statusCommandId to the commandId of the runner command to inspect."
         )
@@ -58,7 +58,7 @@ extension RunnerTests {
       return Response(
         ok: false,
         error: ErrorPayload(
-          code: "INVALID_ARGS",
+          code: RunnerWireErrorCode.invalidArgs,
           message: "appState requires appBundleId",
           hint: "Set appBundleId to the session app's bundle identifier."
         )
@@ -77,7 +77,7 @@ extension RunnerTests {
       return Response(
         ok: false,
         error: ErrorPayload(
-          code: "INVALID_ARGS",
+          code: RunnerWireErrorCode.invalidArgs,
           message: "pasteboardWrite requires text",
           hint: "Set text to the string the pasteboard should hold."
         )
@@ -134,7 +134,7 @@ extension RunnerTests {
     return Response(
       ok: false,
       error: ErrorPayload(
-        code: "RUNNER_BUSY",
+        code: RunnerWireErrorCode.runnerBusy,
         message:
           "The iOS runner is still finishing a previous command that exceeded its execution watchdog (usually an accessibility capture on a heavy or animating screen).",
         hint:
@@ -153,7 +153,7 @@ extension RunnerTests {
     return Response(
       ok: false,
       error: ErrorPayload(
-        code: "RUNNER_WEDGED",
+        code: RunnerWireErrorCode.runnerWedged,
         message:
           "The iOS runner main thread has been stuck in abandoned work for \(Int(abandonedForSeconds)) seconds and cannot recover on its own.",
         hint:
@@ -701,7 +701,7 @@ extension RunnerTests {
     hint: String = "XCUIApplication must report runningForeground before and after capture. This state report does not prove screen ownership (#2696)."
   ) -> Response {
     Response(ok: false, error: ErrorPayload(
-      code: "OBSERVATION_UNAVAILABLE",
+      code: RunnerWireErrorCode.observationUnavailable,
       message: "The session app cannot be observed without activation.",
       hint: hint
     ))
@@ -726,7 +726,7 @@ extension RunnerTests {
     return Response(
       ok: false,
       error: ErrorPayload(
-        code: "XCTEST_RECORDED_FAILURE",
+        code: RunnerPassThroughErrorCode.xctestRecordedFailure,
         message: "XCTest recorded a failure while executing \(command.command.rawValue); the action may not have been performed.",
         hint: "The iOS runner session was invalidated. Re-observe with a fresh snapshot before retrying; if the accessibility tree is unavailable, use screenshot plus coordinate commands instead of retrying the tap blindly."
       )
