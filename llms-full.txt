@@ -1799,6 +1799,8 @@ For MCP client setup and what MCP does not expose, see [AI agent setup](/docs/ag
 
 In text mode, every command prints each response warning as a `Warning:` line after its own output. `get`, `find`, `clipboard`, and `record` print those lines on **stderr** instead, so `value=$(agent-device get text …)` captures only the value. With `--json`, warnings stay in `data.warnings` and no `Warning:` line is printed.
 
+Text that the CLI prints can name values that a device or a remote daemon chose, such as file paths and labels. So the CLI shows control characters as escapes: a C0 character other than newline and tab, DEL, or a C1 character prints as `\u00NN`, for example `\u001b`. That is a JSON escape too, so JSON the CLI prints, with or without `--json`, still parses back to the exact values. Newlines and tabs are kept as layout, and a newline inside one warning is folded into a space so each warning stays on one `Warning:` line. Colored output keeps its own color codes. Output from a tool a command wraps, and `--debug` diagnostics, are escaped the same way. MCP and AI SDK tool text can show these escapes too, in warnings and other values the shared formatters escape; their structured content keeps the exact values.
+
 ## Navigation
 
 ```bash
