@@ -1,10 +1,11 @@
 import { BOOT_TIMEOUT_REASON } from '@agent-device/contracts/device-readiness-runtime';
+import type { DeviceBootPerformance } from '@agent-device/contracts/device-boot';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
-import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
+import { simctlBootRefusedAlreadyBooted, scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { getSimulatorState } from '../simulator-state.ts';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
@@ -28,6 +29,14 @@ export type AppleReadinessOptions = Readonly<{
    * runner cache in parallel with the boot, which is the whole reason the hook exists.
    */
   onColdBootStart?: () => void;
+  /**
+   * Reports what this call's own boot step did with its boot: `performed: true` when it started the
+   * boot, `already-booted` when `simctl` refused a Simulator that was up before the call, and
+   * `no-boot-attempt` when readiness settled the Simulator without reaching one. #4791: this is the
+   * positive proof `open` needs to own the boot, and it is the only report a boot attempt makes —
+   * an option the caller leaves unset costs it nothing.
+   */
+  onSimulatorBoot?: (performance: DeviceBootPerformance) => void;
 }>;
 
 export async function ensureAppleReady(
@@ -37,28 +46,44 @@ export async function ensureAppleReady(
   options: AppleReadinessOptions = {},
 ): Promise<DeviceInfo> {
   signal.throwIfAborted();
-  if (isMacOs(device)) return { ...device, booted: true };
-  if (device.kind === 'device') {
-    await host.deviceReadiness.applePhysical.ensureConnected(device, signal);
+  // #4791: every exit of this function states what its boot step did with this call, so a caller
+  // that needs to know whether it caused the boot never has to read a device snapshot instead.
+  const reportBoot = (performance: DeviceBootPerformance) => options.onSimulatorBoot?.(performance);
+  if (isMacOs(device)) {
+    reportBoot({ performed: false, reason: 'no-boot-attempt' });
     return { ...device, booted: true };
   }
-  if (device.kind !== 'simulator') return { ...device, booted: true };
+  if (device.kind === 'device') {
+    await host.deviceReadiness.applePhysical.ensureConnected(device, signal);
+    reportBoot({ performed: false, reason: 'no-boot-attempt' });
+    return { ...device, booted: true };
+  }
+  if (device.kind !== 'simulator') {
+    reportBoot({ performed: false, reason: 'no-boot-attempt' });
+    return { ...device, booted: true };
+  }
 
   const recentlyObservedBooted = await readRecentBootObservation(host, device);
   if (recentlyObservedBooted) {
     host.deviceReadiness.appleAutomation.keepHot(device);
+    reportBoot({ performed: false, reason: 'already-booted' });
     return { ...device, booted: true };
   }
   const state = await simulatorState(host, device, signal);
+  let bootPerformed: DeviceBootPerformance | undefined;
   if (state !== 'Booted') {
     options.onColdBootStart?.();
     host.deviceReadiness.appleAutomation.keepHot(device);
-    await bootSimulator(host, device, signal, options.deadlineAtMs);
+    const startedBoot = await bootSimulator(host, device, signal, options);
     await showSimulator(host, signal);
+    bootPerformed = startedBoot
+      ? { performed: true }
+      : { performed: false, reason: 'already-booted' };
   }
   host.deviceReadiness.appleAutomation.keepHot(device);
   // Publish the fresh observation so the boot checks later in this flow skip their own listing.
   host.deviceReadiness.appleAutomation.markBooted(device);
+  reportBoot(bootPerformed ?? { performed: false, reason: 'already-booted' });
   return { ...device, booted: true };
 }
 
@@ -73,12 +98,14 @@ async function readRecentBootObservation(
   }
 }
 
+/** True when the `simctl boot` this call issued started the boot, false when it was refused as already booted. */
 async function bootSimulator(
   host: AppleReadinessHost,
   device: DeviceInfo,
   signal: AbortSignal,
-  deadlineAtMs = Date.now() + BOOT_TIMEOUT_MS,
-): Promise<void> {
+  options: AppleReadinessOptions,
+): Promise<boolean> {
+  const deadlineAtMs = options.deadlineAtMs ?? Date.now() + BOOT_TIMEOUT_MS;
   let started = false;
   try {
     started = await startSimulatorBoot(host, device, signal, deadlineAtMs);
@@ -91,6 +118,7 @@ async function bootSimulator(
     if (Date.now() >= deadlineAtMs) throw bootDeadlineError(device, error);
     throw error;
   }
+  return started;
 }
 
 /** Issues `simctl boot`; true when this call started the boot, false when it was already booted. */
@@ -109,9 +137,7 @@ async function startSimulatorBoot(
     },
     signal,
   );
-  const output = `${boot.stdout}\n${boot.stderr}`.toLowerCase();
-  const alreadyBooted =
-    output.includes('already booted') || output.includes('current state: booted');
+  const alreadyBooted = simctlBootRefusedAlreadyBooted(`${boot.stdout}\n${boot.stderr}`);
   if (!alreadyBooted) requireExecSuccess(boot, 'simctl boot failed');
   return !alreadyBooted;
 }
