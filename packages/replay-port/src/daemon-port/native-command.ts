@@ -76,6 +76,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
   // its own. Read below by the catch block, so a mid-loop exception still reports
   // the artifacts collected up to that point.
   const artifactPaths = new Set<string>();
+  const warnings: string[] = [];
   try {
     resolved = bundle.entry;
     if (isMaestroYamlPath(resolved) && req.flags?.replayBackend !== 'maestro') {
@@ -135,6 +136,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       ctx: stepContext,
       req,
       artifactPaths,
+      warnings,
       onStep,
       armSaveScript: sessionPreparation.armSaveScript,
     });
@@ -155,38 +157,72 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       // response was built (and wrapped with diagnostics/repair-hold marking)
       // by this adapter's own dispatch/build-failure capabilities, which
       // stashed it in `readLastResponse`'s closure as it went; reading it
-      // back here is what makes the final response byte-identical to the
-      // pre-split code that threaded it straight through the engine's return
-      // value. The fallback below is unreachable in practice (a response is
-      // always recorded before any failure can be reported) and exists only
-      // so this stays total.
-      return (
+      // back here keeps the failing step's response as the final response.
+      // Warnings from earlier successful steps are added to it on purpose: a
+      // step that succeeded with a warning (for example a close that kept a
+      // device running) still happened, so a later failure must not hide it.
+      // The fallback below is unreachable in practice (a response is always
+      // recorded before any failure can be reported) and exists only so this
+      // stays total.
+      return await withReplayActionWarnings(
         readLastResponse() ??
-        errorResponse('COMMAND_FAILED', 'replay step failed with no recorded response')
+          errorResponse('COMMAND_FAILED', 'replay step failed with no recorded response'),
+        warnings,
       );
     }
-    return completeReplayRun({
-      startedAt,
-      sessionName,
-      sessionStore,
-      replayed: outcome.replayed,
-      artifactPaths: outcome.artifactPaths,
-      snapshotDiagnosticSamples: outcome.snapshotDiagnosticSamples,
-      armSaveScript: sessionPreparation.armSaveScript,
-      coordinator,
-      keepSession,
-    });
+    return await withReplayActionWarnings(
+      completeReplayRun({
+        startedAt,
+        sessionName,
+        sessionStore,
+        replayed: outcome.replayed,
+        artifactPaths: outcome.artifactPaths,
+        snapshotDiagnosticSamples: outcome.snapshotDiagnosticSamples,
+        armSaveScript: sessionPreparation.armSaveScript,
+        coordinator,
+        keepSession,
+      }),
+      warnings,
+    );
   } catch (error) {
     const normalized = normalizeError(error);
-    if (artifactPaths.size === 0) return { ok: false, error: normalized };
-    return {
-      ok: false,
-      error: {
-        ...normalized,
-        details: { ...normalized.details, artifactPaths: [...artifactPaths] },
+    return await withReplayActionWarnings(
+      {
+        ok: false,
+        error: {
+          ...normalized,
+          ...(artifactPaths.size > 0
+            ? { details: { ...normalized.details, artifactPaths: [...artifactPaths] } }
+            : {}),
+        },
       },
+      warnings,
+    );
+  }
+}
+
+async function withReplayActionWarnings(
+  response: DaemonResponse,
+  warnings: readonly string[],
+): Promise<DaemonResponse> {
+  if (warnings.length === 0) return response;
+  const { readResponseWarnings } = await import('@agent-device/kernel/success-text');
+  if (response.ok) {
+    return {
+      ...response,
+      data: { ...response.data, warnings: [...warnings, ...readResponseWarnings(response.data)] },
     };
   }
+  return {
+    ...response,
+    error: {
+      ...response.error,
+      details: {
+        ...response.error.details,
+        warnings: [...warnings, ...readResponseWarnings(response.error.details)],
+      },
+    },
+  };
 }
 
 function completeReplayRun(params: {

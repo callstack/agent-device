@@ -5,7 +5,10 @@ import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-gateway.ts';
-
+import {
+  checkLaunchedProcessFixture,
+  confirmLaunchedProcessStoppedFixture,
+} from './launched-process-owner-fixture.ts';
 /**
  * The `DaemonPlatformServices` port as the daemon suites answer it: every member is a plain
  * `vi.fn` spy with a canned answer, never a re-implementation of a root platform rule. A suite
@@ -26,6 +29,10 @@ export function daemonPlatformServicesFixture(
     }),
     deviceBootObservation: Object.freeze({
       observeBootTimeMs: observeBootTimeMsFixture,
+    }),
+    launchedDeviceProcess: Object.freeze({
+      checkLaunchedProcess: checkLaunchedProcessFixture,
+      confirmLaunchedProcessStopped: confirmLaunchedProcessStoppedFixture,
     }),
     ensureLocalDeviceReady: ensureLocalDeviceReadyFixture,
     resolveRequestedOpenSurface: resolveRequestedOpenSurfaceFixture,

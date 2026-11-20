@@ -1,4 +1,5 @@
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { onTestFailed } from 'vitest';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import {
   FIRST_SCREEN_NODES,
@@ -42,6 +43,32 @@ export async function withIosContractDaemon(
   run: (daemon: ProviderScenarioHarness, transcript: ProviderScenarioTranscript) => Promise<void>,
   options: { saveScript?: boolean | string } = {},
 ): Promise<void> {
+  const startedAt = performance.now();
+  const timings: Array<{ stage: string; startMs: number; endMs: number }> = [];
+  let activeStage = 'create';
+  let stageStartedAt = startedAt;
+  const enter = (stage: string) => {
+    const now = performance.now();
+    timings.push({
+      stage: activeStage,
+      startMs: Math.round(stageStartedAt - startedAt),
+      endMs: Math.round(now - startedAt),
+    });
+    if (timings.length > 8) timings.shift();
+    activeStage = stage;
+    stageStartedAt = now;
+  };
+  onTestFailed(() => {
+    console.error(
+      '[interaction-contract-stage]',
+      JSON.stringify({
+        activeStage,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        stageStartedMs: Math.round(stageStartedAt - startedAt),
+        timings,
+      }),
+    );
+  });
   const transcript = createProviderTranscript([
     ...Array.from({ length: SETTLING_CAPTURE_READS }, () =>
       runnerSnapshotEntry(FIRST_SCREEN_NODES),
@@ -66,13 +93,25 @@ export async function withIosContractDaemon(
   });
 
   await withProviderScenarioResource(
-    async () =>
-      await createProviderScenarioHarness({
+    async () => {
+      const daemon = await createProviderScenarioHarness({
         appleRunnerProvider: () => appleRunnerProvider,
         appleToolProvider: () => appleTool.provider,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
         env: { AGENT_DEVICE_CLAIMS_DIR: mkdtempForTestSync('interaction-contract-claims-') },
-      }),
+      });
+      return {
+        ...daemon,
+        callCommand: async (...args: Parameters<ProviderScenarioHarness['callCommand']>) => {
+          enter(args[0]);
+          return await daemon.callCommand(...args);
+        },
+        close: async () => {
+          enter('cleanup');
+          await daemon.close();
+        },
+      };
+    },
     async (daemon) => {
       const open = await daemon.callCommand('open', [CONTRACT_APP], {
         platform: 'ios',
@@ -82,6 +121,7 @@ export async function withIosContractDaemon(
       });
       assertRpcOk(open);
       assertRpcOk(await daemon.callCommand('snapshot'));
+      enter('scenario');
       await run(daemon, scenarioTranscript);
       transcript.assertComplete();
     },
