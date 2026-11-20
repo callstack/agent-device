@@ -49,10 +49,21 @@ function sectionText(prose: string, heading: string): string | undefined {
   return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
+/** Drops HTML comments, such as the template's prompts. An unclosed comment runs to the end. */
+function withoutComments(text: string): string {
+  return text
+    .split('<!--')
+    .map((part, index) => {
+      if (index === 0) return part;
+      const end = part.indexOf('-->');
+      return end === -1 ? '' : part.slice(end + 3);
+    })
+    .join('');
+}
+
 function bodyViolations(title: string, body: string): string[] {
-  const prose = (body.split(BOT_FOOTER)[0] ?? '')
+  const prose = withoutComments(body.split(BOT_FOOTER)[0] ?? '')
     .replaceAll('\r', '')
-    .replaceAll(/<!--[\s\S]*?-->/g, '')
     .replaceAll(/^(`{3,}|~{3,})[\s\S]*?^\1[^\n]*$/gm, '');
   const violations = requiredSections(title)
     .filter((heading) => !sectionText(prose, heading))
