@@ -215,7 +215,7 @@
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:bc620e6f98821fdfe7e65eb63404eb175ffd583730cb877fa5a5f9f4e80c9fe0",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:b37b9391d20f535ca9c0858f92ed37943297c7acbf1fb10f8cad5cd5b53423eb",
-    "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:7f023573456565bb4eebabb8131d5f9d4e2b9128ff2513811b3b689f60913d0f",
+    "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
     "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
@@ -223,9 +223,8 @@
     "packages/remote/src/daemon-artifacts.ts#fetchRemoteArtifact": "sha256:871f675d744dfa2bbf50237ac14b7f8957f973b126b774f4011da65573c8548f",
     "packages/remote/src/artifact-download.ts#RemoteArtifactRequest": "sha256:6cce66499f34bb18139917df592e554395936964025089024d6c6f67e4fa4b98",
     "packages/remote/src/artifact-download.ts#RemoteArtifactFetch": "sha256:e83939ec48a66917df9ec84becf53b6ca3c8115cfdada10731046381ac9e32c1",
-    "packages/remote/src/artifact-download.ts#fetchRemoteArtifactFromUrl": "sha256:173bb12c4e7ca30d807e30860f56f57764d5fa54494f2589005bd375df7e0e3a",
-    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:16dde534fc0e39ac1273070ba7b864a23c6f5a63c7d0b9029dd3b804593ad148",
-    "packages/remote/src/artifact-download.ts#ArtifactSink": "sha256:1ee203536d68a1e96a55045bcc3c8b99dcf3fcbbed0e0403297097c151eb0967"
+    "packages/remote/src/artifact-download.ts#fetchRemoteArtifactFromUrl": "sha256:de6e71abdc758f760beffba0dc260473f88a8c60b13540b9c14d39f1a3d5e3a1",
+    "packages/remote/src/artifact-download.ts#requestRemoteArtifact": "sha256:4c79d3aada2259ea0711417dacea85e58aaafd518d3b6a34befb1c638422969f"
   },
   "compatibleChanges": [
     {
@@ -626,7 +625,7 @@
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
       "digest": "sha256:6d9aba219e6fafbdbcef76d30ed99fbb4f61dcc525242a0a76c3dc1bdacd24e2",
-      "rationale": "Passes the in-memory fetchRemoteArtifact to the session-script owner instead of the file download. Which artifacts are requested, and what the response fields become, is unchanged. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
+      "rationale": "Passes the in-memory fetchRemoteArtifact to the session-script owner instead of the file download. Which artifacts are requested is unchanged, and the wire fields are unchanged; the client no longer adds a repeat warning to its own output. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
     },
     {
       "declaration": "packages/remote/src/script-version-publisher.ts#publishScriptVersion",
@@ -634,14 +633,14 @@
       "rationale": "A script version is fetched into memory, capped at 8 MiB, and committed by the local script publisher under the record lock; a version no newer than the record is answered from the record with no warning. The client reads the same artifact fields (field, artifactType, artifactId, scriptPublicationId, scriptRevision) and requests the same artifact route. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
     },
     {
-      "declaration": "packages/remote/src/script-version-publisher.ts#PublishOutcome",
-      "digest": "sha256:7f023573456565bb4eebabb8131d5f9d4e2b9128ff2513811b3b689f60913d0f",
-      "rationale": "Removes the client-local repeat member, which never left the client. No request field, response field, route, status or header changes."
-    },
-    {
       "declaration": "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen",
       "digest": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
       "rationale": "Removes the unanswered open's record through the record owner instead of a direct unlink. The request still carries meta.scriptPublicationId and omits the caller path, and the response is read for the same scriptPublicationId field."
+    },
+    {
+      "declaration": "packages/remote/src/script-version-publisher.ts#PublishOutcome",
+      "digest": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
+      "rationale": "Removes the client-local repeat member and the export; the type never left the client. No request field, response field, route, status or header changes."
     }
   ]
 }

@@ -475,7 +475,6 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         ARTIFACT_DOWNLOAD,
         'RemoteArtifactRequest',
-        'ArtifactSink',
         'RemoteArtifactDownload',
         'RemoteArtifactFetch',
         'downloadRemoteArtifactFromUrl',
