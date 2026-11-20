@@ -150,6 +150,13 @@ export function createWaitPolling(
         recordPoll(completedPollOutcome(captureWasReadable, unobserved.lastUnobservedCause()));
         return result;
       }
+      if (!('error' in result)) {
+        // The capture answered, but after the cutoff: the budget ran out between observations.
+        // The late answer is not evidence, and nothing was cut off mid-capture, so the wait ends
+        // on what its earlier captures established.
+        recordPoll('deadline');
+        return { timedOut: true as const, deadline: undefined };
+      }
       const cancelled = cancelledPoll(result.error, unobserved.readableCaptures());
       recordPoll(cancelled.outcome);
       timeoutEvidence = cancelled.evidence;

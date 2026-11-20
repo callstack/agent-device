@@ -498,14 +498,36 @@ test('a capture that answers after the cutoff is a timeout and not a readable ca
     const late = await pending;
     assert.equal(late.timedOut, true);
     if (!late.timedOut) return;
-    assert.equal(late.deadline, 'capture-truncated');
+    // Nothing was cut off mid-capture, so the wait ends on what its earlier capture established:
+    // the target was absent. The late answer is not counted.
+    assert.equal(late.deadline, undefined);
     const error = waitTimeoutError('wait timed out for text: Ready', polling, late.deadline);
-    assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded);
+    assert.equal(error.details?.reason, WAIT_REASONS.targetAbsent);
     assert.equal(error.details?.readableCaptures, 1);
-    assert.equal(error.details?.captureStalled, undefined);
+    assert.equal(error.details?.captureTruncated, undefined);
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('a first capture that answers after the cutoff leaves the wait with no readable capture', async () => {
+  let currentMs = 0;
+  const runtime = {
+    clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
+  } as unknown as AgentDeviceRuntime;
+  const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+
+  const late = await polling.capture(async () => {
+    currentMs = 50;
+    return 'late observation';
+  });
+
+  assert.equal(late.timedOut, true);
+  if (!late.timedOut) return;
+  assert.equal(late.deadline, undefined);
+  const error = waitTimeoutError('wait timed out for text: Ready', polling, late.deadline);
+  assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+  assert.equal(error.details?.readableCaptures, 0);
 });
 
 test('a non-retriable producer failure still ends the wait at its first poll', async () => {
