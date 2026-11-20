@@ -5,11 +5,16 @@ import { isRecord } from '@agent-device/kernel/record';
 
 const RECORDING_ROLES = new Set(['outPath', 'telemetryPath', 'chunkPath']);
 
-/** One recording file to download, bound to its validated role and, for a chunk, its index. */
-type RecordingDownload = Readonly<{
-  artifact: DaemonArtifact & { artifactId: string };
-  chunkIndex: number | undefined;
-}>;
+type DeliverableArtifact = DaemonArtifact & { artifactId: string };
+type RecordingDestination = { path: string; fallback: boolean };
+type RecordStopDelivery =
+  | { kind: 'script'; artifact: DeliverableArtifact }
+  | {
+      kind: 'recording';
+      artifact: DeliverableArtifact;
+      chunkIndex: number | undefined;
+      destination: RecordingDestination;
+    };
 
 /**
  * Binds every downloadable recording artifact to its role and chunk before anything is fetched.
@@ -17,36 +22,43 @@ type RecordingDownload = Readonly<{
  * `outPath` file is chunk 0 and each later chunk is the `chunkPath` artifact, each only when its
  * daemon path names that chunk. An artifact without an id or a recording role downloads nothing.
  */
-export function planRecordingDownloads(data: Record<string, unknown> | undefined): {
-  downloads: RecordingDownload[];
-  scripts: DaemonArtifact[];
-  chunkIndexes: number[];
-} {
+export function planRecordingDownloads(
+  data: Record<string, unknown> | undefined,
+  destinationOf: {
+    recording(artifact: DeliverableArtifact): RecordingDestination;
+    script(artifact: DeliverableArtifact): string | undefined;
+  },
+): { deliveries: RecordStopDelivery[]; chunkIndexes: number[] } {
   const chunks = readChunks(data?.chunks);
   const claimed = new Set<string>();
   const claim = (key: string) => {
     if (claimed.has(key)) throw invalidAnswer(`The recording answer names ${key} twice.`);
     claimed.add(key);
   };
-  const downloads: RecordingDownload[] = [];
-  const scripts: DaemonArtifact[] = [];
+  const deliveries: RecordStopDelivery[] = [];
+  const paths: string[] = [];
   for (const artifact of readDeliverableArtifacts(data?.artifacts)) {
     claim(`artifact ${artifact.artifactId}`);
     if (artifact.field === 'savedScript') {
-      scripts.push(artifact);
+      const scriptPath = destinationOf.script(artifact);
+      if (scriptPath !== undefined) paths.push(scriptPath);
+      deliveries.push({ kind: 'script', artifact });
       continue;
     }
     if (artifact.field !== 'chunkPath') claim(artifact.field);
     const chunkIndex = chunkOf(artifact, chunks);
     if (chunkIndex !== undefined) claim(`chunk ${chunkIndex}`);
-    downloads.push({ artifact, chunkIndex });
+    const destination = destinationOf.recording(artifact);
+    paths.push(destination.path);
+    deliveries.push({ kind: 'recording', artifact, chunkIndex, destination });
   }
-  return { downloads, scripts, chunkIndexes: chunks.map((chunk) => chunk.index) };
+  claimDistinctDestinations(paths);
+  return { deliveries, chunkIndexes: chunks.map((chunk) => chunk.index) };
 }
 
-function readDeliverableArtifacts(value: unknown): RecordingDownload['artifact'][] {
+function readDeliverableArtifacts(value: unknown): DeliverableArtifact[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((artifact: unknown): artifact is RecordingDownload['artifact'] => {
+  return value.filter((artifact: unknown): artifact is DeliverableArtifact => {
     if (!isRecord(artifact) || typeof artifact.artifactId !== 'string') return false;
     if (artifact.artifactType === 'session-script') return artifact.field === 'savedScript';
     return typeof artifact.field === 'string' && RECORDING_ROLES.has(artifact.field);
@@ -71,11 +83,11 @@ function chunkOf(
 }
 
 /** Refuses two recording files that would land at one local path (compared case-insensitively). */
-export function claimDistinctDestinations(paths: readonly string[]): void {
+function claimDistinctDestinations(paths: readonly string[]): void {
   const seen = new Set<string>();
   for (const destination of paths) {
     const key = path.resolve(destination).normalize('NFC').toLowerCase();
-    if (seen.has(key)) throw invalidAnswer(`Two recording files share a destination.`);
+    if (seen.has(key)) throw invalidAnswer('Two artifacts share a destination.');
     seen.add(key);
   }
 }

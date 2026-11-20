@@ -608,26 +608,20 @@ async function deliverRecordStop(
   }>,
 ): Promise<DaemonResponse> {
   const answer = await import('./record-stop-answer.ts');
-  const plan = answer.planRecordingDownloads(response.data);
-  const downloads = plan.downloads.map((entry) => ({
-    ...entry,
-    destination: resolveMaterializedArtifactPath(entry.artifact, req, client.host),
-  }));
-  const paths = downloads.map(({ destination }) => destination.path);
-  answer.claimDistinctDestinations(paths);
+  const plan = answer.planRecordingDownloads(response.data, {
+    recording: (artifact) => resolveMaterializedArtifactPath(artifact, req, client.host),
+    script: (artifact) => client.scripts?.plannedDestination(artifact),
+  });
   const local: Record<string, unknown> = {};
   const delivered: DaemonArtifact[] = [];
-  // A script can replace an earlier version. Check its destination before any recording write.
-  for (const script of plan.scripts) await client.scripts?.publish(script, local, delivered);
-  if (delivered.length > 0) {
-    answer.claimDistinctDestinations([
-      ...paths,
-      ...delivered.flatMap(({ localPath }) => (localPath ? [localPath] : [])),
-    ]);
-  }
   const chunkPaths = new Map<number, string>();
   try {
-    for (const { artifact, chunkIndex, destination } of downloads) {
+    for (const entry of plan.deliveries) {
+      if (entry.kind === 'script') {
+        await client.scripts?.publish(entry.artifact, local, delivered);
+        continue;
+      }
+      const { artifact, chunkIndex, destination } = entry;
       const written = await downloadRemoteArtifact({
         ...endpoint,
         artifactId: artifact.artifactId,

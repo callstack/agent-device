@@ -213,7 +213,7 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
     "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:b6f5f17fd0551a445c63726a7be95705f9ee45119c92b90c02fe71a1ddf4b5ab",
-    "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
+    "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:e9d551b3023d4445e8be9a22275a810919c96208c2bbe0955a6f52ff51ce6c25",
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:91be966acf412179ae3a682243b24042772a03c79dcd754c9acaa588372de2c9",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
@@ -676,6 +676,11 @@
       "declaration": "packages/remote/src/remote-request-diagnostics.ts#localizeRemoteDaemonError",
       "digest": "sha256:b0ba4c155bbefe846ab5770c8acbd72ccf46d83de147e685a4d8ef605ff571f1",
       "rationale": "#4518 (client-side only): it takes the caller's signal and fetches no record for a canceled request."
+    },
+    {
+      "declaration": "packages/remote/src/session-script-destination.ts#SessionScriptDelivery",
+      "digest": "sha256:e9d551b3023d4445e8be9a22275a810919c96208c2bbe0955a6f52ff51ce6c25",
+      "rationale": "#4518 client-side only: read the existing script publication record during record-stop planning to refuse destination collisions before any transfer. Requests and responses keep the same format."
     }
   ]
 }

@@ -578,8 +578,8 @@ test('a recording fallback cannot claim a script destination in the same answer'
           ],
         }),
       ).rejects.toMatchObject({ details: { reason: 'record_stop_answer_invalid' } });
-      expect(requestedArtifacts).toEqual(['/artifacts/script']);
-      expect(fs.readFileSync(scriptPath, 'utf8')).toBe('open Demo\n');
+      expect(requestedArtifacts).toEqual([]);
+      expect(fs.existsSync(scriptPath)).toBe(false);
     },
   );
 });

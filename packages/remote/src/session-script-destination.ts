@@ -52,6 +52,8 @@ export async function sendRemoteScriptOpen(
 }
 
 export type SessionScriptDelivery = Readonly<{
+  /** The client-owned destination of a planned script artifact, before it is fetched. */
+  plannedDestination(artifact: DaemonArtifact): string | undefined;
   /** Publishes one script artifact and names it in `data`, or drops it from the response. */
   publish(
     artifact: DaemonArtifact,
@@ -166,6 +168,18 @@ export function sessionScriptDelivery(
   // published destination from here rather than downloading anything a second time.
   let settled: ReceiptSettlement | undefined;
   const delivery: SessionScriptDelivery = {
+    plannedDestination: ({ scriptPublicationId, scriptRevision }) => {
+      if (
+        typeof scriptPublicationId !== 'string' ||
+        typeof scriptRevision !== 'number' ||
+        !Number.isSafeInteger(scriptRevision) ||
+        scriptRevision <= 0
+      ) {
+        return undefined;
+      }
+      return readRecord(recordPath(stateDir, endpoint.baseUrl, req, scriptPublicationId))
+        ?.destination;
+    },
     publish: async (artifact, data, kept) => {
       if (artifact.field !== 'savedScript' || artifact.artifactType !== 'session-script') return;
       // The receipt is the one delivery instruction of this response; a step's or the batch's own
