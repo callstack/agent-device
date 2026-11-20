@@ -196,7 +196,13 @@ export async function fixture(
       return;
     }
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    try {
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    } catch (error) {
+      // A canceled client can leave before its upload body ends. Nobody waits for an answer.
+      if (!request.complete) return;
+      throw error;
+    }
     let body = Buffer.concat(chunks);
     if (request.headers['content-encoding'] === 'gzip') body = gunzipSync(body);
     if (storage.serve(request, response, body)) return;

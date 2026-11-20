@@ -160,7 +160,11 @@ function tunnel(port: number) {
   const pidFile = path.join(mkdtempForTestSync('ares-tunnel-'), 'ares-inspect.pid');
   const isRunning = () => {
     try {
-      process.kill(Number(readFileSync(pidFile, 'utf8')), 0);
+      // The shell creates the file before it writes the pid. An empty file reads as pid 0, and
+      // signal 0 to pid 0 reaches this process group, so it never reports a stopped tunnel.
+      const pid = Number(readFileSync(pidFile, 'utf8'));
+      if (!(pid > 0)) return false;
+      process.kill(pid, 0);
       return true;
     } catch {
       return false;
