@@ -3,6 +3,7 @@ import type {
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import { settleWithin, type SettleWithinOutcome } from '@agent-device/host-kit/retry';
 import type { DaemonServer } from './transport.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';
@@ -34,19 +35,18 @@ export async function closeDaemonServers(
 ): Promise<void> {
   await Promise.all(
     servers.map(async (server) => {
-      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-      await new Promise<void>((resolve) => {
-        timeoutHandle = setTimeout(() => {
-          forceCloseServer(server);
-          resolve();
-        }, timeoutMs);
-        try {
-          server.close(() => resolve());
-        } catch {
-          resolve();
-        }
-      });
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      const outcome = await settleWithin(
+        () =>
+          new Promise<void>((resolve) => {
+            try {
+              server.close(() => resolve());
+            } catch {
+              resolve();
+            }
+          }),
+        timeoutMs,
+      );
+      if (outcome.kind === 'deadline') forceCloseServer(server);
     }),
   );
 }
@@ -167,54 +167,30 @@ export function createPluginClose(params: {
   return {
     close: () =>
       (closing ??= (async () => {
-        const outcome = await settleWithinBudget(
-          params.close,
-          params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
-        );
-        if (outcome.kind === 'deadline') {
-          return { disposed: [], failed: [], pending: activeProviders() };
-        }
-        if (outcome.kind === 'rejected') {
-          const error = normalizeError(outcome.error);
+        let outcome: SettleWithinOutcome<readonly PluginCleanupOutcome[]>;
+        try {
+          outcome = await settleWithin(
+            params.close,
+            params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
+          );
+        } catch (error) {
+          const normalized = normalizeError(error);
           return {
             disposed: [],
             failed: activeProviders().map((provider) => ({
               provider,
               step: 'shutdown' as const,
-              error,
+              error: normalized,
             })),
             pending: [],
           };
         }
+        if (outcome.kind === 'deadline') {
+          return { disposed: [], failed: [], pending: activeProviders() };
+        }
         return reportCleanupOutcomes(outcome.value);
       })()),
   };
-}
-
-type BoundedShutdownOutcome<T> =
-  | { kind: 'completed'; value: T }
-  | { kind: 'rejected'; error: unknown }
-  | { kind: 'deadline' };
-
-/** Settles one shutdown operation at its deadline without cancelling its unfinished work. */
-export async function settleWithinBudget<T>(
-  close: () => Promise<T>,
-  timeoutMs: number,
-): Promise<BoundedShutdownOutcome<T>> {
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  const outcome = await Promise.race([
-    Promise.resolve()
-      .then(close)
-      .then(
-        (value): BoundedShutdownOutcome<T> => ({ kind: 'completed', value }),
-        (error: unknown): BoundedShutdownOutcome<T> => ({ kind: 'rejected', error }),
-      ),
-    new Promise<BoundedShutdownOutcome<T>>((resolve) => {
-      deadlineTimer = setTimeout(() => resolve({ kind: 'deadline' }), timeoutMs);
-    }),
-  ]);
-  clearTimeout(deadlineTimer);
-  return outcome;
 }
 
 function reportCleanupOutcomes(
@@ -354,12 +330,18 @@ export async function teardownDaemonSessionForShutdown(params: {
       : true;
     return genericTeardownSucceeded && lifecycleTeardownSucceeded;
   })();
-  const teardownOutcome = await settleWithinBudget(async () => await teardown, timeoutMs);
-  if (teardownOutcome.kind === 'deadline') {
+  let timedOut = false;
+  let genericTeardownSucceeded = false;
+  try {
+    const teardownOutcome = await settleWithin(async () => await teardown, timeoutMs);
+    if (teardownOutcome.kind === 'deadline') timedOut = true;
+    else genericTeardownSucceeded = teardownOutcome.value;
+  } catch {
+    // A teardown that rejects is a failed teardown; its own step already wrote why to stderr.
+  }
+  if (timedOut) {
     stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
   }
-  const genericTeardownSucceeded =
-    teardownOutcome.kind === 'completed' ? teardownOutcome.value : false;
   const teardownSucceeded = appLogTeardownSucceeded && genericTeardownSucceeded;
   // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
   // `.ad` iff the repair transaction completed, else leave a bounded

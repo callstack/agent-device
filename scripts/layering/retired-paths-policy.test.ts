@@ -23,6 +23,7 @@ const EMPTY_RATCHETS: LayeringRatchets = {
   testOnlyExports: [],
   unmatchedTests: [],
   untypedReasonLiterals: {},
+  promiseRaces: {},
 };
 
 function contextWithFiles(

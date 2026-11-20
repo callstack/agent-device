@@ -1,5 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { settleWithin } from '@agent-device/host-kit/retry';
 import {
   clearDeviceClaim,
   type DeviceClaimClearOutcome,
@@ -282,12 +283,10 @@ async function expireIdleSession(
   const expiry = settleIdleSessionUnderLock({ ...params, lockKeys });
   const budgetMs = params.settleBudgetMs?.(params.ref.session);
   if (budgetMs === undefined) return void (await expiry);
-  const budget = budgetElapsedAfter(budgetMs);
-  try {
-    if ((await Promise.race([expiry, budget.promise])) !== BUDGET_ELAPSED) return;
-  } finally {
-    budget.cancel();
-  }
+  // A background sweep's settle budget must not hold the daemon's event loop if the expiry
+  // hangs, so the deadline timer is unref'd (the removed budgetElapsedAfter unref'd too).
+  const budget = await settleWithin(() => expiry, budgetMs, { keepAlive: false });
+  if (budget.kind === 'settled') return;
   emitDiagnostic({
     level: 'warn',
     phase: 'session_idle_expiry_settle_timeout',
@@ -305,25 +304,6 @@ async function expireIdleSession(
   // moment this sweep stopped waiting — because the release may have been running for most of the
   // window already, and deferring from when it STARTED would schedule the next pass in the past.
   params.retryNotBeforeMs.set(address, params.now() + params.idleExpiryMs);
-}
-
-const BUDGET_ELAPSED = Symbol('session-idle-settle-budget-elapsed');
-
-/**
- * A wait the expiry can win. Unref'd and cancellable because a sweep that stopped waiting must leave
- * nothing behind: a ref'd timer here is a daemon that cannot exit, and an armed one is a timer the
- * event loop carries for the whole budget after the session it was watching was released.
- */
-function budgetElapsedAfter(ms: number): Readonly<{
-  promise: Promise<typeof BUDGET_ELAPSED>;
-  cancel: () => void;
-}> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const promise = new Promise<typeof BUDGET_ELAPSED>((resolve) => {
-    timer = setTimeout(() => resolve(BUDGET_ELAPSED), ms);
-    timer.unref?.();
-  });
-  return { promise, cancel: () => clearTimeout(timer) };
 }
 
 /**

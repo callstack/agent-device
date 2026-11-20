@@ -73,6 +73,7 @@ test('measureRatchets reports all ratchets from one tree', () => {
     testOnlyExports: [],
     unmatchedTests: [],
     untypedReasonLiterals: {},
+    promiseRaces: {},
   });
   const withExports = measureRatchets(sources, resolveImportEdges(sources), {
     manifests: new Map([
