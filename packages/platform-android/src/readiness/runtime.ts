@@ -15,7 +15,11 @@ import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { bootFailureHint } from '@agent-device/provision-kit/boot-diagnostics';
 import { androidAdbResultError, attachAdbFailureHint } from '../adb-executor.ts';
-import { androidBootFailureReason, isTransientAndroidBootFailure } from '../emulator-lifecycle.ts';
+import {
+  androidBootFailureReason,
+  buildAndroidBootError,
+  isTransientAndroidBootFailure,
+} from '../emulator-lifecycle.ts';
 
 const BOOT_TIMEOUT_MS = 120_000;
 const POLL_MS = 1_000;
@@ -128,7 +132,13 @@ async function waitForBoot(
     if (observation.booted) return;
     // Retry/stop decisions consume the typed probe evidence, never message or stdout wording.
     if (observation.failure && !isTransientAndroidBootFailure(observation.failure)) {
-      throwBootProbeFailure(host, observation.failure, serial, startedAtMs);
+      throwBootProbeFailure(
+        host,
+        observation.failure,
+        serial,
+        startedAtMs,
+        host.clock.now() >= deadline,
+      );
     }
     await host.clock.sleep(POLL_MS, signal);
   }
@@ -157,7 +167,9 @@ async function observeBootProbe(
   } catch (error) {
     // Cancellation stays immediate and keeps the abort owner's typed reason.
     signal.throwIfAborted();
-    return { booted: false, failure: attachAdbFailureHint(asAppError(error)) };
+    // A non-AppError (a spawn failure, say) is a failed boot command, as it was before the typed
+    // evidence: it never reaches the caller as UNKNOWN.
+    return { booted: false, failure: attachAdbFailureHint(asAppError(error, 'COMMAND_FAILED')) };
   }
   if (result.stdout.trim() === '1') return { booted: true };
   if (result.exitCode === 0) {
@@ -191,6 +203,7 @@ function throwBootProbeFailure(
   failure: AppError,
   serial: string,
   startedAtMs: number,
+  budgetSpent: boolean,
 ): never {
   const reason = androidBootFailureReason(failure);
   const details = {
@@ -200,10 +213,7 @@ function throwBootProbeFailure(
     ...(failure.details ?? {}),
     reason,
   };
-  if (failure.code === 'TOOL_MISSING') {
-    throw new AppError('TOOL_MISSING', failure.message, details);
-  }
-  throw new AppError('COMMAND_FAILED', failure.message, details);
+  throw buildAndroidBootError(failure, reason, budgetSpent, details);
 }
 
 function bootTimeoutError(message: string, details: Record<string, unknown>): AppError {

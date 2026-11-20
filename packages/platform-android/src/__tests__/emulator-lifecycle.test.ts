@@ -174,6 +174,9 @@ test.each([
     const failure = await expectBootFailure(500);
 
     assert.equal(failure.details.reason, reason);
+    // One probe failed inside the 500 ms budget, so the message names that failure, as the
+    // readiness poller does for the same evidence. The budget wording is for a spent budget.
+    assert.equal(failure.message, message);
     assert.equal(mockRunCmd.mock.calls.length, 1);
   },
 );

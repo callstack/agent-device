@@ -135,10 +135,13 @@ function throwAndroidBootFailure(params: {
 }): never {
   const appError = asAppError(params.error);
   const reason = normalizedAndroidBootFailureReason(params, appError);
+  // A transient observation that ended the retry loop means the retries used the budget.
+  const budgetSpent =
+    params.timedOut || params.deadline.isExpired() || isTransientAndroidBootFailure(params.error);
   throw buildAndroidBootError(
     appError,
     reason,
-    params.timedOut,
+    budgetSpent,
     buildAndroidBootFailureDetails(params, reason),
   );
 }
@@ -168,20 +171,43 @@ function buildAndroidBootFailureDetails(
   };
 }
 
-function buildAndroidBootError(
+/** The details every Android boot poller reports for a terminal boot failure. */
+type AndroidBootFailureDetails = Readonly<
+  { serial: string; elapsedMs: number; hint: string; reason: BootFailureReason } & Record<
+    string,
+    unknown
+  >
+>;
+
+/**
+ * Shapes one terminal boot failure. Shared by every Android boot poller so one typed observation
+ * gets the same code, message and cause at each. `budgetSpent` is true only when the caller's boot
+ * deadline has expired, or its retries ended on a still-booting observation: only then does the
+ * message say that the device did not boot in time. A failure inside the budget keeps the message
+ * of the layer that failed. The code is the failure's own, so a caller that can receive a
+ * non-AppError normalizes it before the call.
+ */
+export function buildAndroidBootError(
   appError: AppError,
   reason: BootFailureReason,
-  timedOut: boolean,
-  details: ReturnType<typeof buildAndroidBootFailureDetails>,
+  budgetSpent: boolean,
+  details: AndroidBootFailureDetails,
 ): AppError {
-  if (timedOut || reason === 'ANDROID_BOOT_TIMEOUT') {
-    return new AppError('COMMAND_FAILED', 'Android device did not finish booting in time', details);
-  }
+  // A missing tool is not a slow boot: it keeps its code and message even on a spent budget.
   if (appError.code === 'TOOL_MISSING') {
-    return new AppError('TOOL_MISSING', appError.message, details);
+    return new AppError('TOOL_MISSING', appError.message, details, appError.cause);
   }
+  // A terminal transport failure (an unauthorized device, say) is not a slow boot either.
   if (reason === 'ADB_TRANSPORT_UNAVAILABLE') {
-    return new AppError('COMMAND_FAILED', appError.message, details);
+    return new AppError('COMMAND_FAILED', appError.message, details, appError.cause);
+  }
+  if (budgetSpent) {
+    return new AppError(
+      'COMMAND_FAILED',
+      'Android device did not finish booting in time',
+      details,
+      appError.cause,
+    );
   }
   return new AppError(appError.code, appError.message, details, appError.cause);
 }
