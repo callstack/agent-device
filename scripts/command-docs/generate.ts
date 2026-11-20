@@ -56,9 +56,7 @@ export type CommandFacts = Readonly<{
   /** Options the whole command reads, minus the ones the shared table owns. Empty per action. */
   flags: readonly OptionRow[];
   /** One table per action a command's first positional selects, when it has `flagsByAction`. */
-  actions: ReadonlyArray<
-    Readonly<{ label: string; options: readonly OptionRow[]; everyAction?: boolean }>
-  >;
+  actions: ReadonlyArray<Readonly<{ label: string; options: readonly OptionRow[] }>>;
   /** Labels of the shared options this command reads on every action. */
   commonOptions: readonly string[];
   capabilityRows: ReadonlyArray<{ readonly label: string; readonly link: string }>;
@@ -156,11 +154,12 @@ function capabilityRows(command: string): CommandFacts['capabilityRows'] {
  * A shared option the command reads on every action leaves its table, and the command names it in
  * one `Also accepts` line. An option the command overrides keeps its row, with the override text,
  * and is left out of that line. A command that declares `flagsByAction` gets one table per action:
- * an option only some actions read would otherwise read as available to all of them. An option no
- * action names is read by all of them: it gets one table of its own, never a copy under each action,
- * so an action's table holds only what that action alone reads. A shared one of those leaves for
- * the `Also accepts` line; an option the shared table owns for one action only keeps its row there,
- * because which action reads it is the fact the placement carries.
+ * an option only some actions read would otherwise read as available to all of them. So every
+ * option of such a command must be named by the action that reads it: a schema that leaves one
+ * unnamed says nothing about who reads it, and the block refuses to guess. Only an option the shared
+ * table owns may stay unnamed, and it leaves for the `Also accepts` line; one the shared table owns
+ * for a single action keeps its row there, because which action reads it is the fact the placement
+ * carries.
  */
 export function buildCommandFacts(
   command: string,
@@ -192,10 +191,14 @@ export function buildCommandFacts(
     };
   }
 
-  // A key no action names is read by all of them, so it gets the every-action table; a shared one of
-  // those leaves for the command's `Also accepts` line instead.
   const actionScoped = new Set(Object.values(flagsByAction).flat());
-  const readByEveryAction = allowedFlags.filter((key) => !actionScoped.has(key) && !shared(key));
+  const unnamed = allowedFlags.filter((key) => !actionScoped.has(key) && !shared(key));
+  if (unnamed.length > 0) {
+    throw new Error(
+      `${command} declares flagsByAction but names no action for: ${unnamed.join(', ')}. ` +
+        'Name the action that reads each option in the command schema, or document the command by hand.',
+    );
+  }
   const tableFor = (keys: Iterable<FlagKey>): OptionRow[] =>
     helpFlags({ ...schema, allowedFlags: [...keys] } as CommandSchema).map((row) => ({
       label: row.label,
@@ -204,15 +207,10 @@ export function buildCommandFacts(
   return {
     ...base,
     flags: [],
-    actions: [
-      ...Object.entries(flagsByAction).map(([action, keys]) => ({
-        label: `${command} ${action}`,
-        options: tableFor(keys),
-      })),
-      ...(readByEveryAction.length > 0
-        ? [{ label: command, options: tableFor(readByEveryAction), everyAction: true }]
-        : []),
-    ],
+    actions: Object.entries(flagsByAction).map(([action, keys]) => ({
+      label: `${command} ${action}`,
+      options: tableFor(keys),
+    })),
     commonOptions: sharedLabels(
       allowedFlags.filter((key) => shared(key) && !actionScoped.has(key)),
     ),
@@ -291,16 +289,11 @@ export function renderBlock(facts: CommandFacts): string {
     lines.push(`Aliases: ${facts.aliases.map((alias) => `\`${alias}\``).join(', ')}.`, '');
   }
   if (facts.actions.length > 0) {
-    // With an every-action table below, an empty action still reads those options.
-    const noOptions = facts.actions.some((action) => action.everyAction)
-      ? 'No options of its own.'
-      : 'Reads no options.';
     for (const action of facts.actions) {
+      lines.push(`**\`${action.label}\`**`, '');
       lines.push(
-        action.everyAction ? `**Every \`${action.label}\` action**` : `**\`${action.label}\`**`,
-        '',
+        ...(action.options.length > 0 ? optionTable(action.options) : ['Reads no options.', '']),
       );
-      lines.push(...(action.options.length > 0 ? optionTable(action.options) : [noOptions, '']));
     }
   } else if (facts.flags.length > 0) {
     lines.push(...optionTable(facts.flags));

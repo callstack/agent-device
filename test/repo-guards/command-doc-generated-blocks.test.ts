@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { describe, test } from 'vitest';
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
+import { getCliCommandSchema } from '@agent-device/command-surface';
 import {
   buildCommandFacts,
   collectCommandFacts,
@@ -253,30 +254,24 @@ describe('several generated blocks share one section heading', () => {
   });
 });
 
-describe('an option no action names gets one table of its own', () => {
-  const schema = {
-    text: { summary: 'Diff', description: 'Diff' },
-    allowedFlags: ['baseline', 'threshold', 'screenshotScreenMask'] as FlagKey[],
-    flagsByAction: { snapshot: [], screenshot: ['screenshotScreenMask'] },
-  } as CommandSchema;
-  const facts = buildCommandFacts('diff', schema, new Set<FlagKey>());
-
-  test('an action table holds only what that action alone reads', () => {
-    assert.deepEqual(
-      facts.actions.map((action) => [action.label, action.options.map((option) => option.label)]),
-      [
-        ['diff snapshot', []],
-        ['diff screenshot', ['--screen-mask <black>']],
-        ['diff', ['--baseline, -b <path>', '--threshold <0-1>']],
-      ],
+describe('an option no action names is refused, never guessed', () => {
+  test('the diff schema names an action for one option only, so diff gets no generated block', () => {
+    const schema = getCliCommandSchema('diff');
+    assert.deepEqual(schema.flagsByAction, { snapshot: [], screenshot: ['screenshotScreenMask'] });
+    assert.throws(
+      () => buildCommandFacts('diff', schema, new Set<FlagKey>()),
+      /diff declares flagsByAction but names no action for: .*baseline, threshold/,
     );
+    assert.equal(generatedCommands(committed).includes('diff'), false);
   });
 
-  test('the every-action table is labelled as such and printed once', () => {
-    const block = renderBlock(facts);
-    assert.match(block, /^\*\*`diff snapshot`\*\*\n\nNo options of its own\.$/m);
-    assert.match(block, /^\*\*Every `diff` action\*\*$/m);
-    assert.equal(block.match(/^\| `--baseline, -b <path>` \|/gm)?.length, 1);
+  test('record names an action for every option it reads, so its tables are per action', () => {
+    const schema = getCliCommandSchema('record');
+    const facts = buildCommandFacts('record', schema, new Set<FlagKey>());
+    assert.deepEqual(
+      facts.actions.map((action) => action.label),
+      Object.keys(schema.flagsByAction ?? {}).map((action) => `record ${action}`),
+    );
   });
 });
 
