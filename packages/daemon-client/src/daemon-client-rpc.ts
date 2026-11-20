@@ -13,6 +13,7 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
+  withoutClientOwnedFields,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
@@ -164,9 +165,10 @@ function toDaemonHttpRpcError(error: {
     code: toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
     message: String(data.message ?? error.message ?? 'Daemon RPC request failed'),
     cause,
+    // A peer cannot supply the fields only this client's own delivery sets (#4518).
     details:
       typeof data.details === 'object' && data.details
-        ? (data.details as Record<string, unknown>)
+        ? withoutClientOwnedFields(data.details as Record<string, unknown>)
         : undefined,
     hint: typeof data.hint === 'string' ? data.hint : undefined,
     diagnosticId: typeof data.diagnosticId === 'string' ? data.diagnosticId : undefined,

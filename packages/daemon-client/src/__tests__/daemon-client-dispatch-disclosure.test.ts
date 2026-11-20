@@ -9,7 +9,7 @@ import net from 'node:net';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
@@ -424,3 +424,74 @@ async function openRecording(baseUrl: string, stateDir: string, destination: str
   assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
   return publicationId;
 }
+
+/** Runs one remote answer body through the RPC adapter and returns what the caller receives. */
+async function adapt(baseUrl: string, cwd: string, body: unknown) {
+  return await new Promise<{ response?: unknown; error?: unknown }>((resolve) => {
+    handleDaemonHttpResponseBody(JSON.stringify(body), {
+      info: { ...IDENTITY, baseUrl },
+      req: { ...request(PUBLIC_COMMANDS.record), positionals: ['stop'], meta: { cwd } },
+      stateDir: path.join(cwd, 'state'),
+      host: createTestHostEnvironment(),
+      resolve: (response) => resolve({ response }),
+      reject: (error) => resolve({ error }),
+    });
+  });
+}
+
+// #4518: only this client's own delivery may report a cwd write or a published script path.
+test('a remote record stop error cannot carry client-owned fields to the caller', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'client-owned error details')) return;
+  const cwd = mkdtempForTestSync('agent-device-peer-details-');
+  const server = http.createServer((_req, res) => res.writeHead(500).end());
+  const port = await listenOnLoopback(server);
+  try {
+    const peer = [{ reason: 'recording_destination_not_requested', field: 'outPath', path: '/x' }];
+    const details = { recordingDestinationWarnings: peer, savedScript: '/daemon/x.ad', step: 1 };
+    const { error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
+      jsonrpc: '2.0',
+      error: {
+        message: 'stop failed',
+        data: { code: 'COMMAND_FAILED', message: 'stop failed', details },
+      },
+    });
+    assert.ok(error instanceof AppError);
+    for (const view of [error.details, normalizeError(error).details]) {
+      assert.equal(view?.recordingDestinationWarnings, undefined);
+      assert.equal(view?.savedScript, undefined);
+      assert.equal(view?.step, 1);
+    }
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a local recording delivery failure keeps its own cwd fallback warnings', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'local delivery failure warnings')) return;
+  const cwd = mkdtempForTestSync('agent-device-local-delivery-');
+  const server = http.createServer((req, res) => {
+    if (req.url?.includes('telemetry')) return void res.writeHead(500).end();
+    res.end('video');
+  });
+  const port = await listenOnLoopback(server);
+  try {
+    const artifacts = [
+      { artifactId: 'video', field: 'outPath', fileName: 'demo.mp4' },
+      { artifactId: 'telemetry', field: 'telemetryPath', fileName: 'demo.json' },
+    ];
+    const { error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
+      jsonrpc: '2.0',
+      result: { ok: true, data: { artifacts } },
+    });
+    assert.ok(error instanceof AppError);
+    const written = path.join(fs.realpathSync(cwd), 'demo.mp4');
+    const reported = normalizeError(error).details?.recordingDestinationWarnings as
+      | Array<{ path: string }>
+      | undefined;
+    assert.equal(fs.realpathSync(reported?.[0]?.path ?? ''), written);
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});

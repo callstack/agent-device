@@ -1,10 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type {
-  DaemonArtifact,
-  DaemonResponse,
-  DaemonResponseData,
-} from '@agent-device/kernel/contracts';
+import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -719,15 +715,19 @@ function isClientOwnedResponseField(field: string): boolean {
   );
 }
 
-// Only a successfully published version can name a caller's savedScript destination, and only this
-// client's own recording downloads can report a cwd fallback (#4518).
-function withoutClientOwnedFields(
-  data: DaemonResponseData | undefined,
-): DaemonResponseData | undefined {
+/**
+ * Drops the fields only this client may set from a peer's result data or error details: a
+ * `savedScript` only a version this client published can name, and `recordingDestinationWarnings`
+ * only this client's own recording downloads can report (#4518). The RPC adapter applies it to
+ * error details too, so no daemon answer can claim a local write.
+ */
+export function withoutClientOwnedFields<T extends Record<string, unknown> | undefined>(
+  data: T,
+): T {
   if (data === undefined || (!('savedScript' in data) && !('recordingDestinationWarnings' in data)))
     return data;
   const { savedScript: _peerScript, recordingDestinationWarnings: _peerWarnings, ...kept } = data;
-  return kept;
+  return kept as T;
 }
 
 /**
