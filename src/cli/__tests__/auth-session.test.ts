@@ -162,7 +162,7 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
   assert.deepEqual(bodies, [
     {
       refreshCredential: 'adc_refresh_secret',
-      rotatesRefreshCredential: true,
+      acceptsRotatedRefreshCredential: true,
       tenant: 'acme',
       runId: 'run-123',
       daemonBaseUrl: 'https://bridge.agent-device.dev',
@@ -211,6 +211,55 @@ test('remote auth stores a refresh credential that the cloud rotated', async () 
   // The next command sends the rotated credential; a response without one keeps it.
   assert.equal((await refresh()).flags.daemonAuthToken, 'adc_agent_2');
   assert.deepEqual(sent, ['adc_refresh_old', 'adc_refresh_new']);
+  assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('parallel commands under the rotation contract leave the one replacement stored', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-rotate-parallel-');
+  const session = {
+    version: 1 as const,
+    id: 'session-parallel',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_old',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  writeCliSession({ stateDir: tempRoot, session });
+  // The cloud's side of the contract: the first request gets the one replacement; a request
+  // that still presents the replaced credential gets an access token and no replacement.
+  let rotated = false;
+  const release: Array<() => void> = [];
+  const refresh = () =>
+    resolveRemoteAuth({
+      command: 'snapshot',
+      flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+      stateDir: tempRoot,
+      allowInteractiveLogin: false,
+      env: {},
+      io: {
+        fetch: async (_url, init) => {
+          const sent = JSON.parse(String(init?.body)).refreshCredential;
+          const first = sent === 'adc_refresh_old' && !rotated;
+          rotated = true;
+          // Both requests are in flight before either response is stored.
+          await new Promise<void>((resolve) => release.push(resolve));
+          return jsonResponse(
+            first
+              ? { accessToken: 'adc_agent_a', refreshCredential: 'adc_refresh_new' }
+              : { accessToken: 'adc_agent_b' },
+          );
+        },
+      },
+    });
+
+  const both = [refresh(), refresh()];
+  while (release.length < 2) await Promise.resolve();
+  // The command without a replacement finishes first, then the one that holds it.
+  release[1]!();
+  release[0]!();
+  const tokens = (await Promise.all(both)).map((result) => result.flags.daemonAuthToken);
+
+  assert.deepEqual(tokens, ['adc_agent_a', 'adc_agent_b']);
   assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
