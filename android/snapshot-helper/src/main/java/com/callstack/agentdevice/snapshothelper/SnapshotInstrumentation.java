@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.concurrent.TimeoutException;
 
@@ -187,11 +188,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
     // `adb forward tcp:<port> localabstract:<name>`.
     try (LocalServerSocket server =
         new LocalServerSocket(SessionPeerPolicy.sessionSocketName(launchedSocketName))) {
+      // The secret goes only to the host that ran `am instrument`, in this status record on its
+      // stdout; it is never in argv, logcat or a file, and it never crosses the socket.
+      SecureRandom random = new SecureRandom();
+      byte[] secret = new byte[32];
+      random.nextBytes(secret);
       Bundle ready = new Bundle();
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
       ready.putString("sessionSocket", launchedSocketName);
+      ready.putString("sessionSecret", SessionPeerPolicy.hex(secret));
       ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate,snapshot-short-idle"
           + (android.os.Build.VERSION.SDK_INT >= 31 ? ",app" : ""));
       sendStatus(2, ready);
@@ -218,11 +225,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
                     SystemClock::elapsedRealtime,
                     SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS,
                     SessionPeerPolicy.MIN_COMMAND_BYTES_PER_SECOND);
+            // The handshake shares the accept deadline with the command it guards.
+            long baseDeadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_BASE_TIMEOUT_MS;
+            byte[] serverNonce = new byte[32];
+            random.nextBytes(serverNonce);
+            SessionPeerPolicy.authenticatePeer(
+                channel, sink, SystemClock::elapsedRealtime, baseDeadlineAtMs, secret, serverNonce);
             String[] parts =
                 SessionPeerPolicy.readSessionCommand(
                         channel,
                         SystemClock::elapsedRealtime,
-                        SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_BASE_TIMEOUT_MS,
+                        baseDeadlineAtMs,
                         SessionPeerPolicy.MAX_COMMAND_LINE_BYTES)
                     .trim()
                     .split("\\s+", 3);

@@ -117,11 +117,22 @@ rejects the launch before it binds anything, and it reads no `sessionPort` argum
 talk it into an open loopback TCP listener. The host then fails that start and keeps the device on the
 one-shot transport.
 
-Each accepted connection is admitted before any command byte is read: the helper reads the
-forwarded peer's kernel credentials with `LocalSocket.getPeerCredentials()` and serves only adbd —
-shell uid 2000, or root uid 0 when adb runs in its supported root mode. Both are the adb operator
-trust boundary; any other uid, or a credential read that yields nothing usable, is closed without a
-response. The socket name carries no secret, and no token travels in argv.
+Each accepted connection is admitted before any command byte is read. The helper first reads the
+peer's kernel credentials with `LocalSocket.getPeerCredentials()` and serves only adbd (shell uid
+2000, or root uid 0 under `adb root`); any other uid, or a credential read that yields nothing usable,
+is closed without a response. The uid alone does not bind the connection to the host, because adbd
+relays every forwarded connection, including one an emulator guest opens to the host forward through
+`10.0.2.2`. So every connection also proves a per-session secret in both directions. At startup the
+helper draws 32 random bytes and reports them only as `sessionSecret` in its ready record, on the
+stdout of the `am instrument` run the host started; the secret is never in argv, logcat or a file,
+and it never crosses the socket. The peer then sends a 32-byte nonce line; the helper answers with
+its own nonce and `HMAC-SHA256(secret, "agent-device-session-server|" + client nonce + server
+nonce)`; the peer answers with `HMAC-SHA256(secret, "agent-device-session-client|" + server nonce +
+client nonce)`. All fields are 64 lowercase hex characters on their own line. The helper reads the
+command only after the client proof matches, and the host sends the command only after the server
+proof matches, so a process that bound the freed socket name after the helper exited gets the nonce
+and nothing else. Any failure closes the connection, and the handshake shares the command's read
+deadline.
 
 Each connection gets a command read deadline from acceptance, independent of the capture
 `timeoutMs`. The deadline is two seconds, plus one second for each 64 KiB of command bytes that

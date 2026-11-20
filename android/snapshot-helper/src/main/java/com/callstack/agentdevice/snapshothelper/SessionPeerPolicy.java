@@ -9,6 +9,10 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * Peer admission and command framing for persistent-session connections, with an injected stream and
@@ -163,6 +167,75 @@ final class SessionPeerPolicy {
         return decodeCommand(bytes.toByteArray());
       }
     }
+  }
+
+  /** Hex characters in a 32-byte nonce, secret or HMAC-SHA256 proof. */
+  static final int PROOF_HEX_CHARS = 64;
+
+  /**
+   * Proves this process holds the session secret and requires the peer to prove it too, before any
+   * command byte is read. The peer sends a client nonce; the helper answers with a server nonce and
+   * HMAC(secret, server label + client nonce + server nonce); the peer must answer
+   * HMAC(secret, client label + server nonce + client nonce). The secret reached only the host that
+   * ran {@code am instrument}, on its stdout, so a forwarded connection from anywhere else, such as
+   * an emulator guest reaching the host forward, cannot pass, and the host refuses a listener that
+   * cannot answer. Any failure throws, and the caller closes without a reply.
+   */
+  static void authenticatePeer(
+      CommandSource source,
+      SessionResponseWriter.FrameSink sink,
+      MonotonicClock clock,
+      long deadlineAtMs,
+      byte[] secret,
+      byte[] serverNonce)
+      throws IOException {
+    String clientNonce = readProofField(source, clock, deadlineAtMs);
+    String server = hex(serverNonce);
+    String serverProof = hex(proof(secret, "agent-device-session-server|" + clientNonce + server));
+    sink.write(
+        new SessionResponseWriter.Frame(
+            (server + " " + serverProof + "\n").getBytes(StandardCharsets.US_ASCII), new byte[0]));
+    byte[] expected =
+        hex(proof(secret, "agent-device-session-client|" + server + clientNonce))
+            .getBytes(StandardCharsets.US_ASCII);
+    byte[] clientProof =
+        readProofField(source, clock, deadlineAtMs).getBytes(StandardCharsets.US_ASCII);
+    if (!MessageDigest.isEqual(expected, clientProof)) {
+      throw new IOException("session peer did not prove the session secret");
+    }
+  }
+
+  /** Reads one handshake line: exactly 64 lowercase hex characters, and never a byte past it. */
+  private static String readProofField(
+      CommandSource source, MonotonicClock clock, long deadlineAtMs) throws IOException {
+    String field;
+    try {
+      field = readSessionCommand(source, clock, deadlineAtMs, PROOF_HEX_CHARS);
+    } catch (CommandRejected rejected) {
+      throw new IOException("session handshake field is malformed", rejected);
+    }
+    if (!field.matches("[0-9a-f]{" + PROOF_HEX_CHARS + "}")) {
+      throw new IOException("session handshake field is malformed");
+    }
+    return field;
+  }
+
+  private static byte[] proof(byte[] secret, String message) {
+    try {
+      Mac mac = Mac.getInstance("HmacSHA256");
+      mac.init(new SecretKeySpec(secret, "HmacSHA256"));
+      return mac.doFinal(message.getBytes(StandardCharsets.US_ASCII));
+    } catch (GeneralSecurityException error) {
+      throw new IllegalStateException("HmacSHA256 is unavailable", error);
+    }
+  }
+
+  static String hex(byte[] bytes) {
+    StringBuilder text = new StringBuilder(bytes.length * 2);
+    for (byte value : bytes) {
+      text.append(Character.forDigit((value >> 4) & 0xf, 16)).append(Character.forDigit(value & 0xf, 16));
+    }
+    return text.toString();
   }
 
   /** Decodes a complete frame strictly, so malformed bytes never become replacement text. */
