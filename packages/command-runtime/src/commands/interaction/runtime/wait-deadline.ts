@@ -2,6 +2,10 @@ import { openScope, type Limit, type Scope } from '@agent-device/host-kit/retry'
 import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { now } from '../../runtime-common.ts';
 
+/**
+ * A timeout carries `error` when the deadline cancelled the task in flight. It carries no `error`
+ * when the task answered, but after the cutoff.
+ */
 export type WaitDeadlineResult<T> =
   | { timedOut: false; value: T }
   | { timedOut: true; error?: unknown };
