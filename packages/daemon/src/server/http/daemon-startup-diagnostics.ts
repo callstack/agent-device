@@ -66,12 +66,16 @@ export async function finishDaemonRegistration(params: {
   }
 }
 
-/** Watches this registration being taken over; arm only after this process published. */
+/**
+ * Watches this registration being taken over or deleted; arm only after this process published.
+ * `onLost` runs once, after the loss is on disk.
+ */
 export function armDaemonMetadataLossWatch(
   stateDir: string,
   infoPath: string,
   logPath: string,
   owner: OwnerIdentity,
+  onLost: () => void,
 ): () => void {
   return watchDaemonMetadataLoss({
     infoPath,
@@ -81,6 +85,8 @@ export function armDaemonMetadataLossWatch(
       void emitDaemonDiagnostic(logPath, 'daemon_metadata_lost', {
         infoPath,
         ...loss,
-      }).catch(() => {}),
+      })
+        .catch(() => {})
+        .then(onLost),
   });
 }
