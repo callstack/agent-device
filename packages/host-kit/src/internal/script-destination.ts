@@ -63,9 +63,9 @@ export function untrustedAncestryExposure(
 }
 
 /**
- * Whether the group's write bit opens `directory` to accounts this user did not admit. A directory this
- * non-root user owns carries a group its owner chose, so the script rule honors it; root's group is nobody's
- * choice here, and executable state and a private root honor no group at all (ADR 0016).
+ * Whether the group's write bit counts as opening `directory` to other accounts. The script rule accepts the
+ * group of a directory this non-root user owns as that owner's responsibility; it accepts no group on a
+ * directory root owns, and executable state and a private root accept no group at all (ADR 0016).
  */
 function groupAddsEntriesIn(directory: DirectoryAuthority, trust: ScriptDestinationTrust): boolean {
   if (!(directory.mode & 0o020)) return false;
@@ -130,7 +130,7 @@ const SCRIPT_FILE_MODE = 0o600;
 
 /**
  * A directory a publish creates holds private recordings, so it is created owner-only under every umask — the
- * shared-checkout umask 002 would otherwise leave it 0775, open to a group nobody chose for it.
+ * shared-checkout umask 002 would otherwise leave it 0775, open to its group.
  */
 const SCRIPT_DIR_MODE = 0o700;
 

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   ancestryRoot as root,
+  currentUid,
   directoryWith,
   expectUntrusted,
   FOREIGN_UID,
@@ -168,6 +169,32 @@ skipOnWindows(
   },
 );
 
+(currentUid === 0 ? test.skip : skipOnWindows)(
+  'adopts a missing level that appeared group-writable and owned by this non-root user',
+  () => {
+    // The other session ran under umask 002, so the level it won is 0775: the same shape the walk accepts
+    // when it finds one already standing (ADR 0016).
+    const directory = root();
+    const home = directoryWith(path.join(directory, 'home'), 0o700);
+    const appeared = path.join(home, 'recordings');
+    const realMkdirSync = fs.mkdirSync;
+    vi.spyOn(fs, 'mkdirSync').mockImplementation(((pathname: unknown, ...rest: unknown[]) => {
+      if (String(pathname) === appeared && !fs.existsSync(appeared)) {
+        realMkdirSync(appeared, { mode: 0o775 });
+        fs.chmodSync(appeared, 0o775);
+      }
+      return (realMkdirSync as (...args: unknown[]) => unknown)(pathname, ...rest);
+    }) as typeof fs.mkdirSync);
+
+    const destination = path.join(appeared, 'journey.ad');
+
+    expect(prepareScriptDestination(destination).directory).toBe(appeared);
+    expect(modeOf(appeared)).toBe(0o775);
+    publish(destination);
+    expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
+  },
+);
+
 skipOnWindows(
   'refuses a missing level that appeared as another user directory, and creates nothing below it',
   () => {
@@ -199,8 +226,8 @@ skipOnWindows(
 skipOnWindows(
   'refuses a missing level that appeared group-writable and root-owned, rather than adopting it',
   () => {
-    // Root's group is not this user's choice (ADR 0016): the destination's own name can be made there by a
-    // member of it first.
+    // No non-root owner answers for root's group (ADR 0016): the destination's own name can be made there by
+    // a member of it first.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const appeared = path.join(home, 'recordings');

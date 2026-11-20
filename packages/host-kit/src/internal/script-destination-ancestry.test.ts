@@ -145,7 +145,7 @@ skipOnWindows('refuses a destination created inside a directory others can add e
 });
 
 skipOnWindowsAndAsRoot('passes through a group-writable directory this user owns', () => {
-  // The ordinary checkout under umask 002: every level a `mkdir` made is 0775, and its owner chose the group.
+  // The ordinary checkout under umask 002: every level a `mkdir` made is 0775, and its owner answers for it.
   const team = directoryWith(path.join(root(), 'team'), 0o775);
   const sub = directoryWith(path.join(team, 'sub'), 0o775);
 
@@ -159,7 +159,7 @@ skipOnWindows(
   'refuses to pass through a group-writable directory root owns above a private directory',
   () => {
     // `sub` is private and safe, and the refusal still names `team` above it: a member of a group this user
-    // did not choose can replace `sub` with one of their own before the entry is written.
+    // does not answer for can replace `sub` with one of their own before the entry is written.
     const team = directoryWith(path.join(root(), 'team'), 0o775);
     const sub = path.join(team, 'sub');
     privateDir(sub);
@@ -670,7 +670,7 @@ skipOnWindows(
 );
 
 skipOnWindows('refuses a group-writable 0775 directory root owns, with a hint', () => {
-  // Root's group is not this user's choice, and the mode bits cannot say who belongs to it. Reading /etc/group
+  // No non-root owner answers for root's group, and the mode bits cannot say who belongs to it. Reading /etc/group
   // would not settle it either: systemd userdb answers members those files never show.
   const home = directoryWith(path.join(root(), 'home'), 0o775);
   serveOwnership({ [home]: 0 });

@@ -10,15 +10,19 @@ import {
   untrustedLinkExposure,
   type DirectoryAuthority,
 } from './script-destination.ts';
-import { FOREIGN_UID, currentUid } from './script-destination-host.fixtures.ts';
+/**
+ * The decisions read only the ids they are handed, so the tables name fixed ones: an ordinary user, another
+ * ordinary user, and root. No answer depends on the account that runs the suite.
+ */
+const USER_UID = 1000;
+const FOREIGN_UID = 1001;
 
 // --- what makes one directory unsafe to publish inside ---
 
-const OWN = { uid: currentUid, mode: 0o755 };
-const TRUST = { uid: currentUid };
-const PRIVATE_TRUST = { uid: currentUid, privateAncestry: true };
-const PRIVATE_ROOT_TRUST = { uid: currentUid, closedToOwnGroup: true };
-/** The decisions read only the ids they are handed, so root's own judgment is asked without being root. */
+const OWN = { uid: USER_UID, mode: 0o755 };
+const TRUST = { uid: USER_UID };
+const PRIVATE_TRUST = { uid: USER_UID, privateAncestry: true };
+const PRIVATE_ROOT_TRUST = { uid: USER_UID, closedToOwnGroup: true };
 const ROOT_TRUST = { uid: 0 };
 
 function directoryOf(overrides: Partial<DirectoryAuthority>): DirectoryAuthority {
@@ -38,14 +42,14 @@ test('refuses a directory that is world-writable', () => {
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o777 }), TRUST)).toBe('world_writable');
 });
 
-test('accepts a group-writable directory this user owns, because its owner chose that group', () => {
+test("accepts a group-writable directory this non-root user owns, whose group is its owner's to answer for", () => {
   // The shape every `mkdir` leaves under umask 002 (ADR 0016).
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o775 }), TRUST)).toBeUndefined();
   expect(untrustedAncestryExposure(directoryOf({ mode: 0o2770 }), TRUST)).toBeUndefined();
 });
 
 test('refuses a group-writable directory root owns, whoever asks', () => {
-  // Nobody running this chose root's group, and that includes a process running as root.
+  // No non-root owner answers for root's group, and a process running as root gets no exception.
   for (const mode of [0o775, 0o2770]) {
     expect(untrustedAncestryExposure(directoryOf({ uid: 0, mode }), TRUST)).toBe(
       'shared_group_writable',
@@ -72,7 +76,7 @@ test('refuses a group-writable directory this user owns for executable state and
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), PRIVATE_TRUST)).toBe(true);
   expect(othersCreateEntriesIn(directoryOf({ mode: 0o775 }), PRIVATE_ROOT_TRUST)).toBe(true);
   expect(
-    untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o775 }), PRIVATE_TRUST),
+    untrustedLinkExposure({ uid: USER_UID }, directoryOf({ mode: 0o775 }), PRIVATE_TRUST),
   ).toBe('planted_link');
 });
 
@@ -104,14 +108,14 @@ test('refuses a sticky directory another user owns, since both bits shield other
 // --- untrustedLinkExposure: which link on the path belongs to somebody else ---
 
 test('accepts a link in a directory only this user or root can add entries to', () => {
-  const link = { uid: currentUid };
+  const link = { uid: USER_UID };
   expect(untrustedLinkExposure(link, directoryOf({ mode: 0o755 }), TRUST)).toBeUndefined();
   expect(untrustedLinkExposure(link, directoryOf({ uid: 0, mode: 0o755 }), TRUST)).toBeUndefined();
 });
 
 test('accepts a link held in a group-writable directory this user owns, whoever owns the link', () => {
   const own = directoryOf({ mode: 0o775 });
-  expect(untrustedLinkExposure({ uid: currentUid }, own, TRUST)).toBeUndefined();
+  expect(untrustedLinkExposure({ uid: USER_UID }, own, TRUST)).toBeUndefined();
   expect(untrustedLinkExposure({ uid: FOREIGN_UID }, own, TRUST)).toBeUndefined();
 });
 
@@ -119,11 +123,11 @@ test('refuses a link in a group-writable directory root owns, which is ground ot
   // The link's OWN owner is this user, and it is still refused: a member of root's group could have added the
   // name here first, and the destination would follow their link.
   const rootOwned = directoryOf({ uid: 0, mode: 0o775 });
-  expect(untrustedLinkExposure({ uid: currentUid }, rootOwned, TRUST)).toBe('planted_link');
+  expect(untrustedLinkExposure({ uid: USER_UID }, rootOwned, TRUST)).toBe('planted_link');
 });
 
 test('refuses a link in a shared directory unless the sticky bit and its owner hold it in place', () => {
-  expect(untrustedLinkExposure({ uid: currentUid }, directoryOf({ mode: 0o777 }), TRUST)).toBe(
+  expect(untrustedLinkExposure({ uid: USER_UID }, directoryOf({ mode: 0o777 }), TRUST)).toBe(
     'planted_link',
   );
   expect(untrustedLinkExposure({ uid: FOREIGN_UID }, directoryOf({ mode: 0o1777 }), TRUST)).toBe(
@@ -133,7 +137,7 @@ test('refuses a link in a shared directory unless the sticky bit and its owner h
 
 test('accepts a link this user or root owns in a sticky shared directory', () => {
   const sticky = directoryOf({ mode: 0o1777 });
-  expect(untrustedLinkExposure({ uid: currentUid }, sticky, TRUST)).toBeUndefined();
+  expect(untrustedLinkExposure({ uid: USER_UID }, sticky, TRUST)).toBeUndefined();
   expect(untrustedLinkExposure({ uid: 0 }, sticky, TRUST)).toBeUndefined();
 });
 
