@@ -7,7 +7,6 @@ import {
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { pinElementMatchCandidateLine } from '@agent-device/capture-kit/snapshot-lines';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
@@ -237,8 +236,9 @@ function bootStateMarker(device: { booted?: boolean }): string {
  * caller will face: a bare line is pinned, and a line born stamped at an
  * earlier epoch is re-pinned — a stale stamp pastes into an immediate
  * superseded refusal, which is the one outcome a suggested ref must not cause.
+ * A line without a leading ref is returned as is.
  */
 function pinCandidateLine(candidate: string, generation: number | undefined): string {
   if (generation === undefined) return candidate;
-  return pinElementMatchCandidateLine(candidate, generation);
+  return candidate.replace(/^@(e\d+)(?:~s\d+)?(?=\s|$)/, `@$1~s${generation}`);
 }
