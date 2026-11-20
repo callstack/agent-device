@@ -32,10 +32,6 @@ async function withIO<T>(pending: Promise<T>, label: string): Promise<T> {
   }
 }
 
-async function flushIO(): Promise<void> {
-  for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
-}
-
 async function startServer(env: NodeJS.ProcessEnv = process.env) {
   const server = await createDaemonHttpServer({
     token: TOKEN,
@@ -138,10 +134,13 @@ test('the second of two pipelined uploads reads its early 308 while it is still 
 type HeldHookCall = { signal?: AbortSignal };
 const HELD_HOOK_CALLS = '__agentDeviceHeldUploadAuthHook';
 
-function heldHookCalls(): HeldHookCall[] {
+/** The held hook reports each call here, so a test waits on the call, not on loop turns. */
+type HeldHookLog = { calls: HeldHookCall[]; onCall?: (call: HeldHookCall) => void };
+
+function heldHookLog(): HeldHookLog {
   const store = globalThis as Record<string, unknown>;
-  store[HELD_HOOK_CALLS] ??= [];
-  return store[HELD_HOOK_CALLS] as HeldHookCall[];
+  store[HELD_HOOK_CALLS] ??= { calls: [] };
+  return store[HELD_HOOK_CALLS] as HeldHookLog;
 }
 
 async function startHeldHookServer() {
@@ -151,20 +150,37 @@ async function startHeldHookServer() {
   fs.writeFileSync(
     hookPath,
     `export default (context) => {
-      const calls = (globalThis[${JSON.stringify(HELD_HOOK_CALLS)}] ??= []);
-      calls.push({ signal: context.signal });
+      const log = (globalThis[${JSON.stringify(HELD_HOOK_CALLS)}] ??= { calls: [] });
+      const call = { signal: context.signal };
+      log.calls.push(call);
+      log.onCall?.(call);
       return new Promise(() => {});
     };\n`,
   );
-  heldHookCalls().length = 0;
+  const log = heldHookLog();
+  log.calls.length = 0;
+  log.onCall = undefined;
   return await startServer({ ...process.env, AGENT_DEVICE_HTTP_AUTH_HOOK: hookPath });
 }
 
 async function waitForHookCall(): Promise<HeldHookCall> {
-  for (let i = 0; i < 50 && heldHookCalls().length === 0; i += 1) await flushIO();
-  const [call] = heldHookCalls();
-  assert.ok(call, 'the auth hook was called');
-  return call;
+  const log = heldHookLog();
+  const [first] = log.calls;
+  if (first) return first;
+  return await withIO(
+    new Promise<HeldHookCall>((resolve) => {
+      log.onCall = resolve;
+    }),
+    'the auth hook call',
+  );
+}
+
+/** Resolves when the signal aborts. */
+function aborted(signal: AbortSignal | undefined): Promise<void> {
+  if (!signal || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) =>
+    signal.addEventListener('abort', () => resolve(), { once: true }),
+  );
 }
 
 test('a held auth hook sees the upload ingress deadline through its signal', async (t) => {
@@ -224,7 +240,7 @@ test('a held auth hook sees a client disconnect through its signal', async (t) =
     req.end('{}');
     const call = await waitForHookCall();
     req.destroy();
-    for (let i = 0; i < 50 && !call.signal?.aborted; i += 1) await flushIO();
+    await withIO(aborted(call.signal), 'the hook signal abort on disconnect');
     assert.equal(call.signal?.aborted, true, 'the hook signal aborts on disconnect');
     const reason = call.signal?.reason as AppError | undefined;
     assert.equal(reason?.details?.reason, 'request_canceled');
