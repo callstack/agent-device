@@ -20,5 +20,3 @@ export const VPHONE_ERROR_REASONS = {
   processFailed: 'vphone_process_failed',
   providerSessionUnavailable: 'provider-session-unavailable',
 } as const satisfies Record<string, string>;
-
-export type VphoneErrorReason = (typeof VPHONE_ERROR_REASONS)[keyof typeof VPHONE_ERROR_REASONS];
