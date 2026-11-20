@@ -118,33 +118,39 @@ test('inventory commands retain their route responses and typed failures', async
   }
 });
 
-test('open routes only its lifecycle input through its owner', async () => {
-  const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
-  mockHandleSessionOpenCommands.mockImplementationOnce(async () => expected);
+test.each([true, false])(
+  'open routes only its lifecycle input through its owner (shutdown denied: %s)',
+  async (deviceShutdownDenied) => {
+    const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
+    mockHandleSessionOpenCommands.mockImplementationOnce(async () => expected);
 
-  await expect(run('open')).resolves.toEqual(expected);
+    await expect(run('open', deviceShutdownDenied)).resolves.toEqual(expected);
 
-  const forwarded = mockHandleSessionOpenCommands.mock.calls.at(-1)?.[0];
-  expect(Object.keys(forwarded ?? {}).sort()).toEqual(
-    [
-      'bindDevice',
-      'host',
-      'createCommandSurface',
-      'inspectFacts',
-      'logPath',
-      'platformServices',
-      'reconcileOrphanedDeviceClaim',
-      'req',
-      'sessionName',
-      'sessionStore',
-    ].sort(),
-  );
-  expect(forwarded).toMatchObject({
-    req: expect.objectContaining({ command: 'open' }),
-    sessionName: 'default',
-    logPath: '/tmp/agent-device-session-lifecycle-route.log',
-  });
-});
+    const forwarded = mockHandleSessionOpenCommands.mock.calls.at(-1)?.[0];
+    expect(Object.keys(forwarded ?? {}).sort()).toEqual(
+      [
+        'bindDevice',
+        'deviceShutdownDenied',
+        'host',
+        'createCommandSurface',
+        'inspectFacts',
+        'logPath',
+        'platformServices',
+        'reconcileOrphanedDeviceClaim',
+        'req',
+        'sessionName',
+        'sessionStore',
+      ].sort(),
+    );
+    expect(forwarded).toMatchObject({
+      // A denied policy is what keeps a failed open from stopping the emulator it launched.
+      deviceShutdownDenied,
+      req: expect.objectContaining({ command: 'open' }),
+      sessionName: 'default',
+      logPath: '/tmp/agent-device-session-lifecycle-route.log',
+    });
+  },
+);
 
 test.each([true, false])(
   'close routes only its lifecycle input through its owner (shutdown denied: %s)',

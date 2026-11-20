@@ -34,6 +34,7 @@ Close every session you opened, even after failure. Reuse its session, platform,
 Use plain `close` for a local device your `open` booted.
 If policy denies `device-shutdown`, read the warning.
 Keep prebooted devices running unless the user requests shutdown.
+For a failed cold open (#4764): on a dedicated stopped AVD, cancel a cold `open` while it boots, and fail one after the boot completes. Check the emulator pid is gone afterwards and the error carries `details.failedOpenEmulatorCleanup`.
 
 For `DEVICE_IN_USE`:
 
