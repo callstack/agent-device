@@ -1,6 +1,6 @@
 {
-  "name": "@agent-device/provider-limrun",
-  "version": "0.0.0",
+  "name": "@agent-device/limrun",
+  "version": "0.22.0-dev",
   "engines": {
     "node": ">=22.12"
   },
@@ -10,27 +10,67 @@
   },
   "private": true,
   "type": "module",
-  "description": "Limrun provider runtime for agent-device. Internal workspace package bundled into the published artifact.",
-  "dependencies": {
-    "@agent-device/capture-kit": "workspace:*",
-    "@agent-device/contracts": "workspace:*",
-    "@agent-device/kernel": "workspace:*",
-    "@agent-device/platform-android": "workspace:*",
-    "@agent-device/plugins": "workspace:*"
+  "description": "Limrun Android instance and iOS simulator plugin for agent-device.",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./internal": {
-      "types": "./src/internal.ts",
-      "default": "./src/internal.ts"
-    }
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./runtime": {
+      "types": "./src/runtime.ts",
+      "default": "./src/runtime.ts"
+    },
+    "./host": {
+      "types": "./src/host-entry.ts",
+      "default": "./src/host-entry.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@limrun/api": "^0.69.1"
   },
   "devDependencies": {
+    "@agent-device/build-config": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
-    "@limrun/api": "^0.69.1"
-  }
+    "@agent-device/xml": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      },
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/provider-limrun"
+  },
+  "homepage": "https://agent-device.dev/docs/limrun"
 }

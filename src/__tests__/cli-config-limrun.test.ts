@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,12 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from '@agent-device/test-kit';
+
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
 
 test('Limrun apps lists uploaded assets without allocating an instance', async () => {
   const { root, home, project } = makeTempWorkspace();

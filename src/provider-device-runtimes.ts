@@ -11,7 +11,7 @@ import type {
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
-import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
+import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   platforms: ProviderRegistry['platforms'];
@@ -28,7 +28,7 @@ export type ProviderRuntimeComposition = Readonly<{
 }>;
 
 /**
- * The daemon's providers from one registry: built-in providers, then the plugin store. A plugin
+ * The daemon's providers from one registry: the built-in platforms, then the plugin store. A plugin
  * that cannot register is listed in the inventory; the others still register.
  */
 export async function createDaemonProviderRuntimeComposition(
@@ -39,18 +39,20 @@ export async function createDaemonProviderRuntimeComposition(
     await import('@agent-device/plugins/store');
   const candidates = await storePluginCandidates(host.env);
   return await composeProviderRuntime(host, candidates, {
+    ...PROVIDER_PLUGIN_POLICY,
     platformHost,
     assertSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
   });
 }
 
-/** Composes built-ins followed by supplied candidates without reading the plugin store. */
+/** Composes the built-in platforms followed by supplied candidates without reading the plugin store. */
 export async function createEmbeddedProviderRuntimeComposition(
   host: HostEnvironment,
   candidates: readonly PluginCandidate[],
   platformHost: PlatformHost,
 ): Promise<ProviderRuntimeComposition> {
   return await composeProviderRuntime(host, candidates, {
+    ...PROVIDER_PLUGIN_POLICY,
     platformHost,
   });
 }
@@ -63,11 +65,7 @@ async function composeProviderRuntime(
   const { resolveProviderPlugins, startProviderRegistry } =
     await import('@agent-device/plugins/registry');
   const { builtinPlatformCandidates } = await import('./platform-runtime/platform-plugins.ts');
-  const resolved = await resolveProviderPlugins([
-    ...builtinPlatformCandidates(),
-    ...builtinProviderCandidates(host),
-    ...candidates,
-  ]);
+  const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
   const registry = await startProviderRegistry(resolved, host, policy);
   return Object.freeze({
     platforms: registry.platforms,

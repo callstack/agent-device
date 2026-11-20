@@ -1,12 +1,12 @@
 import { SimctlExecution } from '@limrun/api/ios-client';
+import { createLimrunAppleToolProvider } from './provider-plugin-host-capabilities.fixtures.ts';
 import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';
 import { runXcrun, withAppleToolProvider } from '@agent-device/platform-apple/tool-provider';
-import { createLimrunAppleToolProvider } from './limrun-ios-tools.ts';
 import { expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { fixture } from './limrun-ios-runner.fixtures.ts';
+import { fixture } from './provider-plugin-host-capabilities-limrun-ios.fixtures.ts';
 
 async function sessionWithClient(result = { code: 0, stdout: '', stderr: '' }) {
   const f = await fixture({ simctlResult: result });
@@ -26,7 +26,7 @@ test('malformed successful device inventory preserves the remote command output'
     stderr: 'simulator warning',
   });
   f.simctl.mockReturnValue(execution);
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   await expect(
     withAppleToolProvider(tools, () =>
       runXcrun(buildSimctlArgsForDevice(f.device, ['list', 'devices', '--json'])),
@@ -205,7 +205,7 @@ test('a host timeout stops the remote command and preserves partial console outp
   const stopped = vi.fn();
   const execution = new SimctlExecution(stopped);
   vi.mocked(f.session.client.simctl).mockReturnValue(execution);
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   const deadline = new AbortController();
   const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
   try {
@@ -237,7 +237,12 @@ for (const canceledBy of ['lease', 'deadline'] as const) {
     const deadline = new AbortController();
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
     try {
-      const tools = createLimrunAppleToolProvider(f.session, lease.signal, AbortSignal.abort());
+      const tools = createLimrunAppleToolProvider(
+        f.session,
+        f.host,
+        lease.signal,
+        AbortSignal.abort(),
+      );
       const pending = tools.runCommand('xcrun', ['simctl', 'status_bar', f.device.id, 'clear'], {
         requestCancellation: 'ignore',
         timeoutMs: 30_000,
@@ -261,6 +266,7 @@ test('canceling an app catalog request releases the caller without waiting for t
   const abort = new AbortController();
   const tools = createLimrunAppleToolProvider(
     f.session,
+    f.host,
     new AbortController().signal,
     abort.signal,
   );
@@ -303,7 +309,7 @@ test.each(['app', 'data', 'group.com.example.shared'])(
     const f = await fixture({
       containers: { 'com.example.app': { [containerType]: { [sourcePath]: bytes } } },
     });
-    const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+    const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
     const destinationPath = path.join(f.directory, 'download', 'file.bin');
     await tools.simulatorFiles!.copyToHost({
       device: f.device,
@@ -325,7 +331,7 @@ test.each(['app', 'data', 'group.com.example.shared'])(
 
 test('a missing container file reports HTTP failure and leaves no local artifact', async () => {
   const f = await fixture();
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   const destinationPath = path.join(f.directory, 'missing.bin');
   await expect(
     tools.simulatorFiles!.copyToHost({
@@ -353,6 +359,7 @@ test('canceling a container download stops the transfer and removes the partial 
   const controller = new AbortController();
   const tools = createLimrunAppleToolProvider(
     f.session,
+    f.host,
     new AbortController().signal,
     controller.signal,
   );
@@ -396,6 +403,7 @@ test.each(['timeout', 'request'] as const)(
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
     const tools = createLimrunAppleToolProvider(
       f.session,
+      f.host,
       new AbortController().signal,
       request.signal,
     );
@@ -431,7 +439,7 @@ test.each([
   ['list', 'devices', '--json'],
 ])('normalizes the remote device identity for %j', async (...args) => {
   const f = await fixture();
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   const result = await tools.runCommand('xcrun', ['simctl', ...args], {});
   const inventory = JSON.parse(result.stdout);
   expect(inventory.devices.ios[0].udid).toBe(f.device.id);

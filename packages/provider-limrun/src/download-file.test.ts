@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '@agent-device/test-kit';
-import { downloadLimrunFile } from './limrun-download-file.ts';
+import { downloadLimrunFile } from './download-file.ts';
 
 const servers: http.Server[] = [];
 

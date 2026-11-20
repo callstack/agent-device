@@ -4,7 +4,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import type { LimrunFileDownload } from '@agent-device/provider-limrun';
+import type { LimrunFileDownload } from './runtime-dependencies.ts';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
 

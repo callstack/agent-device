@@ -1,7 +1,11 @@
 import { createPlatformPluginHost } from '../platform-runtime/plugin-host.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createDaemonProviderRuntimeComposition as composeDaemonProviders } from '../provider-device-runtimes.ts';
+import {
+  createDaemonProviderRuntimeComposition as composeDaemonProviders,
+  createEmbeddedProviderRuntimeComposition,
+} from '../provider-device-runtimes.ts';
+import { limrunPluginCandidate } from './test-utils/limrun-plugin-store.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
@@ -10,6 +14,16 @@ function createDaemonProviderRuntimeComposition(
   host: Parameters<typeof composeDaemonProviders>[0],
 ) {
   return composeDaemonProviders(host, createPlatformPluginHost(host, host.cwd));
+}
+
+/** The daemon's composition with the Limrun plugin installed, without an on-disk store. */
+function composeWithLimrunInstalled(env: Record<string, string | undefined>) {
+  const host = { env, cwd: process.cwd() };
+  return createEmbeddedProviderRuntimeComposition(
+    host,
+    [limrunPluginCandidate()],
+    createPlatformPluginHost(host, host.cwd),
+  );
 }
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
@@ -28,7 +42,7 @@ test('daemon composition registers installed provider runtimes and their lazy pl
   await composition.shutdown();
 });
 
-test('an unconfigured Limrun stays dormant while the store provider registers', async () => {
+test('core registers no Limrun provider of its own beside the store provider', async () => {
   const { home, env } = pluginHome();
   selectPlugin(home, 'example', pluginSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
@@ -47,45 +61,20 @@ test('an unconfigured Limrun stays dormant while the store provider registers', 
   await composition.shutdown();
 });
 
-test('daemon composition records Limrun as failed for a partial instance set and still loads every other provider', async () => {
-  const { home, env } = pluginHome();
-  selectPlugin(home, 'example', pluginSource('example'));
-  const composition = await createDaemonProviderRuntimeComposition({
-    env: {
-      ...env,
-      LIMRUN_API_KEY: 'lim_test_key',
-      LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_x/api',
-      LIM_ANDROID_INSTANCE_TOKEN: 'android-instance-token',
-    },
-    cwd: process.cwd(),
+test('an installed Limrun is recorded as failed for a partial instance set', async () => {
+  const composition = await composeWithLimrunInstalled({
+    ...pluginHome().env,
+    LIMRUN_API_KEY: 'lim_test_key',
+    LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_x/api',
+    LIM_ANDROID_INSTANCE_TOKEN: 'android-instance-token',
   });
 
-  assert.deepEqual(
-    composition.runtimes.map((runtime) => runtime.provider),
-    ['example'],
-  );
+  assert.deepEqual(composition.runtimes, []);
   const limrun = composition.inventory.find(({ provider }) => provider === 'limrun');
   assert.equal(limrun?.state, 'failed');
   assert.equal(limrun?.error?.code, 'INVALID_ARGS');
   assert.match(limrun?.error?.message ?? '', /LIM_ANDROID_INSTANCE_ADB_URL/);
   await composition.shutdown();
-});
-
-test('a plugin claiming a built-in provider ID is recorded as failed and the built-in keeps the ID', async () => {
-  for (const provider of ['limrun']) {
-    const { home, env } = pluginHome();
-    selectPlugin(home, 'example', pluginSource(provider));
-    const composition = await createDaemonProviderRuntimeComposition({
-      env: env,
-      cwd: process.cwd(),
-    });
-    const plugin = composition.inventory.find(({ package: name }) => name === 'example');
-    assert.equal(plugin?.state, 'failed');
-    assert.equal(plugin?.error?.reason, 'duplicate_provider');
-    // An unconfigured Limrun claims its id without registering a runtime.
-    assert.equal(composition.runtimes.filter((runtime) => runtime.provider === provider).length, 0);
-    await composition.shutdown();
-  }
 });
 
 test('BrowserStack registers as an ordinary store plugin, not a built-in', async () => {
@@ -137,55 +126,47 @@ test('a plugin claiming a routing identity is refused before the registry settle
   }
 });
 
-test('Limrun stays unregistered when only the removed API key alias is configured', async () => {
-  const { env } = pluginHome();
-  const { runtimes, platformModules, inventory, shutdown } =
-    await createDaemonProviderRuntimeComposition({
-      env: {
-        ...env,
-        LIM_API_KEY: 'lim_test_key',
-      },
-      cwd: process.cwd(),
-    });
+test('an installed Limrun names the credentials it needs when only the removed API key alias is configured', async () => {
+  const { runtimes, platformModules, inventory, shutdown } = await composeWithLimrunInstalled({
+    ...pluginHome().env,
+    LIM_API_KEY: 'lim_test_key',
+  });
 
   assert.equal(
     runtimes.some((runtime) => runtime.provider === 'limrun'),
     false,
   );
-  assert.equal(
-    inventory.some(({ provider }) => provider === 'limrun'),
-    false,
-  );
+  const limrun = inventory.find(({ provider }) => provider === 'limrun');
+  assert.equal(limrun?.state, 'failed');
+  assert.equal(limrun?.error?.reason, 'missing_provider_credentials');
   assertPlatformModuleCoverage(runtimes, platformModules);
   await shutdown();
 });
 
-test('Limrun registers when a Limrun API key is configured', async () => {
-  const { env } = pluginHome();
-  const { runtimes, platformModules, shutdown } = await createDaemonProviderRuntimeComposition({
-    env: {
-      ...env,
-      LIMRUN_API_KEY: 'lim_test_key',
-    },
-    cwd: process.cwd(),
+test('an installed Limrun registers when a Limrun API key is configured', async () => {
+  const { runtimes, platformModules, inventory, shutdown } = await composeWithLimrunInstalled({
+    ...pluginHome().env,
+    LIMRUN_API_KEY: 'lim_test_key',
   });
 
   const limrun = runtimes.find((runtime) => runtime.provider === 'limrun');
   assert.ok(limrun);
   assert.equal('loadRuntime' in limrun, false);
+  assert.deepEqual(
+    inventory
+      .filter(({ provider }) => provider === 'limrun')
+      .map(({ source, state, package: name }) => [source, state, name]),
+    [['store', 'active', '@agent-device/limrun']],
+  );
   assertPlatformModuleCoverage(runtimes, platformModules, [limrun]);
   await shutdown();
 });
 
-test('Limrun registers for an existing instance without an API key', async () => {
-  const { env } = pluginHome();
-  const { runtimes, platformModules, shutdown } = await createDaemonProviderRuntimeComposition({
-    env: {
-      ...env,
-      LIM_IOS_INSTANCE_URL: 'https://region.limrun.example/v1/ios_x/api',
-      LIM_IOS_INSTANCE_TOKEN: 'ios-instance-token',
-    },
-    cwd: process.cwd(),
+test('an installed Limrun registers for an existing instance without an API key', async () => {
+  const { runtimes, platformModules, shutdown } = await composeWithLimrunInstalled({
+    ...pluginHome().env,
+    LIM_IOS_INSTANCE_URL: 'https://region.limrun.example/v1/ios_x/api',
+    LIM_IOS_INSTANCE_TOKEN: 'ios-instance-token',
   });
 
   const limrun = runtimes.find((runtime) => runtime.provider === 'limrun');

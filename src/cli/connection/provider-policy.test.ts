@@ -12,9 +12,22 @@ import {
   primeProviderConnection,
 } from './provider-policy.ts';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
+import limrun from '@agent-device/limrun';
+import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
-test('provider policy projects provider identity into semantic capabilities', () => {
-  assert.deepEqual(connectionProviderCapabilities('limrun', {}), {
+test('provider policy projects provider identity into semantic capabilities', async () => {
+  const limrunStore = pluginHome();
+  selectPlugin(
+    limrunStore.home,
+    '@agent-device/limrun',
+    pluginSource('limrun', {
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(limrun()))}, resolve() {}, verify() {} },`,
+    }),
+  );
+  // Without the plugin nothing declares Limrun's capabilities; the installed one answers once primed.
+  assert.equal(connectionProviderCapabilities('limrun', {}).leaseKind, 'remote-provider');
+  await primeProviderConnection('limrun', limrunStore.env);
+  assert.deepEqual(connectionProviderCapabilities('limrun', limrunStore.env), {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
     requiresRemoteDaemon: false,

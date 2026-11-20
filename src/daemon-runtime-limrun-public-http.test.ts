@@ -4,7 +4,7 @@ import { test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { createLimrunRuntime } from '@agent-device/provider-limrun';
+import { createLimrunRuntime } from '@agent-device/limrun/runtime';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,

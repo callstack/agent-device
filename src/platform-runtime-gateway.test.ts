@@ -16,7 +16,7 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
-import { createLimrunRuntime } from '@agent-device/provider-limrun';
+import { createLimrunRuntime } from '@agent-device/limrun/runtime';
 import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import type { AgentDeviceHost } from './sdk/host-types.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';

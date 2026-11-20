@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/limrun/runtime';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit';

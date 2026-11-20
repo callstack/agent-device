@@ -1,8 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
-import { createLimrunRuntimeDependencies } from './limrun-runtime-dependencies.ts';
-import { createPerfRuntimeHost } from '../platform-runtime-perf-host.ts';
+import { limrunRuntimeDependencies } from './provider-plugin-host-capabilities.fixtures.ts';
+import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 
@@ -24,7 +24,7 @@ vi.mock('@agent-device/host-kit/command', async (original) => ({
 }));
 
 test('Limrun performance reads use the provider ADB and collect heap artifacts', async () => {
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const host = createPerfRuntimeHost().android;
   const dir = await mkdtempForTest('limrun-perf-');
   let remoteHeap: string | undefined;

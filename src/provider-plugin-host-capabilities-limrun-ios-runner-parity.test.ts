@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { PNG } from '@agent-device/capture-kit/png';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
-import { fixture } from './limrun-ios-runner.fixtures.ts';
+import { fixture } from './provider-plugin-host-capabilities-limrun-ios.fixtures.ts';
 
 test('forwarded screenshots preserve PNG pixels and share density and status bar normalization', async () => {
   const png = new PNG({ width: 12, height: 18 });
@@ -135,9 +135,9 @@ test('remote tools execute the shared text-size, status bar and biometric settin
 
 test('shared deployment prepares before uninstalling and uploading a replacement', async () => {
   const f = await fixture();
-  const { createAppleToolHost } = await import('../../platform-runtime-apple-tool-host.ts');
+  const { createAppleToolHost } = await import('./platform-runtime-apple-tool-host.ts');
   const { createAppleAppDeploymentExecutor } =
-    await import('../../platform-runtime-apple-deployment-executor.ts');
+    await import('./platform-runtime-apple-deployment-executor.ts');
   const order: string[] = [];
   const originalSimctl = f.session.client.simctl;
   f.session.client.simctl = vi.fn((args, options) => {
