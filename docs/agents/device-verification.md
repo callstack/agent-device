@@ -11,13 +11,12 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
    A graceful shutdown can hand off an active runner. A new daemon can adopt the old binary.
 4. After the builds, run `pnpm clean:daemon`. The daemon does not reload code.
 5. To examine the worktree-scoped state, run `pnpm daemon:state-dir`.
-6. For `Agent Device Tester`, follow `examples/test-app/README.md` for the build, Metro, and expected app surface.
-   An installed `com.callstack.agentdevicelab` alone is not sufficient.
+6. For `Agent Device Tester`, follow the build, Metro, and app checks in `examples/test-app/README.md`. Installation alone is insufficient.
 7. For Android apps that use Metro, run `adb reverse tcp:<port> tcp:<port>` before you open the app or URL.
 
 ## Prove the path
 
-Run the exact route that changed. Record the commands, device, source SHA, and observable results.
+Run the changed route. Record the commands, device, source SHA, and observed results.
 For Android, `snapshot -i --json` must show `androidSnapshot.backend: android-helper`.
 Its `helperVersion` must match `package.json`. A UIAutomator fallback proves only that fallback.
 
@@ -30,7 +29,7 @@ A failed command can look like a fast success. Before you record its time, check
 
 ## Ownership and cleanup
 
-Use one session for each purpose. For more isolation, use a separate `--state-dir` under `/private/tmp`.
+Use one session per purpose. To isolate daemon state, create a directory with `mktemp -d` and pass it to `--state-dir`.
 Close each session that you opened manually, including failed attempts, with its original session, platform, UDID, and state directory.
 If your session booted a local simulator or emulator, add `--shutdown`, unless the user asks to keep it running.
 
@@ -43,7 +42,7 @@ For `DEVICE_IN_USE`:
 
 If cleanup is stuck, run `agent-device device status --stale`.
 To stop the owning daemon, run `agent-device daemon stop --state-dir <dir>`. For retained runners, add `--clean`.
-If you are blocked, report the session, state directory, and status output. Always report incomplete cleanup.
+Report incomplete cleanup. If blocked, include the session, state directory, and status output.
 The physical runner handoff checklist is in `docs/evidence/ios-physical-runner-handoff-2026-09-19.md`.
 
 ## Platform policy
@@ -58,7 +57,7 @@ The first run needs XCUITest automation permission.
 When you change Apple targets, synchronize the kernel model, runtime-fact admission, dispatch,
 discovery, and xctestrun preparation. Simulator-set scoping must not hide the host macOS target.
 HarmonyOS has no provisioned CI device or HDC. Mocked tests do not replace local hardware evidence.
-Before you run a live smoke harness, read it. Its environment contract is in its entry file under `test/integration/`.
+Before you run a live smoke harness, read its entry file under `test/integration/` for environment requirements.
 
 If a sandbox rejects localhost with `listen EPERM`, use host access, if permitted.
 A generic startup or cleanup failure does not prove a sandbox cause.
