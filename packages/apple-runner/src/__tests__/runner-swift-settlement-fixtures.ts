@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Reads the two Swift declarations that decide how a command charge settles (#2965), so the daemon's
+ * Reads the Swift declarations that decide how a command charge settles (#2965), so the daemon's
  * rules and the runner's cannot drift apart silently. These are source inspections on purpose: the
  * Swift answers they name run on a device lane, so the tie that keeps one claim has to read the
  * declaration rather than a second copy of its answer.
@@ -18,10 +18,6 @@ const SWIFT_TRANSPORT = path.resolve(
 const SWIFT_JOURNAL = path.resolve(
   here,
   '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift',
-);
-const SWIFT_RUNNER = path.resolve(
-  here,
-  '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
 );
 
 /** `offQueueRoute(for:)`'s switch arms, up to the `default:` where queued commands begin. */
@@ -128,104 +124,4 @@ export function requireLifecycleSettlementRows(
     lifecycleState,
     settlesCharge: expectations[lifecycleState]!,
   }));
-}
-
-/** The string values `RunnerWireErrorCode` declares, keyed by the Swift member name. */
-function readSwiftWireErrorCodes(): Record<string, string> {
-  const swift = fs.readFileSync(SWIFT_RUNNER, 'utf8');
-  const declaration = swift.match(/enum RunnerWireErrorCode \{([\s\S]*?)\n {2}\}/);
-  const body = declaration?.[1];
-  assert.ok(
-    body !== undefined,
-    'RunnerTests.swift must declare RunnerWireErrorCode with a body. The daemon keys behavior on ' +
-      'these codes, so a runner that stops naming them in one place breaks the tie here first.',
-  );
-  const codes: Record<string, string> = {};
-  for (const [, member, value] of body.matchAll(/static let (\w+) = "([A-Z0-9_]+)"/g)) {
-    codes[member!] = value!;
-  }
-  assert.ok(
-    Object.keys(codes).length > 0,
-    'RunnerWireErrorCode declares no `static let NAME = "CODE"` row this reader can parse',
-  );
-  return codes;
-}
-
-/** The Swift wire-code declarations the daemon uses for occupancy. */
-export function requireSwiftThrownErrorWireCode(): {
-  /** The Swift member whose value the daemon's occupancy verdict keys on. */
-  timeoutCode: string;
-  /** The bodyless journal refusal whose occupancy report must stay silent. */
-  finishedCode: string;
-} {
-  const codes = readSwiftWireErrorCodes();
-  const timeoutCode = codes['mainThreadTimeout'];
-  assert.ok(
-    timeoutCode !== undefined,
-    'RunnerWireErrorCode must declare mainThreadTimeout: the daemon reads this code to record the ' +
-      "runner's main thread as still draining, on the live reply and on a journal replay alike.",
-  );
-  const finishedCode = codes['commandAlreadyFinished'];
-  assert.ok(
-    finishedCode !== undefined,
-    'RunnerWireErrorCode must declare commandAlreadyFinished: the daemon reads this code as silent about main-thread occupancy.',
-  );
-  return {
-    timeoutCode,
-    finishedCode,
-  };
-}
-
-/**
- * The Swift declaration for the code a `keyboard dismiss` refuses with when the keyboard exposes no
- * dismiss key (#1606). The refusal is thrown on a device lane, so the tie that keeps the host's
- * `details.reason` row attached to it reads the declaration rather than a second copy of the literal.
- */
-export function requireSwiftKeyboardDismissRefusalWireCode(): string {
-  const codes = readSwiftWireErrorCodes();
-  const refusalCode = codes['keyboardDismissUnavailable'];
-  assert.ok(
-    refusalCode !== undefined,
-    'RunnerWireErrorCode must declare keyboardDismissUnavailable: the daemon publishes ' +
-      "details.reason 'keyboard_dismiss_unavailable' for this code, and a runner that stopped " +
-      'encoding it would leave that reason unreachable.',
-  );
-  return refusalCode;
-}
-
-/**
- * The Swift declarations for the runner refusals that name a control or a key the target could not
- * supply: `keyboard enter` with nothing to submit, a hardware or Siri Remote control this platform
- * cannot express, and macOS `back` with no in-app back control. Each is thrown on a device lane, so the
- * tie that keeps the host's `details.reason` row attached to it reads the declaration rather than a
- * second copy of the literal.
- */
-export function requireSwiftControlRefusalWireCodes(): {
-  keyboardReturnCode: string;
-  hardwareControlCode: string;
-  inAppBackControlCode: string;
-} {
-  const codes = readSwiftWireErrorCodes();
-  const members = [
-    'keyboardReturnUnavailable',
-    'hardwareControlUnavailable',
-    'inAppBackControlUnavailable',
-  ] as const;
-  const keys = ['keyboardReturnCode', 'hardwareControlCode', 'inAppBackControlCode'] as const;
-  const refusalCodes: Record<string, string> = {};
-  for (const [index, member] of members.entries()) {
-    const key = keys[index]!;
-    const refusalCode = codes[member];
-    assert.ok(
-      refusalCode !== undefined,
-      `RunnerWireErrorCode must declare ${member}: the daemon publishes details.reason for this ` +
-        'code, and a runner that stopped encoding it would leave that reason unreachable.',
-    );
-    refusalCodes[key] = refusalCode;
-  }
-  return refusalCodes as {
-    keyboardReturnCode: string;
-    hardwareControlCode: string;
-    inAppBackControlCode: string;
-  };
 }

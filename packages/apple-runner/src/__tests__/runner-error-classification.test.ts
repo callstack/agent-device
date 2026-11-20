@@ -19,11 +19,6 @@ import {
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
 import { runnerConnectFailure, unwrittenConnectRefusal } from './runner-session-fixtures.ts';
-import {
-  requireSwiftControlRefusalWireCodes,
-  requireSwiftKeyboardDismissRefusalWireCode,
-  requireSwiftThrownErrorWireCode,
-} from './runner-swift-settlement-fixtures.ts';
 
 const TAP = { command: 'tap' } as const;
 const SNAPSHOT = { command: 'snapshot' } as const;
@@ -638,54 +633,6 @@ test('occupancy reads the busy refusal and the stalling timeout as occupied, and
   );
   assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('ELEMENT_NOT_FOUND')), 'drained');
 });
-
-test('the runner declares the wire codes the daemon reads for occupancy', () => {
-  const swift = requireSwiftThrownErrorWireCode();
-
-  assert.equal(
-    swift.timeoutCode,
-    'MAIN_THREAD_TIMEOUT',
-    'the runner must encode the watchdog timeout under the code the daemon keys occupancy on',
-  );
-  assert.equal(
-    swift.finishedCode,
-    COMMAND_ALREADY_FINISHED_RUNNER_CODE,
-    'the runner must encode its finished-id refusal under the code the daemon reads as silent',
-  );
-});
-
-test('the runner declares the wire code the keyboard-dismiss refusal publishes its reason under', () => {
-  assert.equal(
-    requireSwiftKeyboardDismissRefusalWireCode(),
-    'KEYBOARD_DISMISS_UNAVAILABLE',
-    'the runner must encode its no-dismiss-key refusal under the code the daemon maps to ' +
-      'details.reason, or that reason becomes unreachable',
-  );
-});
-
-test('the runner declares the wire codes the control refusals publish their reasons under', () => {
-  const swift = requireSwiftControlRefusalWireCodes();
-  assert.equal(
-    swift.keyboardReturnCode,
-    'KEYBOARD_RETURN_UNAVAILABLE',
-    'the runner must encode its nothing-to-submit refusal under the code the daemon maps to ' +
-      'details.reason, or that reason becomes unreachable',
-  );
-  assert.equal(
-    swift.hardwareControlCode,
-    'HARDWARE_CONTROL_UNAVAILABLE',
-    'the runner must encode its cannot-press-here refusal under the code the daemon maps to ' +
-      'details.reason, or that reason becomes unreachable',
-  );
-  assert.equal(
-    swift.inAppBackControlCode,
-    'IN_APP_BACK_CONTROL_UNAVAILABLE',
-    'the runner must encode its macOS no-back-control refusal under the code the daemon maps to ' +
-      'details.reason, or that reason becomes unreachable',
-  );
-});
-
-// --- runner that predates the listener token ---
 
 test('a runner that does not require the token is session-fatal and never retried or replayed', () => {
   for (const extra of [{}, { runnerReadinessPreflightFailed: true }]) {

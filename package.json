@@ -109,6 +109,7 @@
     "build:xcuitest:watchos": "AGENT_DEVICE_XCUITEST_PLATFORM=watchos sh ./scripts/build-xcuitest-apple.sh",
     "build:xcuitest:watchos:clean": "pnpm clean:xcuitest:watchos && pnpm build:xcuitest:watchos",
     "package:xcuitest": "node scripts/build-package-xcuitest.mjs",
+    "generate:runner-error-codes": "node --experimental-strip-types scripts/generate-runner-error-codes.ts --write",
     "generate:recording-swift-sources": "node --experimental-strip-types scripts/generate-recording-swift-sources.ts",
     "build:android-snapshot-helper": "AGENT_DEVICE_ANDROID_HELPER=snapshot sh ./scripts/build-android-helper.sh $(node -p \"require('./package.json').version\") .tmp/android-snapshot-helper",
     "package:android-snapshot-helper": "AGENT_DEVICE_ANDROID_HELPER=snapshot sh ./scripts/package-android-helper.sh $(node -p \"require('./package.json').version\") v$(node -p \"require('./package.json').version\") .tmp/android-snapshot-helper",

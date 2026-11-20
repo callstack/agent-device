@@ -287,8 +287,8 @@ const BACK_SWIPE_NO_CHANGE_RUNNER_CODE: RunnerTableErrorCode = 'BACK_SWIPE_NO_CH
 /**
  * One row per runner error code: the single declaration of what the host does with a reported
  * code, replacing the four parallel maps this file used to keep. A new runner refusal is one row
- * here plus one `RunnerWireErrorCode` constant in the Swift tests, and
- * test/repo-guards/runner-error-code-parity.test.ts fails when the two drift apart. A row holds:
+ * here: `pnpm generate:runner-error-codes` writes the Swift `RunnerWireErrorCode` enum from the
+ * keys, and the `runner-error-codes` gate fails while the generated file is stale. A row holds:
  * - `dispatched`: what the reply proves about reaching the device — refusals answer before the
  *   command runs (selector refusals included; `INVALID_ARGS` comes only from request decoding,
  *   ahead of any gesture); every other code, and a reply without one, is `unknown`.
@@ -428,13 +428,36 @@ export const RUNNER_ERROR_CODES = {
 
 /**
  * A code with a row in {@link RUNNER_ERROR_CODES}. The code constants are typed with it, so a
- * constant naming no row fails to compile;
- * test/repo-guards/runner-error-code-parity.test.ts checks the same keys against the Swift
- * `RunnerWireErrorCode` enum and the codes the runner Swift actually emits. Runner codes the host
- * passes through unclassified get no row here — nothing on the host branches on them — and the
- * same guard declares and checks them against the Swift `RunnerPassThroughErrorCode` enum.
+ * constant naming no row fails to compile. Runner codes the host passes through unclassified get
+ * no row here; {@link RUNNER_PASS_THROUGH_CODES} declares them.
  */
 export type RunnerTableErrorCode = keyof typeof RUNNER_ERROR_CODES;
+
+/**
+ * The runner codes the host does not classify: they get no row of {@link RUNNER_ERROR_CODES}, so
+ * {@link classifyRunnerReportedError} hands each one to `toAppErrorCode`, which publishes it
+ * verbatim as the command's own `AppError.code`. No host policy reads them: no reason, no
+ * retriable flag, no dispatch disclosure beyond the generic one. The list exists so that
+ * `pnpm generate:runner-error-codes` can write the Swift `RunnerPassThroughErrorCode` enum the
+ * emitters use. A code the host learns to branch on moves to a table row.
+ */
+export const RUNNER_PASS_THROUGH_CODES = [
+  'TEXT_ENTRY_MISMATCH', // `fill` read-back found different text than it typed
+  'TEXT_INPUT_NOT_FOCUSED',
+  'TEXT_INPUT_SYNTHESIS_UNAVAILABLE',
+  'TEXT_INPUT_COMMIT_NOT_OBSERVED',
+  'TEXT_INPUT_CLEAR_NOT_OBSERVED',
+  'TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED',
+  'XCTEST_RECORDED_FAILURE', // the failure was recorded by XCTest itself
+  'ALERT_DEADLINE_EXCEEDED',
+  'ALERT_CONFIRMATION_UNAVAILABLE',
+  'IOS_TREE_CAPTURE_TIMEOUT',
+  'IOS_AX_SNAPSHOT_FAILED',
+  'IOS_RAW_SNAPSHOT_TOO_LARGE',
+  'IOS_SNAPSHOT_TOO_LARGE',
+  'IOS_SNAPSHOT_PROJECTION_MISMATCH',
+  'IOS_SNAPSHOT_PRESENTATION_FAILED',
+] as const;
 
 /**
  * `details.reason` for the runner codes a consumer acts on, derived from {@link RUNNER_ERROR_CODES}
