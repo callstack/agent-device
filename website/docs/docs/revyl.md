@@ -103,10 +103,11 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   so `orientation auto` refuses.
 - `settings appearance` (`light`, `dark`, or `toggle`), `settings location set <lat> <lon>`,
   `settings permission`, and `settings clear-app-state`. On iOS, `settings reset-keychain` also
-  works. Revyl starts every device with location services on, so `settings location on` succeeds
-  without changing anything. `settings location off` refuses, because Revyl moves the device's
-  coordinates but cannot switch location services off. `settings permission` refuses `location-always`, `contacts-limited`, and
-  `--mode limited`. Revyl's iOS simulators refuse `camera` and `notifications`.
+  works. Revyl starts every Android device with location services on, so `settings location on`
+  succeeds there without changing anything, and `settings location off` refuses, because Revyl
+  cannot switch location services off. On iOS, `settings location on|off` refuses; grant the app
+  location with `settings permission grant location`. `settings permission` refuses
+  `location-always`, `contacts-limited`, and `--mode limited`. Revyl's iOS simulators refuse `camera` and `notifications`.
 
 The plugin refuses every other command with a reason that names the substitute. It does not
 report a refused command as a success:
