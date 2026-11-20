@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseSync } from 'oxc-parser';
+import { stripSwiftComments } from '../../scripts/strip-swift-comments.mjs';
 
 export const PROJECT_ROOT = path.resolve(import.meta.dirname, '../..');
 
@@ -64,79 +65,34 @@ export function swiftEnumBody(source: string, enumName: string): string {
   return declaration[0]!;
 }
 
-/** One code literal found by {@link swiftCodeLiteralSites}, with the position it sits in. */
-export type SwiftCodeLiteralSite = Readonly<{
+/** One UPPER_SNAKE string literal in production runner Swift. */
+export type SwiftUpperSnakeLiteral = Readonly<{
   file: string;
   line: number;
   code: string;
-  kind: 'emit' | 'binding' | 'rawValue';
+  /** The literal is the raw value of a `case name = "CODE"` on its own line. */
+  rawValueCase: boolean;
 }>;
 
 /**
- * Every UPPER_SNAKE string literal the production runner Swift puts where a wire code can travel,
- * with the position that decides what may appear there:
- * - `emit`: a `code:`/`errorCode:`/`wireCode:`/`lifecycleErrorCode:` argument. Only a top-level
- *   family code may appear here; every runner code must travel through its enum constant.
- * - `binding`: a `let`/`var` (typically `static let`) or a `return` whose value is the literal.
- *   Same rule as an emit site: this is a name a caller can pass on, and the enums are the only
- *   place a runner code may be spelled.
- * - `rawValue`: a `case … = "CODE"` raw value. Swift allows only a literal here, so the two
- *   refusal enums keep theirs and the rule is vocabulary closure instead: the code must be
- *   declared on the host side.
- * A position stays open across lines when the value cannot sit on the opening line yet — a bare
- * `code:` label, a wrapped ternary arm after ` ?` / ` :`, `let code =`, or a computed
- * `var code: String {` — so a formatter-driven wrap cannot drop a literal out of the scan. The
- * open kind carries until a `}`, `)` or `;` closes the expression. Comment text is skipped.
+ * Every UPPER_SNAKE string literal in the given Swift sources, comments stripped. The scan reads
+ * no syntax around the literal, so no wrap style, operator or nested call can hide one: what a
+ * literal may spell is decided by the caller from its value and file alone.
  */
-export function swiftCodeLiteralSites(
+export function swiftUpperSnakeLiterals(
   sources: ReadonlyArray<{ file: string; source: string }>,
-): SwiftCodeLiteralSite[] {
-  const sites: SwiftCodeLiteralSite[] = [];
+): SwiftUpperSnakeLiteral[] {
+  const literals: SwiftUpperSnakeLiteral[] = [];
   for (const { file, source } of sources) {
-    const lines = source.split('\n');
-    let open: SwiftCodeLiteralSite['kind'] | undefined;
-    for (let index = 0; index < lines.length; index++) {
-      const line = (lines[index] ?? '').replace(/\/\/.*/, '');
-      const kind = swiftCodeLiteralKind(line) ?? open;
+    const lines = stripSwiftComments(source, file).contents.split('\n');
+    lines.forEach((line, index) => {
+      const rawValueCase = /^\s*case\s+[A-Za-z_]\w*\s*=\s*"[A-Z][A-Z0-9_]{3,}"\s*$/.test(line);
       for (const match of line.matchAll(/"([A-Z][A-Z0-9_]{3,})"/g)) {
-        if (kind !== undefined) sites.push({ file, line: index + 1, code: match[1]!, kind });
+        literals.push({ file, line: index + 1, code: match[1]!, rawValueCase });
       }
-      const afterLine = swiftOpenPositionAfterLine(line, swiftCodeLiteralKind(line));
-      open = afterLine === 'keep' ? kind : afterLine;
-    }
+    });
   }
-  return sites;
-}
-
-/** The code position one comment-stripped Swift line occupies, or undefined for neither. */
-function swiftCodeLiteralKind(line: string): SwiftCodeLiteralSite['kind'] | undefined {
-  if (/\b(?:code|errorCode|wireCode|lifecycleErrorCode)\s*[:=]/.test(line)) return 'emit';
-  if (/\bcase\s+[A-Za-z_]\w*\s*=\s*"[A-Z][A-Z0-9_]{3,}"/.test(line)) return 'rawValue';
-  if (/\b(?:let|var)\s+[A-Za-z_]\w*(?:\s*:\s*String)?\s*=\s*"[A-Z][A-Z0-9_]{3,}"/.test(line)) {
-    return 'binding';
-  }
-  return /\breturn\s+"[A-Z][A-Z0-9_]{3,}"/.test(line) ? 'binding' : undefined;
-}
-
-/**
- * Whether a code position is still open after one line: `keep` means the previous openness
- * stands; a kind means this line opened (or restated) that position with its value not yet
- * written — a bare `code:` label, a `let`/`var` whose `=` ends the line, a bare `return`, or a
- * classified line left open by ` ?`, ` :`, `{`, `(` or `=`. undefined means the position
- * closed: this line wrote its value, or a `}`, `)` or `;` ended the expression.
- */
-function swiftOpenPositionAfterLine(
-  line: string,
-  kind: SwiftCodeLiteralSite['kind'] | undefined,
-): SwiftCodeLiteralSite['kind'] | 'keep' | undefined {
-  if (kind !== undefined) {
-    const labelOnly = /^\s*(?:code|errorCode|wireCode|lifecycleErrorCode)\s*:\s*$/.test(line);
-    return labelOnly || /[ \t][?:({]\s*$/.test(line) || /=\s*$/.test(line) ? kind : undefined;
-  }
-  if (/[});]/.test(line)) return undefined;
-  if (/^\s*(?:let|var)\s+[A-Za-z_]\w*[^=]*=\s*$/.test(line)) return 'binding';
-  if (/^\s*return\s*$/.test(line)) return 'binding';
-  return 'keep';
+  return literals;
 }
 
 // ── oxc helpers shared by the reason-table guards ──

@@ -6,10 +6,11 @@ import {
   parseTs,
   readRepoFile,
   runnerProductionSources,
-  swiftCodeLiteralSites,
   swiftEnumBody,
   swiftEnumWireCodes,
   swiftEnumWireConstants,
+  swiftUpperSnakeLiterals,
+  type SwiftUpperSnakeLiteral,
   unwrapAssertion,
 } from './runner-source-assertions.ts';
 
@@ -21,11 +22,9 @@ import {
  * as a literal at the emit site (`COMMAND_FAILED`, `UNSUPPORTED_OPERATION`, `UNAUTHORIZED`). This
  * guard reads the production runner Swift and the TypeScript declarations: the two sides match
  * 1:1 per set, every Swift constant is actually referenced (a dead constant is how this pair
- * silently split before), and no production runner file puts an unlisted UPPER_SNAKE code literal
- * where a code travels — a `code:` argument, a `let`/`return` binding, or a raw-value `case` —
- * so `ErrorPayload(code: "NEW_CODE")` fails here instead of shipping a code no host path
- * classifies. Raw-value enum cases keep their literals (Swift requires one), so their rule is
- * closure over the declared vocabulary, not routing through the wire enums.
+ * silently split before), and every UPPER_SNAKE string literal in production runner Swift is
+ * accounted for by its value and file alone, so `ErrorPayload(code: "NEW_CODE")` fails here
+ * however the expression is wrapped, instead of shipping a code no host path classifies.
  */
 
 const CONTRACT = 'packages/apple-runner/src/runner-contract.ts';
@@ -39,15 +38,46 @@ const RUNNER_TESTS = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/Ru
 const FAMILY_CODE_LITERALS = new Set(['COMMAND_FAILED', 'UNSUPPORTED_OPERATION', 'UNAUTHORIZED']);
 
 /**
- * Literals the closed-vocabulary rule waives per file: HTTP framing rejects requests before the
- * runner's session model exists and stays standalone, so it writes these two top-level codes as
- * literals in its computed `var code`. The waiver is per (file, code), not per file, and the scan
- * now really sees those lines (a computed `code` property stays open across lines): a third code
- * written there is measured and fails.
+ * UPPER_SNAKE literals that are not wire codes, per (file, literal): the two top-level codes HTTP
+ * framing names itself (it rejects a request before the runner's session model exists and stays
+ * standalone), `safely(...)` work labels, localization keys, an environment name and an HTTP
+ * method. A new literal fails the guard until it is a constant of a wire enum or a pair here, so
+ * adding a pair is the explicit statement that the literal never travels as a code.
  */
-const WAIVED_LITERALS = new Map([
-  ['RunnerHttpRequestFraming.swift', new Set(['UNAUTHORIZED', 'INVALID_ARGS'])],
-]);
+const WAIVED_LITERALS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  Object.entries({
+    'RunnerHttpRequestFraming.swift': ['INVALID_ARGS', 'POST'],
+    'RunnerLaunchConfirmationPrompt.swift': [
+      'SCHEME_APPROVAL_DO_NOT_OPEN_BUTTON',
+      'SCHEME_APPROVAL_OPEN_BUTTON',
+      'SCHEME_APPROVAL_PROMPT_TITLE_NO_SOURCE',
+    ],
+    'RunnerRequestPanel.swift': ['LIT_PANEL_APP_IDENTITY'],
+    'RunnerSystemPromptStrings.swift': [
+      'SCHEME_APPROVAL_DO_NOT_OPEN_BUTTON',
+      'SCHEME_APPROVAL_OPEN_BUTTON',
+    ],
+    'RunnerTests+Alert.swift': ['ALERT_BUTTON_HITTABLE', 'ALERT_TITLE', 'ALERT_WINDOW'],
+    'RunnerTests+Keyboard.swift': ['KEYBOARD_FRAME'],
+    'RunnerTests+SnapshotAcquisition.swift': [
+      'SNAPSHOT_INTERFACE_ORIENTATION',
+      'SNAPSHOT_VIEWPORT',
+    ],
+    'RunnerTests+SnapshotBridge.swift': ['SIMULATOR_UDID'],
+    'RunnerTests+SystemModal.swift': ['MODAL_CONTENT', 'MODAL_NODE', 'MODAL_QUERY'],
+    'RunnerTests+TextEntryFocus.swift': ['LAST_TAPPED_TEXT_INPUT_EXISTS'],
+    'RunnerTests+TextEntryReadiness.swift': [
+      'FOCUSED_INPUT_QUERY',
+      'KEYBOARD_EXISTS',
+      'TEXT_ENTRY_FOCUS_CONFIRMED',
+      'TEXT_ENTRY_READINESS_FRAME',
+    ],
+    'RunnerTests+TextInputProbe.swift': ['TEXT_INPUT_AT_POINT'],
+  }).map(([file, literals]) => [file, new Set(literals)]),
+);
+
+/** The runner's log-mark and environment-variable namespace; no wire code may use it. */
+const NON_CODE_PREFIX = 'AGENT_DEVICE_';
 
 const productionSources = runnerProductionSources();
 const swiftSource = readRepoFile(RUNNER_TESTS);
@@ -151,35 +181,48 @@ test('every declared Swift code constant is emitted, not just declared', () => {
   );
 });
 
-test('production runner code puts no undeclared code literal where a code travels', () => {
-  // `code:` arguments and let/return bindings may hold only a family code: every runner code
-  // travels through its enum constant. A raw-value `case` must spell a literal (Swift requires
-  // one), so its rule is closure: the code is declared vocabulary. RunnerTests.swift keeps its
-  // declaration enums: those static lets ARE the vocabulary, so their bodies are blanked first.
-  const scanned = swiftCodeLiteralSites(
-    productionSources.map(({ file, source }) =>
+/**
+ * Whether a literal outside the declaration enums is accounted for: a family code, a log mark or
+ * environment name, a raw-value `case` that spells declared vocabulary (Swift requires a literal
+ * there), or a waived (file, literal) pair.
+ */
+function isAccountedFor({ file, code, rawValueCase }: SwiftUpperSnakeLiteral): boolean {
+  if (FAMILY_CODE_LITERALS.has(code) || code.startsWith(NON_CODE_PREFIX)) return true;
+  if (rawValueCase && declaredCodes.has(code)) return true;
+  return WAIVED_LITERALS.get(file)?.has(code) === true;
+}
+
+/** The production sources with the two declaration enum bodies blanked, line numbers kept. */
+function sourcesOutsideDeclarations(): Array<{ file: string; source: string }> {
+  const blank = (body: string) => body.replaceAll(/[^\n]/g, '');
+  return productionSources.map(({ file, source }) => ({
+    file,
+    source:
       file === RUNNER_TESTS.split('/').pop()
-        ? {
-            file,
-            source: source
-              .replace(swiftEnumBody(swiftSource, 'RunnerWireErrorCode'), '')
-              .replace(swiftEnumBody(swiftSource, 'RunnerPassThroughErrorCode'), ''),
-          }
-        : { file, source },
-    ),
-  );
-  const offenders = scanned.filter(({ file, code, kind }) => {
-    if (WAIVED_LITERALS.get(file)?.has(code) === true) return false;
-    return kind === 'rawValue' ? !declaredCodes.has(code) : !FAMILY_CODE_LITERALS.has(code);
-  });
+        ? source
+            .replace(swiftEnumBody(swiftSource, 'RunnerWireErrorCode'), blank)
+            .replace(swiftEnumBody(swiftSource, 'RunnerPassThroughErrorCode'), blank)
+        : source,
+  }));
+}
+
+test('every UPPER_SNAKE literal in production runner Swift is accounted for', () => {
+  const literals = swiftUpperSnakeLiterals(sourcesOutsideDeclarations());
+  const offenders = literals.filter((literal) => !isAccountedFor(literal));
   assert.deepEqual(
-    offenders,
+    offenders.map(({ file, line, code }) => `${file}:${line} "${code}"`),
     [],
-    `puts a code literal where a code travels, outside the closed vocabulary: ${offenders
-      .map(({ file, line, code, kind }) => `${file}:${line} "${code}" (${kind})`)
-      .join(', ')} — a new runner code is a table row or a pass-through member, emitted ` +
-      'through its constant',
+    'a new runner code is a table row or a pass-through member, emitted through its enum ' +
+      'constant; a literal that never travels as a code is a WAIVED_LITERALS pair',
   );
+  const namespaced = [...declaredCodes].filter((code) => code.startsWith(NON_CODE_PREFIX));
+  assert.deepEqual(namespaced, [], `wire codes may not use the ${NON_CODE_PREFIX} namespace`);
+  const stale = [...WAIVED_LITERALS].flatMap(([file, waived]) =>
+    [...waived]
+      .filter((code) => !literals.some((literal) => literal.file === file && literal.code === code))
+      .map((code) => `${file} "${code}"`),
+  );
+  assert.deepEqual(stale, [], 'a waived pair no source spells any more must be deleted');
 });
 
 test('deleting a Swift constant fails the parity guard', () => {
@@ -197,54 +240,29 @@ test('deleting a Swift constant fails the parity guard', () => {
   );
 });
 
-test('the literal guard allows only codes the kernel declares as top-level', () => {
+test('the literal guard measures a literal wherever it is written', () => {
   // The allowlist for inline family literals must not drift from the kernel's own declaration.
   for (const code of FAMILY_CODE_LITERALS) {
     assert.ok(knownAppErrorCodes.includes(code), `${code} is not a KNOWN_APP_ERROR_CODES member`);
   }
-  const fixture = [
-    {
-      file: 'Fixture.swift',
-      source: [
-        'let e = ErrorPayload(code: "NEW_REFUSAL")', // emit: not a family code -> offender
-        'let ok = ErrorPayload(code: "COMMAND_FAILED")', // emit: family code -> allowed
-        'static let hoisted = "BRAND_NEW"', // binding: same rule as emit
-        'return "SNEAKED"', // binding: same rule as emit
-        'case refused = "RAW_REFUSAL"', // rawValue: undeclared -> offender
-        'case known = "RUNNER_BUSY"', // rawValue: declared row -> allowed
-        'NSLog("AGENT_DEVICE_RUNNER_LOG_MARK")', // not a code position at all
-        'var code: String {', // a computed code property stays open across lines...
-        '  "MULTILINE_REFUSAL"', // ...so this literal IS the code position (emit)
-        '}',
-        'let payload = ErrorPayload(',
-        '  code:', // a bare code: label stays open too
-        '    "WRAPPED_CODE",',
-        ')',
-        'return payload // `return` with no literal on its line is not a binding',
-      ].join('\n'),
-    },
-  ];
-  const scanned = swiftCodeLiteralSites(fixture);
+  const source = [
+    'let e = ErrorPayload(code: "NEW_REFUSAL")',
+    'let ok = ErrorPayload(code: "COMMAND_FAILED")', // family code
+    'case refused = "RAW_REFUSAL"', // raw value outside the declared vocabulary
+    'case known = "RUNNER_BUSY"', // raw value that spells a declared row
+    'let hoisted = "RUNNER_BUSY"', // a declared code outside its constant
+    'NSLog("AGENT_DEVICE_RUNNER_LOG_MARK")',
+    'let payload = ErrorPayload(code: fallback ??',
+    '  lookup(["WRAPPED_CODE"]))',
+    'return',
+    'NSLog("UNLISTED_MARK") // "COMMENTED_OUT"',
+  ].join('\n');
+  const literals = swiftUpperSnakeLiterals([{ file: 'Fixture.swift', source }]);
   assert.deepEqual(
-    scanned.map(({ line, code, kind }) => `${line} ${code} ${kind}`),
-    [
-      '1 NEW_REFUSAL emit',
-      '2 COMMAND_FAILED emit',
-      '3 BRAND_NEW binding',
-      '4 SNEAKED binding',
-      '5 RAW_REFUSAL rawValue',
-      '6 RUNNER_BUSY rawValue',
-      '9 MULTILINE_REFUSAL emit',
-      '13 WRAPPED_CODE emit',
-    ],
-  );
-  assert.deepEqual(
-    scanned
-      .filter(({ code, kind }) =>
-        kind === 'rawValue' ? !declaredCodes.has(code) : !FAMILY_CODE_LITERALS.has(code),
-      )
-      .map(({ code }) => code),
-    ['NEW_REFUSAL', 'BRAND_NEW', 'SNEAKED', 'RAW_REFUSAL', 'MULTILINE_REFUSAL', 'WRAPPED_CODE'],
+    literals
+      .filter((literal) => !isAccountedFor(literal))
+      .map(({ line, code }) => `${line} ${code}`),
+    ['1 NEW_REFUSAL', '3 RAW_REFUSAL', '5 RUNNER_BUSY', '8 WRAPPED_CODE', '10 UNLISTED_MARK'],
   );
 });
 
