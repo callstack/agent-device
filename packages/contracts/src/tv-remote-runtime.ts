@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
@@ -56,7 +57,7 @@ export function tvRemoteRuntimeOperationFacts(
 }
 
 /** How a fail-closed refusal names the TV remote to the caller, matching the command. */
-export const TV_REMOTE_LABEL = 'tv-remote';
+const TV_REMOTE_LABEL = 'tv-remote';
 
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The
@@ -83,3 +84,8 @@ export function bindTvRemote(
     },
   });
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const TV_REMOTE_INTERACTOR_OPERATIONS = [
+  { operation: 'tvRemote', label: TV_REMOTE_LABEL, bind: bindTvRemote },
+] as const satisfies readonly InteractorOperationDefinition<TvRemoteRuntimeOperations>[];

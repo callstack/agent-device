@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type {
   Interactor,
   KeyboardDismissResult,
@@ -92,7 +93,7 @@ async function resolveKeyboardInteractor(
   });
 }
 
-export const KEYBOARD_ACTION_LABELS = {
+const KEYBOARD_ACTION_LABELS = {
   keyboardStatus: 'keyboard status',
   keyboardDismiss: 'keyboard dismiss',
   keyboardEnter: 'keyboard enter',
@@ -119,3 +120,22 @@ export function bindKeyboardAction<Key extends keyof KeyboardRuntimeOperations>(
   };
   return Object.freeze({ [key]: action }) as Pick<KeyboardRuntimeOperations, Key>;
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const KEYBOARD_INTERACTOR_OPERATIONS = [
+  {
+    operation: 'keyboardStatus',
+    label: KEYBOARD_ACTION_LABELS.keyboardStatus,
+    bind: (signal, resolve) => bindKeyboardAction('keyboardStatus', signal, resolve),
+  },
+  {
+    operation: 'keyboardDismiss',
+    label: KEYBOARD_ACTION_LABELS.keyboardDismiss,
+    bind: (signal, resolve) => bindKeyboardAction('keyboardDismiss', signal, resolve),
+  },
+  {
+    operation: 'keyboardEnter',
+    label: KEYBOARD_ACTION_LABELS.keyboardEnter,
+    bind: (signal, resolve) => bindKeyboardAction('keyboardEnter', signal, resolve),
+  },
+] as const satisfies readonly InteractorOperationDefinition<KeyboardRuntimeOperations>[];

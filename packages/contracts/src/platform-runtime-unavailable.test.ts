@@ -2,6 +2,26 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { localRuntimeOwner, providerRuntimeOwner } from './platform-runtime.ts';
 import { applicationLifecycleOperationFacts } from './application-lifecycle-runtime.ts';
+import { alertRuntimeOperationFacts } from './alert-runtime.ts';
+import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
+import { audioProbeRuntimeOperationFacts } from './audio-probe-runtime.ts';
+import { backRuntimeOperationFacts } from './back-runtime.ts';
+import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
+import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
+import { focusRuntimeOperationFacts } from './focus-runtime.ts';
+import { gestureRuntimeOperationFacts } from './gesture-runtime.ts';
+import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
+import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
+import { perfRuntimeOperationFacts } from './perf-runtime.ts';
+import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
+import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
+import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
+import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
+import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
+import { HOVER_UNAVAILABLE_HINT, touchRuntimeOperationFacts } from './touch-runtime.ts';
+import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
+import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
+import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 import {
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeFacts,
@@ -117,4 +137,91 @@ test('generic unavailable facts report provider mode local for a local family ow
     createUnavailablePlatformRuntimeBinding(device, owner, UNAVAILABLE_FACTS).owner,
     owner,
   );
+});
+
+test('a refused touch cell answers both hover legs with the longpress redirection', () => {
+  const { operations } = createUnavailablePlatformRuntimeFacts(
+    device,
+    localRuntimeOwner('linux'),
+    UNAVAILABLE_FACTS,
+  );
+  assert.equal(UNAVAILABLE_FACTS.touch.hint, undefined);
+  for (const hover of [operations.hoverPoint, operations.hoverRef]) {
+    assert.deepEqual(hover, { ...UNAVAILABLE_FACTS.touch, hint: HOVER_UNAVAILABLE_HINT });
+  }
+});
+
+test('the operations stated by name equal what each family facts builder produces', () => {
+  // One distinguishable cell per family, so a key wired to the wrong family fails.
+  const cell = (family: string) =>
+    ({ available: false, reason: 'unsupported-provider-mode', hint: family }) as const;
+  const facts = {
+    ...Object.fromEntries(
+      Object.keys(UNAVAILABLE_FACTS)
+        .filter((family) => family !== 'lifecycle')
+        .concat(['snapshot', 'perf'])
+        .map((family) => [family, cell(family)]),
+    ),
+    lifecycle,
+  } as unknown as UnavailablePlatformRuntimeFacts;
+  const { operations } = createUnavailablePlatformRuntimeFacts(
+    device,
+    localRuntimeOwner('linux'),
+    facts,
+  );
+  const fromBuilders = {
+    ...screenshotRuntimeOperationFacts({ capture: cell('screenshot') }),
+    ...snapshotRuntimeOperationFacts({
+      capture: cell('snapshot'),
+      customActions: cell('snapshot'),
+      withoutActiveApp: cell('snapshot'),
+    }),
+    ...selectorObservationRuntimeOperationFacts({
+      findText: cell('snapshot'),
+      querySelector: cell('snapshot'),
+    }),
+    ...viewportRuntimeOperationFacts({ setViewport: cell('viewport') }),
+    ...focusRuntimeOperationFacts({ focus: cell('focus') }),
+    ...gestureRuntimeOperationFacts({ unsupported: cell('gesture') }),
+    ...scrollRuntimeOperationFacts({ scroll: cell('scroll') }),
+    ...typeTextRuntimeOperationFacts({ type: cell('typeText') }),
+    ...touchRuntimeOperationFacts({
+      unsupported: cell('touch'),
+      tap: cell('touch'),
+      longPress: cell('touch'),
+      fill: cell('touch'),
+    }),
+    ...elementTextRuntimeOperationFacts({ readTextAtPoint: cell('elementText') }),
+    ...backRuntimeOperationFacts({ back: cell('back') }),
+    ...orientationRuntimeOperationFacts({
+      orientation: cell('orientation'),
+      unlock: cell('orientation'),
+    }),
+    ...tvRemoteRuntimeOperationFacts({ tvRemote: cell('tvRemote') }),
+    ...keyboardRuntimeOperationFacts({ unsupported: cell('keyboard') }),
+    ...clipboardRuntimeOperationFacts({ unsupported: cell('clipboard') }),
+    ...systemButtonRuntimeOperationFacts({ unsupported: cell('systemButton') }),
+    ...appEventRuntimeOperationFacts({ triggerAppEvent: cell('triggerAppEvent') }),
+    ...alertRuntimeOperationFacts({
+      read: cell('readAlert'),
+      wait: cell('awaitAlert'),
+      accept: cell('acceptAlert'),
+      dismiss: cell('dismissAlert'),
+    }),
+    ...audioProbeRuntimeOperationFacts({
+      capture: cell('audioProbeCapture'),
+      query: cell('audioProbeQuery'),
+    }),
+    ...perfRuntimeOperationFacts({
+      frames: cell('perf'),
+      memorySample: cell('perf'),
+      memorySnapshot: cell('perf'),
+      nativeCapture: cell('perf'),
+      profileReport: cell('perf'),
+    }),
+  };
+  const stated = Object.fromEntries(
+    Object.keys(fromBuilders).map((key) => [key, operations[key as keyof typeof operations]]),
+  );
+  assert.deepEqual(stated, fromBuilders);
 });

@@ -43,7 +43,8 @@ import type {
   PlatformRuntimeOwner,
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
 import { deviceShape, isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -168,6 +169,7 @@ async function bindProviderScenarioPlatformRuntime(
       }),
       // The interactor catalog binds every keyboard leg this provider's facts admit.
       ...bindAdmittedProviderInteractorOperations({
+        operations: INTERACTOR_OPERATIONS,
         device: request.device,
         signal: request.scope.signal,
         resolveInteractor: (runner) => runtime.getInteractor(request.device, runner),

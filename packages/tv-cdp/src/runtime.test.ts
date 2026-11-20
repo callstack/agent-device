@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { Duplex } from 'node:stream';
 
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
@@ -673,6 +674,21 @@ test('the platform binding lists the TV apps and reports the attached app while 
   assert.deepEqual(await binding.operations.appState?.(), { package: APP_ID });
   page.hide();
   assert.deepEqual(await binding.operations.appState?.(), { package: undefined });
+});
+
+// The runtime names the families it binds, so its facts must admit no operation outside them.
+test('the platform binding binds every interactor operation its facts admit', async () => {
+  const { binding } = await boundTv();
+
+  for (const { operation } of INTERACTOR_OPERATIONS) {
+    assert.equal(
+      typeof binding.operations[operation],
+      binding.facts.operations[operation].available ? 'function' : 'undefined',
+      operation,
+    );
+  }
+  assert.equal(binding.facts.operations.back.available, true);
+  assert.equal(binding.facts.operations.tvRemote.available, true);
 });
 
 test('close and apps hand the request signal to the TV', async () => {

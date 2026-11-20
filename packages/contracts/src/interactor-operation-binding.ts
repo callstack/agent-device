@@ -61,3 +61,77 @@ export function providerInteractorSource(
     );
   };
 }
+
+/**
+ * How a family turns one resolved interactor into one of its own typed operations. Every row
+ * shares this shape, which is what lets one adapter drive all of them: the family owns what the
+ * operation *does* and declares its rows beside its binders, and the adapters below own only which
+ * interactor a row reaches and how a refusal reads.
+ */
+export type InteractorOperationDefinition<Operations extends object> = Readonly<{
+  /** The facts key that admits it, and the operations key it binds. */
+  operation: keyof Operations;
+  /** How a provider fail-closed refusal names this operation to the caller. */
+  label: string;
+  bind: (
+    signal: AbortSignal,
+    resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
+  ) => Partial<Operations>;
+}>;
+
+/**
+ * `operations` is the rows of every family the owner implements, so an owner evaluates only those
+ * families. `facts[operation]` alone still decides whether a row binds: `facts` is an owner's full
+ * `RuntimeFacts.operations` (extra keys are ignored) or a narrower standalone map, and a key it
+ * never defines is never bindable.
+ */
+type AdmittedInteractorOperationParams<Operations extends object, Resolver> = Readonly<{
+  device: DeviceInfo;
+  signal: AbortSignal;
+  resolveInteractor: Resolver;
+  operations: readonly InteractorOperationDefinition<Operations>[];
+  facts: Readonly<Partial<Record<keyof Operations, Readonly<{ available: boolean }>>>>;
+}>;
+
+/**
+ * Walks the rows once, binding each operation the facts admitted through whichever interactor
+ * source the caller's entry point supplies. The source is the only thing that differs between a
+ * local owner and a provider.
+ */
+function bindAdmittedInteractorOperations<Operations extends object, Resolver>(
+  params: AdmittedInteractorOperationParams<Operations, Resolver>,
+  source: (
+    definition: InteractorOperationDefinition<Operations>,
+  ) => (runner: RunnerContext) => Promise<Interactor>,
+): Partial<Operations> {
+  const bound: Partial<Operations> = {};
+  for (const definition of params.operations) {
+    if (!params.facts[definition.operation]?.available) continue;
+    Object.assign(bound, definition.bind(params.signal, source(definition)));
+  }
+  return bound;
+}
+
+/**
+ * Binds whichever local operations the owner's own facts admitted. The owner keeps full
+ * authority — its facts alone decide what binds — this only removes the once-per-operation
+ * ternary that read them.
+ */
+export function bindAdmittedLocalInteractorOperations<Operations extends object>(
+  params: AdmittedInteractorOperationParams<Operations, LocalInteractorOperationResolver>,
+): Partial<Operations> {
+  return bindAdmittedInteractorOperations(params, () => localInteractorSource(params));
+}
+
+/**
+ * Binds whichever provider operations the owner's own facts admitted, failing closed when the
+ * exact owner no longer exposes its interactor. Each refusal names the operation the caller asked
+ * for, which is what the per-operation `label` carries.
+ */
+export function bindAdmittedProviderInteractorOperations<Operations extends object>(
+  params: AdmittedInteractorOperationParams<Operations, ProviderInteractorOperationResolver>,
+): Partial<Operations> {
+  return bindAdmittedInteractorOperations(params, (definition) =>
+    providerInteractorSource({ ...params, operation: definition.label }),
+  );
+}

@@ -1,11 +1,32 @@
-import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
-import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  BACK_INTERACTOR_OPERATIONS,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
+import {
+  bindAdmittedLocalInteractorOperations,
+  type InteractorOperationDefinition,
+} from '@agent-device/contracts/interactor-operation-binding';
+import {
+  KEYBOARD_INTERACTOR_OPERATIONS,
+  keyboardRuntimeOperationFacts,
+} from '@agent-device/contracts/keyboard-runtime';
+import {
+  ORIENTATION_INTERACTOR_OPERATIONS,
+  orientationRuntimeOperationFacts,
+} from '@agent-device/contracts/orientation-runtime';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import {
+  SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+  systemButtonRuntimeOperationFacts,
+} from '@agent-device/contracts/system-button-runtime';
+import {
+  TV_REMOTE_INTERACTOR_OPERATIONS,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import { tvRemoteButtonsForPlatform } from '@agent-device/contracts/tv-remote';
 import {
   isHandheldAppleDevice,
@@ -245,6 +266,16 @@ export function appleNavigationFacts(device: DeviceInfo) {
   });
 }
 
+/** The rows of the families {@link appleNavigationFacts} declares, in catalog order. */
+const APPLE_NAVIGATION_INTERACTOR_OPERATIONS: readonly InteractorOperationDefinition<PlatformRuntimeOperations>[] =
+  [
+    ...BACK_INTERACTOR_OPERATIONS,
+    ...SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+    ...ORIENTATION_INTERACTOR_OPERATIONS,
+    ...TV_REMOTE_INTERACTOR_OPERATIONS,
+    ...KEYBOARD_INTERACTOR_OPERATIONS,
+  ];
+
 /**
  * Binds whichever navigation operations the device's admitted facts allow. The cells are those
  * {@link appleNavigationFacts} declares, read from the admitted facts so a refusal layered over
@@ -261,6 +292,7 @@ export function createAppleNavigationOperations(params: {
     keyof ReturnType<typeof appleNavigationFacts>
   >;
   return bindAdmittedLocalInteractorOperations({
+    operations: APPLE_NAVIGATION_INTERACTOR_OPERATIONS,
     device,
     signal,
     resolveInteractor: host.localInteractors.resolve,

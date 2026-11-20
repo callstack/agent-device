@@ -8,9 +8,18 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import {
+  BACK_INTERACTOR_OPERATIONS,
+  backRuntimeOperationFacts,
+} from '@agent-device/contracts/back-runtime';
+import {
+  SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+  systemButtonRuntimeOperationFacts,
+} from '@agent-device/contracts/system-button-runtime';
+import {
+  bindAdmittedLocalInteractorOperations,
+  type InteractorOperationDefinition,
+} from '@agent-device/contracts/interactor-operation-binding';
 import {
   localRuntimeOwner,
   sameRuntimeOwner,
@@ -19,7 +28,10 @@ import {
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import {
+  TV_REMOTE_INTERACTOR_OPERATIONS,
+  tvRemoteRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import { tvRemoteButtonsForPlatform } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -78,6 +90,7 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
         operations: Object.freeze({
           ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
           ...bindAdmittedLocalInteractorOperations({
+            operations: VEGA_INTERACTOR_OPERATIONS,
             device: request.device,
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
@@ -90,6 +103,14 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
     shutdown: async () => undefined,
   });
 }
+
+/** The interactor families Vega admits an operation of: remote navigation only. */
+const VEGA_INTERACTOR_OPERATIONS: readonly InteractorOperationDefinition<PlatformRuntimeOperations>[] =
+  [
+    ...BACK_INTERACTOR_OPERATIONS,
+    ...SYSTEM_BUTTON_INTERACTOR_OPERATIONS,
+    ...TV_REMOTE_INTERACTOR_OPERATIONS,
+  ];
 
 const screenshotUnavailable = unavailableFact(
   'unsupported-platform-leaf',

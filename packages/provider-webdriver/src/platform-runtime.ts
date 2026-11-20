@@ -22,7 +22,8 @@ import {
   bindProviderScrollInteractor,
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
-import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
@@ -407,6 +408,7 @@ function webDriverInteractionOperations(
     ...bindProviderGestureInteractor({ ...resolver, facts: facts.operations }),
     ...(facts.operations.scrollDirection.available ? bindProviderScrollInteractor(resolver) : {}),
     ...bindAdmittedProviderInteractorOperations({
+      operations: INTERACTOR_OPERATIONS,
       ...resolver,
       facts: facts.operations,
     }),
