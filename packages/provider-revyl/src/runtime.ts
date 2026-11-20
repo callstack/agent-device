@@ -19,6 +19,7 @@ import {
   parseRevylDeviceId,
   platformForRevylLeaseBackend,
   REVYL_PROVIDER,
+  revylSessionIdForLease,
   type RevylPlatform,
 } from './device.ts';
 import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
@@ -42,7 +43,6 @@ import {
 import { createRevylInteractor } from './interactor.ts';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
-import { revylSessionIdForLease } from './session-identity.ts';
 import type { RevylStartRequest } from './session-allocation.ts';
 import type { RevylDeploymentSession } from './deployment.ts';
 

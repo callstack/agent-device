@@ -2,14 +2,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { buildRevylDevice, type RevylPlatform } from './device.ts';
+import { buildRevylDevice, revylSessionIdForLease, type RevylPlatform } from './device.ts';
 import {
   REVYL_START_DEVICE_TIMEOUT_MS,
   isRevylSessionGone,
   revylFailureRefusedTheRequest,
   type RevylClient,
 } from './revyl-client.ts';
-import { revylSessionIdForLease } from './session-identity.ts';
 import type {
   RevylStartDeviceRequest,
   RevylStartDeviceResponse,
