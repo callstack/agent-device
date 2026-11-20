@@ -14,10 +14,10 @@ import { pathToFileURL } from 'node:url';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { cliAliasesForCommand } from '@agent-device/command-registry/cli-command-aliases';
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
-import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
 import { getCliCommandSchema } from '@agent-device/command-surface';
-import { buildCommandUsage } from '../../src/commands/schema/usage.ts';
+import { buildCommandUsage, commandHelpFlags } from '../../src/commands/schema/usage.ts';
 import { MATRIX_SECTIONS } from '../capability-matrix/annotations.ts';
+import { firstDifference } from '../capability-matrix/generate.ts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
 const PAGE_PATH = path.join('website', 'docs', 'docs', 'commands.md');
@@ -33,16 +33,11 @@ export type CommandFacts = Readonly<{
   capabilityRows: ReadonlyArray<{ readonly label: string; readonly link: string }>;
 }>;
 
-/** The options `agent-device help <command>` lists, with the command's own description overrides. */
 function helpFlags(schema: CommandSchema): CommandFacts['flags'] {
-  const allowed = new Set<string>(schema.allowedFlags ?? []);
-  return getFlagDefinitions().flatMap((definition) => {
-    const description =
-      schema.flagDescriptionOverrides?.[definition.key] ?? definition.usageDescription;
-    return allowed.has(definition.key) && definition.usageLabel && description
-      ? [{ label: definition.usageLabel, description }]
-      : [];
-  });
+  return commandHelpFlags(schema).map((definition) => ({
+    label: definition.usageLabel ?? '',
+    description: definition.usageDescription ?? '',
+  }));
 }
 
 /** Starlight's heading slug for the plain-word section titles the capabilities page prints. */
@@ -128,18 +123,11 @@ export function generatedCommands(page: string): string[] {
   return [...page.matchAll(BLOCK)].map((match) => match[1] as string);
 }
 
-/** The first differing line between the committed page and the generated one, or null. */
 export function driftReport(committed: string, generated: string): string | null {
   if (committed === generated) return null;
-  const a = committed.split('\n');
-  const b = generated.split('\n');
-  const index = a.findIndex((line, at) => line !== b[at]);
-  const line = index === -1 ? a.length : index;
   return (
-    `${PAGE_PATH} is stale. Run \`pnpm generate:command-docs\`.\n` +
-    `First difference at line ${line + 1}:\n` +
-    `  committed: ${a[line] ?? '(end of file)'}\n` +
-    `  generated: ${b[line] ?? '(end of file)'}`
+    `${PAGE_PATH} is stale. Run \`pnpm generate:command-docs\`.\nFirst difference:\n` +
+    firstDifference(committed, generated)
   );
 }
 

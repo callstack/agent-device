@@ -644,13 +644,13 @@ Exact behavior: `agent-device help scroll`.
 Things to know:
 
 - A scroll does not land on an exact position. The amount is a fraction of the viewport (`0.5` is half), and the app's scroll physics decide the final offset.
-- To reach an off-screen element, use `scroll down --until <selector>`. It also works in `.ad` scripts on any screen size; see [Replay and E2E testing](/docs/replay-e2e). It stops after 12 gestures by default. For a long list, raise `--max-passes`. If the 90-second request timeout ends the search, inspect the screen and continue with another search.
+- To reach an off-screen element, use `scroll down --until <selector>`. It also works in `.ad` scripts on any screen size; see [Replay and E2E testing](/docs/replay-e2e). It stops after 12 gestures by default. For a long list, raise `--max-passes` (1–200 gestures). If the 90-second request timeout ends the search, inspect the screen and continue with another search.
 - Add `--settle` to get the changed screen with fresh refs in the same response. You then do not need another `snapshot -i`.
 - Read `movement` in the result: `moved`, `at-edge`, `unchanged`, or `unobserved`. After `scroll refresh`, `unchanged` means that nothing changed on screen. It does not mean that a refresh ran and found nothing new, so check the app's refresh indicator or content.
-- On iOS, `scroll refresh` pulls down the middle of the screen. A list that sits only in the top or bottom part of the screen is not pulled.
-- With a keyboard up, the scroll stays above the keyboard and leaves it open. If too little room is left, end editing first. On Android, use `keyboard dismiss`. On iOS, use a visible dismissal control.
+- `scroll refresh` is one slow pull down (`scroll up 0.4 --duration-ms 1200` by default; an amount, `--pixels`, or `--duration-ms` overrides it). On iOS, the pull runs down the middle of the screen. A list that sits only in the top or bottom part of the screen is not pulled.
+- With a keyboard up, the scroll stays above the keyboard and leaves it open. The result reports this as `keyboardAvoided` and `keyboardMinY`. If too little room is left, end editing first. On Android, use `keyboard dismiss`. On iOS, use a visible dismissal control.
 - A refused scroll names its cause in `details.reason`, and the hint gives the next step. The reasons are `scroll_refresh_not_at_top` (run `scroll top` first), `scroll_until_no_progress`, `scroll_until_edge_reached`, `scroll_keyboard_occludes_surface`, and `scroll_no_progress`.
-- `--no-post-gesture-stabilization` is for a caller that verifies the screen by polling it, such as a test runner. Without your own polling, the next read can return a tree that the gesture is still moving. To apply it to every command, set `postGestureStabilization` to `false` in your user config, or set `AGENT_DEVICE_POST_GESTURE_STABILIZATION=0`. `./agent-device.json` rejects the key, a recorded `.ad` script does not carry it, and MCP and AI SDK tools do not offer it.
+- `--no-post-gesture-stabilization` is for a caller that verifies the screen by polling it, such as a test runner. Without your own polling, the next read can return a tree that the gesture is still moving. In the Node client or a batch step, pass `postGestureStabilization: false`. To apply it to every command, set `postGestureStabilization` to `false` in your user config, or set `AGENT_DEVICE_POST_GESTURE_STABILIZATION=0`. `./agent-device.json` rejects the key, a recorded `.ad` script does not carry it, and MCP and AI SDK tools do not offer it.
 
 ## Retry after a failed command
 
@@ -1045,7 +1045,7 @@ Things to know:
 - `keyboard status` reports whether the software keyboard is visible. When it can identify the Return key, it reports the key's action as `returnKey`. A value of `unknown` means that the keyboard is visible but the action could not be identified. On iOS, `OBSERVATION_UNAVAILABLE` means that the runner could not establish visibility.
 - `keyboard enter` sends Return to the focused input, so focus the intended field first. The app decides what Return does: submit, advance focus, or insert a newline. It can work with the software keyboard hidden.
 - On iOS, `keyboard dismiss` does not close a visible keyboard. It returns `keyboard_dismiss_unavailable` with `dispatched: no`. Press the visible Hide Keyboard key or the app control that ends editing. If the app supports interactive dismissal, drag down from inside the scrollable content with `gesture pan x y 0 dy durationMs` and a positive `dy`. Check the result with `keyboard status`.
-- On Android, `keyboard dismiss` closes the keyboard.
+- On Android, `keyboard dismiss` asks the platform to close the keyboard. If the keyboard stays up, it returns `keyboard_dismiss_unavailable`.
 
 ## Performance diagnostics
 

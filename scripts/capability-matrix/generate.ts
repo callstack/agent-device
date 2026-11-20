@@ -312,7 +312,7 @@ export function renderPage(data: MatrixData): string {
 }
 
 /** Line-by-line difference between the committed page and the generated one. */
-function firstDifference(committed: string, generated: string): string {
+export function firstDifference(committed: string, generated: string): string {
   const a = committed.split('\n');
   const b = generated.split('\n');
   for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
