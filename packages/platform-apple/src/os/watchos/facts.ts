@@ -6,8 +6,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
  * The operations a watchOS simulator admits. The watch keeps only what has a watch meaning: app
  * lifecycle, the runner tree, one-finger touch (tap, touch and hold, swipe, pan), the Digital Crown
  * (`scrollDirection` rotates it, `home` presses it), the Action Button, back, typing through the
- * system input sheet, and screenshots. Every other operation is refused here, so an operation added
- * later stays closed on the watch until it has watch evidence (#4738).
+ * system input sheet, screenshots, and screen recording (the host runs `simctl recordVideo` for any
+ * Apple simulator, so the watch needs no runner recorder of its own). Every other operation is
+ * refused here, so an operation added later stays closed on the watch until it has watch evidence
+ * (#4738).
  */
 const WATCH_OS_OPERATIONS = new Set<keyof PlatformRuntimeOperations>([
   'deployApp',
@@ -42,6 +44,9 @@ const WATCH_OS_OPERATIONS = new Set<keyof PlatformRuntimeOperations>([
   'home',
   'actionButton',
   'captureScreenshot',
+  'screenRecordingStart',
+  'screenRecordingReattach',
+  'screenRecordingCleanup',
 ]);
 
 /** Why a watch refuses multi-touch, shared by the fact and the Apple adapter's own check. */
@@ -66,7 +71,7 @@ function watchOsRefusal(operation: string): RuntimeOperationFact {
     reason: 'unsupported-platform-leaf',
     hint:
       WATCH_OS_REFUSALS[operation as keyof PlatformRuntimeOperations] ??
-      'watchOS simulators support only watch interactions: app lifecycle, snapshot, press, swipe, scroll (the Digital Crown), back, home, typing, and screenshots.',
+      'watchOS simulators support only watch interactions: app lifecycle, snapshot, press, swipe, scroll (the Digital Crown), back, home, typing, screenshots, and recording.',
   } as const);
 }
 
