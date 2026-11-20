@@ -2338,7 +2338,7 @@ agent-device diff snapshot | diff screenshot --baseline <path> [current.png] [--
 
 **`diff snapshot`**
 
-Reads no options.
+No options of its own.
 
 **`diff screenshot`**
 
