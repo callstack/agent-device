@@ -44,7 +44,7 @@ test('runtime audit appends native issues without altering heuristic findings or
         return [...nativeAuditFindings];
       },
     },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: process.cwd() }),
     sessions: { get: () => undefined, set: () => {} },
     policy: localCommandPolicy(),
   });
