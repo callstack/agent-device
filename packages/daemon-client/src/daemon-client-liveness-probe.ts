@@ -2,6 +2,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import net from 'node:net';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 import { loadNodeHttpRequester, consumeTextLines } from '@agent-device/host-kit/transport';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
@@ -10,11 +11,28 @@ import type { DaemonInfo } from './daemon-client-metadata.ts';
 // nothing, and it must be asked on FRESH connections — the timed-out connection is the one the
 // transport already tore down to cancel that request.
 
-// The extra latency a caller of a reset-eligible timed-out request can pay before its error lands.
-// An order of magnitude under the narrowest reset-eligible envelope (pinned in
-// `__tests__/daemon-client-liveness-probe.test.ts`): a wrong "unresponsive" verdict kills a live
-// shared daemon.
+// One probe window. A caller of a reset-eligible timed-out request can pay three of them, plus two
+// short gaps, before its error lands. One window stays an order of magnitude under the narrowest
+// reset-eligible envelope (pinned in `__tests__/daemon-client-liveness-probe.test.ts`): a wrong
+// "unresponsive" verdict kills a live shared daemon.
 export const LIVENESS_PROBE_BUDGET_MS = 1_000;
+const UNRESPONSIVE_PROBES = 3;
+const UNRESPONSIVE_PROBE_GAP_MS = 200;
+
+/**
+ * The one verdict that may end a daemon for answering nothing: every probe of several missed. Each
+ * caller that retires on silence asks here, so the evidence is the same on every path.
+ */
+export async function answersLivenessProbe(
+  info: DaemonInfo,
+  params: Readonly<{ session?: string }> = {},
+): Promise<boolean> {
+  for (let probe = 1; probe <= UNRESPONSIVE_PROBES; probe += 1) {
+    if (await probeDaemonResponsive(info, params)) return true;
+    if (probe < UNRESPONSIVE_PROBES) await sleep(UNRESPONSIVE_PROBE_GAP_MS);
+  }
+  return false;
+}
 
 /**
  * Whether this local daemon answers anything within the probe budget: its HTTP health route, or

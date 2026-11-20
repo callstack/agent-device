@@ -19,7 +19,7 @@ import {
 } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { DAEMON_LEAVE_WAIT_MS, requestDaemonLifecycle } from './daemon-client-lifecycle-request.ts';
-import { probeDaemonResponsive } from './daemon-client-liveness-probe.ts';
+import { answersLivenessProbe } from './daemon-client-liveness-probe.ts';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 import {
   DAEMON_CONTENDED_REASON,
@@ -35,8 +35,6 @@ import {
 const ENSURE_ATTEMPTS = 40;
 const JUDGE_AGAIN_DELAY_MS = 250;
 const DRAIN_POLL_MS = 250;
-const UNRESPONSIVE_PROBES = 3;
-const UNRESPONSIVE_PROBE_GAP_MS = 200;
 
 type EnsureStep =
   | { kind: 'connected'; daemon: EnsuredDaemon; started: boolean }
@@ -196,14 +194,6 @@ async function quiesceOrRetireUnresponsive(
     await retireDaemonForTakeover(info, settings.paths, 'force');
     return 'retired';
   }
-}
-
-async function answersLivenessProbe(info: DaemonInfo): Promise<boolean> {
-  for (let probe = 1; probe <= UNRESPONSIVE_PROBES; probe += 1) {
-    if (await probeDaemonResponsive(info)) return true;
-    if (probe < UNRESPONSIVE_PROBES) await sleep(UNRESPONSIVE_PROBE_GAP_MS);
-  }
-  return false;
 }
 
 async function start(

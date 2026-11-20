@@ -65,7 +65,7 @@ export async function handleRequestTimeout(
   const probeAnswered = resetEligible
     ? await (
         await import('./daemon-client-liveness-probe.ts')
-      ).probeDaemonResponsive(info, {
+      ).answersLivenessProbe(info, {
         session,
       })
     : undefined;

@@ -246,8 +246,8 @@ type RouteRow = Readonly<{
   afterFirst: 'answer' | 'refuse';
   hintPattern: RegExp;
   // The connections the stand-in must observe: 1 = the RPC only (route never probed),
-  // 2 = RPC + probe.
-  connections: 1 | 2;
+  // 2 = RPC + the probe that answered, 4 = RPC + every probe of the unresponsive verdict.
+  connections: 1 | 2 | 4;
   /** Whether this row's verdict is the reset branch, which clears the daemon's metadata. */
   resets: boolean;
 }>;
@@ -283,7 +283,7 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     platform: undefined,
     afterFirst: 'refuse',
     hintPattern: /The daemon did not answer the liveness probe and was reset after the timeout/,
-    connections: 2,
+    connections: 4,
     resets: true,
   },
   {
@@ -490,8 +490,8 @@ test('request-timeout route: an attach client leaves a daemon that answers no pr
     );
     assert.equal(
       daemon.connections(),
-      2,
-      'the probe still asks, so the hint can say what it found',
+      4,
+      'every probe still asks, so the hint can say what it found',
     );
     assert.equal(isProcessAlive(info.pid), true);
     assert.ok(fs.existsSync(paths.infoPath));
