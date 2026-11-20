@@ -36,34 +36,41 @@ test('shape refusals carry the shared hint, or the caller-supplied one', () => {
 describe('input key admission', () => {
   const ACCEPTED = ['path', 'fullscreen', 'platform'];
 
-  test('an undeclared input key is refused with the closest accepted key', () => {
+  // The nearest-name rule is the CLI parser's command and flag suggestion rule,
+  // exercised here through the reader's "Did you mean" suffix: a one-edit typo
+  // or a prefix names the single closest key, and a short or distant token
+  // earns no suggestion at all. A declared key never reaches the rule: the
+  // read accepts it untouched (see the pass-through test below).
+  test.each([
+    ['fullscren', 'Batch step 1 input has unknown field(s): fullscren. Did you mean fullscreen?'],
+    ['scal', 'Batch step 1 input has unknown field(s): scal. Did you mean scale?'],
+    ['full', 'Batch step 1 input has unknown field(s): full. Did you mean fullscreen?'],
+    ['pa', 'Batch step 1 input has unknown field(s): pa.'],
+    ['output', 'Batch step 1 input has unknown field(s): output.'],
+  ])('the unknown key %s recovers with the nearest accepted key, or none', (token, message) => {
     expect(() =>
       readBatchStepInputObject(
-        { command: 'screenshot', input: { fullscreenn: true } },
-        2,
-        BATCH_STEP_SHAPE_HINT,
-        ACCEPTED,
-      ),
-    ).toThrow(
-      expect.objectContaining({
-        code: 'INVALID_ARGS',
-        message: 'Batch step 2 input has unknown field(s): fullscreenn. Did you mean fullscreen?',
-      }),
-    );
-  });
-
-  test('a refusal with no confident match states the unknown keys only', () => {
-    expect(() =>
-      readBatchStepInputObject(
-        { command: 'screenshot', input: { output: 'x' } },
+        { command: 'screenshot', input: { [token]: true } },
         1,
         BATCH_STEP_SHAPE_HINT,
-        ACCEPTED,
+        ['path', 'fullscreen', 'cropOn', 'scale'],
+      ),
+    ).toThrow(expect.objectContaining({ code: 'INVALID_ARGS', message }));
+  });
+
+  test('distance ties are answered with the whole set, in order', () => {
+    expect(() =>
+      readBatchStepInputObject(
+        { command: 'screenshot', input: { pathh: true } },
+        1,
+        BATCH_STEP_SHAPE_HINT,
+        ['path', 'patch', 'pause'],
       ),
     ).toThrow(
       expect.objectContaining({
         code: 'INVALID_ARGS',
-        message: 'Batch step 1 input has unknown field(s): output.',
+        message:
+          'Batch step 1 input has unknown field(s): pathh. Did you mean one of: patch, path?',
       }),
     );
   });
