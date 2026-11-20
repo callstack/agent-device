@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { WebProvider } from '@agent-device/platform-web';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -41,10 +41,12 @@ vi.mock('./platform-runtime.ts', () => ({
   createPlatformDeviceInventoryGateways: ports.inventoryGateways,
 }));
 
-vi.mock('./provider-device-runtimes.ts', () => ({
+vi.mock('./provider-device-runtimes.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./provider-device-runtimes.ts')>()),
   createDaemonProviderRuntimeComposition: async () => ({
     runtimes: [],
     platformModules: [],
+    platforms: [],
     shutdown: ports.shutdownProviders,
     inventory: [],
     resolveReplayBackend: async () => {

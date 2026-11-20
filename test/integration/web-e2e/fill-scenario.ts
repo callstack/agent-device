@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { installWebPluginForSmoke, stopWebPluginSmokeDaemon } from './web-plugin-artifact.ts';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from '../cli-json.ts';
 import {
   FILL_FIXTURE_POINTS,
@@ -154,6 +155,7 @@ async function startLiveFill(): Promise<LiveFill> {
   const env = {
     ...process.env,
     AGENT_DEVICE_STATE_DIR: stateDir,
+    AGENT_DEVICE_HOME: path.join(stateDir, 'plugin-home'),
     AGENT_BROWSER_CONFIG: configPath,
     AGENT_BROWSER_HEADED: 'false',
     AGENT_BROWSER_IDLE_TIMEOUT_MS: '30000',
@@ -165,6 +167,7 @@ async function startLiveFill(): Promise<LiveFill> {
   return {
     url: `http://127.0.0.1:${port}/`,
     setup: async () => {
+      await installWebPluginForSmoke(env);
       const result = await runBuiltCliJson(['web', 'setup', '--json'], env);
       assert.equal(result.status, 0, debug('web setup', result));
     },
@@ -187,8 +190,12 @@ async function startLiveFill(): Promise<LiveFill> {
       try {
         if (opened) await run(['close']);
       } finally {
-        await closeServer(server);
-        rmSync(root, { recursive: true, force: true });
+        try {
+          await stopWebPluginSmokeDaemon(env);
+        } finally {
+          await closeServer(server);
+          rmSync(root, { recursive: true, force: true });
+        }
       }
     },
   };

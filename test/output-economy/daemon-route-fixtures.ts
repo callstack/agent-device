@@ -4,7 +4,7 @@ import path from 'node:path';
 import { PNG } from '@agent-device/capture-kit/png';
 import type { BackendDumpNetworkResult } from '@agent-device/contracts/backend-diagnostics';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { WebProvider } from '@agent-device/platform-web';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { createProviderScenarioHarness } from '../integration/provider-scenarios/harness.ts';
 import { NETWORK_SELECTION_RESULT } from './selection-fixtures.ts';

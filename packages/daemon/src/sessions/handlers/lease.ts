@@ -439,6 +439,7 @@ function assertProviderRuntimeRegistered(
   const failures = failedPlugins.flatMap((plugin) =>
     plugin.state === 'failed' &&
     plugin.backend === undefined &&
+    plugin.platform === undefined &&
     (plugin.provider === provider || plugin.provider === undefined)
       ? [
           {

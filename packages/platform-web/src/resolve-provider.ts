@@ -1,5 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { WebProvider } from './provider.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 
 /**
  * The provider a web request composed for itself, or `undefined` outside one. A reader that must
@@ -21,10 +21,11 @@ export async function resolveRequestScopedWebProvider(): Promise<WebProvider | u
 export async function resolveWebProviderForHost(
   host: HostEnvironment,
   provider?: WebProvider,
+  stateDir?: string,
 ): Promise<WebProvider> {
   if (provider) return provider;
   const scoped = await resolveRequestScopedWebProvider();
   if (scoped) return scoped;
   const { createAgentBrowserWebProvider } = await import('./agent-browser-provider.ts');
-  return await createAgentBrowserWebProvider({ host });
+  return await createAgentBrowserWebProvider({ host, stateDir });
 }

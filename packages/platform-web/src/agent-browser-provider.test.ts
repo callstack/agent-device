@@ -23,7 +23,7 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => {
 
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import { buildSelectFocusedContentEvalScript } from './agent-browser-select-content.ts';
-import type { WebSnapshotResult } from './provider.ts';
+import type { WebSnapshotResult } from '@agent-device/contracts/web-provider';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';

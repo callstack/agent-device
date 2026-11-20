@@ -4,16 +4,18 @@ import { createUnsupportedInteractor } from '@agent-device/contracts/unsupported
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { resolveWebProviderForHost, type WebProvider } from './index.ts';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { resolveWebProviderForHost } from './resolve-provider.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
+import type { ManagedBrowserHost } from './agent-browser-tool.ts';
 
 export async function createWebInteractor(
-  host: HostEnvironment,
+  host: ManagedBrowserHost,
   provider?: WebProvider,
+  stateDir?: string,
 ): Promise<Interactor> {
   // A request's scoped provider wins; an out-of-request local path binds the composing root's
   // host into its own default provider instead of reading an ambient one (#3794).
-  const resolvedProvider = await resolveWebProviderForHost(host, provider);
+  const resolvedProvider = await resolveWebProviderForHost(host, provider, stateDir);
   const clickRef = resolvedProvider.clickRef;
   const hover = resolvedProvider.hover;
   const hoverRef = resolvedProvider.hoverRef;
@@ -56,7 +58,7 @@ export async function createWebInteractor(
     screenshot: (outPath, options) => resolvedProvider.screenshot(outPath, options),
     setViewport: (width, height) => resolvedProvider.setViewport(width, height),
     snapshot: async (options) => {
-      const result = await withDiagnosticTimer(
+      const result = await (host.withDiagnosticTimer ?? withDiagnosticTimer)(
         'snapshot_capture',
         async () => await resolvedProvider.snapshot(options),
         { backend: 'web' },

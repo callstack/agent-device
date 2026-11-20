@@ -3,7 +3,10 @@ import {
   normalizeAudioProbeRecord,
 } from '@agent-device/contracts/audio-probe-result';
 import { isJsonObject, type JsonObject } from './json-utils.ts';
-import type { WebAudioProbeOptions, WebAudioProbeResult } from './provider.ts';
+import type {
+  WebAudioProbeOptions,
+  WebAudioProbeResult,
+} from '@agent-device/contracts/web-provider';
 
 const audioProbePageScriptFunctions = [
   audioProbeDbfs,

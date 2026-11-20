@@ -1,4 +1,4 @@
-import { readVersion } from '@agent-device/host-kit/version';
+import { webPlatformCompositionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -172,8 +172,13 @@ export async function createProviderScenarioHarness(
     const providerModules =
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
+    const platforms = webPlatformCompositionFixture(input.host, input.baseDir, {
+      openWebSessionNames: input.openWebSessionNames,
+      ownedProcessRecords: rootDeps.ownedProcessRecords,
+    });
+    const { web } = platforms;
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
-      coreVersion: readVersion(),
+      platforms,
       host: input.host,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
@@ -213,12 +218,7 @@ export async function createProviderScenarioHarness(
           webProvider,
           appleSimulatorScreenRecordingTransport,
         },
-        defaultWebProvider: {
-          host: input.host,
-          stateDir: input.baseDir,
-          openWebSessionNames: input.openWebSessionNames,
-          ownedProcessRecords: rootDeps.ownedProcessRecords,
-        },
+        web,
       });
     return Object.freeze({
       ...rootDeps,

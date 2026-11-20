@@ -1,4 +1,3 @@
-import { readVersion } from '@agent-device/host-kit/version';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   bindTestCommandHost,
@@ -8,6 +7,7 @@ import {
 import { expect, test, vi } from 'vitest';
 import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
+import { builtinPlatformSelectionFixture } from './platform-runtime-builtin-platforms.fixtures.ts';
 
 const adb = vi.hoisted(() => ({ calls: [] as string[][] }));
 
@@ -52,8 +52,8 @@ test('the composed Android perf operation reports an unavailable ADB memory samp
   adb.calls.length = 0;
   const sessionsDir = mkdtempForTestSync('platform-runtime-perf-host-');
   const gateway = createPlatformRuntimeGateway({
-    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
+    platforms: builtinPlatformSelectionFixture(),
     sessionsDir,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: `${sessionsDir}/${sessionId}/app.log`,

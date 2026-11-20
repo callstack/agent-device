@@ -4,7 +4,7 @@ import {
   pluginInstallCommand,
   pluginPackageSelector,
   pluginRepairCommand,
-} from '@agent-device/contracts/platform-module';
+} from '@agent-device/contracts/plugin-installation';
 
 type ProviderPluginDeclaration = PluginReleaseDeclaration &
   Readonly<{
@@ -40,9 +40,6 @@ export function getProviderPluginDeclaration(
 ): ProviderPluginDeclaration | undefined {
   return PROVIDER_PLUGIN_CATALOG.find((plugin) => plugin.provider === provider);
 }
-
-// The release-channel rule lives in @agent-device/contracts/platform-module, shared with the
-// optional platform families, so the two catalogs cannot drift apart on the nightly selector.
 
 export function providerPluginInstallCommand(
   declaration: ProviderPluginDeclaration,

@@ -6,10 +6,11 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
+import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
+import { readVersion } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   getProviderPluginDeclaration,
-  providerPluginInstallCommand,
   providerPluginRepairCommand,
 } from '../../commands/provider-plugin-catalog.ts';
 import {
@@ -94,7 +95,6 @@ export function unavailableConnectPluginError(
       hint: `Run agent-device plugins list --json to inspect the plugin, fix its configuration or run ${providerPluginRepairCommand(declaration)}, then retry your original command.`,
     });
   }
-  const installCommand = providerPluginInstallCommand(declaration);
   return new AppError(
     'UNSUPPORTED_OPERATION',
     `${declaration.label} requires the ${declaration.package} plugin.`,
@@ -102,8 +102,7 @@ export function unavailableConnectPluginError(
       reason: 'plugin-not-installed',
       provider,
       package: declaration.package,
-      installCommand,
-      hint: `Install:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
+      ...pluginInstallationHint(declaration, readVersion()),
     },
   );
 }

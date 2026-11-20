@@ -1,3 +1,4 @@
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
@@ -6,6 +7,7 @@ import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-
 export function createScreenRecordingRuntimeHost(options: {
   ownedProcesses?: OwnedProcessRecordWriter;
   host: HostEnvironment;
+  web?: WebPlatformSelection;
 }): ScreenRecordingRuntimeHost {
   const host = options.host;
   const android: ScreenRecordingRuntimeHost['android'] = Object.freeze({
@@ -19,7 +21,7 @@ export function createScreenRecordingRuntimeHost(options: {
     resolve: async (device) => {
       const { resolveWebScreenRecordingTransport } =
         await import('./platform-runtime-screen-recording-web-host.ts');
-      return await resolveWebScreenRecordingTransport(device);
+      return await resolveWebScreenRecordingTransport(device, options.web);
     },
   });
   const outputs: ScreenRecordingRuntimeHost['outputs'] = Object.freeze({

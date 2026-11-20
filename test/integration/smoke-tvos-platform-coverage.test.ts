@@ -1,4 +1,3 @@
-import { readVersion } from '@agent-device/host-kit/version';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +10,7 @@ import {
   assertCoverageGapRowsAreOwned,
 } from './support/coverage-classification.ts';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';
+import { builtinPlatformSelectionFixture } from '../../src/platform-runtime-builtin-platforms.fixtures.ts';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import {
   TVOS_COVERAGE_GAP_ISSUE,
@@ -84,8 +84,8 @@ test('tvOS gesture contract preserves the typed multi-touch denial', async () =>
   // R42: the denial is now the Apple owner's own fact for the tvOS leaf, and the refusal a
   // gesture reports is that fact's hint under the shared wording.
   const facts = await createPlatformRuntimeGateway({
-    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
+    platforms: builtinPlatformSelectionFixture(),
     resolveSessionArtifacts: () => ({
       outputPath: '/sessions/tvos/app.log',
       pidPath: '/sessions/tvos/app-log.pid',

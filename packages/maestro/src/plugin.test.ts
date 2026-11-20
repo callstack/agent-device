@@ -12,7 +12,8 @@ function contributionOf(
   plugin: AgentDevicePlugin,
 ): ReplayBackendContribution | ReplayExecutionContribution {
   const [contribution] = plugin.contributes;
-  if (contribution.kind === 'provider') throw new Error('expected a replay contribution');
+  if (contribution.kind !== 'replay-backend' && contribution.kind !== 'replay-execution')
+    throw new Error('expected a replay contribution');
   return contribution;
 }
 

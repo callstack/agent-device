@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import {
   CANONICAL_PLATFORM_FAMILIES,
@@ -21,7 +22,13 @@ function declarations(): PlatformPackageDeclaration[] {
   return CANONICAL_PLATFORM_FAMILIES.map((family) => ({
     dir: `packages/platform-${family}`,
     family,
-    name: `@agent-device/platform-${family}`,
+    name: family === 'web' ? '@agent-device/web' : `@agent-device/platform-${family}`,
+    ...(family === 'web'
+      ? {
+          managedClaim: { platform: family, apiVersion: 3 },
+          publishedSubpaths: ['./agent-device'],
+        }
+      : {}),
     private: true,
     exportedSubpaths:
       family === 'apple'
@@ -53,9 +60,11 @@ function declarations(): PlatformPackageDeclaration[] {
               '@agent-device/platform-android/snapshot-capture-fixtures',
               '@agent-device/platform-android/ui-hierarchy-fixtures',
             ]
-          : family === 'harmonyos' || family === 'linux' || family === 'web'
-            ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
-            : [`@agent-device/platform-${family}`],
+          : family === 'web'
+            ? ['@agent-device/web/agent-device']
+            : family === 'harmonyos' || family === 'linux'
+              ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
+              : [`@agent-device/platform-${family}`],
   }));
 }
 
@@ -753,6 +762,7 @@ test('composition imports are category-based for future contracts and host adapt
 
 test('Node resolves only each platform package root facade', () => {
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
+    if (family === 'web') continue;
     const specifier = `@agent-device/platform-${family}`;
     assert.ok(import.meta.resolve(specifier).endsWith(`packages/platform-${family}/src/index.ts`));
     assert.throws(
@@ -760,6 +770,18 @@ test('Node resolves only each platform package root facade', () => {
       /ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath/,
     );
   }
+});
+
+test('only the plugin scope resolves the managed web entry', () => {
+  assert.throws(() => import.meta.resolve('@agent-device/web/agent-device'), /Cannot find package/);
+  const resolveWeb = createRequire(
+    new URL('../../packages/platform-web/package.json', import.meta.url),
+  );
+  assert.match(
+    resolveWeb.resolve('@agent-device/web/agent-device'),
+    /platform-web[/\\]src[/\\]index\.ts$/,
+  );
+  assert.throws(() => resolveWeb.resolve('@agent-device/web'), /No "exports" main/);
 });
 
 test('the retired src/platforms zone rejects every production, test, and fixture file', () => {
@@ -828,5 +850,22 @@ test('a provision-kit import of a concrete platform package fails closed', () =>
       .map(({ message }) => message)
       .join('\n'),
     /may import '@agent-device\/platform-android'/,
+  );
+});
+
+test('managed platform code enters core only through the registry', () => {
+  const file = 'src/platform-runtime/consumer.ts';
+  const violations = checkPlatformPackagePolicy(
+    new Map([
+      ['src/platform-runtime.ts', ''],
+      [file, "void import('@agent-device/web/agent-device')"],
+    ]),
+    declarations(),
+  );
+  assert.ok(
+    violations.some(
+      (finding) =>
+        finding.file === file && finding.message.includes('only through the plugin registry'),
+    ),
   );
 });
