@@ -20,7 +20,7 @@ import {
   withManagedAgentBrowserProvider,
 } from './test-utils.ts';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
-import type { WebProvider } from '../provider.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 
 bindTestCommandHost();
 

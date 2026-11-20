@@ -1,27 +1,53 @@
 {
-  "name": "@agent-device/platform-web",
-  "version": "0.0.0",
+  "name": "@agent-device/web",
+  "version": "0.22.0-dev",
   "private": true,
   "type": "module",
-  "description": "Web-family platform runtime metadata and implementations for agent-device.",
-  "dependencies": {
+  "description": "Managed web platform plugin for agent-device.",
+  "exports": {
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
-    "@agent-device/selectors": "workspace:*"
+    "@agent-device/selectors": "workspace:*",
+    "@agent-device/build-config": "workspace:*",
+    "agent-device": "workspace:*"
   },
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "agent-device": {
+    "apiVersion": 3,
+    "platform": "web"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types build.mjs",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "exports": {
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      }
     },
-    "./interactor": {
-      "types": "./src/interactor-facade.ts",
-      "default": "./src/interactor-facade.ts"
-    }
+    "access": "public"
   },
-  "devDependencies": {
-    "@agent-device/test-kit": "workspace:*"
-  }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/platform-web"
+  },
+  "homepage": "https://agent-device.dev/docs/commands#web"
 }

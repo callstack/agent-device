@@ -9,18 +9,15 @@ import type {
   AndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
 import type { AppleRunnerCommandExecutor, AppleRunnerProvider } from '@agent-device/apple-runner';
-import type { WebProvider } from '@agent-device/platform-web';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { LinuxToolProvider } from '@agent-device/platform-linux';
 import type { VegaToolProvider } from '@agent-device/platform-vega';
 import { webBackendKeyOf, type DeviceInfo } from '@agent-device/kernel/device';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
-import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
-import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
+import { builtinPlatformPlugins } from '../core/interactors/builtin-platform-plugin-set.ts';
 import { loadAndroidMechanics } from '../platform-runtime-android-mechanics.ts';
 
 export type PlatformProviderResolver<TResult> = (
@@ -62,17 +59,9 @@ export type PlatformProviderResolvers = {
   appleSimulatorScreenRecordingTransport?: AppleSimulatorScreenRecordingTransportResolver;
 };
 
-export type DefaultWebProviderOptions = Readonly<{
-  /** The composing runtime's host; the default web provider spawns managed backends with it. */
-  host: HostEnvironment;
-  stateDir?: string;
-  openWebSessionNames: () => readonly string[];
-  ownedProcessRecords?: OwnedProcessRecordStore;
-}>;
-
 export type RequestPlatformProviderOptions = Readonly<{
   providers?: PlatformProviderResolvers;
-  defaultWebProvider?: DefaultWebProviderOptions;
+  web?: WebPlatformSelection;
 }>;
 
 type ResolvedRequestPlatformProviders = {
@@ -105,6 +94,7 @@ type RequestPlatformProviderDescriptor = {
   appendWrapper: (
     scopedProviders: ResolvedRequestPlatformProviders,
     wrappers: RequestPlatformProviderScopeWrapper[],
+    web?: WebPlatformSelection,
   ) => Promise<void>;
 };
 
@@ -124,16 +114,12 @@ export function createComposedRequestPlatformProviders(
       context: PlatformProviderRequestContext,
       task: (scope: RequestPlatformProviderScope) => Promise<T>,
     ): Promise<T> => {
-      const effectiveProviders = await providersForContext(
-        providers,
-        options.defaultWebProvider,
-        context,
-      );
+      const effectiveProviders = await providersForContext(providers, options.web, context);
       const scopedProviders = resolveRequestPlatformProviders(effectiveProviders, context);
       const scope: RequestPlatformProviderScope = {
         androidAdbExecutor: scopedProviders.androidAdb?.executor,
       };
-      const wrappers = await requestPlatformProviderScopeWrappers(scopedProviders);
+      const wrappers = await requestPlatformProviderScopeWrappers(scopedProviders, options.web);
       return await runRequestPlatformProviderScopes(wrappers, async () => await task(scope));
     },
   });
@@ -141,26 +127,15 @@ export function createComposedRequestPlatformProviders(
 
 async function providersForContext(
   providers: PlatformProviderResolvers,
-  defaultWebProvider: DefaultWebProviderOptions | undefined,
+  web: WebPlatformSelection | undefined,
   context: PlatformProviderRequestContext,
 ): Promise<PlatformProviderResolvers> {
   const session = webBackendKeyOf(context.device.id);
-  if (
-    providers.webProvider ||
-    !context.useDefaultWebProvider ||
-    !defaultWebProvider ||
-    session === undefined
-  ) {
+  if (context.device.platform !== 'web' || !web) return providers;
+  const platform = web.get();
+  if (providers.webProvider || !context.useDefaultWebProvider || session === undefined)
     return providers;
-  }
-  const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
-  const defaultProvider = await createAgentBrowserWebProvider({
-    host: defaultWebProvider.host,
-    session,
-    stateDir: defaultWebProvider.stateDir,
-    openWebSessionNames: defaultWebProvider.openWebSessionNames,
-    ownedProcessRecords: defaultWebProvider.ownedProcessRecords,
-  });
+  const defaultProvider = await platform.operations.createProvider(session);
   return {
     ...providers,
     webProvider: () => defaultProvider,
@@ -267,13 +242,12 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'webProvider',
     resolve(providers, context) {
       const resolver = providers.webProvider;
-      if (!resolver || !platformGatedResolverApplies('webProvider', context.device)) return {};
+      if (!resolver || context.device.platform !== 'web') return {};
       return { web: { provider: resolver(context) } };
     },
-    async appendWrapper(scopedProviders, wrappers) {
-      if (!scopedProviders.web?.provider) return;
-      const { withWebProvider } = await import('@agent-device/platform-web');
-      appendRequestProviderWrapper(wrappers, scopedProviders.web, withWebProvider);
+    async appendWrapper(scopedProviders, wrappers, web) {
+      if (!scopedProviders.web?.provider || !web) return;
+      appendRequestProviderWrapper(wrappers, scopedProviders.web, web.get().withRequestProvider);
     },
   },
   {
@@ -333,17 +307,20 @@ function platformGatedResolverApplies(
   // A predicate, never a throw: an absent optional family gates no resolver, and the runtime or
   // interactor lookup the same request then performs raises the typed plugin-not-installed outcome.
   // The registry is intentionally loaded by the root composition, not by the daemon request path.
-  return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
+  return (
+    builtinPlatformPlugins
+      .tryGet(device.platform)
+      ?.plugin.providers?.platformGatedResolvers.includes(key) ?? false
+  );
 }
-
-registerBuiltinPlatformPlugins(missingPlatformPlugin);
 
 async function requestPlatformProviderScopeWrappers(
   scopedProviders: ResolvedRequestPlatformProviders,
+  web?: WebPlatformSelection,
 ): Promise<RequestPlatformProviderScopeWrapper[]> {
   const wrappers: RequestPlatformProviderScopeWrapper[] = [];
   for (const descriptor of REQUEST_PLATFORM_PROVIDER_DESCRIPTORS) {
-    await descriptor.appendWrapper(scopedProviders, wrappers);
+    await descriptor.appendWrapper(scopedProviders, wrappers, web);
   }
   return wrappers;
 }

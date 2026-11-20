@@ -81,7 +81,7 @@ export function createPluginSelectionGuard(
     } catch (error) {
       throw new AppError(
         'INVALID_ARGS',
-        'Cannot read the selected replay plugin configuration',
+        'Cannot read the selected plugin configuration',
         {
           reason: 'invalid_plugin',
           package: packageName,
@@ -133,6 +133,7 @@ type StoreInstallation = {
   directory: string;
   selection: PluginSelection;
   entry: string;
+  assertCompatibleHost(): void;
   declaredClaims: readonly PluggedClaim[];
 };
 
@@ -161,12 +162,18 @@ async function describeInstallation(
     throw new AppError('INVALID_ARGS', `Invalid artifact plugin metadata: ${name}`, {
       reason: 'invalid_plugin',
     });
+  // Record the declared claims before checking the Node floor or importing the factory.
   const entry = discoverPluginEntry(directory);
-  // Before any import: the supported contract version, the Node floor, and the static claims. The
-  // claims the factory returns must equal these once it runs with its options.
   const declaredClaims = readAgentDeviceClaims(packageJson);
-  assertNodeFloor(packageJson);
-  return { name, version, directory, selection, entry, declaredClaims };
+  return {
+    name,
+    version,
+    directory,
+    selection,
+    declaredClaims,
+    entry,
+    assertCompatibleHost: () => assertNodeFloor(packageJson),
+  };
 }
 
 async function readInstallation(home: string, name: string, selection: PluginSelection) {
@@ -178,7 +185,13 @@ async function readInstallation(home: string, name: string, selection: PluginSel
   );
 }
 
-async function loadInstallation({ name, entry, selection }: StoreInstallation) {
+async function loadInstallation({
+  name,
+  entry,
+  assertCompatibleHost,
+  selection,
+}: StoreInstallation) {
+  assertCompatibleHost();
   const module = await import(pathToFileURL(entry).href);
   if (typeof module.default !== 'function')
     throw new AppError('INVALID_ARGS', `Plugin must export a default factory: ${name}`, {
@@ -273,6 +286,7 @@ export async function listPlugins(env: NodeJS.ProcessEnv, builtinProviders: read
     ...(entry.version !== undefined ? { version: entry.version } : {}),
     ...(entry.provider !== undefined ? { provider: entry.provider } : {}),
     ...(entry.backend !== undefined ? { backend: entry.backend } : {}),
+    ...(entry.platform !== undefined ? { platform: entry.platform } : {}),
     compatible: entry.state === 'active',
     ...(entry.error ? { error: entry.error } : {}),
   }));
@@ -390,9 +404,12 @@ async function stagePlugin(
     JSON.stringify({ private: true, dependencies: { [name]: version ?? 'latest' } }),
   );
   await installInProject(stage.project, env);
-  await describeInstallation(name, installationDirectory(stage.home, name, stage.installation), {
-    installation: stage.installation,
-  });
+  const installation = await describeInstallation(
+    name,
+    installationDirectory(stage.home, name, stage.installation),
+    { installation: stage.installation },
+  );
+  installation.assertCompatibleHost();
 }
 
 /**
@@ -492,7 +509,8 @@ export async function addPluginArtifact(
         installation,
         artifact: { integrity, version: manifest.version },
       };
-      await describeInstallation(name, directory, selection);
+      const described = await describeInstallation(name, directory, selection);
+      described.assertCompatibleHost();
       if (Object.hasOwn(selections, name))
         throw new AppError('INVALID_ARGS', `Plugin is already installed: ${name}`, {
           reason: 'plugin_already_installed',

@@ -169,8 +169,8 @@ async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise
       serial: flags.serial,
     },
     host,
-    undefined,
     {
+      stateDir: flags.stateDir,
       afterOutcomes: async (outcomes) => {
         const data = {
           released: outcomes

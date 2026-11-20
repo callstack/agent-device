@@ -37,7 +37,7 @@ export type DaemonRuntimeDeps = Readonly<{
   shutdownProviderRuntimes: () => Promise<readonly PluginCleanupOutcome[]>;
   /**
    * Every provider plugin the composition saw, active or failed. Data only: this server publishes
-   * it in the daemon registration and records each failed entry as a `provider_plugin_failed`
+   * it in the daemon registration and records each failed entry as a plugin failure
    * diagnostic, so log emission stays in this module.
    */
   pluginInventory: readonly PluginInventoryEntry[];

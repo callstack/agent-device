@@ -216,6 +216,7 @@ async function startDaemonRuntimeOnHost(
     emitDaemonDiagnostic,
     finishDaemonRegistration,
     flushDaemonStartupDiagnostics,
+    reportPluginStartupFailures,
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
@@ -685,17 +686,7 @@ async function startDaemonRuntimeOnHost(
   options.startupProgress?.report('registered');
   options.startupProgress?.close();
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
-  for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
-    await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
-      provider: plugin.provider,
-      package: plugin.package,
-      source: plugin.source,
-      code: plugin.error?.code,
-      reason: plugin.error?.reason,
-      message: plugin.error?.message,
-      hint: plugin.error?.hint,
-    });
-  }
+  await reportPluginStartupFailures(logPath, deps.pluginInventory);
   // After publication: publishDaemonInfo truncates daemon.log, so anything
   // written before it is lost — including reconciliation diagnostics.
   await reconcileDeviceClaimsForDaemonStartup(

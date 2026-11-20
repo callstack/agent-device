@@ -7,6 +7,7 @@ import {
   type InventoryPlatformModule,
   createPlatformModuleRegistry,
 } from '@agent-device/contracts/platform-module';
+import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
 import type {
   DeviceInventoryHost,
   PlatformRequestScope,
@@ -256,7 +257,9 @@ describe('composed device inventory gateway', () => {
         },
       }),
     );
-    const registry = createPlatformModuleRegistry(modules, CORE_VERSION);
+    const registry = createPlatformModuleRegistry(modules, (family) =>
+      missingOptionalPlatformError(family, CORE_VERSION),
+    );
     const gateways = createComposedDeviceInventoryGateways({
       registry,
       loadHost: async () => host,
@@ -361,7 +364,9 @@ function inventoryWorld(
     },
   }));
   return {
-    registry: createPlatformModuleRegistry(modules, CORE_VERSION),
+    registry: createPlatformModuleRegistry(modules, (family) =>
+      missingOptionalPlatformError(family, CORE_VERSION),
+    ),
     loadHost: async () => {
       hosts += 1;
       return host;

@@ -8,15 +8,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import { assertPngDimensions, assertPngFile } from './provider-scenarios/assertions.ts';
 import { runCleanupWithCoverageReport } from './web-e2e/coverage-report.ts';
+import {
+  installWebPluginForSmoke,
+  stopWebPluginSmokeDaemon,
+} from './web-e2e/web-plugin-artifact.ts';
 import { runLiveFillScenario } from './web-e2e/fill-scenario.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
-import {
-  getManagedAgentBrowserStatus,
-  inspectManagedAgentBrowserProcesses,
-  summarizeAgentBrowserProcesses,
-  type AgentBrowserProcessSummary,
-  type AgentBrowserToolStatus,
-} from '@agent-device/platform-web';
+import { webSelectionFixture } from '../../src/platform-runtime-web-provider.fixtures.ts';
 import {
   stopDaemonProcess,
   waitForDaemonExit,
@@ -187,22 +185,19 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
   // above (including the very failure this test exists to catch: processes still alive when the
   // fix regresses) can never leave a daemon or a Chrome fleet running on the host afterward.
   let daemonIdentity: DaemonProcessIdentity | undefined;
-  let status: AgentBrowserToolStatus | undefined;
+  let inspect: InspectManagedBrowserProcesses | undefined;
   try {
+    await installWebPluginForSmoke(context.env);
     await runStep(context, 'set up managed web backend', ['web', 'setup', '--json']);
     await runStep(context, 'open local fixture', ['open', context.url, ...context.common]);
 
     const stateDir = context.env.AGENT_DEVICE_STATE_DIR;
     assert.ok(stateDir, 'expected the smoke context to configure a state dir');
-    status = await getManagedAgentBrowserStatus({
-      stateDir,
-      host: { env: process.env, cwd: process.cwd() },
-    });
-
-    const before = await inspectManagedAgentBrowserProcesses(status);
+    inspect = inspectManagedBrowserProcesses(context.env, stateDir);
+    const before = await inspect();
     assert.ok(
       before.count > 0,
-      `expected the managed browser fleet to be running after open, found none: ${formatProcessSummary(before)}`,
+      `expected the managed browser fleet to be running after open, found none: ${JSON.stringify(before)}`,
     );
 
     const daemonPid = readDaemonPid(stateDir);
@@ -216,7 +211,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     process.kill(daemonPid, 'SIGTERM');
 
     const [after, daemonExit] = await Promise.all([
-      settleManagedBrowserProcesses(status),
+      settleManagedBrowserProcesses(inspect),
       waitForDaemonExit(daemonIdentity, {
         timeoutMs: WEB_SHUTDOWN_SETTLE_TIMEOUT_MS,
         pollMs: WEB_SHUTDOWN_SETTLE_POLL_MS,
@@ -225,7 +220,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     assert.equal(
       after.count,
       0,
-      `expected zero owned Chrome processes after daemon shutdown, found: ${formatProcessSummary(after)}`,
+      `expected zero owned Chrome processes after daemon shutdown, found: ${JSON.stringify(after)}`,
     );
     assert.equal(
       daemonExit.exited,
@@ -237,7 +232,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
     // state-dir residue either, on top of the process-level proof above.
     await assertNoDaemonLeaks({ stateDir, daemonPids: [daemonPid], phase: 'after-shutdown' });
   } finally {
-    await cleanupWebShutdownSmoke(context, daemonIdentity, status);
+    await cleanupWebShutdownSmoke(context, daemonIdentity, inspect);
   }
 }
 
@@ -250,7 +245,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 async function cleanupWebShutdownSmoke(
   context: WebSmokeContext,
   daemonIdentity: DaemonProcessIdentity | undefined,
-  status: AgentBrowserToolStatus | undefined,
+  inspect: InspectManagedBrowserProcesses | undefined,
   timeouts = {
     termTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
     killTimeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS,
@@ -264,9 +259,9 @@ async function cleanupWebShutdownSmoke(
       errors.push(error);
     }
   }
-  if (status) {
+  if (inspect) {
     try {
-      await forceKillManagedBrowserProcesses(status);
+      await forceKillManagedBrowserProcesses(inspect);
     } catch (error) {
       errors.push(error);
     }
@@ -297,9 +292,11 @@ async function stopWebSmokeDaemon(
 // of how recently it was used, so a planted regression (no active close on shutdown) cannot leave
 // Chrome processes running on the host just because cleanup honored the same idle guard the
 // regression exploits.
-async function forceKillManagedBrowserProcesses(status: AgentBrowserToolStatus): Promise<void> {
+async function forceKillManagedBrowserProcesses(
+  inspect: InspectManagedBrowserProcesses,
+): Promise<void> {
   const processes = await listHostProcesses({ timeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS });
-  const summary = await summarizeAgentBrowserProcesses(processes, status);
+  const summary = await inspect();
   if (summary.count === 0) return;
   // Chrome renderers share command lines, so each stop also names the lifetime read beside them.
   const fleet = expandProcessTree(summary.pids, processes);
@@ -332,30 +329,42 @@ function readDaemonPid(stateDir: string): number {
   return info.pid as number;
 }
 
-async function settleManagedBrowserProcesses(
-  status: AgentBrowserToolStatus,
-): Promise<AgentBrowserProcessSummary> {
-  const deadline = Date.now() + WEB_SHUTDOWN_SETTLE_TIMEOUT_MS;
-  let summary = await inspectManagedAgentBrowserProcesses(status);
-  while (summary.count > 0 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, WEB_SHUTDOWN_SETTLE_POLL_MS));
-    summary = await inspectManagedAgentBrowserProcesses(status);
-  }
-  return summary;
+type ManagedBrowserProcessSummary = { count: number; pids: number[]; matchReasons: string[] };
+type InspectManagedBrowserProcesses = () => Promise<ManagedBrowserProcessSummary>;
+
+function inspectManagedBrowserProcesses(
+  env: NodeJS.ProcessEnv,
+  stateDir: string,
+): InspectManagedBrowserProcesses {
+  const { operations } = webSelectionFixture({ env, cwd: process.cwd() }, stateDir).get();
+  return async () => {
+    const result = await operations.browserLifecycleCheck(stateDir);
+    const { count, pids, matchReasons } = result.evidence ?? {};
+    assert.ok(
+      typeof count === 'number' && Array.isArray(pids) && Array.isArray(matchReasons),
+      JSON.stringify(result),
+    );
+    return { count, pids, matchReasons };
+  };
 }
 
-function formatProcessSummary(summary: AgentBrowserProcessSummary): string {
-  return JSON.stringify({
-    count: summary.count,
-    pids: summary.pids,
-    reasons: summary.processes.map((match) => match.reason),
-  });
+async function settleManagedBrowserProcesses(
+  inspect: InspectManagedBrowserProcesses,
+): Promise<ManagedBrowserProcessSummary> {
+  const deadline = Date.now() + WEB_SHUTDOWN_SETTLE_TIMEOUT_MS;
+  let summary = await inspect();
+  while (summary.count > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, WEB_SHUTDOWN_SETTLE_POLL_MS));
+    summary = await inspect();
+  }
+  return summary;
 }
 
 async function runWebSmoke(context: WebSmokeContext): Promise<void> {
   let opened = false;
 
   try {
+    await installWebPluginForSmoke(context.env);
     await runStep(context, 'set up managed web backend', ['web', 'setup', '--json']);
     await runStep(context, 'verify managed web backend', ['web', 'doctor', '--json']);
     await runStep(context, 'open local fixture', ['open', context.url, ...context.common]);
@@ -391,6 +400,7 @@ async function createWebSmokeContext(
   const env = {
     ...process.env,
     AGENT_DEVICE_STATE_DIR: stateDir,
+    AGENT_DEVICE_HOME: path.join(artifactDir, 'plugin-home'),
     AGENT_BROWSER_CONFIG: agentBrowserConfigPath,
     AGENT_BROWSER_HEADED: 'false',
     ...(options.agentBrowserIdleTimeoutMs === undefined
@@ -553,6 +563,11 @@ async function cleanupWebSmoke(context: WebSmokeContext, opened: boolean): Promi
     } catch (error) {
       errors.push(error);
     }
+  }
+  try {
+    await stopWebPluginSmokeDaemon(context.env);
+  } catch (error) {
+    errors.push(error);
   }
   try {
     await closeServer(context.server);
