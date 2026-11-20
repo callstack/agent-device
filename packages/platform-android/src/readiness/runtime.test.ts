@@ -391,6 +391,26 @@ test('a missing tool keeps its code and message when the probe also spent the bu
   ).rejects.toMatchObject({ code: 'TOOL_MISSING', message: 'adb not found in PATH' });
 });
 
+test('an unauthorized device keeps its own message when the probe also spent the budget', async () => {
+  const { host } = probeHost([]);
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      return { stdout: '', stderr: 'error: device unauthorized.', exitCode: 1 };
+    },
+  });
+
+  const failure = await ensureAndroidReady(
+    host,
+    runningEmulator(),
+    { headless: false, deadlineAtMs: 5_000 },
+    new AbortController().signal,
+  ).catch((error: unknown) => error);
+
+  expect(failure).toMatchObject({ details: { reason: 'ADB_TRANSPORT_UNAVAILABLE' } });
+  expect((failure as Error).message).not.toBe('Android device did not finish booting in time');
+});
+
 test('a probe that throws a plain Error fails as a command failure, not UNKNOWN', async () => {
   const { host } = probeHost([new Error('spawn adb EACCES')]);
 

@@ -172,7 +172,7 @@ function buildAndroidBootFailureDetails(
 }
 
 /** The details every Android boot poller reports for a terminal boot failure. */
-export type AndroidBootFailureDetails = Readonly<
+type AndroidBootFailureDetails = Readonly<
   { serial: string; elapsedMs: number; hint: string; reason: BootFailureReason } & Record<
     string,
     unknown
@@ -197,6 +197,10 @@ export function buildAndroidBootError(
   if (appError.code === 'TOOL_MISSING') {
     return new AppError('TOOL_MISSING', appError.message, details, appError.cause);
   }
+  // A terminal transport failure (an unauthorized device, say) is not a slow boot either.
+  if (reason === 'ADB_TRANSPORT_UNAVAILABLE') {
+    return new AppError('COMMAND_FAILED', appError.message, details, appError.cause);
+  }
   if (budgetSpent) {
     return new AppError(
       'COMMAND_FAILED',
@@ -204,9 +208,6 @@ export function buildAndroidBootError(
       details,
       appError.cause,
     );
-  }
-  if (reason === 'ADB_TRANSPORT_UNAVAILABLE') {
-    return new AppError('COMMAND_FAILED', appError.message, details, appError.cause);
   }
   return new AppError(appError.code, appError.message, details, appError.cause);
 }
