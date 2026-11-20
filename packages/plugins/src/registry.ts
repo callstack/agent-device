@@ -47,6 +47,7 @@ import {
   validateReplayExecution,
   type ClaimKind,
   type PluggedClaim,
+  PLUGIN_REASONS,
 } from './validate.ts';
 
 /**
@@ -292,7 +293,7 @@ function assertDeclaredClaims(candidate: PluginCandidate, returned: readonly Plu
       'INVALID_ARGS',
       `Plugin factory claims do not match its package metadata: ${candidate.package ?? 'candidate'}`,
       {
-        reason: 'invalid_plugin',
+        reason: PLUGIN_REASONS.invalidPlugin,
         declared: sortedDeclared,
         returned: sortedReturned,
       },
@@ -332,7 +333,7 @@ export async function startProviderRegistry(
     resolveReplayBackend: async (id, host, packageName) => {
       if (closed)
         throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
-          reason: 'plugin-registry-closed',
+          reason: PLUGIN_REASONS.registryClosed,
         });
       const claim = requireReplayClaim(
         resolved,
@@ -345,7 +346,7 @@ export async function startProviderRegistry(
     resolveReplayExecution: async (packageName) => {
       if (closed)
         throw new AppError('COMMAND_FAILED', 'Plugin registry is closed', {
-          reason: 'plugin-registry-closed',
+          reason: PLUGIN_REASONS.registryClosed,
         });
       const claim = requireReplayClaim(
         resolved,
@@ -401,7 +402,7 @@ async function setUpClaim(
     if (scope === 'replay-backends') return;
     if (!policy.platformHost)
       throw new AppError('COMMAND_FAILED', 'Platform setup requires a platform host', {
-        reason: 'platform_host_missing',
+        reason: PLUGIN_REASONS.platformHostMissing,
       });
     const result = await contribution.setup(policy.platformHost);
     claim.platformSetup = Object.freeze(
@@ -523,7 +524,7 @@ function requireReplayClaim(
     throw replayClaimError(found);
   }
   throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${claim.id}`, {
-    reason: 'plugin-not-installed',
+    reason: PLUGIN_REASONS.notInstalled,
     backend: claim.id,
   });
 }

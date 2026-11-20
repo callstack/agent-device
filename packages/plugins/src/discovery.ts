@@ -3,7 +3,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { compareVersions } from '@agent-device/host-kit/version';
-import { readPluginPackageClaims, type PluggedClaim } from './validate.ts';
+import { PLUGIN_REASONS, readPluginPackageClaims, type PluggedClaim } from './validate.ts';
 
 /**
  * The static claims a plugin package declares in its `agent-device` package.json field, in kind
@@ -28,7 +28,7 @@ export function assertNodeFloor(manifest: Record<string, unknown>): void {
     throw new AppError(
       'INVALID_ARGS',
       `Plugin requires Node ${engines.node}; this host runs Node ${node}`,
-      { reason: 'node-below-floor', engines: engines.node, node },
+      { reason: PLUGIN_REASONS.nodeBelowFloor, engines: engines.node, node },
     );
   }
 }

@@ -15,6 +15,15 @@ import {
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginCandidate } from './registry.ts';
 import type { PluggedClaim } from './validate.ts';
+
+/** The `error.details.reason` values the plugin store publishes for its own selection and artifact refusals. */
+const PLUGIN_STORE_REASONS = {
+  alreadyInstalled: 'plugin_already_installed',
+  artifactIntegrityMismatch: 'artifact_integrity_mismatch',
+  artifactUpdateRequiresRemove: 'artifact_update_requires_remove',
+  cleanupFailed: 'plugin_cleanup_failed',
+  daemonPluginSetStale: 'daemon-plugin-set-stale',
+} as const satisfies Record<string, string>;
 export type PluginSelection = {
   installation: string;
   version?: string;
@@ -92,7 +101,7 @@ export function createPluginSelectionGuard(
     }
     if ((selected.get(packageName) ?? selectionStamp(undefined)) !== selectionStamp(current))
       throw new AppError('INVALID_ARGS', 'The running daemon retains an older plugin set.', {
-        reason: 'daemon-plugin-set-stale',
+        reason: PLUGIN_STORE_REASONS.daemonPluginSetStale,
         package: packageName,
         hint: 'Finish your sessions and restart the daemon on its host, then retry the original invocation with all its arguments.',
       });
@@ -378,7 +387,7 @@ async function transactSelection<T>(
               'COMMAND_FAILED',
               'Plugin installation and staging cleanup failed',
               {
-                reason: 'plugin_cleanup_failed',
+                reason: PLUGIN_STORE_REASONS.cleanupFailed,
                 installationError: normalizeError(error),
                 cleanupError: normalizeError(cleanupError),
               },
@@ -445,7 +454,7 @@ export async function changePlugin(
         throw new AppError(
           'INVALID_ARGS',
           `Artifact plugin cannot be updated from the registry: ${name}`,
-          { reason: 'artifact_update_requires_remove' },
+          { reason: PLUGIN_STORE_REASONS.artifactUpdateRequiresRemove },
         );
       const requested =
         action === 'update' && isVersionSelector(previous?.version) ? previous.version : version;
@@ -485,7 +494,7 @@ export async function addPluginArtifact(
       const name = names[0]!;
       if (lock.packages?.[`node_modules/${name}`]?.integrity !== integrity)
         throw new AppError('INVALID_ARGS', 'Artifact contents changed during installation', {
-          reason: 'artifact_integrity_mismatch',
+          reason: PLUGIN_STORE_REASONS.artifactIntegrityMismatch,
         });
       const directory = installationDirectory(home, name, installation);
       const root = fs.realpathSync(project);
@@ -513,7 +522,7 @@ export async function addPluginArtifact(
       described.assertCompatibleHost();
       if (Object.hasOwn(selections, name))
         throw new AppError('INVALID_ARGS', `Plugin is already installed: ${name}`, {
-          reason: 'plugin_already_installed',
+          reason: PLUGIN_STORE_REASONS.alreadyInstalled,
         });
       selections[name] = selection;
       return { name, version: manifest.version, installation, integrity };
