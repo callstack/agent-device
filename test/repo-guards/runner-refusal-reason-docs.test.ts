@@ -32,6 +32,7 @@ const reasonTable = (
 const REASON_TABLES = [
   reasonTable('RUNNER_ERROR_CODES', 'packages/apple-runner/src/runner-contract.ts', 'rows'),
   reasonTable('PRE_DISPATCH_REFUSAL_REASONS', 'packages/kernel/src/errors.ts', 'object'),
+  reasonTable('SCROLL_REASONS', 'packages/contracts/src/scroll-reasons.ts', 'rows'),
   reasonTable('WAIT_REASONS', 'packages/contracts/src/wait.ts', 'object', [
     commandsDoc,
     cliHelpWorkflows,
