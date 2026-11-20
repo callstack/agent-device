@@ -4,6 +4,7 @@ import {
   DEFAULT_SCROLL_UNTIL_PASSES,
   SCROLL_UNTIL_MAX_PASSES,
 } from '@agent-device/contracts/scroll-command';
+import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -185,7 +186,7 @@ function scrollUntilNotFoundError(
     'COMMAND_FAILED',
     `scroll ${direction} spent its ${passes}-pass budget without ${selector} becoming visible`,
     {
-      reason: 'scroll_until_pass_limit',
+      reason: SCROLL_REASONS.untilPassLimit.reason,
       selector,
       direction,
       passes,
@@ -203,7 +204,7 @@ function scrollUntilEdgeError(
     'COMMAND_FAILED',
     `scroll ${direction} reached the end of the scrollable content after ${passes} ${passes === 1 ? 'pass' : 'passes'} without ${selector} becoming visible`,
     {
-      reason: 'scroll_until_edge_reached',
+      reason: SCROLL_REASONS.untilEdgeReached.reason,
       selector,
       direction,
       passes,
@@ -222,7 +223,7 @@ function scrollUntilNoProgressError(
     'COMMAND_FAILED',
     `scroll ${direction} --until ${selector} moved nothing across ${spent}: the on-screen content never shifted`,
     {
-      reason: 'scroll_until_no_progress',
+      reason: SCROLL_REASONS.untilNoProgress.reason,
       selector,
       direction,
       passes,
@@ -240,7 +241,7 @@ function scrollUntilCaptureError(
     'COMMAND_FAILED',
     `scroll ${direction} --until ${selector} could not read the screen: ${refusal.detail}`,
     {
-      reason: 'scroll_until_capture_unreadable',
+      reason: SCROLL_REASONS.untilCaptureUnreadable.reason,
       selector,
       direction,
       captureRefusal: refusal.reason,

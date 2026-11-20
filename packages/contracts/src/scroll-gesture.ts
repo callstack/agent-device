@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { SCROLL_REASONS } from './scroll-reasons.ts';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -469,10 +470,8 @@ export const SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE = 12;
  * across platforms, and mutates state session-action provenance does not record. So the hint names
  * the tradeoff instead of paying it.
  */
-export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON = 'scroll_keyboard_occludes_surface';
-
 export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS = Object.freeze({
-  reason: SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
+  reason: SCROLL_REASONS.keyboardOccludesSurface.reason,
   hint:
     'The on-screen keyboard covers the surface this scroll would swipe, so it cannot reach it. ' +
     'End editing with a visible dismissal control, or use `keyboard dismiss` on Android. You can also scroll before focusing the field.',
@@ -486,7 +485,7 @@ export type ScrollKeyboardClip =
   /**
    * Too little surface left above the keyboard to swipe. Swiping anyway reads as a stuck
    * container to the no-progress fingerprint, so the caller refuses with
-   * `SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON` instead.
+   * `scroll_keyboard_occludes_surface` instead.
    */
   | { kind: 'occluded'; keyboardMinY: number; visibleHeight: number };
 

@@ -6,12 +6,12 @@ import {
   DEFAULT_REFRESH_PULL_DURATION_MS,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
-  SCROLL_REFRESH_REFUSALS,
   type ResolvedScrollExecutionOptions,
   type ScrollCommandOptions,
   type ScrollMovementObservation,
 } from '@agent-device/contracts/scroll-command';
 import { parseScrollDirection, type ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
 import {
   resolveScrollRuntimePlan,
   type ScrollRuntimePlan,
@@ -300,8 +300,10 @@ async function executeRefreshScroll(
   const top = await captureEdgeState(runtime, 'top', undefined, context);
   if ('refused' in top) throw buildScrollEdgeCaptureError('top', top.refused);
   if (top.canScroll) {
-    const { message, ...details } = SCROLL_REFRESH_REFUSALS.notAtTop;
-    throw new AppError('COMMAND_FAILED', message, details);
+    throw new AppError('COMMAND_FAILED', 'scroll refresh needs the content at its top', {
+      reason: SCROLL_REASONS.refreshNotAtTop.reason,
+      hint: 'Run scroll top, then scroll refresh.',
+    });
   }
   const pullOptions =
     top.containerRect === undefined ? options : { ...options, containerRect: top.containerRect };

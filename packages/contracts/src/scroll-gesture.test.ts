@@ -11,10 +11,10 @@ import {
   clampGestureCoordinate,
   SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE,
   SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION,
-  SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
   clipScrollViewportAboveKeyboard,
   scrollKeyboardOccludesSurfaceError,
 } from './scroll-gesture.ts';
+import { SCROLL_REASONS } from './scroll-reasons.ts';
 import {
   DEFAULT_IOS_SCROLL_AMOUNT,
   DEFAULT_IOS_SCROLL_DURATION_MS,
@@ -268,7 +268,7 @@ test('the keyboard clip thresholds and refusal keys belong to the table, not thi
   const { constants } = loadTable();
   assert.equal(constants.minVisibleFraction, SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION);
   assert.equal(constants.accessoryAllowance, SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE);
-  assert.equal(constants.occlusionReason, SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON);
+  assert.equal(constants.occlusionReason, SCROLL_REASONS.keyboardOccludesSurface.reason);
 });
 
 test('a clipped viewport keeps even a saturated swipe inside the visible band', () => {
@@ -313,7 +313,7 @@ test('the occlusion refusal is keyed on its reason, not on its message', () => {
   });
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'COMMAND_FAILED');
-  assert.equal(error.details?.reason, SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON);
+  assert.equal(error.details?.reason, SCROLL_REASONS.keyboardOccludesSurface.reason);
   assert.equal(error.details?.keyboardMinY, 564);
   assert.equal(error.details?.visibleHeight, 40);
   assert.equal(error.details?.viewportHeight, 874);

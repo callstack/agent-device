@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON } from '@agent-device/contracts/scroll-gesture';
+import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
 import {
   normalizeAppleScrollResultWithResolvedFrame,
   withAppleScrollKeyboardOcclusion,
@@ -73,7 +73,7 @@ test('the runner keyboard refusal gains the shared reason and hint and keeps its
   assert.ok(mapped instanceof AppError);
   assert.equal(mapped.code, 'COMMAND_FAILED');
   assert.equal(mapped.message, runnerError.message);
-  assert.equal(mapped.details?.reason, SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON);
+  assert.equal(mapped.details?.reason, SCROLL_REASONS.keyboardOccludesSurface.reason);
   assert.match(String(mapped.details?.hint), /keyboard dismiss/);
   assert.equal(mapped.details?.logPath, '/tmp/runner.log');
   assert.equal(mapped.details?.runnerErrorCode, 'SCROLL_KEYBOARD_OCCLUDES_SURFACE');
