@@ -15,6 +15,7 @@ on:
       - 'scripts/__tests__/check-doc-links.test.ts'
       - 'scripts/check-doc-prose.ts'
       - 'scripts/__tests__/check-doc-prose.test.ts'
+      - 'scripts/command-docs/**'
       - 'scripts/capability-matrix/**'
       - 'test/repo-guards/capability-matrix.test.ts'
       - 'scripts/check-affected/**'
@@ -36,6 +37,7 @@ on:
       - 'scripts/__tests__/check-doc-links.test.ts'
       - 'scripts/check-doc-prose.ts'
       - 'scripts/__tests__/check-doc-prose.test.ts'
+      - 'scripts/command-docs/**'
       - 'scripts/capability-matrix/**'
       - 'test/repo-guards/capability-matrix.test.ts'
       - 'scripts/check-affected/**'
@@ -69,7 +71,7 @@ jobs:
 
       # ci.yml ignores docs paths, so a docs-only PR never reaches the unit lane that carries the
       # command-reference coverage gate. Documenting a retired command, or dropping a public
-      # command's docs, fails here instead.
+      # command's docs, or leaving a generated block stale, fails here instead.
       - name: Check command reference doc coverage
         uses: ./.github/actions/run-gate
         with: { gate: command-docs }

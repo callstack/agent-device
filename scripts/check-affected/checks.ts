@@ -137,7 +137,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('freerange', 'Numeric range audit', 'check:freerange', false),
   gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
   gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),
-  gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
+  gate('command-docs', 'Command reference coverage and generated blocks', 'check:command-docs'),
   gate('adr-citations', 'ADR citations name tracked files', 'check:adr-citations'),
   // The docs page's cells are generated from the runtime facts, so the check is
   // the guard over that generation: it regenerates and diffs, proves the drift

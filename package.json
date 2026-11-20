@@ -172,7 +172,7 @@
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
     "check:package": "node --experimental-strip-types scripts/check-package.ts",
     "check:provider-plugin": "node scripts/check-provider-plugin.mjs",
-    "check:command-docs": "vitest run --project unit-core test/repo-guards/command-doc-coverage.test.ts",
+    "check:command-docs": "vitest run --project unit-core test/repo-guards/command-doc-coverage.test.ts test/repo-guards/command-doc-generated-blocks.test.ts",
     "generate:command-docs": "node --experimental-strip-types scripts/command-docs/generate.ts --write",
     "check:adr-citations": "vitest run --project unit-core test/repo-guards/adr-citations.test.ts",
     "check:capabilities-matrix": "vitest run --project unit-core test/repo-guards/capability-matrix.test.ts",
