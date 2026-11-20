@@ -23,6 +23,8 @@ import type {
  * Every operation is stated here by name, never through its family's facts builder: each owner
  * builds on this value, so a family this module evaluated would be one every owner evaluates,
  * whether or not it implements that family. `RuntimeFacts` refuses a value that omits an operation.
+ * The one exception is `withHoverRefusalHint` from `touch-runtime.ts`: a refused hover leg carries
+ * its redirection to longpress on every owner, so the hub evaluates that module.
  */
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
