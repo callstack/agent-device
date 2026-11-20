@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   loginWithDeviceAuth,
   readCliSession,
@@ -574,3 +575,31 @@ function assertRefusedWithoutOutput(refused: RefusedDeviceLogin): void {
   assert.deepEqual(refused.spawns, []);
   assert.equal(refused.stderr, '');
 }
+
+test('a rewritten CLI session replaces the file, so a reader never sees a partial record', () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-session-replace-');
+  const session = {
+    version: 1 as const,
+    id: 'session-first',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_first',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  try {
+    writeCliSession({ stateDir: tempRoot, session });
+    const sessionPath = resolveCliSessionPath(tempRoot);
+    fs.chmodSync(sessionPath, 0o644);
+    const openedBeforeRewrite = fs.openSync(sessionPath, 'r');
+    try {
+      writeCliSession({ stateDir: tempRoot, session: { ...session, id: 'session-second' } });
+      assert.equal(JSON.parse(fs.readFileSync(openedBeforeRewrite, 'utf8')).id, 'session-first');
+    } finally {
+      fs.closeSync(openedBeforeRewrite);
+    }
+    assert.equal(readCliSession({ stateDir: tempRoot })?.id, 'session-second');
+    assert.equal(fs.statSync(sessionPath).mode & 0o077, 0);
+    assert.deepEqual(fs.readdirSync(path.dirname(sessionPath)), [path.basename(sessionPath)]);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});

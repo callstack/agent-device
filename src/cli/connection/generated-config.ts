@@ -7,6 +7,7 @@ import type {
   RemoteConfigProfile,
   ResolvedRemoteConfigProfile,
 } from '@agent-device/remote/remote-config-schema';
+import { publishFileSync } from '@agent-device/host-kit/file';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -26,12 +27,11 @@ export function writeGeneratedRemoteConfig(options: {
     configDir,
     `${safeProviderName(options.provider)}-${profileHash(normalized)}.json`,
   );
-  fs.writeFileSync(configPath, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(configPath, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support POSIX mode bits.
-  }
+  publishFileSync({
+    destination: configPath,
+    contents: `${JSON.stringify(normalized, null, 2)}\n`,
+    mode: 0o600,
+  });
   return configPath;
 }
 

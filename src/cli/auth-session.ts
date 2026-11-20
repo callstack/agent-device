@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { publishFileSync } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -295,14 +296,11 @@ export function readCliSession(options: { stateDir: string }): CliSessionRecord 
 export function writeCliSession(options: { stateDir: string; session: CliSessionRecord }): void {
   const filePath = resolveCliSessionPath(options.stateDir);
   fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(filePath, `${JSON.stringify(options.session, null, 2)}\n`, {
+  publishFileSync({
+    destination: filePath,
+    contents: `${JSON.stringify(options.session, null, 2)}\n`,
     mode: 0o600,
   });
-  try {
-    fs.chmodSync(filePath, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support POSIX mode bits.
-  }
 }
 
 export function removeCliSession(options: { stateDir: string }): boolean {
