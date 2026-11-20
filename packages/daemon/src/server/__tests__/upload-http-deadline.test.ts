@@ -8,6 +8,11 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { createDaemonHttpServer } from '../http/http-server.ts';
 import { cleanupUploadedArtifact } from '../../resources/artifact-tracking.ts';
 import {
+  readResponses,
+  watchAcceptedArtifactBytes,
+  watchServer,
+} from './upload-loopback.fixtures.ts';
+import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
@@ -228,6 +233,7 @@ test('a finalize whose hash crosses the deadline never publishes success', async
 test('a queued 308 behind a long finalize never closes the socket under the earlier answer', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { server, port } = await startServer();
+  const watch = watchServer(server);
   const reads = holdPayloadReads((path) => String(path).endsWith('/payload'));
   try {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
@@ -265,12 +271,9 @@ test('a queued 308 behind a long finalize never closes the socket under the earl
     // One keep-alive socket: a complete finalize for A, then a stale-offset PUT for B whose
     // body stays unfinished. B's 308 queues behind A's long hash.
     const socket = net.connect(port, '127.0.0.1');
-    let received = '';
+    const client = readResponses(socket);
     const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()));
-    socket.on('data', (data: Buffer) => {
-      received += data.toString('latin1');
-    });
-    socket.on('error', () => {});
+    const bAnswered = watch.answered(`/upload/direct/${uploadB}`);
     const finalizeBody = JSON.stringify({ uploadId: uploadA });
     socket.write(
       `POST /upload/finalize HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
@@ -279,17 +282,18 @@ test('a queued 308 behind a long finalize never closes the socket under the earl
         `Transfer-Encoding: chunked\r\n\r\n1\r\na\r\n`,
     );
     await withIO(reads.started.promise, 'the held finalize hash');
-    await flushIO();
+    // B's 308 is committed (queued behind A) before the clock moves.
+    await withIO(bAnswered, "B's queued 308");
     // B's inactivity ceiling passes while A's in-budget hash still owns the socket.
     await vi.advanceTimersByTimeAsync(150_000);
     await flushIO();
     assert.equal(socket.destroyed, false, 'the socket survives B timing out behind A');
     reads.release.resolve();
+    const [answerA, answerB] = await withIO(client.responses(2), 'both answers');
     await withIO(closed, 'the socket close after both answers');
-    const statuses = [...received.matchAll(/HTTP\/1\.1 (\d+)/g)].map((match) => match[1]);
-    assert.equal(statuses[0], '200', 'A finalizes with its own answer');
-    assert.equal(statuses[1], '308', "B's queued answer follows");
-    const artifact = received.match(/"uploadId":"([^"]+)"/)?.[1];
+    assert.equal(answerA?.status, 200, 'A finalizes with its own answer');
+    assert.equal(answerB?.status, 308, "B's queued answer follows");
+    const artifact = answerA?.body.match(/"uploadId":"([^"]+)"/)?.[1];
     if (artifact) cleanupUploadedArtifact(artifact);
   } finally {
     reads.release.resolve();
@@ -617,6 +621,7 @@ function pipelinedFinalizeThenStreamingPut(port: number, uploadA: string, upload
 test('an expired queued request with an unread body never resets the earlier answer', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { server, port } = await startServer();
+  const watch = watchServer(server);
   try {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     // A reset on close with unread body bytes is timing dependent, so the case repeats.
@@ -652,10 +657,12 @@ test('an expired queued request with an unread body never resets the earlier ans
           ),
           'seed B',
         );
+        const bAnswered = watch.answered(`/upload/direct/${uploadB}`);
         const pipelined = pipelinedFinalizeThenStreamingPut(port, uploadA, uploadB);
         void pipelined.outcome.catch(() => {});
         await withIO(reads.started.promise, 'the held finalize hash');
-        await flushIO();
+        // B's 308 is committed (queued behind A) before the clock moves.
+        await withIO(bAnswered, "B's queued 308");
         // B's inactivity ceiling passes while queued behind A's in-budget hash.
         await vi.advanceTimersByTimeAsync(150_000);
         reads.release.resolve();
@@ -682,6 +689,7 @@ test('an expired queued request with an unread body never resets the earlier ans
 test('guard: a single-shot upload expiring behind a long finalize keeps the earlier answer first', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { server, port } = await startServer();
+  const watch = watchServer(server);
   const reads = holdPayloadReads((path) => String(path).endsWith('/payload'));
   try {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
@@ -704,11 +712,9 @@ test('guard: a single-shot upload expiring behind a long finalize keeps the earl
     // One keep-alive socket: a finalize for A (hash held), then a single-shot upload B
     // whose body stalls after its first bytes.
     const socket = net.connect(port, '127.0.0.1');
-    let received = '';
-    socket.on('data', (data: Buffer) => {
-      received += data.toString('latin1');
-    });
-    socket.on('error', () => {});
+    const client = readResponses(socket);
+    const bAdmitted = watch.admitted('/upload');
+    const bAnswered = watch.answered('/upload');
     const finalizeBody = JSON.stringify({ uploadId: uploadA });
     socket.write(
       `POST /upload/finalize HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
@@ -717,23 +723,21 @@ test('guard: a single-shot upload expiring behind a long finalize keeps the earl
         `X-Artifact-Type: file\r\nX-Artifact-Filename: single.bin\r\nContent-Length: 1000\r\n\r\n0123456789`,
     );
     await withIO(reads.started.promise, 'the held finalize hash');
-    await flushIO();
+    // B's ingress is admitted, so its own 120 s ceiling runs on the fake clock.
+    await withIO(bAdmitted, 'B admitted');
     // B's 120 s inactivity ceiling passes while A's in-budget hash still owns the socket.
     await vi.advanceTimersByTimeAsync(150_000);
-    await flushIO();
+    await withIO(bAnswered, "B's typed expiry, queued behind A");
     assert.equal(socket.destroyed, false, "B's expiry does not close the socket under A");
     reads.release.resolve();
-    const answers = async () => {
-      for (let i = 0; i < 50; i += 1) {
-        if ((received.match(/HTTP\/1\.1 /g) ?? []).length >= 2) return;
-        await flushIO();
-      }
-    };
-    await withIO(answers(), 'both answers');
-    const statuses = [...received.matchAll(/HTTP\/1\.1 (\d+)/g)].map((match) => match[1]);
-    assert.deepEqual(statuses, ['200', '500'], 'A finalizes, then B answers its typed expiry');
-    assert.match(received, /"reason":"transfer_phase_timeout"/);
-    const artifact = received.match(/"uploadId":"([^"]+)"/)?.[1];
+    const responses = await withIO(client.responses(2), 'both answers');
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 500],
+      'A finalizes, then B answers its typed expiry',
+    );
+    assert.equal(JSON.parse(responses[1]?.body ?? '{}').reason, 'transfer_phase_timeout');
+    const artifact = responses[0]?.body.match(/"uploadId":"([^"]+)"/)?.[1];
     if (artifact) cleanupUploadedArtifact(artifact);
     socket.destroy();
   } finally {
@@ -751,56 +755,32 @@ test('a single-shot upload that expires mid-body answers a client that is still 
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     // A reset on close with unread body bytes is timing dependent, so the case repeats.
     for (let attempt = 0; attempt < 5; attempt += 1) {
+      const watch = watchServer(server);
+      const accepted = watchAcceptedArtifactBytes(`single-${attempt}.bin`);
       const socket = net.connect({ port, host: '127.0.0.1', allowHalfOpen: true });
-      let received = '';
-      let answered = false;
-      const socketErrors: unknown[] = [];
-      socket.on('error', (error) => socketErrors.push(error));
-      // Resolves once the typed answer is read completely; rejects on a reset before it.
-      const answer = new Promise<string>((resolve, reject) => {
-        socket.on('data', (data: Buffer) => {
-          received += data.toString('latin1');
-          if (!answered && /\r\n\r\n\{.*\}$/s.test(received)) {
-            answered = true;
-            resolve(received);
-          }
-        });
-        socket.on('error', (error) => {
-          if (!answered) reject(error);
-        });
-      });
-      void answer.catch(() => {});
-      socket.write(
-        `POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
-          `X-Artifact-Type: file\r\nX-Artifact-Filename: single.bin\r\nContent-Length: ${64 * 1024 * 1024}\r\n\r\n`,
-      );
-      const chunk = Buffer.alloc(64 * 1024, 0x61);
-      // The body keeps making progress, so only the 600 s aggregate can end it. The last
-      // step stops 1 s past the aggregate, inside the expired request's lingering grace.
-      for (let step = 0; step < 10 && !answered; step += 1) {
-        socket.write(chunk);
-        await flushIO();
-        await vi.advanceTimersByTimeAsync(step < 9 ? 61_000 : 52_000);
-      }
-      // The client is still sending when its typed answer arrives, as the remote upload
-      // client does until it reads the answer.
-      let sent = 0;
-      const pump = () => {
-        while (!answered && sent < 16 * 1024 * 1024 && socket.writable) {
-          sent += chunk.length;
-          if (!socket.write(chunk)) {
-            socket.once('drain', pump);
-            return;
-          }
-        }
-      };
-      pump();
+      const client = readResponses(socket);
       try {
-        const read = await withIO(answer, 'the typed answer to a client still sending');
-        assert.match(read, /^HTTP\/1\.1 500 /);
-        // Under load a progress write can land after the 120 s ceiling; either typed
-        // expiry is the owner's answer.
-        assert.match(read, /"reason":"transfer_(ingress_deadline_exceeded|phase_timeout)"/);
+        const admitted = watch.admitted('/upload');
+        socket.write(
+          `POST /upload HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+            `X-Artifact-Type: file\r\nX-Artifact-Filename: single-${attempt}.bin\r\n` +
+            `Content-Length: ${64 * 1024 * 1024}\r\n\r\n`,
+        );
+        await withIO(admitted, 'the upload admitted');
+        const chunk = Buffer.alloc(64 * 1024, 0x61);
+        // The body keeps making progress: each step's bytes are accepted before the clock
+        // moves 61 s, so only the 600 s aggregate can end it. The last step lands 1 s past
+        // the aggregate, inside the expired request's lingering grace.
+        for (let step = 0; step < 10; step += 1) {
+          socket.write(chunk);
+          await withIO(accepted.reached((step + 1) * chunk.length), 'the step accepted');
+          await vi.advanceTimersByTimeAsync(step < 9 ? 61_000 : 52_000);
+        }
+        // The client is still sending when its typed answer arrives, as the remote upload
+        // client does until it reads the answer.
+        const [answer] = await withIO(client.responses(1), 'the typed answer');
+        assert.equal(answer?.status, 500);
+        assert.equal(JSON.parse(answer?.body ?? '{}').reason, 'transfer_ingress_deadline_exceeded');
         // The expiry did not destroy the connection: the server lingers and discards, so a
         // client that has not read its answer yet keeps sending without a reset.
         const sentAfterAnswer = new Promise<void>((resolve, reject) => {
@@ -820,15 +800,14 @@ test('a single-shot upload that expires mid-body answers a client that is still 
           pumpMore();
         });
         await withIO(sentAfterAnswer, 'the body bytes sent after the answer');
-        await flushIO();
-        assert.equal(socket.destroyed, false, 'the server did not reset the connection');
-        // The server closes cleanly: it half-closed with a FIN after the answer, and its
-        // lingering grace ends the connection without a reset.
+        // The server half-closed with a FIN after its answer, and its lingering grace then
+        // ends the connection without a reset.
+        await withIO(client.ended, "the server's FIN");
         await vi.advanceTimersByTimeAsync(5_000);
-        await flushIO();
-        assert.equal(socket.readableEnded, true, 'the server sent a FIN, not a reset');
-        assert.deepEqual(socketErrors, [], 'no reset reached the client');
+        await withIO(watch.connectionsClosed(), 'the server close after the grace');
+        assert.deepEqual(client.errors, [], 'no reset reached the client');
       } finally {
+        accepted.restore();
         socket.destroy();
       }
     }
@@ -884,16 +863,12 @@ test('a hash mismatch found past the deadline answers the deadline expiry', asyn
 test('a chunk refused by its byte cap lingers only for the grace, not the inactivity ceiling', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { server, port } = await startServer();
+  const watch = watchServer(server);
   try {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const uploadId = await withIO(preflight(port, Buffer.alloc(0), 4), 'the preflight');
     const socket = net.connect({ port, host: '127.0.0.1', allowHalfOpen: true });
-    let received = '';
-    socket.on('data', (data: Buffer) => {
-      received += data.toString('latin1');
-    });
-    socket.on('error', () => {});
-    const ended = new Promise<void>((resolve) => socket.once('end', () => resolve()));
+    const client = readResponses(socket);
     // A chunked body that overruns its 2-byte range: the limiter refuses it mid-body.
     const chunk = Buffer.alloc(64 * 1024, 0x61);
     socket.write(
@@ -903,21 +878,18 @@ test('a chunk refused by its byte cap lingers only for the grace, not the inacti
     socket.write(
       Buffer.concat([Buffer.from(`${chunk.length.toString(16)}\r\n`), chunk, Buffer.from('\r\n')]),
     );
-    const answer = async () => {
-      for (let i = 0; i < 50 && !/\r\n\r\n\{.*\}$/s.test(received); i += 1) await flushIO();
-    };
-    await withIO(answer(), 'the byte-cap answer');
-    assert.match(received, /^HTTP\/1\.1 400 /);
+    const [answer] = await withIO(client.responses(1), 'the byte-cap answer');
+    assert.equal(answer?.status, 400);
     // The rest of the refused body is discarded for at most the grace, then the server
     // closes its side of the connection, long before the 120 s inactivity ceiling.
-    await withIO(ended, "the server's half-close after its answer");
+    await withIO(client.ended, "the server's half-close after its answer");
     const openConnections = () =>
       new Promise<number>((resolve, reject) =>
         server.getConnections((error, count) => (error ? reject(error) : resolve(count))),
       );
-    assert.equal(await openConnections(), 1);
+    assert.equal(await openConnections(), 1, 'the connection lingers until the grace');
     await vi.advanceTimersByTimeAsync(5_000);
-    await flushIO();
+    await withIO(watch.connectionsClosed(), 'the server close after the grace');
     assert.equal(await openConnections(), 0, 'the grace closed the connection');
     socket.destroy();
   } finally {
@@ -930,15 +902,11 @@ for (const route of ['/upload/preflight', '/upload/finalize']) {
   test(`an oversized JSON body on ${route} gets its 400 and a clean close while the client keeps sending`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
     const { server, port } = await startServer();
+    const watch = watchServer(server);
     try {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
       const socket = net.connect({ port, host: '127.0.0.1', allowHalfOpen: true });
-      let received = '';
-      const socketErrors: unknown[] = [];
-      socket.on('error', (error) => socketErrors.push(error));
-      socket.on('data', (data: Buffer) => {
-        received += data.toString('latin1');
-      });
+      const client = readResponses(socket);
       // A chunked body declares no length, so the reader refuses it as it passes 64 KiB.
       socket.write(
         `POST ${route} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${TOKEN}\r\n` +
@@ -969,19 +937,19 @@ for (const route of ['/upload/preflight', '/upload/finalize']) {
         pump();
       });
       await withIO(sent, 'the oversized body sent past the refusal');
-      await flushIO();
-      assert.match(received, /^HTTP\/1\.1 400 /, 'the client reads its typed refusal');
-      assert.equal(socket.readableEnded, true, 'the server half-closed with a FIN');
-      assert.deepEqual(socketErrors, [], 'no reset reached the client');
+      const [answer] = await withIO(client.responses(1), 'the typed refusal');
+      assert.equal(answer?.status, 400, 'the client reads its typed refusal');
+      await withIO(client.ended, 'the server half-close with a FIN');
+      assert.deepEqual(client.errors, [], 'no reset reached the client');
       // After its lingering grace the server closes the connection.
       const openConnections = () =>
         new Promise<number>((resolve, reject) =>
           server.getConnections((error, count) => (error ? reject(error) : resolve(count))),
         );
       await vi.advanceTimersByTimeAsync(5_000);
-      await flushIO();
+      await withIO(watch.connectionsClosed(), 'the server close after the grace');
       assert.equal(await openConnections(), 0);
-      assert.deepEqual(socketErrors, []);
+      assert.deepEqual(client.errors, []);
       socket.destroy();
     } finally {
       vi.useRealTimers();
