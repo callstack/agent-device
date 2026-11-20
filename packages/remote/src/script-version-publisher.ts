@@ -20,27 +20,20 @@ type PublishOutcome =
   | Readonly<{ published: string | undefined }>
   | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
 
-export function scriptVersionTarget(
-  {
-    endpoint,
-    req,
-    stateDir,
-  }: {
-    endpoint: Required<DaemonArtifactEndpoint>;
-    req: DaemonWireRequest;
-    stateDir: string;
-  },
-  {
-    field,
-    artifactType,
-    artifactId,
-    scriptPublicationId: id,
-    scriptRevision: revision,
-  }: DaemonArtifact,
-) {
+type ScriptVersionContext = {
+  endpoint: Required<DaemonArtifactEndpoint>;
+  req: DaemonWireRequest;
+  stateDir: string;
+  fetch: typeof fetchRemoteArtifact;
+  signal?: AbortSignal;
+};
+
+export function scriptVersionTarget(context: ScriptVersionContext, artifact: DaemonArtifact) {
+  const { endpoint, req, stateDir } = context;
+  const { scriptPublicationId: id, scriptRevision: revision, artifactId } = artifact;
   if (
-    field !== 'savedScript' ||
-    artifactType !== 'session-script' ||
+    artifact.field !== 'savedScript' ||
+    artifact.artifactType !== 'session-script' ||
     typeof id !== 'string' ||
     typeof artifactId !== 'string' ||
     typeof revision !== 'number' ||
@@ -65,14 +58,7 @@ export function scriptVersionTarget(
  * unless the open granted `--force`.
  */
 export async function publishScriptVersion(
-  context: Readonly<{
-    endpoint: Required<DaemonArtifactEndpoint>;
-    req: DaemonWireRequest;
-    stateDir: string;
-    fetch: typeof fetchRemoteArtifact;
-    /** The caller's cancellation: the fetch takes it, and the publish re-checks it under the lock. */
-    signal?: AbortSignal;
-  }>,
+  context: Readonly<ScriptVersionContext>,
   artifact: DaemonArtifact,
   closesRecording: boolean,
 ): Promise<PublishOutcome> {

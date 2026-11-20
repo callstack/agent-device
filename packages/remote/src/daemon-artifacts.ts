@@ -9,6 +9,7 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import {
   assertScriptTargetVacant,
   isOrdinaryEntryName,
@@ -525,7 +526,14 @@ export async function materializeRemoteArtifacts(
     return delivered;
   } catch (error) {
     const failure = signal?.aborted ? canceled() : error;
-    throw fallbacks.length === 0 ? failure : withRecordingFallbacks(failure, fallbacks);
+    if (fallbacks.length === 0) throw failure;
+    const appError = asAppError(failure);
+    throw new AppError(
+      appError.code,
+      appError.message,
+      recordingFallbackDetails(appError.details, fallbacks),
+      appError.cause,
+    );
   }
 }
 
@@ -537,16 +545,18 @@ function needsScriptDelivery(data: Extract<DaemonResponse, { ok: true }>['data']
   );
 }
 
+type ArtifactDeliveryContext = {
+  host: HostEnvironment;
+  scripts?: SessionScriptDelivery;
+  signal?: AbortSignal;
+  fallbacks: RecordingDestinationWarning[];
+};
+
 async function downloadResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
-  client: Readonly<{
-    host: HostEnvironment;
-    scripts: SessionScriptDelivery | undefined;
-    signal: AbortSignal | undefined;
-    fallbacks: RecordingDestinationWarning[];
-  }>,
+  client: ArtifactDeliveryContext,
 ): Promise<DaemonResponse> {
   if (recordAction(req) === 'stop') return await deliverRecordStop(endpoint, req, response, client);
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
@@ -587,12 +597,7 @@ async function deliverRecordStop(
   endpoint: Required<DaemonArtifactEndpoint>,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
-  client: Readonly<{
-    host: HostEnvironment;
-    scripts: SessionScriptDelivery | undefined;
-    signal: AbortSignal | undefined;
-    fallbacks: RecordingDestinationWarning[];
-  }>,
+  client: ArtifactDeliveryContext,
 ): Promise<DaemonResponse> {
   const answer = await import('./record-stop-answer.ts');
   const plan = answer.planRecordingDownloads(
@@ -605,6 +610,7 @@ async function deliverRecordStop(
   );
   const local: Record<string, unknown> = {};
   const delivered: DaemonArtifact[] = [];
+  const chunks: { index: number; path: string }[] = [];
   const { downloadRemoteArtifactFromUrl } = await import('./artifact-download.ts');
   for (const entry of plan.deliveries) {
     if (entry.kind === 'script') {
@@ -629,13 +635,18 @@ async function deliverRecordStop(
         path: written,
       });
     }
+    if (artifact.role !== 'chunk') local[artifact.field] = written;
+    if (artifact.chunkIndex !== undefined)
+      chunks.push({ index: artifact.chunkIndex, path: written });
     delivered.push({ ...artifact, localPath: written });
   }
-  if (client.fallbacks.length)
-    Object.assign(local, recordingFallbackDetails(local, client.fallbacks));
+  if (chunks.length) local.chunks = chunks.sort((left, right) => left.index - right.index);
+  const details = client.fallbacks.length
+    ? recordingFallbackDetails(local, client.fallbacks)
+    : local;
   return {
     ok: true,
-    data: answer.projectRecordStopResult(response.data, local, delivered, plan.missingRole),
+    data: answer.projectRecordStopResult(response.data, details, delivered, plan.missingRole),
   };
 }
 
@@ -658,34 +669,20 @@ type RecordingDestinationWarning = Readonly<{
   path: string;
 }>;
 
-function fallbackWarningText({ field, path: written }: RecordingDestinationWarning): string {
-  return `The remote recording ${field} was saved to ${written} in the current directory, because the request named no destination for it.`;
-}
-
-function withRecordingFallbacks(
-  error: unknown,
-  fallbacks: RecordingDestinationWarning[],
-): AppError {
-  const failure = asAppError(error);
-  return new AppError(
-    failure.code,
-    failure.message,
-    {
-      ...failure.details,
-      ...recordingFallbackDetails(failure.details, fallbacks),
-    },
-    failure.cause,
-  );
-}
-
 function recordingFallbackDetails(
   data: Record<string, unknown> | undefined,
   fallbacks: RecordingDestinationWarning[],
 ) {
-  const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
   return {
+    ...data,
     recordingDestinationWarnings: fallbacks,
-    warnings: [...warnings, ...fallbacks.map(fallbackWarningText)],
+    warnings: [
+      ...readResponseWarnings(data),
+      ...fallbacks.map(
+        ({ field, path }) =>
+          `The remote recording ${field} was saved to ${path} in the current directory, because the request named no destination for it.`,
+      ),
+    ],
   };
 }
 

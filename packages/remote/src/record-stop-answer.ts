@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RecordingStopCommandResult } from '@agent-device/contracts/recording';
 import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
@@ -162,25 +161,6 @@ export function projectRecordStopResult(
   missingRole: boolean,
 ): Record<string, unknown> {
   const app = peer?.activeSessionApp;
-  const chunks: NonNullable<RecordingStopCommandResult['chunks']> = [];
-  const paths: Pick<RecordingStopCommandResult, 'outPath' | 'telemetryPath'> = {};
-  const artifacts = delivered.map(
-    ({ artifactId, field, artifactType, role, chunkIndex, fileName, localPath }) => {
-      if (role === 'recording') paths.outPath = localPath;
-      if (role === 'telemetry') paths.telemetryPath = localPath;
-      if (role && chunkIndex !== undefined && localPath !== undefined)
-        chunks.push({ index: chunkIndex, path: localPath });
-      return {
-        artifactId,
-        field,
-        artifactType,
-        role,
-        chunkIndex: role ? chunkIndex : undefined,
-        fileName: typeof fileName === 'string' ? fileName : undefined,
-        localPath,
-      };
-    },
-  );
   return {
     ...pickFacts(peer, RESULT_FACTS),
     ...daemonWarningsOf(peer),
@@ -188,9 +168,17 @@ export function projectRecordStopResult(
       ? { activeSessionApp: pickFacts(app, { bundleId: 'string', name: 'string' }) }
       : {}),
     ...local,
-    ...paths,
-    artifacts,
-    ...(chunks.length ? { chunks: chunks.sort((left, right) => left.index - right.index) } : {}),
+    artifacts: delivered.map(
+      ({ artifactId, field, artifactType, role, chunkIndex, fileName, localPath }) => ({
+        artifactId,
+        field,
+        artifactType,
+        role,
+        localPath,
+        chunkIndex: role ? chunkIndex : undefined,
+        fileName: typeof fileName === 'string' ? fileName : undefined,
+      }),
+    ),
     ...(missingRole ? missingRoleWarning(local) : {}),
   };
 }

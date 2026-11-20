@@ -154,7 +154,7 @@
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:570a2f2d7d77e201d623c1c4c904d5cd0fe56bb7c9c56636fe95751bf6c076e3",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:1ea02235040b4717a7798d24f809a428e6cf2dd115abd79ecda797e5131f822d",
     "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:f50bf3548edb2d0df594b6bee6efa9e33e142a046eb88f6d2aa48898edbbabca",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
@@ -212,9 +212,9 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:01fb34d0b9f32df3228cac7f8e7659b28178c7617f59ed869080463c1d411473",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:ebbd382e82859f73084102e2c5b62baca0568ab03afb910c742c0ed9098cb0b2",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:e9d551b3023d4445e8be9a22275a810919c96208c2bbe0955a6f52ff51ce6c25",
-    "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:c98e00810338c88b82daa560a5d734482079d2c3ab61521ea391c8be64d494e0",
+    "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:2bb96f9ecdac9cd737260eb7f4fb781b52226961c4d86dfeb492ebe267804829",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
@@ -664,17 +664,17 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:570a2f2d7d77e201d623c1c4c904d5cd0fe56bb7c9c56636fe95751bf6c076e3",
+      "digest": "sha256:1ea02235040b4717a7798d24f809a428e6cf2dd115abd79ecda797e5131f822d",
       "rationale": "#4518 Client-side only. The artifact delivery entry point settles script receipts through the same publisher and discloses completed recording fallbacks on a failure or cancellation."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:01fb34d0b9f32df3228cac7f8e7659b28178c7617f59ed869080463c1d411473",
+      "digest": "sha256:ebbd382e82859f73084102e2c5b62baca0568ab03afb910c742c0ed9098cb0b2",
       "rationale": "#4518 Client-side only. The client uses the optional recording role and chunkIndex to place and report completed recording downloads. An artifact without a role yields no recording path and adds a warning. Other response artifact handling keeps the same wire shape."
     },
     {
       "declaration": "packages/remote/src/script-version-publisher.ts#publishScriptVersion",
-      "digest": "sha256:c98e00810338c88b82daa560a5d734482079d2c3ab61521ea391c8be64d494e0",
+      "digest": "sha256:2bb96f9ecdac9cd737260eb7f4fb781b52226961c4d86dfeb492ebe267804829",
       "rationale": "#4518 Client-side only. Destination planning and script publication use the same admission and record lookup. Script artifact fields, transfers and publication behavior are unchanged."
     }
   ]
