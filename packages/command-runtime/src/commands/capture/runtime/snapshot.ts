@@ -193,7 +193,8 @@ export const auditSnapshotCommand: RuntimeCommand<
   AuditSnapshotCommandOptions,
   AuditSnapshotCommandResult
 > = async (runtime, options): Promise<AuditSnapshotCommandResult> => {
-  const { auditSnapshotState } = await import('@agent-device/capture-kit/snapshot-audit');
+  const { auditSnapshotState, matchNativeAuditFindings } =
+    await import('@agent-device/capture-kit/snapshot-audit');
   const capture = await captureRuntimeSnapshot(runtime, options);
   const audit = auditSnapshotState(capture.snapshot, {
     platform: runtime.backend.platform,
@@ -202,8 +203,22 @@ export const auditSnapshotCommand: RuntimeCommand<
     pixelDensity: capture.annotations.androidSnapshot?.pixelDensity,
     truncated: snapshotTruncationForResult(capture.snapshot),
   });
+  const nativeFindings = runtime.backend.accessibilityAudit
+    ? await runtime.backend.accessibilityAudit({
+        appBundleId: capture.result.appBundleId ?? capture.session?.appBundleId,
+        requestId: options.requestId,
+        signal: options.signal ?? runtime.signal,
+      })
+    : [];
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));
-  return { ...audit, ...(capture.warnings.length > 0 ? { warnings: capture.warnings } : {}) };
+  return {
+    ...audit,
+    findings: [
+      ...audit.findings,
+      ...matchNativeAuditFindings(nativeFindings, capture.snapshot.nodes, audit.findings),
+    ],
+    ...(capture.warnings.length > 0 ? { warnings: capture.warnings } : {}),
+  };
 };
 
 async function captureRuntimeSnapshot(

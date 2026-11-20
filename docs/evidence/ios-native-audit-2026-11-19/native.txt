@@ -1,0 +1,13 @@
+agent-device audit
+7 warnings, 1 observation — current screen
+@e48~s146711  covered-control  cell  Accessible action is unavailable to touch
+@e56~s146711  small-target     button "Dictate"  17.3×22pt, below 44×44pt
+@e58~s146711  small-target     button "Dictate"  17.3×22pt, below 44×44pt
+native  hitRegion  The size of this element is too small for user to interact.  [335.6666666666667,811 17.333333333333314×22]
+native  contrast  Contrast is not high enough for element unless font size is larger.
+native  contrast  Contrast failed for element
+native  contrast  Contrast failed for element
+native  trait  The accessibilityLabel of this element duplicates information that is available in the traits.  [16,484.3333333333333 370×51.99999999999994]
+
+covered-control: Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.
+small-target: Apple HIG recommends 44×44pt. Enlarge the touch area with padding, a minimum size, or hitSlop.

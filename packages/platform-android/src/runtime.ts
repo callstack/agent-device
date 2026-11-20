@@ -318,6 +318,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: available,
         screenRecordingReattach: available,
         screenRecordingCleanup: available,
+        accessibilityAudit: unavailableFact('unsupported-platform-leaf'),
         ...snapshotRuntimeOperationFacts({
           capture: device.kind === 'simulator' ? snapshotKindUnavailable : available,
           customActions: snapshotCustomActionsUnavailable,

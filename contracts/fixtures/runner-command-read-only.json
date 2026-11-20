@@ -235,5 +235,11 @@
       "action": "dismiss"
     },
     "readOnly": false
+  },
+  {
+    "command": {
+      "command": "accessibilityAudit"
+    },
+    "readOnly": true
   }
 ]

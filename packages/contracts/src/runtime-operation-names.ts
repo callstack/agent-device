@@ -25,6 +25,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'bootTarget',
   'bootTargetHeadless',
   'captureScreenshot',
+  'accessibilityAudit',
   'captureSnapshot',
   'captureSnapshotWithCustomActions',
   'captureSnapshotWithoutActiveApp',

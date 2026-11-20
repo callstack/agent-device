@@ -1,3 +1,8 @@
+import type {
+  AccessibilityAuditInput,
+  AccessibilityAuditRuntimeOperations,
+} from '@agent-device/contracts/capture';
+import { isRunnerServedIos } from './native-audit-support.ts';
 import {
   appleRunnerInteractionFacts,
   applePrepareAppleRunnerFact,
@@ -197,6 +202,12 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       operations: applyWatchOsOperationFacts(device, {
         ...logs.operations,
         ...deployment,
+        accessibilityAudit: isRunnerServedIos(device)
+          ? available
+          : unavailableFact(
+              'unsupported-device-backend',
+              'Native accessibility audit requires an iOS target served by the XCTest runner.',
+            ),
         networkDump: available,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
@@ -248,7 +259,17 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             signal: request.scope.signal,
           }),
       );
+      const nativeAuditOperations: Partial<AccessibilityAuditRuntimeOperations> = whenAdmitted(
+        facts.operations.accessibilityAudit,
+        () => ({
+          accessibilityAudit: async (input: AccessibilityAuditInput) => {
+            const { collectNativeAudit } = await import('./native-audit.ts');
+            return await collectNativeAudit(request.device, input, request.scope.signal);
+          },
+        }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
+        ...nativeAuditOperations,
         ...appStateOperations,
         ...selectorQueryOperations,
         ...logs.operations,

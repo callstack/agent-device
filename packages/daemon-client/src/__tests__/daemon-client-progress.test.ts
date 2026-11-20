@@ -180,7 +180,7 @@ test('readDaemonSocketProgressResponse hands generic command progress to the sin
         event: {
           type: 'command',
           status: 'progress',
-          message: 'Building Apple runner...',
+          message: 'Building Apple runner (one-time per agent-device version)...',
         },
       })}\n`,
     );
@@ -197,7 +197,11 @@ test('readDaemonSocketProgressResponse hands generic command progress to the sin
     // `createStderrCommandProgressSink`); the transport writes nothing itself.
     assert.equal(stderrCapture.read(), '');
     assert.deepEqual(events, [
-      { type: 'command', status: 'progress', message: 'Building Apple runner...' },
+      {
+        type: 'command',
+        status: 'progress',
+        message: 'Building Apple runner (one-time per agent-device version)...',
+      },
     ]);
   } finally {
     stderrCapture.restore();
@@ -291,7 +295,7 @@ test('readDaemonSocketProgressResponse renders nothing without a sink', async ()
       event: {
         type: 'command',
         status: 'progress',
-        message: 'Building Apple runner...',
+        message: 'Building Apple runner (one-time per agent-device version)...',
       },
     });
     const responseLine = JSON.stringify({

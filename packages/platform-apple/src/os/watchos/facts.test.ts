@@ -56,6 +56,9 @@ test('a watchOS simulator admits only the operations with a watch meaning', asyn
       'querySelector',
       'readTextAtPoint',
       'resolveOpenTarget',
+      'screenRecordingCleanup',
+      'screenRecordingReattach',
+      'screenRecordingStart',
       'scrollDirection',
       'shutdownTarget',
       'tapElementSelector',
@@ -66,7 +69,7 @@ test('a watchOS simulator admits only the operations with a watch meaning', asyn
   );
 });
 
-test('a watchOS simulator names why it refuses multi-touch, the App Switcher, and recording', async () => {
+test('a watchOS simulator names why it refuses multi-touch and the App Switcher', async () => {
   const facts = await createApplePlatformRuntime(platformRuntimeHostFixture()).inspectFacts(
     watch(),
   );
@@ -78,11 +81,6 @@ test('a watchOS simulator names why it refuses multi-touch, the App Switcher, an
   expect(facts.operations.appSwitcher).toMatchObject({
     available: false,
     hint: expect.stringContaining('Digital Crown double-click'),
-  });
-  expect(facts.operations.screenRecordingStart).toMatchObject({
-    available: false,
-    reason: 'unsupported-platform-leaf',
-    hint: expect.stringContaining('watchOS simulators support only watch interactions'),
   });
 });
 

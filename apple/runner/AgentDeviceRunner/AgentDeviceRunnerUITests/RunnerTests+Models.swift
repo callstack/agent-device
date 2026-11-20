@@ -16,6 +16,7 @@ enum CommandType: String, Codable, CaseIterable {
   case querySelector
   case readText
   case snapshot
+  case accessibilityAudit
   case screenshot
   case backInApp
   case home
@@ -302,7 +303,7 @@ extension Command {
          .keyboardDismiss, .keyboardReturn, .sequence, .gesture:
       return .interaction
 
-    case .findText, .readText, .gestureViewport, .keyboardStatus:
+    case .findText, .readText, .gestureViewport, .keyboardStatus, .accessibilityAudit:
       return .appRead(retainsJournalResponseJson: true)
 
     case .snapshot:
@@ -501,6 +502,7 @@ struct TargetActivationFactPayload: Codable {
 }
 
 struct DataPayload: Codable {
+  var auditIssues: [NativeAuditIssuePayload]?
   var message: String?
   var imageBase64: String?
   var text: String?

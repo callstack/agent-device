@@ -1,0 +1,15 @@
+agent-device audit
+8 warnings, 1 observation — current screen
+@e48~s884762  covered-control  cell  Accessible action is unavailable to touch
+@e56~s884762  small-target     button "Dictate"  17.3×22pt, below 44×44pt
+@e56~s884762  ambiguous-name   button "Dictate"  Name shared by 2 controls of this role
+@e58~s884762  small-target     button "Dictate"  17.3×22pt, below 44×44pt
+@e58~s884762  ambiguous-name   button "Dictate"  Name shared by 2 controls of this role
+native  contrast  Contrast is not high enough for element unless font size is larger.  @e10~s884762 text "Sign in to access your iCloud data, the App Store, Apple services, and more."  [100,209.7 236×33.7]
+native  contrast  Contrast failed for element  @e46~s884762 text "StandBy"  [29.7,756 106.7×29]
+native  contrast  Contrast failed for element  @e50~s884762 text "Screen Time"  [29.7,843 137.7×29]
+native  trait  The accessibilityLabel of this element duplicates information that is available in the traits.  [16,484.3 370×52]
+
+covered-control: Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.
+small-target: Apple HIG recommends 44×44pt. Enlarge the touch area with padding, a minimum size, or hitSlop.
+ambiguous-name: Give each control a unique label that names its target, for example "Save Lemon Herb Rice".

@@ -25,6 +25,7 @@ type RevylOperation = keyof ReturnType<typeof revylFacts>['operations'];
  * compile error here rather than an unclassified row.
  */
 const EXPECTED_CELLS = {
+  accessibilityAudit: 'mode',
   bootTarget: 'available',
   captureScreenshot: 'available',
   captureSnapshot: 'available',

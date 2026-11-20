@@ -37,6 +37,7 @@ import {
   resolveSelectorCaptureRuntimePlan,
   resolveSnapshotRuntimePlan,
   snapshotRuntimePlanUses,
+  auditRuntimePlanUses,
   deviceBootRuntimeUses,
   shutdownTargetUse,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -490,7 +491,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: false,
-    platformExecution: { kind: 'device-runtime', uses: snapshotRuntimePlanUses },
+    platformExecution: { kind: 'device-runtime', uses: auditRuntimePlanUses },
   },
   ...DEVICE_OPERATION_COMMAND_DESCRIPTORS.captureAndSystem,
   {

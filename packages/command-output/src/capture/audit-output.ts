@@ -1,4 +1,5 @@
 import type {
+  NativeAuditFinding,
   AuditFinding,
   AuditNameDetail,
   AuditSizeDetail,
@@ -14,7 +15,13 @@ function formatAuditText(result: AuditSnapshotCommandResult): string {
   const lines = [
     'agent-device audit',
     summaryLine(result.findings),
-    ...findingLines(result.findings, result.refsGeneration),
+    ...findingLines(
+      result.findings.filter((finding) => finding.kind !== 'native'),
+      result.refsGeneration,
+    ),
+    ...result.findings
+      .filter((finding) => finding.kind === 'native')
+      .map((finding) => nativeFindingLine(finding, result.refsGeneration)),
   ];
   const guidance = Object.entries(result.guidance);
   if (guidance.length > 0)
@@ -25,7 +32,7 @@ function formatAuditText(result: AuditSnapshotCommandResult): string {
   return `${lines.join('\n')}\n`;
 }
 
-function summaryLine(findings: readonly AuditFinding[]): string {
+function summaryLine(findings: AuditSnapshotCommandResult['findings']): string {
   const warnings = findings.filter((finding) => finding.severity === 'warning').length;
   const observations = findings.length - warnings;
   const counts = [plural(warnings, 'warning'), plural(observations, 'observation')].filter(
@@ -86,4 +93,20 @@ function elementText(finding: AuditFinding): string {
       ? `id=${JSON.stringify(finding.identifier)}`
       : undefined;
   return identity ? `${finding.role} ${identity}` : finding.role;
+}
+
+function nativeFindingLine(finding: NativeAuditFinding, generation: number | undefined): string {
+  const ref = pinnedRefText(finding.ref, generation);
+  const element = ref
+    ? `  ${ref} ${finding.role}${finding.label ? ` ${JSON.stringify(finding.label)}` : ''}`
+    : '';
+  const rect = finding.rect;
+  const geometry = rect
+    ? `  [${roundTenth(rect.x)},${roundTenth(rect.y)} ${roundTenth(rect.width)}×${roundTenth(rect.height)}]`
+    : '';
+  return `native  ${finding.auditType}  ${finding.description}${element}${geometry}`;
+}
+
+function roundTenth(value: number): number {
+  return Math.round(value * 10) / 10;
 }

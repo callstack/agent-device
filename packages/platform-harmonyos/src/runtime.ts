@@ -194,6 +194,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
+        accessibilityAudit: unavailableFact('unsupported-platform-leaf'),
         ...snapshotRuntimeOperationFacts({
           capture:
             device.kind === 'emulator' || device.kind === 'device'

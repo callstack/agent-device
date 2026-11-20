@@ -1,0 +1,11 @@
+agent-device audit
+4 warnings, 1 observation — current screen
+@e48~s755882  covered-control  cell  Accessible action is unavailable to touch
+@e56~s755882  small-target     button "Dictate"  17.3×22pt, below 44×44pt
+@e56~s755882  ambiguous-name   button "Dictate"  Name shared by 2 controls of this role
+@e58~s755882  small-target     button "Dictate"  17.3×22pt, below 44×44pt
+@e58~s755882  ambiguous-name   button "Dictate"  Name shared by 2 controls of this role
+
+covered-control: Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.
+small-target: Apple HIG recommends 44×44pt. Enlarge the touch area with padding, a minimum size, or hitSlop.
+ambiguous-name: Give each control a unique label that names its target, for example "Save Lemon Herb Rice".

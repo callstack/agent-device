@@ -1,3 +1,4 @@
+import type { NativeAuditFinding } from './audit.ts';
 import type { ScreenshotScreenMask } from './screenshot.ts';
 import type { BackendSnapshotOptions, ScreenshotResultData } from './snapshot-types.ts';
 import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
@@ -395,6 +396,7 @@ export type BackendEscapeHatches = {
 export type AgentDeviceBackend = {
   platform: AgentDeviceBackendPlatform;
   escapeHatches?: BackendEscapeHatches;
+  accessibilityAudit?(context: BackendCommandContext): Promise<NativeAuditFinding[]>;
   captureSnapshot?(
     context: BackendCommandContext,
     options?: BackendSnapshotOptions,

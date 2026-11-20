@@ -1,4 +1,5 @@
 import type { DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
+import type { RunnerContext } from './interactor-types.ts';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { SnapshotProducer } from './snapshot-producers.ts';
 
@@ -48,6 +49,31 @@ export type AuditFinding =
   | (AuditFindingBase & { kind: 'ambiguous-name'; severity: 'warning'; detail: AuditNameDetail })
   | (AuditFindingBase & { kind: 'covered-control'; severity: 'observation' });
 
+export type IosNativeAuditType =
+  | 'contrast'
+  | 'dynamicType'
+  | 'elementDetection'
+  | 'hitRegion'
+  | 'sufficientElementDescription'
+  | 'textClipped'
+  | 'trait'
+  | `unknown:${string}`;
+
+/** Native geometry can identify one node in the preceding snapshot. */
+export type NativeAuditFinding = {
+  ref?: string;
+  role?: string;
+  label?: string;
+  source: 'native';
+  kind: 'native';
+  severity: 'warning';
+  description: string;
+  rect?: Rect;
+} & (
+  | { platform: 'ios'; auditType: IosNativeAuditType }
+  | { platform: 'android'; auditType: string }
+);
+
 export type AuditContext = {
   platform: PublicPlatform;
   producer?: SnapshotProducer;
@@ -75,11 +101,18 @@ export type AuditResult = {
   limitations: string[];
 };
 
-export type AuditSnapshotCommandResult = AuditResult & {
+export type AuditSnapshotCommandResult = Omit<AuditResult, 'findings'> & {
+  findings: (AuditFinding | NativeAuditFinding)[];
   /**
    * Ref-frame epoch the finding refs were minted from (ADR 0014). Present only when the audit
-   * returned a finding; pair each ref with it (`@e7~s<refsGeneration>`) before a mutation.
+   * returned a finding with a ref; pair each ref with it (`@e7~s<refsGeneration>`) before a mutation.
    */
   refsGeneration?: number;
   warnings?: string[];
 };
+
+export type AccessibilityAuditInput = Readonly<RunnerContext>;
+
+export type AccessibilityAuditRuntimeOperations = Readonly<{
+  accessibilityAudit(input: AccessibilityAuditInput): Promise<NativeAuditFinding[]>;
+}>;

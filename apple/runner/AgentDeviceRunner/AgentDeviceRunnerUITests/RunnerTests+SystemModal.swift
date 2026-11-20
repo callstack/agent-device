@@ -244,7 +244,7 @@ extension RunnerTests {
     return "\(element.elementType.rawValue)-\(frame.origin.x)-\(frame.origin.y)-\(frame.size.width)-\(frame.size.height)-\(element.label)-\(element.identifier)"
   }
 
-  private func preferredSystemModalTitle(_ element: XCUIElement) -> String {
+  func preferredSystemModalTitle(_ element: XCUIElement) -> String {
     let label = element.label
     if !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return label

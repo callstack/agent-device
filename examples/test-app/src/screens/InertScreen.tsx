@@ -9,8 +9,8 @@ import { useAppColors, type AppColors } from '../theme';
  * the pre-tap one, and that signature hashes EVERY node on screen — not just the
  * tapped subtree. So any live content anywhere on the screen suppresses the
  * retry, which is what made the layer-3 tap-retry scenario a coin flip on the
- * home screen (its gesture lab loads a remote image whose arrival lands on either
- * side of the tap). See https://github.com/callstack/agent-device/issues/1300.
+ * home screen (its gesture lab loads asynchronous content, an image and icon glyphs,
+ * whose arrival lands on either side of the tap). See https://github.com/callstack/agent-device/issues/1300.
  *
  * Everything here is therefore deliberately constrained, and each rule is load-
  * bearing for that scenario rather than stylistic:

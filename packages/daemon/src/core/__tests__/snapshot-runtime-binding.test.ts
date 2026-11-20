@@ -203,3 +203,27 @@ test('snapshot and diff shorten idle only when every observation guard still hol
     clock.mockRestore();
   }
 });
+
+test('audit binds the heuristic capture alone on an owner without a native audit', async () => {
+  for (const make of [makeAndroidSession, makeIosSession]) {
+    const fixture = snapshotRuntimeFixture();
+    const sessionStore = makeSessionStore();
+    sessionStore.publish('audit', make('audit', { appBundleId: 'com.example.app' }));
+    const resolved = await resolveBoundSnapshotCaptureRuntime(
+      {
+        createCommandSurface: fakeCreateCommandSurface,
+        platformServices: fixture.platformServices,
+        req: { command: 'audit', session: 'audit', positionals: [], token: 'test-token' },
+        sessionName: 'audit',
+        logPath: '/tmp/audit.log',
+        inspectFacts: fixture.inspectFacts,
+        sessionStore,
+        bindDevice: fixture.bindDevice,
+      },
+      'audit',
+    );
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) throw new Error('Expected a bound audit capture');
+    expect(resolved.accessibilityAudit).toBeUndefined();
+  }
+});

@@ -374,8 +374,9 @@ agent-device close --session watch --shutdown
 - `home` presses the Digital Crown. From an app it shows the watch face; from the watch face it opens the app grid.
 - `fill` and `type` wait for the system input sheet that a text field opens (its keyboard), type into it, press the sheet's Done button, and wait for the sheet to close. Done is found by its English label. On another system language, or when the sheet stays open, the command fails with `TEXT_INPUT_COMMIT_NOT_OBSERVED` and the text stays in the sheet; press its commit button by ref.
 - `action-button` presses the Action Button on Apple Watch Ultra; other models refuse with `hardware_control_unavailable`.
-- `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, and `screenshot` work as on iOS.
-- Everything else is refused before dispatch with `reason: unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `record`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures such as `gesture pinch`. watchOS apps have no pinch or rotate gestures, and the App Switcher opens on a crown double-click that XCUITest cannot press.
+- `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, `screenshot`, and `record` work as on iOS.
+- `record start` captures the watch screen with the host recorder (`simctl recordVideo`), so it needs no runner recorder and records at the watch's own resolution. `record stop` exports MP4 and burns in touch overlays the same way it does on an iOS simulator. `--fps`, `--quality`, `--hide-touches`, and `--scope` behave as on an iOS simulator.
+- Everything else is refused before dispatch with `reason: unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures such as `gesture pinch`. watchOS apps have no pinch or rotate gestures, and the App Switcher opens on a crown double-click that XCUITest cannot press.
 - Open apps by their watch bundle ID, such as `com.apple.NanoSettings`. Without `apps` there is no name lookup, and app aliases such as `settings` resolve to iPhone bundle IDs.
 
 ## Desktop targets
@@ -465,6 +466,13 @@ agent-device audit
 ```
 
 `audit` captures the current screen once and reports advisory accessibility findings. Findings are review prompts, not failures, and `audit` changes nothing on the device.
+
+On an iOS 17+ target served by the XCTest runner, `audit` also runs Apple's native checks for contrast, element detection, hit regions, sufficient element descriptions, and traits. Apple's Dynamic Type and clipped-text checks are not run, because they resize the app's text while they run; `agent-device help accessibility` describes the large text check to use for them. iOS simulators and physical devices configured with that runner are supported. Android, TV, macOS, web, and physical devices without the runner run the heuristic checks only. Before iOS 17, `audit` returns the heuristic findings alone. The first `audit` after an install or update builds the runner once, which takes longer. A runner answer the CLI cannot read fails with `COMMAND_FAILED` and reason `native-audit-invalid-result`.
+
+A system alert over the app, such as a permission prompt, stops Apple's checks. `audit` then fails with `COMMAND_FAILED` and reason `native_audit_blocked_by_alert`, and the message names the alert. Run `agent-device alert accept` or `agent-device alert dismiss`, then run `audit` again.
+
+Native findings have `source: "native"`, `kind: "native"`, `platform`, `auditType`, Apple's `description`, and `rect` in snapshot points when Apple supplies an element. When a frame uniquely matches a captured element, the finding includes its snapshot ref, role, and accessible name. Otherwise, match its geometry against a fresh snapshot before acting. A finding without a rect names no element: report it without acting on it. A native `hitRegion` finding on the frame of a `small-target` finding is left out, because `small-target` reports that control with its ref and size. Native findings are listed by check, then top to bottom and left to right, so two audits of an unchanged screen print the same list. All native issues are collected without failing the runner test. Heuristic findings keep their existing fields.
+
 
 - `small-target`: an enabled, visible control below 44pt on iOS or 48dp on Android, with a 0.5-unit tolerance for layout rounding. Android pixels convert to dp with the captured display density; without it the check reports a limitation instead. TV and desktop targets skip the check. A link inside a text container is exempt.
 - `missing-name`: a control with no accessible name. An identifier, a resource id, or a field value is not a name; a label, an Android content description, a placeholder, or a named child is.
