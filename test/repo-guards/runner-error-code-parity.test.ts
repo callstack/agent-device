@@ -76,7 +76,10 @@ const WAIVED_LITERALS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
   }).map(([file, literals]) => [file, new Set(literals)]),
 );
 
-/** The runner's log-mark and environment-variable namespace; no wire code may use it. */
+/**
+ * The runner's log-mark and environment-variable namespace. It passes only as a direct `NSLog(`
+ * argument or `environment[` key, and no wire code may use it.
+ */
 const NON_CODE_PREFIX = 'AGENT_DEVICE_';
 
 const productionSources = runnerProductionSources();
@@ -186,8 +189,10 @@ test('every declared Swift code constant is emitted, not just declared', () => {
  * environment name, a raw-value `case` that spells declared vocabulary (Swift requires a literal
  * there), or a waived (file, literal) pair.
  */
-function isAccountedFor({ file, code, rawValueCase }: SwiftUpperSnakeLiteral): boolean {
-  if (FAMILY_CODE_LITERALS.has(code) || code.startsWith(NON_CODE_PREFIX)) return true;
+function isAccountedFor(literal: SwiftUpperSnakeLiteral): boolean {
+  const { file, code, rawValueCase, markOrEnvName } = literal;
+  if (FAMILY_CODE_LITERALS.has(code)) return true;
+  if (markOrEnvName && code.startsWith(NON_CODE_PREFIX)) return true;
   if (rawValueCase && declaredCodes.has(code)) return true;
   return WAIVED_LITERALS.get(file)?.has(code) === true;
 }
@@ -252,6 +257,7 @@ test('the literal guard measures a literal wherever it is written', () => {
     'case known = "RUNNER_BUSY"', // raw value that spells a declared row
     'let hoisted = "RUNNER_BUSY"', // a declared code outside its constant
     'NSLog("AGENT_DEVICE_RUNNER_LOG_MARK")',
+    'let p = ErrorPayload(code: "AGENT_DEVICE_NEW_REFUSAL")', // the namespace alone is no pass
     'let payload = ErrorPayload(code: fallback ??',
     '  lookup(["WRAPPED_CODE"]))',
     'return',
@@ -262,7 +268,14 @@ test('the literal guard measures a literal wherever it is written', () => {
     literals
       .filter((literal) => !isAccountedFor(literal))
       .map(({ line, code }) => `${line} ${code}`),
-    ['1 NEW_REFUSAL', '3 RAW_REFUSAL', '5 RUNNER_BUSY', '8 WRAPPED_CODE', '10 UNLISTED_MARK'],
+    [
+      '1 NEW_REFUSAL',
+      '3 RAW_REFUSAL',
+      '5 RUNNER_BUSY',
+      '7 AGENT_DEVICE_NEW_REFUSAL',
+      '9 WRAPPED_CODE',
+      '11 UNLISTED_MARK',
+    ],
   );
 });
 

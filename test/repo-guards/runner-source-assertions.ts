@@ -72,6 +72,8 @@ export type SwiftUpperSnakeLiteral = Readonly<{
   code: string;
   /** The literal is the raw value of a `case name = "CODE"` on its own line. */
   rawValueCase: boolean;
+  /** The literal is the direct argument of `NSLog(` or the key of an `environment[` read. */
+  markOrEnvName: boolean;
 }>;
 
 /**
@@ -88,7 +90,8 @@ export function swiftUpperSnakeLiterals(
     lines.forEach((line, index) => {
       const rawValueCase = /^\s*case\s+[A-Za-z_]\w*\s*=\s*"[A-Z][A-Z0-9_]{3,}"\s*$/.test(line);
       for (const match of line.matchAll(/"([A-Z][A-Z0-9_]{3,})"/g)) {
-        literals.push({ file, line: index + 1, code: match[1]!, rawValueCase });
+        const markOrEnvName = /(?:\bNSLog\(|\benvironment\[)$/.test(line.slice(0, match.index));
+        literals.push({ file, line: index + 1, code: match[1]!, rawValueCase, markOrEnvName });
       }
     });
   }
