@@ -10,9 +10,8 @@ import java.io.IOException;
 
 /**
  * Nonblocking reads and sends on an accepted LocalSocket, with poll for readiness. API 21 and later.
- * Every wait takes the absolute deadline and derives its own poll duration when it starts: a
- * duration sampled earlier would let a pause between the deadline check and the poll wait past the
- * deadline. The socket timeout is not used: Android 7.0 and 7.1.0 set only SO_SNDTIMEO for it, and
+ * Every wait takes the absolute deadline and polls in short slices measured when each poll
+ * starts, so a pause or suspend can overrun the deadline by at most one slice. The socket timeout is not used: Android 7.0 and 7.1.0 set only SO_SNDTIMEO for it, and
  * where it is set it bounds each blocking call, not the command.
  */
 final class LocalSocketSessionChannel
@@ -66,14 +65,14 @@ final class LocalSocketSessionChannel
   }
 
   private void pollUntil(int events, long deadlineAtMs, int failures) throws IOException {
-    // Measure here, not at the caller: the duration must be what the deadline has left when Os.poll
-    // starts, or a pause before this call would extend it.
-    long remainingMs = SessionPeerPolicy.remainingBeforeDeadline(clock, deadlineAtMs);
+    // Measure here, not at the caller, and poll for one short slice: Os.poll takes a relative
+    // duration, so a pause or suspend after this sample overruns the deadline by at most one slice.
+    int sliceMs = SessionPeerPolicy.pollSliceMs(clock, deadlineAtMs);
     StructPollfd pollfd = new StructPollfd();
     pollfd.fd = fd;
     pollfd.events = (short) events;
     try {
-      Os.poll(new StructPollfd[] {pollfd}, (int) Math.min(remainingMs, Integer.MAX_VALUE));
+      Os.poll(new StructPollfd[] {pollfd}, sliceMs);
     } catch (ErrnoException error) {
       if (error.errno == OsConstants.EINTR) return;
       throw new IOException("session socket poll failed", error);

@@ -94,6 +94,18 @@ final class SessionPeerPolicy {
   }
 
   /**
+   * The longest single poll. Os.poll takes a relative duration, so a pause or a device suspend
+   * between measuring the deadline and polling overruns it by at most this; callers recheck the
+   * deadline after every return.
+   */
+  static final long MAX_POLL_SLICE_MS = 100;
+
+  /** The duration for one poll that must end by an absolute deadline. */
+  static int pollSliceMs(MonotonicClock clock, long deadlineAtMs) throws SocketTimeoutException {
+    return (int) Math.min(remainingBeforeDeadline(clock, deadlineAtMs), MAX_POLL_SLICE_MS);
+  }
+
+  /**
    * What an absolute deadline has left, measured now. An expired deadline throws rather than answer
    * with a duration a wait could still poll with, so every wait derives its own duration at its own
    * start and a pause before it cannot extend it.

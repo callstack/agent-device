@@ -30,6 +30,7 @@ public final class SessionPeerPolicyTest {
     bytesAfterTheNewlineEarnNoReadTime();
     lateBytesEarnNoTimeBeforeTheExpiryCheck();
     socketNameComesFromTheLaunchedSocketName();
+    pollIsSlicedSoAPauseAfterTheSampleOverrunsByAtMostOneSlice();
   }
 
   private static void admitsTheAdbdUids() {
@@ -413,6 +414,29 @@ public final class SessionPeerPolicyTest {
     }
     if (!"authenticated-session-v1".equals(SessionPeerPolicy.AUTHENTICATED_SESSION_MODE)) {
       throw new AssertionError("Expected the activation mode the host launches with");
+    }
+  }
+
+  private static void pollIsSlicedSoAPauseAfterTheSampleOverrunsByAtMostOneSlice() throws Exception {
+    long[] nowMs = {1_000};
+    // A long remainder is never handed to Os.poll whole: a pause after this sample could otherwise
+    // wait the full remainder past the deadline.
+    int slice = SessionPeerPolicy.pollSliceMs(() -> nowMs[0], 1_000 + 5_000);
+    if (slice != SessionPeerPolicy.MAX_POLL_SLICE_MS) {
+      throw new AssertionError("Expected one slice for a long remainder, got " + slice);
+    }
+    // The deadline expires between the sample and the poll: the overrun is bounded by the slice.
+    long deadlineAtMs = 1_000 + 30;
+    int shortSlice = SessionPeerPolicy.pollSliceMs(() -> nowMs[0], deadlineAtMs);
+    nowMs[0] = deadlineAtMs + 1;
+    if (shortSlice != 30 || nowMs[0] + shortSlice - deadlineAtMs > SessionPeerPolicy.MAX_POLL_SLICE_MS) {
+      throw new AssertionError("Expected the poll to end within one slice of the deadline");
+    }
+    try {
+      SessionPeerPolicy.pollSliceMs(() -> nowMs[0], deadlineAtMs);
+      throw new AssertionError("Expected an expired deadline to refuse another poll");
+    } catch (SocketTimeoutException expected) {
+      // The caller's recheck after the poll returns sees the expired deadline.
     }
   }
 }

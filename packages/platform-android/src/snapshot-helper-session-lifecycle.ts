@@ -206,8 +206,8 @@ async function retireUnusableAndroidSnapshotHelperSession(
  * Starts the helper, or answers `undefined` for a start that failed. A start that failed is not a
  * command that failed — the caller answers with the one-shot transport. Any failure earns the same
  * timed backoff under the capture identity, so a burst of commands does not re-pay a slow failure.
- * Nothing here decides what the helper build can do: that came from the artifact before launch, and
- * no answer from the device marks a build for good.
+ * An older helper refuses the versioned session mode at launch, so its start fails here like any
+ * other and later commands stay one-shot until the backoff expires. No answer marks a build for good.
  */
 async function tryStartAndroidSnapshotHelperSession(params: {
   deviceKey: string;

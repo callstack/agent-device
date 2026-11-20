@@ -169,8 +169,9 @@ function addStatusLine(record: StatusRecord, line: string): void {
 /**
  * Classifies one complete status record. A ready record decides readiness only when it is well
  * formed: this protocol, the socket name this host launched, no duplicate or unparsed line. Anything
- * else is a start failure, not a capability answer — the host already knows what the artifact it
- * launched can do (#4519). A record that is not readiness is ignored, so the wait goes on.
+ * else is a start failure, not a capability answer: an older helper refuses the versioned mode
+ * before it would report readiness (#4519). A record that is not readiness is ignored, so the wait
+ * goes on.
  */
 function classifyReadinessRecord(
   statusLine: string,
