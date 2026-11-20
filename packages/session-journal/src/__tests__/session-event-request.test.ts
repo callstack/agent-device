@@ -481,6 +481,20 @@ test('only a note longer than 1,200 code points counts as cut before redaction',
   assert.equal(cut?.details?.note, `${REDACTED_SEARCH_URL}…`);
 });
 
+test('a note cut inside a quoted credential stores no part of the credential', async () => {
+  // The URL query shrinks to `?REDACTED`, so text kept after the credential's key would fit in
+  // the 300 code points. The 1,200-code-point cap falls inside the quoted multi-word value.
+  const note = `Checked ${SEARCH_URL}${'q'.repeat(900)} with password="${'correct horse battery staple '.repeat(40)}" and retried`;
+  const { started, finished, failed } = await writeAndReadNoteEvents(note);
+  const bounded = `Checked ${REDACTED_SEARCH_URL} with password=[REDACTED]…`;
+
+  assert.equal(Array.from(note).slice(0, 1200).join('').split('"').length, 2);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+  assert.doesNotMatch(JSON.stringify([started, finished, failed]), /horse|battery|staple/);
+});
+
 test('unknown commands keep the existing generic completion event', () => {
   const event = buildSuccessEvent('future-command', { arbitrary: 'not projected' });
 

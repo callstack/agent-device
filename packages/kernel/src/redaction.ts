@@ -2,8 +2,10 @@ const SENSITIVE_KEY_RE =
   /(token|secret|password|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key|user[_-]?code|device[_-]?code|refresh[_-]?credential)/i;
 const SECRET_TOKEN_RE =
   /\b(?:bearer\s+[a-z0-9._-]+|adc_(?:agent|live|refresh|cli)_[a-z0-9._-]+)\b/gi;
+// A quoted value with no closing quote, as in text cut short, runs to the end of the input. Each
+// quoted scan ends its match, so a scan never repeats over the same text.
 const SENSITIVE_ASSIGNMENT_RE =
-  /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+  /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*(?:"|$)|'[^']*(?:'|$)|\S+)/gi;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 const REDACTED_STRING_MAX_LENGTH = 400;
 const REDACTED_STDERR_MAX_LENGTH = 8192;

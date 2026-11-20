@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { redactDiagnosticData } from './redaction.ts';
+import { redactDiagnosticData, redactDiagnosticText } from './redaction.ts';
 
 test('stderr retains nested command failure details beyond 400 characters', () => {
   const stderr = `Launch request denied\n${'Context line\n'.repeat(50)}Underlying reason: device locked`;
@@ -70,4 +70,24 @@ test('a diamond chain redacts each shared node once, not once per path', () => {
   }
   assert.deepEqual(node, { token: '[REDACTED]', note: 'leaf' });
   assert.equal(reads, 1);
+});
+
+test('an unterminated quoted sensitive value is masked through the end of the text', () => {
+  for (const quote of ['"', "'"]) {
+    const text = `Signed in with password=${quote}correct horse battery staple`;
+    assert.equal(redactDiagnosticText(text), 'Signed in with password=[REDACTED]');
+    assert.equal(
+      redactDiagnosticData({ message: `retry api_key: ${quote}correct horse battery` }).message,
+      'retry api_key: [REDACTED]',
+    );
+  }
+});
+
+test('a terminated quoted sensitive value is masked only up to its closing quote', () => {
+  for (const quote of ['"', "'"]) {
+    assert.equal(
+      redactDiagnosticText(`token=${quote}correct horse battery${quote} then opened settings`),
+      'token=[REDACTED] then opened settings',
+    );
+  }
 });
