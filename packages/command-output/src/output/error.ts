@@ -7,6 +7,7 @@ import {
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
+import { pinElementMatchCandidateLine } from '@agent-device/capture-kit/snapshot-lines';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
@@ -213,11 +214,31 @@ function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
         ...(remaining > 0 ? [`  +${remaining} more`] : []),
       ];
     }
-    return ['Devices:', ...view.devices.map((device) => `  ${device.id}  ${device.name}`)];
+    return [
+      'Devices:',
+      ...view.devices.map((device) => `  ${device.id}  ${device.name}${bootStateMarker(device)}`),
+    ];
   });
 }
 
+/**
+ * The boot state a caller needs to pick one id out of a tied list, using the
+ * same `booted` term the device list prints. Known states always render — a
+ * tie between equally preferred devices can span booted and shut-down entries,
+ * and an id chosen without the state can aim at a device that cannot answer.
+ */
+function bootStateMarker(device: { booted?: boolean }): string {
+  if (device.booted === undefined) return '';
+  return device.booted ? '  booted=true' : '  booted=false';
+}
+
+/**
+ * Every candidate line this surface prints carries the stamp of the epoch the
+ * caller will face: a bare line is pinned, and a line born stamped at an
+ * earlier epoch is re-pinned — a stale stamp pastes into an immediate
+ * superseded refusal, which is the one outcome a suggested ref must not cause.
+ */
 function pinCandidateLine(candidate: string, generation: number | undefined): string {
   if (generation === undefined) return candidate;
-  return candidate.replace(/^@(e\d+)(?=\s|$)/, `@$1~s${generation}`);
+  return pinElementMatchCandidateLine(candidate, generation);
 }

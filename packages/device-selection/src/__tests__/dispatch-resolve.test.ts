@@ -454,8 +454,8 @@ test('resolveTargetDevice refuses booted simulator selection when the requested 
   // that key with an incompatible shape (@agent-device/kernel/errors).
   assert.equal(error.details?.candidates, undefined);
   assert.deepEqual(error.details?.devices, [
-    { id: bootedSimulator.id, name: bootedSimulator.name },
-    { id: secondBootedSimulator.id, name: secondBootedSimulator.name },
+    { id: bootedSimulator.id, name: bootedSimulator.name, booted: true },
+    { id: secondBootedSimulator.id, name: secondBootedSimulator.name, booted: true },
   ]);
 });
 
@@ -474,8 +474,8 @@ test('resolveTargetDevice refuses ambiguous booted simulator app matches', async
   assert.equal(error.details?.hint, 'Pass --udid to select the intended simulator explicitly.');
   assert.equal(error.details?.dispatched, 'no');
   assert.deepEqual(error.details?.devices, [
-    { id: bootedSimulator.id, name: bootedSimulator.name },
-    { id: secondBootedSimulator.id, name: secondBootedSimulator.name },
+    { id: bootedSimulator.id, name: bootedSimulator.name, booted: true },
+    { id: secondBootedSimulator.id, name: secondBootedSimulator.name, booted: true },
   ]);
 });
 

@@ -103,6 +103,22 @@ export function elementMatchCandidateDetails(
 }
 
 /**
+ * The ref-pin grammar for a rendered candidate line: the line's leading `@eN`,
+ * bare or already pinned, is re-stamped to `refsGeneration`, so a pasted
+ * candidate carries exactly the epoch of the ref frame that issued it. Owned
+ * beside the line renderer, and shared by every surface that prints the
+ * candidates (the CLI summary and body today), because a stamp that disagrees
+ * with the frame the caller will face is refused as superseded the moment it
+ * is pasted — the failure a printed suggestion must never cause. The wire
+ * keeps the #2870 shape (bare lines, the epoch additive once as
+ * `refsGeneration`); this grammar rules the RENDERED form. A line without a
+ * leading ref is returned as is.
+ */
+export function pinElementMatchCandidateLine(candidate: string, refsGeneration: number): string {
+  return candidate.replace(/^@(e\d+)(?:~s\d+)?(?=\s|$)/, `@$1~s${refsGeneration}`);
+}
+
+/**
  * Accessibility custom actions render as a named list rather than bracketed
  * metadata: they are the element's hidden affordances, and an agent reading the
  * line needs the exact names it would have to match. Names only — activation

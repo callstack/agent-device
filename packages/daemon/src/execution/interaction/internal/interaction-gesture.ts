@@ -26,6 +26,8 @@ import {
   splitRefGenerationSuffix,
   type Point,
 } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
 import {
   resolveBoundGestureRuntime,
   type BoundGestureExecutor,
@@ -86,8 +88,11 @@ export async function dispatchGestureViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
   params = bindInteractionSession(params);
-  return await dispatchGestureInteraction(params, 'gesture', async (session, readiness) =>
-    runGestureInteraction(params, session, readiness),
+  return await dispatchGestureInteraction(
+    params,
+    'gesture',
+    async (session, readiness, consumedCapture) =>
+      await runGestureInteraction(params, session, readiness, consumedCapture),
   );
 }
 
@@ -95,6 +100,7 @@ async function runGestureInteraction(
   params: GestureHandlerParams,
   session: SessionState,
   readiness: AndroidBlockingDialogReadinessResult,
+  consumedCapture: { state?: SnapshotState },
 ): Promise<GestureInteractionResult> {
   const input = readGesturePayload(params.req.input);
   const gesture = prepareGestureCommandInput(input, session, readiness);
@@ -111,7 +117,7 @@ async function runGestureInteraction(
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return { refused: bound.response };
-  const runtime = await createGestureRuntime(params, bound.gestures);
+  const runtime = await createGestureRuntime(params, bound.gestures, consumedCapture);
   const result = await runGestureRepetitions(
     runtime,
     params,
@@ -208,47 +214,51 @@ export async function dispatchSwipeViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
   params = bindInteractionSession(params);
-  return await dispatchGestureInteraction(params, 'swipe', async (session) => {
-    const input = readSwipeInput(params.req.input);
-    // One bind for the whole series: `--count N` executes the bound operation N times under a
-    // single binding, never one bind per repetition (ADR 0019 §9).
-    const bound = await resolveBoundGestureRuntime({
-      device: session.device,
-      input: normalizePublicSwipeMotion(input).gesture,
-      inspectFacts: params.inspectFacts,
-      platformServices: params.platformServices,
-      bindDevice: params.bindDevice,
-    });
-    if (!bound.ok) return { refused: bound.response };
-    const count = input.count ?? 1;
-    const pauseMs = input.pauseMs ?? 0;
-    const pattern = input.pattern ?? 'one-way';
-    const runtime = await createGestureRuntime(params, bound.gestures);
-    const result = await runGestureRepetitions(
-      runtime,
-      params,
-      count,
-      pauseMs,
-      (index) => normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index)).gesture,
-      (completed, index, startedAt, finishedAt) => {
-        const executedInput = { ...swipeMotionAtIndex(input, pattern, index), count: 1 };
-        recordTouchVisualizationEvent(
-          session,
-          'swipe',
-          swipeReplayPositionals(executedInput),
-          swipeResponseData(executedInput, completed),
-          {},
-          startedAt,
-          finishedAt,
-        );
-      },
-    );
-    return {
-      positionals: swipeReplayPositionals(input),
-      flags: params.req.flags,
-      responseData: swipeResponseData(input, result),
-    };
-  });
+  return await dispatchGestureInteraction(
+    params,
+    'swipe',
+    async (session, _readiness, consumedCapture) => {
+      const input = readSwipeInput(params.req.input);
+      // One bind for the whole series: `--count N` executes the bound operation N times under a
+      // single binding, never one bind per repetition (ADR 0019 §9).
+      const bound = await resolveBoundGestureRuntime({
+        device: session.device,
+        input: normalizePublicSwipeMotion(input).gesture,
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
+      });
+      if (!bound.ok) return { refused: bound.response };
+      const count = input.count ?? 1;
+      const pauseMs = input.pauseMs ?? 0;
+      const pattern = input.pattern ?? 'one-way';
+      const runtime = await createGestureRuntime(params, bound.gestures, consumedCapture);
+      const result = await runGestureRepetitions(
+        runtime,
+        params,
+        count,
+        pauseMs,
+        (index) => normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index)).gesture,
+        (completed, index, startedAt, finishedAt) => {
+          const executedInput = { ...swipeMotionAtIndex(input, pattern, index), count: 1 };
+          recordTouchVisualizationEvent(
+            session,
+            'swipe',
+            swipeReplayPositionals(executedInput),
+            swipeResponseData(executedInput, completed),
+            {},
+            startedAt,
+            finishedAt,
+          );
+        },
+      );
+      return {
+        positionals: swipeReplayPositionals(input),
+        flags: params.req.flags,
+        responseData: swipeResponseData(input, result),
+      };
+    },
+  );
 }
 
 function swipeResponseData(
@@ -274,10 +284,15 @@ function swipeResponseData(
 function createGestureRuntime(
   params: GestureHandlerParams,
   gestures: BoundGestureExecutor,
+  consumedCapture: { state?: SnapshotState },
 ): Promise<GestureRuntime> {
   return createInteractionRuntimeForRoute({
     ...params,
     gestures,
+    // The ambiguity-issuance seam reads the tree THIS request consumed: a drag
+    // whose target selector refused owes the same printed-ref contract the
+    // touch routes give (#2870 review).
+    consumedCapture,
     pairedGestureViewport: params.req.internal?.gestureViewport,
   });
 }
@@ -288,11 +303,13 @@ async function dispatchGestureInteraction(
   run: (
     session: SessionState,
     readiness: AndroidBlockingDialogReadinessResult,
+    consumedCapture: { state?: SnapshotState },
   ) => Promise<GestureInteractionResult>,
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return noActiveSessionError();
   const actionStartedAt = Date.now();
+  const consumedCapture: { state?: SnapshotState } = {};
   try {
     const providerDevice = isActiveProviderDevice(session.device);
     const readiness = providerDevice
@@ -303,7 +320,7 @@ async function dispatchGestureInteraction(
           phase: 'before-command',
           observation: params.androidObservation,
         });
-    const outcome = await run(session, readiness);
+    const outcome = await run(session, readiness, consumedCapture);
     if (isRefusal(outcome)) return outcome.refused;
     getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
     if (!providerDevice) {
@@ -336,7 +353,16 @@ async function dispatchGestureInteraction(
       actionFinishedAt: Date.now(),
     });
   } catch (error) {
-    return { ok: false, error: normalizeError(error) };
+    // The same ambiguity-issuance rule the touch routes run: a refusal that
+    // prints candidate refs must issue them on the frame that lists them, or
+    // print none. A drag's ambiguous target selector is the producer here.
+    const appError = publishAmbiguousMatchCandidateRefs(
+      params.sessionRef,
+      params.sessionStore,
+      asAppError(error),
+      consumedCapture.state,
+    );
+    return { ok: false, error: normalizeError(appError) };
   }
 }
 

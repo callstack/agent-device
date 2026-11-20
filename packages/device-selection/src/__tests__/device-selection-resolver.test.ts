@@ -89,9 +89,12 @@ test('a cross-platform tie fails undispatched, naming only the tied devices and 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'AMBIGUOUS_MATCH');
   assert.equal(error.details?.dispatched, 'no');
+  // Each tied device carries its boot state beside the id: a tie can span
+  // booted and shut-down entries, and an id picked without the state can aim
+  // at a device that cannot answer.
   assert.deepEqual(error.details?.devices, [
-    { id: ANDROID_EMULATOR.id, name: ANDROID_EMULATOR.name },
-    { id: IOS_SIMULATOR.id, name: IOS_SIMULATOR.name },
+    { id: ANDROID_EMULATOR.id, name: ANDROID_EMULATOR.name, booted: true },
+    { id: IOS_SIMULATOR.id, name: IOS_SIMULATOR.name, booted: true },
   ]);
   assert.deepEqual(error.details?.retrySelectors, [
     { flag: '--serial', value: ANDROID_EMULATOR.id },

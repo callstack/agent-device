@@ -176,7 +176,10 @@ export type ElementMatchCandidateDetails = {
 
 export type ErrorCandidateView =
   | (ElementMatchCandidateDetails & { kind: 'element-match' })
-  | { kind: 'device'; devices: Array<{ id: string; name: string }> };
+  | {
+      kind: 'device';
+      devices: Array<{ id: string; name: string; booted?: boolean }>;
+    };
 
 export function readErrorCandidateViews(
   details: Record<string, unknown> | undefined,
@@ -213,15 +216,13 @@ function readStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
-function readDeviceList(value: unknown): Array<{ id: string; name: string }> {
+function readDeviceList(value: unknown): Array<{ id: string; name: string; booted?: boolean }> {
   if (!Array.isArray(value)) return [];
-  return value.filter(
-    (entry): entry is { id: string; name: string } =>
-      typeof entry === 'object' &&
-      entry !== null &&
-      typeof (entry as { id?: unknown }).id === 'string' &&
-      typeof (entry as { name?: unknown }).name === 'string',
-  );
+  return value.filter((entry): entry is { id: string; name: string; booted?: boolean } => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const record = entry as { id?: unknown; name?: unknown; booted?: unknown };
+    return typeof record.id === 'string' && typeof record.name === 'string';
+  });
 }
 
 /**

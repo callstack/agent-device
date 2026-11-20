@@ -773,15 +773,25 @@ function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
     'AMBIGUOUS_MATCH',
     `${candidates.length} devices match this request equally; select one explicitly.`,
     {
-      // The declared device-candidate details domain (@agent-device/kernel/errors), so the CLI
-      // and MCP renderers print these candidates without a new shape to learn.
-      devices: listed.map((device) => ({ id: device.id, name: device.name })),
+      // The declared device-candidate details domain (@agent-device/kernel/errors). The boot
+      // state rides beside the id: an id picked without it can aim at a device that cannot answer.
+      devices: listed.map(deviceCandidateSummary),
       matches: candidates.length,
       // Selection precedes every device operation, so a refused tie never reached a device.
       dispatched: 'no',
       hint: buildAmbiguousDeviceHint(listed),
     },
   );
+}
+
+/** The candidate facts a device ambiguity prints (`booted` omitted when discovery reported none). */
+export function deviceCandidateSummary(device: DeviceInfo): {
+  id: string;
+  name: string;
+  booted?: boolean;
+} {
+  const summary = { id: device.id, name: device.name };
+  return device.booted === undefined ? summary : { ...summary, booted: device.booted };
 }
 
 function buildAmbiguousDeviceHint(candidates: DeviceInfo[]): string {
