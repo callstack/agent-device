@@ -145,6 +145,6 @@ An upgraded checkout uses a different default directory, so a plain `pnpm clean:
 
 The daemon refuses to start when it finds a legacy lock file or can't verify who owns the state directory. Before you recover manually, confirm that every client and daemon using the directory has stopped. Deleting `daemon.json` or `daemon.lock` alone is not a safe reset.
 
-Packaged installs use `~/.agent-device` by default; source checkouts use a per-worktree directory under `~/.agent-device/dev/`. Set `AGENT_DEVICE_STATE_DIR` or pass `--state-dir` to override either default.
+Packaged installs use `~/.agent-device` by default; source checkouts use a per-worktree directory under `~/.agent-device/dev/`. Set `AGENT_DEVICE_STATE_DIR` or pass `--state-dir` to override either default. Keep that directory private to your own account: it holds the daemon's record, log, and recordings, so agent-device refuses to use one another account owns or can write, or one that is a symbolic link. [Supported environment variables](/docs/configuration#supported-environment-variables) states what a state directory must look like and how to fix one.
 
 In a source checkout, `pnpm clean:daemon --prune-dev` first stops the current checkout's daemon; the 14-day inactivity rule below does not apply to it. It then finds development state directories with no activity for 14 days (by the newest modification time of the directory and its immediate children) and removes daemon registrations it can confirm are abandoned. It keeps the directories, session artifacts, and logs.

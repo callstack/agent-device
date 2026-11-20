@@ -32,6 +32,7 @@ import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-invent
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
+  admitDaemonStateRoot,
   resolveDaemonPaths,
   type DaemonCapability,
   type DaemonRuntimeOwnership,
@@ -208,41 +209,13 @@ async function releaseRegistrationAfterFailure(
 }
 
 /**
- * The daemon's stdout and stderr append to this inode, so it is emptied in place, never
- * replaced. On POSIX the append handle that creates the file also permits truncation, and
- * keeping that one handle open for the whole operation is what pins the inode. A Windows
- * handle opened append-only (`'a'`) rejects `ftruncate` with EPERM, so that host empties the
- * log through a read-write handle instead (#3291). A failure at any step propagates: an
- * unreadable log must fail startup loudly.
+ * The daemon's stdout and stderr append to this inode, so it is emptied in place, never replaced. POSIX takes
+ * `ftruncate` on the append handle that also creates the file; Windows rejects that there (#3291), so the same
+ * inode is emptied by opening it for writing, which truncates as it creates. Either way it is ONE open of the
+ * name: a creation race against a reopen could otherwise drop the pin this launch holds on the inode.
  */
 function truncateDaemonLog(logPath: string): void {
-  if (process.platform === 'win32') {
-    truncateDaemonLogOnWindowsHost(logPath);
-    return;
-  }
-  const descriptor = fs.openSync(logPath, 'a', 0o600);
-  try {
-    fs.ftruncateSync(descriptor, 0);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-/**
- * `ftruncate` on Windows requires a handle opened for writing beyond append. An existing log
- * is opened `'r+'` directly, so no window exists between handles on the common path; a
- * missing log is first created through `'a'` and then reopened, and a creation race against
- * that reopen surfaces as this startup failing rather than a silently unemptied log.
- */
-function truncateDaemonLogOnWindowsHost(logPath: string): void {
-  let descriptor: number;
-  try {
-    descriptor = fs.openSync(logPath, 'r+', 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    fs.closeSync(fs.openSync(logPath, 'a', 0o600));
-    descriptor = fs.openSync(logPath, 'r+', 0o600);
-  }
+  const descriptor = fs.openSync(logPath, process.platform === 'win32' ? 'w' : 'a', 0o600);
   try {
     fs.ftruncateSync(descriptor, 0);
   } finally {
@@ -285,27 +258,7 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
   return owned;
 }
 
-/**
- * Forces a pre-existing state path to the private mode, whatever mode it had. On Windows, chmod
- * only toggles the read-only bit, so it cannot make the path private. The repair never decides
- * whether the daemon starts: a path another user owns, or a mount without chmod, keeps its mode.
- */
-function repairStateMode(target: string, mode: number): void {
-  try {
-    fs.chmodSync(target, mode);
-  } catch (error) {
-    if (!MODE_REPAIR_SKIPPED_CODES.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_state_mode_repair_skipped',
-      data: { path: target, error: normalizeError(error) },
-    });
-  }
-}
-
-const MODE_REPAIR_SKIPPED_CODES = new Set(['EPERM', 'EROFS', 'ENOTSUP', 'EOPNOTSUPP']);
-
-/** Launches and monitors the actual child before recording its private-directory authority. */
+/** Launches and monitors the actual child. The root is admitted once here, before the log is opened. */
 export function launchDaemonProcess(
   input: Readonly<{
     paths: DaemonPaths;
@@ -323,11 +276,9 @@ export function launchDaemonProcess(
     throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
       reason: 'daemon_startup_admission_closed',
     });
-  fs.mkdirSync(input.paths.baseDir, { recursive: true, mode: 0o700 });
-  repairStateMode(input.paths.baseDir, 0o700);
+  admitDaemonStateRoot({ paths: input.paths, mode: 'establish' });
   const logFd = fs.openSync(input.paths.logPath, 'a', 0o600);
   try {
-    repairStateMode(input.paths.logPath, 0o600);
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       cwd: input.cwd,
       env: {

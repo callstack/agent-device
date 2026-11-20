@@ -10,6 +10,7 @@ import { asAppError, AppError, normalizeError } from '@agent-device/kernel/error
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
+  admitDaemonStateRoot,
   resolveDaemonPaths,
   resolveDaemonServerMode,
   type DaemonRuntimeOwnership,
@@ -204,6 +205,8 @@ async function startDaemonRuntimeOnHost(
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
+  // A daemon from another build, or embedded, reaches the root without the launcher's admission.
+  admitDaemonStateRoot({ paths: daemonPaths, mode: 'establish' });
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs

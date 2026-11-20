@@ -7,8 +7,10 @@ import {
   scriptEntryNameOrRefuse,
 } from './entry-name.ts';
 import { hostPathRules } from './path-resolution.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   scriptAncestryFailure,
+  scriptAncestryReason,
   type ScriptAncestryExposure,
 } from './script-destination-refusal.ts';
 
@@ -519,4 +521,78 @@ function createMissingLevel(
     throw scriptAncestryFailure(destination, level, 'shared_parent');
   }
   return level;
+}
+
+/** Never all of a bare `/`. On POSIX `\` is a file-name character: `state\` is part of a name to judge. */
+const TRAILING_HOST_SEPARATORS = process.platform === 'win32' ? /(?<=.)[\\/]+$/ : /(?<=.)\/+$/;
+
+/**
+ * Admits a private root before an operation's first use of it: every ancestor through
+ * {@link walkSpelledParent}, then the root's OWN name, then each managed name below it. `establish` creates a
+ * missing root at 0700 and `repair` creates nothing; both close a directory the umask left open (#4649).
+ * The ancestry is judged BEFORE the root's own bits are closed, and `chmod` follows links, so that order is
+ * what keeps a planted link's target out of reach of the mode change.
+ */
+export type PrivateRootAdmission =
+  | Readonly<{ status: 'admitted' }>
+  | Readonly<{ status: 'refused'; component: string; exposure: ScriptAncestryExposure }>;
+
+export function admitPrivateRoot(options: {
+  rootPath: string;
+  mode: 'repair' | 'establish';
+  /** Names below the root this caller traverses, judged by the same rule. */
+  managedDirs?: readonly string[];
+}): PrivateRootAdmission {
+  const trust = scriptTrust({});
+  const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
+  if (!path.isAbsolute(root))
+    return { status: 'refused', component: root, exposure: 'relative_destination' };
+  const create = options.mode === 'establish';
+  try {
+    const parent = walkSpelledParent(path.dirname(root), root, trust, create);
+    if (create && !lstatEntry(root))
+      createMissingLevel(root, parent.deepest, path.basename(root), trust);
+    for (const directory of [
+      root,
+      ...(options.managedDirs ?? []).map((name) => path.join(root, name)),
+    ]) {
+      const fault = admitDirectory(directory, trust);
+      if (fault) return { status: 'refused', component: directory, exposure: fault };
+    }
+  } catch (error) {
+    return verdictForAncestryFault(error, create);
+  }
+  return { status: 'admitted' };
+}
+
+/** The root rule of one name. Absence is no fault: `repair` creates nothing. */
+function admitDirectory(
+  directory: string,
+  trust: ScriptDestinationTrust,
+): ScriptAncestryExposure | undefined {
+  const seen = lstatEntry(directory);
+  if (seen === undefined) return undefined;
+  if (seen.isSymbolicLink()) return 'planted_link';
+  if (!seen.isDirectory()) return 'not_a_directory';
+  if (Number(seen.uid) !== trust.uid) return 'foreign_owned';
+  if (!(Number(seen.mode) & 0o077)) return undefined;
+  // Only a change the host refuses for the directory's OWN owner is a fault (#4649).
+  try {
+    fs.chmodSync(directory, SCRIPT_DIR_MODE);
+  } catch {
+    return 'not_private';
+  }
+  return undefined;
+}
+
+function verdictForAncestryFault(error: unknown, create: boolean): PrivateRootAdmission {
+  if (scriptAncestryReason(error) === undefined) throw error;
+  const { ancestor, exposure } = (error as AppError).details as Readonly<{
+    ancestor: string;
+    exposure: ScriptAncestryExposure;
+  }>;
+  // A route that is not there yet is an absent root, not an unsafe one, to a caller that creates nothing.
+  if (!create && (exposure === 'unreachable_parent' || exposure === 'unresolvable_parent'))
+    return { status: 'admitted' };
+  return { status: 'refused', component: ancestor, exposure };
 }
