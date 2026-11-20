@@ -124,9 +124,12 @@ export function resolveSessionBootOwnership(
     bootPerformance: DeviceBootPerformance | undefined;
   }>,
 ): CloseBootOwnership {
+  // A boot the boot step reports performing is proof on its own: the device can even have gone down
+  // between the snapshot and this call, which makes the boot real while the inference says nothing.
+  const performed = input.bootPerformance?.performed === true;
   const disprovesSnapshot = input.bootPerformance?.performed === false;
   return {
-    ownsBoot: input.inferredFromSnapshot && !disprovesSnapshot,
+    ownsBoot: performed || (input.inferredFromSnapshot && !disprovesSnapshot),
     bootOwnerUnverified: input.inferredFromSnapshot && disprovesSnapshot,
   };
 }
