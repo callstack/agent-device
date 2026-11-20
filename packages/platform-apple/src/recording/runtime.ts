@@ -1,4 +1,8 @@
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isIosFamily,
+  resolveApplePlatformName,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
@@ -35,8 +39,12 @@ import {
 } from './recovery.ts';
 import { validateAppleSimulatorRecording } from './validation.ts';
 
-const SIMULATOR_TARGET_LABEL = 'iOS recording';
 const SIMULATOR_BACKEND_LABEL = 'simctl recordVideo';
+
+/** Names the export in finalizer messages for the Apple OS the simulator runs. */
+function simulatorTargetLabel(device: DeviceInfo): string {
+  return `${resolveApplePlatformName(undefined, device.appleOs)} recording`;
+}
 
 export function appleScreenRecordingFacts(device: DeviceInfo) {
   if (
@@ -65,7 +73,10 @@ export function createAppleScreenRecordingOperations(params: {
     screenRecordingReattach: async (input) => {
       const reattached = await reattachAppleRecording({ host, device, envelope: input.envelope });
       return reattached.status === 'restore-export'
-        ? { status: 'active', handle: simulatorExportHandle({ host, restored: reattached }) }
+        ? {
+            status: 'active',
+            handle: simulatorExportHandle({ host, device, restored: reattached }),
+          }
         : reattached;
     },
     screenRecordingCleanup: async (input) =>
@@ -183,7 +194,7 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
               return await finalizeAppleRecordingFromCollected({
                 host,
                 snapshot: current,
-                targetLabel: SIMULATOR_TARGET_LABEL,
+                targetLabel: simulatorTargetLabel(device),
                 collectedPath,
                 exportPath,
                 nativePath,
@@ -219,11 +230,13 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
 function simulatorExportHandle(
   params: Readonly<{
     host: AppleScreenRecordingOperationHost;
+    device: DeviceInfo;
     restored: AppleSimulatorExportRestore;
   }>,
 ): ScreenRecordingLiveHandle {
   const {
     host,
+    device,
     restored: { recording, nativePath, cleanup },
   } = params;
   const snapshot: ScreenRecordingLiveSnapshot = Object.freeze({
@@ -250,7 +263,7 @@ function simulatorExportHandle(
             await finalizeAppleRecordingFromCollected({
               host,
               snapshot: current,
-              targetLabel: SIMULATOR_TARGET_LABEL,
+              targetLabel: simulatorTargetLabel(device),
               collectedPath,
               exportPath,
               nativePath,

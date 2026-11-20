@@ -29,6 +29,16 @@ export const simulator = Object.freeze({
   booted: true,
 });
 
+export const watchSimulator = Object.freeze({
+  platform: 'apple' as const,
+  appleOs: 'watchos' as const,
+  id: 'watch-sim',
+  name: 'Apple Watch Series 11 (46mm)',
+  kind: 'simulator' as const,
+  target: 'mobile' as const,
+  booted: true,
+});
+
 export const runnerOwnership = Object.freeze({
   runnerSessionId: 'runner-session',
   runnerAuthority: 'local-lease' as const,

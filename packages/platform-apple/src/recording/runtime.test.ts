@@ -16,6 +16,7 @@ import {
   recordingOutputPath,
   runnerOwnership,
   simulator,
+  watchSimulator,
 } from './runtime.fixtures.ts';
 
 test('uses the closed Apple runner and finalizer for a CoreDevice recording', async () => {
@@ -208,6 +209,47 @@ test('uses simctl on simulators and retains the macOS runner path', async () => 
     { ...processIdentity, purpose: 'simctl-screen-recording' },
   ]);
   expect(ownedProcesses.clear).toHaveBeenCalledWith({ kind: 'session', sessionId: 'sim' });
+});
+
+test('a watchOS simulator records through simctl and never through the runner', async () => {
+  const calls: string[] = [];
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        startSimulator: async (_device, recorderPath) => {
+          calls.push(`simctl:${recorderPath}`);
+          return {
+            markers: [processIdentity],
+            wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+            terminate: async () => {
+              calls.push('simctl-stop');
+            },
+          };
+        },
+        runRunner: async (_device: DeviceInfo, request: AppleScreenRecordingRunnerRequest) => {
+          calls.push(`runner:${request.kind}`);
+          return request.kind === 'start' ? runnerOwnership : {};
+        },
+      },
+      complete: async ({ targetLabel }) => {
+        calls.push(`finalize:${targetLabel}`);
+        return {};
+      },
+    }),
+    device: watchSimulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+
+  const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
+  expect(handle.inspect()).toMatchObject({ backend: 'simctl recordVideo' });
+  await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+
+  expect(calls).toEqual([
+    `simctl:${recordingOutputPath().replace(/\.mp4$/, '.native.mp4')}`,
+    'simctl-stop',
+    'finalize:watchOS recording',
+  ]);
 });
 
 test('a simulator stop exports from a copy and retires the file the recorder owned', async () => {
