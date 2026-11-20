@@ -252,3 +252,45 @@ describe('several generated blocks share one section heading', () => {
     );
   });
 });
+
+describe('an option no action names gets one table of its own', () => {
+  const schema = {
+    text: { summary: 'Diff', description: 'Diff' },
+    allowedFlags: ['baseline', 'threshold', 'screenshotScreenMask'] as FlagKey[],
+    flagsByAction: { snapshot: [], screenshot: ['screenshotScreenMask'] },
+  } as CommandSchema;
+  const facts = buildCommandFacts('diff', schema, new Set<FlagKey>());
+
+  test('an action table holds only what that action alone reads', () => {
+    assert.deepEqual(
+      facts.actions.map((action) => [action.label, action.options.map((option) => option.label)]),
+      [
+        ['diff snapshot', []],
+        ['diff screenshot', ['--screen-mask <black>']],
+        ['diff', ['--baseline, -b <path>', '--threshold <0-1>']],
+      ],
+    );
+  });
+
+  test('the every-action table is labelled as such and printed once', () => {
+    const block = renderBlock(facts);
+    assert.match(block, /^\*\*`diff snapshot`\*\*\n\nReads no options\.$/m);
+    assert.match(block, /^\*\*Every `diff` action\*\*$/m);
+    assert.equal(block.match(/^\| `--baseline, -b <path>` \|/gm)?.length, 1);
+  });
+});
+
+test('a multi-line synopsis renders one command form per line and no help prose', () => {
+  const block = renderBlock(
+    commandFacts({
+      name: 'perf',
+      usage:
+        'perf frames --json\n  agent-device perf memory sample --json\n\n  Aggregate perf was removed.',
+    }),
+  );
+  assert.match(
+    block,
+    /```bash\nagent-device perf frames --json\nagent-device perf memory sample --json\n```/,
+  );
+  assert.doesNotMatch(block, /Aggregate perf was removed/);
+});
