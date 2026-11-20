@@ -39,11 +39,14 @@ export function createGestureLabStyles(colors: AppColors) {
       gap: 6,
     },
     multiTapTarget: {
+      alignItems: 'center',
       backgroundColor: colors.cardStrong,
       borderColor: colors.line,
       borderRadius: 4,
       borderWidth: StyleSheet.hairlineWidth,
+      gap: 8,
       height: 160,
+      justifyContent: 'center',
     },
     metric: {
       color: colors.textSoft,
@@ -63,6 +66,8 @@ export function createGestureLabStyles(colors: AppColors) {
       borderRadius: 8,
       borderWidth: 1,
       flex: 1,
+      flexDirection: 'row',
+      gap: 8,
       height: 56,
       justifyContent: 'center',
     },
@@ -85,11 +90,13 @@ export function createGestureLabStyles(colors: AppColors) {
       fontWeight: '600',
     },
     reorderHandle: {
+      alignItems: 'center',
       backgroundColor: colors.cardStrong,
       borderColor: colors.line,
       borderRadius: 6,
       borderWidth: 1,
       height: 32,
+      justifyContent: 'center',
       width: 44,
     },
   });

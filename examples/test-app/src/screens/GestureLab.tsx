@@ -26,12 +26,14 @@ import {
   type ScrollView,
 } from 'react-native-gesture-handler';
 
+import { SymbolView } from 'expo-symbols';
+
+// NASA photograph AS17-148-22727 (public domain), bundled so the lab needs no network.
+import gestureImage from '../../assets/gesture-earth.jpg';
 import { SectionCard } from '../components';
 import { useAppColors } from '../theme';
 import { createGestureLabStyles } from './gesture-lab-styles';
 import { disableDevelopmentGestureInterceptors } from './gesture-lab-dev-menu';
-
-const gestureImageUri = 'https://reactnative.dev/img/logo-share.png';
 
 type TransformState = {
   offsetX: number;
@@ -388,7 +390,7 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
         accessibilityIgnoresInvertColors
         accessibilityLabel="Gesture test image"
         resizeMode="cover"
-        source={{ uri: gestureImageUri }}
+        source={gestureImage}
         style={[
           styles.image,
           {
@@ -428,6 +430,11 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
             style={styles.dragEndpoint}
             testID="drag-source"
           >
+            <SymbolView
+              name={{ ios: 'hand.draw', android: 'drag_pan', web: 'drag_pan' }}
+              size={18}
+              tintColor={colors.text}
+            />
             <Text style={styles.dragEndpointLabel}>Source</Text>
           </Pressable>
         </GestureDetector>
@@ -438,6 +445,11 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
           style={styles.dragEndpoint}
           testID="drag-destination"
         >
+          <SymbolView
+            name={{ ios: 'scope', android: 'target', web: 'target' }}
+            size={18}
+            tintColor={colors.text}
+          />
           <Text style={styles.dragEndpointLabel}>Destination</Text>
         </Pressable>
       </View>
@@ -481,7 +493,14 @@ export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
           accessible
           style={styles.multiTapTarget}
           testID="multi-tap-target"
-        />
+        >
+          <SymbolView
+            name={{ ios: 'hand.tap', android: 'touch_app', web: 'touch_app' }}
+            size={36}
+            tintColor={colors.textSoft}
+          />
+          <Text style={styles.metric}>Tap here with 2 to 5 fingers</Text>
+        </View>
       </GestureDetector>
 
       <View testID="reorder-list">
@@ -560,7 +579,13 @@ function ReorderRow(props: {
           collapsable={false}
           style={styles.reorderHandle}
           testID={`reorder-handle-${props.label}`}
-        />
+        >
+          <SymbolView
+            name={{ ios: 'line.3.horizontal', android: 'drag_handle', web: 'drag_handle' }}
+            size={18}
+            tintColor={colors.textSoft}
+          />
+        </View>
       </GestureDetector>
       <Text style={styles.reorderLabel} testID={`reorder-label-${props.label}`}>
         {props.label}
