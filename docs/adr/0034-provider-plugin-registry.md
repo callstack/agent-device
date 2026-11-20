@@ -78,7 +78,8 @@ The registry then owns cleanup.
 It returns an outcome per registration and step.
 It never wraps runtimes.
 When a later composition step fails, composition closes the registry before it throws.
-The registry closes activated registrations in reverse order.
+The registry starts closing activated registrations in reverse order.
+Those teardowns run concurrently, so one hanging disposer cannot stall the others.
 It shuts each runtime down before its disposer.
 Close is memoized.
 There is no package-level `dispose`.

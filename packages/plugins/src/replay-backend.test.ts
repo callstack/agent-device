@@ -58,6 +58,48 @@ function nativeExecution() {
   return { plugin, execution, create, dispose, setup };
 }
 
+test('one backend disposer cannot delay another backend disposer', async () => {
+  const first = engine('first');
+  const second = engine('second');
+  let release!: () => void;
+  first.dispose.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([candidate(first.plugin), candidate(second.plugin)]),
+    { env: {}, cwd: '/' },
+    policy,
+  );
+  const closing = registry.close();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(second.dispose).toHaveBeenCalledTimes(1);
+  release();
+  expect(await closing).toHaveLength(2);
+});
+
+test('a duplicate claim keeps its duplicate reason when its factory also fails', async () => {
+  const resolved = await resolveProviderPlugins([
+    candidate(engine().plugin, [{ kind: 'replay-backend', id: 'maestro' }]),
+    {
+      source: 'embedder',
+      declaredClaims: [{ kind: 'replay-backend', id: 'maestro' }],
+      load: () => {
+        throw new Error('factory failed');
+      },
+    },
+  ]);
+  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' }, policy);
+  expect(registry.inventory).toMatchObject([
+    { backend: 'maestro', state: 'active' },
+    { backend: 'maestro', state: 'failed', error: { reason: 'duplicate_replay_backend' } },
+  ]);
+  await registry.close();
+});
+
 test('managed replay setup stays lazy and retains one backend and one cleanup owner', async () => {
   const e = engine();
   const resolved = await resolveProviderPlugins([candidate(e.plugin)]);
@@ -517,7 +559,7 @@ test('the replay-only scope sets up no provider claim', async () => {
   await registry.close();
 });
 
-test('close runs activated claims in reverse order with per-step outcomes', async () => {
+test('close starts activated claims in reverse order with per-step outcomes', async () => {
   const order: string[] = [];
   const make = (name: string, failShutdown: boolean) => {
     const plugin: AgentDevicePlugin = {
@@ -563,7 +605,17 @@ test('close runs activated claims in reverse order with per-step outcomes', asyn
     policy,
   );
   const outcomes = await registry.close();
-  expect(order).toEqual(['second-shutdown', 'second-dispose', 'first-shutdown', 'first-dispose']);
+  // Teardown starts in reverse activation order; each runtime shuts down before its own disposer.
+  expect(order[0]).toBe('second-shutdown');
+  expect(order.indexOf('second-shutdown')).toBeLessThan(order.indexOf('first-shutdown'));
+  expect(order.indexOf('second-shutdown')).toBeLessThan(order.indexOf('second-dispose'));
+  expect(order.indexOf('first-shutdown')).toBeLessThan(order.indexOf('first-dispose'));
+  expect([...order].sort()).toEqual([
+    'first-dispose',
+    'first-shutdown',
+    'second-dispose',
+    'second-shutdown',
+  ]);
   expect(outcomes).toEqual([
     {
       provider: 'second',

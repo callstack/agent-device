@@ -288,7 +288,8 @@ async function loadSlot(slot: Slot, claimed: ClaimedClaims): Promise<void> {
   } catch (error) {
     slot.failure = asPluginFailure(error, 'plugin_load_failed');
     for (const claim of slot.claims) {
-      if (claim.contribution === undefined) claim.failure = slot.failure;
+      // A reservation reason (a duplicate or reserved id) is the actionable one; keep it.
+      if (claim.contribution === undefined) claim.failure ??= slot.failure;
     }
     nameFailedClaims(slot, claimed, raw);
   }
@@ -383,9 +384,9 @@ export async function startProviderRegistry(
       );
       return await resolveRegisteredReplayExecution(claim, refreshInventory);
     },
-    // Reverse activation order, per ADR 0034: each runtime shuts down before its own disposer, and
-    // a claim activated later is torn down first. The sequence is the ownership order, so it is
-    // deliberately not a Promise.all: one disposer's work is the next one's precondition.
+    // Reverse activation order, per ADR 0034: a claim activated later starts its teardown first,
+    // and each runtime shuts down before its own disposer. Claims own independent resources, so
+    // their teardowns run concurrently and one hanging disposer cannot stall the others.
     close: once(async () => {
       closed = true;
       const activated = resolved.slots.flatMap(({ claims }) =>
@@ -393,11 +394,7 @@ export async function startProviderRegistry(
           (claim) => claim.registration !== undefined || claim.replaySetup !== undefined,
         ),
       );
-      const outcomes: PluginCleanupOutcome[] = [];
-      for (const claim of [...activated].reverse()) {
-        outcomes.push(await cleanUpClaim(claim));
-      }
-      return outcomes;
+      return await Promise.all([...activated].reverse().map((claim) => cleanUpClaim(claim)));
     }),
   });
 }
