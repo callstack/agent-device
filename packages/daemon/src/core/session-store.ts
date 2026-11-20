@@ -1,3 +1,4 @@
+import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
 import {
   resolveSessionDir,
   resolveSessionAppLogPath,
@@ -8,7 +9,12 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { devicesOverlap } from '@agent-device/kernel/device';
+import {
+  devicesOverlap,
+  deviceIdentity,
+  sameDeviceIdentity,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
@@ -426,6 +432,27 @@ export class SessionStore {
     const session = this.get(address);
     if (!session) return;
     session.lastActivityAtMs = atMs;
+  }
+
+  /** Keep boot ownership and its launch identity together for the same device identity. */
+  updateOpenDevice(
+    ref: SessionRef,
+    device: DeviceInfo,
+    bootOccurred: boolean,
+    androidLaunchIdentity?: AndroidEmulatorLaunchIdentity,
+  ): void {
+    const current = this.requireCurrent(ref);
+    const retainsBoot = sameDeviceIdentity(deviceIdentity(current.device), deviceIdentity(device));
+    const ownsBoot = bootOccurred || (retainsBoot && current.bootedByOpen === true);
+    this.update(ref, {
+      device,
+      androidLaunchIdentity: bootOccurred
+        ? androidLaunchIdentity
+        : retainsBoot
+          ? current.androidLaunchIdentity
+          : undefined,
+      bootedByOpen: ownsBoot ? true : undefined,
+    });
   }
 
   /**

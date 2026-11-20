@@ -187,7 +187,7 @@ export type ReplayTestRunReplay = (
   params: ReplayTestRunReplayParams,
 ) => Promise<ReplayTestAttemptOutcome>;
 
-export type ReplayTestCleanupSession = (sessionName: string) => Promise<void>;
+export type ReplayTestCleanupSession = (sessionName: string) => Promise<readonly string[] | void>;
 
 /**
  * Runs after the attempt settles and before cleanup. Returns a failure outcome when
