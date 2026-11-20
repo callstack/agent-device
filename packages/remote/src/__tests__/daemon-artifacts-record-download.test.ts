@@ -32,7 +32,14 @@ function stopRequest(world: World, meta: DaemonWireRequest['meta'] = {}): Daemon
 }
 
 function artifact(partial: Partial<DaemonArtifact> & { field: string }): DaemonArtifact {
-  return { artifactId: 'a1', path: '/daemon/x', fileName: 'x.mp4', ...partial } as DaemonArtifact;
+  const role =
+    partial.field === 'outPath'
+      ? 'recording'
+      : partial.field === 'telemetryPath'
+        ? 'telemetry'
+        : 'chunk';
+  const artifactType = role === 'recording' ? 'screen-recording' : `screen-recording-${role}`;
+  return { artifactId: 'a1', path: '/daemon/x', fileName: 'x.mp4', role, artifactType, ...partial };
 }
 
 async function materialize(
@@ -135,7 +142,7 @@ test.for(['link', 'file', 'case variant'] as const)(
       const pending = materialize(world, [artifact({ field: 'outPath' })]);
       if (fs.existsSync(candidate)) {
         await expect(pending).rejects.toMatchObject({
-          details: { reason: 'artifact_publish_failed' },
+          details: { reason: 'artifact_publish_failed', destinationPath: candidate },
         });
       } else {
         await expect(pending).resolves.toMatchObject({ outPath: candidate });
@@ -147,15 +154,6 @@ test.for(['link', 'file', 'case variant'] as const)(
     });
   },
 );
-
-test('a recording reply that claims the directory type downloads one file', async (t) => {
-  await withServer(t, serveVideo, async (world) => {
-    const data = await materialize(world, [
-      artifact({ field: 'outPath', artifactType: 'test-artifacts' }),
-    ]);
-    expect(fs.readFileSync(String(data.outPath), 'utf8')).toBe('video-bytes');
-  });
-});
 
 // a. A caller abort during the transfer stops the download and its publish, then cleans up.
 test('a caller abort during the transfer publishes nothing and leaves no staging', async (t) => {
@@ -242,40 +240,6 @@ test.for([
     expect(path.win32.resolve(String.raw`D:\work`, name)).toBe(
       String.raw`D:\work` + path.win32.sep + name,
     );
-  });
-});
-
-// 2. Chunk paths name the files this client published, not the daemon's paths.
-test('a multi-chunk recording reports the chunk paths this client published', async (t) => {
-  await withServer(t, serveVideo, async (world) => {
-    const response = await materializeRemoteArtifacts(
-      { baseUrl: world.baseUrl, token: 'secret' },
-      stopRequest(world),
-      {
-        ok: true,
-        data: {
-          chunks: [
-            { index: 0, path: '/daemon/demo.mp4' },
-            { index: 1, path: '/daemon/demo.part-001.mp4' },
-          ],
-          artifacts: [
-            artifact({ field: 'outPath', path: '/daemon/demo.mp4', fileName: 'demo.mp4' }),
-            artifact({
-              artifactId: 'c1',
-              field: 'chunkPath',
-              path: '/daemon/demo.part-001.mp4',
-              fileName: 'demo.part-001.mp4',
-            }),
-          ],
-        },
-      },
-      createTestHostEnvironment(),
-      path.join(world.root, 'state'),
-    );
-    expect(response.ok && response.data?.chunks).toEqual([
-      { index: 0, path: path.join(world.cwd, 'demo.mp4') },
-      { index: 1, path: path.join(world.cwd, 'demo.part-001.mp4') },
-    ]);
   });
 });
 
@@ -369,7 +333,7 @@ test.for([
     const data = response.ok ? (response.data ?? {}) : {};
     expect(data.outPath).toBeUndefined();
     expect(data.telemetryPath).toBeUndefined();
-    expect(data.chunks).toEqual([{ index: 0 }]);
+    expect(data.chunks).toBeUndefined();
     expect(fs.readdirSync(world.cwd)).toEqual([]);
   });
 });
@@ -403,6 +367,7 @@ test('a remote record stop drops a peer sessionStateDir and unknown fields', asy
     const data = await stopAnswer(world, {
       recording: 'stopped',
       durationMs: 5,
+      capturedDurationMs: Infinity,
       sessionStateDir: '/daemon/state',
       unknownField: { localPath: '/client/x' },
       artifacts: [],
@@ -427,50 +392,6 @@ test('a remote record stop keeps peer warning text only as daemonWarnings', asyn
   });
 });
 
-test('reordered chunk artifacts bind by chunk identity, and an id-less chunk names no path', async (t) => {
-  await withServer(t, serveVideo, async (world) => {
-    const data = await stopAnswer(world, {
-      chunks: [
-        { index: 0, path: '/daemon/a.mp4' },
-        { index: 1, path: '/daemon/a.part-001.mp4' },
-        { index: 2, path: '/daemon/a.part-002.mp4' },
-        { index: 3, path: '/daemon/a.part-003.mp4' },
-      ],
-      artifacts: [
-        artifact({
-          artifactId: 'c3',
-          field: 'chunkPath',
-          path: '/daemon/a.part-003.mp4',
-          fileName: 'three.mp4',
-        }),
-        artifact({
-          artifactId: 'c0',
-          field: 'outPath',
-          path: '/daemon/a.mp4',
-          fileName: 'zero.mp4',
-        }),
-        {
-          field: 'chunkPath',
-          path: '/daemon/a.part-002.mp4',
-          fileName: 'two.mp4',
-        } as DaemonArtifact,
-        artifact({
-          artifactId: 'c1',
-          field: 'chunkPath',
-          path: '/daemon/a.part-001.mp4',
-          fileName: 'one.mp4',
-        }),
-      ],
-    });
-    expect(data.chunks).toEqual([
-      { index: 0, path: path.join(world.cwd, 'zero.mp4') },
-      { index: 1, path: path.join(world.cwd, 'one.mp4') },
-      { index: 2 },
-      { index: 3, path: path.join(world.cwd, 'three.mp4') },
-    ]);
-  });
-});
-
 test.for([
   {
     name: 'a repeated artifact id',
@@ -487,21 +408,10 @@ test.for([
     ],
   },
   {
-    name: 'an outPath artifact that contradicts chunk 0',
-    artifacts: [{ artifactId: 'a', field: 'outPath', path: '/daemon/other.mp4' }],
-  },
-  {
     name: 'two roles with the same fallback name in another case',
     artifacts: [
-      { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4', fileName: 'clip.mp4' },
-      { artifactId: 'b', field: 'telemetryPath', path: '/daemon/a.json', fileName: 'CLIP.mp4' },
-    ],
-  },
-  {
-    name: 'a chunk artifact relabelled for another chunk',
-    artifacts: [
-      { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4' },
-      { artifactId: 'b', field: 'chunkPath', path: '/daemon/elsewhere.mp4' },
+      { artifactId: 'a', field: 'outPath', fileName: 'clip.mp4' },
+      { artifactId: 'b', field: 'telemetryPath', fileName: 'CLIP.mp4' },
     ],
   },
 ])('a record stop answer with $name is refused before any download', async ({ artifacts }, t) => {
@@ -518,12 +428,8 @@ test.for([
       const scriptPublicationId = script && (await armScript(world, scriptPath));
       await expect(
         stopAnswer(world, {
-          chunks: [
-            { index: 0, path: '/daemon/a.mp4' },
-            { index: 1, path: '/daemon/a.part-001.mp4' },
-          ],
           artifacts: artifacts.map((entry) =>
-            entry === script ? { ...entry, scriptPublicationId } : entry,
+            entry === script ? { ...entry, scriptPublicationId } : artifact(entry),
           ),
         }),
       ).rejects.toMatchObject({ details: { reason: 'record_stop_answer_invalid' } });
@@ -598,21 +504,5 @@ test('an abort while a staged delivery fails during preparation is request_cance
     } finally {
       mkdir.mockRestore();
     }
-  });
-});
-
-test('a remote record stop keeps an artifact type only when it is a string', async (t) => {
-  await withServer(t, serveVideo, async (world) => {
-    const data = await stopAnswer(world, {
-      artifacts: [{ ...artifact({ field: 'outPath' }), artifactType: { localPath: '/client/x' } }],
-    });
-    expect(data.artifacts).toEqual([
-      {
-        artifactId: 'a1',
-        field: 'outPath',
-        fileName: 'x.mp4',
-        localPath: path.join(world.cwd, 'x.mp4'),
-      },
-    ]);
   });
 });

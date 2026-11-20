@@ -1,15 +1,24 @@
+import fs from 'node:fs';
 import path from 'node:path';
+import type { RecordingStopCommandResult } from '@agent-device/contracts/recording';
 import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 
-/** The `details.reason` a remote record stop answer publishes when it cannot be delivered safely. */
 const RECORD_STOP_ANSWER_REASONS = {
-  /** Two artifacts share an id or a role, or a chunk artifact names no chunk of the answer. */
   invalid: 'record_stop_answer_invalid',
+  missingRole: 'recording_artifact_role_missing',
 } as const;
 
-const RECORDING_ROLES = new Set(['outPath', 'telemetryPath', 'chunkPath']);
+const RECORDING_ROLES = {
+  recording: { artifactType: 'screen-recording', field: 'outPath' },
+  telemetry: { artifactType: 'screen-recording-telemetry', field: 'telemetryPath' },
+  chunk: { artifactType: 'screen-recording-chunk', field: 'chunkPath' },
+} as const satisfies Record<
+  NonNullable<DaemonArtifact['role']>,
+  Pick<DaemonArtifact, 'artifactType' | 'field'>
+>;
 
 type DeliverableArtifact = DaemonArtifact & { artifactId: string };
 type RecordingDestination = { path: string; fallback: boolean };
@@ -18,109 +27,113 @@ type RecordStopDelivery =
   | {
       kind: 'recording';
       artifact: DeliverableArtifact;
-      chunkIndex: number | undefined;
       destination: RecordingDestination;
+      url: URL;
     };
 
-/**
- * Binds every downloadable recording artifact to its role and chunk before anything is fetched.
- * Artifact ids are claimed across every deliverable artifact, session scripts included. The
- * `outPath` file is chunk 0 and each later chunk is the `chunkPath` artifact, each only when its
- * daemon path names that chunk. An artifact without an id or a recording role downloads nothing.
- */
 export function planRecordingDownloads(
   data: Record<string, unknown> | undefined,
+  artifactUrl: (id: string) => URL,
   destinationOf: {
     recording(artifact: DeliverableArtifact): RecordingDestination;
     script(artifact: DeliverableArtifact): string | undefined;
   },
-): { deliveries: RecordStopDelivery[]; chunkIndexes: number[] } {
-  const chunks = readChunks(data?.chunks);
+): { deliveries: RecordStopDelivery[]; missingRole: boolean } {
   const claimed = new Set<string>();
   const claim = (key: string) => {
     if (claimed.has(key)) throw invalidAnswer(`The recording answer names ${key} twice.`);
     claimed.add(key);
   };
+  const claimDestination = (destination: string | undefined) => {
+    if (destination === undefined) return;
+    const parent = resolvedParent(path.dirname(destination));
+    const key = path.join(parent, path.basename(destination)).normalize('NFC').toLowerCase();
+    claim(`destination ${key}`);
+  };
   const deliveries: RecordStopDelivery[] = [];
-  const paths: string[] = [];
-  for (const artifact of readDeliverableArtifacts(data?.artifacts)) {
-    claim(`artifact ${artifact.artifactId}`);
-    if (artifact.field === 'savedScript') {
-      const scriptPath = destinationOf.script(artifact);
-      if (scriptPath !== undefined) paths.push(scriptPath);
-      deliveries.push({ kind: 'script', artifact });
+  let missingRole = false;
+  const route = artifactUrl('');
+  for (const artifact of Array.isArray(data?.artifacts) ? data.artifacts : []) {
+    if (!isRecord(artifact)) continue;
+    if (artifact.role === undefined) {
+      if (artifact.artifactType !== 'session-script' || artifact.field !== 'savedScript') {
+        missingRole = true;
+      } else if (typeof artifact.artifactId === 'string') {
+        const script = artifact as DeliverableArtifact;
+        claim(`artifact ${script.artifactId}`);
+        claimDestination(destinationOf.script(script));
+        deliveries.push({ kind: 'script', artifact: script });
+      }
       continue;
     }
-    if (artifact.field !== 'chunkPath') claim(artifact.field);
-    const chunkIndex = chunkOf(artifact, chunks);
-    if (chunkIndex !== undefined) claim(`chunk ${chunkIndex}`);
-    const destination = destinationOf.recording(artifact);
-    paths.push(destination.path);
-    deliveries.push({ kind: 'recording', artifact, chunkIndex, destination });
+    const recording = readRecordingArtifact(artifact, claim);
+    const id = recording.artifactId;
+    const url = artifactUrl(id);
+    if (url.href !== route.href + encodeURIComponent(id))
+      throw invalidAnswer('Invalid recording artifact URL.');
+    const destination = destinationOf.recording(recording);
+    claimDestination(destination.path);
+    deliveries.push({ kind: 'recording', artifact: recording, destination, url });
   }
-  claimDistinctDestinations(paths);
-  return { deliveries, chunkIndexes: chunks.map((chunk) => chunk.index) };
+  return { deliveries, missingRole };
 }
 
-function readDeliverableArtifacts(value: unknown): DeliverableArtifact[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((artifact: unknown): artifact is DeliverableArtifact => {
-    if (!isRecord(artifact) || typeof artifact.artifactId !== 'string') return false;
-    if (artifact.artifactType === 'session-script') return artifact.field === 'savedScript';
-    return typeof artifact.field === 'string' && RECORDING_ROLES.has(artifact.field);
-  });
+function readRecordingArtifact(
+  artifact: Record<string, unknown>,
+  claim: (key: string) => void,
+): DeliverableArtifact {
+  const { role, chunkIndex } = artifact;
+  if (typeof role !== 'string' || !Object.hasOwn(RECORDING_ROLES, role)) {
+    throw invalidAnswer('Unknown recording artifact role.');
+  }
+  const { artifactType, field } = RECORDING_ROLES[role as keyof typeof RECORDING_ROLES];
+  if (artifact.artifactType !== artifactType) {
+    throw invalidAnswer('The recording artifact type contradicts its role.');
+  }
+  if (role !== 'chunk') claim(role);
+  if (chunkIndex !== undefined || role === 'chunk') {
+    if (
+      role === 'telemetry' ||
+      typeof chunkIndex !== 'number' ||
+      !Number.isSafeInteger(chunkIndex) ||
+      chunkIndex < 1
+    ) {
+      throw invalidAnswer('Invalid recording chunk index.');
+    }
+    claim(`chunk ${chunkIndex}`);
+  }
+  const artifactId = opaqueArtifactId(artifact.artifactId);
+  claim(`artifact ${artifactId}`);
+  return { ...artifact, field, artifactId } as DeliverableArtifact;
 }
 
-/** The chunk an artifact's daemon path names; a contradictory identity refuses the answer. */
-function chunkOf(
-  artifact: DaemonArtifact,
-  chunks: ReadonlyArray<{ index: number; path: string }>,
-): number | undefined {
-  if (artifact.field === 'telemetryPath') return undefined;
-  const first = artifact.field === 'outPath';
-  if (first && !chunks.some(({ index }) => index === 0)) return undefined;
-  const matches = chunks.filter(
-    (chunk) => chunk.path === artifact.path || chunk.path === artifact.localPath,
-  );
-  if (matches.length !== 1 || (matches[0]!.index === 0) !== first) {
-    throw invalidAnswer(`Artifact ${artifact.artifactId} names no single chunk.`);
-  }
-  return matches[0]!.index;
+function opaqueArtifactId(id: unknown): string {
+  if (
+    typeof id === 'string' &&
+    id &&
+    id !== '.' &&
+    id !== '..' &&
+    !/[\\/\0\p{Surrogate}]/u.test(id)
+  )
+    return id;
+  throw invalidAnswer('Invalid recording artifact ID.');
 }
 
-/** Refuses two recording files that would land at one local path (compared case-insensitively). */
-function claimDistinctDestinations(paths: readonly string[]): void {
-  const seen = new Set<string>();
-  for (const destination of paths) {
-    const key = path.resolve(destination).normalize('NFC').toLowerCase();
-    if (seen.has(key)) throw invalidAnswer('Two artifacts share a destination.');
-    seen.add(key);
+function resolvedParent(directory: string): string {
+  const absolute = path.resolve(directory);
+  try {
+    return fs.realpathSync(absolute);
+  } catch (error) {
+    const parent = path.dirname(absolute);
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === absolute) return absolute;
+    return path.join(resolvedParent(parent), path.basename(absolute));
   }
-}
-
-function readChunks(value: unknown): Array<{ index: number; path: string }> {
-  const chunks = (Array.isArray(value) ? value : []).flatMap((chunk) =>
-    isRecord(chunk) &&
-    typeof chunk.index === 'number' &&
-    Number.isSafeInteger(chunk.index) &&
-    chunk.index >= 0 &&
-    typeof chunk.path === 'string'
-      ? [{ index: chunk.index, path: chunk.path }]
-      : [],
-  );
-  if (new Set(chunks.map((chunk) => chunk.index)).size !== chunks.length) {
-    throw invalidAnswer('The recording answer names one chunk index twice.');
-  }
-  return chunks;
 }
 
 function invalidAnswer(message: string): AppError {
-  return new AppError('COMMAND_FAILED', message, {
-    reason: RECORD_STOP_ANSWER_REASONS.invalid,
-  });
+  return new AppError('COMMAND_FAILED', message, { reason: RECORD_STOP_ANSWER_REASONS.invalid });
 }
 
-/** The daemon facts a record stop result keeps, each with the one type it may have. */
 const RESULT_FACTS = {
   recording: 'string',
   durationMs: 'number',
@@ -133,7 +146,6 @@ const RESULT_FACTS = {
   showTouches: 'boolean',
 } as const;
 
-/** The facts record stop error details keep. */
 const ERROR_FACTS = {
   reason: 'string',
   hint: 'string',
@@ -143,20 +155,31 @@ const ERROR_FACTS = {
   retriable: 'boolean',
 } as const;
 
-/**
- * The remote record stop result: validated daemon facts, then the client's own fields (published
- * paths, artifacts and delivery disclosures), and chunk paths only for chunks this client wrote.
- */
 export function projectRecordStopResult(
   peer: Record<string, unknown> | undefined,
   local: Record<string, unknown>,
   delivered: readonly DaemonArtifact[],
-  chunkPaths: ReadonlyMap<number, string>,
-  chunkIndexes: readonly number[],
+  missingRole: boolean,
 ): Record<string, unknown> {
   const app = peer?.activeSessionApp;
-  const chunks = chunkIndexes.map((index) =>
-    chunkPaths.has(index) ? { index, path: chunkPaths.get(index) } : { index },
+  const chunks: NonNullable<RecordingStopCommandResult['chunks']> = [];
+  const paths: Pick<RecordingStopCommandResult, 'outPath' | 'telemetryPath'> = {};
+  const artifacts = delivered.map(
+    ({ artifactId, field, artifactType, role, chunkIndex, fileName, localPath }) => {
+      if (role === 'recording') paths.outPath = localPath;
+      if (role === 'telemetry') paths.telemetryPath = localPath;
+      if (role && chunkIndex !== undefined && localPath !== undefined)
+        chunks.push({ index: chunkIndex, path: localPath });
+      return {
+        artifactId,
+        field,
+        artifactType,
+        role,
+        chunkIndex: role ? chunkIndex : undefined,
+        fileName: typeof fileName === 'string' ? fileName : undefined,
+        localPath,
+      };
+    },
   );
   return {
     ...pickFacts(peer, RESULT_FACTS),
@@ -165,37 +188,41 @@ export function projectRecordStopResult(
       ? { activeSessionApp: pickFacts(app, { bundleId: 'string', name: 'string' }) }
       : {}),
     ...local,
-    artifacts: delivered.map(({ artifactId, field, artifactType, fileName, localPath }) => ({
-      artifactId,
-      field,
-      ...(typeof artifactType === 'string' ? { artifactType } : {}),
-      ...(typeof fileName === 'string' ? { fileName } : {}),
-      localPath,
-    })),
-    ...(chunks.length > 0 ? { chunks } : {}),
+    ...paths,
+    artifacts,
+    ...(chunks.length ? { chunks: chunks.sort((left, right) => left.index - right.index) } : {}),
+    ...(missingRole ? missingRoleWarning(local) : {}),
   };
 }
 
-/** Remote record stop error details: named scalar facts and the daemon's warning text only. */
+function missingRoleWarning(local: Record<string, unknown>) {
+  return {
+    recordingArtifactWarning: { reason: RECORD_STOP_ANSWER_REASONS.missingRole },
+    warnings: [
+      ...readResponseWarnings(local),
+      'The remote daemon omitted a recording artifact role. The client skipped that artifact.',
+    ],
+  };
+}
+
 export function projectRecordStopErrorDetails(
   details: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   return details && { ...pickFacts(details, ERROR_FACTS), ...daemonWarningsOf(details) };
 }
 
-/** The named facts of `source` whose value has the declared type. */
 function pickFacts(
   source: Record<string, unknown> | undefined,
   types: Readonly<Record<string, 'string' | 'number' | 'boolean'>>,
 ): Record<string, unknown> {
   const facts: Record<string, unknown> = {};
   for (const [key, type] of Object.entries(types)) {
-    if (source && typeof source[key] === type) facts[key] = source[key];
+    const value = source?.[key];
+    if (typeof value === type && (type !== 'number' || Number.isFinite(value))) facts[key] = value;
   }
   return facts;
 }
 
-/** The daemon's own warning text as `daemonWarnings`, never the client-owned `warnings` channel. */
 function daemonWarningsOf(source: Record<string, unknown> | undefined): {
   daemonWarnings?: string[];
 } {

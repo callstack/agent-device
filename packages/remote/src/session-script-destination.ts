@@ -19,7 +19,7 @@ import {
   removeRecord,
   withRecordLock,
 } from './script-publication-record.ts';
-import { publishScriptVersion } from './script-version-publisher.ts';
+import { publishScriptVersion, scriptVersionTarget } from './script-version-publisher.ts';
 
 type RemoteEndpoint = DaemonArtifactEndpoint & { capabilities?: readonly string[] };
 
@@ -168,18 +168,7 @@ export function sessionScriptDelivery(
   // published destination from here rather than downloading anything a second time.
   let settled: ReceiptSettlement | undefined;
   const delivery: SessionScriptDelivery = {
-    plannedDestination: ({ scriptPublicationId, scriptRevision }) => {
-      if (
-        typeof scriptPublicationId !== 'string' ||
-        typeof scriptRevision !== 'number' ||
-        !Number.isSafeInteger(scriptRevision) ||
-        scriptRevision <= 0
-      ) {
-        return undefined;
-      }
-      return readRecord(recordPath(stateDir, endpoint.baseUrl, req, scriptPublicationId))
-        ?.destination;
-    },
+    plannedDestination: (artifact) => scriptVersionTarget(context, artifact)?.record.destination,
     publish: async (artifact, data, kept) => {
       if (artifact.field !== 'savedScript' || artifact.artifactType !== 'session-script') return;
       // The receipt is the one delivery instruction of this response; a step's or the batch's own

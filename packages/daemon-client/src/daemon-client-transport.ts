@@ -536,7 +536,18 @@ function remainingRemoteRequestTimeoutMs(
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'remote_instance_mismatch';
+  return error instanceof RemoteInstanceMismatchError;
+}
+
+const INSTANCE_MISMATCH_REASONS = { rejected: 'remote_instance_mismatch' } as const;
+
+class RemoteInstanceMismatchError extends AppError {
+  constructor(daemonBaseUrl: string | undefined) {
+    super('COMMAND_FAILED', 'Remote daemon instance changed', {
+      reason: INSTANCE_MISMATCH_REASONS.rejected,
+      daemonBaseUrl,
+    });
+  }
 }
 
 function isRemoteTransportFailure(error: unknown): boolean {
@@ -864,12 +875,7 @@ async function sendHttpRequest(
         if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
           res.resume();
           if (timeoutHandle) clearTimeout(timeoutHandle);
-          rejectOnce(
-            new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
-              reason: 'remote_instance_mismatch',
-              daemonBaseUrl: info.baseUrl,
-            }),
-          );
+          rejectOnce(new RemoteInstanceMismatchError(info.baseUrl));
           return;
         }
         if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {

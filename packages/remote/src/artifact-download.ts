@@ -153,7 +153,7 @@ function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestinat
         if (params.mode === 'staged-new-file') fs.linkSync(staged, target);
         else fs.renameSync(staged, target);
       } catch (error) {
-        throw publishError(artifactId, error);
+        throw publishError(artifactId, error, target);
       }
       fs.rmSync(staging!, { recursive: true, force: true });
       return destinationPath;
@@ -161,11 +161,16 @@ function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestinat
   };
 }
 
-function publishError(artifactId: string, cause: unknown): AppError {
+function publishError(artifactId: string, cause: unknown, target?: string): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'The downloaded artifact could not be saved on this machine.',
-    { reason: ARTIFACT_DOWNLOAD_REASONS.publishFailed, artifactId },
+    {
+      reason: ARTIFACT_DOWNLOAD_REASONS.publishFailed,
+      artifactId,
+      destinationPath:
+        (cause as NodeJS.ErrnoException | undefined)?.code === 'EEXIST' ? target : undefined,
+    },
     cause instanceof Error ? cause : undefined,
   );
 }

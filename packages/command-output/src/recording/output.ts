@@ -12,7 +12,7 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
   const outPath = typeof data.outPath === 'string' ? data.outPath : '';
   const chunks = readRecordingChunks(data);
   const stderr = daemonWarningLines(data);
-  if (chunks.length <= 1) {
+  if (chunks.length === 0 || (chunks.length === 1 && chunks[0]?.path === outPath)) {
     return { data, text: formatRecordSingleOutput(data, outPath), ...(stderr ? { stderr } : {}) };
   }
 

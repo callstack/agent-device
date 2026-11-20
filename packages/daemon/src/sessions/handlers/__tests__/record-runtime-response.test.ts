@@ -44,15 +44,20 @@ test('stop response derives client telemetry and chunk artifact paths', () => {
     recordOnlySession: false,
     telemetryPath: '/daemon/capture.gesture-telemetry.json',
     chunks: [
-      { index: 0, path: '/daemon/capture.mp4', clientOutPath: '/client/capture.mp4' },
-      { index: 1, path: '/daemon/capture-1.mp4', clientOutPath: '/client/capture-1.mp4' },
+      { index: 1, path: '/daemon/capture.mp4', clientOutPath: '/client/capture.mp4' },
+      { index: 2, path: '/daemon/capture-1.mp4', clientOutPath: '/client/capture-1.mp4' },
     ],
   });
 
   if (!response.ok) throw new Error(JSON.stringify(response.error));
+  expect(response.data?.artifacts?.[0]).toMatchObject({
+    role: 'recording',
+    chunkIndex: 1,
+  });
   expect(response.data?.artifacts).toContainEqual(
     expect.objectContaining({
       field: 'telemetryPath',
+      role: 'telemetry',
       path: '/daemon/capture.gesture-telemetry.json',
       localPath: path.join('/client', 'capture.gesture-telemetry.json'),
     }),
@@ -60,6 +65,8 @@ test('stop response derives client telemetry and chunk artifact paths', () => {
   expect(response.data?.artifacts).toContainEqual(
     expect.objectContaining({
       field: 'chunkPath',
+      role: 'chunk',
+      chunkIndex: 2,
       path: '/daemon/capture-1.mp4',
       localPath: '/client/capture-1.mp4',
     }),

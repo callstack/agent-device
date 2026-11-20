@@ -20,6 +20,39 @@ type PublishOutcome =
   | Readonly<{ published: string | undefined }>
   | Readonly<{ failure: ScriptDeliveryFailure; error: unknown }>;
 
+export function scriptVersionTarget(
+  {
+    endpoint,
+    req,
+    stateDir,
+  }: {
+    endpoint: Required<DaemonArtifactEndpoint>;
+    req: DaemonWireRequest;
+    stateDir: string;
+  },
+  {
+    field,
+    artifactType,
+    artifactId,
+    scriptPublicationId: id,
+    scriptRevision: revision,
+  }: DaemonArtifact,
+) {
+  if (
+    field !== 'savedScript' ||
+    artifactType !== 'session-script' ||
+    typeof id !== 'string' ||
+    typeof artifactId !== 'string' ||
+    typeof revision !== 'number' ||
+    !Number.isSafeInteger(revision) ||
+    revision <= 0
+  )
+    return undefined;
+  const file = recordPath(stateDir, endpoint.baseUrl, req, id);
+  const record = readRecord(file);
+  return record && { file, record, id, revision, artifactId };
+}
+
 /**
  * Publishes one version and returns the destination, `undefined` when no record of this client
  * matches the artifact, or a typed delivery failure. A version no newer than the one published is
@@ -43,32 +76,22 @@ export async function publishScriptVersion(
   artifact: DaemonArtifact,
   closesRecording: boolean,
 ): Promise<PublishOutcome> {
-  const { endpoint, req, stateDir } = context;
-  const { scriptPublicationId: id, scriptRevision, artifactId } = artifact;
-  const file =
-    artifact.field === 'savedScript' &&
-    artifact.artifactType === 'session-script' &&
-    typeof id === 'string' &&
-    typeof artifactId === 'string' &&
-    Number.isSafeInteger(scriptRevision) &&
-    (scriptRevision as number) > 0
-      ? recordPath(stateDir, endpoint.baseUrl, req, id)
-      : undefined;
-  const record = file ? readRecord(file) : undefined;
-  if (!file || !record) {
+  const { endpoint, req } = context;
+  const target = scriptVersionTarget(context, artifact);
+  if (!target) {
     emitDiagnostic({
       level: 'warn',
       phase: 'session_script_artifact_dropped',
-      data: { session: req.session, artifactId },
+      data: { session: req.session, artifactId: artifact.artifactId },
     });
     return { published: undefined };
   }
-  const revision = scriptRevision as number;
+  const { file, record, id, revision, artifactId } = target;
   if (revision <= record.revision) return { published: record.destination };
   try {
     const contents = await context.fetch({
       ...endpoint,
-      artifactId: artifactId as string,
+      artifactId,
       requestScope: req.meta,
       maxBytes: MAX_SCRIPT_BYTES,
       signal: context.signal,
@@ -90,7 +113,7 @@ export async function publishScriptVersion(
     });
   } catch (error) {
     return {
-      failure: scriptDeliveryFailure(record.destination, id as string, error, closesRecording),
+      failure: scriptDeliveryFailure(record.destination, id, error, closesRecording),
       error,
     };
   }

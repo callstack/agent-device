@@ -38,6 +38,7 @@ describe('recording command interface', () => {
       .toHaveProperty('daemonWarnings')
       .toEqualTypeOf<string[] | undefined>();
     const stopped = RECORDING_COMMAND_OUTPUT_SCHEMAS.record.oneOf[1];
+    expect(stopped?.required).not.toContain('outPath');
     expect(stopped).toMatchObject({
       properties: { daemonWarnings: { type: 'array', items: { type: 'string' } } },
     });

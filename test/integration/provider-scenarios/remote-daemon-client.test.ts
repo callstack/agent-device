@@ -426,6 +426,8 @@ function writeRecordSuccess(
           {
             artifactId: 'recording-1',
             field: 'outPath',
+            role: 'recording',
+            artifactType: 'screen-recording',
             localPath: state.recordingClientOutPath,
             fileName: 'remote-recording.mp4',
           },

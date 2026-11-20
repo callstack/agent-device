@@ -25,7 +25,9 @@
   },
   "devDependencies": {
     "@agent-device/apple-runner": "workspace:*",
+    "@agent-device/command-output": "workspace:*",
     "@agent-device/proxy": "workspace:*",
+    "@agent-device/remote": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
     "@types/node": "^22.20.1",
     "fast-check": "^4.9.0",

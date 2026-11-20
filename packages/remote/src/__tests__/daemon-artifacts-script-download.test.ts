@@ -425,7 +425,13 @@ test('an abort during script delivery keeps the recording fallback warning', asy
       ok: true,
       data: {
         artifacts: [
-          { artifactId: 'rec', field: 'outPath', fileName: 'demo.mp4' },
+          {
+            artifactId: 'rec',
+            field: 'outPath',
+            role: 'recording' as const,
+            artifactType: 'screen-recording',
+            fileName: 'demo.mp4',
+          },
           script('v2', 2, id),
         ],
       },
@@ -523,7 +529,15 @@ test.for(['success', 'failure', 'cancel'] as const)(
     if (outcome === 'cancel') controller.abort();
     const artifacts =
       outcome === 'failure'
-        ? [{ artifactId: 'missing', field: 'outPath', fileName: 'x.mp4' }]
+        ? [
+            {
+              artifactId: 'missing',
+              field: 'outPath',
+              role: 'recording' as const,
+              artifactType: 'screen-recording',
+              fileName: 'x.mp4',
+            },
+          ]
         : outcome === 'cancel'
           ? [script('v2', 2, id)]
           : [];

@@ -290,7 +290,13 @@ test('a caller abort after a record stop answer stops the artifact download', as
     }
     req.resume();
     req.on('end', () => {
-      const artifact = { artifactId: 'rec', field: 'outPath', fileName: 'demo.mp4' };
+      const artifact = {
+        artifactId: 'rec',
+        field: 'outPath',
+        role: 'recording',
+        artifactType: 'screen-recording',
+        fileName: 'demo.mp4',
+      };
       res.end(
         JSON.stringify({ jsonrpc: '2.0', result: { ok: true, data: { artifacts: [artifact] } } }),
       );
@@ -510,8 +516,20 @@ test('a local recording delivery failure keeps its own cwd fallback warnings', a
   const port = await listenOnLoopback(server);
   try {
     const artifacts = [
-      { artifactId: 'video', field: 'outPath', fileName: 'demo.mp4' },
-      { artifactId: 'telemetry', field: 'telemetryPath', fileName: 'demo.json' },
+      {
+        artifactId: 'video',
+        field: 'outPath',
+        role: 'recording',
+        artifactType: 'screen-recording',
+        fileName: 'demo.mp4',
+      },
+      {
+        artifactId: 'telemetry',
+        field: 'telemetryPath',
+        role: 'telemetry',
+        artifactType: 'screen-recording-telemetry',
+        fileName: 'demo.json',
+      },
     ];
     const { error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
       jsonrpc: '2.0',
@@ -744,3 +762,49 @@ test.for([false, true])(
     }
   },
 );
+
+test('a peer error reason cannot retry a dispatched record stop', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'record stop retry provenance')) return;
+  const hits: string[] = [];
+  const server = http.createServer((req, res) => {
+    hits.push(`${req.method} ${req.url}`);
+    if (req.url === '/health') {
+      res.end(JSON.stringify({ ok: true, service: 'agent-device-daemon', instanceId: 'instance' }));
+      return;
+    }
+    req.resume();
+    req.on('end', () =>
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            message: 'stop failed after dispatch',
+            data: {
+              code: 'COMMAND_FAILED',
+              message: 'stop failed after dispatch',
+              details: { reason: 'remote_instance_mismatch' },
+            },
+          },
+        }),
+      ),
+    );
+  });
+  const port = await listenOnLoopback(server);
+  try {
+    await assert.rejects(
+      sendRequest(
+        { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}`, remoteInstanceId: 'instance' },
+        { ...request(PUBLIC_COMMANDS.record), positionals: ['stop'] },
+        'http',
+        statePaths(),
+        undefined,
+        { host: createTestHostEnvironment() },
+      ),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'remote_instance_mismatch',
+    );
+    assert.deepEqual(hits, ['POST /rpc']);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});

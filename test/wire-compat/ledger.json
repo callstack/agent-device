@@ -16,7 +16,7 @@
     "packages/contracts/src/request-progress.ts#RequestProgressEvent": "sha256:2516c4d0a4e831f779d68e692158b863f6b42c78a7eaac6607ebbffe2d4b6ce5",
     "packages/kernel/src/contracts.ts#CommandRpcParams": "sha256:3a400b0d815920d9cf4c6236531931f6ba6f9debf7ac26915e0116b493f1c97a",
     "packages/kernel/src/contracts.ts#DAEMON_LOCK_POLICIES": "sha256:625cc33bb574aa6119add45878a0f6adc445244edc2957737da975f91605c786",
-    "packages/kernel/src/contracts.ts#DaemonArtifact": "sha256:77dee23e48dc77febb33efadc85377cbbcd137389ae7b33e93ba31670565fdf6",
+    "packages/kernel/src/contracts.ts#DaemonArtifact": "sha256:34f9be1f3565dc059763a40abbfa046206f12a4f46a355ae4cdc74878bbea5a7",
     "packages/kernel/src/contracts.ts#DaemonArtifactKnownType": "sha256:4a55e654d15d4719a579df4aa1929dda1d52a4acf4c71e9ff78814ad09d6d233",
     "packages/kernel/src/contracts.ts#ScriptDeliveryFailure": "sha256:186881f8b2e6a0227a6d1a2c802d8f7356fee39d4137800a0c9fa65401aa2765",
     "packages/kernel/src/contracts.ts#DaemonArtifactType": "sha256:5e5017276fefe880b8ab32001888011d2e02a8670f0978afdb9b56a77ab37f09",
@@ -154,7 +154,7 @@
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:11f462db8a8f83b2f090195f3632b98b0e96cc9854091fe02ce7628cbb7c2fb2",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:570a2f2d7d77e201d623c1c4c904d5cd0fe56bb7c9c56636fe95751bf6c076e3",
     "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:f50bf3548edb2d0df594b6bee6efa9e33e142a046eb88f6d2aa48898edbbabca",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
@@ -195,7 +195,7 @@
     "packages/proxy/src/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders": "sha256:9f5d76a1f761d65fabd7244fc67295fed5934a544e86a6455451ef8520cf1615",
     "packages/daemon-client/src/daemon-client-transport.ts#buildRemoteInstancePreconditionHeaders": "sha256:70241561c4070a8ebbdbbdb4ebcdbdfcb9543501cbb649a6d71cf041aee55a08",
     "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatchResponse": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
-    "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
+    "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:ae1ac42c72f043b37467164d252b5659eb3abc8a076788f6d659333fc95b78fb",
     "packages/contracts/src/lease-scope.ts#buildDaemonRpcRequest": "sha256:b3d03bb08f8f332b04dea6d2ea30abca2faf83a10f11cb874df2344b3f54c2b6",
     "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
     "packages/contracts/src/lease-scope.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
@@ -212,9 +212,9 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:b6f5f17fd0551a445c63726a7be95705f9ee45119c92b90c02fe71a1ddf4b5ab",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:01fb34d0b9f32df3228cac7f8e7659b28178c7617f59ed869080463c1d411473",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:e9d551b3023d4445e8be9a22275a810919c96208c2bbe0955a6f52ff51ce6c25",
-    "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:91be966acf412179ae3a682243b24042772a03c79dcd754c9acaa588372de2c9",
+    "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:c98e00810338c88b82daa560a5d734482079d2c3ab61521ea391c8be64d494e0",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:a4ae6fc3298d3c560719591372edddbfa83ce749f4cf3f3e2ed1d8369313bd2d",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
     "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
@@ -418,11 +418,6 @@
       "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
     },
     {
-      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch",
-      "digest": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
-      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
-    },
-    {
       "declaration": "packages/daemon-client/src/daemon-client-transport.ts#readDaemonHttpHealth",
       "digest": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
       "rationale": "The health-probe budget includes requester loading and response completion. The caller AbortSignal joins the probe timer only in-process; caller cancellation remains distinct from probe expiry. No signal, timedOut flag, request route, auth header or accepted health payload field changes on the wire, so released daemons and proxies parse and respond as before (ADR 0006)."
@@ -583,21 +578,6 @@
       "rationale": "#4441 removes an unregistered upload directory if ingress is canceled before the registry takes ownership. Successful responses retain the same status and uploadId envelope. Expiry is also checked on the monotonic clock before a ticket is created, a chunk offset is committed and an artifact is registered, and an expired exchange ends with the same typed error answer; status codes and body shapes are unchanged. Every answer, ticket publish and registration now commits through the request's single commit gate; a newly created preflight ticket is removed when its answer is refused. Status codes, headers and bodies are unchanged."
     },
     {
-      "declaration": "packages/kernel/src/contracts.ts#DaemonArtifact",
-      "digest": "sha256:77dee23e48dc77febb33efadc85377cbbcd137389ae7b33e93ba31670565fdf6",
-      "rationale": "#4511 adds the optional scriptPublicationId string and scriptRevision number, which a daemon sets only on a session-script artifact for a remote recording. A released client ignores the unknown fields and downloads the artifact like any other file named by its field; every existing field keeps its meaning."
-    },
-    {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:11f462db8a8f83b2f090195f3632b98b0e96cc9854091fe02ce7628cbb7c2fb2",
-      "rationale": "#4518 client-side only: the function takes the caller's AbortSignal so a cancel after the answer stops artifact delivery in every branch, including session-script delivery. Every field a released daemon sends is read as before; nothing new is sent or required."
-    },
-    {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:b6f5f17fd0551a445c63726a7be95705f9ee45119c92b90c02fe71a1ddf4b5ab",
-      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published paths. A response's own recordingDestinationWarnings is dropped: only the client's completed recording downloads fill that field. A released daemon's fields are read as before. #4518 (client-side only): a remote record stop reports outPath, telemetryPath and chunk paths only from files this client downloaded; a peer value without a published file is dropped. #4518 (client-side only): a remote record stop answer is rebuilt from an allow-list of named facts plus this client's own published files, and downloads are bound to a role and chunk before any fetch."
-    },
-    {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
       "digest": "sha256:7d26a53973dab7b683f6b26b623c2b7a488738a2ef52eabc37802e80deca5973",
       "rationale": "#4518 client-side only: the RPC error branch takes the caller's AbortSignal. A caller abort skips the batch receipt settlement, and an abort during it stops the script download before anything publishes. The error fields read and the error the caller receives are unchanged. For a remote daemon only, the error details drop a peer's savedScript, recordingDestinationWarnings and artifact localPath, which only this client's own delivery may set; a local daemon's details are unchanged. #4518 (client-side only): remote record stop error details keep only named facts, a failure of this handler reaches the reject callback, and a canceled request fetches no diagnostics record and drops the peer's logPath."
@@ -638,16 +618,6 @@
       "rationale": "Removes the client-local privateFile option, which was never serialized or sent. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes. #4518 (client-side only): the client-local destination mode and caller signal replace isDirectory; they are never sent."
     },
     {
-      "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:11f462db8a8f83b2f090195f3632b98b0e96cc9854091fe02ce7628cbb7c2fb2",
-      "rationale": "Passes the in-memory fetchRemoteArtifact to the session-script owner instead of the file download. Which artifacts are requested is unchanged, and the wire fields are unchanged; the client no longer adds a repeat warning to its own output. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes."
-    },
-    {
-      "declaration": "packages/remote/src/script-version-publisher.ts#publishScriptVersion",
-      "digest": "sha256:91be966acf412179ae3a682243b24042772a03c79dcd754c9acaa588372de2c9",
-      "rationale": "A script version is fetched into memory, capped at 8 MiB, and committed by the local script publisher under the record lock; a version no newer than the record is answered from the record with no warning. The client reads the same artifact fields (field, artifactType, artifactId, scriptPublicationId, scriptRevision) and requests the same artifact route. The GET /artifacts/:id request, its headers and the response framing are unchanged, so a peer on the same protocol sees the same bytes. #4518 (client-side only): its context carries the caller's signal, which the fetch takes; an abort that lands while the publish waits for the record lock writes nothing."
-    },
-    {
       "declaration": "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen",
       "digest": "sha256:73eca35dba88bfe0e933ea877a0ca953fbbe5c5ddca5896ed5fbac7f459ecd6c",
       "rationale": "Removes the unanswered open's record through the record owner instead of a direct unlink. The request still carries meta.scriptPublicationId and omits the caller path, and the response is read for the same scriptPublicationId field."
@@ -681,6 +651,31 @@
       "declaration": "packages/remote/src/session-script-destination.ts#SessionScriptDelivery",
       "digest": "sha256:e9d551b3023d4445e8be9a22275a810919c96208c2bbe0955a6f52ff51ce6c25",
       "rationale": "#4518 client-side only: read the existing script publication record during record-stop planning to refuse destination collisions before any transfer. Requests and responses keep the same format."
+    },
+    {
+      "declaration": "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch",
+      "digest": "sha256:ae1ac42c72f043b37467164d252b5659eb3abc8a076788f6d659333fc95b78fb",
+      "rationale": "#4518 The client retries only after the HTTP 409 and mismatch header prove the precondition rejected the request before dispatch. The status, header and RPC framing are unchanged."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#DaemonArtifact",
+      "digest": "sha256:34f9be1f3565dc059763a40abbfa046206f12a4f46a355ae4cdc74878bbea5a7",
+      "rationale": "#4518 The daemon adds optional role and chunkIndex fields to recording artifacts. Older clients ignore the new fields. Every existing field keeps its meaning. With a daemon that omits role, the client reports a warning and omits the affected recording path."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
+      "digest": "sha256:570a2f2d7d77e201d623c1c4c904d5cd0fe56bb7c9c56636fe95751bf6c076e3",
+      "rationale": "#4518 Client-side only. The artifact delivery entry point settles script receipts through the same publisher and discloses completed recording fallbacks on a failure or cancellation."
+    },
+    {
+      "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
+      "digest": "sha256:01fb34d0b9f32df3228cac7f8e7659b28178c7617f59ed869080463c1d411473",
+      "rationale": "#4518 Client-side only. The client uses the optional recording role and chunkIndex to place and report completed recording downloads. An artifact without a role yields no recording path and adds a warning. Other response artifact handling keeps the same wire shape."
+    },
+    {
+      "declaration": "packages/remote/src/script-version-publisher.ts#publishScriptVersion",
+      "digest": "sha256:c98e00810338c88b82daa560a5d734482079d2c3ab61521ea391c8be64d494e0",
+      "rationale": "#4518 Client-side only. Destination planning and script publication use the same admission and record lookup. Script artifact fields, transfers and publication behavior are unchanged."
     }
   ]
 }
