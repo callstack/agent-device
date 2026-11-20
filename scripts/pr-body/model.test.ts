@@ -178,6 +178,27 @@ test('a Validation SHA the repository does not have fails as unreachable', () =>
   assert.match(verdict.violations[0]!.message, /not a commit this repository has/);
 });
 
+test('a date or a count the repository has no commit for is not read as the tested SHA', () => {
+  const body = `## Summary\n\nReason.\n\n## Validation\n\nTested 20261120 over 1000000 runs.`;
+  const verdict = verdictFor('chore(gates): enforce bodies', body, {
+    resolve: () => ({ verdict: 'unreachable' }),
+  });
+  assert.deepEqual(rulesOf(verdict), ['validation-sha']);
+  assert.match(verdict.violations[0]!.message, /name the tested commit SHA/);
+});
+
+test('an all-digit SHA the repository has still counts', () => {
+  const body = `## Summary\n\nReason.\n\n## Validation\n\nTested at 1234567.`;
+  const ancestor = verdictFor('chore(gates): enforce bodies', body, {
+    resolve: () => ({ verdict: 'ancestor' }),
+  });
+  assert.deepEqual(ancestor.violations, []);
+  const diverged = verdictFor('chore(gates): enforce bodies', body, {
+    resolve: () => ({ verdict: 'diverged' }),
+  });
+  assert.match(diverged.violations[0]!.message, /not an ancestor of this PR's head/);
+});
+
 test('a SHA this checkout cannot resolve is a note, not a failure', () => {
   const body = `## Summary\n\nReason.\n\n## Validation\n\nTested at ${HEAD.slice(0, 10)}.`;
   const verdict = verdictFor('chore(gates): enforce bodies', body, {

@@ -250,8 +250,18 @@ function checkValidationSha(
   head: string,
   resolve: (sha: string) => ShaResolution,
 ): { violations: BodyViolation[]; notes: string[] } {
-  const tokens = shaTokens(section);
-  if (tokens.length === 0) {
+  const unverifiable: string[] = [];
+  const unreachable: string[] = [];
+  const diverged: string[] = [];
+  for (const sha of shaTokens(section)) {
+    const resolution = resolve(sha);
+    if (resolution.verdict === 'ancestor') return { violations: [], notes: [] };
+    if (resolution.verdict === 'unknown') unverifiable.push(sha);
+    else if (resolution.verdict === 'diverged') diverged.push(sha);
+    // A run of digits the repository has no commit for is a date, a count, or a timing.
+    else if (!/^\d+$/.test(sha)) unreachable.push(sha);
+  }
+  if (unverifiable.length + unreachable.length + diverged.length === 0) {
     return {
       violations: [
         {
@@ -263,16 +273,6 @@ function checkValidationSha(
       ],
       notes: [],
     };
-  }
-  const unverifiable: string[] = [];
-  const unreachable: string[] = [];
-  const diverged: string[] = [];
-  for (const sha of tokens) {
-    const resolution = resolve(sha);
-    if (resolution.verdict === 'ancestor') return { violations: [], notes: [] };
-    if (resolution.verdict === 'unknown') unverifiable.push(sha);
-    else if (resolution.verdict === 'unreachable') unreachable.push(sha);
-    else diverged.push(sha);
   }
   if (unverifiable.length > 0) {
     const resolution = resolve(unverifiable[0]!);
