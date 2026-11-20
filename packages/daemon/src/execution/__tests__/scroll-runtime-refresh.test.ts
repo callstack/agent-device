@@ -141,8 +141,5 @@ test('scroll refresh is refused at admission when the owner declares no capture'
 
   assert.equal(resolved.ok, false);
   if (resolved.ok || resolved.response.ok) return;
-  assert.match(
-    String(resolved.response.error.message),
-    /scroll refresh.*requires snapshot support/,
-  );
+  assert.equal(resolved.response.error.code, 'UNSUPPORTED_OPERATION');
 });
