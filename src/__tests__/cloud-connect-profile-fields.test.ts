@@ -1,5 +1,8 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { runCliCapture } from './cli-capture.ts';
 
 vi.mock('@agent-device/plugins/store', async (importOriginal) =>
@@ -68,6 +71,10 @@ test('connect limrun applies the same refusal when attaching to an existing inst
 });
 
 test('connect limrun refuses the device type before saving a profile', async () => {
+  const stateDir = path.join(
+    mkdtempForTestSync('agent-device-connect-limrun-device-type-'),
+    'state',
+  );
   const result = await runCliCapture(
     [
       'connect',
@@ -78,13 +85,14 @@ test('connect limrun refuses the device type before saving a profile', async () 
       'ios',
       '--provider-device-type',
       'real',
+      '--state-dir',
+      stateDir,
       '--json',
     ],
-    {
-      env: { LIMRUN_API_KEY: 'lim_test_key' },
-      stateDirPrefix: 'agent-device-connect-limrun-device-type-',
-    },
+    { env: { LIMRUN_API_KEY: 'lim_test_key' } },
   );
+  // No generated profile and no connection state exist after the refusal.
+  assert.equal(fs.existsSync(path.join(stateDir, 'remote-connections')), false);
   assert.equal(result.code, 1);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.error.code, 'INVALID_ARGS');
