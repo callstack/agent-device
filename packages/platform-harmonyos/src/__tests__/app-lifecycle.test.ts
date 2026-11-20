@@ -500,7 +500,7 @@ function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicati
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: '/tmp/agent-device-open-foreground',
-    runtimeHints: {},
+    runtimeHints: { values: {}, apply: async () => {} },
     execution: {},
     ...overrides,
   };
