@@ -821,24 +821,37 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/kernel',
     '@agent-device/xml',
   ]);
-  const providerLimrunPackage = packages.find(
-    (pkg) => pkg.name === '@agent-device/provider-limrun',
-  );
+  const providerLimrunPackage = packages.find((pkg) => pkg.name === '@agent-device/limrun');
   assert.ok(providerLimrunPackage, 'provider-limrun package must exist');
   assert.deepEqual(
     [...providerLimrunPackage.exportTargets.keys()],
-    ['@agent-device/provider-limrun', '@agent-device/provider-limrun/internal'],
+    [
+      '@agent-device/limrun',
+      '@agent-device/limrun/agent-device',
+      '@agent-device/limrun/runtime',
+      '@agent-device/limrun/host',
+      '@agent-device/limrun/package.json',
+    ],
   );
   assert.deepEqual([...providerLimrunPackage.workspaceDependencies].sort(), [
+    '@agent-device/build-config',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/host-kit',
     '@agent-device/kernel',
     '@agent-device/platform-android',
-    '@agent-device/plugins',
+    '@agent-device/platform-apple',
+    '@agent-device/test-kit',
+    '@agent-device/xml',
+    'agent-device',
   ]);
   const rootExternalDependencies = rootExternalDependencyRanges(repoRoot);
   for (const pkg of packages) {
     for (const [name, range] of pkg.externalDependencies) {
+      // A package that publishes its own artifact installs its own dependencies, so the root
+      // matches only the ranges it also declares.
+      if (pkg.workspaceDependencyField === 'devDependencies' && !rootExternalDependencies.has(name))
+        continue;
       assert.equal(
         rootExternalDependencies.get(name),
         range,
@@ -846,6 +859,10 @@ test('the real tree parses, declares, and passes R11', () => {
       );
     }
   }
+  assert.ok(
+    !rootExternalDependencies.has('@limrun/api'),
+    'core must not depend on the Limrun SDK; the Limrun plugin installs it',
+  );
   const xmlPackage = packages.find((pkg) => pkg.name === '@agent-device/xml');
   assert.ok(xmlPackage, 'xml package must exist');
   assert.deepEqual([...xmlPackage.exportTargets.keys()], ['@agent-device/xml']);
@@ -884,8 +901,8 @@ test('the real tree parses, declares, and passes R11', () => {
     'core must not depend on the provider-webdriver engine',
   );
   assert.ok(
-    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-limrun'),
-    'root must declare the provider-limrun workspace dependency',
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/limrun'),
+    'root must declare the Limrun plugin workspace dependency for its own suites',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/xml'),
