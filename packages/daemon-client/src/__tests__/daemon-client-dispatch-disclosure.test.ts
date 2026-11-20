@@ -23,6 +23,10 @@ import {
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
+import {
+  materializeRemoteArtifacts,
+  sendRemoteScriptOpen,
+} from '@agent-device/remote/daemon-artifacts';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 
@@ -306,6 +310,99 @@ test('a caller abort after a record stop answer stops the artifact download', as
     );
     // The rejection waits for cleanup, so neither the file nor its staging remains.
     assert.deepEqual(fs.readdirSync(cwd), []);
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(paths.baseDir, { recursive: true, force: true });
+  }
+});
+
+// #4518: a caller abort during a remote RPC-error answer cancels at once and delivers no script.
+test('a caller abort during a remote error answer with a receipt cancels and publishes nothing', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'remote error answer cancellation')) return;
+  const paths = statePaths();
+  const destination = path.join(paths.baseDir, 'caller', 'journey.ad');
+  const controller = new AbortController();
+  let publicationId = '';
+  const server = http.createServer((req, res) => {
+    if (req.url?.endsWith('/artifacts/open-v1')) return void res.end('open Demo\n');
+    if (req.url?.endsWith('/artifacts/v2')) return void res.end('open Demo\nwait\n');
+    if (req.url?.includes('/diagnostics')) {
+      controller.abort();
+      return void res.writeHead(404).end();
+    }
+    req.resume();
+    req.on('end', () => {
+      const version = {
+        field: 'savedScript',
+        artifactType: 'session-script',
+        artifactId: 'v2',
+        scriptPublicationId: publicationId,
+        scriptRevision: 2,
+      };
+      const details = {
+        step: 1,
+        command: 'wait',
+        scriptDeliveryReceipt: { publicationId, version },
+      };
+      const data = {
+        code: 'COMMAND_FAILED',
+        message: 'batch failed',
+        details,
+        diagnosticsRecord: { session: 'journey', requestId: 'r1' },
+      };
+      res.end(JSON.stringify({ jsonrpc: '2.0', error: { message: 'batch failed', data } }));
+    });
+  });
+  const port = await listenOnLoopback(server);
+  const baseUrl = `http://127.0.0.1:${port}`;
+  try {
+    const openRequest = {
+      ...request('open'),
+      session: 'journey',
+      flags: { saveScript: true },
+      meta: { clientArtifactPaths: { savedScript: destination } },
+    };
+    const opened = await sendRemoteScriptOpen(
+      { baseUrl, token: IDENTITY.token, capabilities: ['script-artifacts'] },
+      openRequest,
+      paths.baseDir,
+      async (next) => {
+        publicationId = next.meta?.scriptPublicationId as string;
+        const artifact = {
+          field: 'savedScript',
+          artifactType: 'session-script' as const,
+          artifactId: 'open-v1',
+          scriptPublicationId: publicationId,
+          scriptRevision: 1,
+        };
+        return { ok: true, data: { scriptPublicationId: publicationId, artifacts: [artifact] } };
+      },
+    );
+    if (!opened.ok) throw new Error('open failed');
+    await materializeRemoteArtifacts(
+      { baseUrl, token: IDENTITY.token },
+      openRequest,
+      opened,
+      createTestHostEnvironment(),
+      paths.baseDir,
+    );
+    assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
+    await assert.rejects(
+      sendRequest(
+        { ...IDENTITY, baseUrl },
+        {
+          ...request('batch'),
+          session: 'journey',
+          flags: { batchSteps: [{ command: 'wait', input: {} }] },
+        },
+        'http',
+        paths,
+        undefined,
+        { host: createTestHostEnvironment(), signal: controller.signal },
+      ),
+      (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    );
+    assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(paths.baseDir, { recursive: true, force: true });

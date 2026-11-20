@@ -110,3 +110,25 @@ test('stop response serves the recorder word and omits the reason behind it', ()
   expect(unreported.data).not.toHaveProperty('recorder');
   expect(unreported.data).not.toHaveProperty('nativePathDisposition');
 });
+
+test('stop response names the telemetry file from the caller start path', () => {
+  const response = buildRecordingStopResponse({
+    backend: 'adb screenrecord',
+    outPath: '/daemon/tmp/recording-123.mp4',
+    clientOutPath: '/client/demo.mp4',
+    startedAt: 10,
+    completedAt: 25,
+    scope: 'app',
+    showTouches: true,
+    recordOnlySession: false,
+    telemetryPath: '/daemon/tmp/recording-123.gesture-telemetry.json',
+  });
+
+  if (!response.ok) throw new Error(JSON.stringify(response.error));
+  expect(response.data?.artifacts).toContainEqual(
+    expect.objectContaining({
+      field: 'telemetryPath',
+      fileName: 'demo.gesture-telemetry.json',
+    }),
+  );
+});

@@ -122,7 +122,8 @@ export function recordingStopArtifacts(completion: ScreenRecordingCompletion): D
       artifactType: 'screen-recording-telemetry',
       path: completion.telemetryPath,
       localPath: clientTelemetryPath,
-      fileName: path.basename(completion.telemetryPath),
+      // Named from the caller's start path, like the video, so a remote cwd fallback keeps that name.
+      fileName: path.basename(clientTelemetryPath ?? completion.telemetryPath),
     });
   }
   return artifacts;

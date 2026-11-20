@@ -1,10 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, test, vi } from 'vitest';
+import http from 'node:http';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import * as file from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  closeLoopbackServer,
+  createTestHostEnvironment,
+  listenOnLoopback,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
 import { sendRemoteScriptOpen } from '../session-script-destination.ts';
 import {
@@ -618,4 +624,43 @@ test.for([
     ),
   ).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+});
+
+// #4518: an abort that lands after the recording is in cwd, during script delivery, still names it.
+test('an abort during script delivery keeps the recording fallback warning', async () => {
+  const { root, stateDir, destination } = journey();
+  const cwd = path.join(root, 'cwd');
+  fs.mkdirSync(cwd);
+  const controller = new AbortController();
+  const server = http.createServer((req, res) => {
+    if (req.url?.endsWith('/v2')) controller.abort();
+    res.end(req.url?.endsWith('/rec') ? 'video' : 'v\n');
+  });
+  onTestFinished(() => closeLoopbackServer(server));
+  const baseUrl = `http://127.0.0.1:${await listenOnLoopback(server)}`;
+  const { id } = await open(baseUrl, stateDir, destination);
+  const failure = await materializeRemoteArtifacts(
+    { baseUrl, token: 't' },
+    { ...request('record', { cwd }), positionals: ['stop'] },
+    {
+      ok: true,
+      data: {
+        artifacts: [
+          { artifactId: 'rec', field: 'outPath', fileName: 'demo.mp4' },
+          script('v2', 2, id),
+        ],
+      },
+    },
+    createTestHostEnvironment(),
+    stateDir,
+    controller.signal,
+  ).catch((error: unknown) => error);
+  expect(failure).toMatchObject({
+    details: {
+      reason: 'request_canceled',
+      recordingDestinationWarnings: [
+        expect.objectContaining({ field: 'outPath', path: path.join(cwd, 'demo.mp4') }),
+      ],
+    },
+  });
 });

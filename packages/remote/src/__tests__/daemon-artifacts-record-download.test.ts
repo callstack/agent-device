@@ -205,23 +205,31 @@ test('a parent swapped during the transfer is refused without touching the new d
 });
 
 // 1. A peer file name is ONE ordinary local file name, so it cannot switch drives or leave cwd.
-test.for(['C:foo.mp4', 'CON.mp4', 'clip.mp4:stream', 'nul', '..', 'clip.mp4.'])(
-  'a fallback name %s is replaced by a generated name inside cwd',
-  async (fileName, t) => {
-    await withServer(t, serveVideo, async (world) => {
-      const data = await materialize(world, [artifact({ field: 'outPath', fileName })]);
-      const written = String(data.outPath);
-      const name = path.basename(written);
-      expect(path.dirname(written)).toBe(world.cwd);
-      expect(name).toMatch(/^outPath-\d+$/);
-      // The chosen name stays one component under Windows rules too.
-      expect(path.win32.basename(name)).toBe(name);
-      expect(path.win32.resolve(String.raw`D:\work`, name)).toBe(
-        String.raw`D:\work` + path.win32.sep + name,
-      );
-    });
-  },
-);
+test.for([
+  'C:foo.mp4',
+  'CON.mp4',
+  'CONIN$.mp4',
+  'NUL .mp4',
+  'clip.mp4:stream',
+  'nul',
+  '..',
+  'clip.mp4.',
+  'clip\uD800.mp4',
+  `${'a'.repeat(252)}.mp4`,
+])('a fallback name %s is replaced by a generated name inside cwd', async (fileName, t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const data = await materialize(world, [artifact({ field: 'outPath', fileName })]);
+    const written = String(data.outPath);
+    const name = path.basename(written);
+    expect(path.dirname(written)).toBe(world.cwd);
+    expect(name).toMatch(/^outPath-\d+$/);
+    // The chosen name stays one component under Windows rules too.
+    expect(path.win32.basename(name)).toBe(name);
+    expect(path.win32.resolve(String.raw`D:\work`, name)).toBe(
+      String.raw`D:\work` + path.win32.sep + name,
+    );
+  });
+});
 
 // 2. Chunk paths name the files this client published, not the daemon's paths.
 test('a multi-chunk recording reports the chunk paths this client published', async (t) => {
@@ -281,3 +289,36 @@ test('a recording that cannot be staged fails with a typed artifact reason', asy
     ).rejects.toMatchObject({ details: { reason: 'artifact_publish_failed' } });
   });
 });
+
+// 3c. A parent that becomes unreadable or a non-directory mid-transfer is a typed refusal.
+test.for(['EACCES', 'ENOTDIR'] as const)(
+  'a parent that turns %s during the transfer is refused with a typed reason',
+  async (fault, t) => {
+    if (fault === 'EACCES' && process.getuid?.() === 0) return;
+    const stalled = stalledServer();
+    await withServer(t, stalled.handler, async (world) => {
+      const pending = materialize(world, [artifact({ field: 'outPath' })]).catch(
+        (error: unknown) => error,
+      );
+      await stalled.begun;
+      const moved = `${world.root}-moved`;
+      if (fault === 'EACCES') fs.chmodSync(world.root, 0o000);
+      else {
+        fs.renameSync(world.root, moved);
+        fs.writeFileSync(world.root, '');
+      }
+      try {
+        stalled.release();
+        const failure = (await pending) as AppError;
+        expect(failure).toBeInstanceOf(AppError);
+        expect(failure.details?.reason).toBe('artifact_destination_replaced');
+      } finally {
+        if (fault === 'EACCES') fs.chmodSync(world.root, 0o700);
+        else {
+          fs.rmSync(world.root, { force: true });
+          fs.renameSync(moved, world.root);
+        }
+      }
+    });
+  },
+);

@@ -12,7 +12,11 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { assertScriptTargetVacant, resolveScriptDestination } from '@agent-device/host-kit/file';
+import {
+  assertScriptTargetVacant,
+  isOrdinaryEntryName,
+  resolveScriptDestination,
+} from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
   appendRecordingExtensionWhenMissing,
@@ -503,8 +507,15 @@ export async function materializeRemoteArtifacts(
     stateDir,
     signal,
   });
-  // A caller abort during delivery wins over any branch that finished without seeing it.
-  throwIfCanceled(signal, req);
+  // A caller abort during delivery wins over any branch that finished without seeing it, and the
+  // failure still names the recording files already written to cwd.
+  if (signal?.aborted) {
+    const canceled = createRequestCanceledError({ requestId: req.meta?.requestId }, signal.reason);
+    const written = delivered.ok ? delivered.data?.recordingDestinationWarnings : undefined;
+    throw Array.isArray(written) && written.length > 0
+      ? withRecordingFallbacks(canceled, written)
+      : canceled;
+  }
   return delivered;
 }
 
@@ -528,19 +539,34 @@ async function deliverResponseArtifacts(
     return await download();
   }
   const { sessionScriptDelivery } = await import('./session-script-destination.ts');
-  // The script branch downloads with the caller's signal and never publishes after an abort.
-  const scriptDownload: typeof downloadRemoteArtifact = async (params) => {
-    const downloaded = await downloadRemoteArtifact({ ...params, signal });
-    throwIfCanceled(signal, req);
-    return downloaded;
-  };
-  const scripts = sessionScriptDelivery(endpoint, req, response, client.stateDir, scriptDownload);
+  const scripts = sessionScriptDelivery(
+    endpoint,
+    req,
+    response,
+    client.stateDir,
+    cancelableArtifactDownload(signal, req.meta?.requestId),
+  );
   return await scripts.settleAfter(download);
 }
 
-function throwIfCanceled(signal: AbortSignal | undefined, req: DaemonWireRequest): void {
+/**
+ * The artifact download for a delivery that must stop on the caller's abort: the transfer takes the
+ * signal, and an abort that lands after the bytes arrived still fails before anything publishes.
+ */
+export function cancelableArtifactDownload(
+  signal: AbortSignal | undefined,
+  requestId: string | undefined,
+): typeof downloadRemoteArtifact {
+  return async (params) => {
+    const downloaded = await downloadRemoteArtifact({ ...params, signal });
+    throwIfCanceled(signal, requestId);
+    return downloaded;
+  };
+}
+
+function throwIfCanceled(signal: AbortSignal | undefined, requestId: string | undefined): void {
   if (!signal?.aborted) return;
-  throw createRequestCanceledError({ requestId: req.meta?.requestId }, signal.reason);
+  throw createRequestCanceledError({ requestId }, signal.reason);
 }
 
 async function downloadResponseArtifacts(
@@ -770,21 +796,16 @@ function resolveMaterializedArtifactPath(
   return { path: fallback, fallback: true };
 }
 
-/** Device names Windows reserves in every directory, with or without an extension. */
-const RESERVED_DEVICE_NAME = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
-
 /**
- * The last component of a peer-named file as ONE ordinary file name on every platform, or
- * `undefined`. No separator, drive or stream colon, control character, `.`/`..`, reserved device
- * name, or trailing dot or space survives, so the name cannot leave the directory it is joined to.
+ * The last component of a peer-named file as ONE ordinary entry name under both POSIX and Windows
+ * rules, or `undefined`, so the name cannot leave or switch the directory it is joined to.
  */
 function localFileName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const name = value.trim().split(/[\\/]/).pop() ?? '';
-  if (name === '' || name === '.' || name === '..' || name.length > 255) return undefined;
-  if (/[:<>"|?*]/.test(name) || /[. ]$/.test(name)) return undefined;
-  if ([...name].some((char) => char.charCodeAt(0) < 0x20)) return undefined;
-  return RESERVED_DEVICE_NAME.test(name) ? undefined : name;
+  return isOrdinaryEntryName(name, path.posix) && isOrdinaryEntryName(name, path.win32)
+    ? name
+    : undefined;
 }
 
 type DownloadRemoteArtifactParams = {

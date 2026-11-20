@@ -115,6 +115,7 @@ function stagedFileDestination(params: RemoteArtifactDownload): DownloadDestinat
         await fs.promises.mkdir(parent, { recursive: true });
         const physical = fs.realpathSync(parent);
         anchor = { path: physical, identity: directoryIdentity(physical) };
+        if (anchor.identity === undefined) throw new Error(`${physical} is not a directory`);
         staging = fs.mkdtempSync(path.join(physical, '.agent-device-download-'));
         file = await fs.promises.open(path.join(staging, 'artifact'), PRIVATE_FILE_FLAGS, 0o600);
       } catch (error) {
@@ -168,10 +169,15 @@ function realpathOrUndefined(directory: string): string | undefined {
   }
 }
 
-/** A directory's identity from `lstat`, or `undefined` when it is not a directory. */
+/** A directory's identity from `lstat`, or `undefined` when it is not a reachable directory. */
 function directoryIdentity(directory: string): string | undefined {
-  const stat = fs.lstatSync(directory, { bigint: true, throwIfNoEntry: false });
-  return stat?.isDirectory() ? `${stat.dev}:${stat.ino}` : undefined;
+  try {
+    const stat = fs.lstatSync(directory, { bigint: true });
+    return stat.isDirectory() ? `${stat.dev}:${stat.ino}` : undefined;
+  } catch {
+    // ENOENT, ENOTDIR or EACCES all mean the anchored directory can no longer be confirmed.
+    return undefined;
+  }
 }
 
 function limitBytes(maxBytes: number, artifactId: string): Transform {

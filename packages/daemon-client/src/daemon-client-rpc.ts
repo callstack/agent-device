@@ -11,7 +11,7 @@ import {
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
-  downloadRemoteArtifact,
+  cancelableArtifactDownload,
   materializeRemoteArtifacts,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
@@ -29,15 +29,17 @@ export function handleDaemonHttpResponseBody(
     host: HostEnvironment;
     /** The caller's cancellation, which still stops artifact delivery after the answer arrived. */
     signal?: AbortSignal;
+    /** Called once artifact delivery, which observes `signal`, takes over the caller abort. */
+    onDelivery?: () => void;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, host, signal, resolve, reject } = options;
+  const { info, req, stateDir, host, signal, onDelivery, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, reject });
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, signal, reject });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
@@ -53,7 +55,7 @@ export function handleDaemonHttpResponseBody(
       info,
       req,
       parsed.result,
-      { host, stateDir, signal },
+      { host, stateDir, signal, onDelivery },
       resolve,
       reject,
     );
@@ -95,10 +97,11 @@ async function rejectDaemonHttpRpcError(
     info: DaemonInfo;
     req: DaemonWireRequest;
     stateDir: string;
+    signal?: AbortSignal;
     reject: (error: unknown) => void;
   },
 ): Promise<void> {
-  const { info, req, stateDir, reject } = options;
+  const { info, req, stateDir, signal, reject } = options;
   const requestId = req.meta?.requestId;
   const payload = toDaemonHttpRpcError(error);
   if (!info.baseUrl) {
@@ -117,7 +120,7 @@ async function rejectDaemonHttpRpcError(
   });
   reject(
     appErrorFromDaemonError(
-      await settleFailedDeliveryReceipt(info, req, stateDir, localized),
+      await settleFailedDeliveryReceipt(info, req, stateDir, localized, signal),
       requestId,
     ),
   );
@@ -133,15 +136,17 @@ async function settleFailedDeliveryReceipt(
   req: DaemonWireRequest,
   stateDir: string,
   error: DaemonError,
+  signal: AbortSignal | undefined,
 ): Promise<DaemonError> {
-  if (!info.baseUrl) return error;
+  // A caller abort already rejected this request, so nothing is delivered for it any more.
+  if (!info.baseUrl || signal?.aborted) return error;
   try {
     return await settleScriptDeliveryReceiptOfFailure(
       { baseUrl: info.baseUrl, token: info.token },
       req,
       error,
       stateDir,
-      downloadRemoteArtifact,
+      cancelableArtifactDownload(signal, req.meta?.requestId),
     );
   } catch {
     return error;
@@ -198,11 +203,17 @@ async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
   result: DaemonResponse,
-  client: { host: HostEnvironment; stateDir: string; signal?: AbortSignal },
+  client: {
+    host: HostEnvironment;
+    stateDir: string;
+    signal?: AbortSignal;
+    onDelivery?: () => void;
+  },
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
+    if (info.baseUrl && result.ok) client.onDelivery?.();
     resolve(
       info.baseUrl && result.ok
         ? await materializeRemoteArtifacts(

@@ -111,6 +111,16 @@ export function scriptEntryName(spelled: string, rules: path.PlatformPath): stri
 const NAME_MAX = 255;
 
 /**
+ * Whether `name` is exactly one ordinary directory entry under `rules`: no separator, and an entry the
+ * script rules above accept unchanged (no drive, stream, device name, control character, lone
+ * surrogate, `.`/`..`, trailing dot or space, or over-long name).
+ */
+export function isOrdinaryEntryName(name: string, rules: path.PlatformPath): boolean {
+  if (name.includes('/') || (rules.sep === '\\' && name.includes('\\'))) return false;
+  return scriptEntryName(name, rules) === name;
+}
+
+/**
  * The Windows answer, read from the spelling as the publisher's own joins normalize it, so a doubled separator
  * cannot hide a root. A rooted spelling outside the supported shapes, a reserved device name, and a stream after
  * a `:` all name something other than one file.

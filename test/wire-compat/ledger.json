@@ -60,10 +60,10 @@
     "packages/daemon-client/src/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:27ac0a5299324aab39fa2c4fe0e0d32b1eb1515df47c7f4aa75a75d66b8b5a3e",
     "packages/daemon-client/src/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
     "packages/daemon-client/src/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:8978ef89d3af866bd94fec52c586a0cbf3217ee9e60952fbc826e8208e5fa158",
-    "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:80a2bff7fbc00a4241121cba0504fb8011527d9b3949f0ff4b62826f2acc6666",
+    "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:c585b1a36a66c31cb34b44fc36cf6f20368109cdd2012c92fde477a5f4f866ba",
     "packages/daemon-client/src/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:51f17269ac0a02116ba8af33c9884b10b74f78bcb54c40f77dd887f1f08d8246",
-    "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:5ea62ff34144e4e825de121811de2f9609f5f67a0db018f74bd7a364a621f082",
+    "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:370b06f0609d11decff87299e222bc78c2fe1d60cbe87b189f2c6374d23fe7b6",
+    "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:3492e901f0568f31fc0e9c9932d2845a4b546969fd636d50a91e7b71b46e0eb4",
     "packages/daemon-client/src/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:1ff542dadff6d92233c464b7d09052d809f36186bb60acdb572c48bfc1eb5c1f",
     "packages/daemon-client/src/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:96a79a8ff5a078916ee7bffed1d9624d0ba9c0dcbd8e2c55f9abf37fccfef744",
@@ -154,7 +154,7 @@
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:ecb66e8e5ddc252209ca4e3e4ee6cd2cb0da7b456dee9b5a4586bb3718254e4c",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:50ee37b44e0de9b9aa7661b06cb8412f0b8325a406c18cf1da4f206789825e37",
     "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:ad35861d1469db77ae23650447865c31e0a803045630f18ce802a6fcb45fdfcf",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
@@ -492,13 +492,13 @@
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
-      "digest": "sha256:80a2bff7fbc00a4241121cba0504fb8011527d9b3949f0ff4b62826f2acc6666",
-      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): the two invalid-response rejections also gain details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; nothing is sent or read differently. #4511 (client-side only): the success branch passes the client state directory along with the host, so remote artifact materialization can read the client's own record of a remote recording's destination. Nothing is sent or parsed differently."
+      "digest": "sha256:c585b1a36a66c31cb34b44fc36cf6f20368109cdd2012c92fde477a5f4f866ba",
+      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): the two invalid-response rejections also gain details.reason 'daemon_response_invalid', so the client can disclose whether the request reached the device; nothing is sent or read differently. #4511 (client-side only): the success branch passes the client state directory along with the host, so remote artifact materialization can read the client's own record of a remote recording's destination. Nothing is sent or parsed differently. #4518 (client-side only): the handler takes the caller's AbortSignal and an onDelivery callback, called only when a remote ok answer starts artifact delivery; nothing is sent or parsed differently."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#resolveDaemonHttpResult",
-      "digest": "sha256:5ea62ff34144e4e825de121811de2f9609f5f67a0db018f74bd7a364a621f082",
-      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): when materializing a successful response's remote artifacts fails, the locally raised error (wrapped as an AppError when it is not one) also carries the command registry's dispatch verdict in details.dispatched, because the daemon already ran the request; the request, the response and the download are unchanged. #4511 (client-side only): it receives the client host and state directory together and forwards the state directory to artifact materialization; the request, the response and the download are unchanged."
+      "digest": "sha256:3492e901f0568f31fc0e9c9932d2845a4b546969fd636d50a91e7b71b46e0eb4",
+      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves. #4302 (client-side only): when materializing a successful response's remote artifacts fails, the locally raised error (wrapped as an AppError when it is not one) also carries the command registry's dispatch verdict in details.dispatched, because the daemon already ran the request; the request, the response and the download are unchanged. #4511 (client-side only): it receives the client host and state directory together and forwards the state directory to artifact materialization; the request, the response and the download are unchanged. #4518 (client-side only): the handler takes the caller's AbortSignal and an onDelivery callback, called only when a remote ok answer starts artifact delivery; nothing is sent or parsed differently."
     },
     {
       "declaration": "packages/daemon-client/src/daemon-client-progress.ts#createInvalidDaemonResponseError",
@@ -587,13 +587,18 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:ecb66e8e5ddc252209ca4e3e4ee6cd2cb0da7b456dee9b5a4586bb3718254e4c",
+      "digest": "sha256:50ee37b44e0de9b9aa7661b06cb8412f0b8325a406c18cf1da4f206789825e37",
       "rationale": "#4518 client-side only: the function takes the caller's AbortSignal so a cancel after the answer stops artifact delivery in every branch, including session-script delivery. Every field a released daemon sends is read as before; nothing new is sent or required."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
       "digest": "sha256:f92f9c73a9d9adbfe535167352277de651b978a260831e11c2edc1fd05c40401",
       "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published paths. A released daemon's fields are read as before."
+    },
+    {
+      "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
+      "digest": "sha256:370b06f0609d11decff87299e222bc78c2fe1d60cbe87b189f2c6374d23fe7b6",
+      "rationale": "#4518 client-side only: the RPC error branch takes the caller's AbortSignal. A caller abort skips the batch receipt settlement, and an abort during it stops the script download before anything publishes. The error fields read and the error the caller receives are unchanged."
     }
   ]
 }
