@@ -94,14 +94,17 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   bundle identifier or package name, `open` with a deep link or URL, and `close` for the app the
   session opened.
 - `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
-- `orientation`. An Android emulator rotates to all four sides. An iOS simulator rotates to
-  `portrait` and `landscape-left` only, and refuses the other two. Neither releases the rotation lock,
+- `orientation`. A worker that reports precise orientation, as Revyl's Android emulators do, rotates
+  to all four sides. Any other worker, such as an iOS simulator, rotates to `portrait` and
+  `landscape-left` only, and refuses the other two. Neither releases the rotation lock,
   so `orientation auto` refuses.
 - `settings appearance` (`light`, `dark`, or `toggle`), `settings location set <lat> <lon>`,
   `settings permission`, and `settings clear-app-state`. On iOS, `settings reset-keychain` also
-  works. `settings location on|off` refuses, because Revyl moves the device's coordinates but cannot
-  switch location services. `settings permission` refuses `location-always`, `contacts-limited`, and
-  `--mode limited`. Revyl's iOS simulators refuse `camera` and `notifications`.
+  works. Revyl starts every Android device with location services on, so `settings location on`
+  succeeds there without changing anything, and `settings location off` refuses, because Revyl
+  cannot switch location services off. On iOS, `settings location on|off` refuses; grant the app
+  location with `settings permission grant location`. `settings permission` refuses
+  `location-always`, `contacts-limited`, and `--mode limited`. Revyl's iOS simulators refuse `camera` and `notifications`.
 
 The plugin refuses every other command with a reason that names the substitute. It does not
 report a refused command as a success:
