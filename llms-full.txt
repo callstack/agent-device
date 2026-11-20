@@ -2143,8 +2143,9 @@ agent-device close --session watch --shutdown
 * `home` presses the Digital Crown. From an app it shows the watch face; from the watch face it opens the app grid.
 * `fill` and `type` wait for the system input sheet that a text field opens (its keyboard), type into it, press the sheet’s Done button, and wait for the sheet to close. Done is found by its English label. On another system language, or when the sheet stays open, the command fails with `TEXT_INPUT_COMMIT_NOT_OBSERVED` and the text stays in the sheet; press its commit button by ref.
 * `action-button` presses the Action Button on Apple Watch Ultra; other models refuse with `hardware_control_unavailable`.
-* `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, and `screenshot` work as on iOS.
-* Everything else is refused before dispatch with `reason: unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `record`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures such as `gesture pinch`. watchOS apps have no pinch or rotate gestures, and the App Switcher opens on a crown double-click that XCUITest cannot press.
+* `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, `screenshot`, and `record` work as on iOS.
+* `record start` captures the watch screen with the host recorder (`simctl recordVideo`), so it needs no runner recorder and records at the watch’s own resolution. `record stop` exports MP4 and burns in touch overlays the same way it does on an iOS simulator. `--fps`, `--quality`, `--hide-touches`, and `--scope` behave as on an iOS simulator.
+* Everything else is refused before dispatch with `reason: unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures such as `gesture pinch`. watchOS apps have no pinch or rotate gestures, and the App Switcher opens on a crown double-click that XCUITest cannot press.
 * Open apps by their watch bundle ID, such as `com.apple.NanoSettings`. Without `apps` there is no name lookup, and app aliases such as `settings` resolve to iPhone bundle IDs.
 
 ## Desktop targets
