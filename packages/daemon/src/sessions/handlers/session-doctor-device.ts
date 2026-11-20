@@ -20,6 +20,7 @@ import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { DeviceInventoryDiscovery } from '@agent-device/contracts/platform-module';
+import { PLUGIN_INSTALLATION_REASONS } from '@agent-device/contracts/plugin-installation';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 
 export type DoctorDeviceInventory = {
@@ -178,7 +179,7 @@ async function readDoctorDeviceInventory(selector: DeviceInventoryRequest): Prom
 function isFamilyNotInstalledFailure(error: unknown): boolean {
   return (
     error instanceof AppError &&
-    error.details?.reason === 'plugin-not-installed' &&
+    error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled &&
     typeof error.details.family === 'string'
   );
 }
