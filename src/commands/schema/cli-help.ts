@@ -9,9 +9,8 @@ import {
   DEVICE_SELECTION_FLAG_KEYS,
   GLOBAL_FLAG_KEYS,
 } from '@agent-device/command-registry/flag-groups';
-import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
-import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
-import { buildCommandUsage } from './usage.ts';
+import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
+import { buildCommandUsage, commandHelpFlags, listHelpFlags } from './usage.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   debuggingHelpTopics,
@@ -789,30 +788,6 @@ export function buildUsageText(): string {
   return renderUsageText();
 }
 
-function listHelpFlags(keys: ReadonlySet<FlagKey>): FlagDefinition[] {
-  return getFlagDefinitions().filter(
-    (definition) =>
-      keys.has(definition.key) &&
-      definition.usageLabel !== undefined &&
-      definition.usageDescription !== undefined,
-  );
-}
-
-// Command-specific override for a shared flag's help text (see CommandSchema.flagDescriptionOverrides):
-// keeps the FlagDefinition registry as one shared row per flag while letting a command whose
-// semantics genuinely differ (e.g. `replay --save-script` arms a repair transaction, not the
-// open/close authoring lifecycle) show its own description without duplicating the flag entry.
-function applyFlagDescriptionOverrides(
-  definitions: FlagDefinition[],
-  overrides: Partial<Record<FlagKey, string>> | undefined,
-): FlagDefinition[] {
-  if (!overrides) return definitions;
-  return definitions.map((definition) => {
-    const override = overrides[definition.key];
-    return override === undefined ? definition : { ...definition, usageDescription: override };
-  });
-}
-
 function renderFlagSection(title: string, definitions: FlagDefinition[]): string {
   return renderAlignedSection(
     title,
@@ -872,10 +847,7 @@ export function buildCommandUsageText(commandName: string): string | null {
   const schema = getCommandSchema(commandName);
   if (!schema) return null;
   const usage = buildCommandUsage(commandName, schema);
-  const commandFlags = applyFlagDescriptionOverrides(
-    listHelpFlags(new Set<FlagKey>(schema.allowedFlags ?? [])),
-    schema.flagDescriptionOverrides,
-  );
+  const commandFlags = commandHelpFlags(schema);
   const sections: string[] = [];
   if (commandName === 'connect') {
     sections.push(`Optional provider plugins:\n${providerPluginHelp()}`);
