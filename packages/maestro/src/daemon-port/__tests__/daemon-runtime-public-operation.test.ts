@@ -1,4 +1,4 @@
-import { readGesturePayload } from '@agent-device/gestures/gesture-input';
+import { readGesturePayload } from '@agent-device/gestures/gesture-payload-reader';
 import { normalizePublicGesture } from '@agent-device/gestures/gesture-normalization';
 import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import assert from 'node:assert/strict';

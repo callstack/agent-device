@@ -13,9 +13,9 @@
     "fast-check": "^4.9.0"
   },
   "exports": {
-    "./gesture-input": {
-      "types": "./src/gesture-input.ts",
-      "default": "./src/gesture-input.ts"
+    "./gesture-payload-reader": {
+      "types": "./src/gesture-payload-reader.ts",
+      "default": "./src/gesture-payload-reader.ts"
     },
     "./gesture-normalization": {
       "types": "./src/gesture-normalization.ts",

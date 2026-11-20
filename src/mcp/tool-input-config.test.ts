@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
-import { readGesturePayload } from '@agent-device/gestures/gesture-input';
+import { readGesturePayload } from '@agent-device/gestures/gesture-payload-reader';
 import type { DevicePin } from '@agent-device/command-surface';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '@agent-device/client';
