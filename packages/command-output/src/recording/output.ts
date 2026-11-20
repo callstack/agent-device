@@ -37,10 +37,16 @@ function formatRecordSingleOutput(data: Record<string, unknown>, outPath: string
   return withRecordWarnings(lines, data);
 }
 
-/** The overlay warning, which is not a response warning; the dispatcher prints the response warning once. */
+/**
+ * The overlay warning and a remote daemon's own warning text, which are not response warnings; the
+ * dispatcher prints the response warnings once.
+ */
 function withRecordWarnings(lines: string[], data: Record<string, unknown>): string {
   if (typeof data.overlayWarning === 'string') {
     lines.push(`Overlay warning: ${collapseWarningText(data.overlayWarning)}`);
+  }
+  for (const warning of Array.isArray(data.daemonWarnings) ? data.daemonWarnings : []) {
+    if (typeof warning === 'string') lines.push(`Daemon warning: ${collapseWarningText(warning)}`);
   }
   return lines.join('\n');
 }

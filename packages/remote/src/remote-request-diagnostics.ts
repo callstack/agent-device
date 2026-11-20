@@ -77,7 +77,13 @@ function stripDaemonLogPath(error: DaemonError): RemoteDaemonErrorPayload {
  */
 export async function localizeRemoteDaemonError(
   error: DaemonError,
-  params: { endpoint: RemoteDiagnosticsEndpoint; stateDir: string; requestId?: string },
+  params: {
+    endpoint: RemoteDiagnosticsEndpoint;
+    stateDir: string;
+    requestId?: string;
+    /** The caller's cancellation: an aborted request fetches no record, and an abort stops one. */
+    signal?: AbortSignal;
+  },
 ): Promise<DaemonError> {
   const payload = stripDaemonLogPath(error);
   const ref = error.diagnosticsRecord;
@@ -95,11 +101,14 @@ export async function localizeRemoteDaemonError(
 
   try {
     const destinationPath = resolveRemoteRequestDiagnosticsPath(params.stateDir, ref);
-    const failure = await fetchRemoteRequestDiagnostics({
-      endpoint: params.endpoint,
-      ref,
-      destinationPath,
-    });
+    const failure = params.signal?.aborted
+      ? 'the request was canceled'
+      : await fetchRemoteRequestDiagnostics({
+          endpoint: params.endpoint,
+          ref,
+          destinationPath,
+          signal: params.signal,
+        });
     if (failure) {
       return withUnavailableRecord(payload, params.endpoint, requestId, failure);
     }
@@ -137,8 +146,9 @@ async function fetchRemoteRequestDiagnostics(params: {
   endpoint: RemoteDiagnosticsEndpoint;
   ref: DiagnosticsRecordRef;
   destinationPath: string;
+  signal: AbortSignal | undefined;
 }): Promise<string | undefined> {
-  const { endpoint, ref, destinationPath } = params;
+  const { endpoint, ref, destinationPath, signal } = params;
   let url: URL;
   try {
     url = new URL(buildRemoteRequestDiagnosticsUrl(endpoint.baseUrl, ref));
@@ -212,6 +222,14 @@ async function fetchRemoteRequestDiagnostics(params: {
       request.on('error', (error: Error) => {
         settle(error.message);
       });
+      signal?.addEventListener(
+        'abort',
+        () => {
+          settle('the request was canceled');
+          request.destroy();
+        },
+        { once: true },
+      );
       request.end();
     });
   } catch (error) {

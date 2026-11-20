@@ -425,6 +425,43 @@ async function openRecording(baseUrl: string, stateDir: string, destination: str
   return publicationId;
 }
 
+/** A record stop error whose details name local paths, nested paths and daemon warnings. */
+const HOSTILE_RECORD_STOP_DETAILS = {
+  reason: 'recording_stop_failed',
+  outPath: '/client/x.mp4',
+  telemetryPath: '/client/x.gesture-telemetry.json',
+  chunkPath: '/client/x.part-001.mp4',
+  chunks: [{ index: 1, path: '/client/x.part-001.mp4' }],
+  savedScript: '/daemon/x.ad',
+  scriptDeliveryFailure: { reason: 'script_delivery_failed' },
+  recordingDestinationWarnings: [{ reason: 'recording_destination_not_requested' }],
+  artifacts: [{ field: 'outPath', path: '/daemon/x.mp4', localPath: '/client/x.mp4' }],
+  nested: { localPath: '/client/elsewhere.mp4' },
+  warnings: ['daemon note'],
+};
+
+/** A remote record stop error keeps only its named facts, with the daemon's warning text apart. */
+function assertOnlyRecordStopFacts(error: AppError): void {
+  for (const view of [error.details, normalizeError(error).details]) {
+    assert.equal(view?.reason, 'recording_stop_failed');
+    assert.deepEqual(view?.daemonWarnings, ['daemon note']);
+    for (const field of [
+      'outPath',
+      'telemetryPath',
+      'chunkPath',
+      'chunks',
+      'savedScript',
+      'scriptDeliveryFailure',
+      'recordingDestinationWarnings',
+      'artifacts',
+      'nested',
+      'warnings',
+    ]) {
+      assert.equal(view?.[field], undefined, field);
+    }
+  }
+}
+
 /** Runs one answer body through the RPC adapter and returns what the caller receives. */
 async function adapt(baseUrl: string | undefined, cwd: string, body: unknown) {
   return await new Promise<{ response?: unknown; error?: unknown }>((resolve) => {
@@ -446,14 +483,7 @@ test('a remote record stop error cannot carry client-owned fields to the caller'
   const server = http.createServer((_req, res) => res.writeHead(500).end());
   const port = await listenOnLoopback(server);
   try {
-    const peer = [{ reason: 'recording_destination_not_requested', field: 'outPath', path: '/x' }];
-    const artifacts = [{ field: 'outPath', path: '/daemon/x.mp4', localPath: '/client/x.mp4' }];
-    const details = {
-      recordingDestinationWarnings: peer,
-      savedScript: '/daemon/x.ad',
-      artifacts,
-      step: 1,
-    };
+    const details = HOSTILE_RECORD_STOP_DETAILS;
     const { error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
       jsonrpc: '2.0',
       error: {
@@ -462,12 +492,7 @@ test('a remote record stop error cannot carry client-owned fields to the caller'
       },
     });
     assert.ok(error instanceof AppError);
-    for (const view of [error.details, normalizeError(error).details]) {
-      assert.equal(view?.recordingDestinationWarnings, undefined);
-      assert.equal(view?.savedScript, undefined);
-      assert.deepEqual(view?.artifacts, [{ field: 'outPath', path: '/daemon/x.mp4' }]);
-      assert.equal(view?.step, 1);
-    }
+    assertOnlyRecordStopFacts(error);
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -531,7 +556,7 @@ test('a remote result artifact that is not downloaded names no local path', asyn
       result: { ok: true, data: { artifacts: [artifact] } },
     });
     const data = (response as { ok: boolean; data?: Record<string, unknown> }).data;
-    assert.deepEqual(data?.artifacts, [{ field: 'outPath', path: '/daemon/x.mp4' }]);
+    assert.deepEqual(data?.artifacts, []);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -551,24 +576,14 @@ test.for([
   const server = http.createServer((_req, res) => res.writeHead(500).end());
   const port = await listenOnLoopback(server);
   try {
-    const details = {
-      savedScript: '/daemon/x.ad',
-      recordingDestinationWarnings: [{ reason: 'recording_destination_not_requested' }],
-      artifacts: [{ field: 'outPath', path: '/daemon/x.mp4', localPath: '/client/x.mp4' }],
-      step: 1,
-    };
+    const details = HOSTILE_RECORD_STOP_DETAILS;
     const { response, error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
       jsonrpc: '2.0',
       result: { ...ok, error: { code: 'COMMAND_FAILED', message: 'x', details } },
     });
     assert.equal(response, undefined);
     assert.ok(error instanceof AppError);
-    for (const view of [error.details, normalizeError(error).details]) {
-      assert.equal(view?.recordingDestinationWarnings, undefined);
-      assert.equal(view?.savedScript, undefined);
-      assert.deepEqual(view?.artifacts, [{ field: 'outPath', path: '/daemon/x.mp4' }]);
-      assert.equal(view?.step, 1);
-    }
+    assertOnlyRecordStopFacts(error);
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -605,6 +620,69 @@ test.for([
     assert.equal(error.details?.reason, 'daemon_response_invalid');
     assert.equal(error.details?.savedScript, undefined);
   } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+// #4518: an error code or message that is not a string still settles the request.
+test('a remote error with a non-string code and message still rejects', async () => {
+  const cwd = mkdtempForTestSync('agent-device-peer-code-');
+  try {
+    const { error } = await adapt('http://127.0.0.1:9', cwd, {
+      jsonrpc: '2.0',
+      error: {
+        message: { toString: 1 },
+        data: { code: { toString: 1 }, message: { toString: 1 } },
+      },
+    });
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+// #4518: a canceled request fetches no diagnostics record from a remote error answer.
+test('a canceled remote error answer fetches no diagnostics record', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'diagnostics after cancel')) return;
+  const cwd = mkdtempForTestSync('agent-device-diagnostics-cancel-');
+  let diagnosticsHits = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url?.includes('/diagnostics')) diagnosticsHits += 1;
+    res.end('{}');
+  });
+  const port = await listenOnLoopback(server);
+  try {
+    const controller = new AbortController();
+    controller.abort();
+    const error = await new Promise<unknown>((resolve) => {
+      handleDaemonHttpResponseBody(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            message: 'stop failed',
+            data: {
+              code: 'COMMAND_FAILED',
+              message: 'stop failed',
+              diagnosticsRecord: { session: 's', requestId: 'r1' },
+            },
+          },
+        }),
+        {
+          info: { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` },
+          req: { ...request(PUBLIC_COMMANDS.record), positionals: ['stop'], meta: { cwd } },
+          stateDir: path.join(cwd, 'state'),
+          host: createTestHostEnvironment(),
+          signal: controller.signal,
+          resolve: () => resolve(undefined),
+          reject: resolve,
+        },
+      );
+    });
+    assert.ok(error instanceof AppError);
+    assert.equal(diagnosticsHits, 0);
+  } finally {
+    await closeLoopbackServer(server);
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });

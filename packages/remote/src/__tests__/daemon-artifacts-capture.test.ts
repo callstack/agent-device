@@ -99,15 +99,6 @@ test.for<MaterializationCase>([
     expected: 'cwd/x',
   },
   {
-    // #4518: a record stop never trusts a response localPath; without a requested destination
-    // it lands in cwd.
-    name: 'a record stop refuses the response localPath to cwd',
-    command: 'record',
-    localPath: 'client/clip.mp4',
-    fileName: 'clip.mp4',
-    expected: 'cwd/clip.mp4',
-  },
-  {
     name: 'a close does not authorize an unrelated response artifact destination',
     command: 'close',
     localPath: 'outside/shot.png',

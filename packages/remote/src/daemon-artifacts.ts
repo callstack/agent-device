@@ -511,19 +511,26 @@ export async function materializeRemoteArtifacts(
   // The one record of recording files this client wrote to cwd. Only completed local downloads add
   // to it; success, a later failure and a cancellation all report from it, never from the response.
   const fallbacks: RecordingDestinationWarning[] = [];
-  const delivered = await deliverResponseArtifacts(endpoint, req, response, {
-    host,
-    stateDir,
-    signal,
-    fallbacks,
-  });
-  // A caller abort during delivery wins over any branch that finished without seeing it, and the
-  // failure still names the recording files already written to cwd.
-  if (signal?.aborted) {
+  // A caller abort during delivery wins on either settlement, over any branch that did not see it,
+  // and the failure still names the recording files already written to cwd.
+  const throwIfCanceled = () => {
+    if (!signal?.aborted) return;
     const canceled = createRequestCanceledError({ requestId: req.meta?.requestId }, signal.reason);
     throw fallbacks.length > 0 ? withRecordingFallbacks(canceled, fallbacks) : canceled;
+  };
+  try {
+    const delivered = await deliverResponseArtifacts(endpoint, req, response, {
+      host,
+      stateDir,
+      signal,
+      fallbacks,
+    });
+    throwIfCanceled();
+    return delivered;
+  } catch (error) {
+    throwIfCanceled();
+    throw error;
   }
-  return delivered;
 }
 
 async function deliverResponseArtifacts(
@@ -573,32 +580,87 @@ async function downloadResponseArtifacts(
     fallbacks: RecordingDestinationWarning[];
   }>,
 ): Promise<DaemonResponse> {
-  const { fallbacks } = client;
+  if (recordAction(req) === 'stop') return await deliverRecordStop(endpoint, req, response, client);
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const data = withoutClientOwnedFields(response.data);
-  // #4518: a remote record stop reports a local output path only for a file this client published.
-  const recordStop = recordAction(req) === 'stop';
-  if (artifacts.length === 0 && !recordStop) {
-    return data === response.data ? response : { ok: true, data };
-  }
-  const nextData: Record<string, unknown> = recordStop
-    ? withoutRecordingOutputs(data)
-    : { ...(data ?? {}) };
+  if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
+  const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
+  await downloadEachArtifact(endpoint, req, artifacts, { ...client, nextData, nextArtifacts });
+  nextData.artifacts = nextArtifacts;
+  return { ok: true, data: nextData };
+}
+
+/**
+ * #4518: a remote record stop answer is rebuilt in one allow-listed shape. Every recording download
+ * is bound to its role and chunk before anything is fetched, and every local path in the result is
+ * a file this client published.
+ */
+async function deliverRecordStop(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  client: Readonly<{
+    host: HostEnvironment;
+    scripts: SessionScriptDelivery | undefined;
+    signal: AbortSignal | undefined;
+    fallbacks: RecordingDestinationWarning[];
+  }>,
+): Promise<DaemonResponse> {
+  const answer = await import('./record-stop-answer.ts');
+  const plan = answer.planRecordingDownloads(response.data);
+  const planned = new Set<unknown>(plan.downloads.map(({ artifact }) => artifact));
+  const artifacts = (Array.isArray(response.data?.artifacts) ? response.data.artifacts : []).filter(
+    (artifact) => isSessionScriptArtifact(artifact) || planned.has(artifact),
+  );
+  const local: Record<string, unknown> = {};
+  const delivered: DaemonArtifact[] = [];
+  const { fallbacks } = client;
   try {
-    await downloadEachArtifact(endpoint, req, artifacts, { ...client, nextData, nextArtifacts });
+    await downloadEachArtifact(endpoint, req, artifacts, {
+      ...client,
+      nextData: local,
+      nextArtifacts: delivered,
+    });
   } catch (error) {
-    // Files already written to cwd stay on disk, so the failure still names them (#4518).
+    // Files already written to cwd stay on disk, so the failure still names them.
     throw fallbacks.length === 0 ? error : withRecordingFallbacks(error, fallbacks);
   }
-  nextData.artifacts = nextArtifacts;
-  if (recordStop) projectPublishedChunks(nextData, nextArtifacts);
-  if (fallbacks.length > 0) {
-    nextData.recordingDestinationWarnings = fallbacks;
-    const previous = Array.isArray(nextData.warnings) ? nextData.warnings : [];
-    nextData.warnings = [...previous, ...fallbacks.map(fallbackWarningText)];
+  const chunkPaths = new Map<number, string>();
+  for (const { artifact, chunkIndex } of plan.downloads) {
+    const written = delivered.find((entry) => entry.artifactId === artifact.artifactId)?.localPath;
+    if (chunkIndex !== undefined && typeof written === 'string')
+      chunkPaths.set(chunkIndex, written);
   }
-  return { ok: true, data: nextData };
+  local.artifacts = delivered.map(({ artifactId, field, artifactType, fileName, localPath }) => ({
+    artifactId,
+    field,
+    ...(artifactType === undefined ? {} : { artifactType }),
+    ...(typeof fileName === 'string' ? { fileName } : {}),
+    localPath,
+  }));
+  if (fallbacks.length > 0) {
+    local.recordingDestinationWarnings = fallbacks;
+    const previous = Array.isArray(local.warnings) ? local.warnings : [];
+    local.warnings = [...previous, ...fallbacks.map(fallbackWarningText)];
+  }
+  return {
+    ok: true,
+    data: answer.projectRecordStopResult(response.data, local, chunkPaths, plan.chunkIndexes),
+  };
+}
+
+/**
+ * The error details of a remote answer: a record stop keeps only its allow-listed facts, and every
+ * other command loses the fields only this client's own delivery may set (#4518).
+ */
+export async function projectRemoteErrorDetails(
+  req: DaemonWireRequest,
+  details: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (recordAction(req) !== 'stop') return withoutClientOwnedFields(details);
+  const answer = await import('./record-stop-answer.ts');
+  return answer.projectRecordStopErrorDetails(details);
 }
 
 async function downloadEachArtifact(
@@ -658,25 +720,6 @@ async function downloadEachArtifact(
   }
 }
 
-/**
- * A multi-chunk recording lists its chunks by the daemon's paths. The first chunk is published as
- * `outPath`, and each later one as a `chunkPath` artifact in chunk order, so each entry is
- * rewritten to the path this client published it at.
- */
-function projectPublishedChunks(data: Record<string, unknown>, artifacts: DaemonArtifact[]): void {
-  if (!Array.isArray(data.chunks)) return;
-  const published = [
-    ...artifacts.filter((artifact) => artifact.field === 'outPath'),
-    ...artifacts.filter((artifact) => artifact.field === 'chunkPath'),
-  ].map((artifact) => artifact.localPath);
-  data.chunks = data.chunks.map((chunk: unknown, index: number) => {
-    if (typeof chunk !== 'object' || chunk === null) return chunk;
-    const { path: _peerPath, ...kept } = chunk as Record<string, unknown>;
-    const local = published[index];
-    return typeof local === 'string' ? { ...kept, path: local } : kept;
-  });
-}
-
 /** A recording is one staged file, chosen from the request; a test-artifacts reply is a directory. */
 function destinationMode(
   req: DaemonWireRequest,
@@ -688,22 +731,6 @@ function destinationMode(
 
 function recordAction(req: DaemonWireRequest): string | undefined {
   return req.command === 'record' ? req.positionals?.[0]?.toLowerCase() : undefined;
-}
-
-/**
- * The recording outputs a remote record stop reports only from this client's own completed
- * downloads: the download loop sets each one again from the file it published.
- */
-function withoutRecordingOutputs(
-  data: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  const {
-    outPath: _outPath,
-    telemetryPath: _telemetryPath,
-    chunkPath: _chunkPath,
-    ...kept
-  } = data ?? {};
-  return kept;
 }
 
 /** #4518: a recording file that landed in cwd because the request named no destination for it. */
@@ -767,9 +794,7 @@ function isClientOwnedResponseField(field: string): boolean {
  * local download can name (#4518). The RPC adapter applies it to remote error details too, so no
  * remote answer can claim a local write.
  */
-export function withoutClientOwnedFields<T extends Record<string, unknown> | undefined>(
-  data: T,
-): T {
+function withoutClientOwnedFields<T extends Record<string, unknown> | undefined>(data: T): T {
   if (data === undefined) return data;
   const {
     savedScript: _script,

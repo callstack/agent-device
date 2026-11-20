@@ -13,7 +13,7 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
   fetchRemoteArtifact,
   materializeRemoteArtifacts,
-  withoutClientOwnedFields,
+  projectRemoteErrorDetails,
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
@@ -41,7 +41,7 @@ export function handleDaemonHttpResponseBody(
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, signal, reject });
+      rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, signal, reject }).catch(reject);
       return;
     }
     const result: unknown = parsed.result;
@@ -64,10 +64,10 @@ export function handleDaemonHttpResponseBody(
       );
     } else if (isRecord(result) && isRecord(result.error)) {
       const message = typeof result.error.message === 'string' ? result.error.message : undefined;
-      void rejectDaemonHttpRpcError(
+      rejectDaemonHttpRpcError(
         { message, data: result.error },
         { info, req, stateDir, signal, reject },
-      );
+      ).catch(reject);
     } else {
       reject(invalidDaemonResponse(req));
     }
@@ -132,7 +132,12 @@ async function rejectDaemonHttpRpcError(
     return;
   }
   // A remote peer cannot supply the fields only this client's own delivery sets (#4518).
-  const payload = { ...local, details: local.details && withoutClientOwnedFields(local.details) };
+  const payload = { ...local, details: await projectRemoteErrorDetails(req, local.details) };
+  // A caller abort already rejected this request, so no diagnostics record is fetched for it.
+  if (signal?.aborted) {
+    reject(appErrorFromDaemonError(payload, requestId));
+    return;
+  }
   const localized = await localizeRemoteDaemonError(payload, {
     endpoint: {
       baseUrl: info.baseUrl,
@@ -142,6 +147,7 @@ async function rejectDaemonHttpRpcError(
     },
     stateDir,
     requestId,
+    signal,
   });
   reject(
     appErrorFromDaemonError(
@@ -186,8 +192,13 @@ function toDaemonHttpRpcError(error: {
   const data = error.data ?? {};
   const cause = readDaemonErrorCause(data.cause);
   return {
-    code: toAppErrorCode(data.code != null ? String(data.code) : undefined, 'COMMAND_FAILED'),
-    message: String(data.message ?? error.message ?? 'Daemon RPC request failed'),
+    code: toAppErrorCode(typeof data.code === 'string' ? data.code : undefined, 'COMMAND_FAILED'),
+    message:
+      typeof data.message === 'string'
+        ? data.message
+        : typeof error.message === 'string'
+          ? error.message
+          : 'Daemon RPC request failed',
     cause,
     details:
       typeof data.details === 'object' && data.details

@@ -58,7 +58,12 @@ test('the human record output lists the chunk paths this client published', asyn
     ],
     artifacts: [
       { artifactId: 'c0', field: 'outPath', fileName: 'demo.mp4' },
-      { artifactId: 'c1', field: 'chunkPath', fileName: 'demo.part-001.mp4' },
+      {
+        artifactId: 'c1',
+        field: 'chunkPath',
+        path: '/daemon/demo.part-001.mp4',
+        fileName: 'demo.part-001.mp4',
+      },
     ],
   });
   if (!result) return;

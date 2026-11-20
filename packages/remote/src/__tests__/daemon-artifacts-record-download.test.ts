@@ -245,8 +245,13 @@ test('a multi-chunk recording reports the chunk paths this client published', as
             { index: 1, path: '/daemon/demo.part-001.mp4' },
           ],
           artifacts: [
-            artifact({ field: 'outPath', fileName: 'demo.mp4' }),
-            artifact({ artifactId: 'c1', field: 'chunkPath', fileName: 'demo.part-001.mp4' }),
+            artifact({ field: 'outPath', path: '/daemon/demo.mp4', fileName: 'demo.mp4' }),
+            artifact({
+              artifactId: 'c1',
+              field: 'chunkPath',
+              path: '/daemon/demo.part-001.mp4',
+              fileName: 'demo.part-001.mp4',
+            }),
           ],
         },
       },
@@ -362,5 +367,163 @@ test('a stop that downloads its recording reports the path this client wrote', a
     ]);
     expect(data.outPath).toBe(path.join(world.cwd, 'clip.mp4'));
     expect(fs.readFileSync(path.join(world.cwd, 'clip.mp4'), 'utf8')).toBe('video-bytes');
+  });
+});
+
+/** Runs one remote record stop answer through the materializer and returns the caller's data. */
+async function stopAnswer(world: World, data: Record<string, unknown>, signal?: AbortSignal) {
+  const response = await materializeRemoteArtifacts(
+    { baseUrl: world.baseUrl, token: 'secret' },
+    stopRequest(world),
+    { ok: true, data },
+    createTestHostEnvironment(),
+    path.join(world.root, 'state'),
+    signal,
+  );
+  return response.ok ? (response.data ?? {}) : {};
+}
+
+// #4518 hostile answers: only named recording facts and this client's own files survive.
+test('a remote record stop drops a peer sessionStateDir and unknown fields', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const data = await stopAnswer(world, {
+      recording: 'stopped',
+      durationMs: 5,
+      sessionStateDir: '/daemon/state',
+      unknownField: { localPath: '/client/x' },
+      artifacts: [],
+    });
+    expect(data).toEqual({ recording: 'stopped', durationMs: 5, artifacts: [] });
+  });
+});
+
+test('a remote record stop keeps peer warning text only as daemonWarnings', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const data = await stopAnswer(world, {
+      warning: 'w1',
+      overlayWarning: 'w2',
+      warnings: ['w3'],
+      scriptDeliveryFailure: { reason: 'script_delivery_failed' },
+      artifacts: [],
+    });
+    expect(data.daemonWarnings).toEqual(['w1', 'w2', 'w3']);
+    for (const field of ['warning', 'overlayWarning', 'warnings', 'scriptDeliveryFailure']) {
+      expect(data[field], field).toBeUndefined();
+    }
+  });
+});
+
+test('reordered chunk artifacts bind by chunk identity, and an id-less chunk names no path', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const data = await stopAnswer(world, {
+      chunks: [
+        { index: 0, path: '/daemon/a.mp4' },
+        { index: 1, path: '/daemon/a.part-001.mp4' },
+        { index: 2, path: '/daemon/a.part-002.mp4' },
+        { index: 3, path: '/daemon/a.part-003.mp4' },
+      ],
+      artifacts: [
+        artifact({
+          artifactId: 'c3',
+          field: 'chunkPath',
+          path: '/daemon/a.part-003.mp4',
+          fileName: 'three.mp4',
+        }),
+        artifact({
+          artifactId: 'c0',
+          field: 'outPath',
+          path: '/daemon/a.mp4',
+          fileName: 'zero.mp4',
+        }),
+        {
+          field: 'chunkPath',
+          path: '/daemon/a.part-002.mp4',
+          fileName: 'two.mp4',
+        } as DaemonArtifact,
+        artifact({
+          artifactId: 'c1',
+          field: 'chunkPath',
+          path: '/daemon/a.part-001.mp4',
+          fileName: 'one.mp4',
+        }),
+      ],
+    });
+    expect(data.chunks).toEqual([
+      { index: 0, path: path.join(world.cwd, 'zero.mp4') },
+      { index: 1, path: path.join(world.cwd, 'one.mp4') },
+      { index: 2 },
+      { index: 3, path: path.join(world.cwd, 'three.mp4') },
+    ]);
+  });
+});
+
+test.for([
+  {
+    name: 'a repeated artifact id',
+    artifacts: [
+      { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4' },
+      { artifactId: 'a', field: 'telemetryPath', path: '/daemon/a.json' },
+    ],
+  },
+  {
+    name: 'a chunk artifact relabelled for another chunk',
+    artifacts: [
+      { artifactId: 'a', field: 'outPath', path: '/daemon/a.mp4' },
+      { artifactId: 'b', field: 'chunkPath', path: '/daemon/elsewhere.mp4' },
+    ],
+  },
+])('a record stop answer with $name is refused before any download', async ({ artifacts }, t) => {
+  let hits = 0;
+  await withServer(
+    t,
+    (_req, res) => {
+      hits += 1;
+      res.end('video-bytes');
+    },
+    async (world) => {
+      await expect(
+        stopAnswer(world, {
+          chunks: [
+            { index: 0, path: '/daemon/a.mp4' },
+            { index: 1, path: '/daemon/a.part-001.mp4' },
+          ],
+          artifacts,
+        }),
+      ).rejects.toMatchObject({ details: { reason: 'record_stop_answer_invalid' } });
+      expect(hits).toBe(0);
+      expect(fs.readdirSync(world.cwd)).toEqual([]);
+    },
+  );
+});
+
+/** An abort signal that reports aborted from its second read on: a cancel that lands mid-delivery. */
+function abortsAfterFirstCheck(): AbortSignal {
+  let reads = 0;
+  return {
+    get aborted() {
+      reads += 1;
+      return reads > 1;
+    },
+    reason: new Error('canceled'),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    throwIfAborted: () => {},
+  } as unknown as AbortSignal;
+}
+
+test('an abort while a staged delivery fails during preparation is request_canceled', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const notADirectory = path.join(world.root, 'file');
+    fs.writeFileSync(notADirectory, '');
+    await expect(
+      materializeRemoteArtifacts(
+        { baseUrl: world.baseUrl, token: 'secret' },
+        stopRequest(world, { cwd: notADirectory }),
+        { ok: true, data: { artifacts: [artifact({ field: 'outPath' })] } },
+        createTestHostEnvironment(),
+        path.join(world.root, 'state'),
+        abortsAfterFirstCheck(),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
   });
 });
