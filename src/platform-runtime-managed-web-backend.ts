@@ -16,54 +16,11 @@ async function withWebPlatform<T>(
   stateDir: string | undefined,
   run: (web: PlatformSetup<'web'>) => Promise<T>,
 ): Promise<T> {
-  const [
-    { resolveProviderPlugins, startProviderRegistry },
-    { storePluginCandidates, createPluginSelectionGuard },
-    { getOptionalPlatformPluginDeclaration },
-    { createPlatformPluginHost },
-    { resolveDaemonPaths },
-    { builtinPlatformCandidates, composePlatformPlugins },
-    { PROVIDER_PLUGIN_POLICY },
-  ] = await Promise.all([
-    import('@agent-device/plugins/registry'),
-    import('@agent-device/plugins/store'),
-    import('@agent-device/contracts/plugin-installation'),
-    import('./platform-runtime/plugin-host.ts'),
-    import('@agent-device/daemon-contracts/daemon-resolution'),
-    import('./platform-runtime/platform-plugins.ts'),
-    import('./provider-plugin-policy.ts'),
-  ]);
-  const packageName = getOptionalPlatformPluginDeclaration('web')?.package;
-  const installed = await storePluginCandidates(host.env);
-  const candidates = installed.filter(
-    (candidate) =>
-      candidate.package === packageName ||
-      candidate.declaredClaims?.some(({ kind, id }) => kind === 'platform' && id === 'web'),
-  );
-  const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
-  const assertSelectionCurrent = createPluginSelectionGuard(installed, host.env);
-  const registry = await startProviderRegistry(
-    resolved,
-    host,
-    {
-      ...PROVIDER_PLUGIN_POLICY,
-      assertSelectionCurrent,
-      platformHost: createPlatformPluginHost(
-        host,
-        resolveDaemonPaths(stateDir, { env: host.env, cwd: host.cwd }).baseDir,
-      ),
-    },
-    'platforms',
-  );
+  const { startInstalledPlatforms } = await import('./platform-runtime/installed-platforms.ts');
+  const installed = await startInstalledPlatforms(host, stateDir, 'web');
   try {
-    return await run(
-      composePlatformPlugins(
-        registry.platforms,
-        registry.inventory,
-        assertSelectionCurrent,
-      ).web.get(),
-    );
+    return await run(installed.platforms.web.get());
   } finally {
-    await registry.close();
+    await installed.close();
   }
 }

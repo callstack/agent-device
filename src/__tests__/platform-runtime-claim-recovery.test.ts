@@ -278,14 +278,12 @@ test('stale release inspects retained resource evidence before gateway compositi
     fs.writeFileSync(resourcePath, '{');
     process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
     const composed: string[] = [];
-    const outcomes = await runStaleDeviceClaimRelease(
-      {},
-      createLiveTestHostEnvironment(),
-      (stateDir) => {
+    const outcomes = await runStaleDeviceClaimRelease({}, createLiveTestHostEnvironment(), {
+      composeRecovery: (stateDir) => {
         composed.push(stateDir);
         throw new Error('retained evidence must not compose a gateway');
       },
-    );
+    });
     assert.deepEqual(composed, []);
     assert.equal(outcomes[0]?.status, 'retained');
     assert.equal(outcomes[0]?.reason, 'app-log-descriptor-invalid');
@@ -326,10 +324,8 @@ test('recovery is composed per claim from the stale owner state dir, never the c
     process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
 
     const composedFor: string[] = [];
-    const outcomes = await runStaleDeviceClaimRelease(
-      {},
-      createLiveTestHostEnvironment(),
-      (stateDir) => {
+    const outcomes = await runStaleDeviceClaimRelease({}, createLiveTestHostEnvironment(), {
+      composeRecovery: (stateDir) => {
         composedFor.push(stateDir);
         return {
           reconcile: async (claim) => {
@@ -339,7 +335,7 @@ test('recovery is composed per claim from the stale owner state dir, never the c
           dispose: async () => {},
         };
       },
-    );
+    });
 
     assert.deepEqual([...composedFor].sort(), [ownerDirA, ownerDirB].sort());
     assert.equal(outcomes.filter((outcome) => outcome.status === 'released').length, 2);

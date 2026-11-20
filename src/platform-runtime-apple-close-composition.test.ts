@@ -7,6 +7,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setAppleRunnerHostEnvironment } from '@agent-device/platform-apple/runner-owner';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
+import { builtinPlatformSelectionFixture } from './platform-runtime-builtin-platforms.fixtures.ts';
 
 const events = vi.hoisted(() => [] as string[]);
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
@@ -50,6 +51,7 @@ test('the composed close awaits the real runner release before dismissing alerts
   };
   const gateway = createPlatformRuntimeGateway({
     host,
+    platforms: builtinPlatformSelectionFixture(),
     sessionsDir: root,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: `${root}/${sessionId}/app.log`,

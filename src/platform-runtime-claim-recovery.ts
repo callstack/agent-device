@@ -1,4 +1,3 @@
-import { missingPlatformPlugin } from './core/platform-plugin-absence.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   createOwnerScopedDeviceClaimReconciler,
@@ -12,6 +11,8 @@ import {
   type DeviceClaimSelectors,
   type DeviceClaimStaleReleaseOutcome,
 } from '@agent-device/daemon-contracts/device-claims';
+import type { PlatformModuleSelection } from '@agent-device/contracts/platform-plugin';
+import type { InstalledPlatforms } from './platform-runtime/installed-platforms.ts';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 
 /**
@@ -20,18 +21,41 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
  * runtime gateway the transaction runs on, because building a gateway is the one act that names
  * platform modules. A local-only gateway per transaction keeps provider runtimes out of recovery —
  * claims exist only for local devices — and instance-scopes every stateful piece the gateway owns,
- * so disposal shuts down only this transaction's handles.
+ * so disposal shuts down only this transaction's handles. `platforms` is the process's one platform
+ * selection, so recovery binds an installed optional family through the same registration every
+ * other request of this process uses.
  */
 export const createClaimRecoveryGatewayFor =
-  (host: HostEnvironment): ClaimRecoveryGatewayFactory =>
+  (host: HostEnvironment, platforms: PlatformModuleSelection): ClaimRecoveryGatewayFactory =>
   (input) =>
     createPlatformRuntimeGateway({
       host,
-      reportAbsent: missingPlatformPlugin,
+      platforms,
       sessionsDir: input.sessionsDir,
       ownedProcesses: input.ownedProcesses,
       resolveSessionArtifacts: input.resolveSessionArtifacts,
     });
+
+type ClaimRecoveryGateway = ReturnType<ClaimRecoveryGatewayFactory>;
+
+/**
+ * A gateway composed on the first bind or fact read. A release that settles no durable resource
+ * through a runtime never composes it, so it starts no plugin.
+ */
+function createDeferredGateway(compose: () => Promise<ClaimRecoveryGateway>): ClaimRecoveryGateway {
+  let composed: Promise<ClaimRecoveryGateway> | undefined;
+  const gateway = (): Promise<ClaimRecoveryGateway> => (composed ??= compose());
+  return Object.freeze({
+    inspectFacts: async (device) => await (await gateway()).inspectFacts(device),
+    bind: async (request) => await (await gateway()).bind(request),
+    // A composition that failed owns nothing to shut down; its error already failed the bind.
+    shutdown: async () =>
+      await composed?.then(
+        (started) => started.shutdown(),
+        () => undefined,
+      ),
+  });
+}
 
 /**
  * Daemonless `device release --stale`: settles each provably dead owner
@@ -39,25 +63,48 @@ export const createClaimRecoveryGatewayFor =
  * startup — recovery composed from the stale claim's own state dir, resources
  * settled first, claim cleared last — without requiring the (typically dead)
  * owner daemon, or any daemon, to be running.
+ *
+ * The platform selection is this process's, as in the daemon: one plugin registry for the whole
+ * run, started from `stateDir` (the caller's state dir) on the first gateway use and closed when
+ * the run ends. Only the gateway's session paths and process records follow the stale owner.
  */
 export async function runStaleDeviceClaimRelease(
   selectors: DeviceClaimSelectors,
   host: HostEnvironment,
-  composeRecovery?: OwnerScopedClaimRecoveryComposer,
+  options: Readonly<{
+    stateDir?: string;
+    composeRecovery?: OwnerScopedClaimRecoveryComposer;
+  }> = {},
 ): Promise<DeviceClaimStaleReleaseOutcome[]> {
   // Settling a transaction can reach runner code; this CLI process runs one host, and the
   // runner reads its configuration from it, entered as the runtime state the daemon route binds.
   const { setAppleRunnerHostEnvironment } =
     await import('@agent-device/platform-apple/runner-owner');
   setAppleRunnerHostEnvironment(host);
-  return await releaseProvenStaleDeviceClaims({
-    selectors,
-    env: host.env,
-    reconcile: createOwnerScopedDeviceClaimReconciler({
-      scope: createRecoveryPlatformScope(),
-      composeGateway: createClaimRecoveryGatewayFor(host),
-      composeRecovery,
-      beforeGateway: inspectDeviceClaimRecovery,
-    }),
-  });
+  let installed: Promise<InstalledPlatforms> | undefined;
+  const startInstalled = (): Promise<InstalledPlatforms> =>
+    (installed ??= import('./platform-runtime/installed-platforms.ts').then(
+      ({ startInstalledPlatforms }) => startInstalledPlatforms(host, options.stateDir),
+    ));
+  try {
+    return await releaseProvenStaleDeviceClaims({
+      selectors,
+      env: host.env,
+      reconcile: createOwnerScopedDeviceClaimReconciler({
+        scope: createRecoveryPlatformScope(),
+        composeGateway: (input) =>
+          createDeferredGateway(async () =>
+            createClaimRecoveryGatewayFor(host, (await startInstalled()).platforms)(input),
+          ),
+        composeRecovery: options.composeRecovery,
+        beforeGateway: inspectDeviceClaimRecovery,
+      }),
+    });
+  } finally {
+    // A registry that failed to start set nothing up, and its error already failed the bind.
+    await installed?.then(
+      (started) => started.close(),
+      () => undefined,
+    );
+  }
 }

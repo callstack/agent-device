@@ -190,7 +190,7 @@ export async function composeDaemonRuntimeDeps(
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
       deviceRuntimeGateway,
       platformResourceCleanup: createPlatformResourceCleanup(host, web),
-      claimRecoveryGateway: createClaimRecoveryGatewayFor(host),
+      claimRecoveryGateway: createClaimRecoveryGatewayFor(host, platforms),
       interactorResolution: Object.freeze({
         resolve: async (device: DeviceInfo, runnerContext: RunnerContext) =>
           await getInteractor(device, runnerContext, host, platforms.interactors),

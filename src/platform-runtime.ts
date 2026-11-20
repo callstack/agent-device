@@ -130,10 +130,7 @@ const androidRuntimeModule = createAndroidRuntimeModule({
   },
 });
 
-function createPlatformRuntimeModuleRegistry(
-  platforms?: PlatformModuleSelection,
-  reportAbsent = platforms?.reportAbsent,
-) {
+function createPlatformRuntimeModuleRegistry(platforms: PlatformModuleSelection) {
   return createPlatformModuleRegistry<PlatformRuntimeModule>(
     [
       appleRuntimeModule,
@@ -141,18 +138,18 @@ function createPlatformRuntimeModuleRegistry(
       harmonyosRuntimeModule,
       vegaRuntimeModule,
       linuxRuntimeModule,
-      ...(platforms?.runtimeModules ?? []),
+      ...platforms.runtimeModules,
     ],
-    reportAbsent,
-    platforms?.assertSelectionCurrent,
+    platforms.reportAbsent,
+    platforms.assertSelectionCurrent,
   );
 }
 
 export function createPlatformRuntimeGateway(
   options: Readonly<{
     host: HostEnvironment;
-    platforms?: PlatformModuleSelection;
-    reportAbsent?: Parameters<typeof createPlatformModuleRegistry>[1];
+    /** The process's one platform selection: it carries the optional families and their absence. */
+    platforms: PlatformModuleSelection;
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
@@ -162,17 +159,14 @@ export function createPlatformRuntimeGateway(
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
-    modules: createPlatformRuntimeModuleRegistry(
-      options.platforms,
-      options.reportAbsent ?? options.platforms?.reportAbsent,
-    ),
+    modules: createPlatformRuntimeModuleRegistry(options.platforms),
     loadHost: async () => {
       const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
         await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         host: options.host,
-        web: options.platforms?.web,
-        interactors: options.platforms?.interactors,
+        web: options.platforms.web,
+        interactors: options.platforms.interactors,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,

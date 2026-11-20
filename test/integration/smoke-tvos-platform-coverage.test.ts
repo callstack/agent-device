@@ -10,6 +10,7 @@ import {
   assertCoverageGapRowsAreOwned,
 } from './support/coverage-classification.ts';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';
+import { builtinPlatformSelectionFixture } from '../../src/platform-runtime-builtin-platforms.fixtures.ts';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import {
   TVOS_COVERAGE_GAP_ISSUE,
@@ -84,6 +85,7 @@ test('tvOS gesture contract preserves the typed multi-touch denial', async () =>
   // gesture reports is that fact's hint under the shared wording.
   const facts = await createPlatformRuntimeGateway({
     host: createLiveTestHostEnvironment(),
+    platforms: builtinPlatformSelectionFixture(),
     resolveSessionArtifacts: () => ({
       outputPath: '/sessions/tvos/app.log',
       pidPath: '/sessions/tvos/app-log.pid',
