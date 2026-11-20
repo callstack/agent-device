@@ -30,7 +30,7 @@ const mockIsProcessAlive = vi.mocked(isProcessAliveMock);
 
 /** Canonical POSIX birth token per pid: provenanced, so a differing token proves a different lifetime. */
 function startToken(pid: number): string {
-  return `posix:${1000 + pid}`;
+  return `posix:${pid * 1000}`;
 }
 /** A birth token naming a different lifetime than any `startToken`. */
 const LATER_LIFETIME = STALE_LIFETIME_TOKEN;

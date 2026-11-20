@@ -257,19 +257,21 @@ function posixStartTimeToken(lstart: string): string | null {
   const month = match ? PS_MONTHS.indexOf(match[1]!) : -1;
   if (!match || month < 0) return null;
   const [day, hour, minute, second, year] = match.slice(2).map(Number);
-  return `posix:${Date.UTC(year!, month, day, hour, minute, second)}`;
+  const token = `posix:${Date.UTC(year!, month, day, hour, minute, second)}`;
+  return startTimeTokenSource(token) === 'posix' ? token : null;
 }
 
-/** The source of a start token. A raw `ps` string from an older release has none. */
+/** The source of a start token. A `posix:` value has one only in the form a read writes. */
 function startTimeTokenSource(value: string): 'linux' | 'posix' | 'windows' | undefined {
   if (value.startsWith('linux:')) return 'linux';
-  if (value.startsWith('posix:')) return 'posix';
+  const epochMs = /^posix:(0|[1-9]\d*000)$/.exec(value)?.[1];
+  if (epochMs !== undefined && Number.isSafeInteger(Number(epochMs))) return 'posix';
   return /^\d{21}$/.test(value) ? 'windows' : undefined;
 }
 
 /**
  * Positive proof of different lifetimes: two tokens from one source that differ. An unreadable
- * token, tokens from two sources, and a raw `ps` string from an older release prove nothing.
+ * token, tokens from two sources, a malformed token, and a raw `ps` string prove nothing.
  */
 export function processStartTimesDiffer(
   left: string | null | undefined,

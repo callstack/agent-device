@@ -6,7 +6,11 @@ import { AppError } from '@agent-device/kernel/errors';
 
 const { zombiePids, processProbe } = vi.hoisted(() => ({
   zombiePids: new Set<number>(),
-  processProbe: { observe: undefined as (() => void) | undefined },
+  processProbe: {
+    observe: undefined as (() => void) | undefined,
+    /** The start token the host answers for every pid, instead of the real one. */
+    startTime: undefined as string | undefined,
+  },
 }));
 
 vi.mock('./host-process.ts', async (importOriginal) => {
@@ -15,7 +19,7 @@ vi.mock('./host-process.ts', async (importOriginal) => {
     const observations = new Map<number, { state: string; startTime: string }>();
     for (const pid of pids) {
       processProbe.observe?.();
-      const startTime = actual.readProcessStartTime(pid);
+      const startTime = processProbe.startTime ?? actual.readProcessStartTime(pid);
       if (!zombiePids.has(pid) && startTime === null) continue;
       observations.set(pid, {
         state: zombiePids.has(pid) ? 'ZN' : 'Ss',
@@ -32,7 +36,7 @@ vi.mock('./host-process.ts', async (importOriginal) => {
     },
     readProcessStartTime: (pid: number) => {
       processProbe.observe?.();
-      return actual.readProcessStartTime(pid);
+      return processProbe.startTime ?? actual.readProcessStartTime(pid);
     },
     // Classification judges from one snapshot; the fixture answers it from the
     // same zombie state and real start times as the per-field probes.
@@ -53,6 +57,7 @@ beforeEach(() => {
 
 afterEach(() => {
   processProbe.observe = undefined;
+  processProbe.startTime = undefined;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -104,6 +109,29 @@ test('acquireProcessLock never steals a null-start-time lock from an alive pid',
     },
   );
 });
+
+test.each(['posix:corrupt', 'posix:1763493000500'])(
+  'a live holder whose recorded start token %s is malformed keeps its lock',
+  async (startTime) => {
+    const lockDirPath = path.join(tmpDir, 'malformed-token.lock');
+    const holder = { pid: process.ppid, startTime, acquiredAtMs: Date.now(), claimToken: 'held' };
+    writeLockOwnerFixture(lockDirPath, holder);
+    processProbe.startTime = 'posix:1763493000000';
+
+    const attempt = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+
+    assert.equal(attempt.status, 'busy');
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(lockDirPath, 'owner.json'), 'utf8')),
+      holder,
+    );
+    await assert.rejects(
+      () =>
+        acquireProcessLock({ lockDirPath, owner: currentProcessOwner(), timeoutMs: 30, pollMs: 1 }),
+      /Timed out/,
+    );
+  },
+);
 
 test('a contender judges a live owner without holding the guard', async () => {
   const lockDirPath = path.join(tmpDir, 'probed-outside-guard.lock');

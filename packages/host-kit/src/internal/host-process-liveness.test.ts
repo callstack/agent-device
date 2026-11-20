@@ -531,3 +531,19 @@ test('only two start times in the same provenanced format prove different lifeti
   assert.equal(processStartTimesDiffer('posix:1763493000000', null), false);
   assert.equal(processStartTimesDiffer('posix:1763493000000', 'posix:1763493000000'), false);
 });
+
+test.each([
+  'posix:corrupt',
+  'posix:',
+  'posix:1763493000500', // not a whole second
+  'posix:01763493000000',
+  'posix:-1763493000000',
+  'posix:1763493000000.0',
+  'posix:1.763493e12',
+  'posix:9007199254740993000', // not a safe integer
+  ' posix:1763493001000',
+])('a stored %s is not a POSIX start token and proves no different lifetime', (stored) => {
+  assert.equal(processStartTimesDiffer(stored, 'posix:1763493000000'), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', stored), false);
+  assert.equal(processStartTimesDiffer(stored, 'posix:corrupt-too'), false);
+});

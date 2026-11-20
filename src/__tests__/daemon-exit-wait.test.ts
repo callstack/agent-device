@@ -70,6 +70,22 @@ test.each([0, -1, 1.5, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
   },
 );
 
+test.each(['posix:corrupt', 'posix:1500', 'posix:02000', 'posix:9007199254740993000'])(
+  'a malformed stored token %s proves no exit: stop retains the daemon and sends no signal',
+  async (startTime) => {
+    expect(await waitForDaemonExit({ pid: PID, startTime }, { timeoutMs: 0 })).toMatchObject({
+      exited: false,
+    });
+    expect(
+      await stopDaemonProcess(
+        { pid: PID, startTime },
+        { mode: 'graceful', termTimeoutMs: 20, killTimeoutMs: 20 },
+      ),
+    ).toEqual({ status: 'retained', signal: 'SIGTERM', reason: 'identity-unverified' });
+    expect(signals).toEqual([]);
+  },
+);
+
 test('waitForDaemonExit reports a pid recycled mid-wait as exited, without burning the deadline', async () => {
   setTimeout(() => state.starts.set(PID, RECYCLED), 20);
   const wait = await waitForDaemonExit(

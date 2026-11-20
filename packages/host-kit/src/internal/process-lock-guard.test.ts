@@ -80,7 +80,7 @@ test('a long-standing guard whose holder pid now has another start time is recla
         ? 'linux:00000000-0000-0000-0000-000000000000:0'
         : process.platform === 'win32'
           ? '000000000000000000000'
-          : 'posix:1',
+          : 'posix:1000',
   };
   fs.writeFileSync(mutexPath, JSON.stringify(reusedHolder));
   stampDirectoryAbandoned(mutexPath);
@@ -98,6 +98,7 @@ test('a guard held by a live process, or naming no holder, is never reclaimed', 
   const live = { ...DEAD_GUARD_HOLDER, pid: process.ppid, startTime: null };
   for (const [name, contents] of [
     ['live-holder', JSON.stringify(live)],
+    ['malformed-start-token', JSON.stringify({ ...live, startTime: 'posix:corrupt' })],
     ['unattributed', ''],
     ['bad-token', JSON.stringify({ ...DEAD_GUARD_HOLDER, token: '../escape' })],
   ] as const) {

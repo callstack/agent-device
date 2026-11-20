@@ -70,6 +70,14 @@ test('a legacy raw record beside a provenanced read stays live, never reused', (
   }
 });
 
+test.each(['posix:corrupt', 'posix:1763493000500', 'posix:01763493001000'])(
+  'an owner whose recorded token %s is malformed stays live, never reused',
+  (startTime) => {
+    mockReadProcessStartTime.mockReturnValue('posix:1763493000000');
+    assert.equal(classifyOwnerLiveness({ owner: { pid: OWNER_PID, startTime } }), 'live');
+  },
+);
+
 test.each([
   ['Mon Aug 10 20:00:00 2026', 'linux:11111111-1111-4111-8111-111111111111:12345'],
   ['posix:1763493000000', 'linux:11111111-1111-4111-8111-111111111111:12345'],

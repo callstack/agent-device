@@ -309,6 +309,12 @@ for (const scenario of [
     retired: false,
   },
   { name: 'live-unverified', observed: ownIdentity, published: ownIdentity, retired: false },
+  {
+    name: 'malformed-token',
+    observed: observedOf({ pid: process.pid, startTime: 'posix:corrupt' }),
+    published: { pid: process.pid, startTime: 'posix:corrupt' },
+    retired: false,
+  },
   { name: 'no-observation', observed: null, published: deadIdentity, retired: false },
   { name: 'replaced', observed: deadIdentity, published: ownIdentity, retired: false },
   { name: 'dead', observed: deadIdentity, published: deadIdentity, retired: true },
