@@ -41,7 +41,7 @@ enum RunnerAppScreenCaptureFailure: String, Error {
 
   /// The wire code for this refusal: always the `RunnerWireErrorCode` table row that shares the
   /// raw value. The raw value stays for test assertions and logging; only this property is
-  /// allowed to put the code on the wire, so the parity guard sees one constant per code.
+  /// allowed to put the code on the wire, so the literal guard sees one constant per code.
   var wireCode: String {
     switch self {
     case .unresolvedWindow:

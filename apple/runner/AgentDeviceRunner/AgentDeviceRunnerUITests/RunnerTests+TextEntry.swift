@@ -13,7 +13,7 @@ extension RunnerTests {
 
     /// The code this refusal puts on the wire: always the `RunnerPassThroughErrorCode` member that
     /// shares the raw value. The raw value stays for test assertions; only this property may carry
-    /// the code, so the parity guard sees one constant per code.
+    /// the code, so the literal guard sees one constant per code.
     var wireCode: String {
       switch self {
       case .notFocused:

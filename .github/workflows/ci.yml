@@ -236,6 +236,12 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: xctest-selection }
 
+      # The Swift runner's error-code enums are generated from runner-contract.ts. The gate
+      # renders them again and fails when the checked-in file differs. No Xcode.
+      - name: Check the generated runner error-code enums
+        uses: ./.github/actions/run-gate
+        with: { gate: runner-error-codes }
+
       # Layers 1-2 of the conformance oracle: replay the JVM-generated fixtures
       # against the live engine. Deterministic and Java-free — the generated
       # fixtures are checked in and only regenerated on an upstream-pin bump. The

@@ -367,7 +367,9 @@ declaration for the current rules.
   [`RunnerTests+Snapshot.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift) sets it. The daemon reads it in
   `resolveRunnerFatalReason` ([`runner-session.ts`](../../packages/apple-runner/src/runner-session.ts)).
 - **Runner error codes** (for example `RUNNER_BUSY`, `RUNNER_WEDGED`, `MAIN_THREAD_TIMEOUT`). On the runner
-  side, wire codes are declared in `RunnerWireErrorCode` ([`RunnerTests.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift));
+  side, `RunnerWireErrorCode` and `RunnerPassThroughErrorCode` ([`RunnerErrorCodes.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerErrorCodes.swift))
+  hold the wire codes. `pnpm generate:runner-error-codes` writes that file from `RUNNER_ERROR_CODES` and
+  `RUNNER_PASS_THROUGH_CODES` in [`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts). To add a code, edit the TypeScript declaration and run the generator.
   `RUNNER_BUSY` and `RUNNER_WEDGED` come from the busy gate in
   [`RunnerTests+CommandDispatch.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift), and `MAIN_THREAD_TIMEOUT` from
   the main-thread watchdog in [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift). The daemon

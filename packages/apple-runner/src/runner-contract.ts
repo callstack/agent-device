@@ -287,8 +287,8 @@ const BACK_SWIPE_NO_CHANGE_RUNNER_CODE: RunnerTableErrorCode = 'BACK_SWIPE_NO_CH
 /**
  * One row per runner error code: the single declaration of what the host does with a reported
  * code, replacing the four parallel maps this file used to keep. A new runner refusal is one row
- * here plus one `RunnerWireErrorCode` constant in the Swift tests, and
- * test/repo-guards/runner-error-code-parity.test.ts fails when the two drift apart. A row holds:
+ * here: `pnpm generate:runner-error-codes` writes the Swift `RunnerWireErrorCode` enum from the
+ * keys, and the `runner-error-codes` gate fails while the generated file is stale. A row holds:
  * - `dispatched`: what the reply proves about reaching the device — refusals answer before the
  *   command runs (selector refusals included; `INVALID_ARGS` comes only from request decoding,
  *   ahead of any gesture); every other code, and a reply without one, is `unknown`.
@@ -319,6 +319,9 @@ export const RUNNER_ERROR_CODES = {
   // RUNNER_WEDGED — so every host path publishes this refusal as retriable.
   RUNNER_BUSY: { dispatched: 'no', reason: 'runner_busy', diagnosticOnly: { retriable: true } },
   RUNNER_WEDGED: { dispatched: 'no' },
+  // A repeat of a `commandId` the runner already finished, when that command keeps no response body
+  // to replay. Nothing ran for the repeat, but only the runner knows whether an earlier send of that
+  // id reached the device, so the disclosure stays `unknown`.
   COMMAND_ALREADY_FINISHED: { dispatched: 'unknown' },
   // A read whose session app is not running: no runner read launches the app (a bare launch would
   // drop a pending launch's payload), so the runner refuses the read-only command. The refusal
@@ -339,6 +342,8 @@ export const RUNNER_ERROR_CODES = {
   // action: `dismiss` found no label on its decline list, and tapping anything else could answer an
   // affirmative (#3627). The refusal is made in the button choice, before any activation.
   ALERT_BUTTON_NOT_FOUND: { dispatched: 'no' },
+  // Required alert acquisition failed or exhausted its deadline. It establishes no absence and
+  // activates nothing.
   ALERT_UNRESOLVED: { dispatched: 'no' },
   // A coordinate `fill` whose point identified no text input (#1721). The synthesized first-responder
   // replacement this route would otherwise take has no element, so its clear and its typed text reach
@@ -348,21 +353,25 @@ export const RUNNER_ERROR_CODES = {
   // NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a claim that the point has
   // no input — only that the runner could not tell.
   TEXT_INPUT_PROBE_UNAVAILABLE: { dispatched: 'no', reason: 'text_input_probe_unavailable' },
+  // Refused before the gesture's events reached XCTest, so the command sent nothing.
   SYNTHESIZED_GESTURE_NOT_DISPATCHED: {
     dispatched: 'no',
     reason: 'synthesized_gesture_not_dispatched',
     diagnosticOnly: {},
   },
+  // Failed after the gesture's events reached XCTest, so it may have run.
   SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN: {
     dispatched: 'unknown',
     reason: 'synthesized_gesture_outcome_unknown',
     diagnosticOnly: {},
   },
+  // The swipe ran and left the app's screen unchanged.
   BACK_SWIPE_NO_CHANGE: {
     dispatched: 'unknown',
     reason: 'back_swipe_no_change',
     diagnosticOnly: {},
   },
+  // The swipe ran, but the screen kept changing on its own beforehand or could not be sampled after.
   BACK_SWIPE_UNVERIFIED: {
     dispatched: 'unknown',
     reason: 'back_swipe_unverified',
@@ -428,13 +437,36 @@ export const RUNNER_ERROR_CODES = {
 
 /**
  * A code with a row in {@link RUNNER_ERROR_CODES}. The code constants are typed with it, so a
- * constant naming no row fails to compile;
- * test/repo-guards/runner-error-code-parity.test.ts checks the same keys against the Swift
- * `RunnerWireErrorCode` enum and the codes the runner Swift actually emits. Runner codes the host
- * passes through unclassified get no row here — nothing on the host branches on them — and the
- * same guard declares and checks them against the Swift `RunnerPassThroughErrorCode` enum.
+ * constant naming no row fails to compile. Runner codes the host passes through unclassified get
+ * no row here; {@link RUNNER_PASS_THROUGH_CODES} declares them.
  */
 export type RunnerTableErrorCode = keyof typeof RUNNER_ERROR_CODES;
+
+/**
+ * The runner codes the host does not classify: they get no row of {@link RUNNER_ERROR_CODES}, so
+ * {@link classifyRunnerReportedError} hands each one to `toAppErrorCode`, which publishes it
+ * verbatim as the command's own `AppError.code`. No host policy reads them: no reason, no
+ * retriable flag, no dispatch disclosure beyond the generic one. The list exists so that
+ * `pnpm generate:runner-error-codes` can write the Swift `RunnerPassThroughErrorCode` enum the
+ * emitters use. A code the host learns to branch on moves to a table row.
+ */
+export const RUNNER_PASS_THROUGH_CODES = [
+  'TEXT_ENTRY_MISMATCH', // `fill` read-back found different text than it typed
+  'TEXT_INPUT_NOT_FOCUSED',
+  'TEXT_INPUT_SYNTHESIS_UNAVAILABLE',
+  'TEXT_INPUT_COMMIT_NOT_OBSERVED',
+  'TEXT_INPUT_CLEAR_NOT_OBSERVED',
+  'TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED',
+  'XCTEST_RECORDED_FAILURE', // the failure was recorded by XCTest itself
+  'ALERT_DEADLINE_EXCEEDED',
+  'ALERT_CONFIRMATION_UNAVAILABLE',
+  'IOS_TREE_CAPTURE_TIMEOUT',
+  'IOS_AX_SNAPSHOT_FAILED',
+  'IOS_RAW_SNAPSHOT_TOO_LARGE',
+  'IOS_SNAPSHOT_TOO_LARGE',
+  'IOS_SNAPSHOT_PROJECTION_MISMATCH',
+  'IOS_SNAPSHOT_PRESENTATION_FAILED',
+] as const;
 
 /**
  * `details.reason` for the runner codes a consumer acts on, derived from {@link RUNNER_ERROR_CODES}
