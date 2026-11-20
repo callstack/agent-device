@@ -133,8 +133,8 @@ Use `close --shutdown` to stop the emulator anyway.
 
 Add `--shutdown` to explicitly stop a local simulator or emulator regardless of boot ownership.
 For an Android emulator, `--shutdown` skips that process check and stops the emulator anyway, then
-waits for the process this session's `open` launched to exit; when it cannot confirm the exit, `close`
-reports that in `warnings`. A session on an emulator that was already running recorded no such
+waits for, and if needed stops, the process this session's `open` launched; when it cannot confirm
+the exit, `close` reports that in `warnings`. A session on an emulator that was already running recorded no such
 process, so `--shutdown` has no process to wait for and returns once the device was asked to stop.
 Physical devices are not stopped. Provider sessions follow the provider's shutdown action.
 With [Limrun](./limrun.md), `--shutdown` ends the instance or attachment and can delete an instance
