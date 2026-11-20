@@ -7,16 +7,11 @@ import {
   ancestryRoot as root,
   directoryWith,
   expectUntrusted,
-  expectUntrustedReplaced,
   publish,
   skipOnWindows,
   tree,
 } from './script-destination-host.fixtures.ts';
-import {
-  confirmScriptDestination,
-  prepareScriptDestination,
-  publishScriptFileSync,
-} from './script-destination.ts';
+import { prepareScriptDestination, publishScriptFileSync } from './script-destination.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -111,19 +106,6 @@ function onWindows<T>(task: () => T): T {
     Object.defineProperty(process, 'platform', original!);
   }
 }
-
-test('a Windows confirmation refuses a different directory under the one identity Windows answers', () => {
-  const volume = fs.statSync(root());
-  vi.spyOn(fs, 'statSync').mockReturnValue(volume);
-  vi.spyOn(fs, 'mkdirSync').mockReturnValue(undefined);
-  onWindows(() => {
-    const prepared = prepareScriptDestination(String.raw`C:\judged\journey.ad`);
-    expectUntrustedReplaced(
-      () => confirmScriptDestination(String.raw`C:\other\journey.ad`, prepared),
-      String.raw`C:\other`,
-    );
-  });
-});
 
 test('a script publishes at a Windows drive root without creating the volume', () => {
   const volume = fs.statSync(root());
@@ -238,9 +220,7 @@ test.each(['create', 'reuse'])(
     const parent = path.win32.join(restricted, 'recordings');
     const destination = path.win32.join(parent, 'journey.ad');
     onWindows(() => {
-      const prepared = prepareScriptDestination(destination);
-      expect(prepared.entry).toBe(destination);
-      expect(confirmScriptDestination(destination, prepared).entry).toBe(destination);
+      expect(prepareScriptDestination(destination).entry).toBe(destination);
     });
     expect(mkdir).toHaveBeenCalledExactlyOnceWith(parent, { mode: 0o700 });
     expect(stat).not.toHaveBeenCalledWith(restricted, expect.anything());
@@ -253,26 +233,15 @@ test.each([
   'C:journey.ad',
   String.raw`\\?\C:\journey.ad`,
   String.raw`\\server\pipe\recorder`,
-])('all Windows publication boundaries refuse the unsupported path form %s', (destination) => {
+])('Windows publication refuses the unsupported path form %s', (destination) => {
   const stat = vi.spyOn(fs, 'statSync');
   const mkdir = vi.spyOn(fs, 'mkdirSync');
   onWindows(() => {
-    const prepared = {
-      directory: 'C:\\',
-      entry: 'C:\\journey.ad',
-      name: 'journey.ad',
-      identity: 'windows',
-    };
-    for (const attempt of [
-      () => prepareScriptDestination(destination),
-      () => confirmScriptDestination(destination, prepared),
-    ]) {
-      expect(attempt).toThrow(
-        expect.objectContaining({
-          details: expect.objectContaining({ exposure: 'windows_path_form' }),
-        }),
-      );
-    }
+    expect(() => prepareScriptDestination(destination)).toThrow(
+      expect.objectContaining({
+        details: expect.objectContaining({ exposure: 'windows_path_form' }),
+      }),
+    );
   });
   expect(stat).not.toHaveBeenCalled();
   expect(mkdir).not.toHaveBeenCalled();

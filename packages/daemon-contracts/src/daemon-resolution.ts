@@ -127,7 +127,6 @@ const STATE_ROOT_PROBLEM_BY_EXPOSURE: Record<
   unnamed_entry: 'unavailable',
   unresolvable_parent: 'unavailable',
   unreachable_parent: 'unavailable',
-  parent_replaced: 'unavailable',
 };
 
 /**

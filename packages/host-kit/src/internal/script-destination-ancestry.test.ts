@@ -8,15 +8,10 @@ import {
   currentUid,
   directoryWith,
   expectUntrusted,
-  expectUntrustedReplaced,
   modeOf,
   publish,
 } from './script-destination-host.fixtures.ts';
-import {
-  confirmScriptDestination,
-  prepareScriptDestination,
-  MAX_SCRIPT_PATH_LINK_HOPS,
-} from './script-destination.ts';
+import { prepareScriptDestination, MAX_SCRIPT_PATH_LINK_HOPS } from './script-destination.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 /** The mode a test's own trusted ground stands at, so a runner's umask cannot widen it. */
@@ -363,9 +358,9 @@ skipOnWindows(
   () => {
     // `work -> priv/x`, `priv/y` is private and `home/y` is open to others. The kernel walks `work` into its
     // target and steps back from THERE, so the entry is created in `priv/y`. `path.dirname` of the same
-    // spelling answers `home/y`, so a publisher that stages beside the spelled parent writes its temp file
+    // spelling answers `home/y`, so a publisher that writes beside the spelled parent puts its temp file
     // into ground the rule never judged — where anyone can list it and put their own bytes behind that name
-    // before the rename. The staging directory has to be the walk's answer.
+    // before the rename. The temp file's directory has to be the walk's answer.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const sharedY = directoryWith(path.join(home, 'y'), 0o777);
@@ -883,81 +878,3 @@ skipOnWindows('publishes to a scratch path exactly as the host spelled it', () =
 
   expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
 });
-
-// --- the destination directory swapped out while the file was staged ---
-
-// Only a caller that holds an answer from an earlier walk confirms it: the remote client does, because a
-// download runs between the walk that judged the directory and the rename that creates the entry. The local
-// publisher asks for no comparison of its own - the ownership rule is what excludes anyone who could make
-// that swap - so these two cover the one comparison this rule keeps.
-
-skipOnWindows('refuses a parent replaced by name while the file was staged', () => {
-  const directory = root();
-  const staged = path.join(directory, 'work');
-  privateDir(staged);
-  const destination = path.join(staged, 'journey.ad');
-  const prepared = prepareScriptDestination(destination);
-  // The replacement is a link to another real directory. Removing the directory and creating the same name
-  // again is not enough to make the two differ: a filesystem may hand back the inode it just freed, and the
-  // identity would match by luck.
-  const elsewhere = path.join(directory, 'elsewhere');
-  privateDir(elsewhere);
-  fs.rmSync(staged, { recursive: true });
-  fs.symlinkSync(elsewhere, staged);
-
-  // The refusal names the directory the entry would really have been created in, which is where the link
-  // leads. The spelled name is a pointer, not a place.
-  expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), elsewhere);
-  expect(fs.existsSync(path.join(elsewhere, 'journey.ad'))).toBe(false);
-});
-
-skipOnWindows(
-  'confirms the directory an earlier answer named, and reports where to create the entry',
-  () => {
-    const directory = root();
-    const staged = path.join(directory, 'work');
-    privateDir(staged);
-    const destination = path.join(staged, 'journey.ad');
-    const prepared = prepareScriptDestination(destination);
-
-    expect(confirmScriptDestination(destination, prepared).entry).toBe(destination);
-  },
-);
-
-// --- a step swapped out while the walk is still running ---
-
-skipOnWindows(
-  'identifies an entry by its bigint inode, so two large inodes do not collapse',
-  () => {
-    // Directory identities are compared for equality by `confirmScriptDestination`, so they are read as
-    // BIGINT. A numeric `ino` cannot hold every inode a filesystem hands out: 2^53 + 1 and 2^53 answer the
-    // same Number, and a swap between the two would then look like the same directory.
-    const directory = root();
-    const home = directoryWith(path.join(directory, 'home'), 0o700);
-    const work = path.join(home, 'work');
-    privateDir(work);
-    const LOW = 2n ** 53n;
-    const realLstatSync = fs.lstatSync;
-    let look = 0;
-    vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, options?: unknown) => {
-      const stats = (realLstatSync as (...args: unknown[]) => unknown)(
-        pathname,
-        options,
-      ) as fs.Stats;
-      if (String(pathname) !== work) return stats;
-      // Two distinct entries, one per look: the inode the walk answers, then the one the name holds when
-      // the staged version is confirmed.
-      const ino = look++ === 0 ? LOW : LOW + 1n;
-      const bigint = (options as { bigint?: boolean } | undefined)?.bigint === true;
-      return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
-        ino: bigint ? ino : Number(ino),
-      });
-    }) as typeof fs.lstatSync);
-
-    // A numeric read would answer Number(2^53 + 1n) === Number(2^53n), and the swap would pass.
-    expect(Number(LOW + 1n)).toBe(Number(LOW));
-    const destination = path.join(work, 'journey.ad');
-    const prepared = prepareScriptDestination(destination);
-    expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), work);
-  },
-);

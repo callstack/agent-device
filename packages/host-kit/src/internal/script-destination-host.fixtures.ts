@@ -69,10 +69,6 @@ export function expectUntrusted(run: () => void, exposure: string, ancestor: str
   expectRefusal(run, 'script_ancestor_untrusted', exposure, ancestor);
 }
 
-export function expectUntrustedReplaced(run: () => void, ancestor: string): void {
-  expectRefusal(run, 'script_ancestry_replaced', 'parent_replaced', ancestor);
-}
-
 /** Asserts the typed refusal a destination earns, naming the directory at fault. */
 function expectRefusal(run: () => void, reason: string, exposure: string, ancestor: string): void {
   let details: Record<string, unknown> | undefined;

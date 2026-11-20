@@ -16,8 +16,7 @@ afterEach(() => {
 });
 
 // host-kit's destination rule owns the path-shape matrix (ADR 0016). These cases pin what this route
-// does around it: pass the spelling untouched, judge before any download or `mkdir`, stage and commit in
-// the judged directory, and confirm it after the download.
+// does around it: pass the spelling untouched, judge before any `mkdir`, and commit in the judged directory.
 
 function directoryWith(directory: string, mode: number): string {
   fs.mkdirSync(directory);
@@ -45,26 +44,19 @@ function expectDeliveryRefused(
 }
 
 test.skipIf(process.platform === 'win32')(
-  'a refused destination with a missing parent downloads nothing and creates no directories',
+  'a refused destination with a missing parent creates no directories and no file',
   async () => {
-    // `open --save-script <shared>/recordings/journey.ad` with `recordings` absent. A `mkdir` or a download
-    // that runs ahead of the rule leaves `recordings` or a fetched version behind after the refusal.
+    // `open --save-script <shared>/recordings/journey.ad` with `recordings` absent. A `mkdir` that runs
+    // ahead of the rule leaves `recordings` behind after the refusal.
     const root = scratchRoot('script-ancestry-stray-');
     const shared = directoryWith(path.join(root, 'shared'), 0o777);
     const destination = path.join(shared, 'recordings', 'journey.ad');
-    let fetches = 0;
-    const baseUrl = await artifactServer({
-      get v1() {
-        fetches += 1;
-        return { body: 'open Demo\n' };
-      },
-    });
+    const baseUrl = await artifactServer({ v1: { body: 'open Demo\n' } });
 
     const result = await open(baseUrl, path.join(root, 'state'), destination);
 
     const warnings = expectDeliveryRefused(result, 'script_ancestor_untrusted');
     expect(warnings).toEqual([expect.stringContaining(`under ${shared}:`)]);
-    expect(fetches).toBe(0);
     expect(fs.readdirSync(shared)).toEqual([]);
   },
 );
@@ -192,7 +184,7 @@ test.skipIf(process.platform === 'win32').each([
   { force: false, publishes: ['linkSync', 'renameSync'] },
   { force: true, publishes: ['renameSync', 'renameSync'] },
 ])(
-  'a remote recording stages and commits every version in the directory the walk judged (force: $force)',
+  'a remote recording commits every version in the directory the walk judged (force: $force)',
   async ({ force, publishes }) => {
     // `home/work/../y` is the private `priv/y`; folded as text it is the open `home/y`. Right before each
     // version's entry is created, `work` is swapped so the spelling resolves to `home/elsewhere/y`.
@@ -209,12 +201,6 @@ test.skipIf(process.platform === 'win32').each([
     const link = path.join(home, 'work');
     fs.symlinkSync(privX, link);
     const destination = `${home}/work/../y/journey.ad`;
-    const staged: string[] = [];
-    const realMkdtempSync = fs.mkdtempSync;
-    vi.spyOn(fs, 'mkdtempSync').mockImplementation(((template: string, ...rest: unknown[]) => {
-      staged.push(path.dirname(template));
-      return (realMkdtempSync as (...args: unknown[]) => unknown)(template, ...rest);
-    }) as typeof fs.mkdtempSync);
     const swaps: string[] = [];
     for (const name of ['linkSync', 'renameSync'] as const) {
       const real = fs[name] as (...args: unknown[]) => unknown;
@@ -244,91 +230,9 @@ test.skipIf(process.platform === 'win32').each([
     expect(replaced.ok).toBe(true);
     expect(readScriptDeliveryFailure(replaced.ok ? replaced.data : undefined)).toBeUndefined();
     expect(swaps).toEqual(publishes);
-    expect(staged).toEqual([privY, privY]);
     expect(fs.readdirSync(privY)).toEqual(['journey.ad']);
     expect(fs.readFileSync(path.join(privY, 'journey.ad'), 'utf8')).toBe('open Demo\nclick Next\n');
     expect(fs.readdirSync(foldedY)).toEqual([]);
     expect(fs.readdirSync(elsewhereY)).toEqual([]);
-  },
-);
-
-test.skipIf(process.platform === 'win32').each([
-  { version: 'first', force: false, change: 'retarget' },
-  { version: 'first', force: true, change: 'retarget' },
-  { version: 'replacement', force: false, change: 'retarget' },
-  { version: 'first', force: false, change: 'replace' },
-  { version: 'first', force: false, change: 'world-writable' },
-] as const)(
-  'a remote recording refuses a $version version (force: $force) whose directory changed by $change while it downloaded',
-  async ({ version, force, change }) => {
-    // Once the staged file is open, the destination's directory changes: `retarget` points `alias` from
-    // `judged` to `other` (both private, so only identity tells), `replace` removes `judged` and makes a
-    // new private one at the same path, and `world-writable` opens `judged` to every user. Only the
-    // confirmation after the download catches each one.
-    const root = scratchRoot('script-ancestry-');
-    const judged = directoryWith(path.join(root, 'judged'), 0o700);
-    const other = directoryWith(path.join(root, 'other'), 0o700);
-    const alias = path.join(root, 'alias');
-    fs.symlinkSync(judged, alias);
-    const destination = path.join(change === 'retarget' ? alias : judged, 'journey.ad');
-    const changeDirectory = {
-      retarget: () => {
-        fs.rmSync(alias);
-        fs.symlinkSync(other, alias);
-      },
-      replace: () => {
-        fs.rmSync(judged, { recursive: true, force: true });
-        directoryWith(judged, 0o700);
-      },
-      'world-writable': () => fs.chmodSync(judged, 0o777),
-    }[change];
-    const stateDir = path.join(root, 'state');
-    const baseUrl = await artifactServer({
-      v1: { body: 'open Demo\n' },
-      v2: { body: 'open Demo\nclick Next\n' },
-    });
-    let retargeted = false;
-    const changeOnDownload = () => {
-      const realOpen = fs.promises.open.bind(fs.promises);
-      vi.spyOn(fs.promises, 'open').mockImplementation(async (file, ...rest) => {
-        const handle = await realOpen(file as never, ...(rest as unknown as never[]));
-        if (!retargeted) {
-          retargeted = true;
-          changeDirectory();
-        }
-        return handle;
-      });
-    };
-
-    let refused: { response: DaemonResponse; id: string };
-    if (version === 'first') {
-      changeOnDownload();
-      refused = await open(baseUrl, stateDir, destination, { force });
-    } else {
-      const { id } = await open(baseUrl, stateDir, destination, { force });
-      changeOnDownload();
-      const response = await answer(baseUrl, stateDir, request('click'), {
-        artifacts: [script('v2', 2, id)],
-      });
-      refused = { response, id };
-    }
-
-    expect(retargeted).toBe(true);
-    const cause =
-      change === 'world-writable' ? 'script_ancestor_untrusted' : 'script_ancestry_replaced';
-    const warnings = expectDeliveryRefused(refused, cause);
-    const ancestor = change === 'retarget' ? other : judged;
-    expect(warnings).toEqual([expect.stringContaining(`under ${ancestor}:`)]);
-    const failure = readScriptDeliveryFailure(
-      refused.response.ok ? refused.response.data : undefined,
-    );
-    expect(failure?.hint).toMatch(/\S/);
-    expect(fs.readdirSync(other)).toEqual([]);
-    if (version === 'first') {
-      expect(fs.readdirSync(judged)).toEqual([]);
-    } else {
-      expect(fs.readdirSync(judged)).toEqual(['journey.ad']);
-      expect(fs.readFileSync(path.join(judged, 'journey.ad'), 'utf8')).toBe('open Demo\n');
-    }
   },
 );

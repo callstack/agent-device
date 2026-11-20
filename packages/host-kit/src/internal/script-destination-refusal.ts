@@ -14,8 +14,7 @@ export type ScriptAncestryExposure =
   | 'relative_destination'
   | 'unnamed_entry'
   | 'unresolvable_parent'
-  | 'unreachable_parent'
-  | 'parent_replaced';
+  | 'unreachable_parent';
 
 /** Why each exposure makes that ground unsafe, in the caller's terms. */
 const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
@@ -39,18 +38,13 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
     'the script path names a directory that does not exist and steps back out of it with `..`, so where the script would land is not established.',
   unreachable_parent:
     'the directory the script path names does not exist, so the script has nowhere to be written.',
-  parent_replaced:
-    'that directory was replaced while the script was staged, so the script may not be created in what stands there now.',
 };
 
 /**
  * The typed reasons a destination-ancestry refusal answers with, named here rather than spelled again by
  * whoever reads them.
  */
-export const SCRIPT_ANCESTRY_REASONS = [
-  'script_ancestor_untrusted',
-  'script_ancestry_replaced',
-] as const;
+export const SCRIPT_ANCESTRY_REASONS = ['script_ancestor_untrusted'] as const;
 
 /** A reason this rule answers with, or `undefined` for an error that came from somewhere else. */
 export function scriptAncestryReason(error: unknown): string | undefined {
@@ -74,8 +68,7 @@ export function scriptAncestryFailure(
     exposure === 'unnamed_entry' ? 'INVALID_ARGS' : 'COMMAND_FAILED',
     `Refusing to save the script under ${ancestor}: ${untrustedGroundWording[exposure]}`,
     {
-      reason:
-        exposure === 'parent_replaced' ? SCRIPT_ANCESTRY_REASONS[1] : SCRIPT_ANCESTRY_REASONS[0],
+      reason: SCRIPT_ANCESTRY_REASONS[0],
       exposure,
       path: destination,
       ancestor,
@@ -90,9 +83,6 @@ function ancestryHint(
   ancestor: string,
   callerOwnsAncestor: boolean,
 ): string {
-  if (exposure === 'parent_replaced') {
-    return 'Re-record with open --save-script, or save under a directory nobody else can write.';
-  }
   if (exposure === 'unnamed_entry') {
     return 'End the script path in a valid file name, such as `--save-script=./workflows/journey.ad`.';
   }
