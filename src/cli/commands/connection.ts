@@ -27,6 +27,7 @@ import {
   unavailableConnectPluginError,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
+import { commitPendingCliLogin } from '../auth-session.ts';
 import {
   resolveConnectProviderProfile,
   verifyResolvedConnectProvider,
@@ -76,6 +77,8 @@ export const connectCommand: ClientCommandHandler = async ({
     cwd: host.cwd,
     env: host.env,
   });
+  // The provider is admitted. A login the generic auth step approved for this `connect` is stored now.
+  commitPendingCliLogin();
   const { flags: connectFlags, connection: connectionMetadata } = scopeConnectProfile(
     flags,
     resolved,
