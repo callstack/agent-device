@@ -176,7 +176,7 @@ function summarizeProviderScenarioFlagCoverage(files: readonly string[]) {
     ['recordAs', 'parameterized fill publication for recorded scripts'],
     ['keyframes', 'timed fold trajectory'],
     ['durationMs', 'scroll, gesture, and TV remote duration'],
-    ['holdMs', 'press and gesture tap hold duration'],
+    ['holdMs', 'press, gesture tap, and gesture pan hold duration'],
     ['jitterPx', 'press jitter'],
     ['pixels', 'scroll distance'],
     ['until', 'scroll-until-visible stop condition'],

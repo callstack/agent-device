@@ -2,7 +2,7 @@
 
 The CLI client trusts its caller to choose local destinations.
 The client trusts a remote daemon for data and validated identifiers.
-Script publication and remote record stop take no path from the daemon. Trace and perf delivery still can (#4518).
+Script publication and remote record stop take no daemon path (#4518); trace and perf can.
 The daemon admits its state directory. Nobody trusts the network or other local users.
 Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 
@@ -11,10 +11,9 @@ Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 ADR 0016 judges caller-named script destinations on POSIX against the writing process's uid.
 Both script publishers commit in the judged directory.
 Remote script delivery caps in-memory bytes and error answers.
-Remote record stop writes to the request's path or one plain cwd name, and warns (#4518).
-Stage recordings privately in one resolved parent, then rename.
 
 ## Proposed in #4669
 
-Apply proposed path checks, staging, and byte caps only after #4669 is approved.
-Pending: screenshot `--out`, contact sheets, JUnit, trace, recording, and client and daemon state.
+#4669 proposes private writes for credentials, client state, and daemon state (#4649): create each under a verified state root, and never write through a link at the final name.
+Do not apply these before #4669 is approved.
+Do not apply the ADR 0016 walk to other caller outputs. Screenshot `--out`, contact sheets, the JUnit reporter, and trace and local recording outputs keep a plain write to the path the caller names.

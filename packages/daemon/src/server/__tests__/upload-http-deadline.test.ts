@@ -45,6 +45,19 @@ async function flushIO(): Promise<void> {
   for (let i = 0; i < 100; i += 1) await new Promise((r) => setImmediate(r));
 }
 
+/** Settles on the socket data that completes the text, however long the server's real IO takes. */
+function receivedText(socket: net.Socket, isComplete: () => boolean): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const check = () => {
+      if (!isComplete()) return;
+      socket.off('data', check);
+      resolve();
+    };
+    socket.on('data', check);
+    check();
+  });
+}
+
 function routeRequest(port: number, options: http.RequestOptions, body?: string | Buffer) {
   return new Promise<RouteResponse>((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, agent: false, ...options }, (res) => {
@@ -723,13 +736,8 @@ test('guard: a single-shot upload expiring behind a long finalize keeps the earl
     await flushIO();
     assert.equal(socket.destroyed, false, "B's expiry does not close the socket under A");
     reads.release.resolve();
-    const answers = async () => {
-      for (let i = 0; i < 50; i += 1) {
-        if ((received.match(/HTTP\/1\.1 /g) ?? []).length >= 2) return;
-        await flushIO();
-      }
-    };
-    await withIO(answers(), 'both answers');
+    const answers = receivedText(socket, () => (received.match(/HTTP\/1\.1 /g) ?? []).length >= 2);
+    await withIO(answers, 'both answers');
     const statuses = [...received.matchAll(/HTTP\/1\.1 (\d+)/g)].map((match) => match[1]);
     assert.deepEqual(statuses, ['200', '500'], 'A finalizes, then B answers its typed expiry');
     assert.match(received, /"reason":"transfer_phase_timeout"/);
@@ -903,10 +911,8 @@ test('a chunk refused by its byte cap lingers only for the grace, not the inacti
     socket.write(
       Buffer.concat([Buffer.from(`${chunk.length.toString(16)}\r\n`), chunk, Buffer.from('\r\n')]),
     );
-    const answer = async () => {
-      for (let i = 0; i < 50 && !/\r\n\r\n\{.*\}$/s.test(received); i += 1) await flushIO();
-    };
-    await withIO(answer(), 'the byte-cap answer');
+    const answer = receivedText(socket, () => /\r\n\r\n\{.*\}$/s.test(received));
+    await withIO(answer, 'the byte-cap answer');
     assert.match(received, /^HTTP\/1\.1 400 /);
     // The rest of the refused body is discarded for at most the grace, then the server
     // closes its side of the connection, long before the 120 s inactivity ceiling.
