@@ -110,6 +110,23 @@ export async function confirmAndroidEmulatorLaunchProcessStopped(
 }
 
 /**
+ * Stops the emulator process this host launched for a device nobody owns: it stops the process
+ * directly, because no shutdown was ever asked of the device. Host-kit signals the pid only while the
+ * recorded start time still names it, so a launch that has already been replaced answers `unconfirmed`
+ * rather than stopping somebody else's emulator.
+ */
+export async function stopAndroidEmulatorLaunchProcess(
+  identity: AndroidEmulatorLaunchIdentity,
+): Promise<LaunchedProcessStopConfirmation> {
+  const { stopProcessAndConfirmExit } = await import('@agent-device/host-kit/process');
+  const stop = await stopProcessAndConfirmExit(
+    { pid: identity.pid, identity: { startTime: identity.startTime } },
+    LAUNCHED_PROCESS_STOP_BUDGET,
+  );
+  return stop.status === 'stopped' ? 'stopped' : 'unconfirmed';
+}
+
+/**
  * Under heavy host load one process-table read took up to 4.2 s. The launch-naming read gets 5 s and
  * a retry because losing it loses the launch; this read is on a close's decision path and answers in
  * tens of milliseconds, so it gets one ordinary process budget instead.
@@ -117,9 +134,17 @@ export async function confirmAndroidEmulatorLaunchProcessStopped(
 const PROCESS_IDENTITY_TIMEOUT_MS = 1_000;
 
 /**
- * The graceful `adb emu kill` already had its own 15 s to work. Waiting the same again on a process
- * that is demonstrably ignoring it would double what one close may spend, so this confirms the exit
- * briefly and then escalates.
+ * The graceful `adb emu kill` already had its own 15 s to work, so the close path confirms the exit
+ * briefly before it escalates to a stop by pid.
  */
 const GRACEFUL_SHUTDOWN_EXIT_CONFIRM_MS = 3_000;
+
+/**
+ * The stop escalation both callers use: 1.5 s to take SIGTERM and 1.5 s to take SIGKILL, so one stop
+ * costs at most 3 s. The close-path caller got that escalation because the graceful `adb emu kill`
+ * already had its own 15 s — waiting the same again on a process demonstrably ignoring it would
+ * double what one close may spend. This caller never asked the device for a graceful stop: a failed
+ * `open` is cleanup on a request that already failed, so TERM does the work and KILL confirms it,
+ * inside the same bound rather than on top of another 15 s.
+ */
 const LAUNCHED_PROCESS_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;

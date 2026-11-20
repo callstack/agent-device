@@ -47,6 +47,7 @@ const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+    deviceShutdownDenied: params.deviceShutdownDenied,
   } satisfies SessionOpenCommandInput);
 
 const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>

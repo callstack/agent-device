@@ -62,4 +62,46 @@ export type LaunchedDeviceProcessService = Readonly<{
     device: DeviceInfo,
     identity: AndroidEmulatorLaunchIdentity,
   ): Promise<LaunchedProcessStopConfirmation>;
+
+  /**
+   * Stops the launch the caller caused, without asking the device to shut down first. A caller that
+   * never published a session has no device to ask, so this addresses only the process the host
+   * itself started: a launch the host does not record, or one the recorded start time no longer
+   * names, gets no signal and answers `unconfirmed`. A host that refuses the stop itself reports an
+   * error, which a caller treats the same way: the launch must be assumed to be running. A device
+   * whose owner launches no host process answers `stopped`, because nothing of the caller's own is
+   * left running.
+   */
+  stopLaunchedDeviceProcess(
+    device: DeviceInfo,
+    identity: AndroidEmulatorLaunchIdentity,
+  ): Promise<LaunchedProcessStopConfirmation>;
 }>;
+
+/**
+ * What happened to the device process an `open` launched when that open published no session, and so
+ * claimed nothing to stop it later. `stopped` confirms the process is gone; `kept_running` names why
+ * nothing was signaled, either because the daemon's policy denies `device-shutdown` or because the
+ * launch recorded no process identity to signal; `not_confirmed` means the stop was made but the
+ * process was still running when the budget ended, or the host refused to answer for the stop at all.
+ */
+export type FailedOpenLaunchCleanup =
+  | Readonly<{ outcome: 'stopped' }>
+  | Readonly<{
+      outcome: 'kept_running';
+      reason: 'daemon-policy-denied' | 'no-process-identity';
+    }>
+  | Readonly<{ outcome: 'not_confirmed' }>;
+
+/** The `details` entries for one launch cleanup, so every report of it agrees. */
+export function failedOpenLaunchCleanupDetails(cleanup: FailedOpenLaunchCleanup): Readonly<{
+  failedOpenEmulatorCleanup: FailedOpenLaunchCleanup['outcome'];
+  failedOpenEmulatorCleanupReason?: 'daemon-policy-denied' | 'no-process-identity';
+}> {
+  return cleanup.outcome === 'kept_running'
+    ? {
+        failedOpenEmulatorCleanup: cleanup.outcome,
+        failedOpenEmulatorCleanupReason: cleanup.reason,
+      }
+    : { failedOpenEmulatorCleanup: cleanup.outcome };
+}

@@ -25,7 +25,7 @@ export async function bootStoppedLocalAndroidDevice(params: {
   flags: Pick<RequestFlags, 'androidDeviceAllowlist'>;
   env: EnvMap;
   deadlineAtMs: number | undefined;
-  onAndroidEmulatorLaunchIdentity?: (identity: AndroidEmulatorLaunchIdentity) => void;
+  onAndroidEmulatorLaunch?: (identity: AndroidEmulatorLaunchIdentity | undefined) => void;
 }): Promise<DeviceInfo | undefined> {
   const { device, owner } = params;
   if (owner.kind !== 'local-family' || device.platform !== 'android' || device.booted === true) {
@@ -35,6 +35,6 @@ export async function bootStoppedLocalAndroidDevice(params: {
   return await readiness.operations.ensureReady({
     androidSerialAllowlist: resolveSortedAndroidSerialAllowlist(params.flags, params.env),
     deadlineAtMs: params.deadlineAtMs,
-    onAndroidEmulatorLaunchIdentity: params.onAndroidEmulatorLaunchIdentity,
+    onAndroidEmulatorLaunch: params.onAndroidEmulatorLaunch,
   });
 }
