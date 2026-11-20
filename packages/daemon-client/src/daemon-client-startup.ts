@@ -3,7 +3,8 @@ import { AppError, normalizeError, type NormalizedError } from '@agent-device/ke
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
-import { settleWithin, sleep } from '@agent-device/host-kit/retry';
+import { sleep } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { DAEMON_TEARDOWN_GRACE_MS } from '@agent-device/daemon-contracts/daemon-process';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';

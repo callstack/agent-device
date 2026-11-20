@@ -8,7 +8,7 @@ import type {
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { settleWithin } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';

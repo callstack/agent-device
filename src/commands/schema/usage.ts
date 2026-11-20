@@ -36,3 +36,35 @@ export function buildCommandUsage(commandName: string, schema: CommandSchema): s
     [commandName, ...(schema.positionalArgs ?? []).map(formatPositionalArg)].join(' ');
   return [grammar, ...buildFlagTail(schema.usageFlags ?? schema.allowedFlags)].join(' ');
 }
+
+export function listHelpFlags(keys: ReadonlySet<FlagKey>): FlagDefinition[] {
+  return getFlagDefinitions().filter(
+    (definition) =>
+      keys.has(definition.key) &&
+      definition.usageLabel !== undefined &&
+      definition.usageDescription !== undefined,
+  );
+}
+
+// Command-specific override for a shared flag's help text (see CommandSchema.flagDescriptionOverrides):
+// keeps the FlagDefinition registry as one shared row per flag while letting a command whose
+// semantics genuinely differ (e.g. `replay --save-script` arms a repair transaction, not the
+// open/close authoring lifecycle) show its own description without duplicating the flag entry.
+function applyFlagDescriptionOverrides(
+  definitions: FlagDefinition[],
+  overrides: Partial<Record<FlagKey, string>> | undefined,
+): FlagDefinition[] {
+  if (!overrides) return definitions;
+  return definitions.map((definition) => {
+    const override = overrides[definition.key];
+    return override === undefined ? definition : { ...definition, usageDescription: override };
+  });
+}
+
+/** The options `agent-device help <command>` lists, with the command's own description overrides. */
+export function commandHelpFlags(schema: CommandSchema): FlagDefinition[] {
+  return applyFlagDescriptionOverrides(
+    listHelpFlags(new Set<FlagKey>(schema.allowedFlags ?? [])),
+    schema.flagDescriptionOverrides,
+  );
+}

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import {
   compileSwiftSources,
   getSwiftCacheRoot,
@@ -152,33 +153,20 @@ export async function isPlayableVideo(
 }
 
 async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): Promise<string> {
-  const compiled = prepareVideoValidator(host);
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () =>
-        reject(
-          new AppError(
-            'COMMAND_FAILED',
-            `The video validator did not compile within ${Math.round(waitMs)}ms`,
-            {
-              reason: 'video_validator_compile_timeout',
-              timeoutMs: waitMs,
-              retriable: true,
-              hint:
-                'Run record stop again: the validator compile continues in the background, ' +
-                'and the recording keeps its evidence.',
-            },
-          ),
-        ),
-      waitMs,
-    );
-  });
-  try {
-    return await Promise.race([compiled, expired]);
-  } finally {
-    clearTimeout(timer);
-  }
+  const outcome = await settleWithin(() => prepareVideoValidator(host), waitMs);
+  if (outcome.kind === 'settled') return outcome.value;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `The video validator did not compile within ${Math.round(waitMs)}ms`,
+    {
+      reason: 'video_validator_compile_timeout',
+      timeoutMs: waitMs,
+      retriable: true,
+      hint:
+        'Run record stop again: the validator compile continues in the background, ' +
+        'and the recording keeps its evidence.',
+    },
+  );
 }
 
 function unavailableVideoValidator(cause: unknown): AppError {

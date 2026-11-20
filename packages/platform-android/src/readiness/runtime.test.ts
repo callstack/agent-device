@@ -261,6 +261,39 @@ test('a retriable device-not-found host refusal stays terminal', async () => {
   expect(run).toHaveBeenCalledTimes(1);
 });
 
+// A nonzero probe exit is not terminal by itself: typed offline evidence is transient, so the
+// poller retries. Without this, a change that makes every nonzero exit terminal would pass.
+test('an offline probe exit retries and resolves once the device reports booted', async () => {
+  const { host, run } = probeHost([
+    { stdout: '', stderr: 'error: device offline', exitCode: 1 },
+    { stdout: '1\n', stderr: '', exitCode: 0 },
+  ]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).resolves.toBeDefined();
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
+test('a terminal probe failure keeps the original cause', async () => {
+  const cause = new Error('spawn adb ENOENT');
+  const { host } = probeHost([new AppError('TOOL_MISSING', 'adb not found in PATH', {}, cause)]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: 'TOOL_MISSING', cause });
+});
+
 test('an unclassified nonzero probe exit stays terminal instead of becoming boot_timeout', async () => {
   const { host, run } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }]);
 
@@ -309,9 +342,86 @@ test('a probe-level timeout is a typed ANDROID_BOOT_TIMEOUT terminal, not a raw 
       new AbortController().signal,
     ),
   ).rejects.toMatchObject({
+    // The readiness deadline was not reached, so the message names the adb layer that timed out.
+    message: 'adb timed out after 10000ms',
     details: { adbFailure: 'timeout', reason: 'ANDROID_BOOT_TIMEOUT', serial: 'emulator-5554' },
   });
   expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('a probe failure that lands on the readiness deadline reports the spent budget', async () => {
+  const { host } = probeHost([]);
+  // The probe uses the last of the budget before it fails: the clock passes the deadline.
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 5_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    message: 'Android device did not finish booting in time',
+    details: { reason: 'ANDROID_BOOT_TIMEOUT' },
+  });
+});
+
+test('a missing tool keeps its code and message when the probe also spent the budget', async () => {
+  const { host } = probeHost([]);
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      throw new AppError('TOOL_MISSING', 'adb not found in PATH');
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 5_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: 'TOOL_MISSING', message: 'adb not found in PATH' });
+});
+
+test('an unauthorized device keeps its own message when the probe also spent the budget', async () => {
+  const { host } = probeHost([]);
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      return { stdout: '', stderr: 'error: device unauthorized.', exitCode: 1 };
+    },
+  });
+
+  const failure = await ensureAndroidReady(
+    host,
+    runningEmulator(),
+    { headless: false, deadlineAtMs: 5_000 },
+    new AbortController().signal,
+  ).catch((error: unknown) => error);
+
+  expect(failure).toMatchObject({ details: { reason: 'ADB_TRANSPORT_UNAVAILABLE' } });
+  expect((failure as Error).message).not.toBe('Android device did not finish booting in time');
+});
+
+test('a probe that throws a plain Error fails as a command failure, not UNKNOWN', async () => {
+  const { host } = probeHost([new Error('spawn adb EACCES')]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'spawn adb EACCES' });
 });
 
 test('a thrown offline wording without typed details does not retry, proving text cannot drive the verdict', async () => {

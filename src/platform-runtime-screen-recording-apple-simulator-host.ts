@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { settleWithin } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/settle-within';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   HostCommandResult,
