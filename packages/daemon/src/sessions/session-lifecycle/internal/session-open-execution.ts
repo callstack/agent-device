@@ -23,10 +23,10 @@ import type {
   OpenApplicationTiming,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type {
-  DeviceBootPerformance,
   CloseBootOwnership,
+  DeviceBootPerformance,
 } from '@agent-device/contracts/device-boot';
-import { resolveSessionBootOwnership } from '@agent-device/contracts/device-boot';
+import { resolveSessionBootOwnership } from './session-boot-ownership.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';

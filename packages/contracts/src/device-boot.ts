@@ -101,38 +101,12 @@ export const CLOSE_BOOT_OWNER_UNVERIFIED_REASONS = {
 
 /**
  * Whether a session's `open` owns stopping the device it holds, and whether it must say why not.
- *
- * #4791: a boot the platform reports performing is positive proof, so it owns the boot whatever the
- * snapshot said. A device-selection snapshot only says the device was STOPPED when the open looked at
- * it, which is not proof the open booted it: anything else could have booted it in the meantime, and
- * nothing about booting a simulator claims the device. So when the platform answers that its own boot
- * step did not boot the device, the session owns no stop and reports the inference it refused. An
- * owner whose open boots the device through some step of its own, outside the preparation that reports
- * (the daemon's Android emulator launch), reports nothing, which leaves the snapshot inference in
- * charge for that family.
+ * The four answers are exclusive by type: an open either proved its boot, inferred one the platform
+ * did not disprove, disproved the inference it started from, or has no claim at all. #4791: only
+ * `proved` and `inferred` owe a stop, and `disproved` is the one close reports. The decision that
+ * produces a member lives with the session that records it (`resolveSessionBootOwnership`).
  */
-export type CloseBootOwnership = Readonly<{
-  ownsBoot: boolean;
-  bootOwnerUnverified: boolean;
-}>;
-
-export function resolveSessionBootOwnership(
-  input: Readonly<{
-    /** Device selection's inference: the pre-open snapshot said this stopped local device needed a boot. */
-    inferredFromSnapshot: boolean;
-    /** What the platform's own boot step reported about its call, when that owner reports at all. */
-    bootPerformance: DeviceBootPerformance | undefined;
-  }>,
-): CloseBootOwnership {
-  // A boot the boot step reports performing is proof on its own: the device can even have gone down
-  // between the snapshot and this call, which makes the boot real while the inference says nothing.
-  const performed = input.bootPerformance?.performed === true;
-  const disprovesSnapshot = input.bootPerformance?.performed === false;
-  return {
-    ownsBoot: performed || (input.inferredFromSnapshot && !disprovesSnapshot),
-    bootOwnerUnverified: input.inferredFromSnapshot && disprovesSnapshot,
-  };
-}
+export type CloseBootOwnership = 'proved' | 'inferred' | 'disproved' | 'none';
 
 /**
  * The `details.failedOpenEmulatorCleanupReason` values a failed open publishes, from the owner of
