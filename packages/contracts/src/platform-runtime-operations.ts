@@ -1,3 +1,4 @@
+import type { AccessibilityAuditRuntimeOperations } from './audit.ts';
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
 import type { AppInventoryRuntimeOperations } from './app-inventory-runtime.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -61,7 +62,8 @@ import {
 import { runtimeUse } from './platform-runtime-use.ts';
 import type { AndroidToolHost } from './platform-runtime-host.ts';
 
-export type PlatformRuntimeOperations = AppLogRuntimeOperations &
+export type PlatformRuntimeOperations = AccessibilityAuditRuntimeOperations &
+  AppLogRuntimeOperations &
   AppInventoryRuntimeOperations &
   AppDeploymentRuntimeOperations &
   AppStateRuntimeOperations &
@@ -550,7 +552,28 @@ export const snapshotRuntimePlanUses = Object.freeze([
   captureSnapshotWithCustomActionsWithoutActiveAppUse,
 ] as const);
 
+const nativeAuditUse = defineUse({ required: ['captureSnapshot', 'accessibilityAudit'] });
+const nativeAuditWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'accessibilityAudit'],
+});
+export const auditRuntimePlanUses = Object.freeze([
+  captureSnapshotUse,
+  captureSnapshotWithoutActiveAppUse,
+  nativeAuditUse,
+  nativeAuditWithoutActiveAppUse,
+] as const);
+
 export type SnapshotRuntimePlan =
+  | Readonly<{
+      kind: 'native-audit-active-app';
+      operation: 'captureSnapshot';
+      use: typeof nativeAuditUse;
+    }>
+  | Readonly<{
+      kind: 'native-audit-without-active-app';
+      operation: 'captureSnapshotWithoutActiveApp';
+      use: typeof nativeAuditWithoutActiveAppUse;
+    }>
   | Readonly<{
       kind: 'active-app';
       operation: 'captureSnapshot';
@@ -684,8 +707,22 @@ function selectorCapturePlan<const Intent extends SelectorCaptureRuntimeIntent>(
 /** Selects one owner-fact-backed capture plan from normalized command/session intent. */
 export function resolveSnapshotRuntimePlan(input: {
   customActions: boolean;
+  nativeAudit?: boolean;
   hasActiveApp: boolean;
 }): SnapshotRuntimePlan {
+  if (input.nativeAudit) {
+    return input.hasActiveApp
+      ? Object.freeze({
+          kind: 'native-audit-active-app',
+          operation: 'captureSnapshot',
+          use: nativeAuditUse,
+        })
+      : Object.freeze({
+          kind: 'native-audit-without-active-app',
+          operation: 'captureSnapshotWithoutActiveApp',
+          use: nativeAuditWithoutActiveAppUse,
+        });
+  }
   if (!input.customActions) {
     return input.hasActiveApp
       ? Object.freeze({ kind: 'active-app', operation: 'captureSnapshot', use: captureSnapshotUse })

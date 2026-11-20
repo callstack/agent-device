@@ -23,6 +23,7 @@ import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './cli
 export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
   ReplayRequestFields &
   SnapshotCommandOptionFields & {
+    nativeAudit?: boolean;
     positionals?: string[];
     kind?: string;
     out?: string;

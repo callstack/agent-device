@@ -3,6 +3,17 @@ import type { FlagDefinition } from './flag-types.ts';
 
 export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   {
+    key: 'nativeAudit',
+    names: ['--native'],
+    type: 'boolean',
+    usageLabel: '--native',
+    usageDescription: 'Audit: include native accessibility checks (iOS 17+, XCTest runner)',
+    inputDescription:
+      'Include native accessibility checks alongside heuristic findings. Requires iOS 17+ served by XCTest.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'replayUpdate',
     names: ['--update', '-u'],
     type: 'boolean',

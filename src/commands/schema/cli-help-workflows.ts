@@ -223,7 +223,12 @@ Coverage:
   Visit every tab, pushed screen, sheet, dialog, and empty, error, and loading state.
   Audit covers the visible screen only. On a long list, run agent-device scroll down 0.8, then run audit again.
 
-Checks audit cannot do:
+Native checks on iOS 17+:
+  Run agent-device audit --native --platform ios to include Apple's contrast, Dynamic Type, clipped text, element detection, hit region, description, and trait checks.
+  This requires the XCTest runner. Android, TV, macOS, web, and physical devices without the runner refuse --native.
+  Native findings have source: "native", auditType, description, and rect in snapshot points when Apple supplies an element. A unique frame match includes the snapshot ref, role, and name. Otherwise, match the rect against a fresh snapshot before acting. A finding without a rect names no element: report it without acting on it. Native hitRegion and heuristic small-target findings can overlap; both are retained because Apple applies its own target checks.
+
+Additional manual checks:
   Large text: first run agent-device settings text-size to record the current size. Then run agent-device settings text-size accessibility-extra-extra-extra-large, then agent-device open <app> --relaunch. The app adopts the size only after a relaunch.
     Then run audit and screenshot each key screen. Look for clipped, truncated, or overlapping text.
     At the end, set the recorded size again. For example, if the recorded size was large, run agent-device settings text-size large.

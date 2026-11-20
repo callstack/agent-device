@@ -190,6 +190,7 @@ function summarizeProviderScenarioFlagCoverage(files: readonly string[]) {
     ['snapshotDepth', 'scoped snapshot depth', ['depth']],
     ['snapshotScope', 'scoped snapshot capture', ['scope']],
     ['snapshotRaw', 'raw snapshot node output', ['raw']],
+    ['nativeAudit', 'native accessibility audit issues alongside heuristic findings'],
     ['out', 'artifact output path plumbing'],
     ['overlayRefs', 'screenshot ref overlay annotation'],
     ['screenshotFullscreen', 'screenshot full-screen capture mode'],

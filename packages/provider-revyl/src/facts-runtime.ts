@@ -143,6 +143,7 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
   return Object.freeze({
     device: { ...deviceShape(device), providerMode: 'provider-runtime' },
     operations: {
+      accessibilityAudit: unavailableFact('unsupported-provider-mode'),
       appLogInspect: appLogUnavailable,
       appLogDoctor: appLogUnavailable,
       appLogStart: appLogUnavailable,

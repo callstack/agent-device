@@ -154,3 +154,46 @@ test('prints each guidance entry once after the findings and preserves it in JSO
   expect(output.text!.indexOf('missing-name:')).toBeGreaterThan(output.text!.indexOf('@e2'));
   expect(output.data).toBe(result);
 });
+
+test('prints native descriptions and point geometry alongside unchanged heuristic lines', () => {
+  const result = {
+    findings: [
+      { kind: 'missing-name', severity: 'warning', ref: '@e1', role: 'button' },
+      {
+        source: 'native',
+        kind: 'native',
+        severity: 'warning',
+        platform: 'ios',
+        auditType: 'contrast',
+        description: 'Low contrast',
+        rect: { x: 335.6666666666667, y: 811, width: 17.333333314, height: 22 },
+        ref: '@e2',
+        role: 'button',
+        label: 'Dictate',
+      },
+      {
+        source: 'native',
+        kind: 'native',
+        severity: 'warning',
+        platform: 'ios',
+        auditType: 'dynamicType',
+        description: 'Does not scale',
+      },
+    ],
+    guidance: {},
+    checks: CHECKS,
+    limitations: [],
+    refsGeneration: 2,
+  } satisfies AuditSnapshotCommandResult;
+  expect(auditCliOutput(result).text).toBe(
+    [
+      'agent-device audit',
+      '3 warnings — current screen',
+      '@e1~s2  missing-name  button  No accessible name',
+      'native  contrast  Low contrast  @e2~s2 button "Dictate"  [335.7,811 17.3×22]',
+      'native  dynamicType  Does not scale',
+      '',
+    ].join('\n'),
+  );
+  expect(auditCliOutput(result).data).toEqual(result);
+});

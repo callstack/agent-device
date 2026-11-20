@@ -359,6 +359,7 @@ function webRuntimeFacts(
       screenRecordingStart: webAvailableFact(recordingAvailable, recordingUnavailable),
       screenRecordingReattach: webAvailableFact(recordingAvailable, recordingUnavailable),
       screenRecordingCleanup: webAvailableFact(recordingAvailable, recordingUnavailable),
+      accessibilityAudit: unavailableFact('unsupported-platform-leaf'),
       ...snapshotRuntimeOperationFacts({
         capture: browserDevice,
         customActions: snapshotCustomActionsUnavailable,

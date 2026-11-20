@@ -1,5 +1,8 @@
 import { commandDescriptors, selectSnapshotStepUses } from '../registry.ts';
-import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  auditRuntimePlanUses,
+  snapshotRuntimePlanUses,
+} from '@agent-device/contracts/platform-runtime-operations';
 import { expect, test } from 'vitest';
 
 test('snapshot descriptor declares its complete planned capture uses', () => {
@@ -27,4 +30,15 @@ test('diff descriptor reuses the complete snapshot plan uses', () => {
     uses: snapshotRuntimePlanUses,
     selectUses: selectSnapshotStepUses,
   });
+});
+
+test('audit declares native capture plans beside heuristic-only plans', () => {
+  const audit = commandDescriptors.find(({ name }) => name === 'audit');
+  expect(audit?.platformExecution).toEqual({ kind: 'device-runtime', uses: auditRuntimePlanUses });
+  expect(auditRuntimePlanUses.map(({ required }) => required)).toEqual([
+    ['captureSnapshot'],
+    ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+    ['captureSnapshot', 'accessibilityAudit'],
+    ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'accessibilityAudit'],
+  ]);
 });

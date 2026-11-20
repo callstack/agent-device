@@ -106,3 +106,16 @@ describe('buildRunnerResponseError', () => {
     assert.equal(error.details?.hint, undefined);
   });
 });
+
+test('native audit availability uses the runner code and preserves the typed reason', () => {
+  const message = 'Native accessibility audit requires iOS 17+';
+  const unsupported = buildRunnerResponseError({
+    ok: false,
+    error: { code: 'NATIVE_AUDIT_UNAVAILABLE', message },
+  });
+  assert.equal(unsupported.code, 'UNSUPPORTED_OPERATION');
+  assert.equal(unsupported.details?.reason, 'native_audit_unavailable');
+  const untyped = buildRunnerResponseError({ ok: false, error: { message } });
+  assert.equal(untyped.code, 'COMMAND_FAILED');
+  assert.equal(untyped.details?.reason, undefined);
+});

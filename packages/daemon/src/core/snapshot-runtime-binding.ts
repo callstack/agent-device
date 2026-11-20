@@ -1,3 +1,4 @@
+import type { AccessibilityAuditRuntimeOperations } from '@agent-device/contracts/capture';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from './platform-services.ts';
@@ -70,6 +71,7 @@ type ResolvedSnapshotCaptureRuntime =
       device: SessionState['device'];
       snapshotScope: string | undefined;
       captureSnapshot: () => Promise<SnapshotResult>;
+      accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
@@ -82,6 +84,7 @@ export type AdmittedSnapshotCapture =
   | Readonly<{
       ok: true;
       capture: BoundSnapshotCapture;
+      accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
       /**
        * The owner's live element read, present only when the caller's plan declared it preferred
        * and the admitted owner advertised it. `snapshot`/`diff` plans declare no read, so this is
@@ -143,6 +146,7 @@ export async function admitAndBindSnapshotCapture(
   return Object.freeze({
     ok: true,
     capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
+    ...(bound.accessibilityAudit ? { accessibilityAudit: bound.accessibilityAudit } : {}),
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
     ...(bound.findText ? { findText: bound.findText } : {}),
     ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
@@ -193,6 +197,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     session,
     plan: resolveSnapshotRuntimePlan({
       customActions: req.flags?.snapshotCustomActions === true,
+      nativeAudit: command === 'audit' && req.flags?.nativeAudit === true,
       hasActiveApp: session?.appBundleId !== undefined,
     }),
     inspectFacts: params.inspectFacts,
@@ -215,6 +220,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     session,
     device,
     snapshotScope: resolvedScope.scope,
+    ...(bound.accessibilityAudit ? { accessibilityAudit: bound.accessibilityAudit } : {}),
     captureSnapshot: async () =>
       await bound.capture(
         canUseShortAndroidSnapshotIdleWait(session)
@@ -263,6 +269,7 @@ async function bindSnapshotCaptureRuntime(
 ): Promise<
   Readonly<{
     captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
+    accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
     readTextAtPoint?: BoundElementRead;
     findText?: BoundNativeTextRead;
     focusPoint?: (
@@ -287,6 +294,20 @@ async function bindSnapshotCaptureRuntime(
   // add selector operation projection; the discriminants differ solely so the compiler can narrow
   // `plan.use` per family. No parallel plan-to-operation dispatch is introduced.
   switch (plan.kind) {
+    case 'native-audit-active-app': {
+      const runtime = await bindReady(device, plan.use);
+      return {
+        ...selectActiveAppSnapshot(runtime),
+        accessibilityAudit: runtime.operations.accessibilityAudit,
+      };
+    }
+    case 'native-audit-without-active-app': {
+      const runtime = await bindReady(device, plan.use);
+      return {
+        ...selectSnapshotWithoutActiveApp(runtime),
+        accessibilityAudit: runtime.operations.accessibilityAudit,
+      };
+    }
     case 'active-app': {
       const runtime = await bindReady(device, plan.use);
       return selectActiveAppSnapshot(runtime);
@@ -448,6 +469,7 @@ async function snapshotPlanUnavailableResponse(
   // find's combined plans add the mutating-leg operations: their refusal is the same
   // owner-fact wording every runtime admission produces, not the session hint below.
   if (
+    params.operation === 'accessibilityAudit' ||
     params.operation === 'captureSnapshot' ||
     params.operation === 'focusPoint' ||
     params.operation === 'typeText'

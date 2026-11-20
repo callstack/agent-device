@@ -19,13 +19,12 @@ export async function dispatchSnapshotAuditViaRuntime(
       const result = await agentRuntime.capture.auditSnapshot({
         session: sessionName,
         target: device.target,
+        nativeAudit: params.req.flags?.nativeAudit,
       });
       const session = getSession();
-      if (!session || result.findings.length === 0) return { data: result };
-      markSessionPartialRefsIssued(
-        session,
-        result.findings.map((finding) => finding.ref),
-      );
+      const refs = result.findings.flatMap((finding) => (finding.ref ? [finding.ref] : []));
+      if (!session || refs.length === 0) return { data: result };
+      markSessionPartialRefsIssued(session, refs);
       const refsGeneration = session.snapshotGeneration;
       return { data: refsGeneration === undefined ? result : { ...result, refsGeneration } };
     },

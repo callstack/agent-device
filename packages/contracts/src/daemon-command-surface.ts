@@ -66,7 +66,8 @@ export type DaemonSelectorSnapshotOptions = Readonly<{
 export type DaemonSnapshotOptions = CommandContext & SnapshotCommandOptionFields;
 
 /** The options of the daemon's `audit` call: one full-screen capture, no snapshot scoping. */
-export type DaemonAuditOptions = CommandContext & Readonly<{ target?: DeviceTarget }>;
+export type DaemonAuditOptions = CommandContext &
+  Readonly<{ target?: DeviceTarget; nativeAudit?: boolean }>;
 
 /** What the daemon's `screenshot` route and its two observation paths receive. */
 export type DaemonScreenshotResult = Readonly<{

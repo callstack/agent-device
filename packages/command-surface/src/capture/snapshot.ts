@@ -4,7 +4,7 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
-import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
+import { AUDIT_FLAGS, SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import {
   booleanField,
@@ -24,7 +24,7 @@ import {
   observationRecordInputFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import { defineCommandFacet, defineParameterlessCommandFacet } from '../family/types.ts';
+import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const SNAPSHOT_COMMAND_NAME = 'snapshot';
@@ -111,42 +111,77 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
     {
       findings: {
         type: 'array',
-        items: objectSchema(
-          {
-            kind: enumSchema(['small-target', 'missing-name', 'ambiguous-name', 'covered-control']),
-            severity: enumSchema(['warning', 'observation']),
-            ref: stringSchema('Plain ref, usable in the frame this audit published.'),
-            rect: objectSchema(
+        items: {
+          oneOf: [
+            objectSchema(
               {
-                x: numberSchema(),
-                y: numberSchema(),
-                width: numberSchema(),
-                height: numberSchema(),
-              },
-              ['x', 'y', 'width', 'height'],
-            ),
-            role: stringSchema(),
-            label: stringSchema(),
-            identifier: stringSchema(),
-            detail: {
-              oneOf: [
-                // A `small-target` detail.
-                objectSchema(
+                kind: enumSchema([
+                  'small-target',
+                  'missing-name',
+                  'ambiguous-name',
+                  'covered-control',
+                ]),
+                severity: enumSchema(['warning', 'observation']),
+                ref: stringSchema('Plain ref, usable in the frame this audit published.'),
+                rect: objectSchema(
                   {
-                    unit: enumSchema(['pt', 'dp']),
+                    x: numberSchema(),
+                    y: numberSchema(),
                     width: numberSchema(),
                     height: numberSchema(),
-                    recommendedSize: numberSchema(),
                   },
-                  ['unit', 'width', 'height', 'recommendedSize'],
+                  ['x', 'y', 'width', 'height'],
                 ),
-                // An `ambiguous-name` detail.
-                objectSchema({ name: stringSchema(), count: numberSchema() }, ['name', 'count']),
-              ],
-            },
-          },
-          ['kind', 'severity', 'ref', 'role'],
-        ),
+                role: stringSchema(),
+                label: stringSchema(),
+                identifier: stringSchema(),
+                detail: {
+                  oneOf: [
+                    // A `small-target` detail.
+                    objectSchema(
+                      {
+                        unit: enumSchema(['pt', 'dp']),
+                        width: numberSchema(),
+                        height: numberSchema(),
+                        recommendedSize: numberSchema(),
+                      },
+                      ['unit', 'width', 'height', 'recommendedSize'],
+                    ),
+                    // An `ambiguous-name` detail.
+                    objectSchema({ name: stringSchema(), count: numberSchema() }, [
+                      'name',
+                      'count',
+                    ]),
+                  ],
+                },
+              },
+              ['kind', 'severity', 'ref', 'role'],
+            ),
+            objectSchema(
+              {
+                ref: stringSchema(),
+                role: stringSchema(),
+                label: stringSchema(),
+                source: enumSchema(['native']),
+                kind: enumSchema(['native']),
+                severity: enumSchema(['warning']),
+                platform: enumSchema(['ios', 'android']),
+                auditType: stringSchema(),
+                description: stringSchema(),
+                rect: objectSchema(
+                  {
+                    x: numberSchema(),
+                    y: numberSchema(),
+                    width: numberSchema(),
+                    height: numberSchema(),
+                  },
+                  ['x', 'y', 'width', 'height'],
+                ),
+              },
+              ['source', 'kind', 'severity', 'platform', 'auditType', 'description'],
+            ),
+          ],
+        },
       },
       guidance: objectSchema(
         {
@@ -179,15 +214,23 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
 const auditCommandDescription =
   'Report advisory accessibility findings from one fresh capture of the current screen: touch targets below the platform recommendation, controls without an accessible name, controls of one role that share one accessible name, and covered controls. Each finding shows its role. On Android, a node the capture reports as clickable or long-clickable with no control role is evaluated as a control too. Missing-name findings omit rejected labels and can show the captured identifier. Other findings include the captured label when available. Guidance follows once per finding kind. Covered controls remain findings inside scroll containers, except a control or row a persistent bar covers when scrolling can reveal it. UIKit sheet grabbers are exempt from size and name checks. Direct items of recognized native iOS bars skip size checks and keep name checks. Custom bar children and nested app content remain subject to size checks. Findings are review prompts, not failures, and the audit changes nothing on the device.';
 
-export const auditCommandFacet = defineParameterlessCommandFacet({
+export const auditCommandFacet = defineCommandFacet({
   name: AUDIT_COMMAND_NAME,
   effect: 'write',
-  description: auditCommandDescription,
+  metadata: defineFieldCommandMetadata(AUDIT_COMMAND_NAME, auditCommandDescription, {
+    nativeAudit: optionField('nativeAudit'),
+  }),
+  cliSchema: { allowedFlags: AUDIT_FLAGS },
+  cliReader: (_positionals, flags) => ({
+    ...commonInputFromFlags(flags),
+    nativeAudit: flags.nativeAudit,
+  }),
+  daemonWriter: direct(AUDIT_COMMAND_NAME),
   text: {
     summary: 'Report advisory accessibility findings',
     searchHint: 'a11y lint voiceover talkback',
     cliDetail:
-      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role; a clickable Android container whose only actionable descendant is already a control reports that control once, for each finding kind the container reports itself. An Android role-less touchable reports under role `clickable`, a role the snapshot itself never shows, and joins the shared-name check only with a name of its own: one named only by its descendants is excluded, because TalkBack announces it by joining their text. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name.',
+      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role; a clickable Android container whose only actionable descendant is already a control reports that control once, for each finding kind the container reports itself. An Android role-less touchable reports under role `clickable`, a role the snapshot itself never shows, and joins the shared-name check only with a name of its own: one named only by its descendants is excluded, because TalkBack announces it by joining their text. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name. --native includes Apple contrast, Dynamic Type, clipped text, and other native checks on iOS 17+ targets served by XCTest. A unique frame match includes a ref, role, and name. Report findings without a rect without acting on an element.',
   },
   run: (client, input) => client.capture.audit(input),
 });

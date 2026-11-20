@@ -30,3 +30,15 @@ test('projection rejects an invalid shared client option', async () => {
 test('every structured batch command has a daemon writer', () => {
   expectTypeOf<BatchCommandName>().toExtend<DaemonCommandName>();
 });
+
+test('audit projects the native opt-in independently from the global platform selector', async () => {
+  expect(
+    await prepareDaemonCommandRequest('audit', { nativeAudit: true, platform: 'ios' }, host),
+  ).toMatchObject({
+    command: 'audit',
+    options: { nativeAudit: true, platform: 'ios' },
+  });
+  expect(
+    (await prepareDaemonCommandRequest('audit', { platform: 'ios' }, host)).options?.nativeAudit,
+  ).toBeUndefined();
+});

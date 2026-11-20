@@ -5,6 +5,8 @@ function flagKeys<const TKeys extends readonly FlagKey[]>(...keys: TKeys): TKeys
   return keys;
 }
 
+export const AUDIT_FLAGS = flagKeys('nativeAudit');
+
 export const FOLD_FLAGS = flagKeys('keyframes');
 
 export const SNAPSHOT_FLAGS = flagKeys(

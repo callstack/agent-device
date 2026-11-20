@@ -203,3 +203,46 @@ test('snapshot and diff shorten idle only when every observation guard still hol
     clock.mockRestore();
   }
 });
+
+test.each([
+  { ...IOS_SIMULATOR, platform: 'android', appleOs: undefined, kind: 'emulator' },
+  { ...IOS_SIMULATOR, appleOs: 'tvos', target: 'tv' },
+  { ...IOS_SIMULATOR, appleOs: 'macos', kind: 'device', target: 'desktop' },
+  { ...IOS_SIMULATOR, platform: 'web', appleOs: undefined },
+  { ...IOS_SIMULATOR, kind: 'device', iosPhysicalDeviceBackend: 'coredevice' },
+] as DeviceInfo[])(
+  'native audit refuses unsupported targets before binding: $platform/$appleOs/$kind',
+  async (device) => {
+    const sessionStore = makeSessionStore();
+    sessionStore.publish(
+      'native-audit',
+      makeIosSession('native-audit', { device, appBundleId: 'com.example.app' }),
+    );
+    const bindDevice = vi.fn();
+    const { inspectFacts } = snapshotRuntimeFixture();
+    const resolved = await resolveBoundSnapshotCaptureRuntime(
+      {
+        createCommandSurface: fakeCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: {
+          command: 'audit',
+          session: 'native-audit',
+          positionals: [],
+          token: 'test-token',
+          flags: { nativeAudit: true },
+        },
+        sessionName: 'native-audit',
+        logPath: '/tmp/native-audit.log',
+        inspectFacts,
+        sessionStore,
+        bindDevice,
+      },
+      'audit',
+    );
+    expect(resolved).toMatchObject({
+      ok: false,
+      response: { error: { code: 'UNSUPPORTED_OPERATION' } },
+    });
+    expect(bindDevice).not.toHaveBeenCalled();
+  },
+);

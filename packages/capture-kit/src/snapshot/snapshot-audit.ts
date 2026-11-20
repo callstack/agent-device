@@ -1,4 +1,5 @@
 import type {
+  NativeAuditFinding,
   AuditChecks,
   AuditContext,
   AuditFinding,
@@ -528,4 +529,35 @@ function auditGuidance(
       'Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.',
   };
   return Object.fromEntries(findings.map(({ kind }) => [kind, sentences[kind]]));
+}
+
+/** Attach a ref only when the frame identifies exactly one captured element. */
+export function matchNativeAuditFindings(
+  findings: readonly NativeAuditFinding[],
+  nodes: readonly SnapshotNode[],
+): NativeAuditFinding[] {
+  const facts: AuditFacts = {
+    platform: 'ios',
+    producer: undefined,
+    byIndex: new Map(nodes.map((node) => [node.index, node])),
+    children: buildChildrenByParent(nodes),
+  };
+  return findings.map((finding) => {
+    const rect = finding.rect;
+    if (!rect) return finding;
+    const matches = nodes.filter(
+      (node) =>
+        node.ref !== undefined &&
+        node.rect &&
+        Math.abs(node.rect.x - rect.x) <= SIZE_TOLERANCE &&
+        Math.abs(node.rect.y - rect.y) <= SIZE_TOLERANCE &&
+        Math.abs(node.rect.width - rect.width) <= SIZE_TOLERANCE &&
+        Math.abs(node.rect.height - rect.height) <= SIZE_TOLERANCE,
+    );
+    const node = matches.length === 1 ? matches[0] : undefined;
+    if (!node) return finding;
+    const role = formatRole(node.type ?? 'Element');
+    const label = accessibleName(node, role, facts);
+    return { ...finding, ref: `@${node.ref}`, role, ...(label ? { label } : {}) };
+  });
 }

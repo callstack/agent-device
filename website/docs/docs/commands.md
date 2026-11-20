@@ -466,6 +466,11 @@ agent-device audit
 
 `audit` captures the current screen once and reports advisory accessibility findings. Findings are review prompts, not failures, and `audit` changes nothing on the device.
 
+On iOS 17+, use `agent-device audit --native --platform ios` to include Apple's native checks for contrast, Dynamic Type, element detection, hit regions, sufficient element descriptions, clipped text, and traits. This requires the XCTest runner: iOS simulators and physical devices configured with that runner are supported. Android, TV, macOS, web, and physical devices without the runner refuse `--native` with `UNSUPPORTED_OPERATION`. A runner on an unsupported OS returns `native_audit_unavailable`.
+
+Native findings have `source: "native"`, `kind: "native"`, `platform`, `auditType`, Apple's `description`, and `rect` in snapshot points when Apple supplies an element. When a frame uniquely matches a captured element, the finding includes its snapshot ref, role, and accessible name. Otherwise, match its geometry against a fresh snapshot before acting. A finding without a rect names no element: report it without acting on it. Native `hitRegion` and heuristic `small-target` findings can describe the same element; both are retained because Apple applies its own target checks. All native issues are collected without failing the runner test. Heuristic findings keep their existing fields. Omit `--native` to run only the heuristics.
+
+
 - `small-target`: an enabled, visible control below 44pt on iOS or 48dp on Android, with a 0.5-unit tolerance for layout rounding. Android pixels convert to dp with the captured display density; without it the check reports a limitation instead. TV and desktop targets skip the check. A link inside a text container is exempt.
 - `missing-name`: a control with no accessible name. An identifier, a resource id, or a field value is not a name; a label, an Android content description, a placeholder, or a named child is.
 - `ambiguous-name`: two or more evaluated controls of one role share one accessible name on the captured screen, for example three buttons named "Save". Names that differ only by case or surrounding whitespace count as one name. Each affected control gets its own finding, and the detail gives the shared label and the count. Controls of different roles may share a name.

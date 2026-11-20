@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "data": {
+    "findings": [
+      {
+        "ref": "@e48",
+        "rect": {
+          "x": 16,
+          "y": 831.3333333333334,
+          "width": 370,
+          "height": 42.66666666666663
+        },
+        "role": "cell",
+        "kind": "covered-control",
+        "severity": "observation"
+      },
+      {
+        "ref": "@e56",
+        "rect": {
+          "x": 335.6666666666667,
+          "y": 811,
+          "width": 17.333333333333314,
+          "height": 22
+        },
+        "role": "button",
+        "label": "Dictate",
+        "identifier": "Dictate",
+        "kind": "small-target",
+        "severity": "warning",
+        "detail": {
+          "unit": "pt",
+          "width": 17.3,
+          "height": 22,
+          "recommendedSize": 44
+        }
+      },
+      {
+        "ref": "@e58",
+        "rect": {
+          "x": 335.6666666666667,
+          "y": 811,
+          "width": 17.333333333333314,
+          "height": 22
+        },
+        "role": "button",
+        "label": "Dictate",
+        "identifier": "Dictate",
+        "kind": "small-target",
+        "severity": "warning",
+        "detail": {
+          "unit": "pt",
+          "width": 17.3,
+          "height": 22,
+          "recommendedSize": 44
+        }
+      }
+    ],
+    "guidance": {
+      "covered-control": "Move the control out from under the cover. If the cover can be dismissed, such as a sheet or dialog, dismiss it before you use the control.",
+      "small-target": "Apple HIG recommends 44×44pt. Enlarge the touch area with padding, a minimum size, or hitSlop."
+    },
+    "checks": {
+      "snapshot": "complete"
+    },
+    "limitations": [],
+    "refsGeneration": 146709
+  }
+}

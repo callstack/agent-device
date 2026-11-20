@@ -40,6 +40,7 @@ const unavailableShutdownOperationFacts = Object.freeze({
 });
 
 export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.freeze({
+  accessibilityAudit: unavailable,
   ...unavailableDeploymentOperationFacts,
   ...snapshotRuntimeOperationFacts({
     capture: unavailable,

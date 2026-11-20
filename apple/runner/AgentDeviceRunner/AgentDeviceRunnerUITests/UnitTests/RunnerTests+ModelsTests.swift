@@ -250,7 +250,7 @@ extension RunnerTests {
   /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge, `keyboardStatus` with
   /// the return key in `keyboard status`.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
-    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge, .keyboardStatus,
+    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge, .keyboardStatus, .accessibilityAudit,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
@@ -266,11 +266,11 @@ extension RunnerTests {
 
   /// The commands the witness column below cannot evaluate against the merge-base rule: they did not
   /// exist there, and that rule's `!isReadOnly` term needs the merge-base's own read-only answer for
-  /// them. `keyboardStatus` is the only one: it is a read that reaches the prepared path, so the
-  /// formula would clear a remembered tap the derived trait keeps. The table below pins its
+  /// them. These reads reach the prepared path, so the formula would clear a remembered tap the
+  /// derived trait keeps. The table below pins its
   /// `converts: false`, which is what `invalidatesRememberedTextEntryTap` reads, so the answer is
   /// still asserted — against its own row rather than against a classification the merge-base lacks.
-  private static let commandsWithoutMergeBaseWitness: Set<CommandType> = [.keyboardStatus]
+  private static let commandsWithoutMergeBaseWitness: Set<CommandType> = [.keyboardStatus, .accessibilityAudit]
 
   private func assertRememberedTextEntryWitnessInvalidation(
     _ command: Command,
@@ -320,6 +320,7 @@ extension RunnerTests {
         expectation(interaction: false, retry: false, launch: .existingApp, converts: true, retains: true, isReadOnly: true)
       ),
       (.readText, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true, isReadOnly: true)),
+      (.accessibilityAudit, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true, isReadOnly: true)),
       (.snapshot, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: false, isReadOnly: true)),
       (.screenshot, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: false, isReadOnly: true)),
       (.backInApp, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),

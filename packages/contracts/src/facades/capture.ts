@@ -1,7 +1,11 @@
 export type {
+  AccessibilityAuditInput,
+  AccessibilityAuditRuntimeOperations,
   AuditChecks,
   AuditContext,
   AuditFinding,
+  NativeAuditFinding,
+  IosNativeAuditType,
   AuditFindingKind,
   AuditNameDetail,
   AuditResult,

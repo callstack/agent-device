@@ -58,6 +58,7 @@ export type RunnerCommand = {
     | 'querySelector'
     | 'readText'
     | 'snapshot'
+    | 'accessibilityAudit'
     | 'screenshot'
     | 'backInApp'
     | 'home'
@@ -418,6 +419,13 @@ export const RUNNER_ERROR_CODES = {
     dispatched: 'no',
     reason: 'in_app_back_control_unavailable',
     diagnosticOnly: {},
+  },
+  // `audit --native` on a target whose runner cannot run Apple's audit: an OS older than iOS 17, or a
+  // platform other than iOS. The row keeps `unknown`, the disclosure this refusal had before the table.
+  NATIVE_AUDIT_UNAVAILABLE: {
+    dispatched: 'unknown',
+    reason: 'native_audit_unavailable',
+    diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
   },
   // The four runner codes meaning "this capture did not happen" (#2728), covering the display, the
   // image, and the panel. The runner emits them from every consumer of its one screen-capture helper —

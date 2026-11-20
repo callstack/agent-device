@@ -478,6 +478,7 @@ function sourceRuntimeFacts(
     },
     operations: {
       ...unavailableApplicationLifecycleOperationFacts,
+      accessibilityAudit: unavailable,
       appLogInspect: unavailable,
       appLogDoctor: unavailable,
       appLogStart: unavailable,

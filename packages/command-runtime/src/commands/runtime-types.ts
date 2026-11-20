@@ -65,6 +65,7 @@ export type DiffSnapshotCommandOptions = SnapshotCommandOptions;
 
 /** `audit` always reads the whole screen, so it takes no snapshot scoping fields. */
 export type AuditSnapshotCommandOptions = CommandContext & {
+  nativeAudit?: boolean;
   /** Target the capture came from; absent means mobile. */
   target?: DeviceTarget;
 };

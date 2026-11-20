@@ -24,6 +24,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   closeApplication: 'simulator',
   finalizeApplicationClose: 'simulator',
   prepareAppleRunner: 'runner',
+  accessibilityAudit: 'runner',
   configureProviderPortReverse: 'simulator',
   ensureReady: 'simulator',
   bootTarget: 'simulator',
