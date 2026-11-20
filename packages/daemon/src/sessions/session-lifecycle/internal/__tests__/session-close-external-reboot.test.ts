@@ -1,9 +1,10 @@
 // #4585: plain `close` owes a stop to the PROCESS its own `open` launched, not to whichever process
-// answers the serial now. Routed through the session command handler, so claim acquisition, renewal,
-// launch-identity recording and close teardown all run against real claim files. What the host says
-// about the launched process is answered by the launched-process owner fixture, exactly as the
-// composed owner answers it — the process reads themselves are pinned in the Android and
-// composition lanes.
+// answers the serial now. #4807: `close --shutdown` commands that stop and never asks the ownership
+// question, but it confirms the recorded process left like plain close does. Routed through the
+// session command handler, so claim acquisition, renewal, launch-identity recording and close
+// teardown all run against real claim files. What the host says about the launched process is
+// answered by the launched-process owner fixture, exactly as the composed owner answers it — the
+// process reads themselves are pinned in the Android and composition lanes.
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import * as hostProcess from '@agent-device/host-kit/process';
@@ -93,6 +94,8 @@ function createRoutedSession() {
     flags?: Record<string, unknown>;
     /** Only a cold open selects a device, and that selection is what boots the stopped AVD. */
     selectsDevice?: boolean;
+    /** Selects an emulator that is already running, so this open launches no process. */
+    selectsBootedDevice?: boolean;
     deviceShutdownDenied?: boolean;
     /** A cold open whose readiness never reported the process it launched. */
     omitLaunchIdentity?: boolean;
@@ -105,6 +108,10 @@ function createRoutedSession() {
         if (!command.omitLaunchIdentity) input.onAndroidEmulatorLaunchIdentity?.(LAUNCH_IDENTITY);
         return BOOTED_EMULATOR;
       });
+    }
+    if (command.selectsBootedDevice) {
+      // Selection finds a running emulator, so the open launches no process and records no identity.
+      vi.mocked(resolveTargetDevice).mockResolvedValue(BOOTED_EMULATOR);
     }
     // Record the close finalization the daemon asks for, while keeping the fixture's own leaf
     // shutdown, so `mockShutdownTargetRuntime` still counts the stop the platform was asked to do.
@@ -197,6 +204,8 @@ const PROCESS_UNVERIFIED_WARNING =
   "This session's open booted this device, but close could not verify its emulator process identity, so it did not request a stop and left the device as it found it.";
 const NO_LAUNCH_IDENTITY_WARNING =
   "This session's open booted this device, but open recorded no emulator process identity, so close did not request a stop and left the device as it found it.";
+const STOP_UNCONFIRMED_WARNING =
+  'Close asked this device to stop, but could not confirm that its emulator process exited. The device may still be running.';
 
 beforeEach(() => {
   mockEnsureReadyRuntime.mockReset();
@@ -269,9 +278,7 @@ test('plain close warns when the stop could not be confirmed', async () => {
   expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
   // The stop was asked of the device and the owner escalated to the launched process; the caller
   // is told that the exit was not confirmed.
-  expect(closeWarningMessages(closed.response!)).toEqual([
-    'Close asked this device to stop, but could not confirm that its emulator process exited. The device may still be running.',
-  ]);
+  expect(closeWarningMessages(closed.response!)).toEqual([STOP_UNCONFIRMED_WARNING]);
   expect(owner.confirmations).toEqual([LAUNCH_IDENTITY]);
 });
 
@@ -352,11 +359,11 @@ test('missing launch identity does not acquire ownership from a later process re
   expect(closeWarningMessages(closed.response!)).toEqual([NO_LAUNCH_IDENTITY_WARNING]);
 });
 
-test('close --shutdown stops the device and never asks about the launched process', async () => {
+test('close --shutdown stops the device without asking whether it still owns the launched process', async () => {
   const runs = createRoutedSession();
   await openBootedByThisSession(runs);
   owner.check = 'changed';
-  owner.confirmation = 'unconfirmed';
+  owner.confirmation = 'stopped';
 
   const closed = await runs.run({ name: 'close', flags: { shutdown: true } });
 
@@ -366,10 +373,52 @@ test('close --shutdown stops the device and never asks about the launched proces
   ]);
   expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
   expect(closeWarningMessages(closed.response!)).toBeUndefined();
-  // An explicit --shutdown is the user's own command for the device; the launched process neither
-  // gates it nor gets confirmed afterwards.
+  // #4807: an explicit --shutdown is the user's own command for the device, so the ownership CHECK
+  // cannot gate it — the answer above says the recorded process is gone and the stop goes ahead
+  // anyway. The recorded process is still confirmed once the stop was asked for.
+  expect(owner.checks).toEqual([]);
+  expect(owner.confirmations).toEqual([LAUNCH_IDENTITY]);
+}, 30_000);
+
+test('close --shutdown warns when the stop could not be confirmed', async () => {
+  const runs = createRoutedSession();
+  await openBootedByThisSession(runs);
+  owner.confirmation = 'unconfirmed';
+
+  const closed = await runs.run({ name: 'close', flags: { shutdown: true } });
+
+  expect(closed.response?.ok).toBe(true);
+  expect(closed.finalizeAsks).toEqual([
+    expect.objectContaining({ shutdownTarget: true, retainRunner: false }),
+  ]);
+  expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
+  expect(owner.confirmations).toEqual([LAUNCH_IDENTITY]);
+  expect(closeWarningMessages(closed.response!)).toEqual([STOP_UNCONFIRMED_WARNING]);
+}, 30_000);
+
+test('close --shutdown on a prebooted emulator asks for no process confirmation', async () => {
+  const runs = createRoutedSession();
+  // A prebooted device: `open` selected a running emulator, so nothing was launched and no process
+  // identity was recorded. There is no process this session can confirm, and close does not go looking
+  // for one by serial.
+  const opened = await runs.run({
+    name: 'open',
+    flags: { platform: 'android' },
+    selectsBootedDevice: true,
+  });
+  expect(opened.response?.ok).toBe(true);
+  expect(runs.sessionStore.get(SESSION)?.androidLaunchIdentity).toBeUndefined();
+
+  const closed = await runs.run({ name: 'close', flags: { shutdown: true } });
+
+  expect(closed.response?.ok).toBe(true);
+  expect(closed.finalizeAsks).toEqual([
+    expect.objectContaining({ shutdownTarget: true, retainRunner: false }),
+  ]);
+  expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
   expect(owner.checks).toEqual([]);
   expect(owner.confirmations).toEqual([]);
+  expect(closeWarningMessages(closed.response!)).toBeUndefined();
 }, 30_000);
 
 test('a policy refusal stays the reported reason and asks nothing of the process owner', async () => {
