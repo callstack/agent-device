@@ -7,7 +7,7 @@ import {
   readStringProperty,
   type JsonObject,
 } from './json-utils.ts';
-import type { WebSnapshotResult } from './provider.ts';
+import type { WebSnapshotResult } from '@agent-device/contracts/web-provider';
 
 type SnapshotRefRecord = {
   ref: string;

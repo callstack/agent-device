@@ -4,6 +4,7 @@ import type {
   ProviderConnectionVerification,
   RemoteConfigProfile,
 } from '@agent-device/contracts/remote';
+import type { PlatformContribution } from './platform.ts';
 import type { ProviderPluginHost } from './host.ts';
 import type { ReplayBackendContribution, ReplayExecutionContribution } from './replay-backend.ts';
 
@@ -104,9 +105,12 @@ export type ProviderContribution<WebDriver extends WebDriverDescriptor = WebDriv
     ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
   }>;
 
+export type { PlatformContribution, PlatformHost, PlatformSetup } from './platform.ts';
+
 /** One independently activated claim a plugin declares. New kinds need an explicit decision. */
 export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
   | ProviderContribution<WebDriver>
+  | PlatformContribution
   | ReplayBackendContribution
   | ReplayExecutionContribution;
 

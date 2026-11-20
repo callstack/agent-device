@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { likelyPlayableWebmContainer } from '@agent-device/test-kit';
-import type { WebProvider } from '@agent-device/platform-web';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_WEB } from './fixtures.ts';

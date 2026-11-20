@@ -100,9 +100,10 @@ function createLocalDeviceInventoryGateway(
   };
   const sourceLoads = new Map<Platform, Promise<DeviceInventorySource>>();
   const loadSource = async (family: Platform): Promise<DeviceInventorySource> => {
+    const module = registry.get(family);
     const existing = sourceLoads.get(family);
     if (existing) return await existing;
-    const pending = loadFamilyInventory(registry.get(family), requiredHost);
+    const pending = loadFamilyInventory(module, requiredHost);
     sourceLoads.set(family, pending);
     try {
       return await pending;

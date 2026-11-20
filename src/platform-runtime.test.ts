@@ -31,7 +31,7 @@ vi.mock('./platform-runtime-host.ts', () => {
   };
 });
 
-import { readVersion } from '@agent-device/host-kit/version';
+import { webPlatformCompositionFixture } from './platform-runtime-web-provider.fixtures.ts';
 import {
   createPlatformDeviceInventoryGateways,
   createPlatformModuleRegistryForHost,
@@ -39,7 +39,10 @@ import {
 
 bindTestCommandHost();
 
-const platformModuleRegistry = createPlatformModuleRegistryForHost({}, readVersion());
+const platformModuleRegistry = createPlatformModuleRegistryForHost(
+  {},
+  webPlatformCompositionFixture(),
+);
 
 describe('platform module metadata composition', () => {
   test('registers each canonical family exactly once in canonical order', () => {
@@ -69,7 +72,6 @@ describe('platform module metadata composition', () => {
     } as const;
     const providerGateways = await createPlatformDeviceInventoryGateways(
       createLiveTestHostEnvironment(),
-      readVersion(),
       {
         discover: async () => ({
           kind: 'inventory',
@@ -93,7 +95,8 @@ describe('platform module metadata composition', () => {
 
     const localGateways = await createPlatformDeviceInventoryGateways(
       createLiveTestHostEnvironment(),
-      readVersion(),
+      undefined,
+      webPlatformCompositionFixture(),
     );
     expect(await localGateways.localOnly.discover({ platform: 'web' }, scope)).toHaveLength(1);
     expect(hostAdapter.evaluations).toBe(0);

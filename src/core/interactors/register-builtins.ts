@@ -1,10 +1,6 @@
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import type { RequiredPlatform } from '@agent-device/contracts/platform-module';
-import {
-  registerPlatformPluginSet,
-  type PlatformPluginAbsence,
-} from '../platform-plugin-registry.ts';
 import { applePlugin } from '@agent-device/platform-apple';
 import { vegaPlugin } from '@agent-device/platform-vega';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -42,18 +38,6 @@ const linuxPlugin = {
   },
 } as const satisfies PlatformPlugin;
 
-const webPlugin = {
-  id: 'web',
-  platforms: ['web'],
-  // Declares the platform-gated request provider resolver the web family owns (the web
-  // provider, formerly gated by `device.platform === 'web'`).
-  providers: { platformGatedResolvers: ['webProvider'] },
-  createInteractor: async (_device, _runner, host) => {
-    const { createWebInteractor } = await import('@agent-device/platform-web/interactor');
-    return await createWebInteractor(host);
-  },
-} as const satisfies PlatformPlugin;
-
 /**
  * The builtin plugins, in `PLATFORMS` order so `registeredPlatforms()` derives
  * the canonical tuple's order (asserted by the parity test).
@@ -64,7 +48,6 @@ export const BUILTIN_PLATFORM_PLUGINS = [
   harmonyosPlugin,
   vegaPlugin,
   linuxPlugin,
-  webPlugin,
 ] as const satisfies readonly PlatformPlugin[];
 
 // The leaf platforms covered by at least one builtin plugin, recovered from the
@@ -83,19 +66,3 @@ type AssertTrue<T extends true> = T;
 export type BuiltinPluginsCoverRequiredPlatforms = AssertTrue<
   [RequiredPlatform] extends [CoveredPlatform] ? true : false
 >;
-
-let registered = false;
-
-/**
- * Composes every builtin plugin into the shared registry exactly once (idempotent), and gives the
- * registry the builtin set's absence reporter as one input. Called at the top of `core/interactors.ts`
- * so the registry is populated before any `getPlugin` lookup; safe to call again from tests.
- * `reportAbsent` is how the registry reports a family the builtin set does not own, so the caller
- * decides which core's plugin release an installation hint names (ADR 0034). It belongs to the set —
- * not to a plugin — so no plugin can swap this process's absence policy.
- */
-export function registerBuiltinPlatformPlugins(reportAbsent: PlatformPluginAbsence): void {
-  if (registered) return;
-  registerPlatformPluginSet(BUILTIN_PLATFORM_PLUGINS, reportAbsent);
-  registered = true;
-}

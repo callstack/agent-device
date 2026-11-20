@@ -1,9 +1,9 @@
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { isIosFamily, webBackendKeyOf } from '@agent-device/kernel/device';
 import type { PlatformResourceCleanup } from '@agent-device/daemon';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /** Focused durable-resource cleanup composed above daemon policy and concrete platforms. */
@@ -27,50 +27,9 @@ export async function restoreLegacyXctestDeviceSetRedirectRuntime(
   await restoreLegacyXctestDeviceSetRedirect(onDiagnostic);
 }
 
-export async function cleanupManagedWebRuntimeOrphans(
-  params: {
-    stateDir: string;
-    openWebSessionNames: readonly string[];
-    ownedProcessRecords?: OwnedProcessRecordStore;
-  },
-  host: HostEnvironment,
-): Promise<void> {
-  const { getManagedAgentBrowserStatus } = await import('@agent-device/platform-web');
-  const status = await getManagedAgentBrowserStatus({ stateDir: params.stateDir, host });
-  if (!status.installed) return;
-  const { cleanupManagedAgentBrowserOrphans } = await import('@agent-device/platform-web');
-  await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
-    env: host.env,
-    openWebSessionNames: params.openWebSessionNames,
-    ...(params.ownedProcessRecords === undefined
-      ? {}
-      : { ownedProcessRecords: params.ownedProcessRecords }),
-  });
-}
-
-async function closeManagedWebRuntimeSession(
-  params: {
-    backendKey: string;
-    stateDir: string;
-    openWebSessionNames: () => readonly string[];
-    ownedProcessRecords?: OwnedProcessRecordStore;
-  },
-  host: HostEnvironment,
-): Promise<void> {
-  const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
-  const provider = await createAgentBrowserWebProvider({
-    host,
-    session: params.backendKey,
-    stateDir: params.stateDir,
-    openWebSessionNames: params.openWebSessionNames,
-    ownedProcessRecords: params.ownedProcessRecords,
-  });
-  await provider.close();
-}
-
 export function createPlatformResourceCleanup(
   host: HostEnvironment,
-  ownedProcessRecords?: OwnedProcessRecordStore,
+  web?: WebPlatformSelection,
 ): PlatformResourceCleanup {
   return Object.freeze({
     async stopSnapshotHelper(device) {
@@ -81,15 +40,8 @@ export function createPlatformResourceCleanup(
       if (params.device.platform !== 'web') return;
       const backendKey = webBackendKeyOf(params.device.id);
       if (backendKey === undefined) return;
-      await closeManagedWebRuntimeSession(
-        {
-          backendKey,
-          stateDir: params.stateDir,
-          openWebSessionNames: params.openSessionNames,
-          ownedProcessRecords,
-        },
-        host,
-      );
+      const provider = await web?.active?.operations.createProvider(backendKey);
+      await provider?.close();
     },
     async cleanupSessionlessExecutionHost(device) {
       if (!isIosFamily(device)) return;

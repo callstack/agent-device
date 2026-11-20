@@ -1,8 +1,9 @@
+import type { PlatformHost, RegisteredPlatformSetup } from './platform.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
-import type {
-  ReplayExecution,
-  ReplayExecutionResolver,
+import {
+  NATIVE_REPLAY_BACKEND,
+  type ReplayExecution,
+  type ReplayExecutionResolver,
 } from '@agent-device/contracts/replay-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import type {
@@ -15,7 +16,6 @@ import { isRecord } from '@agent-device/kernel/record';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import type {
-  AgentDevicePlugin,
   Contribution,
   PluginConnection,
   PluginSetupResult,
@@ -36,7 +36,6 @@ import { describePluginFailure } from './inventory.ts';
 import {
   assertProviderRuntime,
   claimKeyOf,
-  claimOfContribution,
   duplicateClaimError,
   identityOfClaim,
   invalidPlugin,
@@ -88,7 +87,8 @@ export function claimProviderIds(providers: readonly string[]): PluginCandidate[
  * plugin's `{ webDriver }` descriptor becomes a runtime.
  */
 export type PluginRegistryPolicy = Readonly<{
-  assertReplaySelectionCurrent?(packageName: string): void;
+  platformHost?: PlatformHost;
+  assertSelectionCurrent?(packageName: string): void;
   adaptWebDriver(
     descriptor: WebDriverDescriptor,
     context: Readonly<{ clientVersion: string }>,
@@ -107,51 +107,27 @@ export type ProviderRegistration = Readonly<{
 /** Every id held in one claim space. */
 type ClaimedClaims = Map<ClaimKind, Set<string>>;
 
-/**
- * One contribution expanded into its own claim: its own record, setup outcome and cleanup entry. A
- * claim reserved before the load settles carries no contribution until the factory answers it.
- */
 type Claim = PluggedClaim & {
   slot: Slot;
-  contribution?: Contribution;
-  failure?: unknown;
+  contribution: Contribution;
+  failure?: AppError;
   registration?: ProviderRegistration;
+  platformSetup?: RegisteredPlatformSetup;
   replaySetup?: ReplayBackendSetup | ReplayExecutionSetup;
   replayLoading?: Promise<ReplayBackend>;
   executionLoading?: Promise<ReplayExecution>;
-  replayFailure?: unknown;
+  replayFailure?: AppError;
 };
 
-/** A candidate, its load outcome, and the claims it holds. */
+type FailedClaim = PluggedClaim & { slot: Slot; failure: AppError };
+type ClaimEntry = Claim | FailedClaim;
+
+/** A candidate's finalized claims, after its reservations and load have settled. */
 type Slot = {
   candidate: PluginCandidate;
-  plugin?: AgentDevicePlugin;
-  /** Why this slot cannot answer its claims; each unclaimed entry reports it. */
-  failure?: unknown;
-  claims: Claim[];
+  failure?: AppError;
+  claims: ClaimEntry[];
 };
-
-/** A claim as the composition reads it: its kind, id, contribution and owning candidate. */
-export type ResolvedClaim = Readonly<{
-  kind: ClaimKind;
-  id: string;
-  candidate: PluginCandidate;
-  contribution?: Contribution;
-}>;
-
-/** What a root reads from the slots it does not own: each claim with its contribution and candidate. */
-function claimsOf(slots: readonly Slot[]): readonly ResolvedClaim[] {
-  return slots.flatMap(({ claims }) =>
-    claims.map((claim) =>
-      Object.freeze({
-        kind: claim.kind,
-        id: claim.id,
-        candidate: claim.slot.candidate,
-        contribution: claim.contribution,
-      }),
-    ),
-  );
-}
 
 /** Candidates whose claims are already reserved, with every load outcome settled. */
 export type ResolvedProviderPlugins = Readonly<{
@@ -160,14 +136,13 @@ export type ResolvedProviderPlugins = Readonly<{
   /** Every provider id claimed, including failed and dormant plugins. */
   claimedProviders: readonly string[];
   inventory(): readonly PluginInventoryEntry[];
-  /** Every claim the registry holds, with its contribution and owning candidate. */
-  claims: readonly ResolvedClaim[];
   /** @internal Consumed by {@link startProviderRegistry}, which owns setup and cleanup. */
   slots: readonly Slot[];
 }>;
 
 export type ProviderRegistry = Readonly<{
   registrations: readonly ProviderRegistration[];
+  platforms: readonly RegisteredPlatformSetup[];
   resolveReplayBackend: ReplayBackendResolver;
   resolveReplayExecution: ReplayExecutionResolver;
   claimedProviders: readonly string[];
@@ -193,16 +168,16 @@ export async function resolveProviderPlugins(
   for (const candidate of candidates) {
     const slot: Slot = { candidate, claims: [] };
     slots.push(slot);
-    reserveDeclaredClaims(slot, claimed, !candidate.dormant);
-    if (!candidate.dormant) await loadSlot(slot, claimed);
+    const reservations = reserveDeclaredClaims(candidate, claimed);
+    if (!candidate.dormant) await loadSlot(slot, claimed, reservations);
   }
 
   return Object.freeze({
     connections: new Map(
       slots.flatMap(({ claims }) =>
         claims.flatMap((claim) => {
-          if (claim.kind !== 'provider' || claim.failure !== undefined) return [];
-          const connection = (claim.contribution as ProviderContribution | undefined)?.connection;
+          if (!('contribution' in claim) || claim.contribution.kind !== 'provider') return [];
+          const { connection } = claim.contribution;
           return connection
             ? [
                 [
@@ -216,7 +191,6 @@ export async function resolveProviderPlugins(
     ),
     claimedProviders: [...(claimed.get('provider') ?? [])],
     inventory: () => slots.flatMap(describeSlot),
-    claims: Object.freeze(claimsOf(slots)),
     slots,
   });
 }
@@ -226,15 +200,13 @@ export async function resolveProviderPlugins(
  * of a kind and id wins; a later one is recorded as failed against its own slot, and so is a claim of
  * an id the host reserves. A dormant slot holds its claims without listing them.
  */
-function reserveDeclaredClaims(slot: Slot, claimed: ClaimedClaims, list: boolean): void {
-  for (const claim of slot.candidate.declaredClaims ?? []) {
-    const obstacle = claimObstacle(claimed, claim);
-    if (obstacle !== undefined) {
-      if (list) slot.claims.push({ ...claim, slot, failure: obstacle });
-      continue;
-    }
-    if (list) slot.claims.push({ ...claim, slot });
-  }
+function reserveDeclaredClaims(candidate: PluginCandidate, claimed: ClaimedClaims) {
+  return new Map(
+    (candidate.declaredClaims ?? []).map((claim) => [
+      claimKeyOf(claim),
+      { claim, failure: claimObstacle(claimed, claim) },
+    ]),
+  );
 }
 
 /**
@@ -261,64 +233,57 @@ function reserveClaim(claimed: ClaimedClaims, claim: PluggedClaim): boolean {
  * A slot that declares no claims claims what its factory returns, so an embedder's plugin competes
  * for the same spaces the same way.
  */
-async function loadSlot(slot: Slot, claimed: ClaimedClaims): Promise<void> {
+async function loadSlot(
+  slot: Slot,
+  claimed: ClaimedClaims,
+  reservations: ReturnType<typeof reserveDeclaredClaims>,
+): Promise<void> {
   let raw: unknown;
   try {
     raw = await slot.candidate.load();
-    const plugin = validateAgentDevicePlugin(raw);
-    assertDeclaredClaims(slot.candidate, plugin);
-    slot.plugin = plugin;
-    for (const contribution of plugin.contributes) {
-      const claim = claimOfContribution(contribution);
-      const reserved = slot.claims.find(
-        (entry) => entry.contribution === undefined && claimKeyOf(entry) === claimKeyOf(claim),
-      );
-      if (reserved !== undefined) {
-        reserved.contribution = contribution;
-        continue;
-      }
-      const obstacle = claimObstacle(claimed, claim);
-      slot.claims.push({
-        ...claim,
-        slot,
-        contribution,
-        ...(obstacle !== undefined ? { failure: obstacle } : {}),
+    const returned = validateAgentDevicePlugin(raw);
+    assertDeclaredClaims(slot.candidate, returned);
+    const declaredOrder = [...reservations.keys()];
+    slot.claims = [...returned]
+      .sort((a, b) => declaredOrder.indexOf(claimKeyOf(a)) - declaredOrder.indexOf(claimKeyOf(b)))
+      .map(({ contribution, ...claim }) => {
+        const reserved = reservations.get(claimKeyOf(claim));
+        const failure = reserved ? reserved.failure : claimObstacle(claimed, claim);
+        return failure ? { ...claim, slot, failure } : { ...claim, slot, contribution };
       });
-    }
   } catch (error) {
-    slot.failure = asPluginFailure(error, 'plugin_load_failed');
-    for (const claim of slot.claims) {
-      // A reservation reason (a duplicate or reserved id) is the actionable one; keep it.
-      if (claim.contribution === undefined) claim.failure ??= slot.failure;
-    }
-    nameFailedClaims(slot, claimed, raw);
+    const failure = asPluginFailure(error, 'plugin_load_failed');
+    slot.failure = failure;
+    slot.claims = failedLoadClaims(slot, claimed, reservations, raw, failure);
   }
 }
 
-/**
- * Names the claims of a slot that failed before its contributions were readable, from the value it
- * returned, and holds them: what the inventory reports and what a selection resolves must still say
- * what this plugin was meant to provide. A slot whose metadata already declared its claims was named
- * before the load and is left alone. Each claim carries the slot's own reason, which is the one the
- * author can act on.
- */
-function nameFailedClaims(slot: Slot, claimed: ClaimedClaims, raw: unknown): void {
-  if (slot.candidate.declaredClaims !== undefined || slot.claims.length > 0) return;
-  for (const claim of readableClaimsOfValue(raw)) {
-    reserveClaim(claimed, claim);
-    slot.claims.push({ ...claim, slot, failure: slot.failure });
+function failedLoadClaims(
+  slot: Slot,
+  claimed: ClaimedClaims,
+  reservations: ReturnType<typeof reserveDeclaredClaims>,
+  raw: unknown,
+  failure: AppError,
+): FailedClaim[] {
+  if (slot.candidate.declaredClaims !== undefined) {
+    return [...reservations.values()].map(({ claim, failure: reservationFailure }) => ({
+      ...claim,
+      slot,
+      failure: reservationFailure ?? failure,
+    }));
   }
+  return readableClaimsOfValue(raw).map((claim) => {
+    reserveClaim(claimed, claim);
+    return { ...claim, slot, failure };
+  });
 }
 
 /** After the factory runs, declared and returned claims must be exactly equal, unordered. */
-function assertDeclaredClaims(candidate: PluginCandidate, plugin: AgentDevicePlugin): void {
+function assertDeclaredClaims(candidate: PluginCandidate, returned: readonly PluggedClaim[]): void {
   const declared = candidate.declaredClaims;
   if (declared === undefined) return;
-  const returned = plugin.contributes.map((contribution) =>
-    claimKeyOf(claimOfContribution(contribution)),
-  );
-  const sortedDeclared = declared.map((claim) => claimKeyOf(claim)).sort();
-  const sortedReturned = [...returned].sort();
+  const sortedDeclared = declared.map(claimKeyOf).sort();
+  const sortedReturned = returned.map(claimKeyOf).sort();
   if (
     sortedDeclared.length !== sortedReturned.length ||
     sortedDeclared.some((key, index) => key !== sortedReturned[index])
@@ -335,6 +300,8 @@ function assertDeclaredClaims(candidate: PluginCandidate, plugin: AgentDevicePlu
   }
 }
 
+type RegistryScope = 'all' | 'replay-backends' | 'platforms';
+
 /**
  * Sets up every loaded claim in order. A claim whose setup throws, or returns a result the registry
  * refuses, is cleaned up and recorded as failed; the remaining claims still activate, so a broken
@@ -345,17 +312,21 @@ export async function startProviderRegistry(
   resolved: ResolvedProviderPlugins,
   host: HostEnvironment,
   policy: PluginRegistryPolicy,
-  scope: 'all' | 'replay-backends' = 'all',
+  scope: RegistryScope = 'all',
 ): Promise<ProviderRegistry> {
-  await setUpClaims(resolved.slots, host, policy, scope);
-  const registrations = resolved.slots.flatMap(({ claims }) =>
-    claims.flatMap(({ registration }) => (registration ? [registration] : [])),
+  const claims = resolved.slots.flatMap((slot) =>
+    slot.claims.filter((claim) => 'contribution' in claim),
   );
+  await setUpClaims(claims, host, policy, scope);
+  const registrations = claims.flatMap(({ registration }) => (registration ? [registration] : []));
   let closed = false;
   const inventory = [...resolved.inventory()];
   const refreshInventory = () => inventory.splice(0, inventory.length, ...resolved.inventory());
   return Object.freeze({
     registrations,
+    platforms: Object.freeze(
+      claims.flatMap(({ platformSetup }) => (platformSetup ? [platformSetup] : [])),
+    ),
     claimedProviders: resolved.claimedProviders,
     inventory,
     resolveReplayBackend: async (id, host, packageName) => {
@@ -367,7 +338,7 @@ export async function startProviderRegistry(
         resolved,
         { kind: 'replay-backend', id },
         packageName,
-        policy.assertReplaySelectionCurrent,
+        policy.assertSelectionCurrent,
       );
       return await resolveRegisteredReplayBackend(claim, refreshInventory, host);
     },
@@ -380,7 +351,7 @@ export async function startProviderRegistry(
         resolved,
         { kind: 'replay-execution', id: NATIVE_REPLAY_BACKEND },
         packageName,
-        policy.assertReplaySelectionCurrent,
+        policy.assertSelectionCurrent,
       );
       return await resolveRegisteredReplayExecution(claim, refreshInventory);
     },
@@ -389,36 +360,28 @@ export async function startProviderRegistry(
     // their teardowns run concurrently and one hanging disposer cannot stall the others.
     close: once(async () => {
       closed = true;
-      const activated = resolved.slots.flatMap(({ claims }) =>
-        claims.filter(
-          (claim) => claim.registration !== undefined || claim.replaySetup !== undefined,
-        ),
+      const activated = claims.filter(
+        (claim) => claim.registration || claim.replaySetup || claim.platformSetup,
       );
       return await Promise.all([...activated].reverse().map((claim) => cleanUpClaim(claim)));
     }),
   });
 }
 
-/**
- * Sets up every claim of every slot that has not already failed, in candidate order. The provider
- * path sets up provider claims only; the replay path sets up replay claims only.
- */
 async function setUpClaims(
-  slots: readonly Slot[],
+  claims: readonly Claim[],
   host: HostEnvironment,
   policy: PluginRegistryPolicy,
-  scope: 'all' | 'replay-backends',
+  scope: RegistryScope,
 ): Promise<void> {
-  for (const slot of slots) {
-    for (const claim of slot.claims) {
-      if (claim.failure !== undefined) continue;
-      try {
-        await setUpClaim(claim, host, policy, scope);
-      } catch (error) {
-        claim.failure = asPluginFailure(error, 'plugin_setup_failed');
-        claim.registration = undefined;
-        claim.replaySetup = undefined;
-      }
+  for (const claim of claims) {
+    try {
+      await setUpClaim(claim, host, policy, scope);
+    } catch (error) {
+      claim.failure = asPluginFailure(error, 'plugin_setup_failed');
+      claim.registration = undefined;
+      claim.replaySetup = undefined;
+      claim.platformSetup = undefined;
     }
   }
 }
@@ -427,20 +390,29 @@ async function setUpClaim(
   claim: Claim,
   host: HostEnvironment,
   policy: PluginRegistryPolicy,
-  scope: 'all' | 'replay-backends',
+  scope: RegistryScope,
 ): Promise<void> {
   const contribution = claim.contribution;
-  if (contribution === undefined) {
-    throw invalidPlugin(`Plugin claim has no contribution: ${claimKeyOf(claim)}`);
-  }
   if (contribution.kind === 'provider') {
     if (scope === 'all') await setUpProviderClaim(claim, contribution, host, policy);
     return;
   }
+  if (contribution.kind === 'platform') {
+    if (scope === 'replay-backends') return;
+    if (!policy.platformHost)
+      throw new AppError('COMMAND_FAILED', 'Platform setup requires a platform host', {
+        reason: 'platform_host_missing',
+      });
+    const result = await contribution.setup(policy.platformHost);
+    claim.platformSetup = Object.freeze(
+      validateClaimSetup({ kind: contribution.kind, id: contribution.family }, result),
+    );
+    return;
+  }
+  if (scope === 'platforms') return;
   const result = await contribution.setup(createReplaySetupHost());
   try {
-    validateClaimSetup(claim, result);
-    claim.replaySetup = result as ReplayBackendSetup | ReplayExecutionSetup;
+    claim.replaySetup = validateClaimSetup({ kind: contribution.kind, id: claim.id }, result);
   } catch (error) {
     await cleanUpRejectedSetup(result);
     throw error;
@@ -453,7 +425,8 @@ async function resolveRegisteredReplayBackend(
   host: import('@agent-device/contracts/replay-backend').ReplayBackendHost,
 ): Promise<ReplayBackend> {
   if (claim.failure !== undefined) throw replayClaimError(claim);
-  const replayBackend = (claim.replaySetup as ReplayBackendSetup | undefined)?.replayBackend;
+  const setup = claim.replaySetup;
+  const replayBackend = setup && 'replayBackend' in setup ? setup.replayBackend : undefined;
   if (!replayBackend) throw invalidPlugin(`Replay backend was not set up: ${claim.id}`);
   return await (claim.replayLoading ??= Promise.resolve().then(async () => {
     try {
@@ -475,7 +448,8 @@ async function resolveRegisteredReplayExecution(
   refreshInventory: () => void,
 ): Promise<ReplayExecution> {
   if (claim.failure !== undefined) throw replayClaimError(claim);
-  const execution = (claim.replaySetup as ReplayExecutionSetup | undefined)?.execution;
+  const setup = claim.replaySetup;
+  const execution = setup && 'execution' in setup ? setup.execution : undefined;
   if (!execution) throw invalidPlugin('Native replay plugin must provide execution.create()');
   return await (claim.executionLoading ??= Promise.resolve().then(async () => {
     try {
@@ -502,17 +476,17 @@ function assertStoreSelectionCurrent(
 }
 
 /**
- * The claim a replay resolution answers, in candidate order, so the first candidate that named it
+ * The claim a resolution answers, in candidate order, so the first candidate that named it
  * owns what a resolution surfaces. A candidate that failed before its claims were readable still
  * answers for the selection that named it, so a chosen plugin keeps its own reason instead of
  * reporting absence.
  */
-function requireReplayClaim(
+function findClaim(
   resolved: ResolvedProviderPlugins,
   claim: PluggedClaim,
   packageName: string | undefined,
   assertSelectionCurrent?: (packageName: string) => void,
-): Claim {
+): ClaimEntry | undefined {
   const wanted = claimKeyOf(claim);
   for (const slot of resolved.slots) {
     const held = slot.claims.find((entry) => claimKeyOf(entry) === wanted);
@@ -529,19 +503,33 @@ function requireReplayClaim(
       slot.claims.length === 0 &&
       slot.failure !== undefined,
   );
-  if (failedSlot) {
+  if (failedSlot?.failure !== undefined) {
     assertStoreSelectionCurrent(failedSlot, assertSelectionCurrent);
     return { ...claim, slot: failedSlot, failure: failedSlot.failure };
   }
   if (packageName) assertSelectionCurrent?.(packageName);
+  return undefined;
+}
+
+function requireReplayClaim(
+  resolved: ResolvedProviderPlugins,
+  claim: PluggedClaim,
+  packageName: string | undefined,
+  assertSelectionCurrent?: (packageName: string) => void,
+): Claim {
+  const found = findClaim(resolved, claim, packageName, assertSelectionCurrent);
+  if (found) {
+    if ('contribution' in found) return found;
+    throw replayClaimError(found);
+  }
   throw new AppError('INVALID_ARGS', `Replay backend is not installed: ${claim.id}`, {
     reason: 'plugin-not-installed',
     backend: claim.id,
   });
 }
 
-function replayClaimError(claim: Claim): AppError {
-  const error = asPluginFailure(claim.failure ?? claim.replayFailure, 'plugin_load_failed');
+function replayClaimError(claim: ClaimEntry): AppError {
+  const error = asPluginFailure(claimFailure(claim), 'plugin_load_failed');
   const packageName = claim.slot.candidate.package;
   return new AppError(
     error.code,
@@ -710,8 +698,12 @@ function describeSlot(slot: Slot): PluginInventoryEntry[] {
   ];
 }
 
-function describeClaim(claim: Claim): PluginInventoryEntry[] {
-  const failure = claim.failure ?? claim.replayFailure;
+function claimFailure(claim: ClaimEntry): AppError | undefined {
+  return claim.failure ?? ('contribution' in claim ? claim.replayFailure : undefined);
+}
+
+function describeClaim(claim: ClaimEntry): PluginInventoryEntry[] {
+  const failure = claimFailure(claim);
   const { candidate } = claim.slot;
   const base = {
     ...identityOfClaim(claim),
@@ -732,7 +724,7 @@ function describeClaim(claim: Claim): PluginInventoryEntry[] {
     {
       ...base,
       state: 'active',
-      credentials: claimCredentials(claim.contribution),
+      credentials: claimCredentials('contribution' in claim ? claim.contribution : undefined),
     },
   ];
 }

@@ -50,7 +50,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
           ]
         : plugins.map((plugin) =>
             plugin.compatible
-              ? `${plugin.name}@${plugin.version} (${plugin.provider ?? plugin.backend})`
+              ? `${plugin.name}@${plugin.version} (${plugin.provider ?? plugin.platform ?? plugin.backend})`
               : plugin.name === undefined
                 ? `Plugin config unavailable: ${plugin.error?.message}`
                 : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,

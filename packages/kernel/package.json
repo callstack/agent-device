@@ -17,6 +17,10 @@
       "types": "./src/contracts.ts",
       "default": "./src/contracts.ts"
     },
+    "./device-identity": {
+      "types": "./src/device-identity.ts",
+      "default": "./src/device-identity.ts"
+    },
     "./device": {
       "types": "./src/device.ts",
       "default": "./src/device.ts"

@@ -1,3 +1,4 @@
+import type { PlatformHost } from 'agent-device/plugins';
 import path from 'node:path';
 import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
 import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
@@ -39,10 +40,12 @@ const SETUP_TIMEOUT_MS = 5 * 60_000;
 const DOCTOR_TIMEOUT_MS = 60_000;
 
 export type AgentBrowserToolStatus = ManagedWebBackendStatus;
+export type ManagedBrowserHost = HostEnvironment &
+  Partial<Pick<PlatformHost, 'runCommand' | 'emitDiagnostic' | 'withDiagnosticTimer'>>;
 
 export type ManagedAgentBrowserRunOptions = {
   /** The caller's host: its environment selects the state dir and seeds the backend env. */
-  host: HostEnvironment;
+  host: ManagedBrowserHost;
   stateDir?: string;
   timeoutMs: number;
   allowFailure?: boolean;
@@ -66,7 +69,7 @@ export async function runManagedAgentBrowser(
 }
 
 export async function setupManagedAgentBrowser(options: {
-  host: HostEnvironment;
+  host: ManagedBrowserHost;
   stateDir?: string;
 }): Promise<AgentBrowserToolStatus> {
   const status = getManagedAgentBrowserStatus(options);
@@ -94,6 +97,7 @@ export async function setupManagedAgentBrowser(options: {
         packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
         timeoutMs: SETUP_TIMEOUT_MS,
         env: options.host.env,
+        runCommand: options.host.runCommand,
       });
       // The backend entry only exists once npm has written the package.
       const installedStatus = getManagedAgentBrowserStatus(options);
@@ -117,7 +121,7 @@ export async function setupManagedAgentBrowser(options: {
 }
 
 export async function doctorManagedAgentBrowser(options: {
-  host: HostEnvironment;
+  host: ManagedBrowserHost;
   stateDir?: string;
 }): Promise<{ status: AgentBrowserToolStatus; stdout: string; stderr: string; exitCode: number }> {
   const status = getManagedAgentBrowserStatus(options);
@@ -133,7 +137,7 @@ export async function doctorManagedAgentBrowser(options: {
 }
 
 export function getManagedAgentBrowserStatus(options: {
-  host: HostEnvironment;
+  host: ManagedBrowserHost;
   stateDir?: string;
 }): AgentBrowserToolStatus {
   const stateDir =
@@ -171,13 +175,17 @@ async function spawnManagedAgentBrowser(
   options: Omit<ManagedAgentBrowserRunOptions, 'stateDir'>,
 ): Promise<ExecResult> {
   if (!status.entryScript) throw missingManagedToolError(status);
-  return await runCmd(hostNodeExecutablePath(), [status.entryScript, ...args], {
-    allowFailure: options.allowFailure,
-    env: managedAgentBrowserEnv(status, options.host.env),
-    timeoutMs: options.timeoutMs,
-    signal: options.signal,
-    stdin: options.stdin,
-  });
+  return await (options.host.runCommand ?? runCmd)(
+    hostNodeExecutablePath(),
+    [status.entryScript, ...args],
+    {
+      allowFailure: options.allowFailure,
+      env: managedAgentBrowserEnv(status, options.host.env),
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+      stdin: options.stdin,
+    },
+  );
 }
 
 function managedAgentBrowserEnv(

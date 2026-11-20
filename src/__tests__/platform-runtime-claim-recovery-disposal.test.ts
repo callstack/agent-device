@@ -293,17 +293,17 @@ test('runStaleDeviceClaimRelease writes outcomes at the bound and waits for late
         await runStaleDeviceClaimRelease(
           {},
           createTestHostEnvironment({ env: f.env }),
-          () => ({
-            reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
-            dispose: async () => {
-              try {
-                await shutdown();
-              } finally {
-                events.push('late-shutdown-finished');
-              }
-            },
-          }),
           {
+            composeRecovery: () => ({
+              reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
+              dispose: async () => {
+                try {
+                  await shutdown();
+                } finally {
+                  events.push('late-shutdown-finished');
+                }
+              },
+            }),
             afterOutcomes: (outcomes) => {
               events.push('output-written');
               writtenOutcomes.push(outcomes);
@@ -363,17 +363,17 @@ test('runStaleDeviceClaimRelease keeps a Node subprocess alive until an unref-ba
     await runStaleDeviceClaimRelease(
       {},
       { env: process.env, cwd: process.cwd() },
-      () => ({
-        reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
-        dispose: async () => {
-          await new Promise((resolve) => {
-            const timer = setTimeout(resolve, 150);
-            timer.unref();
-          });
-          process.stdout.write('LATE_SHUTDOWN_FINISHED\\n');
-        },
-      }),
       {
+        composeRecovery: () => ({
+          reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
+          dispose: async () => {
+            await new Promise((resolve) => {
+              const timer = setTimeout(resolve, 150);
+              timer.unref();
+            });
+            process.stdout.write('LATE_SHUTDOWN_FINISHED\\n');
+          },
+        }),
         disposeBudgetMs: 25,
         afterOutcomes: (outcomes) => {
           process.stdout.write('OUTPUT_WRITTEN:' + outcomes[0]?.status + ':' + outcomes[0]?.reason + '\\n');
