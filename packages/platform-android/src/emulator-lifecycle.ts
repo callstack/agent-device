@@ -168,20 +168,29 @@ function buildAndroidBootFailureDetails(
   };
 }
 
-function buildAndroidBootError(
+/**
+ * Shapes one terminal boot failure. Shared by every Android boot poller so the code, message and
+ * cause stay identical across owners.
+ */
+export function buildAndroidBootError(
   appError: AppError,
   reason: BootFailureReason,
   timedOut: boolean,
-  details: ReturnType<typeof buildAndroidBootFailureDetails>,
+  details: Record<string, unknown>,
 ): AppError {
   if (timedOut || reason === 'ANDROID_BOOT_TIMEOUT') {
-    return new AppError('COMMAND_FAILED', 'Android device did not finish booting in time', details);
+    return new AppError(
+      'COMMAND_FAILED',
+      'Android device did not finish booting in time',
+      details,
+      appError.cause,
+    );
   }
   if (appError.code === 'TOOL_MISSING') {
-    return new AppError('TOOL_MISSING', appError.message, details);
+    return new AppError('TOOL_MISSING', appError.message, details, appError.cause);
   }
   if (reason === 'ADB_TRANSPORT_UNAVAILABLE') {
-    return new AppError('COMMAND_FAILED', appError.message, details);
+    return new AppError('COMMAND_FAILED', appError.message, details, appError.cause);
   }
   return new AppError(appError.code, appError.message, details, appError.cause);
 }

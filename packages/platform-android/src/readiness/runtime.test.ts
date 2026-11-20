@@ -261,6 +261,25 @@ test('a retriable device-not-found host refusal stays terminal', async () => {
   expect(run).toHaveBeenCalledTimes(1);
 });
 
+// A nonzero probe exit is not terminal by itself: typed offline evidence is transient, so the
+// poller retries. Without this, a change that makes every nonzero exit terminal would pass.
+test('an offline probe exit retries and resolves once the device reports booted', async () => {
+  const { host, run } = probeHost([
+    { stdout: '', stderr: 'error: device offline', exitCode: 1 },
+    { stdout: '1\n', stderr: '', exitCode: 0 },
+  ]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).resolves.toBeDefined();
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
 test('a terminal probe failure keeps the original cause', async () => {
   const cause = new Error('spawn adb ENOENT');
   const { host } = probeHost([new AppError('TOOL_MISSING', 'adb not found in PATH', {}, cause)]);

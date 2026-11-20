@@ -15,7 +15,11 @@ import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { bootFailureHint } from '@agent-device/provision-kit/boot-diagnostics';
 import { androidAdbResultError, attachAdbFailureHint } from '../adb-executor.ts';
-import { androidBootFailureReason, isTransientAndroidBootFailure } from '../emulator-lifecycle.ts';
+import {
+  androidBootFailureReason,
+  buildAndroidBootError,
+  isTransientAndroidBootFailure,
+} from '../emulator-lifecycle.ts';
 
 const BOOT_TIMEOUT_MS = 120_000;
 const POLL_MS = 1_000;
@@ -200,10 +204,7 @@ function throwBootProbeFailure(
     ...(failure.details ?? {}),
     reason,
   };
-  if (failure.code === 'TOOL_MISSING') {
-    throw new AppError('TOOL_MISSING', failure.message, details, failure.cause);
-  }
-  throw new AppError('COMMAND_FAILED', failure.message, details, failure.cause);
+  throw buildAndroidBootError(failure, reason, false, details);
 }
 
 function bootTimeoutError(message: string, details: Record<string, unknown>): AppError {
