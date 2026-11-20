@@ -18,7 +18,6 @@ import {
 } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
-  type ScrollGesturePlan,
   buildScrollGesturePlan,
   clipScrollViewportAboveKeyboard,
   scrollKeyboardOccludesSurfaceError,
@@ -331,7 +330,16 @@ export async function scrollAndroid(
     helperSessionScope: options?.helperSessionScope,
   });
   const swipeSurface = resolveAndroidScrollSurface(direction, viewport, keyboard);
-  const relativePlan = androidScrollLane(direction, options, swipeSurface.viewport);
+  const relativePlan = buildScrollGesturePlan({
+    direction,
+    amount: options?.amount,
+    pixels: options?.pixels,
+    referenceWidth: swipeSurface.viewport.width,
+    referenceHeight: swipeSurface.viewport.height,
+    ...(options?.containerRect === undefined
+      ? {}
+      : { container: relativeToViewport(options.containerRect, swipeSurface.viewport) }),
+  });
   const scrollPlan = {
     ...relativePlan,
     // Injected coordinates are absolute, so their zero-origin reference frame
@@ -347,21 +355,20 @@ export async function scrollAndroid(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
     GESTURE_DURATION_MIN_MS,
   );
-  const gesturePlan = buildGesturePlan(
-    {
-      intent: 'pan',
-      origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
-      delta: {
-        x: scrollPlan.x2 - scrollPlan.x1,
-        y: scrollPlan.y2 - scrollPlan.y1,
-      },
-      durationMs,
-    },
-    swipeSurface.viewport,
-    'android',
-  );
   const backend = await executeAndroidTouchPlan(device, {
-    ...gesturePlan,
+    ...buildGesturePlan(
+      {
+        intent: 'pan',
+        origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
+        delta: {
+          x: scrollPlan.x2 - scrollPlan.x1,
+          y: scrollPlan.y2 - scrollPlan.y1,
+        },
+        durationMs,
+      },
+      swipeSurface.viewport,
+      'android',
+    ),
     releaseBehavior: options?.releaseBehavior ?? 'controlled',
   });
 
@@ -376,31 +383,6 @@ export async function scrollAndroid(
 /** The planner works in the swipe surface's zero-origin frame; snapshot rects are absolute. */
 function relativeToViewport(rect: Rect, viewport: Rect): Rect {
   return { ...rect, x: rect.x - viewport.x, y: rect.y - viewport.y };
-}
-
-type ScrollAndroidOptions = NonNullable<Parameters<typeof scrollAndroid>[2]>;
-
-/**
- * The lane one Android scroll runs, in the swipe surface's zero-origin frame. Snapshot rects are
- * absolute, so a named container is re-based into that frame first.
- */
-function androidScrollLane(
-  direction: ScrollDirection,
-  options: ScrollAndroidOptions | undefined,
-  viewport: Rect,
-): ScrollGesturePlan {
-  const container =
-    options?.containerRect === undefined
-      ? undefined
-      : relativeToViewport(options.containerRect, viewport);
-  return buildScrollGesturePlan({
-    direction,
-    amount: options?.amount,
-    pixels: options?.pixels,
-    referenceWidth: viewport.width,
-    referenceHeight: viewport.height,
-    ...(container === undefined ? {} : { container }),
-  });
 }
 
 /**

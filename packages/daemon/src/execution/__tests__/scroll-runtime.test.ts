@@ -23,12 +23,6 @@ import {
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 import { resolveBoundScrollRuntime } from '../scroll-runtime.ts';
-import {
-  automationScreen,
-  frozenCaptures,
-  SCREEN_CONTAINER,
-  sessionWithStoredScreen,
-} from './scroll-runtime-fixtures.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -48,7 +42,7 @@ import { activateCompleteRefFrame, expireRefFrame } from '../../core/ref-frame.t
  * What moved is WHERE the edge refusal happens — the retired leaf discovered a missing snapshot
  * mid-command, and admission now proves the capture before any pass runs (ADR 0019 §6).
  */
-export type ScrollCall = { direction: string; options: unknown };
+type ScrollCall = { direction: string; options: unknown };
 
 function bindings(options: {
   scroll: (direction: string, scrollOptions: unknown) => Promise<Record<string, unknown> | void>;
@@ -56,25 +50,13 @@ function bindings(options: {
     options?: Record<string, unknown>;
     execution?: unknown;
   }) => Promise<unknown>;
-  /** `scroll refresh` dispatches its pull through the gesture pan operation instead. */
-  gesture?: (plan: unknown) => Promise<Record<string, unknown> | void>;
-  /** Set false to simulate a platform that declares no touch scroll surface (TV, desktop). */
-  touchScrollSurface?: boolean;
 }): { inspectFacts: InspectDeviceRuntimeFacts; bindDevice: BindDeviceRuntime } {
   const available = { available: true } as const;
-  const unavailable = {
-    available: false,
-    reason: 'unsupported-platform-leaf',
-    hint: 'scroll refresh needs a touch scroll surface.',
-  } as const;
-  const touchScroll = options.touchScrollSurface === false ? unavailable : available;
   const facts = {
     device: { family: 'apple', kind: 'simulator', providerMode: 'local' },
     operations: {
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       scrollDirection: available,
-      touchScrollSurface: touchScroll,
-      ...(options.gesture ? { performGesturePlan: available } : {}),
       ...(options.captureSnapshot ? { captureSnapshot: available } : {}),
     },
   } as unknown as RuntimeFacts<PlatformRuntimeOperations>;
@@ -86,20 +68,13 @@ function bindings(options: {
         operations: {
           scrollDirection: async (input: { direction: string; options: unknown }) =>
             decodeScrollDirectionResult(await options.scroll(input.direction, input.options)),
-          touchScrollSurface: async () => {},
-          ...(options.gesture
-            ? {
-                performGesturePlan: async (input: { plan: unknown }) =>
-                  (await options.gesture!(input.plan)) ?? {},
-              }
-            : {}),
           ...(options.captureSnapshot ? { captureSnapshot: options.captureSnapshot } : {}),
         },
       }) as unknown as BoundDeviceRuntime<never>) as unknown as BindDeviceRuntime,
   };
 }
 
-export async function runScroll(
+async function runScroll(
   positionals: string[],
   context: Partial<DaemonCommandContext>,
   options: Parameters<typeof bindings>[0],
@@ -128,18 +103,7 @@ export async function runScroll(
     flags: dispatch?.flags,
     ...bindings(options),
   });
-  if (!resolved.ok) {
-    // Surface the admission refusal's own typed reason instead of a generic one.
-    const failure = resolved.response.ok === false ? resolved.response.error : undefined;
-    throw new AppError(
-      failure?.code ?? 'UNSUPPORTED_OPERATION',
-      failure?.message ?? 'admission refused the scroll',
-      {
-        ...(failure?.hint === undefined ? {} : { hint: failure.hint }),
-        ...(failure?.details ?? {}),
-      },
-    );
-  }
+  if (!resolved.ok) throw new AppError('UNSUPPORTED_OPERATION', 'admission refused the scroll');
   // The dispatcher expires the ref frame at its side-effect seam between resolution and execution
   // (ADR 0014). Running the same transition here keeps a test honest about WHICH of the two moments
   // a scroll's own evidence has to be read at.
@@ -159,6 +123,18 @@ export async function runScroll(
 }
 
 /** A session whose stored tree IS the newest observation — what a `snapshot` leaves behind. */
+function sessionWithStoredScreen(
+  nodes: SnapshotNode[],
+  overrides?: Partial<SessionState>,
+): SessionState {
+  const session = makeIosSession('scroll-runtime', {
+    snapshot: buildSnapshotState({ nodes, backend: 'xctest', producer: 'apple-runner' }, undefined),
+    ...overrides,
+  });
+  activateCompleteRefFrame(session);
+  return session;
+}
+
 test('bound scroll rejects mixing amount and --pixels', async () => {
   await assert.rejects(
     () =>
@@ -731,8 +707,64 @@ test('bound scroll --until is refused at admission when the owner declares no ca
   assert.equal(resolved.ok, false);
 });
 
+/**
+ * #2714: a directional scroll answers with the movement it OBSERVED, and refuses to spend a
+ * distance it did not earn. The observation math lives in `scroll-movement.test.ts`; these cases
+ * prove the claim reaches the command, and that it stays out of every path that was never entitled
+ * to read the screen — a runtime without a capture, a Maestro replay, a `--settle` caller, the macOS
+ * desktop — or that the evidence for it was never there.
+ */
+const SCREEN_CONTAINER = { x: 18, y: 178, width: 366, height: 662 };
+
+function automationScreen(rowOffset: number, hiddenBelow = true): SnapshotNode[] {
+  return [
+    {
+      ref: 'e1',
+      index: 1,
+      depth: 0,
+      type: 'ScrollView',
+      identifier: 'lab-list',
+      rect: SCREEN_CONTAINER,
+      ...(hiddenBelow ? { hiddenContentBelow: true } : {}),
+    },
+    {
+      ref: 'e2',
+      index: 2,
+      parentIndex: 1,
+      depth: 1,
+      type: 'StaticText',
+      label: 'Row one',
+      rect: { x: 24, y: 200 + rowOffset, width: 300, height: 20 },
+    },
+    {
+      ref: 'e3',
+      index: 3,
+      parentIndex: 1,
+      depth: 1,
+      type: 'StaticText',
+      label: 'Row two',
+      rect: { x: 24, y: 260 + rowOffset, width: 300, height: 20 },
+    },
+  ];
+}
+
 /** The swipe the platform reports back, whose midpoint sits inside the container above. */
 const OBSERVED_SWIPE = { x1: 201, y1: 600, x2: 201, y2: 250, pixels: 656, durationMs: 250 };
+
+function frozenCaptures(frames: SnapshotNode[][]) {
+  const queue = [...frames];
+  let calls = 0;
+  return {
+    calls: () => calls,
+    captureSnapshot: async () => {
+      const next = queue.shift();
+      if (next === undefined)
+        throw new Error('scroll observed more captures than the case provided');
+      calls += 1;
+      return { nodes: next, backend: 'xctest', producer: 'apple-runner' };
+    },
+  };
+}
 
 /**
  * The scroll of a session that just captured this screen and has moved nothing since: the one

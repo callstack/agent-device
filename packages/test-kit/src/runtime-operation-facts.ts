@@ -60,7 +60,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
     fill: unavailable,
   }),
   ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
-  ...scrollRuntimeOperationFacts({ scroll: unavailable, touchScrollSurface: unavailable }),
+  ...scrollRuntimeOperationFacts({ scroll: unavailable }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
   back: unavailable,
   setOrientation: unavailable,

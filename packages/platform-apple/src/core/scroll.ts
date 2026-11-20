@@ -63,7 +63,7 @@ export function normalizeAppleScrollResultWithResolvedFrame(
   }
 
   // Recompute the plan from the runner's resolved frame so reported pixels match the planned
-  // travel (TS keeps the planners for Android and recording anyway).
+  // travel (TS keeps buildScrollGesturePlan for Android and recording anyway).
   const plan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,

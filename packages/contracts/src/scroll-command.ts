@@ -10,11 +10,11 @@ export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
 export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
 export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
 /**
- * `scroll refresh` pulls slowly — a fast pull reads as a fling and rubber-bands back without
- * committing the refresh control (measured on an iOS RN list: 0/5 at the 400ms default, 5/5 at
- * 1200ms and above, with no hold at the pulled position: 5/5 at holdMs 0 on both platforms).
+ * `scroll refresh` is a directional scroll with these defaults. iOS commits a refresh only for a
+ * slow pull that starts on the list: 0/5 at the 400ms default, 5/5 from 800ms.
  */
 export const DEFAULT_REFRESH_PULL_DURATION_MS = 1200;
+export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 
@@ -33,10 +33,6 @@ export type ScrollReleaseBehavior = 'controlled' | 'inertial';
  *
  * A directional scroll that measures an unchanged surface WITH hidden content still in that
  * direction does not answer at all: it fails with `scroll_no_progress`.
- *
- * `scroll refresh` never answers `at-edge`: its pull runs at the top edge by construction, so an
- * unchanged surface is reported as `unchanged` and the caller is never told "nothing to scroll"
- * about a pull it deliberately made.
  */
 export type ScrollMovementObservation = 'moved' | 'at-edge' | 'unchanged' | 'unobserved';
 
@@ -71,7 +67,7 @@ export type ResolvedScrollExecutionOptions = ScrollCommandOptions &
   };
 
 export function resolveScrollExecutionOptions(
-  options: ScrollExecutionOptions,
+  options: ScrollCommandOptions,
   edge?: 'top' | 'bottom',
 ): ResolvedScrollExecutionOptions {
   return {
@@ -95,7 +91,12 @@ export function assertExclusiveScrollDistanceInputs(
  * than resolved by precedence, so neither stop condition can silently win.
  */
 export function assertScrollUntilCompatible(
-  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string; maxPasses?: number }>,
+  input: Readonly<{
+    edge?: 'top' | 'bottom';
+    refresh?: boolean;
+    until?: string;
+    maxPasses?: number;
+  }>,
 ): void {
   if (input.maxPasses !== undefined) {
     if (input.until === undefined) {
@@ -117,31 +118,16 @@ export function assertScrollUntilCompatible(
       );
     }
   }
-  if (input.until === undefined || input.edge === undefined) return;
+  if (input.until === undefined) return;
+  if (input.refresh) {
+    throw new AppError('INVALID_ARGS', 'scroll refresh pulls once and cannot take --until');
+  }
+  if (input.edge === undefined) return;
   throw new AppError(
     'INVALID_ARGS',
     `scroll ${input.edge} already scrolls to the ${input.edge} edge and cannot take --until`,
     {
       hint: `Use scroll ${input.edge === 'bottom' ? 'down' : 'up'} --until <selector> to stop at the target, or scroll ${input.edge} to reach the edge.`,
-    },
-  );
-}
-
-/**
- * `scroll refresh` performs exactly one pull, so pairing it with a search stop condition names two
- * and the request has no single meaning. Rejected at the surface, like `top`/`bottom` + `--until`.
- */
-export function assertScrollRefreshCompatible(
-  input: Readonly<{ refresh?: boolean; until?: string; maxPasses?: number }>,
-): void {
-  if (!input.refresh) return;
-  if (input.until === undefined && input.maxPasses === undefined) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    'scroll refresh performs one pull and cannot take --until or --max-passes',
-    {
-      reason: 'scroll_refresh_until_unsupported',
-      hint: 'Use scroll <direction> --until <selector> to search content, or scroll refresh for a single pull.',
     },
   );
 }
@@ -175,14 +161,6 @@ export function normalizeScrollDurationMs(
  */
 export type ScrollCommandResult = {
   direction: ScrollDirection;
-  /**
-   * Set for `scroll refresh`: the request was a pull-to-refresh, dispatched as one slow downward
-   * pan anchored just inside the top of the resolved scroll container. The `movement` field never
-   * answers `at-edge` for this mode — an unchanged surface is reported as `unchanged` instead,
-   * because "already at the top" is the mode's precondition, not news the caller needs to pull
-   * again over.
-   */
-  refresh?: true;
   /** Set for `top`/`bottom` requests: the extreme being scrolled to. */
   edge?: 'top' | 'bottom';
   /** Set for `--until` requests: the selector the passes stopped on. */

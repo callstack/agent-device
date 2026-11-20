@@ -23,10 +23,7 @@ const options = {
 
 test('builds the exact scroll operation fact catalog', () => {
   const scroll = { available: true } as const;
-  expect(scrollRuntimeOperationFacts({ scroll, touchScrollSurface: scroll })).toEqual({
-    scrollDirection: scroll,
-    touchScrollSurface: scroll,
-  });
+  expect(scrollRuntimeOperationFacts({ scroll })).toEqual({ scrollDirection: scroll });
 });
 
 test('a local binding scrolls the owner in the requested direction', async () => {
@@ -85,19 +82,6 @@ test('a provider binding fails closed when its exact owner exposes no interactor
   await expect(operations.scrollDirection({ direction: 'down', options })).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
-  });
-});
-
-test('the admission-only touch fact refuses a call instead of reporting work nobody did', async () => {
-  const operations = bindLocalScrollInteractor({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor: async () => ({ scroll: vi.fn() }) as unknown as Interactor,
-  });
-
-  await expect(operations.touchScrollSurface()).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'runtime-contract-invalid' },
   });
 });
 

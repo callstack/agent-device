@@ -355,19 +355,14 @@ static NSString * _Nullable RunnerSynthesizeEventRecord(
   return nil;
 }
 
-/// A fresh private pointer path at `start`; nil when the path class is unavailable.
-static id RunnerNewPointerPath(const RunnerGestureEventBridge *bridge, CGPoint start) {
-  return ((RunnerMsgSendInitPath)objc_msgSend)(
-    [bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
-}
-
 static id RunnerSwipePointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
   CGPoint end,
   double durationMs
 ) {
-  id path = RunnerNewPointerPath(bridge, start);
+  id path =
+    ((RunnerMsgSendInitPath)objc_msgSend)([bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
   if (path == nil) {
     return nil;
   }
@@ -396,7 +391,8 @@ static id RunnerControlledScrollPointerPath(
   // A stationary hold is not a reliable zero-velocity release in XCTest. Cubic ease-out decreases
   // velocity from the first movement and reaches near zero before lift. Profiles that accelerate
   // after pan recognition can still be classified as flings despite a slow final sample.
-  id path = RunnerNewPointerPath(bridge, start);
+  id path =
+    ((RunnerMsgSendInitPath)objc_msgSend)([bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
   if (path == nil) {
     return nil;
   }

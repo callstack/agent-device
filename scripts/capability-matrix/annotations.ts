@@ -137,49 +137,6 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         label: 'Scroll',
         commands: ['scroll'],
         link: docs('commands', 'scroll'),
-        note: '`scroll refresh` pulls the surface down with a finger, so it admits only where the target declares a touch scroll surface; a target listed here without it still scrolls in every other mode.',
-        cells: {
-          'android-tv-emulator': {
-            text: 'Every mode but pull-to-refresh: no touch screen',
-            refuses: ['touchScrollSurface'],
-          },
-          'android-tv-device': {
-            text: 'Every mode but pull-to-refresh: no touch screen',
-            refuses: ['touchScrollSurface'],
-          },
-          'tvos-sim': {
-            text: 'Every mode but pull-to-refresh: no touch screen',
-            refuses: ['touchScrollSurface'],
-          },
-          'tvos-device': {
-            text: 'Every mode but pull-to-refresh: no touch screen',
-            refuses: ['touchScrollSurface'],
-          },
-          'macos-desktop': {
-            text: 'Every mode but pull-to-refresh: wheel scroll',
-            refuses: ['touchScrollSurface'],
-          },
-          'macos-app': {
-            text: 'Every mode but pull-to-refresh: wheel scroll',
-            refuses: ['touchScrollSurface'],
-          },
-          'linux-desktop': {
-            text: 'Every mode but pull-to-refresh: wheel scroll',
-            refuses: ['touchScrollSurface'],
-          },
-          'web-browser': {
-            text: 'Every mode but pull-to-refresh: wheel and DOM scroll',
-            refuses: ['touchScrollSurface', 'performGesturePlan'],
-          },
-          'revyl-ios': {
-            text: 'Every mode but pull-to-refresh: no gesture plan',
-            refuses: ['performGesturePlan'],
-          },
-          'revyl-android': {
-            text: 'Every mode but pull-to-refresh: no gesture plan',
-            refuses: ['performGesturePlan'],
-          },
-        },
       },
       {
         id: 'gestures',

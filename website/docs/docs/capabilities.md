@@ -85,7 +85,7 @@ What a **Yes** does not claim:
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
 | [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
-| [Scroll](/docs/commands#scroll) | Every mode but pull-to-refresh: no touch screen | Every mode but pull-to-refresh: no touch screen | Every mode but pull-to-refresh: no touch screen | Every mode but pull-to-refresh: no touch screen | No |
+| [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | No |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | No |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | No | No |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | No | No |
@@ -99,7 +99,7 @@ What a **Yes** does not claim:
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes |
 | [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | No |
-| [Scroll](/docs/commands#scroll) | Every mode but pull-to-refresh: wheel scroll | Every mode but pull-to-refresh: wheel scroll | Every mode but pull-to-refresh: wheel scroll | Every mode but pull-to-refresh: wheel and DOM scroll |
+| [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | No |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | Yes |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | Yes | Yes | No | No |
@@ -113,7 +113,7 @@ What a **Yes** does not claim:
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | Yes | Yes | Every mode but pull-to-refresh: no gesture plan | Every mode but pull-to-refresh: no gesture plan |
+| [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Hover and viewport size](/docs/commands#web-automation) | No | No | No | No | No | No | No | No |
 | [Read, accept, and dismiss system alerts](/docs/commands#wait-and-alerts) | No | No | No | No | Yes | Yes | No | No |
@@ -124,7 +124,6 @@ What a **Yes** does not claim:
 
 - **Tap, press, and fill**: Android types non-ASCII text through the test input method: automatically on emulators, and on physical devices only with `open --test-ime`.
 - **Type into the focused field**: Revyl enters text only at a point, so it refuses `type`; use `fill` on the field instead.
-- **Scroll**: `scroll refresh` pulls the surface down with a finger, so it admits only where the target declares a touch scroll surface; a target listed here without it still scrolls in every other mode.
 - **Gesture plans and swipes**: Multi-touch plans are part of `gesture` where the target runs them; a plan using an operation the target lacks fails at that step.
 - **Keyboard dismiss, enter, and status**: For a visible keyboard, the Apple runner uses a recognized accessibility identifier to report the Return action as `returnKey` and the key's localized wording as `returnKeyLabel`. For example, the identifier `Search` gives `returnKey: "search"` even when the label is `"szukaj"`. If the runner cannot identify the action, it reports `unknown`. Only Android can report `none`.
 - **React Native overlay dismissal**: The command runs wherever tapping runs; it answers `detected: false` on a surface with no React Native overlay. Only iOS and Android apps present dismissable development overlays.

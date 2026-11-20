@@ -1,12 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
-import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
-// `top`/`bottom` are scroll-to-extreme requests with no direction of their own; `refresh` is the
-// pull-to-refresh request, resolving to a downward pull at the container's top edge. Declared here
-// so the public `ScrollOptions` does not depend on `commands/`.
+// `top`/`bottom` are scroll-to-extreme requests with no direction of their own, and `refresh` is one
+// slow pull down at the top. Declared here rather than in the command runtime that resolves them,
+// so the public `ScrollOptions` can be stated without depending on `commands/`.
 export const SCROLL_INPUT_DIRECTIONS = [
   'up',
   'down',
@@ -240,105 +240,6 @@ function insetContainerRange(
 }
 
 /**
- * The pull fraction of the scroll container one `scroll refresh` drags by default, and the pixel
- * bounds the daemon clamps it into. A pull has to cross the refresh control's trigger distance:
- * measured 0/5 below ~300px on an iOS RN list, 5/5 at 400px.
- */
-export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
-export const REFRESH_PULL_MIN_PX = 320;
-export const REFRESH_PULL_MAX_PX = 520;
-
-export type PullRefreshGestureOptions = {
-  amount?: number;
-  pixels?: number;
-  /** The vertical scroll container the pull starts inside, in the same space as `viewport`. */
-  container: Rect;
-  /** The gesture viewport the pull is planned in — the same space a capture's rects use. */
-  viewport: Rect;
-};
-
-export type PullRefreshGesturePlan = {
-  /** A pull always drags the finger downward, which the scroll vocabulary calls `up`. */
-  direction: 'up';
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  /** The viewport the coordinates are expressed in; the pan plan takes it over verbatim. */
-  viewport: Rect;
-  amount?: number;
-  /** The span dispatched, which is less than `requestedPixels` when the container shortened it. */
-  pixels: number;
-  /** Present only when the container shortened the pull: the span the padding would carry. */
-  requestedPixels?: number;
-};
-
-/**
- * The one pull `scroll refresh` dispatches: a downward lane anchored just inside the TOP of the
- * resolved vertical container, not the centred lane a directional scroll runs. The top matters twice
- * over: a pull begun on a header above the list moves nothing, and a refresh control arms only while
- * its scroller sits at the top. The lane stays inside the container's intersection with the padded
- * viewport (#2714), in the viewport's own space — which is the snapshot space, so a split-view
- * window with a non-zero origin needs no conversion.
- */
-export function buildPullRefreshGesturePlan(
-  options: PullRefreshGestureOptions,
-): PullRefreshGesturePlan {
-  const { container, viewport } = options;
-  const axisPadding = scrollEdgePadding(viewport.height);
-  const crossPadding = scrollEdgePadding(viewport.width);
-  const paddedAxis = {
-    min: viewport.y + axisPadding,
-    max: viewport.y + viewport.height - axisPadding,
-  };
-  const band = insetContainerRange(container.y, container.height, paddedAxis) ?? paddedAxis;
-  const paddedCross = {
-    min: viewport.x + crossPadding,
-    max: viewport.x + viewport.width - crossPadding,
-  };
-  const crossBand =
-    insetContainerRange(container.x, container.width, paddedCross) ??
-    insetContainerRange(container.x, container.width, {
-      min: viewport.x,
-      max: viewport.x + viewport.width,
-    }) ??
-    paddedCross;
-  const containerCross = Math.round(container.x + container.width / 2);
-  const cross =
-    containerCross >= crossBand.min && containerCross <= crossBand.max
-      ? containerCross
-      : Math.round((crossBand.min + crossBand.max) / 2);
-  const pullAmount = options.amount === undefined ? DEFAULT_REFRESH_PULL_AMOUNT : options.amount;
-  if (!Number.isFinite(pullAmount) || pullAmount <= 0) {
-    throw new AppError('INVALID_ARGS', 'scroll refresh amount must be a positive number');
-  }
-  const requestedPixels =
-    options.pixels !== undefined
-      ? normalizeRequestedPixels(options.pixels)
-      : Math.round(pullAmount * container.height);
-  // Travel never exceeds the container's own height: a container whose inset band degenerates (too
-  // short to inset, or emptied by a clipping ancestor) falls back to the padded viewport lane, and
-  // the caller's too-short refusal must see the container's real reach, not the viewport's.
-  const travelPixels = Math.max(
-    0,
-    Math.min(requestedPixels, band.max - band.min, container.height),
-  );
-  const y1 = band.min;
-  const y2 = y1 + travelPixels;
-  return {
-    direction: 'up',
-    x1: cross,
-    y1,
-    x2: cross,
-    y2,
-    viewport,
-    ...(options.amount !== undefined ? { amount: options.amount } : {}),
-    pixels: travelPixels,
-    ...(travelPixels < requestedPixels ? { requestedPixels } : {}),
-  };
-}
-
-/**
  * Validates pre-frame scroll inputs (amount/pixels) the same way buildScrollGesturePlan would,
  * so the daemon throws INVALID_ARGS for bad inputs BEFORE sending the fused runner `scroll`
  * command (previously validation ran between the frame request and the drag). The resolved
@@ -445,7 +346,7 @@ export function buildInPageSwipeGesturePlan(
 }
 
 export function inferGestureReferenceFrame(
-  nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],
+  nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>,
 ): GestureReferenceFrame | undefined {
   const viewportRect = inferViewportRect(nodes);
   if (!viewportRect) return undefined;
@@ -453,16 +354,6 @@ export function inferGestureReferenceFrame(
     referenceWidth: viewportRect.width,
     referenceHeight: viewportRect.height,
   };
-}
-
-/**
- * The gesture viewport as a rect in the capture's own (screen-origin) space, so plan coordinates
- * need no frame conversion and a split-view window keeps its origin.
- */
-export function inferGestureViewportRect(
-  nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],
-): Rect | undefined {
-  return inferViewportRect(nodes);
 }
 
 function pointFromPercent(
@@ -493,9 +384,7 @@ export function parseScrollDirection(direction: string): ScrollDirection {
   return SCROLL_DIRECTION_ENUM.parse(direction);
 }
 
-function inferViewportRect(
-  nodes: readonly (Pick<SnapshotNode, 'type' | 'rect'> | RawSnapshotNode)[],
-): Rect | undefined {
+function inferViewportRect(nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>): Rect | undefined {
   const candidate = nodes
     .filter((node) => isViewportRootNode(node) && isValidRect(node.rect))
     .map((node) => node.rect)

@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON } from '@agent-device/contracts/scroll-gesture';
 import {
   normalizeAppleScrollResultWithResolvedFrame,
-  scrollRunnerFields,
   withAppleScrollKeyboardOcclusion,
 } from '../scroll.ts';
 
@@ -89,42 +88,4 @@ test('only the refusal code is renamed, so a generic scroll failure never reads 
   assert.equal(withAppleScrollKeyboardOcclusion(alert), alert);
   const transport = new Error('socket hang up');
   assert.equal(withAppleScrollKeyboardOcclusion(transport), transport);
-});
-
-test('scrollRunnerFields carries only the directional scroll fields to the runner wire', () => {
-  assert.deepEqual(
-    scrollRunnerFields({
-      pixels: 320,
-      durationMs: 1200,
-      releaseBehavior: 'controlled',
-    }),
-    {
-      pixels: 320,
-      durationMs: 1200,
-      scrollReleaseBehavior: 'controlled',
-    },
-  );
-  // An ordinary scroll without an explicit release behavior names neither field.
-  assert.deepEqual(scrollRunnerFields({ pixels: 200, durationMs: 400 }), {
-    pixels: 200,
-    durationMs: 400,
-  });
-});
-
-test('normalizeAppleScrollResultWithResolvedFrame recomputes the directional plan from the resolved frame', () => {
-  const result = normalizeAppleScrollResultWithResolvedFrame(
-    { x: 201, y: 186, x2: 201, y2: 506, referenceWidth: 402, referenceHeight: 874 },
-    'up',
-    {
-      pixels: 320,
-      durationMs: 1200,
-      releaseBehavior: 'controlled',
-    },
-  );
-  // The runner's own coordinates echo back; the reported travel comes from the recomputed plan.
-  assert.equal(result.pixels, 320);
-  assert.equal(result.x1, 201);
-  assert.equal(result.y1, 186);
-  assert.equal(result.x2, 201);
-  assert.equal(result.y2, 506);
 });

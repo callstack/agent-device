@@ -93,7 +93,6 @@ export const RUNTIME_OPERATION_NAMES = [
   'tapElementSelector',
   'tapPoint',
   'tapRef',
-  'touchScrollSurface',
   'triggerAppEvent',
   'tvRemote',
   'typeText',

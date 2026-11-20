@@ -729,14 +729,3 @@ test('probeAndroidDisplayRotation reports none when the display read fails', asy
     { returnFailedResults: true },
   );
 });
-
-test('scrollAndroid keeps the centred container lane for a directional scroll', async () => {
-  const offsetWindow = { x: 0, y: 136, width: 1080, height: 2264 };
-  const list = { x: 0, y: 436, width: 1080, height: 1500 };
-  await withFakeAdb(helperRouteAdb(offsetWindow), async ({ device }) => {
-    const result = await scrollAndroid(device, 'up', { pixels: 520, containerRect: list });
-    // The centred lane stays mid-viewport (relative 872..1392), inside the container.
-    assert.equal(result.y1, 136 + 872);
-    assert.equal(result.y2, 136 + 1392);
-  });
-});

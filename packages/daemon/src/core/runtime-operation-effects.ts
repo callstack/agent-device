@@ -72,7 +72,6 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   perfNativeCaptureReattach: 'repeatable',
   perfNativeCaptureStart: 'repeatable',
   perfProfileReport: 'repeatable',
-  touchScrollSurface: 'repeatable',
   performDirectionalFlingPlan: 'mutates',
   performGesturePlan: 'mutates',
   performMultiTouchGesturePlan: 'mutates',

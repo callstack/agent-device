@@ -3,15 +3,12 @@ import {
   createSnapshotVisibility,
   isScrollableNodeLike,
   isViewportRootNode,
-  type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { formatRole } from '@agent-device/kernel/snapshot';
-import { intersectRects, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type {
   HiddenContentHint,
   Point,
   RawSnapshotNode,
-  Rect,
   SnapshotNode,
 } from '@agent-device/kernel/snapshot';
 import type { ScrollEdge, ScrollEdgeState, ScrollEdgeTarget } from '../scroll-edge-state.ts';
@@ -46,7 +43,6 @@ export function analyzeScrollEdgeState(
     // Every selection path admits only `isUsableRect` containers, so a resolved container always
     // has a frame to report and its absence always means no container was resolved.
     ...(container.rect ? { containerRect: container.rect } : {}),
-    containerIndex: container.index,
     scope: buildScrollContainerScope(container, nodes),
     fingerprint: buildSurfaceFingerprint(container, nodes),
   };
@@ -60,68 +56,6 @@ function normalizeSnapshotNodes(
     ref: 'ref' in node && node.ref ? node.ref : `e${index + 1}`,
     kind: 'kind' in node && node.kind ? node.kind : formatRole(node.type ?? 'Element'),
   }));
-}
-
-/** The container a pull is for, plus `pullRect`: the band of it a touch can reach. */
-export function resolveScrollPullContainer(
-  inputNodes: readonly (RawSnapshotNode | SnapshotNode)[],
-): ScrollEdgeState {
-  const nodes = normalizeSnapshotNodes(inputNodes);
-  const broad = analyzeScrollEdgeState(nodes, 'top');
-  const broadRect = broad.containerRect;
-  if (!broadRect) return broad;
-  const visibility = createSnapshotVisibility(nodes);
-  const inner = analyzeScrollEdgeState(nodes, 'top', {
-    point: { x: broadRect.x + broadRect.width / 2, y: broadRect.y + broadRect.height / 2 },
-  });
-  const innerNode = nodeOf(visibility, inner.containerIndex);
-  // Only a DESCENDANT of the resolved container narrows it. One that merely overlaps its centre is a
-  // different surface — an iOS dev client leaves its launcher list in the tree over the app's own —
-  // and a pull planned there drags that list. Membership is the tree, not the frame: a nested list
-  // can report a frame running past the parent that clips it.
-  const narrows =
-    inner.containerRect !== undefined &&
-    innerNode !== undefined &&
-    inner.containerIndex !== broad.containerIndex &&
-    visibility.findAncestor(innerNode, (ancestor) =>
-      ancestor.index === broad.containerIndex ? true : null,
-    ) === true;
-  const chosen = narrows ? { ...inner, canScroll: inner.canScroll || broad.canScroll } : broad;
-  const container = nodeOf(visibility, chosen.containerIndex);
-  const rect = chosen.containerRect;
-  if (!container || !rect) return chosen;
-  return { ...chosen, pullRect: visiblePullRect(rect, container, visibility) };
-}
-
-function nodeOf(visibility: SnapshotVisibility, index: number | undefined) {
-  return index === undefined ? undefined : visibility.nodeByIndex.get(index);
-}
-
-/**
- * What survives of a container's frame once every clipping ancestor — a scroller or window root
- * above it, each of which compounds — has cut away what no touch reaches. One that hides the
- * container entirely leaves a zero-height band at its own edge, so the pull is refused rather than
- * planned onto pixels the list never receives; further ancestors cannot restore what is hidden.
- */
-function visiblePullRect(
-  rect: Rect,
-  container: SnapshotNode,
-  visibility: SnapshotVisibility,
-): Rect {
-  let visible = rect;
-  visibility.findAncestor(container, (ancestor) => {
-    const clip = ancestor.rect;
-    if (visible.height === 0 || !isPositiveFiniteRect(clip)) return null;
-    if (isScrollableNodeLike(ancestor) || isViewportRootNode(ancestor)) {
-      visible = intersectRects(visible, clip) ?? {
-        ...visible,
-        y: clip.y + clip.height,
-        height: 0,
-      };
-    }
-    return null;
-  });
-  return visible;
 }
 
 function selectScrollContainer(

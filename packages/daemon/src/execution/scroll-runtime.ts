@@ -1,8 +1,8 @@
 import { sleep } from '@agent-device/host-kit/retry';
 import {
   assertExclusiveScrollDistanceInputs,
-  assertScrollRefreshCompatible,
   assertScrollUntilCompatible,
+  DEFAULT_REFRESH_PULL_AMOUNT,
   DEFAULT_REFRESH_PULL_DURATION_MS,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
@@ -10,42 +10,27 @@ import {
   type ScrollCommandOptions,
   type ScrollMovementObservation,
 } from '@agent-device/contracts/scroll-command';
-import type { GestureViewportInput } from '@agent-device/contracts/gesture-runtime';
-import {
-  assertScrollGestureInput,
-  buildPullRefreshGesturePlan,
-  DEFAULT_REFRESH_PULL_AMOUNT,
-  inferGestureViewportRect,
-  parseScrollDirection,
-  REFRESH_PULL_MAX_PX,
-  REFRESH_PULL_MIN_PX,
-  type ScrollDirection,
-} from '@agent-device/contracts/scroll-gesture';
-import type {
-  BoundDeviceRuntime,
-  RuntimeOperationKey,
-} from '@agent-device/contracts/platform-runtime';
+import { parseScrollDirection, type ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import {
   resolveScrollRuntimePlan,
-  type PlatformRuntimeOperations,
   type ScrollRuntimePlan,
 } from '@agent-device/contracts/platform-runtime-operations';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type {
   ScrollDirectionInput,
   ScrollDirectionResult,
 } from '@agent-device/contracts/scroll-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  buildScrollEdgeCaptureError,
   captureScrollEdgeState,
   formatScrollEdgeMessage,
-  readScrollPullContainer,
   runScrollEdgePasses,
   scrollSurfaceFingerprint,
   type ScrollEdge,
   type ScrollEdgeObservation,
-  type ScrollEdgeState,
 } from '@agent-device/capture-kit/scroll-edge-state';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import {
@@ -78,28 +63,25 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 type ScrollTarget = Readonly<{
   direction: ScrollDirection;
   edge?: ScrollEdge;
-  refresh?: boolean;
+  refresh?: true;
 }>;
 
 /**
  * Both bindings come straight from the declared uses, so neither restates what a use already says:
- * an ordinary scroll cannot name a capture, while an edge scroll's and a refresh pull's
- * `captureSnapshot` are non-optional because their uses require them.
+ * an ordinary scroll cannot name a capture, and an edge scroll's `captureSnapshot` is non-optional
+ * because `scrollEdgeUse` requires it.
  */
 type BoundScrollDirection = BoundDeviceRuntime<
   Extract<ScrollRuntimePlan, { kind: 'direction' }>['use']
 >;
-type BoundScrollRefresh = BoundDeviceRuntime<
-  Extract<ScrollRuntimePlan, { kind: 'refresh' }>['use']
->;
 type BoundScrollEdge = BoundDeviceRuntime<Extract<ScrollRuntimePlan, { kind: 'edge' }>['use']>;
 type BoundScrollUntil = BoundDeviceRuntime<Extract<ScrollRuntimePlan, { kind: 'until' }>['use']>;
 
-/** `scroll bottom` scrolls down to the edge; `scroll top` scrolls up to it; `scroll refresh` pulls down at the top edge. */
+/** `scroll bottom` scrolls down to the edge; `scroll top` scrolls up to it; `scroll refresh` pulls down. */
 function parseScrollTarget(input: string): ScrollTarget {
+  if (input === 'refresh') return { direction: 'up', refresh: true };
   if (input === 'bottom') return { direction: 'down', edge: 'bottom' };
   if (input === 'top') return { direction: 'up', edge: 'top' };
-  if (input === 'refresh') return { direction: 'up', refresh: true };
   return { direction: parseScrollDirection(input) };
 }
 
@@ -107,16 +89,12 @@ function assertScrollCommandInputs(
   amount: number | undefined,
   pixels: number | undefined,
   durationMs: number | undefined,
-  refresh: boolean,
 ): void {
   if (amount !== undefined && !Number.isFinite(amount)) {
     throw new AppError('INVALID_ARGS', 'scroll amount must be a number');
   }
   normalizeScrollDurationMs(durationMs);
   assertExclusiveScrollDistanceInputs({ amount, pixels });
-  // A pull is planned from these, so the same non-positive rule the pull planner enforces is
-  // answered here, before admission, the capture, or the gesture.
-  if (refresh) assertScrollGestureInput({ amount, pixels });
 }
 
 /**
@@ -146,18 +124,26 @@ export async function resolveBoundScrollRuntime(
   const durationMs = params.context.durationMs;
   const until = params.context.until;
   if (!directionInput) throw new AppError('INVALID_ARGS', 'scroll requires direction');
-  const target = parseScrollTarget(directionInput);
-  assertScrollCommandInputs(amount, pixels, durationMs, target.refresh === true);
+  assertScrollCommandInputs(amount, pixels, durationMs);
 
+  const target = parseScrollTarget(directionInput);
   const stopCondition = {
     ...(target.edge === undefined ? {} : { edge: target.edge }),
     ...(until === undefined ? {} : { until }),
     ...(params.context.maxPasses === undefined ? {} : { maxPasses: params.context.maxPasses }),
-    ...(target.refresh === true ? { refresh: true } : {}),
+    ...(target.refresh ? { refresh: true } : {}),
   };
   assertScrollUntilCompatible(stopCondition);
-  assertScrollRefreshCompatible(stopCondition);
-  const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
+  const options = resolveScrollExecutionOptions(
+    target.refresh
+      ? {
+          amount: amount ?? (pixels === undefined ? DEFAULT_REFRESH_PULL_AMOUNT : undefined),
+          pixels,
+          durationMs: durationMs ?? DEFAULT_REFRESH_PULL_DURATION_MS,
+        }
+      : { amount, pixels, durationMs },
+    target.edge,
+  );
   const plan = resolveScrollRuntimePlan(stopCondition);
   const admission = {
     command: 'scroll',
@@ -167,77 +153,6 @@ export async function resolveBoundScrollRuntime(
     bindDevice: params.bindDevice,
   };
   switch (plan.kind) {
-    case 'refresh': {
-      const movementPlan = planScrollMovement({
-        device: params.device,
-        flags: params.flags,
-        session: params.session,
-      });
-      return await resolveBoundGenericRuntime(
-        {
-          ...admission,
-          // Each requirement the use mixes names its own refusal; none collapses into
-          // "requires snapshot".
-          unavailableResponse: (unavailable, operation) =>
-            refreshAdmissionRefusal(params.device, operation, unavailable.hint),
-          use: plan.use,
-        },
-        async (runtime, dispatchContext) => {
-          // The refusal and the container both come from a fresh capture: the pull is what
-          // invalidates the tree, so the session's stored snapshot cannot answer here.
-          const { state: topState, nodes } = await readCapturedTopEdgeState(
-            runtime,
-            dispatchContext,
-          );
-          if (topState.containerRect === undefined) {
-            throw new AppError(
-              'COMMAND_FAILED',
-              'scroll refresh found no scrollable container at the top of the screen',
-              {
-                reason: 'scroll_refresh_no_container',
-                hint: 'The surface names no vertical scroll container, so there is nothing to pull. Scroll with a direction if the content should move.',
-              },
-            );
-          }
-          if (topState.canScroll) {
-            throw new AppError(
-              'COMMAND_FAILED',
-              'scroll refresh refused: the scrollable area still has hidden content above, so it is not at the top',
-              {
-                reason: 'scroll_refresh_not_at_top',
-                containerRect: topState.containerRect,
-                hint: 'Run scroll top, then scroll refresh.',
-              },
-            );
-          }
-          // The pull stays on the container's VISIBLE band, which an ancestor may cut shorter than
-          // the container's own frame; a touch outside it never reaches the list.
-          const pullBounds = topState.pullRect ?? topState.containerRect;
-          const refreshOptions = resolveRefreshExecutionOptions(
-            { amount, pixels, durationMs },
-            pullBounds,
-          );
-          const pull = await performRefreshPull(
-            runtime,
-            refreshOptions,
-            pullBounds,
-            nodes,
-            dispatchContext,
-          );
-          const observed = await directionalMovementClaim(
-            runtime,
-            target.direction,
-            dispatchContext,
-            movementPlan,
-            pull,
-          );
-          // A refresh pull runs at the top edge by construction: an unchanged surface is answered
-          // as `unchanged`, never as "nothing to scroll".
-          const movement = observed === 'at-edge' ? 'unchanged' : observed;
-          return scrollResult(target, refreshOptions, 1, pull, movement);
-        },
-      );
-    }
     case 'direction': {
       // Decided before the gesture, because this command's own scroll is what invalidates the tree it
       // compares against: the dispatcher expires the session's ref frame at its ADR 0014 side-effect
@@ -284,6 +199,26 @@ export async function resolveBoundScrollRuntime(
           await executeEdgeScroll(runtime, edge, target, options, dispatchContext),
       );
     }
+    case 'refresh': {
+      const movementPlan = planScrollMovement({
+        device: params.device,
+        flags: params.flags,
+        session: params.session,
+      });
+      return await resolveBoundGenericRuntime(
+        {
+          ...admission,
+          unavailableResponse: (unavailable) =>
+            scrollCaptureUnsupported(
+              'scroll refresh, which checks that the content is at its top before pulling,',
+              unavailable.hint,
+            ),
+          use: plan.use,
+        },
+        async (runtime, dispatchContext) =>
+          await executeRefreshScroll(runtime, target, options, dispatchContext, movementPlan),
+      );
+    }
     case 'until': {
       const selector = plan.until;
       return await resolveBoundGenericRuntime(
@@ -324,190 +259,6 @@ function scrollCaptureUnsupported(subject: string, hint: string | undefined) {
 }
 
 /**
- * The refusal one refresh requirement answers, named for the cell that failed: a leaf that runs
- * gestures but cannot read the screen must not be told it lacks snapshot support. Every branch
- * carries the typed reason an agent branches on.
- */
-function refreshAdmissionRefusal(
-  device: DeviceInfo,
-  operation: RuntimeOperationKey<PlatformRuntimeOperations>,
-  hint: string | undefined,
-) {
-  const needs =
-    operation === 'touchScrollSurface'
-      ? 'needs a touch scroll surface'
-      : operation === 'performGesturePlan'
-        ? 'dispatches the pull as a gesture plan'
-        : 'reads the top edge of the scrollable area before pulling, which requires snapshot support';
-  return errorResponse(
-    'UNSUPPORTED_OPERATION',
-    `scroll refresh is not supported on ${publicPlatformString(device)}: it ${needs}`,
-    { reason: 'scroll_refresh_unsupported_platform' },
-    hint === undefined ? undefined : { hint },
-  );
-}
-
-/**
- * The execution options one pull-to-refresh carries: a slow pull (a fast one reads as a fling and
- * rubber-bands back without committing the control), with the distance defaulting to a fraction of
- * the container and clamped into the measured-safe band. No hold rides here: a holdMs-0 run
- * committed the refresh 5/5 on both platforms.
- */
-function resolveRefreshExecutionOptions(
-  options: ScrollCommandOptions,
-  visibleContainer: Rect,
-): ResolvedScrollExecutionOptions {
-  const pullAmount = options.amount ?? DEFAULT_REFRESH_PULL_AMOUNT;
-  // Both an explicit --pixels and the container fraction land in the measured-safe band.
-  const pullPixels = Math.min(
-    REFRESH_PULL_MAX_PX,
-    Math.max(
-      REFRESH_PULL_MIN_PX,
-      options.pixels ?? Math.round(pullAmount * visibleContainer.height),
-    ),
-  );
-  return {
-    ...(options.amount !== undefined ? { amount: options.amount } : {}),
-    pixels: pullPixels,
-    durationMs: options.durationMs ?? DEFAULT_REFRESH_PULL_DURATION_MS,
-    releaseBehavior: 'controlled',
-  };
-}
-
-/**
- * The one pull `scroll refresh` dispatches: the top-anchored lane computed once in TypeScript
- * against the visible band, lowered to a single-contact pan and sent through the bound gesture plan
- * operation — the same path `gesture pan` takes. The plan carries its viewport, so the runner maps
- * the coordinates onto the app window itself (a split-view iPad's origin included).
- */
-async function performRefreshPull(
-  runtime: BoundScrollRefresh,
-  options: ResolvedScrollExecutionOptions,
-  visibleContainer: Rect,
-  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
-  context: DaemonCommandContext,
-): Promise<ScrollDirectionResult> {
-  const viewport = await refreshGestureViewport(runtime, nodes, context);
-  const pull = buildPullRefreshGesturePlan({
-    ...(options.amount !== undefined ? { amount: options.amount } : {}),
-    pixels: options.pixels,
-    container: visibleContainer,
-    viewport,
-  });
-  // The planner keeps the lane inside the visible band, so one shorter than the measured-safe floor
-  // cannot commit a refresh (0/5 below ~300px on an iOS RN list). Dispatching it would report a
-  // refresh the pull cannot trigger, so the refusal names the band it measured.
-  if (pull.pixels < REFRESH_PULL_MIN_PX) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `scroll refresh found a scroll container too short to pull: ${pull.pixels}px of travel is below the ${REFRESH_PULL_MIN_PX}px that commits a refresh`,
-      {
-        reason: 'scroll_refresh_container_too_short',
-        containerRect: visibleContainer,
-        travelPixels: pull.pixels,
-        hint: 'The refresh control needs a longer list. Scroll with a direction if the content should move.',
-      },
-    );
-  }
-  // The gesture planner is loaded here, not at the module's top: the daemon evaluates no gesture
-  // planner on boot, and `scroll refresh` is the only scroll mode that needs one, so a static edge
-  // would put the planner in every daemon's eager closure.
-  const { buildGesturePlan } = await import('@agent-device/contracts/gesture-plan');
-  const plan = buildGesturePlan(
-    {
-      intent: 'pan',
-      origin: { x: pull.x1, y: pull.y1 },
-      delta: { x: pull.x2 - pull.x1, y: pull.y2 - pull.y1 },
-      durationMs: options.durationMs,
-    },
-    pull.viewport,
-  );
-  const gestureResult = await runtime.operations.performGesturePlan({
-    plan,
-    ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
-    execution: runtimeExecutionFromContext(context),
-  });
-  const durationMs = options.durationMs;
-  return {
-    report: {
-      // The route the pull took: the profile of the plan that was dispatched. An Apple runner
-      // echoes its own execution profile back; the Android helper names the lowered single-contact
-      // form it synthesized, so the plan's own profile keeps the route readable on every platform.
-      ...('executionProfile' in plan ? { executionProfile: plan.executionProfile } : {}),
-      ...(gestureResult ?? {}),
-      x1: pull.x1,
-      y1: pull.y1,
-      x2: pull.x2,
-      y2: pull.y2,
-      pixels: pull.pixels,
-      ...(durationMs === undefined ? {} : { durationMs }),
-    },
-    pixels: pull.pixels,
-    midpoint: { x: (pull.x1 + pull.x2) / 2, y: (pull.y1 + pull.y2) / 2 },
-  };
-}
-
-/** The viewport the pull is planned in: the owner's live read, else the capture's own. */
-async function refreshGestureViewport(
-  runtime: BoundScrollRefresh,
-  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
-  context: DaemonCommandContext,
-): Promise<Rect> {
-  const read = runtime.operations.gestureViewport;
-  if (read) {
-    const input: GestureViewportInput = {
-      ...(context.appBundleId === undefined
-        ? {}
-        : { options: { appBundleId: context.appBundleId } }),
-      execution: runtimeExecutionFromContext(context),
-    };
-    return await read(input);
-  }
-  const viewport = inferGestureViewportRect(nodes);
-  if (!viewport) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'scroll refresh could not establish the gesture viewport from the captured screen',
-      {
-        reason: 'scroll_refresh_viewport_unknown',
-        hint: 'Run snapshot -i for the current screen and retry.',
-      },
-    );
-  }
-  return viewport;
-}
-
-/**
- * The top-edge verdict a `scroll refresh` refuses or plans on, read off a freshly captured tree
- * before the pull dispatches. The session's stored snapshot is not used: an earlier gesture may have
- * expired it (ADR 0014), so it cannot answer whether content is still hidden above.
- */
-async function readCapturedTopEdgeState(
-  runtime: BoundScrollRefresh,
-  context: DaemonCommandContext,
-): Promise<
-  Readonly<{ state: ScrollEdgeState; nodes: readonly (RawSnapshotNode | SnapshotNode)[] }>
-> {
-  context.signal?.throwIfAborted();
-  const snapshot = await runtime.operations.captureSnapshot(scrollCaptureInput(context));
-  const nodes = snapshot.nodes ?? [];
-  const state = await readScrollPullContainer(nodes);
-  // An unreadable capture is a capture failure, not "no scroller": refusing it as no_container would
-  // tell the agent the app has no list when the read simply failed.
-  if (state.emptySnapshot) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'scroll refresh could not read the screen to find the scroll container',
-      {
-        reason: 'scroll_refresh_capture_unreadable',
-        hint: 'Run snapshot -i for the current screen and retry.',
-      },
-    );
-  }
-  return { state, nodes };
-}
-
-/**
  * One pass, and the observation that decides whether this response may name a distance (#2714).
  *
  * The baseline is the tree the session already holds, so a scroll that works costs one capture and
@@ -523,22 +274,58 @@ async function executeDirectionScroll(
   movementPlan: ScrollMovementPlan,
 ): Promise<Record<string, unknown>> {
   const interactionResult = await scrollOnce(runtime, target, options, context);
-  const observed = await directionalMovementClaim(
+  const movement = await directionalMovementClaim(
     runtime,
     target.direction,
     context,
     movementPlan,
     interactionResult,
   );
-  return scrollResult(target, options, 1, interactionResult, observed);
+  return scrollResult(target, options, 1, interactionResult, movement);
 }
 
-/** Any bound runtime that may carry the capture the movement claim reads. */
-type CaptureCapableScrollRuntime = Readonly<{
-  operations: Readonly<{
-    captureSnapshot?: (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
-  }>;
-}>;
+/**
+ * `scroll refresh`: one slow directional pull, aimed inside the scroll container a fresh capture
+ * names. A pull that starts above the list moves nothing, and a list that is not at its top only
+ * scrolls, so that case refuses instead of reporting a refresh that cannot have happened.
+ */
+async function executeRefreshScroll(
+  runtime: BoundScrollEdge,
+  target: ScrollTarget,
+  options: ResolvedScrollExecutionOptions,
+  context: DaemonCommandContext,
+  movementPlan: ScrollMovementPlan,
+): Promise<Record<string, unknown>> {
+  const top = await captureEdgeState(runtime, 'top', undefined, context);
+  if ('refused' in top) throw buildScrollEdgeCaptureError('top', top.refused);
+  if (top.canScroll) {
+    throw new AppError('COMMAND_FAILED', 'scroll refresh needs the content at its top', {
+      reason: 'scroll_refresh_not_at_top',
+      hint: 'Run scroll top, then scroll refresh.',
+    });
+  }
+  const pullOptions =
+    top.containerRect === undefined ? options : { ...options, containerRect: top.containerRect };
+  const pull = await scrollOnce(runtime, target, pullOptions, context);
+  const observed = await directionalMovementClaim(
+    runtime,
+    target.direction,
+    context,
+    movementPlan,
+    pull,
+  );
+  // The pull runs at the top edge on purpose, so "nothing left to scroll" is not its answer.
+  const movement = observed === 'at-edge' ? 'unchanged' : observed;
+  const result = scrollResult(target, options, 1, pull, movement);
+  return withSuccessText(
+    result,
+    movement === 'moved'
+      ? 'Pulled to refresh and the content changed'
+      : movement === 'unchanged'
+        ? 'Pulled to refresh and the visible content did not change'
+        : 'Pulled to refresh',
+  );
+}
 
 /**
  * The movement this response may claim, or `undefined` when this command owed no observation of its own
@@ -547,7 +334,7 @@ type CaptureCapableScrollRuntime = Readonly<{
  * keeps its response exactly what it was before this observation existed.
  */
 async function directionalMovementClaim(
-  runtime: CaptureCapableScrollRuntime,
+  runtime: BoundScrollDirection,
   direction: ScrollDirection,
   context: DaemonCommandContext,
   movementPlan: ScrollMovementPlan,
@@ -730,7 +517,6 @@ function scrollResult(
   return withSuccessText(
     {
       direction: target.direction,
-      ...(target.refresh === true ? { refresh: true } : {}),
       ...(target.edge ? { edge: target.edge, passes: completedPasses } : {}),
       ...(options.amount !== undefined ? { amount: options.amount } : {}),
       ...(options.pixels !== undefined ? { pixels: options.pixels } : {}),
@@ -742,7 +528,6 @@ function scrollResult(
     formatScrollEdgeMessage({
       direction: target.direction,
       edge: target.edge,
-      refresh: target.refresh === true ? true : undefined,
       passes: completedPasses,
       amount: options.amount,
       pixels: options.pixels,
