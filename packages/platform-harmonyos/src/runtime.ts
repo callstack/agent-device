@@ -49,7 +49,7 @@ import {
   createHarmonyScreenRecordingOperations,
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
-import { readHarmonyAppState } from './app-state.ts';
+import { probeHarmonyForegroundBundle, readHarmonyAppState } from './app-state.ts';
 import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 import {
   createHarmonyAppDeploymentOperations,
@@ -369,6 +369,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               host: host.localInteractors,
               device: request.device,
               signal: request.scope.signal,
+              readForegroundBundle: (signal) =>
+                probeHarmonyForegroundBundle(request.device, signal),
             }),
             facts.operations,
           ),

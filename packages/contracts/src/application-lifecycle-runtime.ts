@@ -233,6 +233,13 @@ export type LaunchConfirmationAbsent = Readonly<{
 
 type OpenApplicationOutcomeBase = Readonly<{
   appBundleId?: string;
+  /**
+   * The app target already held the foreground when the open dispatched, so the platform's launch
+   * is a re-activation of the running app, not a restart. The open keeps its idempotent semantics;
+   * `open --relaunch` stays the caller's restart path. Present only when an owner read the
+   * foreground before its dispatch; an unreadable read claims nothing.
+   */
+  alreadyForeground?: true;
   timing: OpenApplicationTiming;
 }>;
 
