@@ -17,8 +17,9 @@ import {
   settleScriptDeliveryReceiptOfFailure,
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
+import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
+import { isRecord } from '@agent-device/kernel/record';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
@@ -39,40 +40,37 @@ export function handleDaemonHttpResponseBody(
   const { info, req, stateDir, host, signal, onDelivery, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
-    // #4518: a remote answer is classified once. Only a result object whose `ok` is exactly `true`
-    // is delivered. Any other result object with an `error` object leaves through the error path,
-    // which strips client-owned fields and localizes the log. Every other result is invalid.
-    const remote = Boolean(info.baseUrl);
+    if (parsed.error) {
+      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, signal, reject });
+      return;
+    }
     const result: unknown = parsed.result;
-    const remoteFailure =
-      remote && isRecord(result) && result.ok !== true && isRecord(result.error)
-        ? { message: readMessage(result.error), data: result.error }
-        : undefined;
-    const failure = parsed.error ?? remoteFailure;
-    if (failure) {
-      void rejectDaemonHttpRpcError(failure, { info, req, stateDir, signal, reject });
+    if (!isRemoteDaemon(info)) {
+      if (typeof result === 'object' && result !== null) resolve(result as DaemonResponse);
+      else reject(invalidDaemonResponse(req));
       return;
     }
-    const deliverable = remote
-      ? isRecord(result) && result.ok === true
-      : typeof result === 'object' && result !== null;
-    if (!deliverable) {
-      reject(
-        new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
-          requestId: req.meta?.requestId,
-          reason: 'daemon_response_invalid',
-        }),
+    // #4518: a remote answer is classified once, by one predicate. Only a result whose `ok` is
+    // exactly `true` is delivered. Any other result with an `error` object leaves through the error
+    // path, which strips client-owned fields and localizes the log. Every other result is invalid.
+    if (isDeliverableResult(result)) {
+      void resolveDaemonHttpResult(
+        info,
+        req,
+        result,
+        { host, stateDir, signal, onDelivery },
+        resolve,
+        reject,
       );
-      return;
+    } else if (isRecord(result) && isRecord(result.error)) {
+      const message = typeof result.error.message === 'string' ? result.error.message : undefined;
+      void rejectDaemonHttpRpcError(
+        { message, data: result.error },
+        { info, req, stateDir, signal, reject },
+      );
+    } else {
+      reject(invalidDaemonResponse(req));
     }
-    void resolveDaemonHttpResult(
-      info,
-      req,
-      result as DaemonResponse,
-      { host, stateDir, signal, onDelivery },
-      resolve,
-      reject,
-    );
   } catch (err) {
     reject(
       new AppError(
@@ -89,12 +87,15 @@ export function handleDaemonHttpResponseBody(
   }
 }
 
-function readMessage(error: Record<string, unknown>): string | undefined {
-  return typeof error.message === 'string' ? error.message : undefined;
+function isDeliverableResult(value: unknown): value is Extract<DaemonResponse, { ok: true }> {
+  return isRecord(value) && value.ok === true;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function invalidDaemonResponse(req: DaemonWireRequest): AppError {
+  return new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
+    requestId: req.meta?.requestId,
+    reason: 'daemon_response_invalid',
+  });
 }
 
 function parseDaemonHttpResponseBody(body: string): {
@@ -224,10 +225,11 @@ function appErrorFromDaemonError(error: DaemonError, requestId: string | undefin
   );
 }
 
+/** Delivers a remote success answer: artifact delivery takes over the caller abort first. */
 async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
-  result: DaemonResponse,
+  result: Extract<DaemonResponse, { ok: true }>,
   client: {
     host: HostEnvironment;
     stateDir: string;
@@ -238,18 +240,16 @@ async function resolveDaemonHttpResult(
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
-    if (info.baseUrl && result.ok === true) client.onDelivery?.();
+    client.onDelivery?.();
     resolve(
-      info.baseUrl && result.ok === true
-        ? await materializeRemoteArtifacts(
-            info,
-            req,
-            result,
-            client.host,
-            client.stateDir,
-            client.signal,
-          )
-        : result,
+      await materializeRemoteArtifacts(
+        info,
+        req,
+        result,
+        client.host,
+        client.stateDir,
+        client.signal,
+      ),
     );
   } catch (error) {
     // The daemon answered, so the request ran; only bringing its artifacts here failed.
