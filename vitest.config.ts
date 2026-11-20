@@ -247,6 +247,9 @@ export default defineConfig({
             // The Home/Recents surface-transition wait (#4710): replays scripted captures through
             // the capture seam under fake timers, so the deadline and delayed change need no emulator.
             'test/integration/android-emulator-e2e/live-surface-transition.test.ts',
+            // The Back snapshot-diff wait: replays scripted diffs through the step seam under fake
+            // timers, so the chained diffs and the deadline need no emulator.
+            'test/integration/android-emulator-e2e/live-snapshot-transition.test.ts',
             // The same wait driven through the real scenario wiring with a scripted device (#4710
             // review): proves Home and Recents poll via the scenario, not just the helper.
             'test/integration/android-emulator-e2e/live-automation-scenario.test.ts',

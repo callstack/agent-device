@@ -107,11 +107,11 @@ test('a surface that never changes fails at the deadline and keeps the last obse
     status: 'rejected',
     reason: {
       message: expect.stringMatching(
-        /surface never changed within 10000ms.*capture \d+ still matched/s,
+        /surface never changed within 30000ms.*capture \d+ still matched/s,
       ),
     },
   });
-  expect(attempts()).toBe(40);
+  expect(attempts()).toBe(120);
   expect(fs.readFileSync(outputPath).equals(FIXTURE_SURFACE)).toBe(true);
 });
 
@@ -131,7 +131,7 @@ test('a wait whose captures keep failing reports the last capture error at the d
   expect(result).toMatchObject({
     status: 'rejected',
     reason: {
-      message: expect.stringMatching(/surface never changed within 10000ms.*device offline/s),
+      message: expect.stringMatching(/surface never changed within 30000ms.*device offline/s),
     },
   });
 });
@@ -161,10 +161,10 @@ test('no capture outlives the remaining deadline', async () => {
   expect(result).toMatchObject({
     status: 'rejected',
     reason: {
-      message: expect.stringMatching(/surface never changed within 10000ms.*capture timed out/s),
+      message: expect.stringMatching(/surface never changed within 30000ms.*capture timed out/s),
     },
   });
-  expect(failedAt - start).toBeLessThanOrEqual(10_000);
+  expect(failedAt - start).toBeLessThanOrEqual(30_000);
 });
 
 test('a capture that resolves after the deadline is rejected as a late observation', async () => {
@@ -188,7 +188,7 @@ test('a capture that resolves after the deadline is rejected as a late observati
     status: 'rejected',
     reason: {
       message: expect.stringMatching(
-        /surface never changed within 10000ms.*resolved after the deadline/s,
+        /surface never changed within 30000ms.*resolved after the deadline/s,
       ),
     },
   });
