@@ -554,6 +554,11 @@ async function startDaemonRuntimeOnHost(
       close: { retainRegistration: false },
     });
   });
+  // The winner empties the log it already owns here, before recovery or reconciliation writes to it, so
+  // every startup diagnostic survives into the file its launcher and client read back. Publication used
+  // to do the emptying, after those steps had written. It sits behind the rollback that gives the
+  // registration back, so a log this startup cannot open hands the lock back too.
+  registration.resetLog();
   options.startupProgress?.report('lock-acquired');
 
   rollback.onRollback(() => {
@@ -622,6 +627,30 @@ async function startDaemonRuntimeOnHost(
   options.startupProgress?.report('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
     await import('./server-startup.ts');
+  // Recovery evidence and the host-global claim sweep both land before anything is reachable: they
+  // write to the log the winner emptied when it won the lock, so each of these lines survives, and a
+  // client cannot discover this daemon until the sweep has settled the orphaned claims it found.
+  await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
+  for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
+    await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
+      provider: plugin.provider,
+      package: plugin.package,
+      source: plugin.source,
+      code: plugin.error?.code,
+      reason: plugin.error?.reason,
+      message: plugin.error?.message,
+      hint: plugin.error?.hint,
+    });
+  }
+  await reconcileDeviceClaimsForDaemonStartup(
+    logPath,
+    createOwnerScopedDeviceClaimReconciler({
+      scope: createRecoveryPlatformScope(),
+      composeGateway: deps.claimRecoveryGateway,
+    }),
+    baseDir,
+    env,
+  );
   const { servers, socketPort, httpPort } = await openDaemonServers(
     daemonServerMode,
     {
@@ -660,33 +689,13 @@ async function startDaemonRuntimeOnHost(
     rollback,
   );
   options.startupProgress?.report('listening');
+  // The listeners answer from this step on, so this is where the record lands: `registered` says a
+  // client that finds `daemon.json` finds a daemon that has already reconciled its claims, serves,
+  // and can drain itself.
   publishDaemonInfo(socketPort, httpPort);
   options.startupProgress?.report('registered');
   options.startupProgress?.close();
   stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
-  await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
-  for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
-    await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
-      provider: plugin.provider,
-      package: plugin.package,
-      source: plugin.source,
-      code: plugin.error?.code,
-      reason: plugin.error?.reason,
-      message: plugin.error?.message,
-      hint: plugin.error?.hint,
-    });
-  }
-  // After publication: publishDaemonInfo truncates daemon.log, so anything
-  // written before it is lost — including reconciliation diagnostics.
-  await reconcileDeviceClaimsForDaemonStartup(
-    logPath,
-    createOwnerScopedDeviceClaimReconciler({
-      scope: createRecoveryPlatformScope(),
-      composeGateway: deps.claimRecoveryGateway,
-    }),
-    baseDir,
-    env,
-  );
   // Arms the initial idle-reap timer: a daemon that starts and never
   // receives a request must still be able to reap itself.
   idleReap.noteActivity();

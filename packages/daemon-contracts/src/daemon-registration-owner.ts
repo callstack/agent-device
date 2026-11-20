@@ -72,6 +72,11 @@ type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>
   | Exclude<RegisteredDaemonOwnership, { state: 'match' }>;
 export type DaemonRegistrationOwner = Readonly<{
+  /**
+   * Empties `daemon.log` in place, on the inode the launch redirected to it. Only the lock's
+   * winner calls it.
+   */
+  resetLog(): void;
   publish(fields: DaemonRegistrationFields): void;
   finish(
     outcome?: DaemonShutdownOutcome,
@@ -104,9 +109,12 @@ export async function tryAcquireDaemonRegistration(
   return {
     status: 'acquired',
     owner: Object.freeze({
-      publish({ socketPort, httpPort, ...fields }: DaemonRegistrationFields) {
+      resetLog() {
         acquisition.assertHeld();
         truncateDaemonLog(boundPaths.logPath);
+      },
+      publish({ socketPort, httpPort, ...fields }: DaemonRegistrationFields) {
+        acquisition.assertHeld();
         const transport = socketPort && httpPort ? 'dual' : httpPort ? 'http' : 'socket';
         acquisition.assertHeld();
         publishFileSync({
@@ -213,8 +221,15 @@ async function releaseRegistrationAfterFailure(
  * handle opened append-only (`'a'`) rejects `ftruncate` with EPERM, so that host empties the
  * log through a read-write handle instead (#3291). A failure at any step propagates: an
  * unreadable log must fail startup loudly.
+ *
+ * The winning registration owner calls this right after it acquires the lock, so every startup
+ * diagnostic it later writes — recovery and device-claim reconciliation included — survives into
+ * the log its launcher and client read back. An absent log stays absent: the launcher opens the
+ * file before the daemon runs, so a reset that finds nothing to empty is a start that records no
+ * log, and it leaves the state directory as that start must leave it.
  */
 function truncateDaemonLog(logPath: string): void {
+  if (!fs.existsSync(logPath)) return;
   if (process.platform === 'win32') {
     truncateDaemonLogOnWindowsHost(logPath);
     return;
@@ -229,19 +244,12 @@ function truncateDaemonLog(logPath: string): void {
 
 /**
  * `ftruncate` on Windows requires a handle opened for writing beyond append. An existing log
- * is opened `'r+'` directly, so no window exists between handles on the common path; a
- * missing log is first created through `'a'` and then reopened, and a creation race against
- * that reopen surfaces as this startup failing rather than a silently unemptied log.
+ * is opened `'r+'` directly, so no window exists between handles on the common path; a log
+ * removed between the check and that open surfaces as this startup failing rather than a
+ * silently unemptied log.
  */
 function truncateDaemonLogOnWindowsHost(logPath: string): void {
-  let descriptor: number;
-  try {
-    descriptor = fs.openSync(logPath, 'r+', 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    fs.closeSync(fs.openSync(logPath, 'a', 0o600));
-    descriptor = fs.openSync(logPath, 'r+', 0o600);
-  }
+  const descriptor = fs.openSync(logPath, 'r+', 0o600);
   try {
     fs.ftruncateSync(descriptor, 0);
   } finally {

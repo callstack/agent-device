@@ -591,7 +591,7 @@ test('an embedded runtime refuses a quiesce, because its host decides when it le
   expect(await daemon.exit).toBe(0);
 });
 
-test('a quiesce asked while the daemon is still starting up is refused as busy, then accepted', async () => {
+test('a daemon publishes its record only at readiness, and then answers a quiesce', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-lifecycle-startup-');
   const paths = resolveDaemonPaths(stateDir);
   let openGate: () => void = () => {};
@@ -612,37 +612,30 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
     stdout: { write: () => {} },
   });
   try {
-    // Published, listening, and still held inside startup.
-    for (let polls = 0; !fs.existsSync(paths.infoPath); polls += 1) {
-      if (polls >= 500) throw new Error('daemon did not publish daemon.json during startup');
+    // The gate holds startup inside device-claim reconciliation. Nothing may be discoverable yet: a
+    // client that found this record would find a daemon that cannot drain its own startup work, and
+    // would refuse its replacement while that work ran.
+    for (let polls = 0; polls < 20; polls += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(fs.existsSync(paths.infoPath)).toBe(false);
     }
+
+    openGate();
+    const runtime = await starting;
+    const exit = runtime.closed.then(() => 0);
     const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as {
       port: number;
       token: string;
       pid: number;
       processStartTime?: string;
     };
-
     const quiesceRequest = buildDaemonLifecycleRequest({
       token: info.token,
       fence: { pid: info.pid, processStartTime: info.processStartTime ?? null },
       requestId: 'startup-quiesce',
     });
     const response = await sendSocketRequest(info.port, quiesceRequest);
-    // The daemon is still starting up, so it refuses as busy instead of promising a drain it cannot run yet.
-    expect(response.ok).toBe(false);
-    expect(reasonOf(response)).toBe('daemon-busy');
-    expect(!response.ok && response.error.details).toMatchObject({
-      startingUp: true,
-      inFlightRequests: 0,
-    });
-
-    openGate();
-    const runtime = await starting;
-    const exit = runtime.closed.then(() => 0);
-    const again = await sendSocketRequest(info.port, quiesceRequest);
-    expect(again).toEqual({ ok: true, data: { outcome: 'draining' } });
+    expect(response).toEqual({ ok: true, data: { outcome: 'draining' } });
     expect(await exit).toBe(0);
     expect(fs.existsSync(paths.infoPath)).toBe(false);
   } finally {

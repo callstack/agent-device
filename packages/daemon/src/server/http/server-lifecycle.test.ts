@@ -18,6 +18,11 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
   const { owner } = attempt;
 
   try {
+    // The detached launch redirects stdout and stderr to the log before the daemon runs, so the file
+    // is there for the winner's reset to empty. Publication no longer creates it.
+    fs.writeFileSync(logPath, 'previous run\n');
+    owner.resetLog();
+
     owner.publish({
       socketPort: 4210,
       httpPort: 4310,
@@ -28,6 +33,7 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
     });
 
     assert.equal(fs.existsSync(logPath), true);
+    assert.equal(fs.readFileSync(logPath, 'utf8'), '');
     const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
     assert.equal(info.transport, 'dual');
     assert.equal(info.port, 4210);

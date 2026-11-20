@@ -348,10 +348,10 @@ test('daemon entrypoint reaps itself when idle: exits cleanly, releases its regi
 });
 
 test('daemon runtime records startup device-claim reconciliation in daemon.log', async () => {
-  // Regression: reconciliation ran before publishDaemonInfo, which truncates
-  // daemon.log — so the event was written and then wiped, leaving nothing in
-  // the log users are told to inspect. Asserted against a real runtime start
-  // rather than reconciliation in isolation, since the ordering is the bug.
+  // Regression: the reconciliation event was written to daemon.log and then wiped, leaving nothing in
+  // the log users are told to inspect. Asserted against a real runtime start rather than
+  // reconciliation in isolation, since the ordering is the bug. The winner now empties the log when it
+  // wins the lock, so the event survives wherever startup runs the sweep.
   const stateDir = mkdtempForTestSync('agent-device-daemon-prune-log-');
   const claimsDir = mkdtempForTestSync('agent-device-daemon-prune-claims-');
   const paths = resolveDaemonPaths(stateDir);
