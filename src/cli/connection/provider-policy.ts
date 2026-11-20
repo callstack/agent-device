@@ -117,6 +117,21 @@ export function declaredConnectionCapabilities(
   return pluginConnectionCapabilities(provider, env);
 }
 
+/**
+ * Whether a provider forgets an ended connection lease, answered without loading any plugin: the
+ * provider's own declaration when this process has it, then the plugin catalog's copy of it. A
+ * provider that neither knows keeps its lease.
+ */
+export function providerForgetsEndedConnectionLease(
+  provider: string | undefined,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  const declared = declaredConnectionCapabilities(provider, env);
+  if (declared) return declared.forgetsEndedConnectionLease === true;
+  if (provider === undefined) return false;
+  return getProviderPluginDeclaration(provider)?.forgetsEndedConnectionLease === true;
+}
+
 /** Installed providers declare their capabilities; the rest is the daemon's own routing. */
 export function connectionProviderCapabilities(
   provider: string | undefined,
