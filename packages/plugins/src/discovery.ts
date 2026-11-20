@@ -1,3 +1,4 @@
+import { PLUGIN_REASONS } from './reasons.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -28,7 +29,7 @@ export function assertNodeFloor(manifest: Record<string, unknown>): void {
     throw new AppError(
       'INVALID_ARGS',
       `Plugin requires Node ${engines.node}; this host runs Node ${node}`,
-      { reason: 'node-below-floor', engines: engines.node, node },
+      { reason: PLUGIN_REASONS.nodeBelowFloor.reason, engines: engines.node, node },
     );
   }
 }
@@ -124,7 +125,7 @@ function resolvePluginEntry(directory: string, target: string): string {
     }
   } catch {}
   throw new AppError('INVALID_ARGS', 'Plugin entry must be a readable file inside its package', {
-    reason: 'plugin_load_failed',
+    reason: PLUGIN_REASONS.loadFailed.reason,
     directory,
     entry: target,
   });
@@ -138,12 +139,12 @@ export function readPackageJson(directory: string): Record<string, unknown> {
     throw new AppError(
       'INVALID_ARGS',
       `Cannot read plugin manifest: ${directory}`,
-      { reason: 'plugin_load_failed' },
+      { reason: PLUGIN_REASONS.loadFailed.reason },
       error as Error,
     );
   }
   throw new AppError('INVALID_ARGS', `Cannot read plugin manifest: ${directory}`, {
-    reason: 'plugin_load_failed',
+    reason: PLUGIN_REASONS.loadFailed.reason,
   });
 }
 
@@ -260,7 +261,7 @@ function firstResolved(
 
 function unresolvableEntry(directory: string, subpath: string): AppError {
   return new AppError('INVALID_ARGS', `Package exports ${subpath} without an import target`, {
-    reason: 'incompatible_plugin',
+    reason: PLUGIN_REASONS.incompatiblePlugin.reason,
     directory,
     hint: `Ask the plugin author for a release whose ${subpath} export has an import condition.`,
   });
@@ -268,7 +269,7 @@ function unresolvableEntry(directory: string, subpath: string): AppError {
 
 function missingEntry(directory: string, subpath: string): AppError {
   return new AppError('INVALID_ARGS', 'Package does not export a provider plugin', {
-    reason: 'incompatible_plugin',
+    reason: PLUGIN_REASONS.incompatiblePlugin.reason,
     directory,
     hint: `Install a plugin release that exports ${subpath}.`,
   });

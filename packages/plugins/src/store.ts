@@ -1,10 +1,11 @@
+import { PLUGIN_REASONS } from './reasons.ts';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isRecord } from '@agent-device/kernel/record';
 import { canonicalJson } from '@agent-device/kernel/collections';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   acquireProcessLock,
@@ -15,6 +16,20 @@ import {
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginCandidate } from './registry.ts';
 import type { PluggedClaim } from './validate.ts';
+
+/** The `error.details.reason` values the plugin store publishes for its own selection and artifact refusals. */
+const PLUGIN_STORE_REASONS = {
+  // An install selects a plugin already installed.
+  alreadyInstalled: { reason: 'plugin_already_installed' },
+  // The plugin archive changed during installation.
+  artifactIntegrityMismatch: { reason: 'artifact_integrity_mismatch' },
+  // Updating a local artifact requires removing the existing installation first.
+  artifactUpdateRequiresRemove: { reason: 'artifact_update_requires_remove' },
+  // The plugin install and its staging cleanup both failed.
+  cleanupFailed: { reason: 'plugin_cleanup_failed' },
+  // The daemon retains a plugin selection that changed on disk.
+  daemonPluginSetStale: { reason: 'daemon-plugin-set-stale' },
+} as const satisfies ReasonTable<'plugins'>;
 export type PluginSelection = {
   installation: string;
   version?: string;
@@ -83,7 +98,7 @@ export function createPluginSelectionGuard(
         'INVALID_ARGS',
         'Cannot read the selected plugin configuration',
         {
-          reason: 'invalid_plugin',
+          reason: PLUGIN_REASONS.invalidPlugin.reason,
           package: packageName,
           hint: 'Repair the plugin configuration on the daemon host, then restart it after finishing your sessions.',
         },
@@ -92,7 +107,7 @@ export function createPluginSelectionGuard(
     }
     if ((selected.get(packageName) ?? selectionStamp(undefined)) !== selectionStamp(current))
       throw new AppError('INVALID_ARGS', 'The running daemon retains an older plugin set.', {
-        reason: 'daemon-plugin-set-stale',
+        reason: PLUGIN_STORE_REASONS.daemonPluginSetStale.reason,
         package: packageName,
         hint: 'Finish your sessions and restart the daemon on its host, then retry the original invocation with all its arguments.',
       });
@@ -150,7 +165,7 @@ async function describeInstallation(
   const version = typeof packageJson.version === 'string' ? packageJson.version : undefined;
   if (version === undefined) {
     throw new AppError('INVALID_ARGS', `Plugin package has no version: ${name}`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin.reason,
     });
   }
   if (
@@ -160,7 +175,7 @@ async function describeInstallation(
       !Object.hasOwn(packageJson.exports, './agent-device'))
   )
     throw new AppError('INVALID_ARGS', `Invalid artifact plugin metadata: ${name}`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin.reason,
     });
   // Record the declared claims before checking the Node floor or importing the factory.
   const entry = discoverPluginEntry(directory);
@@ -195,7 +210,7 @@ async function loadInstallation({
   const module = await import(pathToFileURL(entry).href);
   if (typeof module.default !== 'function')
     throw new AppError('INVALID_ARGS', `Plugin must export a default factory: ${name}`, {
-      reason: 'invalid_plugin',
+      reason: PLUGIN_REASONS.invalidPlugin.reason,
     });
   return await module.default(selection.options);
 }
@@ -378,7 +393,7 @@ async function transactSelection<T>(
               'COMMAND_FAILED',
               'Plugin installation and staging cleanup failed',
               {
-                reason: 'plugin_cleanup_failed',
+                reason: PLUGIN_STORE_REASONS.cleanupFailed.reason,
                 installationError: normalizeError(error),
                 cleanupError: normalizeError(cleanupError),
               },
@@ -445,7 +460,7 @@ export async function changePlugin(
         throw new AppError(
           'INVALID_ARGS',
           `Artifact plugin cannot be updated from the registry: ${name}`,
-          { reason: 'artifact_update_requires_remove' },
+          { reason: PLUGIN_STORE_REASONS.artifactUpdateRequiresRemove.reason },
         );
       const requested =
         action === 'update' && isVersionSelector(previous?.version) ? previous.version : version;
@@ -480,30 +495,30 @@ export async function addPluginArtifact(
       const names = Object.keys(lock.packages?.['']?.dependencies ?? {});
       if (names.length !== 1 || !isPackageName(names[0]!))
         throw new AppError('INVALID_ARGS', 'Artifact has an invalid package name', {
-          reason: 'invalid_plugin',
+          reason: PLUGIN_REASONS.invalidPlugin.reason,
         });
       const name = names[0]!;
       if (lock.packages?.[`node_modules/${name}`]?.integrity !== integrity)
         throw new AppError('INVALID_ARGS', 'Artifact contents changed during installation', {
-          reason: 'artifact_integrity_mismatch',
+          reason: PLUGIN_STORE_REASONS.artifactIntegrityMismatch.reason,
         });
       const directory = installationDirectory(home, name, installation);
       const root = fs.realpathSync(project);
       const actualDirectory = fs.realpathSync(directory);
       if (!actualDirectory.startsWith(`${root}${path.sep}`))
         throw new AppError('INVALID_ARGS', 'Artifact package escaped its installation', {
-          reason: 'invalid_plugin',
+          reason: PLUGIN_REASONS.invalidPlugin.reason,
         });
       const manifestPath = fs.realpathSync(path.join(directory, 'package.json'));
       if (!manifestPath.startsWith(`${actualDirectory}${path.sep}`))
         throw new AppError('INVALID_ARGS', 'Artifact manifest escaped its package', {
-          reason: 'invalid_plugin',
+          reason: PLUGIN_REASONS.invalidPlugin.reason,
         });
       const { readPackageJson } = await import('./discovery.ts');
       const manifest = readPackageJson(directory);
       if (manifest.name !== name || !isExactVersion(manifest.version))
         throw new AppError('INVALID_ARGS', `Invalid artifact package identity: ${name}`, {
-          reason: 'invalid_plugin',
+          reason: PLUGIN_REASONS.invalidPlugin.reason,
         });
       const selection: PluginSelection = {
         installation,
@@ -513,7 +528,7 @@ export async function addPluginArtifact(
       described.assertCompatibleHost();
       if (Object.hasOwn(selections, name))
         throw new AppError('INVALID_ARGS', `Plugin is already installed: ${name}`, {
-          reason: 'plugin_already_installed',
+          reason: PLUGIN_STORE_REASONS.alreadyInstalled.reason,
         });
       selections[name] = selection;
       return { name, version: manifest.version, installation, integrity };

@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { Platform } from '@agent-device/kernel/device';
 import type { OptionalPlatform } from './platform-module.ts';
 
@@ -124,6 +124,12 @@ export function getOptionalPlatformPluginDeclaration(
     : undefined;
 }
 
+/** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
+export const PLUGIN_INSTALLATION_REASONS = {
+  // A command requires a plugin that is absent.
+  notInstalled: { reason: 'plugin-not-installed', commands: ['connect', 'replay', 'test'] },
+} as const satisfies ReasonTable<'plugins'>;
+
 /**
  * The typed outcome for a platform family a composition does not have (ADR 0034). An optional family
  * reports `plugin-not-installed` with the package that provides it and its installation command,
@@ -140,7 +146,7 @@ export function missingOptionalPlatformError(family: Platform, coreVersion: stri
     'UNSUPPORTED_PLATFORM',
     `${declaration.label} platform requires the ${declaration.package} plugin.`,
     {
-      reason: 'plugin-not-installed',
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
       family,
       package: declaration.package,
       ...pluginInstallationHint(declaration, coreVersion),
