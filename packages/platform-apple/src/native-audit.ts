@@ -23,10 +23,18 @@ export async function collectNativeAudit(
   return mapNativeAuditIssues(data);
 }
 
+/**
+ * Published `details.reason` values for a native audit the runner answered with a malformed result.
+ * `website/docs/docs/commands.md` documents each value.
+ */
+const NATIVE_AUDIT_FAILURES = {
+  invalidResult: { reason: 'native-audit-invalid-result' },
+} as const satisfies Record<string, { reason: string }>;
+
 function mapNativeAuditIssues(data: Record<string, unknown>): NativeAuditFinding[] {
   if (!Array.isArray(data.auditIssues)) {
     throw new AppError('COMMAND_FAILED', 'Runner returned no native audit result.', {
-      reason: 'native-audit-invalid-result',
+      reason: NATIVE_AUDIT_FAILURES.invalidResult.reason,
     });
   }
   return data.auditIssues.map((issue: unknown) => {
@@ -39,7 +47,7 @@ function mapNativeAuditIssues(data: Record<string, unknown>): NativeAuditFinding
       typeof issue.description !== 'string'
     ) {
       throw new AppError('COMMAND_FAILED', 'Runner returned an invalid native audit issue.', {
-        reason: 'native-audit-invalid-result',
+        reason: NATIVE_AUDIT_FAILURES.invalidResult.reason,
       });
     }
     const rect = readNativeAuditRect('rect' in issue ? issue.rect : undefined);
@@ -92,7 +100,7 @@ function readNativeAuditRect(value: unknown) {
     return { x: value.x, y: value.y, width: value.width, height: value.height };
   }
   throw new AppError('COMMAND_FAILED', 'Runner returned invalid native audit geometry.', {
-    reason: 'native-audit-invalid-result',
+    reason: NATIVE_AUDIT_FAILURES.invalidResult.reason,
   });
 }
 
