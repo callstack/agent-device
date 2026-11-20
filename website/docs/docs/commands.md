@@ -2342,40 +2342,7 @@ agent-device record stop                # Stop active recording
 
 **Screenshot diffs**
 
-<!-- generated:command diff -->
-
-Diff snapshot or screenshot.
-
-```bash
-agent-device diff snapshot | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs] [--screen-mask <black>]
-```
-
-**`diff snapshot`**
-
-No options of its own.
-
-**`diff screenshot`**
-
-| Option | What it does |
-| --- | --- |
-| `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
-
-**Every `diff` action**
-
-| Option | What it does |
-| --- | --- |
-| `-i` | Snapshot: interactive elements only |
-| `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
-| `--baseline, -b <path>` | Diff screenshot: path to baseline image file |
-| `--threshold <0-1>` | Diff screenshot: color distance threshold (default 0.1) |
-
-Also accepts: [common options](#common-options): `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`, `--out <path>`.
-
-Supported targets: [Accessibility snapshot, snapshot diff, and audit](/docs/capabilities#inspect-and-verify-the-ui).
-
-Exact behavior: `agent-device help diff`.
-
-<!-- /generated -->
+`diff screenshot` reads `--baseline`, `--threshold`, `--out`, `--overlay-refs`, and `--screen-mask`. `diff snapshot` reads `-i`, `--depth`, `--scope`, `--raw`, and `--out`; see [Snapshot and inspect](#snapshot-and-inspect). The CLI accepts both sets on either action, and an action ignores the options that it does not read. Exact behavior: `agent-device help diff`.
 
 - `diff screenshot` compares a live capture, or a saved `current.png` (no session needed), against `--baseline`. Inputs may be PNG or JPEG regardless of extension; HarmonyOS captures are JPEG. Output ranks changed regions with rectangles, changed-pixel counts, and share of the diff; `--out` writes a diff PNG with changed pixels tinted red. `ocr` and `nonTextDeltas` are never populated, so read the images yourself for qualitative review.
 - `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Keep it above `0` when either input is JPEG.
