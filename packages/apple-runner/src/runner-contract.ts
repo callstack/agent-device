@@ -421,10 +421,10 @@ export const RUNNER_ERROR_CODES = {
     diagnosticOnly: {},
   },
   // `audit` asked a runner that cannot run Apple's audit for it: an OS older than iOS 17, or a
-  // platform other than iOS. The row keeps `unknown`, the disclosure this refusal had before the table.
+  // platform other than iOS. The host reads the code and answers with the heuristic findings alone,
+  // so the row publishes no reason. It keeps `unknown`, the disclosure it had before the table.
   NATIVE_AUDIT_UNAVAILABLE: {
     dispatched: 'unknown',
-    reason: 'native_audit_unavailable',
     diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
   },
   // Apple's audit failed while a system alert covered the app. The runner names the alert and its

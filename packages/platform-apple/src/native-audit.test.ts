@@ -115,7 +115,6 @@ test('a runner that cannot run the native audit contributes no findings', async 
     runCommand: async () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'Native accessibility audit requires iOS 17+', {
         runnerErrorCode: 'NATIVE_AUDIT_UNAVAILABLE',
-        reason: 'native_audit_unavailable',
       });
     },
   };
