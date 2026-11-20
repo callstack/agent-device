@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { test, vi } from 'vitest';
+import { normalizeError } from '@agent-device/kernel/errors';
 import {
   getLiveAndroidSnapshotHelperSession,
   retireFailedAndroidSnapshotHelperSession,
+  stopAndroidSnapshotHelperSession,
 } from '../snapshot-helper-session-lifecycle.ts';
+import { isAndroidSnapshotHelperSessionPeerUnverified } from '../snapshot-helper-session-protocol.ts';
 import { runAndroidSnapshotHelperSessionTouchCommand } from '../snapshot-helper-session.ts';
 
 vi.mock('../snapshot-helper-session-lifecycle.ts', () => ({
@@ -52,5 +55,51 @@ test('an input sent to a listener that cannot prove the secret falls back before
   } finally {
     for (const socket of sockets) socket.destroy();
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+async function listenOnce(onSocket: (socket: net.Socket) => void) {
+  const sockets = new Set<net.Socket>();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    onSocket(socket);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const close = async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  };
+  return { port: address.port, close };
+}
+
+test.each([
+  { label: 'a refused connection', closedBeforeConnect: true },
+  { label: 'a socket that closes before the hello', closedBeforeConnect: false },
+])('$label is a transport failure, not an unverified peer', async ({ closedBeforeConnect }) => {
+  vi.clearAllMocks();
+  const listener = await listenOnce((socket) => socket.destroy());
+  if (closedBeforeConnect) await listener.close();
+  vi.mocked(getLiveAndroidSnapshotHelperSession).mockResolvedValue({
+    helper: HELPER,
+    port: listener.port,
+    secret: Buffer.alloc(32, 5),
+  } as NonNullable<Awaited<ReturnType<typeof getLiveAndroidSnapshotHelperSession>>>);
+  try {
+    const outcome = await runAndroidSnapshotHelperSessionTouchCommand({
+      deviceKey: 'android:emulator-touch-transport',
+      action: 'viewport',
+      helper: HELPER,
+      timeoutMs: 2_000,
+    }).catch((error: unknown) => error);
+    // The transport failure reaches the caller as before; it earns no unverified-peer backoff.
+    assert.ok(outcome instanceof Error, `expected a transport failure, got ${String(outcome)}`);
+    if (closedBeforeConnect) assert.match(JSON.stringify(normalizeError(outcome)), /ECONNREFUSED/);
+    assert.equal(isAndroidSnapshotHelperSessionPeerUnverified(outcome), false);
+    assert.equal(vi.mocked(retireFailedAndroidSnapshotHelperSession).mock.calls.length, 0);
+    assert.equal(vi.mocked(stopAndroidSnapshotHelperSession).mock.calls.length, 1);
+  } finally {
+    if (!closedBeforeConnect) await listener.close();
   }
 });

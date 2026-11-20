@@ -108,7 +108,10 @@ export function sendAndroidSnapshotHelperSessionCommand(
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: '127.0.0.1', port });
     const clientNonce = randomBytes(32).toString('hex');
-    let hello: Buffer | undefined = Buffer.alloc(0);
+    // The peer is unverified only once it answered: a connect or IO failure before its first byte
+    // stays the ordinary transport failure.
+    let phase: 'nonce-sent' | 'proven' | 'refused' = 'nonce-sent';
+    let hello = Buffer.alloc(0);
     const chunks: Buffer[] = [];
     const timer = setTimeout(() => {
       cleanup();
@@ -131,10 +134,9 @@ export function sendAndroidSnapshotHelperSessionCommand(
       socket.destroy();
       reject(signal?.reason ?? new DOMException('The operation was aborted', 'AbortError'));
     };
-    let refused = false;
     const refuse = () => {
-      if (refused) return;
-      refused = true;
+      if (phase === 'refused') return;
+      phase = 'refused';
       cleanup();
       socket.destroy();
       emitDiagnostic({
@@ -158,7 +160,8 @@ export function sendAndroidSnapshotHelperSessionCommand(
     socket.on('connect', () => socket.write(`${clientNonce}\n`));
     // Only the helper that printed the secret can answer the nonce; anything else is refused.
     socket.on('data', (chunk) => {
-      if (!hello) return void chunks.push(Buffer.from(chunk));
+      if (phase === 'proven') return void chunks.push(Buffer.from(chunk));
+      if (phase === 'refused') return;
       hello = Buffer.concat([hello, chunk]);
       const newline = hello.indexOf(0x0a);
       if (newline < 0) return void (hello.length > 129 && refuse());
@@ -167,7 +170,6 @@ export function sendAndroidSnapshotHelperSessionCommand(
         .toString('latin1')
         .split(' ');
       chunks.push(hello.subarray(newline + 1));
-      hello = undefined;
       const expected = Buffer.from(sessionProof(secret, SERVER_LABEL, clientNonce, serverNonce));
       const actual = Buffer.from(proof);
       if (
@@ -177,16 +179,20 @@ export function sendAndroidSnapshotHelperSessionCommand(
       ) {
         return refuse();
       }
+      phase = 'proven';
       socket.write(`${sessionProof(secret, CLIENT_LABEL, serverNonce, clientNonce)}\n${command}\n`);
     });
-    // Before the hello nothing proved the peer, and no command byte has left this process.
+    // A peer that answered without a complete, valid hello is refused; no command byte has left.
+    const answeredWithoutProof = () => phase === 'nonce-sent' && hello.length > 0;
     socket.on('error', (error) => {
-      if (hello || refused) return refuse();
+      if (phase === 'refused') return;
+      if (answeredWithoutProof()) return refuse();
       cleanup();
       reject(error);
     });
     socket.on('close', () => {
-      if (hello || refused) return refuse();
+      if (phase === 'refused') return;
+      if (answeredWithoutProof()) return refuse();
       cleanup();
       resolve(Buffer.concat(chunks).toString('utf8'));
     });
