@@ -31,6 +31,7 @@ export function writeGeneratedRemoteConfig(options: {
     destination: configPath,
     contents: `${JSON.stringify(normalized, null, 2)}\n`,
     mode: 0o600,
+    exactMode: true,
   });
   return configPath;
 }

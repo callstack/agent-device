@@ -300,6 +300,7 @@ export function writeCliSession(options: { stateDir: string; session: CliSession
     destination: filePath,
     contents: `${JSON.stringify(options.session, null, 2)}\n`,
     mode: 0o600,
+    exactMode: true,
   });
 }
 
