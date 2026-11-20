@@ -1,10 +1,13 @@
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type { NetworkTransport } from '@agent-device/contracts/network-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-export async function resolveWebNetworkTransport(device: DeviceInfo): Promise<NetworkTransport> {
+export async function resolveWebNetworkTransport(
+  device: DeviceInfo,
+  web?: WebPlatformSelection,
+): Promise<NetworkTransport> {
   if (device.platform !== 'web') return Object.freeze({ mode: 'local' });
-  const { resolveRequestScopedWebProvider } = await import('@agent-device/platform-web');
-  const provider = await resolveRequestScopedWebProvider();
+  const provider = await web?.get().operations.resolveRequestProvider();
   if (!provider) return Object.freeze({ mode: 'local' });
   const dumpNetwork = provider.dumpNetwork;
   if (!dumpNetwork) return Object.freeze({ mode: 'transport-composed' });

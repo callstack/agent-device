@@ -17,7 +17,7 @@ import {
 } from '@agent-device/test-kit';
 import { createPlatformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
 
-const platformResourceCleanup = createPlatformResourceCleanup(createLiveTestHostEnvironment());
+import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -30,6 +30,11 @@ afterEach(() => {
 async function closeBrowser(device: DeviceInfo): Promise<void> {
   const stateDir = mkdtempForTestSync('agent-device-resource-cleanup-web-close-');
   await installFakeManagedAgentBrowser(stateDir);
+  const host = createLiveTestHostEnvironment();
+  const platformResourceCleanup = createPlatformResourceCleanup(
+    host,
+    webSelectionFixture(host, stateDir),
+  );
   await platformResourceCleanup.closeManagedBrowser({
     device,
     stateDir,

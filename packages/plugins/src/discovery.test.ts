@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { discoverPluginEntry } from './discovery.ts';
+import { mkdtempForTestSync, withNodeRuntime } from '@agent-device/test-kit';
+import { assertNodeFloor, discoverPluginEntry } from './discovery.ts';
 
 type Case = {
   name: string;
@@ -184,4 +184,10 @@ test('an entry outside the installed package is refused', () => {
     (error: unknown) =>
       (error as { details?: { reason?: string } }).details?.reason === 'plugin_load_failed',
   );
+});
+
+test('the left side of a Node hyphen range accepts that version', async () => {
+  await withNodeRuntime({ version: '18.0.0' }, () => {
+    assert.doesNotThrow(() => assertNodeFloor({ engines: { node: '18 - 20' } }));
+  });
 });

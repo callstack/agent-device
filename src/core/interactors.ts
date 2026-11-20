@@ -3,18 +3,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { getPlugin } from './platform-plugin-registry.ts';
-import { missingPlatformPlugin } from './platform-plugin-absence.ts';
-import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
-
-// Populate the platform-plugin registry once, at module load (only registers
-// lazy closures — no leaf code is imported here, so CLI cold-start is unaffected).
-registerBuiltinPlatformPlugins(missingPlatformPlugin);
+import { builtinPlatformPlugins } from './interactors/builtin-platform-plugin-set.ts';
+import type { PlatformPluginSet } from '@agent-device/contracts/platform-plugin';
 
 export async function getInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
   host: HostEnvironment,
+  plugins: PlatformPluginSet = builtinPlatformPlugins,
 ): Promise<Interactor> {
   if (isActiveProviderDevice(device)) {
     const providerInteractor = getProviderDeviceInteractor(device, runnerContext);
@@ -26,7 +22,7 @@ export async function getInteractor(
     );
   }
 
-  return await getLocalInteractor(device, runnerContext, host);
+  return await getLocalInteractor(device, runnerContext, host, plugins);
 }
 
 /**
@@ -39,11 +35,7 @@ export async function getLocalInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
   host: HostEnvironment,
+  plugins: PlatformPluginSet = builtinPlatformPlugins,
 ): Promise<Interactor> {
-  // Byte-identical replacement for the former per-platform switch: each plugin's
-  // `createInteractor` is the SAME lazy dynamic import + factory call the switch
-  // arm performed, and `getPlugin` throws the SAME `UNSUPPORTED_PLATFORM` AppError
-  // the switch default threw. Registry exhaustiveness (BuiltinPluginsCoverRequiredPlatforms)
-  // guarantees every required family resolves; optional families may be absent (ADR 0034).
-  return await getPlugin(device.platform).createInteractor(device, runnerContext, host);
+  return await plugins.get(device.platform).plugin.createInteractor(device, runnerContext, host);
 }

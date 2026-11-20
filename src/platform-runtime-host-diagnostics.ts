@@ -1,3 +1,4 @@
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
@@ -12,7 +13,10 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
  * execution). Families load lazily: a probe module is imported only when its family's method
  * actually runs, matching the platform registry's implementation-laziness.
  */
-export function createHostDiagnostics(host: HostEnvironment): HostDiagnostics {
+export function createHostDiagnostics(
+  host: HostEnvironment,
+  web?: WebPlatformSelection,
+): HostDiagnostics {
   const { env } = host;
   return Object.freeze({
     toolchainCheck: async (
@@ -46,8 +50,8 @@ export function createHostDiagnostics(host: HostEnvironment): HostDiagnostics {
       return await androidDeviceChecks(device, context);
     },
     ambientChecks: async (context: HostDiagnosticsContext): Promise<readonly DoctorCheck[]> => {
-      const { webBrowserLifecycleCheck } = await import('@agent-device/platform-web');
-      return [await webBrowserLifecycleCheck(context.stateDir, host)];
+      if (!web?.active) return [];
+      return [await web.active.operations.browserLifecycleCheck(context.stateDir)];
     },
     warmupCheck: async (
       device: DeviceInfo,

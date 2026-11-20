@@ -1,3 +1,7 @@
+import type {
+  PlatformPluginSet,
+  WebPlatformSelection,
+} from '@agent-device/contracts/platform-plugin';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
@@ -52,6 +56,8 @@ export async function loadMacOsSurfaceSnapshot(
 
 export function createPlatformRuntimeHost(options: {
   host: HostEnvironment;
+  web?: WebPlatformSelection;
+  interactors?: PlatformPluginSet;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
@@ -72,7 +78,7 @@ export function createPlatformRuntimeHost(options: {
       if (device.platform !== 'web') return Object.freeze({ mode: 'local' as const });
       const { resolveWebNetworkTransport } =
         await import('./platform-runtime-network-web-transport.ts');
-      return await resolveWebNetworkTransport(device);
+      return await resolveWebNetworkTransport(device, options.web);
     },
   });
   const appleApplications = createAppleApplicationTools(env);
@@ -124,11 +130,16 @@ export function createPlatformRuntimeHost(options: {
     screenRecording: createScreenRecordingRuntimeHost({
       ownedProcesses: options.ownedProcesses,
       host,
+      web: options.web,
     }),
-    audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses, host }),
+    audioProbe: createAudioProbeRuntimeHost({
+      ownedProcesses: options.ownedProcesses,
+      host,
+      web: options.web,
+    }),
     perf: createPerfRuntimeHost(),
     snapshot: options.snapshot,
-    localInteractors: createLocalApplicationInteractorHost(host),
+    localInteractors: createLocalApplicationInteractorHost(host, options.interactors),
     appleApplications,
     androidApplications,
     applicationResources: createApplicationResourceLifecycle({

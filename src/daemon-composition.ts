@@ -22,7 +22,9 @@ import {
   createEmbeddedProviderRuntimeComposition,
 } from './provider-device-runtimes.ts';
 import { readDaemonProviderCredentials } from './provider-credential-fingerprint.ts';
-import { readVersion } from '@agent-device/host-kit/version';
+import { createPlatformPluginHost } from './platform-runtime/plugin-host.ts';
+import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import { getInteractor } from './core/interactors.ts';
 import {
   androidObservation,
@@ -41,7 +43,6 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/daemon';
 
@@ -51,7 +52,7 @@ import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/
  * refuses is a diagnostic, not a reason to keep the next daemon from serving.
  */
 export function createDaemonStartupWebOrphanCleanup(
-  host: HostEnvironment,
+  web?: WebPlatformSelection,
 ): (params: {
   stateDir: string;
   openWebSessionNames: readonly string[];
@@ -59,7 +60,7 @@ export function createDaemonStartupWebOrphanCleanup(
 }) => Promise<void> {
   return async (params) => {
     try {
-      await createPlatformDaemonLifecycleOwners(host).cleanupManagedWebOrphans(params);
+      await createPlatformDaemonLifecycleOwners(web).cleanupManagedWebOrphans(params);
     } catch (error) {
       emitDiagnostic({
         level: 'warn',
@@ -112,11 +113,14 @@ export async function composeDaemonRuntimeDeps(
     sessionsDir,
     resolveSessionDir,
   });
-  const hostDiagnostics = createHostDiagnostics(host);
+  const platformHost = createPlatformPluginHost(host, baseDir, {
+    ownedProcessRecords,
+    openWebSessionNames,
+  });
   const providerComposition =
     providerCandidates === undefined
-      ? await createDaemonProviderRuntimeComposition(host)
-      : await createEmbeddedProviderRuntimeComposition(host, providerCandidates);
+      ? await createDaemonProviderRuntimeComposition(host, platformHost)
+      : await createEmbeddedProviderRuntimeComposition(host, providerCandidates, platformHost);
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {
@@ -127,12 +131,16 @@ export async function composeDaemonRuntimeDeps(
       providerComposition.resolveReplayExecution,
     );
     const providerDeviceRuntimes = [...providerComposition.runtimes];
-    // The typed absent-family outcome names the plugin release this core can install, so the
-    // composition that knows its own version passes it to the registries it composes.
-    const coreVersion = readVersion();
+    const platforms = composePlatformPlugins(
+      providerComposition.platforms,
+      providerComposition.inventory,
+      providerComposition.assertSelectionCurrent,
+    );
+    const { web } = platforms;
+    const hostDiagnostics = createHostDiagnostics(host, web);
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
-      coreVersion,
+      platforms,
       assertShutdownAllowed,
       providerRuntimes: providerDeviceRuntimes,
       providerModules: providerComposition.platformModules,
@@ -148,17 +156,12 @@ export async function composeDaemonRuntimeDeps(
         appleRunnerScreenRecordingTransport:
           providerRuntimeProviders.appleRunnerScreenRecordingTransport,
       },
-      defaultWebProvider: {
-        host,
-        stateDir: baseDir,
-        openWebSessionNames,
-        ownedProcessRecords,
-      },
+      web,
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
       host,
-      coreVersion,
       providerRuntimeProviders.deviceInventorySource,
+      platforms,
     );
     // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
     // platform-runtime.ts is already static in this module, so the deferred imports keep these thin
@@ -176,7 +179,7 @@ export async function composeDaemonRuntimeDeps(
     return Object.freeze({
       ownedProcessRecords,
       hostDiagnostics,
-      ownerLifecycle: createPlatformDaemonLifecycleOwners(host),
+      ownerLifecycle: createPlatformDaemonLifecycleOwners(web),
       shutdownProviderRuntimes: providerComposition.shutdown,
       pluginInventory: providerComposition.inventory,
       resolveReplayBackend: providerComposition.resolveReplayBackend,
@@ -186,16 +189,16 @@ export async function composeDaemonRuntimeDeps(
       recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
       deviceRuntimeGateway,
-      platformResourceCleanup: createPlatformResourceCleanup(host, ownedProcessRecords),
-      claimRecoveryGateway: createClaimRecoveryGatewayFor(host),
+      platformResourceCleanup: createPlatformResourceCleanup(host, web),
+      claimRecoveryGateway: createClaimRecoveryGatewayFor(host, platforms),
       interactorResolution: Object.freeze({
         resolve: async (device: DeviceInfo, runnerContext: RunnerContext) =>
-          await getInteractor(device, runnerContext, host),
+          await getInteractor(device, runnerContext, host, platforms.interactors),
       }),
       providerDeviceAdmission: Object.freeze({
         isActive: (device: DeviceInfo) => isActiveProviderDevice(device),
       }),
-      cleanupManagedWebOrphans: createDaemonStartupWebOrphanCleanup(host),
+      cleanupManagedWebOrphans: createDaemonStartupWebOrphanCleanup(web),
       requestRouter: Object.freeze({
         requestPlatformProviders,
         deviceInventoryGateways,

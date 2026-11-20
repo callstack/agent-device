@@ -169,6 +169,7 @@ async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise
       serial: flags.serial,
     },
     host,
+    { stateDir: flags.stateDir },
   );
   const data = {
     released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),

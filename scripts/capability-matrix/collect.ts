@@ -12,7 +12,7 @@ import { listRuntimeFactCommands } from '@agent-device/command-registry/registry
 import { commandIsAvailableFromFacts } from '@agent-device/command-registry/planned-operations';
 import { runtimeModule as appleRuntimeModule } from '@agent-device/platform-apple';
 import { createAndroidRuntimeModule } from '@agent-device/platform-android';
-import { runtimeModule as webRuntimeModule } from '@agent-device/platform-web';
+import { webSelectionFixture } from '../../src/platform-runtime-web-provider.fixtures.ts';
 import { runtimeModule as vegaRuntimeModule } from '@agent-device/platform-vega';
 import { runtimeModule as harmonyosRuntimeModule } from '@agent-device/platform-harmonyos';
 import { runtimeModule as linuxRuntimeModule } from '@agent-device/platform-linux';
@@ -30,6 +30,8 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createProviderWire, PROVIDER_ENV, stubLimrunSdk, type ProviderWire } from './seams.ts';
 import { TARGETS, type Target } from './targets.ts';
+
+const webRuntimeModule = webSelectionFixture().get().runtimeModule;
 
 export type CommandSupport = Readonly<{
   /** Public commands the registry derives from runtime facts, in registry order. */

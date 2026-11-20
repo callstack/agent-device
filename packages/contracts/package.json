@@ -296,6 +296,10 @@
       "types": "./src/lease-scope.ts",
       "default": "./src/lease-scope.ts"
     },
+    "./plugin-installation": {
+      "types": "./src/plugin-installation.ts",
+      "default": "./src/plugin-installation.ts"
+    },
     "./plugin-inventory": {
       "types": "./src/plugin-inventory.ts",
       "default": "./src/plugin-inventory.ts"
@@ -307,6 +311,10 @@
     "./logs-runtime-plan": {
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
+    },
+    "./web-provider": {
+      "types": "./src/web-provider.ts",
+      "default": "./src/web-provider.ts"
     },
     "./managed-web-backend": {
       "types": "./src/managed-web-backend.ts",

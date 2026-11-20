@@ -1,9 +1,12 @@
 import crypto from 'node:crypto';
 import { AppError } from './errors.ts';
-import type { DeviceIdentity } from './device-identity.ts';
 import type { EnvMap } from './source-value.ts';
+import { PLATFORMS, isPlatform, type DeviceIdentity, type Platform } from './device-identity.ts';
 
 export {
+  PLATFORMS,
+  isPlatform,
+  type Platform,
   deviceIdentity,
   deviceIdentityKey,
   deviceShape,
@@ -22,8 +25,6 @@ const APPLE_OS_VALUES = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'
 export type AppleOS = (typeof APPLE_OS_VALUES)[number];
 // Internal device platforms. Apple OSes collapse to a single `apple` platform; the
 // `appleOs` field on DeviceInfo is the sole OS discriminant.
-export const PLATFORMS = ['apple', 'android', 'harmonyos', 'vega', 'linux', 'web'] as const;
-export type Platform = (typeof PLATFORMS)[number];
 // The PUBLIC leaf platform strings the daemon emits and clients parse (approach b:
 // output never changes). Equals the pre-collapse `Platform` set.
 export const PUBLIC_PLATFORMS = [
@@ -376,10 +377,6 @@ export function resolveDeviceAppleOs(
 /**
  * @internal Type guard exposed for unit tests.
  */
-export function isPlatform(value: unknown): value is Platform {
-  // Internal device-platform membership derived from the canonical PLATFORMS tuple.
-  return (PLATFORMS as readonly unknown[]).includes(value);
-}
 
 export function isPublicPlatform(value: unknown): value is PublicPlatform {
   // The PUBLIC leaf strings a daemon response carries (approach b). Used by the client

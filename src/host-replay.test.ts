@@ -6,7 +6,8 @@ import { prepareDaemonCommandRequest } from '@agent-device/command-surface';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type { AgentDevicePlugin } from './sdk/plugins.ts';
 import type { ReplayBackendContribution } from '@agent-device/plugins/replay-backend';
-import { resolveProviderPlugins } from '@agent-device/plugins/registry';
+import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
+import type { PluggedClaim } from '@agent-device/plugins/validate';
 import { storePluginCandidates } from '@agent-device/plugins/store';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -115,39 +116,59 @@ function fixture() {
   return { root, entry, host, stateDir: path.join(root, 'state') };
 }
 
-async function nativePlugin(): Promise<AgentDevicePlugin> {
-  const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
-  const claim = resolved.claims.find(
-    (claim) => claim.kind === 'replay-execution' && claim.id === 'ad',
+async function startReplayFixtureRegistry({ kind, id }: PluggedClaim) {
+  const host = { env: process.env, cwd: process.cwd() };
+  const candidates = await storePluginCandidates(host.env);
+  return await startProviderRegistry(
+    await resolveProviderPlugins(
+      candidates.filter((candidate) =>
+        candidate.declaredClaims?.some((claim) => claim.kind === kind && claim.id === id),
+      ),
+    ),
+    host,
+    {
+      adaptWebDriver: async () => {
+        throw new Error('Replay fixture cannot start providers');
+      },
+    },
+    'replay-backends',
   );
-  if (!claim?.contribution) throw new Error('Native replay test installation is missing');
-  return {
-    apiVersion: 3,
-    contributes: [claim.contribution as AgentDevicePlugin['contributes'][number]],
-  } satisfies AgentDevicePlugin;
 }
 
-async function trackedPlugin() {
-  const resolved = await resolveProviderPlugins(await storePluginCandidates(process.env));
-  const claim = resolved.claims.find(
-    (claim) => claim.kind === 'replay-backend' && claim.id === 'maestro',
-  );
-  const maestro = claim?.contribution;
-  if (!maestro || maestro.kind !== 'replay-backend')
-    throw new Error('Maestro test installation is missing');
+function nativePlugin(): AgentDevicePlugin {
+  return {
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'replay-execution',
+        id: 'ad',
+        async setup() {
+          const registry = await startReplayFixtureRegistry({ kind: 'replay-execution', id: 'ad' });
+          return {
+            execution: { create: () => registry.resolveReplayExecution() },
+            dispose: async () => {
+              await registry.close();
+            },
+          };
+        },
+      },
+    ],
+  };
+}
+
+function trackedPlugin() {
   const calls = { setup: 0, create: 0, collect: 0, run: 0, dispose: 0 };
   const contribution: ReplayBackendContribution = {
-    ...maestro,
-    setup: async (host) => {
+    kind: 'replay-backend',
+    backend: 'maestro',
+    setup: async () => {
       calls.setup += 1;
-      const setup = await maestro.setup(host);
-      if (!setup.replayBackend) throw new Error('Expected a format backend');
-      const replayBackend = setup.replayBackend;
+      const registry = await startReplayFixtureRegistry({ kind: 'replay-backend', id: 'maestro' });
       return {
         replayBackend: {
           create: async (host) => {
             calls.create += 1;
-            const backend = await replayBackend.create(host);
+            const backend = await registry.resolveReplayBackend('maestro', host);
             return {
               ...backend,
               collectSourceFiles: (params) => {
@@ -163,7 +184,7 @@ async function trackedPlugin() {
         },
         dispose: async () => {
           calls.dispose += 1;
-          await setup.dispose?.();
+          await registry.close();
         },
       };
     },
@@ -181,8 +202,8 @@ test.each(['replay', 'test', 'batch-test'] as const)(
     try {
       await state.run(async () => {
         const f = fixture();
-        const { plugin, calls } = await trackedPlugin();
-        const host = await startAgentDevice({ ...f, plugins: [plugin, await nativePlugin()] });
+        const { plugin, calls } = trackedPlugin();
+        const host = await startAgentDevice({ ...f, plugins: [plugin, nativePlugin()] });
         const input = { path: f.entry, platform: 'ios' as const, backend: 'maestro' };
         const testInput = { paths: [f.entry], platform: 'ios' as const, backend: 'maestro' };
         try {
@@ -244,8 +265,8 @@ test('isolated embedded clients ignore a conflicting store and never borrow anot
     path.join(f.host.env.AGENT_DEVICE_HOME!, 'config.json'),
     JSON.stringify({ plugins: { '@agent-device/maestro': { installation } } }),
   );
-  const firstPlugin = await trackedPlugin();
-  const secondPlugin = await trackedPlugin();
+  const firstPlugin = trackedPlugin();
+  const secondPlugin = trackedPlugin();
   const first = await startAgentDevice({ ...f, plugins: [firstPlugin.plugin] });
   let second: Awaited<ReturnType<typeof startAgentDevice>> | undefined;
   try {

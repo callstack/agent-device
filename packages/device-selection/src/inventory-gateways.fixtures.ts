@@ -11,6 +11,7 @@ import {
   type InventoryPlatformModule,
   createPlatformModuleRegistry,
 } from '@agent-device/contracts/platform-module';
+import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
 import type {
   DeviceInventoryHost,
   PlatformRequestScope,
@@ -80,7 +81,7 @@ export function createTestDeviceInventoryGateways(
   return createComposedDeviceInventoryGateways({
     registry: createPlatformModuleRegistry(
       testInventoryModules(options.local ?? (async () => [] as readonly DeviceInfo[])),
-      TEST_CORE_VERSION,
+      (family) => missingOptionalPlatformError(family, TEST_CORE_VERSION),
     ),
     loadHost: async () => testInventoryHost,
     provider: options.provider,

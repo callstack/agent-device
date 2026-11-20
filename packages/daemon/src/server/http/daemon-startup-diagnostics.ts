@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
   emitDiagnostic,
@@ -23,6 +24,28 @@ export async function flushDaemonStartupDiagnostics(
       });
     }
   });
+}
+
+export async function reportPluginStartupFailures(
+  logPath: string,
+  inventory: readonly PluginInventoryEntry[],
+): Promise<void> {
+  for (const plugin of inventory.filter((plugin) => plugin.state === 'failed')) {
+    await emitDaemonDiagnostic(
+      logPath,
+      plugin.platform ? 'platform_plugin_failed' : 'provider_plugin_failed',
+      {
+        provider: plugin.provider,
+        platform: plugin.platform,
+        package: plugin.package,
+        source: plugin.source,
+        code: plugin.error.code,
+        reason: plugin.error.reason,
+        message: plugin.error.message,
+        hint: plugin.error.hint,
+      },
+    );
+  }
 }
 
 /**
