@@ -10,6 +10,7 @@ import {
 } from './deadline.ts';
 import { createDetachedAttempts } from '../detached-attempt.ts';
 import { snapshotSourceSocketPath } from './host.ts';
+import { settleWithin } from '@agent-device/host-kit/retry';
 import { bridgeProcessExited } from './process.ts';
 import { createSnapshotBridgeDescribeRequest, encodeSnapshotBridgeFrame } from './protocol.ts';
 import { roundTripSnapshotBridge } from './transport.ts';
@@ -634,8 +635,5 @@ async function waitForProcess(
   bridgeProcess: SnapshotSourceProcess,
   timeoutMs: number,
 ): Promise<void> {
-  await Promise.race([
-    bridgeProcess.wait.catch(() => undefined),
-    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-  ]);
+  await settleWithin(() => bridgeProcess.wait.catch(() => undefined), timeoutMs);
 }

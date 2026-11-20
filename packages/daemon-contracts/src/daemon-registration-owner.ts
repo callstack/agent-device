@@ -27,6 +27,7 @@ import {
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { settleWithin } from '@agent-device/host-kit/retry';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
@@ -695,17 +696,8 @@ async function joinOwnedStartups(
   timeoutMs: number,
 ): Promise<boolean> {
   if (!owned || owned.startups.every((startup) => startup.joined)) return true;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      Promise.all(owned.startups.map(({ launch }) => launch.exited)).then(() => true),
-      new Promise<boolean>((resolve) => {
-        timer = setTimeout(() => resolve(false), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+  const exits = () => Promise.all(owned.startups.map(({ launch }) => launch.exited));
+  return (await settleWithin(exits, timeoutMs)).kind === 'settled';
 }
 
 function retirePrivateStateIfEligible(

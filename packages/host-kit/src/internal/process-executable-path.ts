@@ -1,8 +1,8 @@
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { readlink } from 'node:fs/promises';
 import path from 'node:path';
-import { setTimeout, clearTimeout } from 'node:timers';
 import { runCmd, withoutCommandExecutorOverride } from './exec.ts';
+import { settleWithin } from './retry.ts';
 import { hostPlatform, uniquePositivePids } from './host-process.ts';
 
 const DEFAULT_TIMEOUT_MS = 1_000;
@@ -66,19 +66,9 @@ async function readLinuxPaths(
       }
     }),
   );
-  let cancelTimeout = () => {};
-  try {
-    const rows = await Promise.race([
-      observations,
-      new Promise<undefined>((resolve) => {
-        const timer = setTimeout(resolve, timeoutMs);
-        cancelTimeout = () => clearTimeout(timer);
-      }),
-    ]);
-    return new Map(rows?.filter((row) => row !== undefined) ?? []);
-  } finally {
-    cancelTimeout();
-  }
+  const outcome = await settleWithin(() => observations, timeoutMs);
+  const rows = outcome.kind === 'settled' ? outcome.value : [];
+  return new Map(rows.filter((row) => row !== undefined));
 }
 
 function darwinArgs(pids: readonly number[]): string[] {
