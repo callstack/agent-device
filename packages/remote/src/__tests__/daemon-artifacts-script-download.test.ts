@@ -712,3 +712,60 @@ test('an abort while the publish waits for the record lock leaves the destinatio
   expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
   expect(fs.readdirSync(path.join(root, 'caller'))).toEqual(['journey.ad']);
 });
+
+// #4518: `recordingDestinationWarnings` is the client's own record of cwd writes. A peer copy, even
+// a malformed one, is dropped and never reported.
+test('a peer recordingDestinationWarnings array with a null entry still cancels as request_canceled', async () => {
+  const { stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const controller = new AbortController();
+  controller.abort();
+  const failure = await materializeRemoteArtifacts(
+    { baseUrl, token: 't' },
+    { ...request('record'), positionals: ['stop'] },
+    { ok: true, data: { recordingDestinationWarnings: [null], artifacts: [script('v2', 2, id)] } },
+    createTestHostEnvironment(),
+    stateDir,
+    controller.signal,
+  ).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(AppError);
+  expect((failure as AppError).details?.reason).toBe('request_canceled');
+  expect((failure as AppError).details?.recordingDestinationWarnings).toBeUndefined();
+});
+
+test.for(['success', 'failure', 'cancel'] as const)(
+  'well-formed peer recordingDestinationWarnings with no local write report nothing on %s',
+  async (outcome) => {
+    const { root, stateDir, destination } = journey();
+    const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+    const { id } = await open(baseUrl, stateDir, destination);
+    const peer = [
+      { reason: 'recording_destination_not_requested', field: 'outPath', path: '/x.mp4' },
+    ];
+    const controller = new AbortController();
+    if (outcome === 'cancel') controller.abort();
+    const artifacts =
+      outcome === 'failure'
+        ? [{ artifactId: 'missing', field: 'outPath', fileName: 'x.mp4' }]
+        : outcome === 'cancel'
+          ? [script('v2', 2, id)]
+          : [];
+    const result = await materializeRemoteArtifacts(
+      { baseUrl, token: 't' },
+      {
+        ...request('record', { clientArtifactPaths: { outPath: path.join(root, 'out.mp4') } }),
+        positionals: ['stop'],
+      },
+      { ok: true, data: { recordingDestinationWarnings: peer, artifacts } },
+      createTestHostEnvironment(),
+      stateDir,
+      controller.signal,
+    ).then(
+      (response) => (response.ok ? response.data : undefined),
+      (error: unknown) => (error as AppError).details,
+    );
+    expect(result?.recordingDestinationWarnings).toBeUndefined();
+    expect(result?.warnings).toBeUndefined();
+  },
+);

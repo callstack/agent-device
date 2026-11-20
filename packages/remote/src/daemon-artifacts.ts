@@ -502,19 +502,20 @@ export async function materializeRemoteArtifacts(
 ): Promise<DaemonResponse> {
   if (!info.baseUrl) return response;
   const endpoint = { baseUrl: info.baseUrl, token: info.token };
+  // The one record of recording files this client wrote to cwd. Only completed local downloads add
+  // to it; success, a later failure and a cancellation all report from it, never from the response.
+  const fallbacks: RecordingDestinationWarning[] = [];
   const delivered = await deliverResponseArtifacts(endpoint, req, response, {
     host,
     stateDir,
     signal,
+    fallbacks,
   });
   // A caller abort during delivery wins over any branch that finished without seeing it, and the
   // failure still names the recording files already written to cwd.
   if (signal?.aborted) {
     const canceled = createRequestCanceledError({ requestId: req.meta?.requestId }, signal.reason);
-    const written = delivered.ok ? delivered.data?.recordingDestinationWarnings : undefined;
-    throw Array.isArray(written) && written.length > 0
-      ? withRecordingFallbacks(canceled, written)
-      : canceled;
+    throw fallbacks.length > 0 ? withRecordingFallbacks(canceled, fallbacks) : canceled;
   }
   return delivered;
 }
@@ -523,12 +524,17 @@ async function deliverResponseArtifacts(
   endpoint: Required<DaemonArtifactEndpoint>,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
-  client: Readonly<{ host: HostEnvironment; stateDir: string; signal: AbortSignal | undefined }>,
+  client: Readonly<{
+    host: HostEnvironment;
+    stateDir: string;
+    signal: AbortSignal | undefined;
+    fallbacks: RecordingDestinationWarning[];
+  }>,
 ): Promise<DaemonResponse> {
-  const { host, signal } = client;
+  const { host, signal, fallbacks } = client;
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   const download = (scripts?: SessionScriptDelivery) =>
-    downloadResponseArtifacts(endpoint, req, response, { host, scripts, signal });
+    downloadResponseArtifacts(endpoint, req, response, { host, scripts, signal, fallbacks });
   // A receipt is a delivery instruction of its own: a batch answer may carry one while naming no
   // publication and no script artifact of its own (#4595).
   if (
@@ -558,21 +564,17 @@ async function downloadResponseArtifacts(
     host: HostEnvironment;
     scripts: SessionScriptDelivery | undefined;
     signal: AbortSignal | undefined;
+    fallbacks: RecordingDestinationWarning[];
   }>,
 ): Promise<DaemonResponse> {
+  const { fallbacks } = client;
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
-  const data = withoutScriptFieldOwner(response.data);
+  const data = withoutClientOwnedFields(response.data);
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
-  const fallbacks: RecordingDestinationWarning[] = [];
   try {
-    await downloadEachArtifact(endpoint, req, artifacts, {
-      ...client,
-      nextData,
-      nextArtifacts,
-      fallbacks,
-    });
+    await downloadEachArtifact(endpoint, req, artifacts, { ...client, nextData, nextArtifacts });
   } catch (error) {
     // Files already written to cwd stay on disk, so the failure still names them (#4518).
     throw fallbacks.length === 0 ? error : withRecordingFallbacks(error, fallbacks);
@@ -712,16 +714,19 @@ function isClientOwnedResponseField(field: string): boolean {
     field === 'artifacts' ||
     field === 'savedScript' ||
     field === 'scriptDeliveryFailure' ||
+    field === 'recordingDestinationWarnings' ||
     field === 'warnings'
   );
 }
 
-// Only a successfully published version can name a caller's savedScript destination.
-function withoutScriptFieldOwner(
+// Only a successfully published version can name a caller's savedScript destination, and only this
+// client's own recording downloads can report a cwd fallback (#4518).
+function withoutClientOwnedFields(
   data: DaemonResponseData | undefined,
 ): DaemonResponseData | undefined {
-  if (data === undefined || !('savedScript' in data)) return data;
-  const { savedScript: _peerValue, ...kept } = data;
+  if (data === undefined || (!('savedScript' in data) && !('recordingDestinationWarnings' in data)))
+    return data;
+  const { savedScript: _peerScript, recordingDestinationWarnings: _peerWarnings, ...kept } = data;
   return kept;
 }
 
