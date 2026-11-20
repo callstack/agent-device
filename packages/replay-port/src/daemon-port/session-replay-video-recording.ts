@@ -49,10 +49,12 @@ export async function startReplayTestVideoRecordingIfReady(
   const videoPath = artifactsDir
     ? path.join(artifactsDir, `recording${extension}`)
     : defaultRecordingPath(activeSession.device.platform);
+  const hideTouches = req.flags?.hideTouches === true;
   appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_recording_start',
     session: sessionName,
     videoPath,
+    showTouches: !hideTouches,
   });
   emitDiagnostic({
     phase: 'replay_test_video_recording_start',
@@ -60,7 +62,13 @@ export async function startReplayTestVideoRecordingIfReady(
   });
   params.video.throwIfCanceled();
   const startResponse = await params.video.record(
-    replayVideoRecordRequest({ req, sessionName, phase: 'start', outputPath: videoPath }),
+    replayVideoRecordRequest({
+      req,
+      sessionName,
+      phase: 'start',
+      outputPath: videoPath,
+      hideTouches,
+    }),
   );
   if (!startResponse.ok) {
     appendVideoTimingEvent(appendTimingEvent, {
@@ -140,7 +148,7 @@ type ReplayVideoRecordRequestParams = Readonly<{
   req: DaemonWireRequest;
   sessionName: string;
 }> &
-  ({ phase: 'start'; outputPath: string } | { phase: 'stop' });
+  ({ phase: 'start'; outputPath: string; hideTouches: boolean } | { phase: 'stop' });
 
 function replayVideoRecordRequest(
   params: ReplayVideoRecordRequestParams,
@@ -152,6 +160,7 @@ function replayVideoRecordRequest(
       sessionName: params.sessionName,
       phase: 'start',
       outputPath: params.outputPath,
+      hideTouches: params.hideTouches,
     };
   }
   return {

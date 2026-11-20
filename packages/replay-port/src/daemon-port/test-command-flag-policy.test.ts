@@ -64,3 +64,19 @@ test.each([
     expect(createSession).not.toHaveBeenCalled();
   },
 );
+
+test('test rejects --hide-touches without --record-video before running the suite', async () => {
+  const { command, invoke, createSession } = rejectedTestCommand({
+    hideTouches: true,
+    replayScriptSources: [],
+  });
+
+  const response = await runReplayTestCommand(command);
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/--hide-touches applies only/);
+  expect(invoke).not.toHaveBeenCalled();
+  expect(createSession).not.toHaveBeenCalled();
+});

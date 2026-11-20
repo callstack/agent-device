@@ -169,6 +169,7 @@ agent-device test "./workflows/**/*.ad" --platform android
 agent-device test ./workflows --timeout 60000 --retries 1
 agent-device test ./workflows --artifacts-dir ./tmp/agent-device-artifacts
 agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xml
+agent-device test ./workflows --record-video --hide-touches
 ```
 
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
@@ -179,6 +180,7 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 - By default, suite artifacts are written under `.agent-device/test-artifacts/<run-id>/...`. Each attempt writes `replay.ad`, `result.txt`, and `replay-timing.ndjson`. Failed attempts also keep copied logs and artifact files when the replay produced them.
 - Copied diagnostic artifacts receive numbered filenames when their names collide with another artifact, a replay source, timing trace, or attempt manifest. `result.txt` lists the retained names in `copiedArtifacts`.
 - `replay-timing.ndjson` records attempt, cleanup, and per-step start/stop events with durations. Upload it from CI even for passing runs when comparing local and CI performance.
+- `--record-video` writes `recording.mp4` in each attempt directory, with touches drawn on it the way `record stop` draws them. Add `--hide-touches` to skip that overlay pass and keep the raw recording. Its `video_recording_start` timing event reports `showTouches`, and `recording.gesture-telemetry.json` keeps the gestures for drawing them elsewhere. `--hide-touches` without `--record-video` is refused.
 - When an attempt hits its timeout, it is marked failed and the replay gets a short grace period to stop before the session is cleaned up.
 - The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use `--verbose` to include step traces in completed-test progress output.
 - The default reporter prints a `Warnings:` section after the summary when any test accumulated composable warnings — for example a Maestro step with `optional: true` that was skipped — whether that test passed or failed. A failing `replay` run repeats the warnings it accumulated as `Warning:` lines after the error. `--json` carries the same strings in each test result's `warnings` array.

@@ -71,7 +71,7 @@ function recordRequest(request: ReplayRecordVideoRequest): DaemonRequest {
     session: request.sessionName,
     command: 'record',
     positionals: request.phase === 'start' ? ['start', request.outputPath] : ['stop'],
-    flags: {},
+    flags: request.phase === 'start' && request.hideTouches ? { hideTouches: true } : {},
     meta: request.request.meta,
   };
 }
