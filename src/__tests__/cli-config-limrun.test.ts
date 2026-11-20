@@ -54,6 +54,8 @@ test('Limrun apps lists uploaded assets without allocating an instance', async (
   assert.equal(result.calls[0]?.flags?.leaseId, undefined);
   assert.equal(result.calls[0]?.flags?.leaseProvider, 'limrun');
   assert.equal(readActiveConnectionState({ stateDir })?.leaseId, undefined);
+  // A connection stored without the provider's ended-lease policy gains it on the next command.
+  assert.equal(readActiveConnectionState({ stateDir })?.forgetsEndedLease, true);
 
   fs.rmSync(root, { recursive: true, force: true });
 });

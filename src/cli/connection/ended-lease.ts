@@ -6,9 +6,24 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
+  type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { connectionProviderCapabilities } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
+
+/**
+ * Records on a connection whether its provider forgets an ended lease. Call it where the provider's
+ * plugin is loaded: `connect` and connection materialization. `close` and `session` load no plugin,
+ * so they read the recorded value.
+ */
+export function withEndedLeasePolicy(
+  state: RemoteConnectionState,
+  env: NodeJS.ProcessEnv,
+): RemoteConnectionState {
+  const forgetsEndedLease =
+    connectionProviderCapabilities(state.leaseProvider, env).forgetsEndedConnectionLease === true;
+  return state.forgetsEndedLease === forgetsEndedLease ? state : { ...state, forgetsEndedLease };
+}
 
 /**
  * Forgets the stored connection lease once a daemon reply says its request ended that lease, so the next
@@ -29,8 +44,12 @@ export function forgetEndedConnectionLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
-  if (!connectionProviderCapabilities(state.leaseProvider, host.env).forgetsEndedConnectionLease)
-    return;
+  // The recorded declaration needs no plugin. A connection stored without one reads what this
+  // process can answer without loading the plugin store.
+  const forgetsEndedLease =
+    state.forgetsEndedLease ??
+    connectionProviderCapabilities(state.leaseProvider, host.env).forgetsEndedConnectionLease;
+  if (!forgetsEndedLease) return;
   writeRemoteConnectionState({
     stateDir,
     state: { ...state, leaseId: undefined, updatedAt: new Date().toISOString() },

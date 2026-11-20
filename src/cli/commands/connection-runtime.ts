@@ -20,6 +20,7 @@ import {
   connectionProviderCapabilities,
   primeProviderConnection,
 } from '../connection/provider-policy.ts';
+import { withEndedLeasePolicy } from '../connection/ended-lease.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
   acquireConnectionLease,
@@ -86,7 +87,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   }
 
   await primeProviderConnection(providerOf(existingState, remoteConfig.profile), host.env);
-  const state =
+  const storedState =
     existingState ??
     createRemoteConnectionStateFromFlags(
       mergedFlags,
@@ -94,10 +95,12 @@ export async function materializeRemoteConnectionForCommand(options: {
       remoteConfig.profile,
       host.env,
     );
+  // The plugin store is loaded here, so the connection records its provider's ended-lease policy.
+  const state = withEndedLeasePolicy(storedState, host.env);
   const nextFlags = { ...mergedFlags, session: state.session };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
-  let changed = !existingState;
+  let changed = !existingState || state !== storedState;
 
   // Unknown creation evidence permits discard before binding, but only confirmed creation permits
   // rollback after a later failure. A committed session record takes over either lease.

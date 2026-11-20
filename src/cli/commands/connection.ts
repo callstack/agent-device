@@ -27,6 +27,7 @@ import {
   unavailableConnectPluginError,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
+import { withEndedLeasePolicy } from '../connection/ended-lease.ts';
 import {
   resolveConnectProviderProfile,
   verifyResolvedConnectProvider,
@@ -97,13 +98,16 @@ export const connectCommand: ClientCommandHandler = async ({
     daemon: context.daemon,
   });
   const verification = await verifyResolvedConnectProvider(resolved, host);
-  const state = buildConnectedState({
-    flags: connectFlags,
-    scope,
-    connectionMetadata,
-    context,
-    remoteConfigPath: resolved.remoteConfigPath,
-  });
+  const state = withEndedLeasePolicy(
+    buildConnectedState({
+      flags: connectFlags,
+      scope,
+      connectionMetadata,
+      context,
+      remoteConfigPath: resolved.remoteConfigPath,
+    }),
+    host.env,
+  );
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
     client,
