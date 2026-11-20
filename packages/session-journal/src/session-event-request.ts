@@ -1,5 +1,6 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';
+import { redactDiagnosticText } from '@agent-device/kernel/redaction';
 import type { DaemonRequest, DaemonResponseData } from '@agent-device/kernel/contracts';
 
 const EVENT_LIST_PREVIEW_LIMIT = 5;
@@ -313,14 +314,16 @@ export function readBoundedSessionEventString(value: unknown): string | undefine
 }
 
 /**
- * A client-written request note, trimmed and bounded to 300 code points. A note longer than that,
- * or one that `truncated` marks as already cut, ends with `…` within the 300.
+ * The stored form of a client-written request note, or `undefined` when nothing is left to store.
+ * The note keeps the diagnostic credential and URL redaction. Redaction reads only a fixed
+ * code-point prefix of the note, so its cost does not grow with the request body. The 300
+ * code-point bound applies last, in place of the redactor's code-unit cap, so a cut never splits
+ * a character. A note cut at either step ends with `…` within the 300, even when redaction
+ * shortened the kept text below the bound.
  */
-export function readSessionEventNote(
-  value: unknown,
-  options: { truncated?: boolean } = {},
-): string | undefined {
-  return readBoundedString(value, EVENT_NOTE_MAX_LENGTH, options.truncated);
+export function prepareRequestNoteForStorage(note: string): string | undefined {
+  const { text, truncated } = boundNoteForRedaction(note);
+  return readBoundedString(redactDiagnosticText(text), EVENT_NOTE_MAX_LENGTH, truncated);
 }
 
 /**
@@ -328,7 +331,7 @@ export function readSessionEventNote(
  * Redaction time grows faster than its input, and the daemon accepts much larger request bodies.
  * `truncated` says the cut dropped text, so the stored note can show that it is incomplete.
  */
-export function boundSessionEventNoteForRedaction(note: string): {
+function boundNoteForRedaction(note: string): {
   text: string;
   truncated: boolean;
 } {

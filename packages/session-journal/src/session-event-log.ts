@@ -3,15 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { redactDiagnosticData, redactDiagnosticText } from '@agent-device/kernel/redaction';
+import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import {
-  boundSessionEventNoteForRedaction,
   buildRequestSuccessEventPresentation,
-  readSessionEventNote,
+  prepareRequestNoteForStorage,
   readSessionEventString,
 } from './session-event-request.ts';
 import { scanEventLogLines } from './session-event-log-lines.ts';
@@ -94,24 +93,17 @@ export function appendSessionEvent(
     session: sessionName,
     ...input,
   } satisfies SessionEventLogEntry);
-  queueEventLogWrite(eventLogPath, `${JSON.stringify(withRedactedNote(entry, note))}\n`, env);
+  queueEventLogWrite(eventLogPath, `${JSON.stringify(withNote(entry, note))}\n`, env);
 }
 
 /**
- * The note keeps the diagnostic credential and URL redaction. Redaction reads only a fixed
- * code-point prefix of the note, so its cost does not grow with the request body. The journal's
- * code-point bound applies last, in place of the redactor's code-unit cap, so a cut never splits
- * a character. When the prefix cut the note, the stored note ends with `…` even if redaction
- * shortened the kept text below the bound.
+ * Adds the finished note to `details` after the entry-wide redaction, so that redaction's
+ * 400-code-unit string cap cannot cut the note again.
  */
-function withRedactedNote(
-  entry: SessionEventLogEntry,
-  note: string | undefined,
-): SessionEventLogEntry {
+function withNote(entry: SessionEventLogEntry, note: string | undefined): SessionEventLogEntry {
   if (note === undefined) return entry;
-  const { text, truncated } = boundSessionEventNoteForRedaction(note);
-  const redactedNote = readSessionEventNote(redactDiagnosticText(text), { truncated });
-  return redactedNote ? { ...entry, details: { ...entry.details, note: redactedNote } } : entry;
+  const storedNote = prepareRequestNoteForStorage(note);
+  return storedNote ? { ...entry, details: { ...entry.details, note: storedNote } } : entry;
 }
 
 export async function flushSessionEventLogWrites(eventLogPath?: string): Promise<void> {
