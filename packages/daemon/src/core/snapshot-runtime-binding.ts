@@ -37,6 +37,7 @@ import { isOutdatedObservation } from './ref-frame.ts';
 import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import { resolveSessionDevice } from './snapshot-session.ts';
+import { isActiveProviderDevice } from './provider-device-admission.ts';
 import {
   selectElementTextOperation,
   selectFindMutatingOperations,
@@ -68,6 +69,7 @@ type ResolvedSnapshotCaptureRuntime =
       ref: SessionRef | undefined;
       session: SessionState | undefined;
       device: SessionState['device'];
+      observeAndroid: boolean;
       snapshotScope: string | undefined;
       captureSnapshot: () => Promise<SnapshotResult>;
     }>
@@ -163,6 +165,38 @@ function canUseShortAndroidSnapshotIdleWait(session: SessionState | undefined): 
   );
 }
 
+function resolveAndroidObservation({
+  command,
+  device,
+  flags,
+  session,
+}: {
+  command: 'snapshot' | 'diff' | 'audit';
+  device: SessionState['device'];
+  flags: DaemonRequest['flags'];
+  session: SessionState | undefined;
+}): boolean {
+  if (flags?.snapshotObserveOnly !== true) return false;
+  const android = device.platform === 'android' && !isActiveProviderDevice(device);
+  if (
+    command !== 'snapshot' ||
+    (!android && (!isHandheldAppleDevice(device) || !session?.appBundleId))
+  ) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'observe-only snapshot requires a local iOS or iPadOS app session or an ADB-connected Android device.',
+    );
+  }
+  if (android && !session && !flags.serial) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'observe-only Android snapshot requires --serial or an open session.',
+      { reason: 'android-observe-target-required' },
+    );
+  }
+  return android;
+}
+
 /** Resolves one plan, inspects its owner facts once, then returns one bound capture closure. */
 export async function resolveBoundSnapshotCaptureRuntime(
   params: SnapshotRuntimeRouteParams,
@@ -175,15 +209,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     req,
     params.sessionRef,
   );
-  if (
-    req.flags?.snapshotObserveOnly === true &&
-    (command !== 'snapshot' || !isHandheldAppleDevice(device) || !session?.appBundleId)
-  ) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'observe-only snapshot requires an iOS or iPadOS app session.',
-    );
-  }
+  const observeAndroid = resolveAndroidObservation({ command, device, flags: req.flags, session });
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
 
@@ -193,12 +219,12 @@ export async function resolveBoundSnapshotCaptureRuntime(
     session,
     plan: resolveSnapshotRuntimePlan({
       customActions: req.flags?.snapshotCustomActions === true,
-      hasActiveApp: session?.appBundleId !== undefined,
+      hasActiveApp: !observeAndroid && session?.appBundleId !== undefined,
     }),
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
-    readinessScope: session ? undefined : createPlatformRequestScope(req),
+    readinessScope: session || observeAndroid ? undefined : createPlatformRequestScope(req),
   });
   if (!bound.ok) return bound;
 
@@ -206,7 +232,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     flags: req.flags,
     logPath: params.logPath,
     meta: req.meta,
-    session,
+    session: observeAndroid ? undefined : session,
     snapshotScope: resolvedScope.scope,
   });
   return Object.freeze({
@@ -214,10 +240,11 @@ export async function resolveBoundSnapshotCaptureRuntime(
     ref,
     session,
     device,
+    observeAndroid,
     snapshotScope: resolvedScope.scope,
     captureSnapshot: async () =>
       await bound.capture(
-        canUseShortAndroidSnapshotIdleWait(session)
+        !observeAndroid && canUseShortAndroidSnapshotIdleWait(session)
           ? {
               ...captureInput,
               options: { ...captureInput.options, captureBasis: 'unchanged-since-observation' },

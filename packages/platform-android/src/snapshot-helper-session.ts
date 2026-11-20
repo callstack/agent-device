@@ -21,7 +21,9 @@ import {
   acquireAndroidSnapshotHelperSession,
   getLiveAndroidSnapshotHelperSession,
   retireFailedAndroidSnapshotHelperSession,
+  resolveAndroidSnapshotHelperSessionCaptureOptions,
   stopAndroidSnapshotHelperSession,
+  type AndroidSnapshotHelperSession,
   type AndroidSnapshotHelperSessionAcquisition,
   type AndroidSnapshotHelperSessionHelperIdentity,
 } from './snapshot-helper-session-lifecycle.ts';
@@ -33,6 +35,16 @@ export async function captureAndroidSnapshotWithHelperSession(
   return acquired ? await captureFromAndroidSnapshotHelperSession(acquired, options) : undefined;
 }
 
+/** A reader borrowing a running helper leaves lifecycle and failure recovery to its owner. */
+export async function captureBorrowedAndroidSnapshotHelperSession(
+  session: AndroidSnapshotHelperSession,
+  options: AndroidSnapshotHelperCaptureOptions,
+): Promise<AndroidSnapshotHelperOutput> {
+  const captureOptions = resolveAndroidSnapshotHelperCaptureOptions(options);
+  const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions(captureOptions);
+  return await readAndroidSnapshotHelperSession(session, options, resolved.commandTimeoutMs);
+}
+
 /** Captures over a session that is ready; `undefined` means the session failed and was retired. */
 export async function captureFromAndroidSnapshotHelperSession(
   acquired: AndroidSnapshotHelperSessionAcquisition,
@@ -42,22 +54,7 @@ export async function captureFromAndroidSnapshotHelperSession(
   const requestedAtMs = Date.now();
   const reused = session.capturedCount > 0;
   try {
-    const output = await requestAndroidSnapshotHelperSessionSnapshot({
-      port: session.port,
-      commandTimeoutMs: resolved.commandTimeoutMs,
-      signal: options.signal,
-      idleWait: options.idleWait,
-      commands: session.commands,
-    });
-    session.capturedCount += 1;
-    return {
-      xml: output.xml,
-      metadata: {
-        ...output.metadata,
-        transport: 'persistent-session',
-        sessionReused: reused,
-      },
-    };
+    return await readAndroidSnapshotHelperSession(session, options, resolved.commandTimeoutMs);
   } catch (error) {
     // Read before the retirement below, which ends the process: a process that is still running
     // has no cause of its own to report, and the retirement never waits for one.
@@ -87,6 +84,26 @@ export async function captureFromAndroidSnapshotHelperSession(
     });
     return undefined;
   }
+}
+
+async function readAndroidSnapshotHelperSession(
+  session: AndroidSnapshotHelperSession,
+  options: AndroidSnapshotHelperCaptureOptions,
+  commandTimeoutMs: number,
+): Promise<AndroidSnapshotHelperOutput> {
+  const reused = session.capturedCount > 0;
+  const output = await requestAndroidSnapshotHelperSessionSnapshot({
+    port: session.port,
+    commandTimeoutMs,
+    signal: options.signal,
+    idleWait: options.idleWait,
+    commands: session.commands,
+  });
+  session.capturedCount += 1;
+  return {
+    xml: output.xml,
+    metadata: { ...output.metadata, transport: 'persistent-session', sessionReused: reused },
+  };
 }
 
 // Touch commands piggyback on a live snapshot session so gestures do not restart instrumentation

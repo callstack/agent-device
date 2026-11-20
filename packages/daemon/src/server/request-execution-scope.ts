@@ -499,21 +499,17 @@ export async function createRequestExecutionScope(params: {
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
         } finally {
-          // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED
-          // to this session, stamped here under the session's own execution lock. The lock is what
-          // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a
-          // session mid-command, and one command slower than the window keeps the session it is
-          // working on — the same guarantee admitted work gives a remote lease (ADR 0007).
-          //
-          // Two exclusions carry that parity. Inventory commands (`devices`, `doctor`, `session list`)
-          // resolve a session address only to locate their own artifacts, so on a shared host they run
-          // against a session they never act through — stamping there would let a bystander agent's
-          // polling keep another agent's abandoned claim alive forever. And a request whose client
-          // hung up preserves nothing, exactly as a canceled request renews no lease: an agent that
-          // timed out is the behavior this feature exists to catch.
+          // Stamp attached commands after they finish and while holding the lock shared with expiry
+          // (#2833, ADR 0007). Inventory, passive Android snapshots, and canceled requests preserve
+          // the existing deadline so a polling reader cannot keep an abandoned session alive.
+          const observeAndroid =
+            command === 'snapshot' &&
+            scopedReq.flags?.snapshotObserveOnly === true &&
+            sessionStore.get(sessionName)?.device.platform === 'android';
           if (
             (!boundedStep || admissionCompleted) &&
             attachesToSession &&
+            !observeAndroid &&
             !isRequestCanceled(scopedReq.meta?.requestId)
           ) {
             sessionStore.noteSessionActivity(sessionName);

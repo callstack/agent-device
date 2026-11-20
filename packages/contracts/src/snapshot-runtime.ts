@@ -157,11 +157,12 @@ async function assertSnapshotObservationOwner(
   input: CaptureSnapshotInput,
 ): Promise<void> {
   if (input.options?.observeOnly !== true) return;
+  if (params.ownership === 'local' && params.device.platform === 'android') return;
   const { isHandheldAppleDevice } = await import('@agent-device/kernel/device');
   if (params.ownership === 'local' && isHandheldAppleDevice(params.device)) return;
   throw new AppError(
     'UNSUPPORTED_OPERATION',
-    'observe-only snapshot requires a local iOS or iPadOS runner.',
+    'observe-only snapshot requires a local iOS, iPadOS, or ADB-connected Android runner.',
   );
 }
 

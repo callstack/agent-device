@@ -680,6 +680,38 @@ test('MCP command tool executor pins refs for runCommand while keeping rendered 
   assert.doesNotMatch(result.content[0]?.text ?? '', /~s500012/);
 });
 
+test('MCP Android observe-only snapshots preserve existing ref pins', async () => {
+  const calls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      if (name === 'snapshot') {
+        if (input.observeOnly === true) {
+          return { nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Continue' }] };
+        }
+        return { nodes: [{ ref: 'e2' }], refsGeneration: 9 };
+      }
+      return { message: 'Tapped @e2 (10, 20)' };
+    },
+  });
+
+  await executor.execute('snapshot', { session: 'android-demo' });
+  const observed = await executor.execute('snapshot', {
+    session: 'android-demo',
+    platform: 'android',
+    serial: 'emulator-5554',
+    observeOnly: true,
+  });
+  assert.equal(observed.isError, false);
+
+  await executor.execute('press', { session: 'android-demo', ref: '@e2' });
+  assert.deepEqual(calls[2], {
+    name: 'press',
+    input: { session: 'android-demo', ref: '@e2~s9' },
+  });
+});
+
 // --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
 
 function replayDivergenceError(): AppError {

@@ -13,6 +13,7 @@ import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { SessionStore } from '../core/session-store.ts';
 import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import {
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
@@ -46,10 +47,50 @@ export function resolveEffectiveSessionName(
   const requested = req.session || DEFAULT_SESSION_NAME;
   if (namesSessionExplicitly(req)) return requested;
   const scope = resolveSessionScope(req);
-  if (scope.kind === 'cwd') {
-    return resolveImplicitWorkspaceSession(req, sessionStore, scope.id, options);
+  const observationSerial =
+    req.command === 'snapshot' &&
+    req.flags?.snapshotObserveOnly === true &&
+    scope.kind !== 'named-local'
+      ? req.flags.serial
+      : undefined;
+  if (observationSerial) {
+    const observerSession = resolveAndroidObservationSession(
+      req,
+      sessionStore,
+      scope,
+      observationSerial,
+    );
+    if (observerSession) return observerSession;
   }
-  return requested;
+  const address =
+    scope.kind === 'cwd'
+      ? resolveImplicitWorkspaceSession(req, sessionStore, scope.id, options)
+      : requested;
+  if (!observationSerial || req.flags?.platform !== 'android') return address;
+  const boundSession = sessionStore.get(address);
+  if (!boundSession || boundSession.device.id === observationSerial) return address;
+  // Keep the request in the same scope while leaving explicit device and claim admission in charge.
+  const observationAddress = `${address}:snapshot:${hashAddressPart(observationSerial)}`;
+  return sessionStore.get(observationAddress) === undefined ? observationAddress : address;
+}
+
+function resolveAndroidObservationSession(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+  scope: SessionScope,
+  serial: string,
+): string | undefined {
+  const owner = sessionStore.findByDevice(serial);
+  if (!owner) return undefined;
+  const { device } = owner.session;
+  if (device.id !== serial || device.platform !== 'android' || isActiveProviderDevice(device)) {
+    return undefined;
+  }
+  if (sessionMatchesInventoryScope(owner.session, scope) === false) return undefined;
+  const platform = resolveImplicitPlatformSelector(req);
+  const flags = platform ? withImplicitPlatform(req.flags, platform) : req.flags;
+  const conflicts = listSessionSelectorConflicts(owner.session, flags);
+  return conflicts.length === 0 ? owner.address : undefined;
 }
 
 export function resolvePublicSessionName(req: DaemonRequest): string {
@@ -81,7 +122,7 @@ export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
     return { kind: 'named-local' };
   }
   const scopeRoot = resolveCallerScopeRoot(req.meta?.cwd);
-  return scopeRoot ? { kind: 'cwd', id: hashScopeRoot(scopeRoot) } : { kind: 'global-default' };
+  return scopeRoot ? { kind: 'cwd', id: hashAddressPart(scopeRoot) } : { kind: 'global-default' };
 }
 
 export function sessionMatchesInventoryScope(
@@ -301,8 +342,8 @@ function buildAmbiguousWorkspaceSessionError(candidates: SessionRef[]): AppError
   );
 }
 
-function hashScopeRoot(scopeRoot: string): string {
-  return crypto.createHash('sha256').update(scopeRoot).digest('hex').slice(0, 16);
+function hashAddressPart(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 }
 
 /**

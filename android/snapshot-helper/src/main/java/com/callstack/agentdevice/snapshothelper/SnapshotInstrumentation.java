@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import java.io.BufferedReader;
 import java.io.EOFException;
 import java.io.File;
@@ -189,8 +190,10 @@ public final class SnapshotInstrumentation extends Instrumentation {
       ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
-      while (!Thread.currentThread().isInterrupted()) {
-        try (Socket socket = server.accept()) {
+      boolean quitRequested = false;
+      while (!quitRequested && !Thread.currentThread().isInterrupted()) {
+        Socket client = server.accept();
+        try (Socket socket = client) {
           String command =
               new BufferedReader(
                       new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
@@ -204,8 +207,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
           String action = parts.length > 0 ? parts[0] : "";
           String requestId = parts.length > 1 ? parts[1] : "";
           if ("quit".equals(action)) {
+            quitRequested = true;
             SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
-            return;
+            continue;
           }
           if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
             AutomationCommandHandler.writeSessionResponse(
@@ -244,6 +248,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
               timeoutMs,
               maxDepth,
               maxNodes);
+        } catch (IOException clientError) {
+          // A disconnected client cannot receive its response. Other clients can still use the helper.
+          Log.w("AgentDeviceSnapshot", "Snapshot helper client connection failed", clientError);
         }
       }
     }

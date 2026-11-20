@@ -30,16 +30,11 @@ import {
 import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickability.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
-import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
-  ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
-  ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
   type AndroidHelperSessionScope,
   type AndroidSnapshotHelperCaptureOptions,
-  type AndroidSnapshotHelperTransport,
 } from './snapshot-helper-types.ts';
 import {
-  captureAndroidSnapshotWithHelper,
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
   stopAndroidSnapshotHelperSession,
@@ -50,15 +45,11 @@ import {
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper.ts';
 import {
-  acquireAndroidSnapshotHelperSession,
   getLiveAndroidSnapshotHelperSession,
+  type AndroidSnapshotHelperSession,
 } from './snapshot-helper-session-lifecycle.ts';
-import { captureFromAndroidSnapshotHelperSession } from './snapshot-helper-session.ts';
 import { isAndroidSnapshotHelperNotCurrentError } from './snapshot-helper-install.ts';
-import {
-  getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRuntimeOccupiedError,
-} from './snapshot-helper-retirement.ts';
+import { getAndroidSnapshotHelperSessionDeviceKey } from './snapshot-helper-retirement.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 import type {
@@ -75,7 +66,7 @@ import {
   readAndroidCaptureFailureReason,
 } from '@agent-device/contracts/android-snapshot-quality';
 import {
-  captureRetryingRefusedAndroidSnapshotHelperStart,
+  captureAndroidUiHierarchyFromHelper,
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
 } from './snapshot-helper-runtime.ts';
@@ -107,19 +98,6 @@ const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
  * a busy screen run a snapshot past the daemon request envelope.
  */
 const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
-/**
- * The diagnostic phase of a capture through the snapshot helper's persistent session. Its
- * `data.transport` names the session transport, and `data.answered` is false when the session
- * returned no capture (off, backed off, failed to start, or retired) and a one-shot capture follows.
- */
-export const ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE =
-  'android_snapshot_helper_session_capture';
-/**
- * The diagnostic phase of a one-shot `am instrument` snapshot helper capture. Its `data.transport`
- * names the instrumentation transport.
- */
-export const ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE = 'android_snapshot_helper_capture';
-
 export type AndroidSnapshotOptions = SnapshotOptions & {
   idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
   appBundleId?: string;
@@ -335,7 +313,13 @@ async function captureAndroidUiHierarchyWithHelper(
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<AndroidUiHierarchyCapture> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  const releaseHelperSession = await releasesHelperSessionAfterCapture(options, helperDeviceKey);
+  options.signal?.throwIfAborted();
+  const borrowedSession = options.observeOnly
+    ? await getLiveAndroidSnapshotHelperSession(helperDeviceKey)
+    : undefined;
+  const releaseHelperSession = options.observeOnly
+    ? borrowedSession === undefined
+    : await releasesHelperSessionAfterCapture(options, helperDeviceKey);
   try {
     return await captureAndroidHelperContentWithinWindow({
       options,
@@ -343,6 +327,7 @@ async function captureAndroidUiHierarchyWithHelper(
       adbProvider: resolveAndroidAdbProvider(device, options.helperAdb),
       artifact,
       helperDeviceKey,
+      borrowedSession,
     });
   } finally {
     if (releaseHelperSession) {
@@ -351,17 +336,22 @@ async function captureAndroidUiHierarchyWithHelper(
   }
 }
 
-/**
- * Re-captures unusable content until a capture answers, the attempts run out, or the re-capture
- * window has closed by the time the next attempt would start.
- */
-async function captureAndroidHelperContentWithinWindow(params: {
+type AndroidHelperCaptureContext = {
   options: AndroidSnapshotOptions;
   adb: AndroidAdbExecutor;
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
-}): Promise<AndroidUiHierarchyCapture> {
+  borrowedSession?: AndroidSnapshotHelperSession;
+};
+
+/**
+ * Re-captures unusable content until a capture answers, the attempts run out, or the re-capture
+ * window has closed by the time the next attempt would start.
+ */
+async function captureAndroidHelperContentWithinWindow(
+  params: AndroidHelperCaptureContext,
+): Promise<AndroidUiHierarchyCapture> {
   const { options } = params;
   const recaptureDeadlineMs = resolveContentRecaptureDeadlineMs(options);
   const rejectContentUnavailable = async (
@@ -375,7 +365,7 @@ async function captureAndroidHelperContentWithinWindow(params: {
       artifact: params.artifact,
       adb: params.adb,
       signal: options.signal,
-      retireHelper: options.transient === undefined,
+      retireHelper: options.transient === undefined && params.borrowedSession === undefined,
     });
   let previousDecision: AndroidHelperContentRecoveryDecision | undefined;
   for (let attempt = 0; ; attempt += 1) {
@@ -465,81 +455,9 @@ async function installAndroidSnapshotHelper(
   return install;
 }
 
-async function captureAndroidUiHierarchyFromHelper(params: {
-  idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
-  signal?: AbortSignal;
-  adb: AndroidAdbExecutor;
-  adbProvider: AndroidAdbProvider;
-  artifact: AndroidSnapshotHelperArtifact;
-  helperDeviceKey: string;
-}): Promise<AndroidSnapshotHelperOutput> {
-  const { signal, adb, adbProvider, artifact, helperDeviceKey } = params;
-  const captureOptions = buildAndroidSnapshotHelperCaptureOptions({
-    adb,
-    adbProvider,
-    artifact,
-    deviceKey: helperDeviceKey,
-    signal,
-  });
-  captureOptions.idleWait = params.idleWait;
-  let sessionCapture: AndroidSnapshotHelperOutput | undefined;
-  // A helper that reached a ready session was started, so a refused start after it is not #4109.
-  let sessionReady = false;
-  try {
-    await withDiagnosticTimer(
-      ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
-      async () => {
-        const acquired = await acquireAndroidSnapshotHelperSession(captureOptions);
-        sessionReady = acquired !== undefined;
-        if (acquired) {
-          sessionCapture = await captureFromAndroidSnapshotHelperSession(acquired, captureOptions);
-        }
-      },
-      () => ({
-        packageName: artifact.manifest.packageName,
-        version: artifact.manifest.version,
-        timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
-        transport: 'persistent-session' satisfies AndroidSnapshotHelperTransport,
-        answered: sessionCapture !== undefined,
-      }),
-    );
-    if (sessionCapture) return sessionCapture;
-  } catch (error) {
-    signal?.throwIfAborted();
-    if (isAndroidSnapshotHelperRuntimeOccupiedError(error)) {
-      throw error;
-    }
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_snapshot_helper_session_fallback',
-      data: { reason: normalizeError(error).message },
-    });
-    await resetAndroidSnapshotHelperRuntime({ adb, packageName: artifact.manifest.packageName });
-  }
-  const captureOneShot = async () =>
-    await withDiagnosticTimer(
-      ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
-      async () => await captureAndroidSnapshotWithHelper(captureOptions),
-      {
-        packageName: artifact.manifest.packageName,
-        version: artifact.manifest.version,
-        timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
-        commandTimeoutMs: ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
-        transport: 'instrumentation' satisfies AndroidSnapshotHelperTransport,
-      },
-    );
-  return await captureRetryingRefusedAndroidSnapshotHelperStart({
-    capture: captureOneShot,
-    sessionReady,
-    adb,
-    packageName: artifact.manifest.packageName,
-    signal,
-  });
-}
-
 function formatAndroidHelperCaptureResult(
   capture: AndroidSnapshotHelperOutput,
-  artifact: AndroidSnapshotHelperArtifact,
+  helperVersion: string,
   installReason: AndroidSnapshotHelperInstallResult['reason'],
 ): AndroidUiHierarchyCapture {
   return {
@@ -548,7 +466,7 @@ function formatAndroidHelperCaptureResult(
     metadata: {
       backend: 'android-helper',
       pixelDensity: capture.metadata.pixelDensity,
-      helperVersion: artifact.manifest.version,
+      helperVersion,
       helperApiVersion: capture.metadata.helperApiVersion,
       helperTransport: capture.metadata.transport,
       helperSessionReused: capture.metadata.sessionReused,
@@ -574,27 +492,28 @@ type AndroidHelperContentAttempt =
   | { outcome: 'captured'; capture: AndroidUiHierarchyCapture }
   | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
 
-async function captureAndroidHelperContentAttempt(params: {
-  options: AndroidSnapshotOptions;
-  adb: AndroidAdbExecutor;
-  adbProvider: AndroidAdbProvider;
-  artifact: AndroidSnapshotHelperArtifact;
-  helperDeviceKey: string;
-  attempt: number;
-  previousContentReason: AndroidContentRecoveryReason | undefined;
-}): Promise<AndroidHelperContentAttempt> {
-  const { options, adb, adbProvider, artifact, helperDeviceKey, attempt } = params;
+async function captureAndroidHelperContentAttempt(
+  params: AndroidHelperCaptureContext & {
+    attempt: number;
+    previousContentReason: AndroidContentRecoveryReason | undefined;
+  },
+): Promise<AndroidHelperContentAttempt> {
+  const { options, adb, adbProvider, artifact, helperDeviceKey, borrowedSession, attempt } = params;
   let helperCapture: AndroidUiHierarchyCapture;
   try {
-    const install = await installAndroidSnapshotHelper(
-      options,
-      adb,
-      adbProvider,
-      artifact,
-      helperDeviceKey,
-    );
-    if (install.installed) {
-      await stopAndroidSnapshotHelperSession(helperDeviceKey);
+    let installReason: AndroidSnapshotHelperInstallResult['reason'] = 'skipped';
+    if (borrowedSession === undefined) {
+      const install = await installAndroidSnapshotHelper(
+        options,
+        adb,
+        adbProvider,
+        artifact,
+        helperDeviceKey,
+      );
+      installReason = install.reason;
+      if (install.installed) {
+        await stopAndroidSnapshotHelperSession(helperDeviceKey);
+      }
     }
     const capture = await captureAndroidUiHierarchyFromHelper({
       idleWait: options.idleWait,
@@ -603,11 +522,13 @@ async function captureAndroidHelperContentAttempt(params: {
       adbProvider,
       artifact,
       helperDeviceKey,
+      borrowedSession,
     });
-    helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
+    const helperVersion = borrowedSession?.helper.helperVersion ?? artifact.manifest.version;
+    helperCapture = formatAndroidHelperCaptureResult(capture, helperVersion, installReason);
   } catch (error) {
     options.signal?.throwIfAborted();
-    if (isAndroidSnapshotHelperNotCurrentError(error)) throw error;
+    if (borrowedSession || isAndroidSnapshotHelperNotCurrentError(error)) throw error;
     return {
       outcome: 'captured',
       capture: await rejectAndroidHelperCaptureFailure({
