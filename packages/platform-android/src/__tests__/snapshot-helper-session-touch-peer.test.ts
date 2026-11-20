@@ -3,12 +3,13 @@ import net from 'node:net';
 import { test, vi } from 'vitest';
 import {
   getLiveAndroidSnapshotHelperSession,
-  stopAndroidSnapshotHelperSession,
+  retireFailedAndroidSnapshotHelperSession,
 } from '../snapshot-helper-session-lifecycle.ts';
 import { runAndroidSnapshotHelperSessionTouchCommand } from '../snapshot-helper-session.ts';
 
 vi.mock('../snapshot-helper-session-lifecycle.ts', () => ({
   getLiveAndroidSnapshotHelperSession: vi.fn(),
+  retireFailedAndroidSnapshotHelperSession: vi.fn(),
   stopAndroidSnapshotHelperSession: vi.fn(),
 }));
 
@@ -43,9 +44,9 @@ test('an input sent to a listener that cannot prove the secret falls back before
       payloadBase64: typed,
       timeoutMs: 2_000,
     });
-    // `undefined` sends this call down the one-shot path; the session is stopped for the next one.
+    // `undefined` sends this call down the one-shot path; the session is retired with a backoff.
     assert.equal(headers, undefined);
-    assert.equal(vi.mocked(stopAndroidSnapshotHelperSession).mock.calls.length, 1);
+    assert.equal(vi.mocked(retireFailedAndroidSnapshotHelperSession).mock.calls.length, 1);
     assert.match(received.join(''), /^[0-9a-f]{64}\n$/);
     assert.equal(received.join('').includes(typed), false);
   } finally {

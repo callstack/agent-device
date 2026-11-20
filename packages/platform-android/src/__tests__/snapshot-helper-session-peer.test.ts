@@ -5,11 +5,15 @@ import assert from 'node:assert/strict';
 import net from 'node:net';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import {
+  captureAndroidSnapshotWithHelperSession,
+  runAndroidSnapshotHelperSessionTouchCommand,
+} from '../snapshot-helper-session.ts';
+import {
+  ensureAndroidSnapshotHelperSession,
   getLiveAndroidSnapshotHelperSession,
   resetAndroidSnapshotHelperSessions,
 } from '../snapshot-helper-session-lifecycle.ts';
@@ -31,6 +35,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await resetAndroidSnapshotHelperSessions();
 });
 
@@ -96,4 +101,39 @@ test('the session secret appears in no diagnostic and no error', async () => {
     for (const socket of sockets) socket.destroy();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('after a refused peer, touch commands run one-shot until the start backoff ends', async () => {
+  const received: string[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls: [], spawnArgs, unprovenListener: received });
+  const options = { adb: provider.exec, adbProvider: provider, deviceKey: DEVICE_KEY };
+  // A gesture warms the session the way the viewport read does, then sends its command.
+  const touch = async () => {
+    await ensureAndroidSnapshotHelperSession(options);
+    return await runAndroidSnapshotHelperSessionTouchCommand({
+      deviceKey: DEVICE_KEY,
+      action: 'viewport',
+      helper: {
+        packageName: 'com.callstack.agentdevice.snapshothelper',
+        runner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
+      },
+      timeoutMs: 2_000,
+    });
+  };
+
+  assert.equal(await touch(), undefined);
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(received.length, 1, 'the refused listener saw one nonce');
+
+  // Inside the backoff: no new session, no new connection, straight to one-shot.
+  assert.equal(await touch(), undefined);
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(received.length, 1);
+
+  // Once the backoff ends, the session is tried again.
+  const realNow = Date.now.bind(Date);
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 10 * 60_000);
+  assert.equal(await touch(), undefined);
+  assert.equal(spawnArgs.length, 2);
 });

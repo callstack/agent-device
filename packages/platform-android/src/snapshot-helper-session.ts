@@ -168,6 +168,7 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
     return undefined;
   }
   let headers: Record<string, string>;
+  const sentAtMs = Date.now();
   try {
     const response = await sendAndroidSnapshotHelperSessionCommand(
       session,
@@ -177,14 +178,26 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
     );
     headers = parseAndroidSnapshotHelperSessionTouchResponse(response, requestId);
   } catch (error) {
+    if (isAndroidSnapshotHelperSessionPeerUnverified(error)) {
+      // The listener got no command, so this call runs one-shot, and the session earns the timed
+      // backoff a failed capture does: the next commands do not restart it only to refuse it again.
+      await retireFailedAndroidSnapshotHelperSession({
+        deviceKey: params.deviceKey,
+        identity: session.identity,
+        failedAfterMs: Date.now() - sentAtMs,
+        fallbackBudgetMs: params.timeoutMs,
+        reusedSessionTimedOut: false,
+        signal: params.signal,
+        cause: error,
+      });
+      return undefined;
+    }
     // Transport-level failure: the session process can no longer be trusted. Stop it so the next
     // command runs against a fresh helper instead of a wedged socket.
     await stopAndroidSnapshotHelperSession(params.deviceKey, {
       signal: params.signal,
       cause: error,
     });
-    // A listener that did not prove the secret got no command, so this call runs one-shot.
-    if (isAndroidSnapshotHelperSessionPeerUnverified(error)) return undefined;
     throw discloseHelperTouchDispatch(params.action, error);
   }
   if (headers.ok !== 'true') {
