@@ -6,31 +6,25 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "rootDir": "./src",
-    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo",
+    "rootDir": ".",
+    "paths": {
+      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"],
+      "agent-device/plugins/device-host": [
+        "./node_modules/agent-device/src/sdk/plugin-device-host.ts"
+      ]
+    }
   },
   "include": ["src"],
   "references": [
-    {
-      "path": "../capture-kit"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../platform-android"
-    },
-    {
-      "path": "../platform-apple"
-    },
-    {
-      "path": "../plugins"
-    },
-    {
-      "path": "../test-kit"
-    }
+    { "path": "../build-config" },
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../platform-android" },
+    { "path": "../platform-apple" },
+    { "path": "../test-kit" },
+    { "path": "../xml" }
   ]
 }

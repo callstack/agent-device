@@ -26,9 +26,17 @@ export const BROWSERSTACK: ProviderPluginDeclaration = {
   nightlyTag: 'nightly-0.22',
 };
 
+export const LIMRUN: ProviderPluginDeclaration = {
+  provider: 'limrun',
+  package: '@agent-device/limrun',
+  label: 'Limrun',
+  nightlyTag: 'nightly-0.22',
+};
+
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   AWS_DEVICE_FARM,
   BROWSERSTACK,
+  LIMRUN,
   { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
   { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
   { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },

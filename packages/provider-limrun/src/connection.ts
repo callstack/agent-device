@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { RemoteConfigProfile } from '@agent-device/contracts/remote';
-import type { PluginConnection, PluginConnectionContext } from '@agent-device/plugins/contract';
+import type { PluginConnection, PluginConnectionContext } from 'agent-device/plugins';
 import {
   rejectRefusedProviderProfileFields,
   requireResolvedProfilePlatform,

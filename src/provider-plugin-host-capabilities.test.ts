@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { limrunRuntimeDependencies } from './provider-plugin-host-capabilities.fixtures.ts';
 import { expect, test, vi } from 'vitest';
 
 const moduleLoads = vi.hoisted(() => ({
@@ -35,11 +36,10 @@ vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) 
 }));
 
 test('Limrun construction defers operation and opposite-platform helper modules', async () => {
-  const { createLimrunRuntime } = await import('@agent-device/provider-limrun');
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const { createLimrunRuntime } = await import('@agent-device/limrun/runtime');
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key' },
-    createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() }),
+    await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() }),
   );
 
   assert.deepEqual(moduleLoads, {
@@ -49,7 +49,7 @@ test('Limrun construction defers operation and opposite-platform helper modules'
   });
   await runtime.shutdown();
 
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const device = {
     platform: 'android' as const,
     id: 'limrun:android:lease-a',
@@ -92,8 +92,7 @@ test('Limrun construction defers operation and opposite-platform helper modules'
 });
 
 test('Limrun appstate forwards an in-flight abort through the provider ADB executor', async () => {
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const device = {
     platform: 'android' as const,
     id: 'limrun:android:lease-abort',
@@ -124,14 +123,13 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
 });
 
 test('host.runAdb carries addressing apart from payload and routes through the host transport', async () => {
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const {
     androidAdbInvocation,
     androidAdbSerialTarget,
     serializeAndroidAdbInvocation,
     withAndroidHostAdbTransport,
   } = await import('@agent-device/platform-android/mechanics');
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const seen: Array<{
     args: string[];
     payload: readonly string[];
@@ -171,10 +169,9 @@ test('host.runAdb carries addressing apart from payload and routes through the h
 });
 
 test('adbError names the failed command with the platform serializer', async () => {
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const { androidAdbInvocation, androidAdbSerialTarget } =
     await import('@agent-device/platform-android/mechanics');
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
 
   const failure = await dependencies.android.adbError(
     'Limrun Android ADB command failed',
@@ -193,14 +190,13 @@ test('adbError names the failed command with the platform serializer', async () 
 });
 
 test('the adb invocation adapters address through the platform builders', async () => {
-  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const {
     androidAdbHostTarget,
     androidAdbInvocation,
     androidAdbSerialTarget,
     serializeAndroidAdbInvocation,
   } = await import('@agent-device/platform-android/mechanics');
-  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
 
   const device = dependencies.android.deviceAdbInvocation('127.0.0.1:62001', [
     'shell',

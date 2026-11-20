@@ -14,6 +14,12 @@ import {
 import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
+
 const profileResolutions = vi.hoisted(() => ({ count: 0 }));
 
 vi.mock('@agent-device/remote/remote-config-core', async (importOriginal) => {

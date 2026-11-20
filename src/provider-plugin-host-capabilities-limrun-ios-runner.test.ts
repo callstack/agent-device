@@ -8,7 +8,7 @@ import {
   clearRequestAbortRegistration,
 } from '@agent-device/host-kit/request';
 import { expect, test, vi } from 'vitest';
-import { fixture } from './limrun-ios-runner.fixtures.ts';
+import { fixture } from './provider-plugin-host-capabilities-limrun-ios.fixtures.ts';
 test('stages a token-authenticated runner once and presents forwarded XCTest snapshots', async () => {
   const f = await fixture();
   const snapshot = await f.runner.createInteractor().snapshot({

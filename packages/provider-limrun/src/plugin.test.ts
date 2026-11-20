@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import type { ProviderPluginHost } from '@agent-device/plugins/host';
+import type {
+  ProviderAgentDevicePlugin as AgentDevicePlugin,
+  ProviderPluginHost,
+} from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { limrunPlugin } from './plugin.ts';
-import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;
@@ -161,12 +163,15 @@ test('verify runs its own SDK check over scoped credentials, version and platfor
 });
 
 test('setup builds the runtime over the credentials, host and HAR directory it was given', async () => {
-  const host = pluginHost({ LIMRUN_API_KEY: 'lim_test_key', LIMRUN_KEEP_ALIVE: '1' });
+  const stateDir = mkdtempForTestSync('limrun-plugin-state-');
+  const host = {
+    ...pluginHost({ LIMRUN_API_KEY: 'lim_test_key', LIMRUN_KEEP_ALIVE: '1' }),
+    stateDir,
+  };
   const dependencies = stubDependencies();
   const createDependencies = vi.fn(() => dependencies);
-  const stateDir = mkdtempForTestSync('limrun-plugin-state-');
 
-  const setup = await providerOf(limrunPlugin({ createDependencies, stateDir })).setup(host);
+  const setup = await providerOf(limrunPlugin({ createDependencies })).setup(host);
 
   if (!('runtime' in setup)) throw new Error('Limrun sets up its own runtime');
   assert.equal(setup.runtime.provider, 'limrun');
@@ -183,6 +188,20 @@ test('setup builds the runtime over the credentials, host and HAR directory it w
       mode: { includePlatformModule: true },
     },
   ]);
+});
+
+test('setup refuses a host that supplies no device capabilities', async () => {
+  await assert.rejects(
+    async () => {
+      await providerOf(limrunPlugin()).setup(pluginHost({ LIMRUN_API_KEY: 'lim_test_key' }));
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider_host_capability_missing');
+      return true;
+    },
+  );
 });
 
 test('setup with only an attached instance builds a runtime without an API key or HAR directory', async () => {

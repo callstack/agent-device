@@ -974,3 +974,5 @@ async function readLimrunTerminationReason(
     return undefined;
   }
 }
+
+export type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';

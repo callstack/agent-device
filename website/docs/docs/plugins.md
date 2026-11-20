@@ -2,7 +2,7 @@
 title: Plugins
 ---
 
-Provider plugins add device providers that agent-device does not bundle, such as [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
+Provider plugins add device providers that agent-device does not bundle, such as [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [Limrun](/docs/limrun), [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
 
 ```bash
 agent-device plugins add @example/agent-device-provider
@@ -15,7 +15,7 @@ agent-device plugins remove @example/agent-device-provider
 `plugin, install separately` and show their installation commands, even before you install them.
 Use the install command shown for your provider. TestMu AI uses `agent-device plugins add @agent-device/testmu`.
 
-If you run `agent-device connect browserstack`, `agent-device connect aws-device-farm`, or `agent-device connect testmu` without its plugin, the error gives that installation
+If you run `agent-device connect browserstack`, `agent-device connect aws-device-farm`, `agent-device connect limrun`, or `agent-device connect testmu` without its plugin, the error gives that installation
 command and tells you to retry your original command. With `--json`, the error has
 `details.reason: plugin-not-installed`, `details.package`, and `details.installCommand`.
 If the plugin is selected but unavailable, the reason is `plugin-unavailable`; run
@@ -47,7 +47,7 @@ A missing installation returns `plugin-not-installed` with the package and insta
 
 ## See which providers are registered
 
-`agent-device daemon status` lists every provider the running daemon registered: bundled Limrun when configured, then installed plugins such as BrowserStack and AWS Device Farm. With `--json`, each entry has:
+`agent-device daemon status` lists every provider the running daemon registered from the installed plugins, such as BrowserStack, AWS Device Farm, and Limrun. With `--json`, each entry has:
 
 ```json
 {
@@ -136,7 +136,7 @@ Incompatible contract changes require a new `apiVersion`; there is no compatibil
 
 ### Credentials
 
-List the environment variables the provider reads in `credentials.variables`. A local daemon keeps the values it started with; when the shell holds different ones, the first command that allocates a lease refuses with reason `provider-credentials-changed` until the daemon is stopped. The check treats a whitespace-only value as unset. If a lease reads fewer variables on one backend, narrow them with `credentials.byBackend`, for example `{ "android-instance": ["EXAMPLE_API_KEY"] }`. Credentials the caller passes as factory options are not in the environment, so list no variable for them.
+List the environment variables the provider reads in `credentials.variables`. A local daemon keeps the values it started with; when the shell holds different ones, the first command that allocates a lease refuses with reason `provider-credentials-changed` until the daemon is stopped. The check treats a whitespace-only value as unset. If a lease reads fewer variables on one backend, narrow them with `credentials.byBackend`, for example `{ "android-instance": ["EXAMPLE_API_KEY"] }`. The Limrun plugin declares its account variables and each platform's instance variables this way, so a change to the iOS instance variables does not invalidate an Android lease. Credentials the caller passes as factory options are not in the environment, so list no variable for them.
 
 ### Connect
 

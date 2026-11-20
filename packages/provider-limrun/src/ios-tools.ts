@@ -1,18 +1,20 @@
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
-import { createLimrunSimulatorFiles } from './limrun-ios-files.ts';
+import { createLimrunSimulatorFiles } from './ios-files.ts';
 import type {
   AppleToolProvider,
   AppleToolExecOptions,
 } from '@agent-device/platform-apple/tool-provider';
-import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
+import type { ExecResult } from '@agent-device/host-kit/command';
+import type { LimrunIosHost } from './ios-host.ts';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 
 /** Runs the shared Apple host commands against the lease's simulator. */
 export function createLimrunAppleToolProvider(
   session: Session,
+  host: Pick<LimrunIosHost, 'apple' | 'kit'>,
   lifetime: AbortSignal,
   requestSignal?: AbortSignal,
 ): AppleToolProvider {
@@ -98,7 +100,7 @@ export function createLimrunAppleToolProvider(
         throw new AppError('COMMAND_FAILED', `xcrun exited with code ${result.code}`, {
           cmd: 'simctl',
           args,
-          ...execFailureDetails({ exitCode: result.code, stdout, stderr: result.stderr }),
+          ...host.kit.execFailureDetails({ exitCode: result.code, stdout, stderr: result.stderr }),
         });
       }
       return { exitCode: result.code, stdout, stderr: result.stderr };
@@ -109,6 +111,7 @@ export function createLimrunAppleToolProvider(
   };
   const { simulatorFiles, readInfoPlist } = createLimrunSimulatorFiles(
     session,
+    host.apple.tools.parsePlist,
     lifetime,
     requestSignal,
   );

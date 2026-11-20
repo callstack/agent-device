@@ -1,8 +1,5 @@
-import { limrunRunnerError } from './limrun-ios-runner-errors.ts';
-import {
-  runnerListenerEnv,
-  RUNNER_XCTESTRUN_CAPTURE_OPTIONS,
-} from '@agent-device/platform-apple/runner/operations';
+import { limrunRunnerError } from './ios-runner-errors.ts';
+import type { LimrunIosHost } from './ios-host.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import { isIP } from 'node:net';
@@ -10,19 +7,21 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
-import { extractArchiveSafely } from '@agent-device/host-kit/archive';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
-import { downloadLimrunFile } from '../limrun-download-file.ts';
+import { downloadLimrunFile } from './download-file.ts';
 
 /** Stages the version-matched release runner, or an explicitly supplied development build. */
-export async function prepareLimrunRunnerProducts(input: {
-  directory: string;
-  version: string;
-  appPath?: string;
-  bindAddress: string;
-  endpoint: { port: number; token: string };
-  signal: AbortSignal;
-}): Promise<string> {
+export async function prepareLimrunRunnerProducts(
+  host: Pick<LimrunIosHost, 'apple' | 'kit'>,
+  input: {
+    directory: string;
+    version: string;
+    appPath?: string;
+    bindAddress: string;
+    endpoint: { port: number; token: string };
+    signal: AbortSignal;
+  },
+): Promise<string> {
   if (isIP(input.bindAddress) !== 4 || input.bindAddress === '0.0.0.0') {
     throw limrunRunnerError(
       'limrun_runner_products_invalid',
@@ -80,7 +79,7 @@ export async function prepareLimrunRunnerProducts(input: {
     if (digest !== manifest.sha256)
       throw limrunRunnerError('limrun_runner_products_invalid', 'iOS runner checksum mismatch');
     const extracted = path.join(input.directory, 'extracted');
-    await extractArchiveSafely({
+    await host.kit.extractArchiveSafely({
       archivePath,
       outputRoot: extracted,
       type: 'tgz',
@@ -136,17 +135,18 @@ export async function prepareLimrunRunnerProducts(input: {
     );
   }
   await fs.cp(appPath, path.join(products, 'Runner.app'), { recursive: true });
-  await writeLimrunRunnerConfiguration(products, input.bindAddress, input.endpoint);
+  await writeLimrunRunnerConfiguration(host, products, input.bindAddress, input.endpoint);
   return products;
 }
 
 export async function writeLimrunRunnerConfiguration(
+  host: Pick<LimrunIosHost, 'apple'>,
   directory: string,
   bindAddress: string,
   endpoint: { port: number; token: string },
 ): Promise<void> {
   const string = (value: string) => `<string>${escapeXmlTextAndAttribute(value)}</string>`;
-  const environment = runnerListenerEnv(endpoint, bindAddress);
+  const environment = host.apple.runner.listenerEnv(endpoint, bindAddress);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>AgentDeviceRunnerUITests</key><dict>
@@ -156,7 +156,7 @@ export async function writeLimrunRunnerConfiguration(
 <key>TestBundlePath</key><string>__TESTHOST__/PlugIns/AgentDeviceRunnerUITests.xctest</string>
 <key>IsUITestBundle</key><true/>
 <key>UITargetAppPath</key><string>__TESTROOT__/Runner.app</string>
-${Object.entries(RUNNER_XCTESTRUN_CAPTURE_OPTIONS)
+${Object.entries(host.apple.runner.xctestrunCaptureOptions)
   .map(([key, value]) => `<key>${key}</key>${string(value)}`)
   .join('')}
 <key>OnlyTestIdentifiers</key><array><string>RunnerTests/testCommand</string></array>

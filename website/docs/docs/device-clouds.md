@@ -8,7 +8,7 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 - [BrowserStack](/docs/browserstack): Android and iOS App Automate sessions over WebDriver. Install the `@agent-device/browserstack` plugin first.
 - [AWS Device Farm](/docs/aws-device-farm): Android and iOS remote-access sessions through AWS. Install the `@agent-device/aws-device-farm` plugin first.
 - [TestMu AI](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
-- [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
+- [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances. Install the `@agent-device/limrun` plugin first.
 - [Revyl](/docs/revyl): iOS simulators and Android emulators rented from Revyl's execution API.
 
 ## Compare providers
@@ -16,7 +16,7 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 | | BrowserStack | AWS Device Farm | TestMu AI | Limrun | Revyl |
 | --- | --- | --- | --- | --- | --- |
 | Devices | Android and iOS real devices | Android and iOS real devices | Android emulators and iOS simulators by default; real devices with `--provider-device-type real` | Android emulators and iOS simulators | Android emulators and iOS simulators |
-| Ships as | The `@agent-device/browserstack` plugin | The `@agent-device/aws-device-farm` plugin; needs the AWS CLI | The `@agent-device/testmu` plugin | Built in | The `@agent-device/revyl` plugin |
+| Ships as | The `@agent-device/browserstack` plugin | The `@agent-device/aws-device-farm` plugin; needs the AWS CLI | The `@agent-device/testmu` plugin | The `@agent-device/limrun` plugin | The `@agent-device/revyl` plugin |
 | Credentials | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY` | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY` | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance | `REVYL_API_KEY` (optional `REVYL_API_URL` for another Revyl backend) |
 | Device allocated on | `open` | `open` | `open` | First device command, such as `install` or `open` | First device command, such as `open` |
 | App source | `--provider-app`: `bs://` reference, HTTP(S) URL, or local path | `--aws-app-arn` upload ARN; no install after allocation | `--provider-app`: `lt://` reference, HTTP(S) URL, or local path | `install <id> <path-or-url>`, or `open <asset-name>` for an uploaded asset | `--provider-app`: a public HTTPS URL only, installed when the device starts |

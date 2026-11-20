@@ -5,8 +5,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ClientOptions } from '@limrun/api';
 import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
-import { createLimrunRuntime, type LimrunRuntimeOptions } from '@agent-device/provider-limrun';
-import { createLimrunRuntimeDependencies } from '../sdk/limrun-runtime-dependencies.ts';
+import { createLimrunRuntime, type LimrunRuntimeOptions } from '@agent-device/limrun/runtime';
+import { limrunRuntimeDependencies } from '../provider-plugin-host-capabilities.fixtures.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -16,11 +16,11 @@ import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // The daemon's own composition: the provider runtime over the host adapters the daemon builds.
-function createTestRuntime(
+async function createTestRuntime(
   options: LimrunRuntimeOptions,
   host: HostEnvironment = { env: process.env, cwd: process.cwd() },
-): ReturnType<typeof createLimrunRuntime> {
-  return createLimrunRuntime(options, createLimrunRuntimeDependencies(host));
+): Promise<ReturnType<typeof createLimrunRuntime>> {
+  return createLimrunRuntime(options, await limrunRuntimeDependencies(host));
 }
 
 type LimrunInstancePage = {
@@ -157,7 +157,7 @@ afterEach(() => {
 });
 
 test('Limrun runtime identifies direct CLI usage when creating an instance', async () => {
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
 
@@ -194,7 +194,7 @@ test('Limrun runtime identifies direct CLI usage when creating an instance', asy
 });
 
 test('Limrun refuses a refused field on a repeat allocation of its live lease', async () => {
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
   const lease = iosLease('lease-repeat');
   try {
     const allocateLease = runtime.leaseLifecycle.allocate;
@@ -214,7 +214,7 @@ test('Limrun refuses a refused field on a repeat allocation of its live lease', 
 });
 
 test('Limrun iOS uses shared deep-link classification', async () => {
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
   const metadata = new Map([
     ['com.apple.Preferences', '<plist version="1.0"><dict/></plist>'],
     [
@@ -273,7 +273,7 @@ test('Limrun iOS uses shared deep-link classification', async () => {
 });
 
 test('Limrun reclaims a labeled iOS instance without an in-memory session', async () => {
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
   const lease = iosLease('lease-recovered-ios');
   limrunMockState.iosList.mockResolvedValueOnce({
     getPaginatedItems: () => [{ metadata: { id: 'ios-instance-recovered' } }],
@@ -296,7 +296,7 @@ test('Limrun reclaims a labeled iOS instance without an in-memory session', asyn
 });
 
 test('Limrun Android reverses localhost URL ports through the persistent ADB tunnel', async () => {
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
 
@@ -323,7 +323,7 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
 test('Limrun keepAlive pings the session client every 30 s until release', async () => {
   vi.useFakeTimers();
   try {
-    const runtime = createTestRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    const runtime = await createTestRuntime({ apiKey: 'lim_test_key', keepAlive: true });
     const lease = androidLease();
     await allocateLimrunDevice(runtime, lease);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -340,7 +340,7 @@ test('Limrun keepAlive pings the session client every 30 s until release', async
 test('Limrun keepAlive is off by default', async () => {
   vi.useFakeTimers();
   try {
-    const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+    const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
     await allocateLimrunDevice(runtime, androidLease());
     await vi.advanceTimersByTimeAsync(60_000);
     assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 0);
@@ -356,7 +356,7 @@ test('Limrun keepAlive keeps pinging after the client throws', async () => {
     limrunMockState.androidKeepAlive.mockImplementationOnce(() => {
       throw new Error('socket closed');
     });
-    const runtime = createTestRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    const runtime = await createTestRuntime({ apiKey: 'lim_test_key', keepAlive: true });
     await allocateLimrunDevice(runtime, androidLease());
     await vi.advanceTimersByTimeAsync(60_000);
     assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
@@ -439,7 +439,7 @@ function assertAndroidTunnelLifecycle(openUrl: string): void {
 test('Limrun Android syncs direct local artifacts', async () => {
   const apkPath = path.join(mkdtempForTestSync('limrun-install-'), 'app-debug.apk');
   fs.writeFileSync(apkPath, 'apk fixture');
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
   const lease = androidLease();
@@ -476,7 +476,7 @@ test('Limrun Android syncs direct local artifacts', async () => {
 });
 
 test('Limrun Android shares an in-flight ADB tunnel across concurrent port reverse requests', async () => {
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
 
   try {
     await allocateLimrunDevice(runtime, androidLease());
@@ -505,7 +505,7 @@ test('Limrun iOS syncs direct local artifacts', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-limrun-install-');
   const ipaPath = path.join(tempRoot, 'Demo.ipa');
   fs.writeFileSync(ipaPath, 'demo');
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
   const lease = iosLease('lease-ios');
@@ -554,7 +554,7 @@ test('Limrun iOS reads the bundle display name before syncing an app bundle', as
       '</dict></plist>',
     ].join(''),
   );
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
 
   try {
     const device = await allocateLimrunDevice(runtime, {
@@ -572,7 +572,7 @@ test('Limrun iOS reads the bundle display name before syncing an app bundle', as
 });
 
 test('Limrun Android configures an explicit port reverse', async () => {
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
   const lease = androidLease();
@@ -609,7 +609,7 @@ test('Limrun Android configures an explicit port reverse', async () => {
 });
 
 test('Limrun Android preserves canonical ADB failure classification', async () => {
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key' });
+  const runtime = await createTestRuntime({ apiKey: 'lim_test_key' });
 
   try {
     await allocateLimrunDevice(runtime, androidLease());
@@ -645,7 +645,7 @@ test('Limrun deletes iOS instance when post-create validation fails', async () =
     metadata: { id: 'ios-instance-missing-api' },
     status: { token: 'instance-token' },
   } as never);
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
   const lease = iosLease('lease-ios');
@@ -668,7 +668,7 @@ test('Limrun deletes Android instance when post-create validation fails', async 
       apiUrl: 'https://android.example',
     },
   } as never);
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
   const lease = androidLease();
@@ -684,7 +684,7 @@ test('Limrun deletes Android instance when post-create validation fails', async 
 });
 
 test('Limrun keeps session tracked when release fails so release can be retried', async () => {
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     apiKey: 'lim_test_key',
   });
   const lease = androidLease();
@@ -728,7 +728,7 @@ const ATTACHED_ANDROID = {
 };
 
 test('Limrun drives existing instances without an API key and never deletes them', async () => {
-  const runtime = createTestRuntime({
+  const runtime = await createTestRuntime({
     instances: { ios: ATTACHED_IOS, android: ATTACHED_ANDROID },
   });
   const releaseLease = runtime.leaseLifecycle.release;
@@ -768,7 +768,7 @@ test('Limrun drives existing instances without an API key and never deletes them
 });
 
 test('Limrun removes only its own port reverse mappings from an attached Android instance', async () => {
-  const runtime = createTestRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const runtime = await createTestRuntime({ instances: { android: ATTACHED_ANDROID } });
   const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
   vi.mocked(runCmd).mockImplementation(async (_command, args) => ({
     stdout: args.includes('--list')
@@ -798,7 +798,7 @@ test('Limrun removes only its own port reverse mappings from an attached Android
 });
 
 test('Limrun refuses to replace an owner port reverse on an attached Android instance', async () => {
-  const runtime = createTestRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const runtime = await createTestRuntime({ instances: { android: ATTACHED_ANDROID } });
   const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
   vi.mocked(runCmd).mockImplementation(async (_command, args) =>
     args.includes('--no-rebind')
@@ -838,7 +838,10 @@ test('Limrun refuses to replace an owner port reverse on an attached Android ins
 });
 
 test('Limrun instance access wins over the API key for its platform only', async () => {
-  const runtime = createTestRuntime({ apiKey: 'lim_test_key', instances: { ios: ATTACHED_IOS } });
+  const runtime = await createTestRuntime({
+    apiKey: 'lim_test_key',
+    instances: { ios: ATTACHED_IOS },
+  });
 
   await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
   await allocateLimrunDevice(runtime, androidLease());
@@ -854,7 +857,7 @@ test('Limrun instance access wins over the API key for its platform only', async
 });
 
 test('Limrun without an API key refuses operations that need one', async () => {
-  const runtime = createTestRuntime({ instances: { ios: ATTACHED_IOS } });
+  const runtime = await createTestRuntime({ instances: { ios: ATTACHED_IOS } });
 
   try {
     await assert.rejects(allocateLimrunDevice(runtime, androidLease()), {
@@ -864,11 +867,11 @@ test('Limrun without an API key refuses operations that need one', async () => {
   } finally {
     await runtime.shutdown();
   }
-  assert.throws(() => createTestRuntime({}), /requires an apiKey or instance access/);
+  await assert.rejects(createTestRuntime({}), /requires an apiKey or instance access/);
 });
 
 test('Limrun attaches an existing instance under a consumed field and refuses a refused one', async () => {
-  const runtime = createTestRuntime({ instances: { ios: ATTACHED_IOS } });
+  const runtime = await createTestRuntime({ instances: { ios: ATTACHED_IOS } });
   const allocateLease = runtime.leaseLifecycle.allocate;
   if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
   try {
@@ -888,8 +891,8 @@ test('Limrun attaches an existing instance under a consumed field and refuses a 
 
 test('Limrun runtimes keep their hosts in concurrent deferred Android callbacks', async () => {
   const host = (owner: string) => ({ env: { SDK_OWNER: owner }, cwd: process.cwd() });
-  const runtimes = ['first', 'second'].map((owner) =>
-    createTestRuntime({ apiKey: 'lim_test_key' }, host(owner)),
+  const runtimes = await Promise.all(
+    ['first', 'second'].map((owner) => createTestRuntime({ apiKey: 'lim_test_key' }, host(owner))),
   );
   vi.mocked(runCmd).mockImplementation(async () => ({
     stdout: `mCurrentFocus=Window{1 u0 com.${commandHostEnvironment().env.SDK_OWNER}/.MainActivity}`,

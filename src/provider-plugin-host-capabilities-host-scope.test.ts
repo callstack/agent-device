@@ -4,7 +4,7 @@ import path from 'node:path';
 import { beforeAll, test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { createLimrunRuntimeDependencies } from './limrun-runtime-dependencies.ts';
+import { limrunRuntimeDependencies } from './provider-plugin-host-capabilities.fixtures.ts';
 
 beforeAll(async () => {
   if (process.platform !== 'win32') await import('@agent-device/platform-apple/install-artifact');
@@ -23,13 +23,13 @@ test.skipIf(process.platform === 'win32')(
         `process.stdout.write(JSON.stringify({args:process.argv.slice(2),host:process.env.LIMRUN_OWNER}));\n`,
     );
     chmodSync(adb, 0o755);
-    const owner = (name: string) =>
-      createLimrunRuntimeDependencies({
+    const owner = async (name: string) =>
+      await limrunRuntimeDependencies({
         env: { ...process.env, PATH: bin, LIMRUN_OWNER: name },
         cwd: root,
       });
-    const first = owner('first');
-    const second = owner('second');
+    const first = await owner('first');
+    const second = await owner('second');
     const invocation = {
       target: { selector: { kind: 'unspecified' as const }, server: { kind: 'ambient' as const } },
       command: ['devices'],
@@ -72,7 +72,7 @@ test.skipIf(process.platform === 'win32')(
       `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({CFBundleDisplayName:'Scoped App'}));\n`,
     );
     chmodSync(plutil, 0o755);
-    const dependencies = createLimrunRuntimeDependencies({
+    const dependencies = await limrunRuntimeDependencies({
       env: { ...process.env, PATH: root },
       cwd: root,
     });

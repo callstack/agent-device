@@ -440,7 +440,7 @@ const a = await startAgentDevice({
   host: supplied,
   plugins: [
     fixture('fixture-a'),
-    fixture('limrun'),
+    fixture('cloud'),
     null,
     { ...fixture('wrong-version'), apiVersion: 1 },
     fixture('broken', () => {
@@ -467,8 +467,8 @@ try {
   const inventory = JSON.parse(fs.readFileSync(path.join(a.clientConfig.stateDir, 'daemon.json'), 'utf8')).plugins;
   assert.equal(inventory.find((p) => p.provider === 'fixture-a').state, 'active');
   assert.equal(
-    inventory.filter((p) => p.provider === 'limrun' && p.source === 'embedder')[0].state,
-    'failed',
+    inventory.filter((p) => p.provider === 'cloud' && p.source === 'embedder')[0].error.reason,
+    'reserved_provider',
   );
   assert.equal(inventory.find((p) => p.provider === 'broken').state, 'failed');
   assert.equal(inventory.find((p) => p.source === 'embedder' && p.provider === undefined).error.reason, 'invalid_plugin');

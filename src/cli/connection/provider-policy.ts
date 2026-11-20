@@ -13,11 +13,7 @@ import {
   getProviderPluginDeclaration,
   providerPluginRepairCommand,
 } from '../../commands/provider-plugin-catalog.ts';
-import {
-  BUILTIN_CONNECT_PROVIDER_IDS,
-  BUILTIN_PROVIDER_IDS,
-  builtinConnectionCapabilities,
-} from '../../builtin-provider-ids.ts';
+import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
 
@@ -37,15 +33,15 @@ function remoteDaemonConnection(
 }
 
 /**
- * Loads the plugin store before the first synchronous capability lookup for a provider that is not
- * built in, because a v2 plugin declares its capabilities in code, not in its manifest.
+ * Loads the plugin store before the first synchronous capability lookup for a provider, because a
+ * plugin declares its capabilities in code, not in its manifest.
  */
 export async function primeProviderConnection(
   provider: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  if (provider === undefined || BUILTIN_CONNECT_PROVIDER_IDS.includes(provider)) return;
-  await primePluginConnections(env, BUILTIN_PROVIDER_IDS);
+  if (provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(provider)) return;
+  await primePluginConnections(env);
   if (pluginConnectionCapabilities(provider, env) !== undefined) return;
   const unavailable = unavailableConnectPluginError(provider, env);
   if (unavailable) throw unavailable;
@@ -57,13 +53,13 @@ export function isConnectProviderName(
 ): value is ConnectProvider {
   return (
     value !== undefined &&
-    (BUILTIN_CONNECT_PROVIDER_IDS.includes(value) ||
+    (ROUTING_PROVIDER_IDENTITIES.includes(value) ||
       pluginConnectionCapabilities(value, env) !== undefined)
   );
 }
 
 export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.env): string {
-  const names = [...BUILTIN_CONNECT_PROVIDER_IDS, ...pluginConnectionNames(env)].join(', ');
+  const names = [...ROUTING_PROVIDER_IDENTITIES, ...pluginConnectionNames(env)].join(', ');
   const failures = pluginLoadFailures(env).map(
     ({ package: name, provider, error }) =>
       `${name ?? provider ?? 'plugin store'}: ${error.message}`,
@@ -107,16 +103,15 @@ export function unavailableConnectPluginError(
   );
 }
 
-/** Bundled and installed providers declare their capabilities; the rest is the daemon's own routing. */
+/** Installed providers declare their capabilities; the rest is the daemon's own routing. */
 export function connectionProviderCapabilities(
   provider: string | undefined,
   env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities {
   if (provider === 'proxy') return remoteDaemonConnection('proxy');
   const declared =
-    builtinConnectionCapabilities(provider) ??
-    (provider === undefined || provider === 'cloud'
+    provider === undefined || provider === 'cloud'
       ? undefined
-      : pluginConnectionCapabilities(provider, env));
+      : pluginConnectionCapabilities(provider, env);
   return declared ?? remoteDaemonConnection('remote-provider');
 }

@@ -10,6 +10,12 @@ import { runCli } from '../cli.ts';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon-client';
 import { makeTempWorkspace } from '@agent-device/test-kit';
 
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
+
 afterEach(() => {
   vi.restoreAllMocks();
 });

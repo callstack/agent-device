@@ -2,10 +2,24 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
+import { extractArchiveSafely } from '@agent-device/host-kit/archive';
 import {
-  prepareLimrunRunnerProducts,
-  uploadLimrunRunnerProducts,
-} from './limrun-ios-runner-products.ts';
+  runnerListenerEnv,
+  RUNNER_XCTESTRUN_CAPTURE_OPTIONS,
+} from '@agent-device/platform-apple/runner/operations';
+import type { LimrunIosHost } from './ios-host.ts';
+import { prepareLimrunRunnerProducts, uploadLimrunRunnerProducts } from './ios-runner-products.ts';
+
+// The products are staged over the host's own archive and runner-listener owners.
+const host = {
+  kit: { extractArchiveSafely },
+  apple: {
+    runner: {
+      listenerEnv: runnerListenerEnv,
+      xctestrunCaptureOptions: RUNNER_XCTESTRUN_CAPTURE_OPTIONS,
+    },
+  },
+} as unknown as Pick<LimrunIosHost, 'apple' | 'kit'>;
 
 afterEach(() => vi.unstubAllGlobals());
 const endpoint = { port: 8100, token: 'a'.repeat(32) };
@@ -17,7 +31,7 @@ test('a normal app without a test bundle reports the invalid runner path', async
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
   await expect(
-    prepareLimrunRunnerProducts({
+    prepareLimrunRunnerProducts(host, {
       directory,
       appPath,
       version: '0.1.0',
@@ -43,7 +57,7 @@ test('a runner that embeds its own XCTest is refused before it reaches Limrun', 
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
   await expect(
-    prepareLimrunRunnerProducts({
+    prepareLimrunRunnerProducts(host, {
       directory,
       appPath,
       version: '0.1.0',
@@ -76,7 +90,7 @@ test('an HTML upload failure preserves the HTTP status', async () => {
 for (const bindAddress of ['0.0.0.0', 'localhost', '', '::1']) {
   test(`refuses ${JSON.stringify(bindAddress)} as a pod binding`, async () => {
     await expect(
-      prepareLimrunRunnerProducts({
+      prepareLimrunRunnerProducts(host, {
         directory: await mkdtempForTest('runner-products-'),
         version: '0.1.0',
         bindAddress,
@@ -103,7 +117,7 @@ test('refuses release bytes with a mismatched checksum before extracting or depl
   });
   const directory = await mkdtempForTest('runner-products-');
   await expect(
-    prepareLimrunRunnerProducts({
+    prepareLimrunRunnerProducts(host, {
       directory,
       version: '0.1.0',
       bindAddress: '10.244.1.2',
@@ -124,7 +138,7 @@ test('nightly builds require a packaged runner instead of requesting unpublished
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
   await expect(
-    prepareLimrunRunnerProducts({
+    prepareLimrunRunnerProducts(host, {
       directory: await mkdtempForTest('runner-products-'),
       version: '0.1.0-nightly.20261030.123',
       bindAddress: '10.244.1.2',

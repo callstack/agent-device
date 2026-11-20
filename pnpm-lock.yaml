@@ -80,6 +80,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:packages/kernel
+      '@agent-device/limrun':
+        specifier: workspace:*
+        version: link:packages/provider-limrun
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:packages/platform-android
@@ -95,9 +98,6 @@ importers:
       '@agent-device/plugins':
         specifier: workspace:*
         version: link:packages/plugins
-      '@agent-device/provider-limrun':
-        specifier: workspace:*
-        version: link:packages/provider-limrun
       '@agent-device/provider-webdriver':
         specifier: workspace:*
         version: link:packages/provider-webdriver
@@ -960,31 +960,40 @@ importers:
 
   packages/provider-limrun:
     dependencies:
+      '@limrun/api':
+        specifier: ^0.69.1
+        version: 0.69.1(supports-color@7.2.0)
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:../platform-android
-      '@agent-device/plugins':
-        specifier: workspace:*
-        version: link:../plugins
-    devDependencies:
       '@agent-device/platform-apple':
         specifier: workspace:*
         version: link:../platform-apple
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
-      '@limrun/api':
-        specifier: ^0.69.1
-        version: 0.69.1(supports-color@7.2.0)
+      '@agent-device/xml':
+        specifier: workspace:*
+        version: link:../xml
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/provider-revyl:
     devDependencies:
