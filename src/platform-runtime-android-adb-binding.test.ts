@@ -1,3 +1,4 @@
+import { readVersion } from '@agent-device/host-kit/version';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 
@@ -54,6 +55,7 @@ const device: DeviceInfo = {
 
 test('the composed gateway lists Android apps from inside the platform package', async () => {
   const gateway = createPlatformRuntimeGateway({
+    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
     ...sessionArtifacts,
   });
@@ -82,6 +84,7 @@ test('the composed gateway lists Android apps from inside the platform package',
 
 test('the composed gateway reads Android app state from inside the platform package', async () => {
   const gateway = createPlatformRuntimeGateway({
+    coreVersion: readVersion(),
     host: createLiveTestHostEnvironment(),
     ...sessionArtifacts,
   });

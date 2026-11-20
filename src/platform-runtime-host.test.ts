@@ -1,3 +1,4 @@
+import { readVersion } from '@agent-device/host-kit/version';
 import { expect, test, vi } from 'vitest';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -115,10 +116,13 @@ test('a host env with no home still inventories every family through the gateway
   // the gateways load the one host for all of them. Reverting the refusal makes both assertions
   // below red: the Apple host-Mac route fails with COMMAND_FAILED, and Vega fails with
   // COMMAND_FAILED instead of the honest TOOL_MISSING its PATH-only answer yields.
-  const gateways = await createPlatformDeviceInventoryGateways({
-    env: {},
-    cwd: process.cwd(),
-  });
+  const gateways = await createPlatformDeviceInventoryGateways(
+    {
+      env: {},
+      cwd: process.cwd(),
+    },
+    readVersion(),
+  );
   const scope: PlatformRequestScope = Object.freeze({
     signal: new AbortController().signal,
     diagnostics: Object.freeze({ emit: () => {} }),

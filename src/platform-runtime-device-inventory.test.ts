@@ -13,6 +13,9 @@ import { PLATFORMS, type DeviceInfo } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
 import { attachAppleSelectionProbes } from './platform-runtime-device-inventory.ts';
 
+// A core version no release channel pins, so an absent family's install hint names the bare package.
+const CORE_VERSION = '0.0.0-test';
+
 const simctl = vi.hoisted(() => ({
   listapps: [] as Array<{ deviceId: string; apps: Record<string, unknown> }>,
   calls: [] as string[],
@@ -51,7 +54,7 @@ describe('production device inventory composition', () => {
         source(family === 'apple' ? [simulator('sim-a'), simulator('sim-b')] : []),
     }));
     const gateways = await attachAppleSelectionProbes({
-      registry: createPlatformModuleRegistry(modules),
+      registry: createPlatformModuleRegistry(modules, CORE_VERSION),
       loadHost: async () => testInventoryHost,
       env: {},
     });
@@ -111,7 +114,7 @@ describe('production device inventory composition', () => {
         loadInventory: async () => source(family === 'apple' ? [mac] : []),
       }));
       const gateways = await attachAppleSelectionProbes({
-        registry: createPlatformModuleRegistry(modules),
+        registry: createPlatformModuleRegistry(modules, CORE_VERSION),
         loadHost: async () => testInventoryHost,
         env: { AGENT_DEVICE_MACOS_APP_BACKEND: backend },
       });
