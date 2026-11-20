@@ -67,12 +67,8 @@ import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import {
-  hostAppDevice,
-  hostAppDeviceId,
-  webSessionDevice,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { hostAppDeviceId } from '@agent-device/kernel/device-identity';
+import { hostAppDevice, webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { seedWebSessionIdentity } from '../../__tests__/support/web-session-request-fixture.ts';

@@ -13,7 +13,8 @@ import {
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import { inspectExistingClaimSettlement } from './device-claim-settlement.ts';
 import { inspectDeviceClaims } from './device-claim-inspection.ts';
-import { hostAppDevice, hostDeviceIdPrefix, type DeviceInfo } from '@agent-device/kernel/device';
+import { hostDeviceIdPrefix } from '@agent-device/kernel/device-identity';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceClaim } from './device-claim-record.ts';
 import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
 import * as hostProcess from '@agent-device/host-kit/process';
