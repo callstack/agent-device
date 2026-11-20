@@ -376,7 +376,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'back',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/back.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'loop',
@@ -415,7 +415,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'home',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/home.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -427,7 +427,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'tv-remote',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/tv-remote.ts'] as const }
         : {}),
       catalog: { group: 'public', key: 'tvRemote' },
       frameworkTier: 'extended',
@@ -439,7 +439,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'orientation',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/orientation.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -451,7 +451,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'fold',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/fold.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -465,7 +465,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'telephony',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/telephony.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -569,7 +569,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       name: 'app-switcher',
       deviceClaimPolicy: 'require-owner',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/app-switcher.ts'] as const }
         : {}),
       catalog: { group: 'public', key: 'appSwitcher' },
       frameworkTier: 'extended',
@@ -590,7 +590,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'action-button',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/action-button.ts'] as const }
         : {}),
       catalog: { group: 'public', key: 'actionButton' },
       frameworkTier: 'extended',
@@ -605,7 +605,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'shake',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/shake.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -618,7 +618,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'hardware-button',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/system/hardware-button.ts'] as const }
         : {}),
       catalog: { group: 'public', key: 'hardwareButton' },
       frameworkTier: 'extended',

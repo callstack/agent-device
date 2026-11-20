@@ -5,12 +5,14 @@ import {
   COMMAND_OWNER_FILES,
   ownerFilesForCommand,
 } from '@agent-device/command-registry/owner-files';
-import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from './system/index.ts';
+import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from './system/output-schemas.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 
 const SYSTEM_COMMANDS = Object.keys(SYSTEM_COMMAND_OUTPUT_SCHEMAS) as Array<
   keyof typeof SYSTEM_COMMAND_OUTPUT_SCHEMAS
 >;
+
+const SYSTEM_FAMILY_DIR = 'packages/command-surface/src/system/';
 
 // `back` is the one entry in this family with a post-action observation trait (#1652): the
 // composed map grafts a `settle` property onto a COPY, so it is not reference-equal to the
@@ -42,24 +44,28 @@ test('a settle-derived system entry still grafts onto the module object, not a f
   );
 });
 
-test('every system-owned command claims this module, and the module claims nothing else', () => {
+// Each system command's descriptor names the per-command module that owns its facet, and that
+// module is named after the command. Deriving the expected path from the schema keys therefore
+// covers a new system command without editing this test, and still fails a command that claims
+// the family composition, another family's module, or no module at all.
+test('every system-owned command claims its own module, and the family claims nothing else', () => {
   for (const command of SYSTEM_COMMANDS) {
     assert.ok(
-      ownerFilesForCommand(command).includes('packages/command-surface/src/system/index.ts'),
-      `${command} projects its output schema from this module but does not name it as its owner`,
+      ownerFilesForCommand(command).includes(`${SYSTEM_FAMILY_DIR}${command}.ts`),
+      `${command} projects its output schema from this family but does not name its own module as its owner`,
     );
   }
 
-  const commandsOwnedByThisModule = (
+  const commandsOwnedByThisFamily = (
     Object.entries(COMMAND_OWNER_FILES) as Array<[string, readonly string[]]>
   )
-    .filter(([, ownerFiles]) => ownerFiles.includes('packages/command-surface/src/system/index.ts'))
+    .filter(([, ownerFiles]) => ownerFiles.some((file) => file.startsWith(SYSTEM_FAMILY_DIR)))
     .map(([command]) => command)
     .sort();
   assert.deepEqual(
-    commandsOwnedByThisModule,
+    commandsOwnedByThisFamily,
     [...SYSTEM_COMMANDS].sort(),
-    'a command the registry attributes to this module is missing from SYSTEM_COMMAND_OUTPUT_SCHEMAS (or vice versa)',
+    'a command the registry attributes to this family is missing from SYSTEM_COMMAND_OUTPUT_SCHEMAS (or vice versa)',
   );
 });
 
