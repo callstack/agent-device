@@ -1,4 +1,5 @@
 import type { PlatformContribution, PlatformHost } from 'agent-device/plugins';
+import type { HarmonyToolbox } from './toolbox.ts';
 import type {
   InventoryPlatformModule,
   PlatformModuleMetadata,
@@ -20,10 +21,16 @@ const metadata = Object.freeze({
  */
 let toolboxModule: Promise<typeof import('./toolbox.ts')> | undefined;
 
-async function harmonyToolbox(host: PlatformHost) {
-  toolboxModule ??= import('./toolbox.ts');
-  const { createHarmonyToolbox } = await toolboxModule;
-  return createHarmonyToolbox(host);
+/**
+ * A bound toolbox, made on first use and then reused: a `setup` that never runs a command imports
+ * and builds nothing, and the operations of one setup share the one toolbox it binds its host to.
+ */
+function harmonyToolbox(host: PlatformHost) {
+  let toolbox: Promise<HarmonyToolbox> | undefined;
+  return async () =>
+    (toolbox ??= (toolboxModule ??= import('./toolbox.ts')).then(({ createHarmonyToolbox }) =>
+      createHarmonyToolbox(host),
+    ));
 }
 
 function harmonyPlatformPlugin() {
@@ -33,9 +40,9 @@ function harmonyPlatformPlugin() {
       {
         kind: 'platform',
         family: 'harmonyos',
-        // The family binds its host on first use rather than in `setup`, so importing this package
-        // evaluates nothing but itself. Every operation below awaits this same resolution, so one
-        // setup builds exactly one toolbox for the whole family.
+        // Importing this package evaluates nothing but itself, and the host is bound to a toolbox
+        // only when an operation first needs one. Every operation below asks the same lazy
+        // resolution, so one setup builds exactly one toolbox for the whole family.
         setup(host: PlatformHost): HarmonyPlatformRegistration {
           const toolbox = harmonyToolbox(host);
           const inventoryModule: InventoryPlatformModule<'harmonyos'> = Object.freeze({
@@ -45,14 +52,14 @@ function harmonyPlatformPlugin() {
             // itself (ADR 0019) nor has the core name its configuration.
             loadInventory: async () => {
               const { createHarmonyInventory } = await import('./inventory.ts');
-              return createHarmonyInventory(await toolbox);
+              return createHarmonyInventory(await toolbox());
             },
           });
           const runtimeModule = Object.freeze({
             ...metadata,
             loadRuntime: async (host) => {
               const { createHarmonyPlatformRuntime } = await import('./runtime.ts');
-              return createHarmonyPlatformRuntime(host, await toolbox);
+              return createHarmonyPlatformRuntime(host, await toolbox());
             },
           } satisfies PlatformRuntimeModule & { readonly family: 'harmonyos' });
           return {
@@ -61,13 +68,13 @@ function harmonyPlatformPlugin() {
             runtimeModule,
             createInteractor: async (device, runnerContext) => {
               const { createHarmonyInteractor } = await import('./interactor.ts');
-              return createHarmonyInteractor(await toolbox, device, runnerContext);
+              return createHarmonyInteractor(await toolbox(), device, runnerContext);
             },
             operations: {
               toolchainCheck: async () => {
                 const [{ harmonyToolchainCheck }, { commands }] = await Promise.all([
                   import('./doctor.ts'),
-                  toolbox,
+                  toolbox(),
                 ]);
                 return await harmonyToolchainCheck(commands);
               },

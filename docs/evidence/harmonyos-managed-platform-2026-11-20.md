@@ -17,9 +17,11 @@ fixture below plus the plugin's unit coverage of every HDC argv.
 
 ## Packed plugin, one stub HDC, reachable only through `HDC_SDK_PATH`
 
-The same sequence now runs as a gate: `packages/platform-harmonyos/test/package-smoke.mjs`. What
-follows is a manual run of it against this host, kept because it shows the raw replies and the exec
-trace the plugin's commands land in.
+`packages/platform-harmonyos/test/package-smoke.mjs` runs this sequence as a gate inside
+`pnpm run check:package`: `devices`, `open`, `snapshot -i`, `screenshot`, `press` and `close`, each
+asserted on its CLI reply and on the argv the stub recorded. What follows is a manual run of the same
+sequence against this host, kept because it shows the raw replies and the exec trace the plugin's
+commands land in.
 
 Setup: a scratch project, an isolated store (`AGENT_DEVICE_HOME`, `AGENT_DEVICE_STATE_DIR`,
 `AGENT_DEVICE_CLAIMS_DIR` under scratch), `PATH` reduced to the Node directory, `/usr/bin` and
