@@ -10,6 +10,7 @@
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/gestures": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provision-kit": "workspace:*",

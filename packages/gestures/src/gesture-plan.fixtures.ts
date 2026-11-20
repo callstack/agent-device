@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
-import { COORDINATE_GESTURE_KINDS, type GesturePayload } from './gesture-input.ts';
+import {
+  COORDINATE_GESTURE_KINDS,
+  type GesturePayload,
+} from '@agent-device/contracts/gesture-input';
 import { buildGesturePlan } from './gesture-plan.ts';
-import type { GesturePlan, MultiTouchGesturePlan } from './gesture-plan-types.ts';
-import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from './scroll-gesture.ts';
+import type {
+  GesturePlan,
+  MultiTouchGesturePlan,
+} from '@agent-device/contracts/gesture-plan-types';
+import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from '@agent-device/contracts/scroll-gesture';
 
 export const PORTRAIT: Rect = { x: 0, y: 0, width: 390, height: 844 };
 export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };

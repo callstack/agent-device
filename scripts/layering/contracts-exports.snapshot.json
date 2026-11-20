@@ -54,8 +54,6 @@
   "@agent-device/contracts/fold-runtime",
   "@agent-device/contracts/gesture-admission",
   "@agent-device/contracts/gesture-input",
-  "@agent-device/contracts/gesture-normalization",
-  "@agent-device/contracts/gesture-plan",
   "@agent-device/contracts/gesture-plan-types",
   "@agent-device/contracts/gesture-runtime",
   "@agent-device/contracts/host-diagnostics",

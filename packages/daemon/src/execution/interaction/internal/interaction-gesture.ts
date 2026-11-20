@@ -8,8 +8,8 @@ import {
   gesturePayloadToPositionals,
   normalizeGestureCommandInput,
   normalizePublicSwipeMotion,
-} from '@agent-device/contracts/gesture-normalization';
-import { GESTURE_FLING_DURATION_MS } from '@agent-device/contracts/gesture-plan';
+} from '@agent-device/gestures/gesture-normalization';
+import { GESTURE_FLING_DURATION_MS } from '@agent-device/gestures/gesture-plan';
 import type {
   GestureCommandInput,
   GestureExecutionProfile,

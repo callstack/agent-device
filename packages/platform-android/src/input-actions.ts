@@ -9,7 +9,7 @@ import {
   deviceRotationFromSurfaceIndex,
   type DeviceRotation,
 } from '@agent-device/contracts/device';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
   type ScrollContainerTarget,

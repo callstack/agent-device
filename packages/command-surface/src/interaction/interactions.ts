@@ -8,7 +8,7 @@ import type {
 import {
   assertNoRemovedSwipeInput,
   swipePayloadFromPositionals,
-} from '@agent-device/contracts/gesture-normalization';
+} from '@agent-device/gestures/gesture-normalization';
 import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {

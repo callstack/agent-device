@@ -10,7 +10,7 @@ import type {
 import {
   buildDragGesturePlan,
   singlePointerPlanEndpoints,
-} from '@agent-device/contracts/gesture-plan';
+} from '@agent-device/gestures/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import { recordedSelectorExpression } from '@agent-device/selectors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';

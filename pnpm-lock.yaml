@@ -63,6 +63,9 @@ importers:
       '@agent-device/device-selection':
         specifier: workspace:*
         version: link:packages/device-selection
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:packages/gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:packages/host-kit
@@ -267,6 +270,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -419,6 +425,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -453,6 +462,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -512,6 +524,9 @@ importers:
       '@agent-device/device-selection':
         specifier: workspace:*
         version: link:../device-selection
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -640,6 +655,19 @@ importers:
         specifier: workspace:*
         version: link:../test-kit
 
+  packages/gestures:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
+
   packages/host-kit:
     dependencies:
       '@agent-device/contracts':
@@ -694,6 +722,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -722,6 +753,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -753,6 +787,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -803,6 +840,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -970,6 +1010,9 @@ importers:
         specifier: workspace:*
         version: link:../xml
     devDependencies:
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
@@ -1090,6 +1133,9 @@ importers:
       '@agent-device/device-selection':
         specifier: workspace:*
         version: link:../device-selection
+      '@agent-device/gestures':
+        specifier: workspace:*
+        version: link:../gestures
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit

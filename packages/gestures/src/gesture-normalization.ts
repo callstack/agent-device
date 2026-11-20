@@ -1,12 +1,19 @@
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import { readGesturePayload, type GESTURE_KINDS, type GesturePayload } from './gesture-input.ts';
-import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
+import {
+  readGesturePayload,
+  type GESTURE_KINDS,
+  type GesturePayload,
+} from '@agent-device/contracts/gesture-input';
+import type {
+  GestureCommandInput,
+  GestureSemanticInput,
+} from '@agent-device/contracts/gesture-plan-types';
 import {
   DEFAULT_DRAG_DESTINATION_HOLD_MS,
   DEFAULT_DRAG_MOVE_MS,
   DEFAULT_DRAG_SOURCE_HOLD_MS,
-} from './gesture-plan-types.ts';
+} from '@agent-device/contracts/gesture-plan-types';
 
 export type NormalizedPublicGesture = {
   gesture: GestureSemanticInput;

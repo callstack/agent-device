@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewport } from '../touch-executor.ts';
 

@@ -6,7 +6,7 @@ import {
   gestureDirectionDelta,
   isScreenEdgeSwipePreset,
   type SwipePreset,
-} from './scroll-gesture.ts';
+} from '@agent-device/contracts/scroll-gesture';
 import {
   DEFAULT_DRAG_DESTINATION_HOLD_MS,
   DEFAULT_DRAG_MOVE_MS,
@@ -16,7 +16,7 @@ import {
   GESTURE_DURATION_MIN_MS,
   GESTURE_MAX_CONTACTS,
   GESTURE_TAP_MIN_CONTACTS,
-} from './gesture-plan-types.ts';
+} from '@agent-device/contracts/gesture-plan-types';
 import type {
   GesturePlan,
   GestureExecutionProfile,
@@ -28,7 +28,7 @@ import type {
   TapGesturePlan,
   TapPointerId,
   TwoContactGesturePlan,
-} from './gesture-plan-types.ts';
+} from '@agent-device/contracts/gesture-plan-types';
 
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;

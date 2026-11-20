@@ -60,6 +60,7 @@ const TARGET_DAG_RANK = new Map([
   ['command-registry', 1],
   ['contracts', 1],
   ['device-selection', 1],
+  ['gestures', 1],
   ['maestro', 1],
   ['replay-port', 1],
   ['replay-test', 1],

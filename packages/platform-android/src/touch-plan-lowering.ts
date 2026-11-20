@@ -2,7 +2,7 @@ import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-comma
 import {
   GESTURE_SAMPLE_INTERVAL_MS,
   densifyGesturePath,
-} from '@agent-device/contracts/gesture-plan';
+} from '@agent-device/gestures/gesture-plan';
 import type {
   GesturePlan,
   MultiTouchGesturePlan,

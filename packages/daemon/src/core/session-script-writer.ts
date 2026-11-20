@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
+import { dragGesturePayloadFromPositionals } from '@agent-device/gestures/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { recordedSelectorExpression } from '@agent-device/selectors';

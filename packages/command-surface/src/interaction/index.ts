@@ -16,7 +16,7 @@ import type {
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { readGesturePayload } from '@agent-device/contracts/gesture-input';
-import { GESTURE_FLAGS_BY_KIND } from '@agent-device/contracts/gesture-normalization';
+import { GESTURE_FLAGS_BY_KIND } from '@agent-device/gestures/gesture-normalization';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import {
   REPEATED_TOUCH_FLAGS,
