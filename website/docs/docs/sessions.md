@@ -43,9 +43,11 @@ record command, status, and timing.
 
 The one client-supplied text is an optional note. When a request carries `meta.note`, its request
 start/finish entries record it as `details.note`. The daemon trims it, redacts credential-like
-tokens and URL query strings, and then bounds it to 300 characters. The commands that a batch or
-replay runs for that request do not repeat the note. Clients send it to say what a command is for
-or what they observed, so it should not contain secrets or personal data.
+tokens and URL query strings, and then bounds it to 300 characters. A long note can also be
+shortened before redaction, and a note shortened at either step ends with `…`, even when the
+stored note is under 300 characters. The commands that a batch or replay runs for that request do
+not repeat the note. Clients send it to say what a command is for or what they observed, so it
+should not contain secrets or personal data.
 
 The timeline is best effort. An event line larger than the configured file cap or 16 MiB is dropped.
 The per-session limit is 128 events and 16 MiB of event data, including the write in progress.

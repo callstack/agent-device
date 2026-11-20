@@ -62,7 +62,8 @@ export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' |
   ts?: string;
   /**
    * The client-written note of a request event. The writer redacts its first 1,200 code points,
-   * bounds the result to 300 code points, and records it as `details.note`.
+   * bounds the result to 300 code points, and records it as `details.note`. A note cut by either
+   * bound ends with `…` within the 300.
    */
   note?: string;
 };
@@ -100,16 +101,16 @@ export function appendSessionEvent(
  * The note keeps the diagnostic credential and URL redaction. Redaction reads only a fixed
  * code-point prefix of the note, so its cost does not grow with the request body. The journal's
  * code-point bound applies last, in place of the redactor's code-unit cap, so a cut never splits
- * a character.
+ * a character. When the prefix cut the note, the stored note ends with `…` even if redaction
+ * shortened the kept text below the bound.
  */
 function withRedactedNote(
   entry: SessionEventLogEntry,
   note: string | undefined,
 ): SessionEventLogEntry {
-  const redactedNote =
-    note === undefined
-      ? undefined
-      : readSessionEventNote(redactDiagnosticText(boundSessionEventNoteForRedaction(note)));
+  if (note === undefined) return entry;
+  const { text, truncated } = boundSessionEventNoteForRedaction(note);
+  const redactedNote = readSessionEventNote(redactDiagnosticText(text), { truncated });
   return redactedNote ? { ...entry, details: { ...entry.details, note: redactedNote } } : entry;
 }
 

@@ -440,6 +440,47 @@ test('a long hyphenated note is cut to 1,200 code points before redaction and 30
   assert.equal(failed?.details?.note, bounded);
 });
 
+const SEARCH_URL = 'https://shop.example/search?q=';
+const REDACTED_SEARCH_URL = 'https://shop.example/search?REDACTED';
+
+test('a note cut before redaction ends in an ellipsis after redaction shortens it', async () => {
+  // The query reaches the 1,200-code-point cap, so the cap drops the explanation after it.
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `Checked ${SEARCH_URL}${'q'.repeat(1300)} because the cart total was wrong`,
+  );
+  const bounded = `Checked ${REDACTED_SEARCH_URL}…`;
+
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+test('a note cut before redaction keeps room for the ellipsis within 300 code points', async () => {
+  // The cap keeps the URL, a space and `keptEmoji` emoji: exactly 300 code points once redacted.
+  const keptEmoji = 300 - REDACTED_SEARCH_URL.length - 1;
+  const query = 'q'.repeat(1200 - SEARCH_URL.length - 1 - keptEmoji);
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `${SEARCH_URL}${query} ${'😀'.repeat(keptEmoji + 50)}`,
+  );
+  const bounded = `${REDACTED_SEARCH_URL} ${'😀'.repeat(keptEmoji - 1)}…`;
+
+  assert.equal(Array.from(`${REDACTED_SEARCH_URL} ${'😀'.repeat(keptEmoji)}`).length, 300);
+  assert.equal(Array.from(bounded).length, 300);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+test('only a note longer than 1,200 code points counts as cut before redaction', async () => {
+  const whole = `${SEARCH_URL}${'q'.repeat(1200 - SEARCH_URL.length)}`;
+  const { started: kept } = await writeAndReadNoteEvents(whole);
+  const { started: cut } = await writeAndReadNoteEvents(`${whole}q`);
+
+  assert.equal(Array.from(whole).length, 1200);
+  assert.equal(kept?.details?.note, REDACTED_SEARCH_URL);
+  assert.equal(cut?.details?.note, `${REDACTED_SEARCH_URL}…`);
+});
+
 test('unknown commands keep the existing generic completion event', () => {
   const event = buildSuccessEvent('future-command', { arbitrary: 'not projected' });
 

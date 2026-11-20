@@ -298,12 +298,13 @@ function pluralize(noun: string, count: number): string {
 function readBoundedString(
   value: unknown,
   maxLength: number = EVENT_LABEL_MAX_LENGTH,
+  truncated = false,
 ): string | undefined {
   const rawText = readSessionEventString(value);
   if (!rawText) return undefined;
   const text = rawText.trim();
   const characters = Array.from(text);
-  if (characters.length <= maxLength) return text;
+  if (!truncated && characters.length <= maxLength) return text;
   return `${characters.slice(0, maxLength - 1).join('')}…`;
 }
 
@@ -311,22 +312,34 @@ export function readBoundedSessionEventString(value: unknown): string | undefine
   return readBoundedString(value);
 }
 
-/** A client-written request note, trimmed and bounded to 300 code points with `…` when cut. */
-export function readSessionEventNote(value: unknown): string | undefined {
-  return readBoundedString(value, EVENT_NOTE_MAX_LENGTH);
+/**
+ * A client-written request note, trimmed and bounded to 300 code points. A note longer than that,
+ * or one that `truncated` marks as already cut, ends with `…` within the 300.
+ */
+export function readSessionEventNote(
+  value: unknown,
+  options: { truncated?: boolean } = {},
+): string | undefined {
+  return readBoundedString(value, EVENT_NOTE_MAX_LENGTH, options.truncated);
 }
 
 /**
  * The trimmed note cut to its first 1,200 code points: the most client text that redaction reads.
  * Redaction time grows faster than its input, and the daemon accepts much larger request bodies.
+ * `truncated` says the cut dropped text, so the stored note can show that it is incomplete.
  */
-export function boundSessionEventNoteForRedaction(note: string): string {
+export function boundSessionEventNoteForRedaction(note: string): {
+  text: string;
+  truncated: boolean;
+} {
   const characters: string[] = [];
   for (const character of note.trim()) {
-    if (characters.length === EVENT_NOTE_REDACTION_INPUT_MAX_LENGTH) break;
+    if (characters.length === EVENT_NOTE_REDACTION_INPUT_MAX_LENGTH) {
+      return { text: characters.join(''), truncated: true };
+    }
     characters.push(character);
   }
-  return characters.join('');
+  return { text: characters.join(''), truncated: false };
 }
 
 export function readSessionEventBoolean(value: unknown): boolean | undefined {
