@@ -65,6 +65,15 @@ test('sendToDaemon refuses to replace a reachable daemon newer than the client',
         assert.ok(error instanceof AppError);
         assert.match(error.message, /v999\.0\.0\) is newer than this client/);
         assert.match(String(error.details?.hint), /agent-device daemon stop --state-dir /);
+        assert.equal(error.details?.reason, 'daemon-incompatible');
+        assert.equal(error.details?.mismatch, 'newer');
+        assert.equal(error.details?.stateDir, stateDir);
+        const { daemon, client } = (error.details ?? {}) as Record<
+          'daemon' | 'client',
+          { version?: string } | undefined
+        >;
+        assert.equal(daemon?.version, '999.0.0');
+        assert.equal(typeof client?.version, 'string');
         return true;
       },
     );
