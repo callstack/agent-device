@@ -56,7 +56,9 @@ export type CommandFacts = Readonly<{
   /** Options the whole command reads, minus the ones the shared table owns. Empty per action. */
   flags: readonly OptionRow[];
   /** One table per action a command's first positional selects, when it has `flagsByAction`. */
-  actions: ReadonlyArray<Readonly<{ label: string; options: readonly OptionRow[] }>>;
+  actions: ReadonlyArray<
+    Readonly<{ label: string; options: readonly OptionRow[]; everyAction?: boolean }>
+  >;
   /** Labels of the shared options this command reads on every action. */
   commonOptions: readonly string[];
   capabilityRows: ReadonlyArray<{ readonly label: string; readonly link: string }>;
@@ -155,9 +157,10 @@ function capabilityRows(command: string): CommandFacts['capabilityRows'] {
  * one `Also accepts` line. An option the command overrides keeps its row, with the override text,
  * and is left out of that line. A command that declares `flagsByAction` gets one table per action:
  * an option only some actions read would otherwise read as available to all of them. An option no
- * action names is read by all of them, so it is a shared row and the line covers it; an option the
- * shared table owns for one action only keeps its row there, because which action reads it is the
- * fact the placement carries.
+ * action names is read by all of them: it gets one table of its own, never a copy under each action,
+ * so an action's table holds only what that action alone reads. A shared one of those leaves for
+ * the `Also accepts` line; an option the shared table owns for one action only keeps its row there,
+ * because which action reads it is the fact the placement carries.
  */
 export function buildCommandFacts(
   command: string,
@@ -189,8 +192,8 @@ export function buildCommandFacts(
     };
   }
 
-  // A key no action names is read by all of them, so it reaches every table; a shared one of those
-  // leaves them all for the command's `Also accepts` line instead.
+  // A key no action names is read by all of them, so it gets the every-action table; a shared one of
+  // those leaves for the command's `Also accepts` line instead.
   const actionScoped = new Set(Object.values(flagsByAction).flat());
   const readByEveryAction = allowedFlags.filter((key) => !actionScoped.has(key) && !shared(key));
   const tableFor = (keys: Iterable<FlagKey>): OptionRow[] =>
@@ -201,10 +204,15 @@ export function buildCommandFacts(
   return {
     ...base,
     flags: [],
-    actions: Object.entries(flagsByAction).map(([action, keys]) => ({
-      label: `${command} ${action}`,
-      options: tableFor([...keys, ...readByEveryAction]),
-    })),
+    actions: [
+      ...Object.entries(flagsByAction).map(([action, keys]) => ({
+        label: `${command} ${action}`,
+        options: tableFor(keys),
+      })),
+      ...(readByEveryAction.length > 0
+        ? [{ label: command, options: tableFor(readByEveryAction), everyAction: true }]
+        : []),
+    ],
     commonOptions: sharedLabels(
       allowedFlags.filter((key) => shared(key) && !actionScoped.has(key)),
     ),
@@ -255,6 +263,19 @@ function commonOptionsLine(labels: readonly string[]): string[] {
   ];
 }
 
+/**
+ * The command forms of a synopsis, one per line. A multi-line synopsis is written for the terminal:
+ * its later lines carry their own `agent-device` prefix and indentation, and a paragraph after a
+ * blank line is help prose. The fence takes the forms only.
+ */
+function usageLines(usage: string): string[] {
+  const forms = usage.split('\n\n')[0]!.split('\n');
+  return forms.map((form) => {
+    const line = form.trim();
+    return line.startsWith('agent-device ') ? line : `agent-device ${line}`;
+  });
+}
+
 export function renderBlock(facts: CommandFacts): string {
   const lines = [
     `<!-- generated:command ${facts.name} -->`,
@@ -262,7 +283,7 @@ export function renderBlock(facts: CommandFacts): string {
     `${facts.summary}.`,
     '',
     '```bash',
-    `agent-device ${facts.usage}`,
+    ...usageLines(facts.usage),
     '```',
     '',
   ];
@@ -271,7 +292,10 @@ export function renderBlock(facts: CommandFacts): string {
   }
   if (facts.actions.length > 0) {
     for (const action of facts.actions) {
-      lines.push(`**\`${action.label}\`**`, '');
+      lines.push(
+        action.everyAction ? `**Every \`${action.label}\` action**` : `**\`${action.label}\`**`,
+        '',
+      );
       lines.push(
         ...(action.options.length > 0 ? optionTable(action.options) : ['Reads no options.', '']),
       );

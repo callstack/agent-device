@@ -2045,18 +2045,16 @@ Check frames, memory, or native profiles.
 
 ```bash
 agent-device perf frames --json
-  agent-device perf memory sample --json
-  agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]
-  agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>
-  agent-device perf cpu profile stop --kind xctrace --out <profile.trace>
-  agent-device perf cpu profile report --kind xctrace --out <report.json>
-  agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>
-  agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>
-  agent-device perf cpu profile stop --kind simpleperf
-  agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>
-  agent-device perf trace start|stop --kind perfetto [--out <path>]
-
-  Aggregate perf was removed in 0.21. Use one of the explicit forms above.
+agent-device perf memory sample --json
+agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]
+agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>
+agent-device perf cpu profile stop --kind xctrace --out <profile.trace>
+agent-device perf cpu profile report --kind xctrace --out <report.json>
+agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>
+agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>
+agent-device perf cpu profile stop --kind simpleperf
+agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>
+agent-device perf trace start|stop --kind perfetto [--out <path>]
 ```
 
 | Option | What it does |
@@ -2220,7 +2218,7 @@ Prepare the dev server or reload apps.
 
 ```bash
 agent-device metro prepare (--public-base-url <url> | --proxy-base-url <url>) [--project-root <path>] [--port <port>] [--kind auto|react-native|expo|repack]
-  agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]
+agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]
 ```
 
 | Option | What it does |
@@ -2354,20 +2352,20 @@ agent-device diff snapshot | diff screenshot --baseline <path> [current.png] [--
 
 **`diff snapshot`**
 
-| Option | What it does |
-| --- | --- |
-| `-i` | Snapshot: interactive elements only |
-| `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
-| `--baseline, -b <path>` | Diff screenshot: path to baseline image file |
-| `--threshold <0-1>` | Diff screenshot: color distance threshold (default 0.1) |
+Reads no options.
 
 **`diff screenshot`**
 
 | Option | What it does |
 | --- | --- |
+| `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
+
+**Every `diff` action**
+
+| Option | What it does |
+| --- | --- |
 | `-i` | Snapshot: interactive elements only |
 | `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
-| `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
 | `--baseline, -b <path>` | Diff screenshot: path to baseline image file |
 | `--threshold <0-1>` | Diff screenshot: color distance threshold (default 0.1) |
 
