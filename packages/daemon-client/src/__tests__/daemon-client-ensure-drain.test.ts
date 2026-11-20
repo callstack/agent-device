@@ -83,7 +83,7 @@ type VirtualDrain = {
  * Time only moves while the client waits for the drain, and signals to \`pid\` are recorded with the
  * virtual time they arrived at. \`leavesAfterMs\` is when the daemon finishes leaving by itself.
  */
-function installVirtualDrain(pid: () => number): VirtualDrain {
+function installVirtualDrain(pid: () => number, closingForMs?: number): VirtualDrain {
   let virtual = false;
   // The fixture holds this child lifetime until it exits or is signaled; later probes use the host.
   let drainIdentity: ReturnType<typeof readHostProcessIdentityObservations> | undefined;
@@ -97,6 +97,13 @@ function installVirtualDrain(pid: () => number): VirtualDrain {
   let startedAt = 0;
   let leavesAt: number | undefined;
   const signals: VirtualDrain['signals'] = [];
+  const begin: VirtualDrain['begin'] = (leavesAfterMs) => {
+    drainIdentity = actualProcess.readHostProcessIdentityObservations([pid()]);
+    now = realNow();
+    startedAt = now;
+    leavesAt = leavesAfterMs === undefined ? undefined : now + leavesAfterMs;
+    virtual = true;
+  };
   vi.spyOn(Date, 'now').mockImplementation(() => (virtual ? now : realNow()));
   vi.mocked(sleep).mockImplementation(async (ms: number) => {
     if (!virtual) return await actualRetry.sleep(ms);
@@ -112,6 +119,12 @@ function installVirtualDrain(pid: () => number): VirtualDrain {
     target: number,
     signal?: NodeJS.Signals | number,
   ) => {
+    // A daemon that is already closing ignores SIGTERM: its close is running and takes this long.
+    if (target === pid() && signal === 'SIGTERM' && closingForMs !== undefined && !virtual) {
+      signals.push({ signal, atMs: 0 });
+      begin(closingForMs);
+      return true;
+    }
     if (target === pid() && signal !== undefined && signal !== 0) {
       signals.push({ signal, atMs: now - startedAt });
       virtual = false;
@@ -120,13 +133,7 @@ function installVirtualDrain(pid: () => number): VirtualDrain {
   }) as typeof process.kill);
   return {
     elapsedMs: () => now - startedAt,
-    begin: (leavesAfterMs) => {
-      drainIdentity = actualProcess.readHostProcessIdentityObservations([pid()]);
-      now = realNow();
-      startedAt = now;
-      leavesAt = leavesAfterMs === undefined ? undefined : now + leavesAfterMs;
-      virtual = true;
-    },
+    begin,
     end: () => {
       virtual = false;
     },
@@ -213,6 +220,38 @@ test('a daemon still running past the deadline that answers no probe is force-re
     );
     assert.equal(isProcessAlive(childPid), false);
     assert.equal(spawn.mock.calls.length, 1);
+  } finally {
+    await closeLoopbackServer(fresh.server);
+  }
+});
+
+// A closing daemon stops listening first and removes its registration last, so a second client
+// finds a live registered process that refuses connections.
+test('a compatible daemon that is closing is waited for, not killed, by another client', async (t) => {
+  if (!(await withLoopback(t))) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  let childPid = 0;
+  const closingForMs = 30_000;
+  const closing = installVirtualDrain(() => childPid, closingForMs);
+  const closed = await startScriptedDaemon(okResult({}));
+  await closeLoopbackServer(closed.server);
+  const fresh = await startScriptedDaemon(okResult({}));
+  const { child } = await registerDaemon(paths, { httpPort: closed.port });
+  childPid = child.pid;
+  launchesFreshDaemonAt(spawn, paths, fresh.port);
+
+  try {
+    const connection = await ensureDaemon({ stateDir, daemonTransport: 'http' });
+
+    assert.equal(connection.started, true);
+    assert.deepEqual(
+      closing.signals.map(({ signal }) => signal),
+      ['SIGTERM'],
+      'asked to leave once, never killed',
+    );
+    assert.ok(closing.elapsedMs() >= closingForMs, 'the close ran its full length');
+    assert.equal(isProcessAlive(childPid), false, 'the daemon left by itself');
+    assert.equal(spawn.mock.calls.length, 1, 'its successor started after it left');
   } finally {
     await closeLoopbackServer(fresh.server);
   }

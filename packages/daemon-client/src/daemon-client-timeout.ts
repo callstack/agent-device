@@ -25,7 +25,8 @@ export async function handleRequestTimeout(
     remote: boolean;
     /**
      * Whether this caller may retire a daemon that answers nothing. An attach client never may: the
-     * daemon is not its to kill, and `ensureDaemon` is where an unresponsive one is replaced.
+     * daemon is not its to kill. `ensureDaemon` reuses a compatible daemon that accepts a
+     * connection without asking it anything, so that one is ended only by a deliberate stop.
      */
     retireUnresponsive: boolean;
     timeoutMs: number;
@@ -194,7 +195,7 @@ export function resolveRequestTimeoutHint(params: {
     return 'The daemon did not answer the liveness probe and was reset after the timeout. Read the request log for the timed-out step.';
   }
   if (stopCommand) {
-    return `The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}, then retry. SDK clients call ensureDaemon() to start a fresh one.`;
+    return `The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}. Then retry; an SDK client calls ensureDaemon() after the stop, because it reuses a daemon that still accepts connections.`;
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot

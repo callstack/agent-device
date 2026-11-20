@@ -168,7 +168,7 @@ test('Home and Recents pass through the harness scenario entry after delayed cap
     expect(attemptTimeouts.length).toBe(2);
     for (const timeoutMs of attemptTimeouts) {
       expect(typeof timeoutMs).toBe('number');
-      expect(timeoutMs).toBeLessThanOrEqual(5_000);
+      expect(timeoutMs).toBeLessThanOrEqual(15_000);
       expect(timeoutMs).toBeGreaterThan(0);
     }
   }
@@ -188,9 +188,29 @@ test('Home and Recents pass through the harness scenario entry after delayed cap
   expect(context.completedScenarios).toContain('smoke:home-recents-restoration');
 });
 
+test('captures as slow as a loaded hosted emulator still leave room for a second attempt', async () => {
+  // Each capture takes the 6.7 s one launcher capture took on a hosted emulator, and the first
+  // Home and Recents captures still show the previous surface.
+  const device = scriptedDevice({
+    script: {
+      'foreground.png': [FOREGROUND],
+      'home.png': [FOREGROUND, HOME],
+      'recents.png': [HOME, RECENTS],
+    },
+    workMs: 6_700,
+  });
+  const { context, promise } = runScenarioWithDevice(device);
+  const result = await settle(promise);
+
+  expect(result.status).toBe('fulfilled');
+  expect(device.timeouts['home.png']).toHaveLength(2);
+  expect(device.timeouts['recents.png']).toHaveLength(2);
+  expect(context.completedScenarios).toContain('smoke:home-recents-restoration');
+});
+
 test('a wedged capture is cut at the forwarded remaining timeout and the scenario fails at the wait deadline', async () => {
   // Every capture would finish after 60s; only the forwarded step timeout can cut it, and the
-  // wait must still fail at its own 10s deadline with the capture failures as the last observation.
+  // wait must still fail at its own 30s deadline with the capture failures as the last observation.
   const device = scriptedDevice({
     script: { 'foreground.png': [FOREGROUND], 'home.png': [FOREGROUND], 'recents.png': [RECENTS] },
     workMs: 60_000,
@@ -202,7 +222,7 @@ test('a wedged capture is cut at the forwarded remaining timeout and the scenari
     status: 'rejected',
     reason: {
       message: expect.stringMatching(
-        /Android Home never replaced the fixture pixels within 10000ms.*capture \d+ failed/s,
+        /Android Home never replaced the fixture pixels within 30000ms.*capture \d+ failed/s,
       ),
     },
   });
@@ -211,8 +231,8 @@ test('a wedged capture is cut at the forwarded remaining timeout and the scenari
   const homeTimeouts = device.timeouts['home.png'] ?? [];
   expect(homeTimeouts.length).toBeGreaterThan(1);
   for (const timeoutMs of homeTimeouts) expect(typeof timeoutMs).toBe('number');
-  expect(Math.max(...homeTimeouts.map((t) => t!))).toBeLessThanOrEqual(5_000);
-  expect(Math.min(...homeTimeouts.map((t) => t!))).toBeLessThan(5_000);
+  expect(Math.max(...homeTimeouts.map((t) => t!))).toBeLessThanOrEqual(15_000);
+  expect(Math.min(...homeTimeouts.map((t) => t!))).toBeLessThan(15_000);
   expect(
     context.stepHistory.filter((record) => record.commandName === 'screenshot').length,
   ).toBeGreaterThanOrEqual(homeTimeouts.length);
@@ -230,7 +250,7 @@ test('the scenario fails when Recents never differs from the Home surface', asyn
     status: 'rejected',
     reason: {
       message: expect.stringMatching(
-        /Android Recents never differed from the Home pixels within 10000ms/s,
+        /Android Recents never differed from the Home pixels within 30000ms/s,
       ),
     },
   });

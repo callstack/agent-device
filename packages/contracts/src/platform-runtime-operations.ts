@@ -378,6 +378,10 @@ function isMultiTouchGesture(input: GestureSemanticInput): boolean {
 /** Selects the one tier a gesture input needs, so its handler binds exactly once (ADR 0019 §9). */
 function gestureRuntimeTier(input: GestureCommandInput): GestureRuntimeTier {
   if (input.intent === 'drag') return 'target-authored-drag';
+  // A held pan carries its hold only in intermediate plan samples; endpoint-only plan lowering
+  // drops them, so admit it through the tier whose fact promises hold-preserving execution and let
+  // backends without that fact refuse before dispatch.
+  if (input.intent === 'pan' && (input.holdMs ?? 0) > 0) return 'target-authored-drag';
   if (isMultiTouchGesture(input)) return 'multi-touch';
   // A direction-authored fling carries speed semantics a coordinate fling does not, which is the
   // one thing the Linux drag primitive cannot reproduce.
@@ -416,6 +420,7 @@ function gesturePlan<const Tier extends GestureRuntimeTier>(tier: Tier): Gesture
 export type ScrollRuntimePlan =
   | Readonly<{ kind: 'direction'; use: typeof scrollDirectionUse }>
   | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollVerifiedPassUse }>
+  | Readonly<{ kind: 'refresh'; use: typeof scrollVerifiedPassUse }>
   | Readonly<{ kind: 'until'; until: string; use: typeof scrollVerifiedPassUse }>;
 
 /**
@@ -425,8 +430,10 @@ export type ScrollRuntimePlan =
  * before this resolves.
  */
 export function resolveScrollRuntimePlan(
-  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string }>,
+  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string; refresh?: boolean }>,
 ): ScrollRuntimePlan {
+  // `scroll refresh` reads the top edge off a fresh capture before its one pull.
+  if (input.refresh) return Object.freeze({ kind: 'refresh', use: scrollVerifiedPassUse } as const);
   if (input.until !== undefined) {
     return Object.freeze({
       kind: 'until',

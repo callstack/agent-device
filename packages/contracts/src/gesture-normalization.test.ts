@@ -23,6 +23,37 @@ test('CLI and .ad positionals normalize at one explicit syntax seam', () => {
   );
 });
 
+test('gesture pan reads the --hold-ms flag into its payload and normalizes it into the runtime input', () => {
+  const payload = gesturePayloadFromPositionals(['pan', '10', '20', '0', '160', '500'], {
+    holdMs: 800,
+  });
+  assert.deepEqual(payload, {
+    kind: 'pan',
+    origin: { x: 10, y: 20 },
+    delta: { x: 0, y: 160 },
+    durationMs: 500,
+    holdMs: 800,
+  });
+  assert.deepEqual(normalizePublicGesture(payload), {
+    gesture: {
+      intent: 'pan',
+      origin: { x: 10, y: 20 },
+      delta: { x: 0, y: 160 },
+      pointerCount: undefined,
+      durationMs: 500,
+      holdMs: 800,
+    },
+  });
+  assert.deepEqual(normalizeGestureCommandInput(payload), {
+    intent: 'pan',
+    origin: { x: 10, y: 20 },
+    delta: { x: 0, y: 160 },
+    pointerCount: undefined,
+    durationMs: 500,
+    holdMs: 800,
+  });
+});
+
 test('CLI and .ad coordinate swipes normalize at one explicit syntax seam', () => {
   assert.deepEqual(
     swipePayloadFromPositionals(['10', '20', '30', '40'], {

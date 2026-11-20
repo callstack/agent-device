@@ -25,6 +25,21 @@ describe('gesture command projection', () => {
     });
   });
 
+  test('parses --hold-ms on gesture pan into the daemon input', () => {
+    const input = gestureCliReaders.gesture(['pan', '10', '20', '0', '160', '500'], {
+      ...NO_FLAGS,
+      holdMs: 800,
+    });
+    expect(input).toEqual({
+      kind: 'pan',
+      origin: { x: 10, y: 20 },
+      delta: { x: 0, y: 160 },
+      durationMs: 500,
+      holdMs: 800,
+    });
+    expect(gestureDaemonWriters.gesture(input).input).toEqual(input);
+  });
+
   test('writes only typed daemon input', () => {
     const request = gestureDaemonWriters.gesture({
       kind: 'pan',

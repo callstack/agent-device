@@ -5,7 +5,10 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
-import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
+import {
+  ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
+  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+} from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
@@ -29,11 +32,11 @@ import {
   type AndroidFillVerification,
 } from './fill-verification.ts';
 import {
-  canAndroidImeHelperCommitText,
-  clearAndroidImeHelperText,
+  chunkAndroidImeHelperText,
+  clearAndroidImeHelperTextCommitted,
   isAndroidImeHelperPackage,
   selectAndroidImeHelperArtifact,
-  sendAndroidImeHelperText,
+  sendAndroidImeHelperTextCommitted,
 } from './ime-helper.ts';
 import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
@@ -283,14 +286,12 @@ async function typeAndroidImeHelper(
   delayMs: number,
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device);
-  await sendAndroidTextSteps(
-    device,
-    planAndroidTextSteps(text, delayMs > 0 ? 1 : Infinity, delayMs),
-    {
-      delayMs,
-      sendChunk: async (chunk) => await sendAndroidImeHelperText(adb, packageName, chunk),
-    },
-  );
+  const chunkLine =
+    delayMs > 0 ? (line: string) => chunkAndroidInputText(line, 1) : chunkAndroidImeHelperText;
+  await sendAndroidTextSteps(device, planAndroidTextSteps(text, chunkLine, delayMs), {
+    delayMs,
+    sendChunk: (chunk) => sendAndroidImeHelperTextCommitted(adb, packageName, chunk),
+  });
   emitAndroidTextDiagnostic('type', 'test-ime', text);
 }
 
@@ -303,35 +304,64 @@ async function fillAndroidImeHelper(
   beforeTarget: AndroidFillVerification['targetInput'],
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
-  // The helper commits a replacement in one broadcast, so a text it would drop or cut is refused
-  // before the clear: the field keeps its value instead of losing it to a partial replacement.
-  if (!canAndroidImeHelperCommitText(text)) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Android fill text is too long for the test IME to commit in one broadcast; the field was not cleared',
-      { reason: 'android-test-ime-text-too-large', textLength: text.length },
-    );
-  }
   const adb = resolveAndroidAdbExecutor(device);
   let dispatchedSteps = 0;
+  // Text chunks of the current attempt that the helper acked as committed. The clear is not one of
+  // them: its ack says nothing about where this attempt's text can go.
+  let ackedTextChunks = 0;
   const attemptFill = async (): Promise<AndroidFillVerification> => {
-    await clearAndroidImeHelperText(adb, packageName);
+    ackedTextChunks = 0;
+    try {
+      await clearAndroidImeHelperTextCommitted(adb, packageName);
+    } catch (error) {
+      if (
+        isImeDispatchRejection(error, 'commit-returned-false') &&
+        error.details?.attemptedUtf16 === 0
+      ) {
+        const observed = await verifyAndroidFilledText(device, x, y, text, helper);
+        if (observed.ok) return observed;
+      }
+      throw error;
+    }
     dispatchedSteps += 1;
     if (text) {
-      await sendAndroidImeHelperText(adb, packageName, text);
-      dispatchedSteps += 1;
+      // Dispatched in code-point-safe chunks within the helper's declared byte bound; every chunk
+      // must ack as committed. Field content stays owned by the single read-back below.
+      for (const piece of chunkAndroidImeHelperText(text)) {
+        await sendAndroidImeHelperTextCommitted(adb, packageName, piece);
+        dispatchedSteps += 1;
+        ackedTextChunks += 1;
+      }
     }
     return await verifyAndroidFilledText(device, x, y, text, helper);
   };
   const attemptFillWithRetry = async (): Promise<AndroidFillVerification> => {
-    const first = await attemptFill();
-    if (first.ok || buildAndroidFillUnconfirmedVerification(text, beforeTarget, first)) {
+    let first: AndroidFillVerification | undefined;
+    try {
+      first = await attemptFill();
+    } catch (error) {
+      // The rebind below is the recovery for a dispatch the editor never took, so it covers both
+      // rejection kinds even when the clear ahead of them committed: `dispatchedSteps` counts that
+      // clear and must not gate the recovery. Text the helper already acked as committed ends the
+      // fill instead, and a rejection thrown by the retried attempt escapes unwrapped: one retry.
+      const canRetry =
+        isImeDispatchRejection(error, 'commit-returned-false') ||
+        (ackedTextChunks === 0 && isImeDispatchRejection(error, 'no-input-connection'));
+      if (!canRetry) {
+        throw error;
+      }
+    }
+    if (first && (first.ok || buildAndroidFillUnconfirmedVerification(text, beforeTarget, first))) {
       return first;
     }
     // The caller focused the target while resolving the channel; the retry re-focuses because it
     // covers the rare not-yet-bound InputConnection right after focus. A commit none of which
     // reached the field may also have gone to a stale input session, which only a rebind replaces.
-    if (isAndroidFillCommitDropped(first, beforeTarget)) await confirmAndroidTestImeRebound(device);
+    if (
+      first ? isAndroidFillCommitDropped(first, beforeTarget) : getAndroidTestImeOwnership(device)
+    ) {
+      await confirmAndroidTestImeRebound(device);
+    }
     await focusAndroid(device, x, y);
     dispatchedSteps += 1;
     return await attemptFill();
@@ -346,13 +376,28 @@ async function fillAndroidImeHelper(
   return verification;
 }
 
+function isImeDispatchRejection(
+  error: unknown,
+  kind: 'commit-returned-false' | 'no-input-connection',
+): error is AppError {
+  return (
+    error instanceof AppError &&
+    error.details?.reason === ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON &&
+    error.details.dispatchKind === kind
+  );
+}
+
 async function typeAndroidShell(
   device: DeviceInfo,
   options: { action: AndroidTextInputAction; text: string; chunkSize: number; delayMs: number },
 ): Promise<void> {
   await sendAndroidTextSteps(
     device,
-    planAndroidTextSteps(options.text, options.chunkSize, options.delayMs),
+    planAndroidTextSteps(
+      options.text,
+      (line) => chunkAndroidInputText(line, options.chunkSize),
+      options.delayMs,
+    ),
     {
       delayMs: options.delayMs,
       sendChunk: async (chunk) => {
@@ -373,10 +418,14 @@ async function typeAndroidShell(
  */
 type AndroidTextStep = { kind: 'chunk'; text: string; pauseAfter: boolean } | { kind: 'enter' };
 
-function planAndroidTextSteps(text: string, chunkSize: number, delayMs: number): AndroidTextStep[] {
+function planAndroidTextSteps(
+  text: string,
+  chunkLine: (line: string) => string[],
+  delayMs: number,
+): AndroidTextStep[] {
   const parts = text.split('\n');
   return parts.flatMap((part, partIndex) => {
-    const chunks = chunkAndroidInputText(part, chunkSize);
+    const chunks = chunkLine(part);
     const lastPart = partIndex + 1 === parts.length;
     const chunkSteps = chunks.map((chunk, chunkIndex): AndroidTextStep => ({
       kind: 'chunk',

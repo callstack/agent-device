@@ -26,7 +26,7 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
       packageName: 'com.callstack.agentdevice.imehelper',
       versionCode: 1,
       serviceComponent: HELPER_SERVICE,
-      broadcastProtocol: 'android-ime-helper-v1' as const,
+      broadcastProtocol: 'android-ime-helper-v2' as const,
     },
   });
   return {

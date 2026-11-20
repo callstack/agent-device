@@ -80,10 +80,10 @@ extension RunnerTests {
     case .disappeared, .presentationChanged:
       return Response(ok: true, data: DataPayload(message: action == "accept" ? "accepted" : "dismissed"))
     case .timedOut:
-      code = "ALERT_DEADLINE_EXCEEDED"
+      code = RunnerPassThroughErrorCode.alertDeadlineExceeded
       message = "alert \(action) exhausted its deadline"
     case .unconfirmed:
-      code = "ALERT_CONFIRMATION_UNAVAILABLE"
+      code = RunnerPassThroughErrorCode.alertConfirmationUnavailable
       message = "alert \(action) could not read the alert presentation"
     }
     return Response(ok: false, error: ErrorPayload(

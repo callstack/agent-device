@@ -71,6 +71,7 @@ const RUNTIME_PERMISSIONS_BLOCK = /^\s*runtime permissions:\s*$/;
 const GRANT_LINE = /^\s*([\w.]+): granted=(true|false)\b/;
 const PACKAGE_BLOCK = /^\s*Package \[.+?\]/;
 const REQUESTED_PERMISSIONS_BLOCK = /^\s*requested permissions:\s*$/;
+const INSTALL_PERMISSIONS_BLOCK = /^\s*install permissions:\s*$/;
 const PERMISSION_ID = /^\s*([A-Za-z][\w.]*)/;
 
 /** A non-blank dump line with the indentation that places it in the tree. */
@@ -137,23 +138,51 @@ function nestedBlock(
  * Both halves of one `dumpsys package` read: the declared ids and the acting
  * user's runtime grants. Each half keeps its own absent-vs-empty semantics —
  * see the two parsers — so callers can refuse on a missing section while
- * still answering `unknown` for missing grants.
+ * still answering `unknown` for missing grants. The one exception is a
+ * package that declares nothing, which `declaresNoPermissions` recognizes.
  */
 function parseAndroidPackagePermissions(
   dumpsysOutput: string,
   userId: number,
 ): AndroidPackagePermissions {
-  return {
-    requested: parseAndroidRequestedPermissions(dumpsysOutput),
-    grants: parseAndroidRuntimePermissionGrants(dumpsysOutput, userId),
-  };
+  const grants = parseAndroidRuntimePermissionGrants(dumpsysOutput, userId);
+  const requested =
+    parseAndroidRequestedPermissions(dumpsysOutput) ??
+    (declaresNoPermissions(dumpsysOutput, grants) ? [] : undefined);
+  return { requested, grants };
+}
+
+/**
+ * Android prints no `requested permissions:` section for a package that
+ * declares none. Its dump still reaches the acting user's empty `runtime
+ * permissions:` block, which follows where the section would be, and it has
+ * no `install permissions:` section either. A dump cut short before that
+ * block, or one that lists any grant, stays unknown.
+ */
+function declaresNoPermissions(
+  dumpsysOutput: string,
+  grants: AndroidRuntimePermissionGrants | undefined,
+): boolean {
+  if (grants === undefined || grants.size > 0) return false;
+  const pkg = packageBlock(dumpsysOutput);
+  return pkg !== undefined && !pkg.some((line) => INSTALL_PERMISSIONS_BLOCK.test(line.text));
+}
+
+/** The first `Package […]` block of the top-level `Packages:` section. */
+function packageBlock(dumpsysOutput: string): DumpLine[] | undefined {
+  const packages = nestedBlock(
+    dumpLines(dumpsysOutput),
+    (line) => line.indent === 0 && line.text.trim() === 'Packages:',
+  );
+  return nestedBlock(packages, (line) => PACKAGE_BLOCK.test(line.text));
 }
 
 /**
  * The permission ids the package declares, in dump order, or `undefined` when
- * the dump carries no `requested permissions:` block for a package. An empty
- * block is still an answer — the app declares nothing — while a missing one
- * means the device did not tell us, and `all` must refuse rather than guess.
+ * the dump carries no `requested permissions:` block for a package. Android
+ * prints the block only when the list is non-empty, so a missing one alone
+ * does not say whether the app declares nothing; `parseAndroidPackagePermissions`
+ * decides that from the rest of the dump.
  *
  * Entries are bare ids (`android.permission.CAMERA`); any trailing attribute
  * (`: restricted=false`) is not part of the id. Section scoping reuses the
@@ -161,13 +190,9 @@ function parseAndroidPackagePermissions(
  * top-level sections cannot leak ids in.
  */
 export function parseAndroidRequestedPermissions(dumpsysOutput: string): string[] | undefined {
-  const lines = dumpLines(dumpsysOutput);
-  const packages = nestedBlock(
-    lines,
-    (line) => line.indent === 0 && line.text.trim() === 'Packages:',
+  const requested = nestedBlock(packageBlock(dumpsysOutput), (line) =>
+    REQUESTED_PERMISSIONS_BLOCK.test(line.text),
   );
-  const pkg = nestedBlock(packages, (line) => PACKAGE_BLOCK.test(line.text));
-  const requested = nestedBlock(pkg, (line) => REQUESTED_PERMISSIONS_BLOCK.test(line.text));
   if (!requested) return undefined;
   const ids: string[] = [];
   for (const { text } of requested) {

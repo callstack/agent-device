@@ -34,6 +34,7 @@ function RootLayoutContent() {
         <Stack.Screen name="perf-lab" />
         <Stack.Screen name="settle-lab" />
         <Stack.Screen name="settle-lab-result" />
+        <Stack.Screen name="refresh-lab" />
         <Stack.Screen name="product/[productId]" />
         <Stack.Screen name="webview" />
       </Stack>

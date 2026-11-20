@@ -2,20 +2,20 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  static let axSnapshotErrorCode = "IOS_AX_SNAPSHOT_FAILED"
+  static let axSnapshotErrorCode = RunnerPassThroughErrorCode.iosAxSnapshotFailed
   static let axSnapshotFailureMessage =
     "iOS XCTest snapshot failed while serializing the accessibility tree."
   static let axSnapshotUnavailableReason = "ax_snapshot_unavailable"
   static let axSnapshotHint =
     "Snapshot state is unavailable because XCTest could not serialize this iOS accessibility tree. This can be specific to the current screen. Use plain screenshot, not screenshot --overlay-refs, as visual truth; navigate with coordinate commands if needed; then retry snapshot -i after reaching another screen. If you own the app and need full-tree inspection, simplify this screen's accessibility tree and expose stable ids on actionable controls."
-  static let rawSnapshotTooLargeCode = "IOS_RAW_SNAPSHOT_TOO_LARGE"
+  static let rawSnapshotTooLargeCode = RunnerPassThroughErrorCode.iosRawSnapshotTooLarge
   static let rawSnapshotMaxNodes = 5_000
   static let rawSnapshotTooLargeHint =
     "Raw iOS snapshot exceeded the runner payload guard. Use regular snapshot for visible UI, or scope/depth-limit raw snapshot when inspecting a large accessibility tree."
   // Runaway guard for the regular tree walk: a work bound only. A screen that trips it raises this
   // number in ADR 0004's name rather than bounding the walk by geometry again.
   private static let regularSnapshotMaxNodes = 50_000
-  private static let regularSnapshotTooLargeCode = "IOS_SNAPSHOT_TOO_LARGE"
+  private static let regularSnapshotTooLargeCode = RunnerPassThroughErrorCode.iosSnapshotTooLarge
   private static let regularSnapshotTooLargeHint =
     "iOS snapshot walked an unexpectedly large accessibility tree. Scope the snapshot to a subtree or use screenshot."
   struct SnapshotTraversalContext {

@@ -341,7 +341,10 @@ export function scrollNoProgressHint(
   );
 }
 
-function buildScrollEdgeCaptureError(edge: ScrollEdge, refusal: ScrollCaptureRefusal): AppError {
+export function buildScrollEdgeCaptureError(
+  edge: ScrollEdge,
+  refusal: ScrollCaptureRefusal,
+): AppError {
   return new AppError(
     'COMMAND_FAILED',
     `scroll ${edge} could not read the screen: ${refusal.detail}`,

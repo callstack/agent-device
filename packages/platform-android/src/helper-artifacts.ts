@@ -12,7 +12,7 @@ export type AndroidImeHelperManifest = {
   packageName: string;
   versionCode: number;
   serviceComponent: string;
-  broadcastProtocol: 'android-ime-helper-v1';
+  broadcastProtocol: 'android-ime-helper-v2';
 };
 
 export type AndroidImeHelperArtifact = {

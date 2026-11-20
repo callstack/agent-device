@@ -5,9 +5,12 @@ import { capturePng as defaultPngCapture, filesDiffer } from './live-assertions.
 import type { LiveContext } from './live-harness.ts';
 import type { RunStepOptions } from '../live-device-e2e/runtime.ts';
 
-const SURFACE_TRANSITION_TIMEOUT_MS = 10_000;
+// One launcher capture took 6.7 s on a hosted emulator, and 8.0 s behind an abandoned one: a
+// timed-out CLI does not cancel the capture its daemon already runs. The per-attempt cap holds
+// twice that, and the wait holds two capped attempts, so one slow capture cannot use it up.
+const SURFACE_CAPTURE_TIMEOUT_MS = 15_000;
+const SURFACE_TRANSITION_TIMEOUT_MS = 2 * SURFACE_CAPTURE_TIMEOUT_MS;
 const SURFACE_TRANSITION_POLL_MS = 250;
-const SURFACE_CAPTURE_TIMEOUT_MS = 5_000;
 
 /** A PNG capture step: `screenshot <outputPath> --scale 0.5` with harness step options. */
 export type PngCapture = (

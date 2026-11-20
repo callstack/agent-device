@@ -5,17 +5,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   FOREIGN_UID,
   ancestryRoot as root,
+  currentUid,
   directoryWith,
   expectUntrusted,
-  expectUntrustedReplaced,
   modeOf,
   publish,
 } from './script-destination-host.fixtures.ts';
-import {
-  confirmScriptDestination,
-  prepareScriptDestination,
-  MAX_SCRIPT_PATH_LINK_HOPS,
-} from './script-destination.ts';
+import { prepareScriptDestination, MAX_SCRIPT_PATH_LINK_HOPS } from './script-destination.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 /** The mode a test's own trusted ground stands at, so a runner's umask cannot widen it. */
@@ -23,8 +19,7 @@ const PRIVATE_DIR_MODE = 0o700;
 
 /**
  * A directory this test owns and trusts, created at {@link PRIVATE_DIR_MODE} rather than at whatever umask the
- * runner carries. A mode-less `mkdir` under a permissive umask creates 0775, which the ancestry rule refuses for
- * a reason that has nothing to do with what the case is about.
+ * runner carries, so each case states the one mode it is about.
  */
 function privateDir(directory: string): string {
   fs.mkdirSync(directory, { mode: PRIVATE_DIR_MODE });
@@ -44,6 +39,8 @@ function judgedDirectory(destination: string): string {
 }
 
 const skipOnWindows = process.platform === 'win32' ? test.skip : test;
+/** A case about a directory this NON-ROOT user owns: root's own directories are root-owned, a different row. */
+const skipOnWindowsAndAsRoot = currentUid === 0 ? test.skip : skipOnWindows;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -142,15 +139,26 @@ skipOnWindows('refuses a destination created inside a directory others can add e
   expect(fs.existsSync(path.join(shared, 'journey.ad'))).toBe(false);
 });
 
+skipOnWindowsAndAsRoot('passes through a group-writable directory this user owns', () => {
+  // The ordinary checkout under umask 002: every level a `mkdir` made is 0775, and its owner answers for it.
+  const team = directoryWith(path.join(root(), 'team'), 0o775);
+  const sub = directoryWith(path.join(team, 'sub'), 0o775);
+
+  publish(path.join(sub, 'flows', 'journey.ad'));
+
+  expect(fs.readFileSync(path.join(sub, 'flows', 'journey.ad'), 'utf8')).toBe('context\n');
+  expect(modeOf(path.join(sub, 'flows'))).toBe(0o700);
+});
+
 skipOnWindows(
-  'refuses to pass through a group-writable directory above the directory it creates',
+  'refuses to pass through a group-writable directory root owns above a private directory',
   () => {
-    // The unsafe part is the level this user does NOT create: `sub` is created at 0700 and is safe, and the
-    // refusal still names `team` above it, because another member of that group can replace `sub` with one of
-    // their own before the entry is written.
+    // `sub` is private and safe, and the refusal still names `team` above it: a member of a group this user
+    // does not answer for can replace `sub` with one of their own before the entry is written.
     const team = directoryWith(path.join(root(), 'team'), 0o775);
     const sub = path.join(team, 'sub');
     privateDir(sub);
+    serveOwnership({ [team]: 0 });
 
     expectUntrusted(() => publish(path.join(sub, 'journey.ad')), 'shared_group_writable', team);
     expect(fs.readdirSync(sub)).toEqual([]);
@@ -350,9 +358,9 @@ skipOnWindows(
   () => {
     // `work -> priv/x`, `priv/y` is private and `home/y` is open to others. The kernel walks `work` into its
     // target and steps back from THERE, so the entry is created in `priv/y`. `path.dirname` of the same
-    // spelling answers `home/y`, so a publisher that stages beside the spelled parent writes its temp file
+    // spelling answers `home/y`, so a publisher that writes beside the spelled parent puts its temp file
     // into ground the rule never judged — where anyone can list it and put their own bytes behind that name
-    // before the rename. The staging directory has to be the walk's answer.
+    // before the rename. The temp file's directory has to be the walk's answer.
     const directory = root();
     const home = directoryWith(path.join(directory, 'home'), 0o700);
     const sharedY = directoryWith(path.join(home, 'y'), 0o777);
@@ -621,29 +629,68 @@ skipOnWindows('refuses a path component that cannot carry a publish', () => {
   );
 });
 
-// --- a group-writable directory is refused, whoever owns the group (ADR 0016) ---
+// --- a group-writable directory is judged by who owns it, never by who belongs to the group (ADR 0016) ---
 
-skipOnWindows('refuses a group-writable 0775 directory this user owns, with a hint', () => {
-  // Ownership of the directory is not enough, because the GROUP can add the destination's name here first and
-  // the mode bits cannot say who belongs to it. Reading /etc/group would not settle it either: systemd userdb
-  // answers members those files never show. So the mode decides and the hint names the fix.
-  const home = directoryWith(path.join(root(), 'home'), 0o775);
-  let hint = '';
-  try {
+skipOnWindowsAndAsRoot.each(['775', '2775', '1770'])(
+  'creates the script directly in a group-writable directory this user owns (mode %s)',
+  (mode) => {
+    const home = directoryWith(path.join(root(), 'home'), Number.parseInt(mode, 8));
+
     publish(path.join(home, 'journey.ad'));
-  } catch (error) {
-    hint = String((error as AppError).details?.hint);
-  }
 
-  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
-  expect(hint).toContain(`chmod g-w ${home}`);
-  expect(fs.readdirSync(home)).toEqual([]);
+    expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toBe('context\n');
+    expect(modeOf(path.join(home, 'journey.ad'))).toBe(0o600);
+  },
+);
+
+skipOnWindowsAndAsRoot('follows a link held in a group-writable directory this user owns', () => {
+  const directory = root();
+  const home = directoryWith(path.join(directory, 'home'), 0o775);
+  const real = privateDir(path.join(directory, 'real'));
+  fs.symlinkSync(real, path.join(home, 'flows'));
+
+  publish(path.join(home, 'flows', 'journey.ad'));
+
+  expect(fs.readdirSync(real)).toEqual(['journey.ad']);
 });
 
+skipOnWindows(
+  'still refuses a world-writable directory this user owns that its group can write',
+  () => {
+    const home = directoryWith(path.join(root(), 'home'), 0o776);
+
+    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'world_writable', home);
+    expect(fs.readdirSync(home)).toEqual([]);
+  },
+);
+
+skipOnWindowsAndAsRoot(
+  'refuses a group-writable 0775 directory root owns, with a hint this user can follow',
+  () => {
+    // No non-root owner answers for root's group, and the mode bits cannot say who belongs to it. Reading /etc/group
+    // would not settle it either: systemd userdb answers members those files never show.
+    const home = directoryWith(path.join(root(), 'home'), 0o775);
+    serveOwnership({ [home]: 0 });
+    let hint = '';
+    try {
+      publish(path.join(home, 'journey.ad'));
+    } catch (error) {
+      hint = String((error as AppError).details?.hint);
+    }
+
+    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+    // This user cannot change the mode of root's directory, so the hint names the recovery that works.
+    expect(hint).toContain('Save the script under a directory you own');
+    expect(hint).not.toContain('chmod');
+    expect(fs.readdirSync(home)).toEqual([]);
+  },
+);
+
 skipOnWindows('accepts the same directory once its group write bit is removed', () => {
-  // The recovery the hint names, applied: `chmod g-w` leaves 0755, which shuts every other local user out of
-  // creating the destination's name, whatever the group holds.
+  // What root's `chmod g-w` leaves: 0755, which shuts every other local user out of creating the destination's
+  // name, whatever the group holds.
   const home = directoryWith(path.join(root(), 'home'), 0o775);
+  serveOwnership({ [home]: 0 });
   fs.chmodSync(home, 0o755);
 
   publish(path.join(home, 'journey.ad'));
@@ -651,9 +698,10 @@ skipOnWindows('accepts the same directory once its group write bit is removed', 
   expect(fs.readFileSync(path.join(home, 'journey.ad'), 'utf8')).toBe('context\n');
 });
 
-skipOnWindows('refuses a setgid group-writable directory', () => {
+skipOnWindows('refuses a setgid group-writable directory root owns', () => {
   // setgid changes who inherits the group, not who belongs to it, so it changes nothing here.
   const home = directoryWith(path.join(root(), 'home'), 0o2775);
+  serveOwnership({ [home]: 0 });
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
 });
@@ -662,8 +710,7 @@ skipOnWindows('refuses a setgid group-writable directory', () => {
 const ACCOUNT_FILES = ['/etc/passwd', '/etc/group', '/etc/nsswitch.conf'];
 
 skipOnWindows('judges a group-writable directory without reading the host account files', () => {
-  // The whole reason the mode decides: the rule asks the kernel who owns a directory and what its bits say, and
-  // reads nothing else. A test cannot accidentally reintroduce a host dependency, because the answer to these
+  // The rule asks the kernel who owns a directory and what its bits say, and reads nothing else. A test cannot accidentally reintroduce a host dependency, because the answer to these
   // three names is a failure. It also says why one destination answers the same on a macOS laptop, a container
   // and an Ubuntu runner with a private primary group.
   const read: string[] = [];
@@ -674,6 +721,7 @@ skipOnWindows('judges a group-writable directory without reading the host accoun
     return (real as (...args: unknown[]) => unknown)(pathname, ...rest);
   }) as typeof fs.readFileSync);
   const home = directoryWith(path.join(root(), 'home'), 0o775);
+  serveOwnership({ [home]: 0 });
 
   expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
   expect(read).toEqual([]);
@@ -830,81 +878,3 @@ skipOnWindows('publishes to a scratch path exactly as the host spelled it', () =
 
   expect(fs.readFileSync(destination, 'utf8')).toBe('context\n');
 });
-
-// --- the destination directory swapped out while the file was staged ---
-
-// Only a caller that holds an answer from an earlier walk confirms it: the remote client does, because a
-// download runs between the walk that judged the directory and the rename that creates the entry. The local
-// publisher asks for no comparison of its own - the ownership rule is what excludes anyone who could make
-// that swap - so these two cover the one comparison this rule keeps.
-
-skipOnWindows('refuses a parent replaced by name while the file was staged', () => {
-  const directory = root();
-  const staged = path.join(directory, 'work');
-  privateDir(staged);
-  const destination = path.join(staged, 'journey.ad');
-  const prepared = prepareScriptDestination(destination);
-  // The replacement is a link to another real directory. Removing the directory and creating the same name
-  // again is not enough to make the two differ: a filesystem may hand back the inode it just freed, and the
-  // identity would match by luck.
-  const elsewhere = path.join(directory, 'elsewhere');
-  privateDir(elsewhere);
-  fs.rmSync(staged, { recursive: true });
-  fs.symlinkSync(elsewhere, staged);
-
-  // The refusal names the directory the entry would really have been created in, which is where the link
-  // leads. The spelled name is a pointer, not a place.
-  expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), elsewhere);
-  expect(fs.existsSync(path.join(elsewhere, 'journey.ad'))).toBe(false);
-});
-
-skipOnWindows(
-  'confirms the directory an earlier answer named, and reports where to create the entry',
-  () => {
-    const directory = root();
-    const staged = path.join(directory, 'work');
-    privateDir(staged);
-    const destination = path.join(staged, 'journey.ad');
-    const prepared = prepareScriptDestination(destination);
-
-    expect(confirmScriptDestination(destination, prepared).entry).toBe(destination);
-  },
-);
-
-// --- a step swapped out while the walk is still running ---
-
-skipOnWindows(
-  'identifies an entry by its bigint inode, so two large inodes do not collapse',
-  () => {
-    // Directory identities are compared for equality by `confirmScriptDestination`, so they are read as
-    // BIGINT. A numeric `ino` cannot hold every inode a filesystem hands out: 2^53 + 1 and 2^53 answer the
-    // same Number, and a swap between the two would then look like the same directory.
-    const directory = root();
-    const home = directoryWith(path.join(directory, 'home'), 0o700);
-    const work = path.join(home, 'work');
-    privateDir(work);
-    const LOW = 2n ** 53n;
-    const realLstatSync = fs.lstatSync;
-    let look = 0;
-    vi.spyOn(fs, 'lstatSync').mockImplementation(((pathname: unknown, options?: unknown) => {
-      const stats = (realLstatSync as (...args: unknown[]) => unknown)(
-        pathname,
-        options,
-      ) as fs.Stats;
-      if (String(pathname) !== work) return stats;
-      // Two distinct entries, one per look: the inode the walk answers, then the one the name holds when
-      // the staged version is confirmed.
-      const ino = look++ === 0 ? LOW : LOW + 1n;
-      const bigint = (options as { bigint?: boolean } | undefined)?.bigint === true;
-      return Object.assign(Object.create(Object.getPrototypeOf(stats)), stats, {
-        ino: bigint ? ino : Number(ino),
-      });
-    }) as typeof fs.lstatSync);
-
-    // A numeric read would answer Number(2^53 + 1n) === Number(2^53n), and the swap would pass.
-    expect(Number(LOW + 1n)).toBe(Number(LOW));
-    const destination = path.join(work, 'journey.ad');
-    const prepared = prepareScriptDestination(destination);
-    expectUntrustedReplaced(() => confirmScriptDestination(destination, prepared), work);
-  },
-);

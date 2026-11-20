@@ -34,7 +34,7 @@ const ARTIFACT: AndroidImeHelperArtifact = {
     packageName: 'com.callstack.agentdevice.imehelper',
     versionCode: 1,
     serviceComponent: HELPER_SERVICE,
-    broadcastProtocol: 'android-ime-helper-v1',
+    broadcastProtocol: 'android-ime-helper-v2',
   },
 };
 

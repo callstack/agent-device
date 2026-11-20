@@ -2,11 +2,87 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   buildDragGesturePlan,
+  buildGesturePlan,
   densifyGesturePath,
   singlePointerPlanEndpoints,
 } from './gesture-plan.ts';
 
 const DRAG_PROPERTY_RUNS = 100;
+const VIEWPORT = { x: 0, y: 0, width: 400, height: 800 };
+
+test('pan with holdMs keeps the contact at the origin through the hold, then moves', () => {
+  const plan = buildGesturePlan(
+    {
+      intent: 'pan',
+      origin: { x: 20, y: 30 },
+      delta: { x: 0, y: 120 },
+      durationMs: 500,
+      holdMs: 800,
+    },
+    VIEWPORT,
+  );
+
+  assert.equal(plan.topology, 'single');
+  assert.equal(plan.durationMs, 1_300);
+  assert.deepEqual(plan.pointers[0]?.samples, [
+    { offsetMs: 0, point: { x: 20, y: 30 } },
+    { offsetMs: 800, point: { x: 20, y: 30 } },
+    { offsetMs: 1_300, point: { x: 20, y: 150 } },
+  ]);
+  assert.deepEqual(singlePointerPlanEndpoints(plan), {
+    start: { x: 20, y: 30 },
+    end: { x: 20, y: 150 },
+  });
+});
+
+test('pan without holdMs keeps its two-sample timed path', () => {
+  const plan = buildGesturePlan(
+    { intent: 'pan', origin: { x: 20, y: 30 }, delta: { x: 0, y: 120 }, durationMs: 500 },
+    VIEWPORT,
+  );
+  assert.equal(plan.durationMs, 500);
+  assert.deepEqual(plan.pointers[0]?.samples, [
+    { offsetMs: 0, point: { x: 20, y: 30 } },
+    { offsetMs: 500, point: { x: 20, y: 150 } },
+  ]);
+});
+
+test('pan rejects a hold plus move above the backend ceiling and a two-pointer hold', () => {
+  assert.throws(
+    () =>
+      buildGesturePlan(
+        {
+          intent: 'pan',
+          origin: { x: 20, y: 30 },
+          delta: { x: 0, y: 120 },
+          durationMs: 9_000,
+          holdMs: 2_000,
+        },
+        VIEWPORT,
+      ),
+    {
+      code: 'INVALID_ARGS',
+      message: 'gesture pan holdMs plus durationMs must be at most 10000',
+    },
+  );
+  assert.throws(
+    () =>
+      buildGesturePlan(
+        {
+          intent: 'pan',
+          origin: { x: 20, y: 30 },
+          delta: { x: 0, y: 120 },
+          pointerCount: 2,
+          holdMs: 800,
+        },
+        VIEWPORT,
+      ),
+    {
+      code: 'INVALID_ARGS',
+      message: 'gesture pan holdMs is supported only for pointerCount 1',
+    },
+  );
+});
 
 test('drag keeps one pointer down through source hold, movement, and destination hold', () => {
   const plan = buildDragGesturePlan(

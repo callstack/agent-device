@@ -2,8 +2,11 @@ import { sleep } from '@agent-device/host-kit/retry';
 import {
   assertExclusiveScrollDistanceInputs,
   assertScrollUntilCompatible,
+  DEFAULT_REFRESH_PULL_AMOUNT,
+  DEFAULT_REFRESH_PULL_DURATION_MS,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
+  SCROLL_REFRESH_REFUSALS,
   type ResolvedScrollExecutionOptions,
   type ScrollCommandOptions,
   type ScrollMovementObservation,
@@ -22,6 +25,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  buildScrollEdgeCaptureError,
   captureScrollEdgeState,
   formatScrollEdgeMessage,
   runScrollEdgePasses,
@@ -60,6 +64,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 type ScrollTarget = Readonly<{
   direction: ScrollDirection;
   edge?: ScrollEdge;
+  refresh?: true;
 }>;
 
 /**
@@ -73,8 +78,9 @@ type BoundScrollDirection = BoundDeviceRuntime<
 type BoundScrollEdge = BoundDeviceRuntime<Extract<ScrollRuntimePlan, { kind: 'edge' }>['use']>;
 type BoundScrollUntil = BoundDeviceRuntime<Extract<ScrollRuntimePlan, { kind: 'until' }>['use']>;
 
-/** `scroll bottom` scrolls down to the edge; `scroll top` scrolls up to it. */
+/** `scroll bottom` scrolls down to the edge; `scroll top` scrolls up to it; `scroll refresh` pulls down. */
 function parseScrollTarget(input: string): ScrollTarget {
+  if (input === 'refresh') return { direction: 'up', refresh: true };
   if (input === 'bottom') return { direction: 'down', edge: 'bottom' };
   if (input === 'top') return { direction: 'up', edge: 'top' };
   return { direction: parseScrollDirection(input) };
@@ -126,9 +132,19 @@ export async function resolveBoundScrollRuntime(
     ...(target.edge === undefined ? {} : { edge: target.edge }),
     ...(until === undefined ? {} : { until }),
     ...(params.context.maxPasses === undefined ? {} : { maxPasses: params.context.maxPasses }),
+    ...(target.refresh ? { refresh: true } : {}),
   };
   assertScrollUntilCompatible(stopCondition);
-  const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
+  const options = resolveScrollExecutionOptions(
+    target.refresh
+      ? {
+          amount: amount ?? (pixels === undefined ? DEFAULT_REFRESH_PULL_AMOUNT : undefined),
+          pixels,
+          durationMs: durationMs ?? DEFAULT_REFRESH_PULL_DURATION_MS,
+        }
+      : { amount, pixels, durationMs },
+    target.edge,
+  );
   const plan = resolveScrollRuntimePlan(stopCondition);
   const admission = {
     command: 'scroll',
@@ -182,6 +198,26 @@ export async function resolveBoundScrollRuntime(
         },
         async (runtime, dispatchContext) =>
           await executeEdgeScroll(runtime, edge, target, options, dispatchContext),
+      );
+    }
+    case 'refresh': {
+      const movementPlan = planScrollMovement({
+        device: params.device,
+        flags: params.flags,
+        session: params.session,
+      });
+      return await resolveBoundGenericRuntime(
+        {
+          ...admission,
+          unavailableResponse: (unavailable) =>
+            scrollCaptureUnsupported(
+              'scroll refresh, which checks that the content is at its top before pulling,',
+              unavailable.hint,
+            ),
+          use: plan.use,
+        },
+        async (runtime, dispatchContext) =>
+          await executeRefreshScroll(runtime, target, options, dispatchContext, movementPlan),
       );
     }
     case 'until': {
@@ -247,6 +283,47 @@ async function executeDirectionScroll(
     interactionResult,
   );
   return scrollResult(target, options, 1, interactionResult, movement);
+}
+
+/**
+ * `scroll refresh`: one slow directional pull, aimed inside the scroll container a fresh capture
+ * names. A pull that starts above the list moves nothing, and a list that is not at its top only
+ * scrolls, so that case refuses instead of reporting a refresh that cannot have happened.
+ */
+async function executeRefreshScroll(
+  runtime: BoundScrollEdge,
+  target: ScrollTarget,
+  options: ResolvedScrollExecutionOptions,
+  context: DaemonCommandContext,
+  movementPlan: ScrollMovementPlan,
+): Promise<Record<string, unknown>> {
+  const top = await captureEdgeState(runtime, 'top', undefined, context);
+  if ('refused' in top) throw buildScrollEdgeCaptureError('top', top.refused);
+  if (top.canScroll) {
+    const { message, ...details } = SCROLL_REFRESH_REFUSALS.notAtTop;
+    throw new AppError('COMMAND_FAILED', message, details);
+  }
+  const pullOptions =
+    top.containerRect === undefined ? options : { ...options, containerRect: top.containerRect };
+  const pull = await scrollOnce(runtime, target, pullOptions, context);
+  const observed = await directionalMovementClaim(
+    runtime,
+    target.direction,
+    context,
+    movementPlan,
+    pull,
+  );
+  // The pull runs at the top edge on purpose, so "nothing left to scroll" is not its answer.
+  const movement = observed === 'at-edge' ? 'unchanged' : observed;
+  const result = scrollResult(target, options, 1, pull, movement);
+  return withSuccessText(
+    result,
+    movement === 'moved'
+      ? 'Pulled to refresh and the content changed'
+      : movement === 'unchanged'
+        ? 'Pulled to refresh and the visible content did not change'
+        : 'Pulled to refresh',
+  );
 }
 
 /**

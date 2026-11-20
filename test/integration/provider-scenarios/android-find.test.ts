@@ -7,6 +7,7 @@ import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { arrayEqual, assertCommandCall, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
 import {
+  androidImeBroadcastAckResult,
   androidImeClearTextBroadcast,
   androidImeInputTextBroadcast,
   androidImeLifecycleAdbResult,
@@ -215,6 +216,8 @@ function androidFindAdbResult(
 ): { stdout: string; stderr: string; exitCode: number } {
   const imeResult = androidImeLifecycleAdbResult(args.join(' '), args, ime);
   if (imeResult) return imeResult;
+  const imeAck = androidImeBroadcastAckResult(args);
+  if (imeAck) return imeAck;
   if (args.join(' ') === 'shell getprop sys.boot_completed') {
     return { stdout: '1\n', stderr: '', exitCode: 0 };
   }

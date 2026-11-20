@@ -12,6 +12,7 @@ import {
   stopDaemonProcess,
   waitForDaemonExit,
   type DaemonTerminationResult,
+  DAEMON_TEARDOWN_GRACE_MS,
 } from './daemon-process.ts';
 import {
   readCurrentOwnerIdentity,
@@ -434,7 +435,7 @@ export async function stopAndRetireDaemon(
       : (identity) =>
           stopDaemonProcess(identity, {
             mode: input.mode,
-            termTimeoutMs: input.termTimeoutMs ?? 3_000,
+            termTimeoutMs: input.termTimeoutMs ?? DAEMON_TEARDOWN_GRACE_MS,
             killTimeoutMs: input.killTimeoutMs ?? 1_000,
           }),
     owned,

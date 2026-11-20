@@ -89,12 +89,16 @@ export const SETUP_FILES = [
   'src/__tests__/process-memo-setup.ts',
 ];
 
+// Redirects TMPDIR to one per-run directory for the whole invocation (all
+// projects, every worker), names the run's checkout-local directory, and removes
+// both once at the end — see the file for why a single global hook beats per-file
+// cleanup here. Imported by vitest.mutation.config.ts: a test that needs the
+// checkout-local directory fails on CI in a lane that leaves this out.
+export const GLOBAL_SETUP = ['scripts/vitest-tmpdir-global-setup.ts'];
+
 export default defineConfig({
   test: {
-    // Redirects TMPDIR to one per-run directory for the whole invocation (all
-    // projects, every worker) and removes it once at the end — see the file
-    // for why a single global hook beats per-file cleanup here.
-    globalSetup: ['scripts/vitest-tmpdir-global-setup.ts'],
+    globalSetup: GLOBAL_SETUP,
     // Wall-clock discipline: unit tests must not wait real time. Measured
     // 2026-07-04: the suite's duration was bounded by files sleeping through
     // production timeout budgets. slowTestThreshold surfaces creep in local
@@ -247,6 +251,9 @@ export default defineConfig({
             // The Home/Recents surface-transition wait (#4710): replays scripted captures through
             // the capture seam under fake timers, so the deadline and delayed change need no emulator.
             'test/integration/android-emulator-e2e/live-surface-transition.test.ts',
+            // The Back snapshot-diff wait: replays scripted diffs through the step seam under fake
+            // timers, so the chained diffs and the deadline need no emulator.
+            'test/integration/android-emulator-e2e/live-snapshot-transition.test.ts',
             // The same wait driven through the real scenario wiring with a scripted device (#4710
             // review): proves Home and Recents poll via the scenario, not just the helper.
             'test/integration/android-emulator-e2e/live-automation-scenario.test.ts',

@@ -38,6 +38,8 @@ the device and does not depend on `simctl pbcopy`. A tvOS simulator has no paste
 
 If a stale input session drops a `fill` commit, `agent-device` rebinds the helper and retries once. If it cannot confirm the rebind, text entry stops until it can. If keyboard restoration cannot read its recovery record, `close` reports a failure and keeps the record so startup recovery can retry.
 
+With the test IME, `type` and `fill` fail if the helper does not acknowledge the command; `type` also fails if no editor is focused. For an older helper, reinstall a current version and reopen the session.
+
 If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to ASCII-only `adb shell input text`, and non-ASCII `fill` and `type` report that they cannot enter the text.
 
 ## Android: first helper install can wait on an OEM install dialog

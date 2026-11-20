@@ -36,7 +36,23 @@ enum RunnerAppScreenCaptureFailure: String, Error {
 
   /// The refusal as a runner reply.
   var response: Response {
-    Response(ok: false, error: ErrorPayload(code: rawValue, message: message, hint: hint))
+    Response(ok: false, error: ErrorPayload(code: wireCode, message: message, hint: hint))
+  }
+
+  /// The wire code for this refusal: always the `RunnerWireErrorCode` table row that shares the
+  /// raw value. The raw value stays for test assertions and logging; only this property is
+  /// allowed to put the code on the wire, so the parity guard sees one constant per code.
+  var wireCode: String {
+    switch self {
+    case .unresolvedWindow:
+      return RunnerTests.RunnerWireErrorCode.appScreenWindowUnresolved
+    case .unresolvedScreen:
+      return RunnerTests.RunnerWireErrorCode.appScreenUnresolved
+    case .unrenderableImage:
+      return RunnerTests.RunnerWireErrorCode.appScreenCaptureUnrenderable
+    case .offLitPanel:
+      return RunnerTests.RunnerWireErrorCode.appScreenOffLitPanel
+    }
   }
 
   var message: String {

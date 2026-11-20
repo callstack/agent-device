@@ -83,7 +83,7 @@ extension RunnerTests {
         )
         if match.isAmbiguous {
           clearRememberedTextEntryTap()
-          return Response(ok: false, error: ErrorPayload(code: "AMBIGUOUS_MATCH", message: "selector matched multiple elements"))
+          return Response(ok: false, error: ErrorPayload(code: RunnerWireErrorCode.ambiguousMatch, message: "selector matched multiple elements"))
         }
         if let element = match.element {
           let frame = element.frame
@@ -103,7 +103,7 @@ extension RunnerTests {
             ) {
             clearRememberedTextEntryTap()
             return Response(ok: false, error: ErrorPayload(
-              code: "ELEMENT_OFFSCREEN",
+              code: RunnerWireErrorCode.elementOffscreen,
               message: "element resolved off-screen at (\(Int(frame.midX)), \(Int(frame.midY)))"))
           }
           let isTextEntry = isTextEntryElement(element)
@@ -168,7 +168,7 @@ extension RunnerTests {
           )
         }
         clearRememberedTextEntryTap()
-        return Response(ok: false, error: ErrorPayload(code: "ELEMENT_NOT_FOUND", message: "element not found"))
+        return Response(ok: false, error: ErrorPayload(code: RunnerWireErrorCode.elementNotFound, message: "element not found"))
       }
       if let x = command.x, let y = command.y {
         let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(
@@ -334,7 +334,7 @@ extension RunnerTests {
         return Response(
           ok: false,
           error: ErrorPayload(
-            code: "INVALID_ARGS",
+            code: RunnerWireErrorCode.invalidArgs,
             message: "scroll could not compute a gesture plan"
           )
         )
@@ -380,7 +380,7 @@ extension RunnerTests {
         return Response(
           ok: false,
           error: ErrorPayload(
-            code: "INVALID_ARGS",
+            code: RunnerWireErrorCode.invalidArgs,
             message: "desktopScroll could not compute a wheel plan"
           )
         )
@@ -528,7 +528,7 @@ extension RunnerTests {
       case .failure(let failure):
         return Response(
           ok: false,
-          error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+          error: ErrorPayload(code: failure.wireCode, message: failure.message, hint: failure.hint)
         )
       case .success(let captured):
         // The facts travel to the host in the response and to the operator in runner.log, because a
@@ -603,7 +603,7 @@ extension RunnerTests {
       }
       guard let status else {
         return Response(ok: false, error: ErrorPayload(
-          code: "OBSERVATION_UNAVAILABLE",
+          code: RunnerWireErrorCode.observationUnavailable,
           message: "Could not determine whether the software keyboard is visible",
           hint: "Take a screenshot or try keyboard status again."
         ))
@@ -653,7 +653,7 @@ extension RunnerTests {
         // code and must not be mistaken for "no alert yet" (ALERT_NOT_FOUND_RUNNER_CODE).
         return Response(
           ok: false,
-          error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
+          error: ErrorPayload(code: RunnerWireErrorCode.alertNotFound, message: "alert not found")
         )
       case .unresolved, .notActionable:
         return alertUnresolvedResponse()
@@ -662,13 +662,13 @@ extension RunnerTests {
       guard let plan = command.gesturePlan else {
         return Response(
           ok: false,
-          error: ErrorPayload(code: "INVALID_ARGS", message: "gesture requires gesturePlan")
+          error: ErrorPayload(code: RunnerWireErrorCode.invalidArgs, message: "gesture requires gesturePlan")
         )
       }
       if let validationError = plannedGestureValidationError(plan) {
         return Response(
           ok: false,
-          error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
+          error: ErrorPayload(code: RunnerWireErrorCode.invalidArgs, message: validationError)
         )
       }
       let execution = plannedGestureExecution(for: plan)

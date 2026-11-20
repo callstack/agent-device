@@ -19,7 +19,12 @@ import {
  * account database, so the answer does not depend on which name services run (ADR 0016). Every judgment below
  * decides over the fields of one `lstat`, so each is testable on its values.
  */
-export type ScriptDestinationTrust = Readonly<{ uid: number; privateAncestry?: boolean }>;
+export type ScriptDestinationTrust = Readonly<{
+  uid: number;
+  privateAncestry?: boolean;
+  /** Set for a private root: its ancestry refuses a group-writable directory this user owns too. */
+  closedToOwnGroup?: boolean;
+}>;
 
 /**
  * How strictly a caller's destination is judged. `privateAncestry` is for executable state, such as the Swift
@@ -53,8 +58,19 @@ export function untrustedAncestryExposure(
   if (directory.uid !== 0 && directory.uid !== trust.uid) return 'foreign_owned';
   if (directory.mode & 0o1000 && !trust.privateAncestry) return undefined;
   if (directory.mode & 0o002) return 'world_writable';
-  if (directory.mode & 0o020) return 'shared_group_writable';
+  if (groupAddsEntriesIn(directory, trust)) return 'shared_group_writable';
   return undefined;
+}
+
+/**
+ * Whether the group's write bit counts as opening `directory` to other accounts. The script rule accepts the
+ * group of a directory this non-root user owns as that owner's responsibility; it accepts no group on a
+ * directory root owns, and executable state and a private root accept no group at all (ADR 0016).
+ */
+function groupAddsEntriesIn(directory: DirectoryAuthority, trust: ScriptDestinationTrust): boolean {
+  if (!(directory.mode & 0o020)) return false;
+  if (trust.privateAncestry || trust.closedToOwnGroup) return true;
+  return directory.uid === 0 || directory.uid !== trust.uid;
 }
 
 /**
@@ -68,7 +84,7 @@ export function othersCreateEntriesIn(
 ): boolean {
   if (directory.uid !== 0 && directory.uid !== trust.uid) return true;
   if (directory.mode & 0o002) return true;
-  return Boolean(directory.mode & 0o020);
+  return groupAddsEntriesIn(directory, trust);
 }
 
 /**
@@ -93,7 +109,7 @@ export function untrustedLinkExposure(
  */
 export function publishScriptFileSync(options: {
   destination: string;
-  contents: string;
+  contents: string | Uint8Array;
   publish?: AtomicPublishMode;
 }): string {
   // The entry is the one the rule authorized, never the caller's spelling: a `..` or a link sends the entry
@@ -113,8 +129,8 @@ export function publishScriptFileSync(options: {
 const SCRIPT_FILE_MODE = 0o600;
 
 /**
- * A directory a publish creates is itself judged on the way to a later version, so it is created at the mode
- * the rule accepts under every umask — the shared-checkout umask 002 would otherwise leave it 0775 and refuse.
+ * A directory a publish creates holds private recordings, so it is created owner-only under every umask — the
+ * shared-checkout umask 002 would otherwise leave it 0775, open to its group.
  */
 const SCRIPT_DIR_MODE = 0o700;
 
@@ -126,20 +142,8 @@ export function prepareScriptDestination(
   destination: string,
   options: ScriptDestinationOptions = {},
 ): ScriptDestination {
-  return scriptDestination(destination, true, options);
-}
-
-/**
- * ADR 0016's judgment of one destination. `create` says whether the caller needs the missing tail created:
- * a walk that stops short is an answer for that caller and a refusal for the other.
- */
-function scriptDestination(
-  destination: string,
-  create: boolean,
-  options: ScriptDestinationOptions = {},
-): ScriptDestination {
   if (process.platform === 'win32') {
-    return windowsScriptDestination(destination, create);
+    return windowsScriptDestination(destination);
   }
   // A relative spelling is refused first, whatever its last segment, because that is what makes it unjudgeable.
   const spelled = spelledParent(destination);
@@ -148,23 +152,21 @@ function scriptDestination(
   // The walk answers the COMPLETED chain, so this is the one place the CREATION question is asked: below the
   // walk the missing directories are this call's own to create, and asking it before creation would refuse
   // `mkdir -p <sticky shared>/recordings`, where those levels are 0700 of this call's own (ADR 0016).
-  const arrived = walkSpelledParent(spelled, destination, trust, create);
+  const arrived = walkSpelledParent(spelled, destination, trust, true);
   if (othersCreateEntriesIn(arrived.authority, trust)) {
     throw scriptAncestryFailure(destination, arrived.deepest, 'shared_parent');
   }
-  return authorizedEntry(arrived.deepest, arrived.identity, name);
+  return authorizedEntry(arrived.deepest, name);
 }
 
-function windowsScriptDestination(destination: string, create: boolean): ScriptDestination {
+function windowsScriptDestination(destination: string): ScriptDestination {
   const rules = path.win32;
   const root = requireWindowsScriptVolume(destination, destination);
   const name = entryNameOrRefuse(destination, rules);
   const directory = rules.dirname(rules.normalize(destination));
   requireWindowsScriptDirectory(destination, root);
-  if (directory === root) return authorizedEntry(directory, 'windows', name);
-  if (create) createWindowsScriptParents(destination, root, directory);
-  else requireWindowsScriptDirectory(destination, directory);
-  return authorizedEntry(directory, 'windows', name);
+  if (directory !== root) createWindowsScriptParents(destination, root, directory);
+  return authorizedEntry(directory, name);
 }
 
 function createWindowsScriptParents(destination: string, root: string, directory: string): void {
@@ -215,42 +217,19 @@ function isWindowsShareUnavailable(file: string, error: unknown): boolean {
   );
 }
 
-function authorizedEntry(
-  directory: string,
-  identity: string | undefined,
-  name: string,
-): ScriptDestination {
-  return { directory, identity, name, entry: hostPathRules().join(directory, name) };
+function authorizedEntry(directory: string, name: string): ScriptDestination {
+  return { directory, name, entry: hostPathRules().join(directory, name) };
 }
 
 /**
- * The entry a script is created as: the PHYSICAL directory the rule judged, that directory's identity as the
- * walk's own `lstat` answered it — what {@link confirmScriptDestination} compares before a rename — and the
- * validated name. `entry` is the one path a publisher creates.
+ * The entry a script is created as: the PHYSICAL directory the rule judged and the validated name. `entry` is
+ * the one path a publisher creates.
  */
 export type ScriptDestination = Readonly<{
   directory: string;
-  identity: string | undefined;
   name: string;
   entry: string;
 }>;
-
-/**
- * Confirms a destination host-kit ANSWERED earlier, and reports the entry to create. The one check a caller
- * that stages bytes owes, for the reason ADR 0016 states. The entry is authorized only when this walk reaches
- * the same directory.
- */
-export function confirmScriptDestination(
-  destination: string,
-  prepared: ScriptDestination,
-): ScriptDestination {
-  const current = scriptDestination(destination, false);
-  // The directory is compared too: Windows answers one constant identity for every directory.
-  if (current.identity !== prepared.identity || current.directory !== prepared.directory) {
-    throw scriptAncestryFailure(destination, current.directory, 'parent_replaced');
-  }
-  return current;
-}
 
 /**
  * The parent of `destination` exactly as the caller spells it, refusing a RELATIVE destination on every
@@ -264,11 +243,10 @@ function spelledParent(destination: string): string {
   return parent;
 }
 
-/** Where the walk stands: a judged directory, the identity its own `lstat` answered, names left to resolve. */
+/** Where the walk stands: a judged directory and the names left to resolve. */
 type WalkState = Readonly<{
   deepest: string;
   authority: DirectoryAuthority;
-  identity: string;
   /** Path components left to resolve, nearest first. */
   queue: readonly string[];
   /** Link targets expanded so far. */
@@ -276,14 +254,12 @@ type WalkState = Readonly<{
 }>;
 
 /**
- * The ground a walk answered: the PHYSICAL directory the entry is created in, with the authority and identity
- * it was judged under, so the caller never asks the host about ground the walk already read.
+ * The ground a walk answered: the PHYSICAL directory the entry is created in, with the authority it was judged
+ * under, so the caller never asks the host about ground the walk already read.
  */
 type WalkGround = Readonly<{
   deepest: string;
   authority: DirectoryAuthority;
-  /** That directory's identity, as this walk's `lstat` of it answered. */
-  identity: string;
 }>;
 
 /** The tail a walk stopped below: the nearest judged directory and the spelled names absent beneath it. */
@@ -312,8 +288,8 @@ function walkSpelledParent(
   trust: ScriptDestinationTrust,
   create: boolean,
 ): WalkGround {
-  const refuse = (ancestor: string, exposure: ScriptAncestryExposure): never => {
-    throw scriptAncestryFailure(destination, ancestor, exposure);
+  const refuse: RefuseAncestor = (ancestor, exposure, callerOwnsAncestor) => {
+    throw scriptAncestryFailure(destination, ancestor, exposure, callerOwnsAncestor);
   };
   let state = standOn('/', pathComponents(parent), trust, 0, refuse);
   let created = false;
@@ -322,7 +298,7 @@ function walkSpelledParent(
     const [component, ...rest] = state.queue;
     // The only ending that ARRIVES: an empty queue, every name the parent spelled resolved and judged.
     if (component === undefined) {
-      return { deepest: state.deepest, authority: state.authority, identity: state.identity };
+      return { deepest: state.deepest, authority: state.authority };
     }
     // `..` is the parent of the directory PHYSICALLY stood in, not of the spelling: where `work` is a link,
     // `.../work/../x` steps back from the link's target and lands beside it.
@@ -351,6 +327,13 @@ function walkSpelledParent(
   }
 }
 
+/** Refuses the walk at `ancestor`; a directory judgment also says whether the caller owns it. */
+type RefuseAncestor = (
+  ancestor: string,
+  exposure: ScriptAncestryExposure,
+  callerOwnsAncestor?: boolean,
+) => never;
+
 /** Where one named entry leaves the walk: standing on a judged directory, or short of the chain. */
 type EntryStep =
   | Readonly<{ ended: 'stand'; state: WalkState }>
@@ -365,7 +348,7 @@ function stepIntoEntry(
   component: string,
   rest: readonly string[],
   trust: ScriptDestinationTrust,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): EntryStep {
   const entry = path.join(state.deepest, component);
   const stats = lstatEntry(entry);
@@ -381,16 +364,10 @@ function stepIntoEntry(
   if (!stats.isDirectory()) refuse(entry, 'not_a_directory');
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) refuse(entry, exposure);
+  if (exposure) refuse(entry, exposure, authority.uid === trust.uid);
   return {
     ended: 'stand',
-    state: {
-      deepest: entry,
-      authority,
-      identity: identityOf(stats),
-      queue: rest,
-      hops: state.hops,
-    },
+    state: { deepest: entry, authority, queue: rest, hops: state.hops },
   };
 }
 
@@ -401,7 +378,7 @@ function hopThroughLink(
   stats: fs.BigIntStats,
   rest: readonly string[],
   trust: ScriptDestinationTrust,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): EntryStep {
   const exposure = untrustedLinkExposure({ uid: Number(stats.uid) }, state.authority, trust);
   if (exposure) refuse(link, exposure);
@@ -426,27 +403,19 @@ function standOn(
   queue: readonly string[],
   trust: ScriptDestinationTrust,
   hops: number,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): WalkState {
   const stats = lstatEntry(directory);
   if (stats === undefined || !stats.isDirectory()) refuse(directory, 'not_a_directory');
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) refuse(directory, exposure);
-  return { deepest: directory, authority, identity: identityOf(stats), queue, hops };
+  if (exposure) refuse(directory, exposure, authority.uid === trust.uid);
+  return { deepest: directory, authority, queue, hops };
 }
 
 /** Owner and mode of the ENTRY one `lstat` answer describes. */
 function directoryAuthority(stats: fs.BigIntStats): DirectoryAuthority {
   return { uid: Number(stats.uid), mode: Number(stats.mode) };
-}
-
-/**
- * The device and inode an `lstat` answer names. BIGINT stats: a numeric `ino` cannot hold every inode a
- * filesystem hands out, so two distinct large inodes would collapse onto one identity.
- */
-function identityOf(stats: fs.BigIntStats): string {
-  return `${stats.dev}:${stats.ino}`;
 }
 
 /** The only lookup this rule makes: `lstat` with bigint ids, absence as `undefined`. */
@@ -508,7 +477,9 @@ function createMissingLevel(
   }
   const authority = directoryAuthority(seen);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) throw scriptAncestryFailure(destination, level, exposure);
+  if (exposure) {
+    throw scriptAncestryFailure(destination, level, exposure, authority.uid === trust.uid);
+  }
   if (created) {
     // `mkdir` ANDs its mode with the umask, and a umask can take an OWNER bit away: umask 200 would leave
     // this level 0500, where this call could not create the name below it. One `chmod` makes the level the
@@ -543,7 +514,7 @@ export function admitPrivateRoot(options: {
   /** Names below the root this caller traverses, judged by the same rule. */
   managedDirs?: readonly string[];
 }): PrivateRootAdmission {
-  const trust = scriptTrust({});
+  const trust: ScriptDestinationTrust = { ...scriptTrust({}), closedToOwnGroup: true };
   const root = options.rootPath.replace(TRAILING_HOST_SEPARATORS, '');
   if (!path.isAbsolute(root))
     return { status: 'refused', component: root, exposure: 'relative_destination' };
