@@ -173,3 +173,31 @@ function replaceCodes(
 export function escapeTerminalText(text: string): string {
   return replaceCodes(text, isEscapedControl, (code) => `\\u${code.toString(16).padStart(4, '0')}`);
 }
+
+// A display line that embeds a rejected argv value can echo a credential the caller typed into
+// the wrong slot. A token whose word is past 12 characters and mixes upper and lower case with
+// a digit or a symbol reads as that credential; ordinary arguments (refs, paths, ids, lowercase
+// names) do not. The word is the token without punctuation attached to its edges, so a sentence
+// period or quotes never make an identifier like `deviceTarget` read as a secret.
+
+const SECRET_LIKE_MIN_LENGTH = 12;
+const TOKEN_EDGE_PUNCTUATION = /^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g;
+
+/** True when `token` is long and varied enough to read as a credential rather than an argument. */
+export function isSecretLikeToken(token: string): boolean {
+  const word = token.replaceAll(TOKEN_EDGE_PUNCTUATION, '');
+  if (word.length <= SECRET_LIKE_MIN_LENGTH) return false;
+  return /[a-z]/.test(word) && /[A-Z]/.test(word) && /[^a-zA-Z]/.test(word);
+}
+
+/**
+ * Replaces each secret-like token in a display line with `<redacted len=N>`, and keeps every
+ * other token and all whitespace as is. N counts the raw token, so punctuation attached to it
+ * is part of N. The output carries no control character, so it passes `escapeTerminalText`
+ * unchanged and stays a valid JSON string value.
+ */
+export function redactSecretLikeText(text: string): string {
+  return text.replaceAll(/\S+/g, (token) =>
+    isSecretLikeToken(token) ? `<redacted len=${token.length}>` : token,
+  );
+}

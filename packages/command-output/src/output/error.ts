@@ -7,6 +7,7 @@ import {
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
+import { redactSecretLikeText } from '@agent-device/kernel/redaction';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { OutputReader } from '../output-common.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
@@ -52,24 +53,26 @@ export function formatHumanError(
   options: HumanErrorOptions = {},
 ): HumanErrorView {
   const normalized = err instanceof AppError ? normalizeError(err) : err;
-  const candidateViews = readErrorCandidateViews(normalized.details);
+  // An INVALID_ARGS message embeds the raw argv the parse refused, and a rejected positional can
+  // be a credential the caller typed into the wrong slot, so the message scrubs secret-like
+  // tokens. Every other code describes device or daemon state, which the structured redaction
+  // and the terminal escape layers already own. The Next step stays as the producer wrote it:
+  // a hint can carry a machine-parsable example the reader is meant to run.
+  const scrub = normalized.code === 'INVALID_ARGS';
+  const view = scrub
+    ? { ...normalized, message: redactSecretLikeText(normalized.message) }
+    : normalized;
+  const candidateViews = readErrorCandidateViews(view.details);
   const inlineCandidates =
-    normalized.code === 'AMBIGUOUS_MATCH' ? readInlineCandidates(candidateViews) : undefined;
+    view.code === 'AMBIGUOUS_MATCH' ? readInlineCandidates(candidateViews) : undefined;
   const forModel = options.reader === 'model';
-  const { summary, truncated } = formatSummary(
-    normalized,
-    inlineCandidates,
-    options.synopsis,
-    forModel,
-  );
-  return {
-    summary,
-    body: formatBody(normalized, {
-      fullMessage: truncated,
-      candidateViews: inlineCandidates ? [] : candidateViews,
-      showDetails: options.showDetails,
-    }),
-  };
+  const { summary, truncated } = formatSummary(view, inlineCandidates, options.synopsis, forModel);
+  const body = formatBody(view, {
+    fullMessage: truncated,
+    candidateViews: inlineCandidates ? [] : candidateViews,
+    showDetails: options.showDetails,
+  });
+  return { summary, body };
 }
 
 function formatSummary(
