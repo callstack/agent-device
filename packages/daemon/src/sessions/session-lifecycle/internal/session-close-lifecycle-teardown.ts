@@ -43,6 +43,14 @@ type CloseDeviceStopDecision = Readonly<{
    */
   implicitShutdownDeniedByPolicy: boolean;
   implicitShutdownClaimLost: boolean;
+}>;
+
+export type SessionCloseTeardownResult = Readonly<{
+  platformCloseError: unknown;
+  retainExecutionHost: boolean;
+  saveScriptOutcome: OrdinaryCloseScript;
+  shutdownResult?: TargetShutdownResult;
+  shutdownPrepared: boolean;
   /**
    * #4585: the process this session's `open` launched is not running the device any more, so whoever
    * answers that device address now is somebody else's device and the implicit stop is withheld. The
@@ -55,14 +63,6 @@ type CloseDeviceStopDecision = Readonly<{
    * for the recorded process.
    */
   implicitShutdownLaunchedProcessUnverified: boolean;
-}>;
-
-export type SessionCloseTeardownResult = Readonly<{
-  platformCloseError: unknown;
-  retainExecutionHost: boolean;
-  saveScriptOutcome: OrdinaryCloseScript;
-  shutdownResult?: TargetShutdownResult;
-  shutdownPrepared: boolean;
   /**
    * The stop was asked for, but the process this session launched was still running when the
    * confirmation budget ended and the pid stop could not confirm its exit.
@@ -107,8 +107,6 @@ async function decideDeviceStopOnClose(params: {
       (implicitShutdown && !implicitShutdownDeniedByPolicy && claimRenewal?.status === 'renewed'),
     implicitShutdownDeniedByPolicy,
     implicitShutdownClaimLost,
-    implicitShutdownLaunchedProcessGone: false,
-    implicitShutdownLaunchedProcessUnverified: false,
   };
 }
 
@@ -259,6 +257,8 @@ export async function runSessionCloseTeardown(params: {
   }
   // #4585: the one ownership read, after every other close step and right before the stop is asked
   // for. A replacement that took the serial during platform close or hint cleanup is seen here.
+  // Residual window: the Android stop restores the test IME and waits up to 2.5 s for its flush
+  // before `adb emu kill`, so a replacement that takes the serial inside that wait is not seen.
   const implicitStop = shutdownRequested && req.flags?.shutdown !== true;
   const launchedProcess = implicitStop
     ? await checkLaunchedProcessOwnership(session, params.launchedProcess)
