@@ -1,5 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { WebProvider } from './provider.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 
 /**
  * The provider a web request composed for itself, or `undefined` outside one. A reader that must

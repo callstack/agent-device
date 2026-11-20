@@ -1,4 +1,3 @@
-import { absentPlatformRegistry } from './__tests__/test-utils/absent-platform-registry.ts';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
@@ -30,7 +29,7 @@ const rootPorts = vi.hoisted(() => {
         () => Promise<
           Pick<
             ProviderRuntimeComposition,
-            'runtimes' | 'platformModules' | 'platformRegistry' | 'inventory' | 'shutdown'
+            'runtimes' | 'platformModules' | 'platforms' | 'inventory' | 'shutdown'
           >
         >
       >(),
@@ -89,7 +88,7 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
   rootPorts.providerComposition.mockResolvedValue({
     runtimes: [limrun],
     platformModules: [],
-    platformRegistry: absentPlatformRegistry,
+    platforms: [],
     inventory: [],
     shutdown: async () => {
       await limrun.shutdown();

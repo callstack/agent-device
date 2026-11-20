@@ -1,7 +1,5 @@
-import type {
-  InventoryPlatformModule,
-  OptionalPlatform,
-} from '@agent-device/contracts/platform-module';
+import type { InventoryPlatformModule } from '@agent-device/contracts/platform-module';
+import type { Platform } from '@agent-device/kernel/device';
 import type {
   PlatformPlugin,
   WebPlatformOperations,
@@ -34,46 +32,43 @@ export type PlatformHost = HostEnvironment &
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;
 
-export type PlatformSetup<Family extends OptionalPlatform = OptionalPlatform> =
-  Family extends OptionalPlatform
-    ? Readonly<{
+export type PlatformSetup<Family extends Platform = Platform> = Family extends Platform
+  ? Readonly<{
+      family: Family;
+      inventoryModule: Readonly<{
         family: Family;
-        inventoryModule: Readonly<{
-          family: Family;
-          loadInventory(...args: never[]): Promise<unknown>;
-        }>;
-        runtimeModule: Readonly<{
-          family: Family;
-          loadRuntime(...args: never[]): Promise<unknown>;
-        }>;
-        createInteractor(...args: never[]): Promise<unknown>;
-      }> &
-        (Family extends 'web'
-          ? Readonly<{
-              withRequestProvider<T>(provider: WebProvider, task: () => Promise<T>): Promise<T>;
-              operations: WebPlatformOperations;
-            }>
-          : unknown)
-    : never;
-
-/** Full module types used after the composing registry validates the declared family and loaders. */
-export type RegisteredPlatformSetup<Family extends OptionalPlatform = OptionalPlatform> =
-  Family extends OptionalPlatform
-    ? Family extends 'web'
-      ? WebPlatformRegistration
-      : Omit<PlatformSetup<Family>, 'inventoryModule' | 'runtimeModule' | 'createInteractor'> &
-          Readonly<{
-            createInteractor: PlatformPlugin['createInteractor'];
-            inventoryModule: InventoryPlatformModule<Family>;
-            runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+        loadInventory(...args: never[]): Promise<unknown>;
+      }>;
+      runtimeModule: Readonly<{
+        family: Family;
+        loadRuntime(...args: never[]): Promise<unknown>;
+      }>;
+      createInteractor(...args: never[]): Promise<unknown>;
+    }> &
+      (Family extends 'web'
+        ? Readonly<{
+            withRequestProvider<T>(provider: WebProvider, task: () => Promise<T>): Promise<T>;
+            operations: WebPlatformOperations;
           }>
-    : never;
+        : unknown)
+  : never;
+
+export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family extends Platform
+  ? Family extends 'web'
+    ? WebPlatformRegistration
+    : Readonly<{
+        family: Family;
+        createInteractor: PlatformPlugin['createInteractor'];
+        inventoryModule: InventoryPlatformModule<Family>;
+        runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+      }>
+  : never;
 
 export type PlatformContribution = {
-  [Family in OptionalPlatform]: Readonly<{
+  [Family in Platform]: Readonly<{
     kind: 'platform';
     family: Family;
     /** Registers modules and operations. Setup itself does not start or install the backend. */
     setup(host: PlatformHost): PlatformSetup<Family> | Promise<PlatformSetup<Family>>;
   }>;
-}[OptionalPlatform];
+}[Platform];

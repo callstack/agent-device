@@ -1,4 +1,7 @@
-import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
+import type {
+  PlatformPluginSet,
+  WebPlatformSelection,
+} from '@agent-device/contracts/platform-plugin';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
@@ -54,6 +57,7 @@ export async function loadMacOsSurfaceSnapshot(
 export function createPlatformRuntimeHost(options: {
   host: HostEnvironment;
   web?: WebPlatformSelection;
+  interactors?: PlatformPluginSet;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
@@ -135,7 +139,7 @@ export function createPlatformRuntimeHost(options: {
     }),
     perf: createPerfRuntimeHost(),
     snapshot: options.snapshot,
-    localInteractors: createLocalApplicationInteractorHost(host, options.web),
+    localInteractors: createLocalApplicationInteractorHost(host, options.interactors),
     appleApplications,
     androidApplications,
     applicationResources: createApplicationResourceLifecycle({

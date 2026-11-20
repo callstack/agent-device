@@ -100,7 +100,7 @@ export function createPlatformModuleRegistry<Module extends PlatformModuleMetada
       // An explicitly requested family with no registration is a missing plugin, reported as the
       // typed outcome rather than a contract violation. Absence of a required family cannot reach
       // here: the completeness check above rejects that composition.
-      throw reportAbsent(family);
+      throw isOptionalPlatform(family) ? reportAbsent(family) : unsupportedPlatform(family);
     },
   });
 }

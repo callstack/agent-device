@@ -1,4 +1,11 @@
-import type { AppleOS, DeviceInfo, DeviceKind, DeviceTarget, Platform } from './device.ts';
+import type { AppleOS, DeviceInfo, DeviceKind, DeviceTarget } from './device.ts';
+
+export const PLATFORMS = ['apple', 'android', 'harmonyos', 'vega', 'linux', 'web'] as const;
+export type Platform = (typeof PLATFORMS)[number];
+
+export function isPlatform(value: unknown): value is Platform {
+  return (PLATFORMS as readonly unknown[]).includes(value);
+}
 
 export type DeviceShape = Readonly<{
   family: Platform;

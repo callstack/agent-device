@@ -1,4 +1,4 @@
-import { webSelectionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
+import { webPlatformCompositionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -172,12 +172,13 @@ export async function createProviderScenarioHarness(
     const providerModules =
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
-    const web = webSelectionFixture(input.host, input.baseDir, {
+    const platforms = webPlatformCompositionFixture(input.host, input.baseDir, {
       openWebSessionNames: input.openWebSessionNames,
       ownedProcessRecords: rootDeps.ownedProcessRecords,
     });
+    const { web } = platforms;
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
-      web,
+      platforms,
       host: input.host,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,

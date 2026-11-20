@@ -27,7 +27,11 @@ import {
   readStringProperty,
   type JsonObject,
 } from './json-utils.ts';
-import type { WebProvider, WebSnapshotOptions, WebSnapshotResult } from './provider.ts';
+import type {
+  WebProvider,
+  WebSnapshotOptions,
+  WebSnapshotResult,
+} from '@agent-device/contracts/web-provider';
 import {
   getManagedAgentBrowserStatus,
   mapManagedAgentBrowserError,

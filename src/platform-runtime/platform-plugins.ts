@@ -1,0 +1,102 @@
+import type {
+  PlatformModuleSelection,
+  PlatformPlugin,
+  WebPlatformSelection,
+  WebPlatformRegistration,
+} from '@agent-device/contracts/platform-plugin';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
+import type { Platform } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import type { PluginCandidate, ProviderRegistry } from '@agent-device/plugins/registry';
+import { getOptionalPlatformPluginDeclaration } from '@agent-device/contracts/plugin-installation';
+import { BUILTIN_PLATFORM_PLUGINS } from '../core/interactors/register-builtins.ts';
+import { registerPlatformPluginSet } from '../core/platform-plugin-registry.ts';
+import { missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
+
+type RuntimePlatformPlugin = PlatformPlugin & { web?: WebPlatformRegistration };
+
+export function builtinPlatformCandidates(): readonly PluginCandidate[] {
+  return [
+    {
+      source: 'builtin',
+      dormant: true,
+      declaredClaims: BUILTIN_PLATFORM_PLUGINS.flatMap((plugin) =>
+        plugin.platforms.map((id) => ({ kind: 'platform', id })),
+      ),
+      load: () => undefined,
+    },
+  ];
+}
+
+export function composePlatformPlugins(
+  platforms: ProviderRegistry['platforms'],
+  inventory: readonly PluginInventoryEntry[],
+  assertPluginSelectionCurrent?: (packageName: string) => void,
+): PlatformModuleSelection {
+  function selectedClaim(family: Platform) {
+    const expected = getOptionalPlatformPluginDeclaration(family)?.package;
+    return (
+      inventory.find((entry) => entry.platform === family) ??
+      inventory.find(
+        (entry) =>
+          expected !== undefined &&
+          entry.package === expected &&
+          entry.state === 'failed' &&
+          entry.platform === undefined &&
+          entry.provider === undefined &&
+          entry.backend === undefined,
+      )
+    );
+  }
+
+  function reportAbsent(family: Platform): AppError {
+    const entry = selectedClaim(family);
+    if (entry?.state !== 'failed') return missingPlatformPlugin(family);
+    const { code, message, ...details } = entry.error;
+    return new AppError(code, message, { ...details, family, package: entry.package });
+  }
+
+  function assertSelectionCurrent(family: Platform): void {
+    if (
+      !assertPluginSelectionCurrent ||
+      BUILTIN_PLATFORM_PLUGINS.some((plugin) => plugin.platforms.some((owned) => owned === family))
+    )
+      return;
+    const claim = selectedClaim(family);
+    if (claim && claim.source !== 'store') return;
+    const packageName = claim?.package ?? getOptionalPlatformPluginDeclaration(family)?.package;
+    if (packageName) assertPluginSelectionCurrent(packageName);
+  }
+
+  const interactors = registerPlatformPluginSet<RuntimePlatformPlugin>(
+    [
+      ...BUILTIN_PLATFORM_PLUGINS,
+      ...platforms.map((platform) => ({
+        id: platform.family,
+        platforms: [platform.family],
+        createInteractor: platform.createInteractor.bind(platform),
+        ...(platform.family === 'web' ? { web: platform } : {}),
+      })),
+    ],
+    reportAbsent,
+    assertSelectionCurrent,
+  );
+
+  const web: WebPlatformSelection = {
+    active: interactors.tryGet('web')?.plugin.web,
+    get() {
+      const { web } = interactors.get('web').plugin;
+      if (!web) throw new TypeError('Web platform registration is missing its operations');
+      return web;
+    },
+  };
+
+  return {
+    interactors,
+    web,
+    inventoryModules: platforms.map((platform) => platform.inventoryModule),
+    runtimeModules: platforms.map((platform) => platform.runtimeModule),
+    reportAbsent,
+    assertSelectionCurrent,
+  };
+}

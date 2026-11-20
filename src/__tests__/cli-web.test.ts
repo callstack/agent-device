@@ -1,16 +1,32 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
 import {
   installFakeManagedAgentBrowser,
   mkdtempForTestSync,
+  pluginHome,
+  selectPlugin,
   withNodeRuntime,
   writeFakeManagedAgentBrowserPackage,
 } from '@agent-device/test-kit';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
 type SpawnedCommand = { cmd: string; args: readonly string[] };
+
+function webPluginEnv(stateDir: string) {
+  const { home, env } = pluginHome();
+  const pluginRequire = createRequire(
+    new URL('../../packages/platform-web/package.json', import.meta.url),
+  );
+  const entry = pathToFileURL(pluginRequire.resolve('@agent-device/web/agent-device')).href;
+  selectPlugin(home, '@agent-device/web', `export { default } from ${JSON.stringify(entry)};`, {
+    claims: { apiVersion: 3, platform: 'web' },
+  });
+  return { ...env, AGENT_DEVICE_STATE_DIR: stateDir };
+}
 
 // `binaryPath` has been in the published `web setup`/`web doctor` JSON since #833.
 // The Windows spawn fix (#2022) moves execution to `node <entryScript>` and adds
@@ -28,7 +44,7 @@ test('web doctor --json keeps the published status fields and spawns the JS entr
       },
       async () =>
         await runCliCapture(['web', 'doctor', '--json'], {
-          env: { AGENT_DEVICE_STATE_DIR: stateDir },
+          env: webPluginEnv(stateDir),
         }),
     );
 
@@ -65,7 +81,7 @@ test('web setup --json keeps the published status fields after installing', asyn
         },
         async () =>
           await runCliCapture(['web', 'setup', '--json'], {
-            env: { AGENT_DEVICE_STATE_DIR: stateDir },
+            env: webPluginEnv(stateDir),
           }),
       );
       stdout = result.stdout;

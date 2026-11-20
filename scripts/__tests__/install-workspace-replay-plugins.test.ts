@@ -61,7 +61,7 @@ test('a non-source workspace install keeps the manifest fields the store reads b
     await Promise.all(
       (['maestro', 'replay'] as const).map(async (packageId) => [
         packageId,
-        await readPluginPackageClaims(installedManifest(home, packageId)['agent-device']),
+        readPluginPackageClaims(installedManifest(home, packageId)['agent-device']),
       ]),
     ),
   );

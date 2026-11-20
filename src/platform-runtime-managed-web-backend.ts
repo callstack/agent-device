@@ -22,7 +22,7 @@ async function withWebPlatform<T>(
     { getOptionalPlatformPluginDeclaration },
     { createPlatformPluginHost },
     { resolveDaemonPaths },
-    { selectWebPlatform },
+    { builtinPlatformCandidates, composePlatformPlugins },
     { PROVIDER_PLUGIN_POLICY },
   ] = await Promise.all([
     import('@agent-device/plugins/registry'),
@@ -30,7 +30,7 @@ async function withWebPlatform<T>(
     import('@agent-device/contracts/plugin-installation'),
     import('./platform-runtime/plugin-host.ts'),
     import('@agent-device/daemon-contracts/daemon-resolution'),
-    import('./provider-device-runtimes.ts'),
+    import('./platform-runtime/platform-plugins.ts'),
     import('./provider-plugin-policy.ts'),
   ]);
   const packageName = getOptionalPlatformPluginDeclaration('web')?.package;
@@ -40,13 +40,14 @@ async function withWebPlatform<T>(
       candidate.package === packageName ||
       candidate.declaredClaims?.some(({ kind, id }) => kind === 'platform' && id === 'web'),
   );
-  const resolved = await resolveProviderPlugins(candidates);
+  const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
+  const assertSelectionCurrent = createPluginSelectionGuard(installed, host.env);
   const registry = await startProviderRegistry(
     resolved,
     host,
     {
       ...PROVIDER_PLUGIN_POLICY,
-      assertSelectionCurrent: createPluginSelectionGuard(installed, host.env),
+      assertSelectionCurrent,
       platformHost: createPlatformPluginHost(
         host,
         resolveDaemonPaths(stateDir, { env: host.env, cwd: host.cwd }).baseDir,
@@ -55,7 +56,13 @@ async function withWebPlatform<T>(
     'platforms',
   );
   try {
-    return await run(selectWebPlatform(registry).get());
+    return await run(
+      composePlatformPlugins(
+        registry.platforms,
+        registry.inventory,
+        assertSelectionCurrent,
+      ).web.get(),
+    );
   } finally {
     await registry.close();
   }

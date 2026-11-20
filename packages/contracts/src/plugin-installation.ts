@@ -66,7 +66,7 @@ export function pluginInstallationHint(
   const installCommand = pluginInstallCommand(declaration, coreVersion);
   return {
     installCommand,
-    hint: `Install:\n  ${installCommand}\nThen retry the original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
+    hint: `Install:\n  ${installCommand}\nThen retry your original command. If a local daemon is already running, close its sessions and run agent-device daemon stop with the same --state-dir before retrying.`,
   };
 }
 /**

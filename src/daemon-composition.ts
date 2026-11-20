@@ -1,4 +1,3 @@
-import { missingPlatformPlugin } from './core/platform-plugin-absence.ts';
 // The daemon runtime's dependency construction, extracted from `packages/daemon/src/server/http/daemon-runtime.ts`
 // so the operational server owns sequencing and this module owns naming runtimes (ADR 0019).
 // Everything here that names a platform runtime, a provider runtime, an interactor, host
@@ -21,10 +20,10 @@ import {
 import {
   createDaemonProviderRuntimeComposition,
   createEmbeddedProviderRuntimeComposition,
-  selectWebPlatform,
 } from './provider-device-runtimes.ts';
 import { readDaemonProviderCredentials } from './provider-credential-fingerprint.ts';
 import { createPlatformPluginHost } from './platform-runtime/plugin-host.ts';
+import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import { getInteractor } from './core/interactors.ts';
 import {
@@ -132,12 +131,16 @@ export async function composeDaemonRuntimeDeps(
       providerComposition.resolveReplayExecution,
     );
     const providerDeviceRuntimes = [...providerComposition.runtimes];
-    const web = selectWebPlatform(providerComposition.platformRegistry);
+    const platforms = composePlatformPlugins(
+      providerComposition.platforms,
+      providerComposition.inventory,
+      providerComposition.assertSelectionCurrent,
+    );
+    const { web } = platforms;
     const hostDiagnostics = createHostDiagnostics(host, web);
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
-      web,
-      reportAbsent: missingPlatformPlugin,
+      platforms,
       assertShutdownAllowed,
       providerRuntimes: providerDeviceRuntimes,
       providerModules: providerComposition.platformModules,
@@ -158,8 +161,7 @@ export async function composeDaemonRuntimeDeps(
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
       host,
       providerRuntimeProviders.deviceInventorySource,
-      web,
-      missingPlatformPlugin,
+      platforms,
     );
     // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
     // platform-runtime.ts is already static in this module, so the deferred imports keep these thin
@@ -191,7 +193,7 @@ export async function composeDaemonRuntimeDeps(
       claimRecoveryGateway: createClaimRecoveryGatewayFor(host),
       interactorResolution: Object.freeze({
         resolve: async (device: DeviceInfo, runnerContext: RunnerContext) =>
-          await getInteractor(device, runnerContext, host, web),
+          await getInteractor(device, runnerContext, host, platforms.interactors),
       }),
       providerDeviceAdmission: Object.freeze({
         isActive: (device: DeviceInfo) => isActiveProviderDevice(device),

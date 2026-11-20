@@ -162,10 +162,9 @@ async function describeInstallation(
     throw new AppError('INVALID_ARGS', `Invalid artifact plugin metadata: ${name}`, {
       reason: 'invalid_plugin',
     });
-  // Before any import: the supported contract version, the Node floor, and the static claims. The
-  // claims the factory returns must equal these once it runs with its options.
+  // Record the declared claims before checking the Node floor or importing the factory.
   const entry = discoverPluginEntry(directory);
-  const declaredClaims = await readAgentDeviceClaims(packageJson);
+  const declaredClaims = readAgentDeviceClaims(packageJson);
   return {
     name,
     version,

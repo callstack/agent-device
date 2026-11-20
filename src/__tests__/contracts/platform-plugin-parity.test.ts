@@ -1,26 +1,17 @@
-import {
-  createPlatformModuleRegistry,
-  REQUIRED_PLATFORMS,
-} from '@agent-device/contracts/platform-module';
+import { builtinPlatformPlugins } from '../../core/interactors/builtin-platform-plugin-set.ts';
+import { REQUIRED_PLATFORMS } from '@agent-device/contracts/platform-module';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  getPlugin,
-  registeredPlatforms,
-  registerPlatformPluginSet,
-  tryGetPlugin,
-} from '../../core/platform-plugin-registry.ts';
+import { registerPlatformPluginSet } from '../../core/platform-plugin-registry.ts';
 import {
   BUILTIN_PLATFORM_PLUGINS,
-  registerBuiltinPlatformPlugins,
   type BuiltinPluginsCoverRequiredPlatforms,
 } from '../../core/interactors/register-builtins.ts';
 import { missingPlatformPlugin } from '../../core/platform-plugin-absence.ts';
 
 // Idempotently populate the root-owned registry for this test module.
-registerBuiltinPlatformPlugins(missingPlatformPlugin, createPlatformModuleRegistry);
 
 // Independent copy of the internal platform accept-set. The CLI `--platform`
 // enum derives separately from `PLATFORM_SELECTORS`; this oracle keeps registry
@@ -40,20 +31,29 @@ test('built-in platforms follow the canonical family order', () => {
   // Byte-for-byte allow-list parity: the registry derives exactly PLATFORMS,
   // in the same order. (Left as a parity assertion — PLATFORMS stays the
   // hand-authored source of truth; nothing is derived FROM the registry yet.)
-  assert.deepEqual(registeredPlatforms(), ['apple', 'android', 'harmonyos', 'vega', 'linux']);
+  assert.deepEqual(builtinPlatformPlugins.families, [
+    'apple',
+    'android',
+    'harmonyos',
+    'vega',
+    'linux',
+  ]);
 });
 
 test('every required family is covered by a builtin plugin; optional families may be absent', () => {
   // Completeness (ADR 0034) is enforced for the required families only: apple and android must
-  // always resolve. All six builtins stay registered today, so registeredPlatforms() still
+  // always resolve. All six builtins stay registered today, so builtinPlatformPlugins.families still
   // equals PLATFORMS above; once an optional family moves to a `platform` plugin its row
   // disappears here without breaking this guarantee. The guard type only resolves to true
   // while every RequiredPlatform is covered, so materializing it pins the guarantee.
   const pin: BuiltinPluginsCoverRequiredPlatforms = true;
   assert.ok(pin);
   for (const family of REQUIRED_PLATFORMS) {
-    assert.ok(registeredPlatforms().includes(family), `required family ${family} is registered`);
-    assert.ok(getPlugin(family).platforms.includes(family));
+    assert.ok(
+      builtinPlatformPlugins.families.includes(family),
+      `required family ${family} is registered`,
+    );
+    assert.ok(builtinPlatformPlugins.get(family).plugin.platforms.includes(family));
   }
 });
 
@@ -77,7 +77,7 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
     undefined,
   ];
   for (const candidate of candidates) {
-    const registered = tryGetPlugin(candidate as Platform) !== undefined;
+    const registered = builtinPlatformPlugins.tryGet(candidate as Platform) !== undefined;
     const parses = parsePlatformByHand(candidate) !== undefined && candidate !== 'web';
     assert.equal(registered, parses, `coverage parity for ${JSON.stringify(candidate)}`);
   }
@@ -85,17 +85,26 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
 
 test('a family plugin resolves to the SAME instance for every leaf it owns', () => {
   // Apple owns both ios + macos (folds in the eventual macOS unwind).
-  assert.equal(getPlugin('apple'), getPlugin('apple'));
-  assert.equal(getPlugin('apple').id, 'apple');
-  assert.equal(getPlugin('apple').familySelector, 'apple');
+  assert.equal(
+    builtinPlatformPlugins.get('apple').plugin,
+    builtinPlatformPlugins.get('apple').plugin,
+  );
+  assert.equal(builtinPlatformPlugins.get('apple').plugin.id, 'apple');
+  assert.equal(builtinPlatformPlugins.get('apple').plugin.familySelector, 'apple');
   // Single-platform plugins are distinct objects.
-  assert.notEqual(getPlugin('android'), getPlugin('linux'));
-  assert.notEqual(getPlugin('vega'), getPlugin('android'));
+  assert.notEqual(
+    builtinPlatformPlugins.get('android').plugin,
+    builtinPlatformPlugins.get('linux').plugin,
+  );
+  assert.notEqual(
+    builtinPlatformPlugins.get('vega').plugin,
+    builtinPlatformPlugins.get('android').plugin,
+  );
 });
 
 test('each registered platform resolves to a plugin that owns it', () => {
-  for (const platform of registeredPlatforms()) {
-    const plugin = getPlugin(platform);
+  for (const platform of builtinPlatformPlugins.families) {
+    const plugin = builtinPlatformPlugins.get(platform).plugin;
     assert.ok(
       plugin.platforms.includes(platform),
       `${platform} plugin lists ${platform} in its platforms`,
@@ -108,22 +117,21 @@ test('getPlugin throws UNSUPPORTED_PLATFORM (verbatim) for an unregistered platf
   // Same code + message the deleted getInteractor switch default produced.
   const unregistered = 'beos' as unknown as Platform;
   assert.throws(
-    () => getPlugin(unregistered),
+    () => builtinPlatformPlugins.get(unregistered).plugin,
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_PLATFORM' &&
       error.message === 'Unsupported platform: beos',
   );
-  assert.equal(tryGetPlugin(unregistered), undefined);
+  assert.equal(builtinPlatformPlugins.tryGet(unregistered), undefined);
 });
 
 test('registering a duplicate platform is a hard error', () => {
   assert.throws(
     () =>
       registerPlatformPluginSet(
-        [BUILTIN_PLATFORM_PLUGINS[0]],
+        [...BUILTIN_PLATFORM_PLUGINS, BUILTIN_PLATFORM_PLUGINS[0]],
         missingPlatformPlugin,
-        createPlatformModuleRegistry,
       ),
     /Duplicate platform family registration/,
   );

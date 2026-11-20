@@ -1,4 +1,4 @@
-import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
+import { webPlatformCompositionFixture } from './platform-runtime-web-provider.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
@@ -7,7 +7,7 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 bindTestCommandHost();
 
 const gateway = createPlatformRuntimeGateway({
-  web: webSelectionFixture(),
+  platforms: webPlatformCompositionFixture(),
   host: createLiveTestHostEnvironment(),
   resolveSessionArtifacts: () => ({
     outputPath: '/sessions/gesture-admission/app.log',

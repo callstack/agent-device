@@ -1,4 +1,3 @@
-import { createPlatformModuleRegistry } from '@agent-device/contracts/platform-module';
 import type {
   PlatformGatedProviderResolverKey,
   PlatformProviderRequestContext,
@@ -18,9 +17,7 @@ import type { VegaToolProvider } from '@agent-device/platform-vega';
 import { webBackendKeyOf, type DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
-import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
-import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
+import { builtinPlatformPlugins } from '../core/interactors/builtin-platform-plugin-set.ts';
 import { loadAndroidMechanics } from '../platform-runtime-android-mechanics.ts';
 
 export type PlatformProviderResolver<TResult> = (
@@ -310,10 +307,12 @@ function platformGatedResolverApplies(
   // A predicate, never a throw: an absent optional family gates no resolver, and the runtime or
   // interactor lookup the same request then performs raises the typed plugin-not-installed outcome.
   // The registry is intentionally loaded by the root composition, not by the daemon request path.
-  return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
+  return (
+    builtinPlatformPlugins
+      .tryGet(device.platform)
+      ?.plugin.providers?.platformGatedResolvers.includes(key) ?? false
+  );
 }
-
-registerBuiltinPlatformPlugins(missingPlatformPlugin, createPlatformModuleRegistry);
 
 async function requestPlatformProviderScopeWrappers(
   scopedProviders: ResolvedRequestPlatformProviders,

@@ -1,7 +1,4 @@
-import {
-  createPlatformModuleRegistry,
-  REQUIRED_PLATFORMS,
-} from '@agent-device/contracts/platform-module';
+import { REQUIRED_PLATFORMS } from '@agent-device/contracts/platform-module';
 import type {
   PlatformGatedProviderResolverKey,
   PlatformProviderRequestContext,
@@ -28,15 +25,11 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '@agent-device/test-kit';
-import { getPlugin, tryGetPlugin } from './platform-plugin-registry.ts';
-import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
-import { missingPlatformPlugin } from './platform-plugin-absence.ts';
+import { builtinPlatformPlugins } from './interactors/builtin-platform-plugin-set.ts';
 import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
 } from '../platform-runtime.ts';
-
-registerBuiltinPlatformPlugins(missingPlatformPlugin, createPlatformModuleRegistry);
 
 const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'androidAdbProvider',
@@ -102,7 +95,7 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 
 test('built-in provider facets retain the former routing', () => {
   for (const device of SAMPLE_DEVICES) {
-    const facet = tryGetPlugin(device.platform)?.providers;
+    const facet = builtinPlatformPlugins.tryGet(device.platform)?.plugin.providers;
     const expected = gatedResolversByHand(device);
     for (const key of GATED_KEYS) {
       const applies = facet?.platformGatedResolvers.includes(key) ?? false;
@@ -116,17 +109,20 @@ test('built-in provider facets retain the former routing', () => {
 });
 
 test('every family carries the providers facet with the resolvers it owns', () => {
-  assert.deepEqual([...getPlugin('apple').providers!.platformGatedResolvers].sort(), [
-    'appleRunnerProvider',
-    'appleToolProvider',
-  ]);
   assert.deepEqual(
-    [...getPlugin('android').providers!.platformGatedResolvers],
+    [...builtinPlatformPlugins.get('apple').plugin.providers!.platformGatedResolvers].sort(),
+    ['appleRunnerProvider', 'appleToolProvider'],
+  );
+  assert.deepEqual(
+    [...builtinPlatformPlugins.get('android').plugin.providers!.platformGatedResolvers],
     ['androidAdbProvider'],
   );
-  assert.deepEqual([...getPlugin('vega').providers!.platformGatedResolvers], ['vegaToolProvider']);
   assert.deepEqual(
-    [...getPlugin('linux').providers!.platformGatedResolvers],
+    [...builtinPlatformPlugins.get('vega').plugin.providers!.platformGatedResolvers],
+    ['vegaToolProvider'],
+  );
+  assert.deepEqual(
+    [...builtinPlatformPlugins.get('linux').plugin.providers!.platformGatedResolvers],
     ['linuxToolProvider'],
   );
 });
@@ -176,8 +172,8 @@ test('every required family is registered at the provider gate; optional familie
   // exercises the full gate; their absence path is covered by
   // platform-plugin-registry-optional-family.test.ts.
   for (const family of REQUIRED_PLATFORMS) {
-    const plugin = getPlugin(family);
+    const plugin = builtinPlatformPlugins.get(family).plugin;
     assert.ok(plugin.platforms.includes(family), `${family} plugin owns ${family}`);
-    assert.equal(tryGetPlugin(family) !== undefined, true);
+    assert.equal(builtinPlatformPlugins.tryGet(family) !== undefined, true);
   }
 });

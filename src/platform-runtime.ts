@@ -49,7 +49,7 @@ import {
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
 } from '@agent-device/platform-linux';
-import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
+import type { PlatformModuleSelection } from '@agent-device/contracts/platform-plugin';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
@@ -85,8 +85,7 @@ const shutdownLoaders = Object.freeze({
 
 export function createPlatformModuleRegistryForHost(
   env: Readonly<Record<string, string | undefined>>,
-  web?: WebPlatformSelection,
-  reportAbsent?: Parameters<typeof createPlatformModuleRegistry>[1],
+  platforms?: PlatformModuleSelection,
 ) {
   return createPlatformModuleRegistry<InventoryPlatformModule>(
     [
@@ -101,23 +100,20 @@ export function createPlatformModuleRegistryForHost(
       }),
       vegaInventoryModule,
       linuxInventoryModule,
-      ...(web?.active ? [web.active.inventoryModule] : []),
+      ...(platforms?.inventoryModules ?? []),
     ],
-    reportAbsent,
-    (family) => {
-      if (family === 'web') web?.get();
-    },
+    platforms?.reportAbsent,
+    platforms?.assertSelectionCurrent,
   );
 }
 
 export async function createPlatformDeviceInventoryGateways(
   host: HostEnvironment,
   provider?: ProviderDeviceInventorySource,
-  web?: WebPlatformSelection,
-  reportAbsent?: Parameters<typeof createPlatformModuleRegistry>[1],
+  platforms?: PlatformModuleSelection,
 ): Promise<ComposedDeviceInventoryGateways> {
   return await attachAppleSelectionProbes({
-    registry: createPlatformModuleRegistryForHost(host.env, web, reportAbsent),
+    registry: createPlatformModuleRegistryForHost(host.env, platforms),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
       return createDeviceInventoryHost(host);
@@ -135,8 +131,8 @@ const androidRuntimeModule = createAndroidRuntimeModule({
 });
 
 function createPlatformRuntimeModuleRegistry(
-  web?: WebPlatformSelection,
-  reportAbsent?: Parameters<typeof createPlatformModuleRegistry>[1],
+  platforms?: PlatformModuleSelection,
+  reportAbsent = platforms?.reportAbsent,
 ) {
   return createPlatformModuleRegistry<PlatformRuntimeModule>(
     [
@@ -145,19 +141,17 @@ function createPlatformRuntimeModuleRegistry(
       harmonyosRuntimeModule,
       vegaRuntimeModule,
       linuxRuntimeModule,
-      ...(web?.active ? [web.active.runtimeModule] : []),
+      ...(platforms?.runtimeModules ?? []),
     ],
     reportAbsent,
-    (family) => {
-      if (family === 'web') web?.get();
-    },
+    platforms?.assertSelectionCurrent,
   );
 }
 
 export function createPlatformRuntimeGateway(
   options: Readonly<{
     host: HostEnvironment;
-    web?: WebPlatformSelection;
+    platforms?: PlatformModuleSelection;
     reportAbsent?: Parameters<typeof createPlatformModuleRegistry>[1];
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
@@ -168,13 +162,17 @@ export function createPlatformRuntimeGateway(
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
-    modules: createPlatformRuntimeModuleRegistry(options.web, options.reportAbsent),
+    modules: createPlatformRuntimeModuleRegistry(
+      options.platforms,
+      options.reportAbsent ?? options.platforms?.reportAbsent,
+    ),
     loadHost: async () => {
       const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
         await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         host: options.host,
-        web: options.web,
+        web: options.platforms?.web,
+        interactors: options.platforms?.interactors,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,

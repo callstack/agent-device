@@ -2,14 +2,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 
-export type {
-  WebSnapshotOptions,
-  WebSnapshotResult,
-  WebAudioProbeOptions,
-  WebAudioProbeResult,
-  WebProvider,
-} from '@agent-device/contracts/web-provider';
-
 /**
  * The un-composed fallback: a request that reaches a web device without a composed provider is a
  * composition bug, so it fails closed instead of borrowing a host it was never given (#3794).

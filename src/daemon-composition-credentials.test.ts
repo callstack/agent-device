@@ -1,4 +1,3 @@
-import { absentPlatformRegistry } from './__tests__/test-utils/absent-platform-registry.ts';
 import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
@@ -45,7 +44,7 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => ({
       },
     ],
     platformModules: [],
-    platformRegistry: absentPlatformRegistry,
+    platforms: [],
     shutdown: async () => [],
     inventory: [
       ...(await (

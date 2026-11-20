@@ -1,3 +1,7 @@
+import type { RegisteredPlatformSetup } from './platform.ts';
+import { isPlatform, type Platform } from '@agent-device/kernel/device-identity';
+import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
+import type { WebPlatformOperations } from '@agent-device/contracts/platform-plugin';
 import type { ReplayExecution } from '@agent-device/contracts/replay-execution';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import type { ReplayBackendSetup, ReplayExecutionSetup } from './replay-backend.ts';
@@ -45,18 +49,8 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
   platform: {
     metadataField: 'platform',
     contributionIdField: 'family',
-    reservedError: async (id) => {
-      const [{ isPlatform }, { isOptionalPlatform }] = await Promise.all([
-        import('@agent-device/kernel/device'),
-        import('@agent-device/contracts/platform-module'),
-      ]);
-      if (!isPlatform(id)) return invalidPlugin(`Unknown platform family: ${id}`);
-      if (isOptionalPlatform(id)) return undefined;
-      return new AppError('INVALID_ARGS', `Platform family is reserved for core: ${id}`, {
-        reason: 'reserved_platform',
-        platform: id,
-      });
-    },
+    reservedError: (id) =>
+      isPlatform(id) ? undefined : invalidPlugin(`Unknown platform family: ${id}`),
     duplicateReason: 'duplicate_platform',
     identityFor: (id) => ({ platform: id }),
     readMetadata: (value) => readableClaimId(value, 'platform'),
@@ -72,9 +66,8 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
   'replay-backend': {
     metadataField: 'replayBackend',
     contributionIdField: 'backend',
-    reservedError: async (id) => {
-      const { NATIVE_REPLAY_BACKEND } = await import('@agent-device/contracts/replay-execution');
-      return id === NATIVE_REPLAY_BACKEND
+    reservedError: (id) =>
+      id === NATIVE_REPLAY_BACKEND
         ? new AppError(
             'INVALID_ARGS',
             `Replay backend id is reserved for native execution: ${id}`,
@@ -83,8 +76,7 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
               backend: id,
             },
           )
-        : undefined;
-    },
+        : undefined,
     duplicateReason: 'duplicate_replay_backend',
     identityFor: (id) => ({ backend: id }),
     readMetadata: (value) => readableClaimId(value, 'replayBackend'),
@@ -106,13 +98,12 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
     contributionIdField: 'id',
     duplicateReason: 'duplicate_replay_execution',
     identityFor: (id) => ({ backend: id }),
-    readMetadata: async (value) => {
+    readMetadata: (value) => {
       // One spelling for this claim: the id itself belongs to the kind, not to the package.
       if (value !== true) throw invalidPlugin('Plugin metadata replayExecution must be true');
-      return (await import('@agent-device/contracts/replay-execution')).NATIVE_REPLAY_BACKEND;
+      return NATIVE_REPLAY_BACKEND;
     },
-    readContribution: async (value) => {
-      const { NATIVE_REPLAY_BACKEND } = await import('@agent-device/contracts/replay-execution');
+    readContribution: (value) => {
       if (value.id !== NATIVE_REPLAY_BACKEND) {
         throw invalidPlugin(
           `A replay-execution contribution must declare id ${NATIVE_REPLAY_BACKEND}`,
@@ -140,15 +131,15 @@ type ClaimKindSpec = Readonly<{
   /** The contribution field that spells this kind's id. */
   contributionIdField: string;
   /** Ids no plugin may claim in this space. */
-  reservedError?(id: string): AppError | undefined | Promise<AppError | undefined>;
+  reservedError?(id: string): AppError | undefined;
   /** What a claim that loses this space's duplicate race reports. */
   duplicateReason: string;
   /** How this space names the claim in the inventory and in cleanup outcomes. */
   identityFor(id: string): ClaimIdentity;
   /** Reads the id out of the `agent-device` field. */
-  readMetadata(value: unknown): string | Promise<string>;
+  readMetadata(value: unknown): string;
   /** Validates one contribution of this kind and answers its claim. */
-  readContribution(value: Record<string, unknown>): PluggedClaim | Promise<PluggedClaim>;
+  readContribution(value: Record<string, unknown>): PluggedClaim;
   /** Checks what setup returned before the registry keeps the claim. */
   validateSetup(value: unknown, id: string): void;
 }>;
@@ -160,9 +151,9 @@ const CLAIM_KIND_ORDER = Object.keys(CLAIM_KINDS) as readonly ClaimKind[];
  * The one validation of what a plugin factory returned, whichever source produced it: the whole
  * declaration is validated before any of its claims is published.
  */
-export async function validateAgentDevicePlugin(
+export function validateAgentDevicePlugin(
   value: unknown,
-): Promise<readonly (PluggedClaim & { contribution: Contribution })[]> {
+): readonly (PluggedClaim & { contribution: Contribution })[] {
   if (!isRecord(value)) throw invalidPlugin('Plugin factory must return a plugin object');
   if (value.apiVersion !== PLUGIN_API_VERSION) throw incompatiblePluginApi(value.apiVersion);
   if (!Array.isArray(value.contributes) || value.contributes.length === 0) {
@@ -171,8 +162,8 @@ export async function validateAgentDevicePlugin(
   const keys = new Set<string>();
   const claims = [];
   for (const contribution of value.contributes as readonly unknown[]) {
-    const claim = await claimOfContribution(contribution);
-    await assertClaimAvailable(claim);
+    const claim = claimOfContribution(contribution);
+    assertClaimAvailable(claim);
     const key = claimKeyOf(claim);
     if (keys.has(key)) {
       throw invalidPlugin(`Plugin declares the same claim twice: ${key}`);
@@ -184,11 +175,11 @@ export async function validateAgentDevicePlugin(
 }
 
 /** The claim a contribution names, after validating the contribution's own shape. */
-async function claimOfContribution(value: unknown): Promise<PluggedClaim> {
+function claimOfContribution(value: unknown): PluggedClaim {
   if (!isRecord(value)) throw invalidPlugin('Each contribution must be an object');
   const spec = claimKindSpecOf(value.kind);
   if (spec === undefined) throw invalidPlugin(`Unknown contribution kind: ${String(value.kind)}`);
-  return await spec.readContribution(value);
+  return spec.readContribution(value);
 }
 
 /** One claim as the store's declared claims and the registry compare them: `kind:id`. */
@@ -197,13 +188,13 @@ export function claimKeyOf(claim: PluggedClaim): string {
 }
 
 /** Why a claim cannot be held at all: a reserved id belongs to the host, not to a package. */
-export async function reservedClaimError(claim: PluggedClaim): Promise<AppError | undefined> {
-  return await CLAIM_KINDS[claim.kind].reservedError?.(claim.id);
+export function reservedClaimError(claim: PluggedClaim): AppError | undefined {
+  return CLAIM_KINDS[claim.kind].reservedError?.(claim.id);
 }
 
 /** Whether anything may still claim this id: a reserved id belongs to the host, not to a package. */
-async function assertClaimAvailable(claim: PluggedClaim): Promise<void> {
-  const reserved = await reservedClaimError(claim);
+function assertClaimAvailable(claim: PluggedClaim): void {
+  const reserved = reservedClaimError(claim);
   if (reserved !== undefined) throw reserved;
 }
 
@@ -212,12 +203,12 @@ async function assertClaimAvailable(claim: PluggedClaim): Promise<void> {
  * a slot that failed before its claims were readable uses this, so the inventory and the plugin that
  * selected it can still say what it was meant to provide.
  */
-export async function readableClaimsOfValue(value: unknown): Promise<readonly PluggedClaim[]> {
+export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
   if (!isRecord(value)) return [];
   const claims: PluggedClaim[] = [...versionTwoReplayClaims(value)];
   for (const kind of CLAIM_KIND_ORDER) {
     const spec = CLAIM_KINDS[kind];
-    const declared = await claimIdSpelledBy(kind, value[spec.metadataField]);
+    const declared = claimIdSpelledBy(kind, value[spec.metadataField]);
     if (declared !== undefined) {
       claims.push({ kind, id: declared });
       continue;
@@ -225,7 +216,7 @@ export async function readableClaimsOfValue(value: unknown): Promise<readonly Pl
     if (!Array.isArray(value.contributes)) continue;
     for (const contribution of value.contributes) {
       if (!isRecord(contribution) || contribution.kind !== kind) continue;
-      const named = await claimIdSpelledBy(kind, contribution[spec.contributionIdField]);
+      const named = claimIdSpelledBy(kind, contribution[spec.contributionIdField]);
       if (named !== undefined) claims.push({ kind, id: named });
     }
   }
@@ -246,10 +237,10 @@ function versionTwoReplayClaims(value: Record<string, unknown>): readonly Plugge
 }
 
 /** The id this value spells for a kind, or nothing when it does not spell one. */
-async function claimIdSpelledBy(kind: ClaimKind, value: unknown): Promise<string | undefined> {
+function claimIdSpelledBy(kind: ClaimKind, value: unknown): string | undefined {
   // The native claim's id belongs to the kind, so its metadata spells it as `true`.
   if (kind === 'replay-execution' && value === true) {
-    return (await import('@agent-device/contracts/replay-execution')).NATIVE_REPLAY_BACKEND;
+    return NATIVE_REPLAY_BACKEND;
   }
   return isClaimId(value) ? value : undefined;
 }
@@ -269,6 +260,11 @@ export function identityOfClaim(claim: PluggedClaim): ClaimIdentity {
 }
 
 /** Checks a setup result against the kind that asked for it. */
+export function validateClaimSetup(
+  claim: PluggedClaim & { kind: 'platform' },
+  value: unknown,
+): asserts value is RegisteredPlatformSetup;
+export function validateClaimSetup(claim: PluggedClaim, value: unknown): void;
 export function validateClaimSetup(claim: PluggedClaim, value: unknown): void {
   CLAIM_KINDS[claim.kind].validateSetup(value, claim.id);
 }
@@ -278,7 +274,7 @@ export function validateClaimSetup(claim: PluggedClaim, value: unknown): void {
  * plus each static claim id, read through its own kind. Read before any import; after the factory
  * runs, its returned claims must equal these, in any order.
  */
-export async function readPluginPackageClaims(field: unknown): Promise<readonly PluggedClaim[]> {
+export function readPluginPackageClaims(field: unknown): readonly PluggedClaim[] {
   if (!isRecord(field) || field.apiVersion !== PLUGIN_API_VERSION) {
     throw incompatiblePackageApi(field);
   }
@@ -287,8 +283,8 @@ export async function readPluginPackageClaims(field: unknown): Promise<readonly 
     const spec = CLAIM_KINDS[kind];
     const declared = field[spec.metadataField];
     if (declared === undefined) continue;
-    const id = await spec.readMetadata(declared);
-    await assertClaimAvailable({ kind, id });
+    const id = spec.readMetadata(declared);
+    assertClaimAvailable({ kind, id });
     claims.push({ kind, id });
   }
   return claims;
@@ -308,21 +304,30 @@ function validatePlatformSetup(value: unknown, family: string): void {
   ) {
     throw invalidPlugin(`Platform setup must supply matching family modules: ${family}`);
   }
-  if (family !== 'web') return;
-  const operations = value.operations;
-  if (
-    typeof value.withRequestProvider !== 'function' ||
-    !isRecord(operations) ||
-    typeof operations.setup !== 'function' ||
-    typeof operations.doctor !== 'function' ||
-    typeof operations.cleanupOrphans !== 'function' ||
-    typeof operations.browserLifecycleCheck !== 'function' ||
-    typeof operations.createProvider !== 'function' ||
-    typeof operations.resolveRequestProvider !== 'function'
-  ) {
-    throw invalidPlugin('Web platform setup must supply request scoping and web operations');
-  }
+  if (isPlatform(family)) PLATFORM_SETUP_CHECKS[family]?.(value);
 }
+
+const WEB_OPERATIONS: Record<keyof WebPlatformOperations, true> = {
+  setup: true,
+  doctor: true,
+  cleanupOrphans: true,
+  browserLifecycleCheck: true,
+  createProvider: true,
+  resolveRequestProvider: true,
+};
+
+const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unknown>) => void>> = {
+  web(value) {
+    const operations = value.operations;
+    if (
+      typeof value.withRequestProvider !== 'function' ||
+      !isRecord(operations) ||
+      Object.keys(WEB_OPERATIONS).some((operation) => typeof operations[operation] !== 'function')
+    ) {
+      throw invalidPlugin('Web platform setup must supply request scoping and web operations');
+    }
+  },
+};
 
 function isClaimId(value: unknown): value is string {
   return typeof value === 'string' && CLAIM_ID.test(value);

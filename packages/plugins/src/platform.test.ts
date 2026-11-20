@@ -1,15 +1,11 @@
 import { expect, test } from 'vitest';
 import { pluginHome, selectPlugin } from '@agent-device/test-kit';
-import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { createPluginSelectionGuard, storePluginCandidates } from './store.ts';
+import { storePluginCandidates } from './store.ts';
 import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
 
 const WEB_PACKAGE = '@agent-device/web';
 const stateDir = '/fixture-state';
-const reportAbsent = (family: Parameters<typeof missingOptionalPlatformError>[0]) =>
-  missingOptionalPlatformError(family, '0.22.0');
-
 const platformClaim = `{
   kind: 'platform',
   family: 'web',
@@ -55,7 +51,6 @@ async function startStore(env: HostEnvironment['env']) {
       emitDiagnostic: () => {},
       withDiagnosticTimer: async (_phase, run) => await run(),
     },
-    assertSelectionCurrent: createPluginSelectionGuard(candidates, env),
     adaptWebDriver: async () => {
       throw new Error('unexpected WebDriver');
     },
@@ -76,8 +71,8 @@ test('a managed platform registers its inventory against the supplied state dire
       credentials: { variables: [], byBackend: {} },
     },
   ]);
-  const platform = registry.resolvePlatform('web', reportAbsent, WEB_PACKAGE);
-  if (platform.family !== 'web') throw new Error('expected web');
+  const [platform] = registry.platforms;
+  if (platform?.family !== 'web') throw new Error('expected web');
   const inventory = await platform.inventoryModule.loadInventory();
   expect(
     await inventory.discover(
@@ -94,38 +89,9 @@ test('a managed platform registers its inventory against the supplied state dire
   await expect(closing).resolves.toEqual([
     { platform: 'web', source: 'store', shutdown: { status: 'ok' }, dispose: { status: 'ok' } },
   ]);
-  expect(() => registry.resolvePlatform('web', reportAbsent, WEB_PACKAGE)).toThrow(
-    expect.objectContaining({ details: { reason: 'plugin-registry-closed' } }),
-  );
-});
-
-test('a missing platform has an install hint, and adding it to a running set requires restart', async () => {
-  const { home, env } = pluginHome();
-  const registry = await startStore(env);
-  expect(() => registry.resolvePlatform('web', reportAbsent, WEB_PACKAGE)).toThrow(
-    expect.objectContaining({
-      details: expect.objectContaining({
-        reason: 'plugin-not-installed',
-        installCommand: 'agent-device plugins add @agent-device/web',
-      }),
-    }),
-  );
-  selectWeb(home);
-  expect(() => registry.resolvePlatform('web', reportAbsent, WEB_PACKAGE)).toThrow(
-    expect.objectContaining({
-      details: expect.objectContaining({ reason: 'daemon-plugin-set-stale', package: WEB_PACKAGE }),
-    }),
-  );
-  await registry.close();
 });
 
 test.each([
-  [
-    'required family',
-    'apple',
-    platformClaim.replace("family: 'web'", "family: 'apple'"),
-    'reserved_platform',
-  ],
   ['unknown family', 'example', platformClaim, 'invalid_plugin'],
   ['factory mismatch', 'linux', platformClaim, 'invalid_plugin'],
   [
@@ -170,11 +136,6 @@ test('a below-floor package retains its platform claim without importing its ent
     { platform: 'web', state: 'failed', error: { reason: 'node-below-floor' } },
     { platform: 'web', state: 'failed', error: { reason: 'duplicate_platform' } },
   ]);
-  expect(() => registry.resolvePlatform('web', reportAbsent, WEB_PACKAGE)).toThrow(
-    expect.objectContaining({
-      details: expect.objectContaining({ reason: 'node-below-floor', package: WEB_PACKAGE }),
-    }),
-  );
   await registry.close();
 });
 
@@ -198,6 +159,6 @@ test('platform and replay claims in one package activate independently', async (
     { platform: 'web', state: 'active' },
     { backend: 'fixture', state: 'failed', error: { reason: 'plugin_setup_failed' } },
   ]);
-  expect(registry.resolvePlatform('web', reportAbsent, WEB_PACKAGE).family).toBe('web');
+  expect(registry.platforms.map(({ family }) => family)).toEqual(['web']);
   await registry.close();
 });

@@ -1,4 +1,3 @@
-import { absentPlatformRegistry } from './__tests__/test-utils/absent-platform-registry.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
@@ -47,7 +46,7 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => ({
   createDaemonProviderRuntimeComposition: async () => ({
     runtimes: [],
     platformModules: [],
-    platformRegistry: absentPlatformRegistry,
+    platforms: [],
     shutdown: ports.shutdownProviders,
     inventory: [],
     resolveReplayBackend: async () => {
