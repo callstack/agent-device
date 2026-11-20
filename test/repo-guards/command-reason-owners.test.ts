@@ -1,22 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { publishedReasonsOf } from '../../scripts/command-docs/reasons.ts';
+import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
+
+/** Every command reason table. A family registers its table here when it declares one. */
+const COMMAND_REASON_TABLES = { SCROLL_REASONS };
 
 /**
- * A reason has one declaration. Two rows with the same value, in one table or in two, would give
- * the reason two owners, and the command reference would list it under both.
+ * A reason has one declaration and one owner. Two rows with the same value would give the reason
+ * two owners, and a row naming no CLI command would give it none.
  */
-test('every published reason of a command reason table has exactly one owning command', () => {
+test('every row of a command reason table names a CLI command and a reason no other row has', () => {
+  const commands = new Set<string>(listCliCommandNames());
   const owners = new Map<string, string[]>();
-  for (const command of listCliCommandNames()) {
-    for (const reason of publishedReasonsOf(command)) {
-      owners.set(reason, [...(owners.get(reason) ?? []), command]);
+  for (const [tableName, table] of Object.entries(COMMAND_REASON_TABLES)) {
+    for (const [member, row] of Object.entries(table)) {
+      assert.ok(commands.has(row.command), `${tableName}.${member} names "${row.command}"`);
+      owners.set(row.reason, [...(owners.get(row.reason) ?? []), `${tableName}.${member}`]);
     }
   }
-  assert.equal(owners.get('scroll_no_progress')?.join(), 'scroll');
+  assert.ok(owners.size > 0);
   assert.deepEqual(
-    [...owners].filter(([, commands]) => commands.length > 1),
+    [...owners].filter(([, rows]) => rows.length > 1),
     [],
   );
 });
