@@ -2173,7 +2173,7 @@ Remote daemons and tenants:
 
 * `--tenant`, `--session-isolation tenant`, `--run-id`, and `--lease-id` enforce lease admission on tenant-scoped daemons.
 * `--daemon-base-url http(s)://host:port[/base-path]` calls a remote HTTP daemon directly instead of starting a local one. Add `--daemon-auth-token <token>` (or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`) for non-loopback daemon URLs.
-* Screenshots and recordings from a remote daemon are downloaded to the path you pass, so `screenshot page.png` and `record start session.mp4` work as they do locally. `record start` without a path downloads to `recording-<timestamp>.mp4` (`.webm` on web) in your working directory.
+* Remote screenshots download to the path you pass. When a remote `record stop` request leaves a destination unspecified, the client saves that file in your working directory and reports a warning.
 * To drive a Mac’s simulators and devices from another machine, see [Remote proxy](/docs/remote-proxy). For hosted devices in CI, see [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), or [TestMu AI](/docs/testmu). For `connect --remote-config`, see [Remote Metro workflow](#remote-metro-workflow).
 
 ```bash
@@ -5632,7 +5632,7 @@ The daemon itself cannot pick a device by these keys, so it refuses a named key 
 
 ## Download captures
 
-Remote screenshots, recordings, performance captures, and trace logs use generated output paths on the daemon. When you specify an output path through the CLI, SDK, or MCP, it selects the download destination on your machine. Direct RPC callers receive artifact IDs and download each result with `GET /artifacts/<id>` using the same authentication.
+Remote screenshots, recordings, performance captures, and trace logs use generated output paths on the daemon. When you specify an output path through the CLI, SDK, or MCP, it selects the download destination on your machine. A recording is different: it downloads to the path named by the `record stop` request, or otherwise to the working directory with a warning. The directory of a `record start` path does not carry over; the working-directory fallback keeps only its file name. Direct RPC callers receive artifact IDs and download each result with `GET /artifacts/<id>` using the same authentication.
 
 By default, artifacts leave the inventory after download or after 15 minutes. `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress can finish before their files are removed, including overlapping downloads of a directory archive. Closing the HTTP connection cancels that download, including directory archive preparation. Other downloads waiting for the same archive can still finish. You can retry a cancelled download while the artifact remains in inventory. Each download has a 15-minute maximum lifetime. When it reaches that limit, the daemon cancels it and cleans up after its pipeline stops.
 
