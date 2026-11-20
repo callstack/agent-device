@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentRef,
-  type ComponentType,
-  type RefObject,
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   Animated,
   Image,
@@ -32,7 +24,6 @@ import {
   type PinchGestureHandlerStateChangeEvent,
   type RotationGestureHandlerGestureEvent,
   type RotationGestureHandlerStateChangeEvent,
-  type ScrollView,
 } from 'react-native-gesture-handler';
 
 import { SymbolView } from 'expo-symbols';
@@ -93,7 +84,7 @@ const initialMultiTap: MultiTapState = { rounds: 0, lastRoundContacts: 0 };
 const minScale = 0.5;
 const maxScale = 2;
 
-type PageScrollRef = RefObject<ComponentRef<typeof ScrollView> | null>;
+type PageScrollRef = RefObject<null>;
 
 export function GestureLab(props: { pageScrollRef: PageScrollRef }) {
   const colors = useAppColors();
@@ -619,8 +610,7 @@ function ReorderRow(props: {
       Gesture.Pan()
         .activateAfterLongPress(reorderHoldArmMs)
         .runOnJS(true)
-        // The builder types this ref as a component type; at runtime it takes the scroll view instance.
-        .blocksExternalGesture(pageScrollRef as unknown as RefObject<ComponentType | null>)
+        .blocksExternalGesture(pageScrollRef)
         .onStart(() => callbacks.current.onHoldActivated())
         .onUpdate((event) => callbacks.current.onDrag(event.translationY))
         .onEnd((event, completed) => {

@@ -1,4 +1,4 @@
-import { useRef, type ComponentRef } from 'react';
+import { useRef } from 'react';
 import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 
@@ -21,7 +21,8 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen(props: HomeScreenProps) {
-  const scrollRef = useRef<ComponentRef<typeof ScrollView> | null>(null);
+  // Left untyped: the scroll view and the handle gesture that blocks it both accept this ref.
+  const scrollRef = useRef(null);
   const colors = useAppColors();
   const styles = createStyles(colors);
 
