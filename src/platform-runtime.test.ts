@@ -31,7 +31,9 @@ vi.mock('./platform-runtime-host.ts', () => {
   };
 });
 
-import { webPlatformCompositionFixture } from './platform-runtime-web-provider.fixtures.ts';
+import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
+import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
+import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import {
   createPlatformDeviceInventoryGateways,
   createPlatformModuleRegistryForHost,
@@ -39,10 +41,13 @@ import {
 
 bindTestCommandHost();
 
-const platformModuleRegistry = createPlatformModuleRegistryForHost(
-  {},
-  webPlatformCompositionFixture(),
+// Both optional families that ship as platform plugins are supplied here, so the registry covers
+// the whole canonical family tuple.
+const platformSelection = composePlatformPlugins(
+  [webSelectionFixture().get(), vegaSelectionFixture().get()],
+  [],
 );
+const platformModuleRegistry = createPlatformModuleRegistryForHost({}, platformSelection);
 
 describe('platform module metadata composition', () => {
   test('registers each canonical family exactly once in canonical order', () => {
@@ -96,7 +101,7 @@ describe('platform module metadata composition', () => {
     const localGateways = await createPlatformDeviceInventoryGateways(
       createLiveTestHostEnvironment(),
       undefined,
-      webPlatformCompositionFixture(),
+      platformSelection,
     );
     expect(await localGateways.localOnly.discover({ platform: 'web' }, scope)).toHaveLength(1);
     expect(hostAdapter.evaluations).toBe(0);

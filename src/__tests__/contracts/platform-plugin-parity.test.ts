@@ -28,23 +28,15 @@ function parsePlatformByHand(value: unknown): Platform | undefined {
 }
 
 test('built-in platforms follow the canonical family order', () => {
-  // Byte-for-byte allow-list parity: the registry derives exactly PLATFORMS,
-  // in the same order. (Left as a parity assertion — PLATFORMS stays the
-  // hand-authored source of truth; nothing is derived FROM the registry yet.)
-  assert.deepEqual(builtinPlatformPlugins.families, [
-    'apple',
-    'android',
-    'harmonyos',
-    'vega',
-    'linux',
-  ]);
+  // The builtin set holds exactly the families the packed core still owns, in canonical
+  // `PLATFORMS` order. The optional families that ship as platform plugins have no row here.
+  assert.deepEqual(builtinPlatformPlugins.families, ['apple', 'android', 'harmonyos', 'linux']);
 });
 
 test('every required family is covered by a builtin plugin; optional families may be absent', () => {
   // Completeness (ADR 0034) is enforced for the required families only: apple and android must
-  // always resolve. All six builtins stay registered today, so builtinPlatformPlugins.families still
-  // equals PLATFORMS above; once an optional family moves to a `platform` plugin its row
-  // disappears here without breaking this guarantee. The guard type only resolves to true
+  // always resolve. An optional family that ships as a platform plugin has no builtin row, and the
+  // selected-registration lookup supplies it instead. The guard type only resolves to true
   // while every RequiredPlatform is covered, so materializing it pins the guarantee.
   const pin: BuiltinPluginsCoverRequiredPlatforms = true;
   assert.ok(pin);
@@ -78,7 +70,8 @@ test('registry coverage is byte-for-byte equal to the parsePlatform hand allow-l
   ];
   for (const candidate of candidates) {
     const registered = builtinPlatformPlugins.tryGet(candidate as Platform) !== undefined;
-    const parses = parsePlatformByHand(candidate) !== undefined && candidate !== 'web';
+    const parses =
+      parsePlatformByHand(candidate) !== undefined && candidate !== 'web' && candidate !== 'vega';
     assert.equal(registered, parses, `coverage parity for ${JSON.stringify(candidate)}`);
   }
 });
@@ -97,7 +90,7 @@ test('a family plugin resolves to the SAME instance for every leaf it owns', () 
     builtinPlatformPlugins.get('linux').plugin,
   );
   assert.notEqual(
-    builtinPlatformPlugins.get('vega').plugin,
+    builtinPlatformPlugins.get('harmonyos').plugin,
     builtinPlatformPlugins.get('android').plugin,
   );
 });

@@ -138,6 +138,7 @@
   "@agent-device/contracts/tv-remote-runtime",
   "@agent-device/contracts/type-text-runtime",
   "@agent-device/contracts/unsupported-interactor",
+  "@agent-device/contracts/vega-tool-provider",
   "@agent-device/contracts/viewport-runtime",
   "@agent-device/contracts/wait",
   "@agent-device/contracts/web-provider"

@@ -2,9 +2,12 @@ import { expect, test, vi } from 'vitest';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { inventoryModule } from '@agent-device/platform-vega';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createPlatformDeviceInventoryGateways } from './platform-runtime.ts';
+import {
+  vegaPlatformCompositionFixture,
+  vegaSelectionFixture,
+} from './platform-runtime-vega-provider.fixtures.ts';
 
 const toolchains = vi.hoisted(() => ({
   appleEvaluations: 0,
@@ -93,7 +96,13 @@ test('vega inventory resolves the CLI from the host home, not the process home',
     progress: Object.freeze({ report: () => {} }),
   });
 
-  const inventory = await inventoryModule.loadInventory(inventoryHost);
+  // Vega is a platform plugin, so the scenario supplies it: the assertion is about which home
+  // the plugin's inventory reads, not about the builtin family set.
+  const selection = vegaSelectionFixture({
+    env: { PATH: path.join(scratch, 'empty-path'), HOME: hostHome },
+    cwd: scratch,
+  });
+  const inventory = await selection.active!.inventoryModule.loadInventory(inventoryHost);
   const devices = await inventory.discover({ platform: 'vega', target: 'tv' }, scope);
 
   expect(devices).toEqual([
@@ -115,10 +124,16 @@ test('a host env with no home still inventories every family through the gateway
   // the gateways load the one host for all of them. Reverting the refusal makes both assertions
   // below red: the Apple host-Mac route fails with COMMAND_FAILED, and Vega fails with
   // COMMAND_FAILED instead of the honest TOOL_MISSING its PATH-only answer yields.
-  const gateways = await createPlatformDeviceInventoryGateways({
-    env: {},
-    cwd: process.cwd(),
-  });
+  const gateways = await createPlatformDeviceInventoryGateways(
+    {
+      env: {},
+      cwd: process.cwd(),
+    },
+    undefined,
+    // Vega is a platform plugin, so the scenario supplies it: the assertion covers what its
+    // inventory answers when the host env names no home, not the builtin family set.
+    vegaPlatformCompositionFixture({ env: {}, cwd: process.cwd() }),
+  );
   const scope: PlatformRequestScope = Object.freeze({
     signal: new AbortController().signal,
     diagnostics: Object.freeze({ emit: () => {} }),
