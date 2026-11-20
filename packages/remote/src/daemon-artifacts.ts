@@ -623,37 +623,25 @@ async function downloadEachArtifact(
         ? { stagedFile: true as const }
         : { isDirectory: artifact.artifactType === 'test-artifacts' }),
     });
-    if (req.command === 'record') {
-      noteRecordingFile(artifact, materializedPath, destination.fallback, client);
+    if (destination.fallback && req.command === 'record') {
+      client.fallbacks.push({
+        reason: 'recording_destination_not_requested',
+        field: artifact.field,
+        path: materializedPath,
+      });
     }
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
+    // The daemon names each chunk by the path it reports in `chunks`: its localPath, else its path.
+    const reported = hasNonEmptyString(artifact.localPath) ? artifact.localPath : artifact.path;
+    if (typeof reported === 'string') client.published.set(reported, materializedPath);
     nextData[artifact.field] = materializedPath;
     nextArtifacts.push({
       ...artifact,
       localPath: materializedPath,
     });
   }
-}
-
-/** Records one published recording file: its cwd fallback warning and its reported chunk path. */
-function noteRecordingFile(
-  artifact: DaemonArtifact,
-  materializedPath: string,
-  fallback: boolean,
-  client: Readonly<{ fallbacks: RecordingDestinationWarning[]; published: Map<string, string> }>,
-): void {
-  if (fallback) {
-    client.fallbacks.push({
-      reason: 'recording_destination_not_requested',
-      field: artifact.field,
-      path: materializedPath,
-    });
-  }
-  // The daemon names each chunk by the path it reports in `chunks`: its localPath, else its path.
-  const reported = hasNonEmptyString(artifact.localPath) ? artifact.localPath : artifact.path;
-  if (typeof reported === 'string') client.published.set(reported, materializedPath);
 }
 
 /**
