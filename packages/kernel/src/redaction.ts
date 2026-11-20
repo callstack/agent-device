@@ -184,7 +184,7 @@ const SECRET_LIKE_MIN_LENGTH = 12;
 const TOKEN_EDGE_PUNCTUATION = /^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g;
 
 /** True when `token` is long and varied enough to read as a credential rather than an argument. */
-export function isSecretLikeToken(token: string): boolean {
+function isSecretLikeToken(token: string): boolean {
   const word = token.replaceAll(TOKEN_EDGE_PUNCTUATION, '');
   if (word.length <= SECRET_LIKE_MIN_LENGTH) return false;
   return /[a-z]/.test(word) && /[A-Z]/.test(word) && /[^a-zA-Z]/.test(word);
