@@ -86,6 +86,7 @@ export function isAndroidSnapshotHelperSessionPeerUnverified(error: unknown): bo
 }
 
 const SERVER_LABEL = 'agent-device-session-server|';
+const HELLO_LINE_BYTES = 129;
 const CLIENT_LABEL = 'agent-device-session-client|';
 
 function sessionProof(secret: Buffer, label: string, first: string, second: string): string {
@@ -122,6 +123,8 @@ export function sendAndroidSnapshotHelperSessionCommand(
           timeoutMs,
           port,
           reason: SESSION_REQUEST_TIMEOUT_REASON,
+          // Before a proven hello the command never left this process.
+          ...(phase === 'proven' ? {} : { dispatched: 'no' }),
         }),
       );
     }, timeoutMs);
@@ -163,22 +166,19 @@ export function sendAndroidSnapshotHelperSessionCommand(
       if (phase === 'proven') return void chunks.push(Buffer.from(chunk));
       if (phase === 'refused') return;
       hello = Buffer.concat([hello, chunk]);
+      // The hello is exactly `<64 hex nonce> <64 hex proof>\n`; both fields are checked before any
+      // HMAC is computed, and a longer line or a newline anywhere else is refused.
       const newline = hello.indexOf(0x0a);
-      if (newline < 0) return void (hello.length > 129 && refuse());
-      const [serverNonce = '', proof = ''] = hello
-        .subarray(0, newline)
-        .toString('latin1')
-        .split(' ');
+      if (newline < 0 && hello.length <= HELLO_LINE_BYTES) return;
+      const fields =
+        newline === HELLO_LINE_BYTES
+          ? /^([0-9a-f]{64}) ([0-9a-f]{64})$/.exec(hello.subarray(0, newline).toString('latin1'))
+          : null;
+      if (!fields) return refuse();
+      const [, serverNonce = '', proof = ''] = fields;
       chunks.push(hello.subarray(newline + 1));
       const expected = Buffer.from(sessionProof(secret, SERVER_LABEL, clientNonce, serverNonce));
-      const actual = Buffer.from(proof);
-      if (
-        !/^[0-9a-f]{64}$/.test(serverNonce) ||
-        actual.length !== expected.length ||
-        !timingSafeEqual(expected, actual)
-      ) {
-        return refuse();
-      }
+      if (!timingSafeEqual(expected, Buffer.from(proof))) return refuse();
       phase = 'proven';
       socket.write(`${sessionProof(secret, CLIENT_LABEL, serverNonce, clientNonce)}\n${command}\n`);
     });

@@ -55,6 +55,8 @@ final class SessionFrameWriter implements SessionResponseWriter.FrameSink {
       // Each wait measures its own remaining time as it starts, so a pause before the wait cannot
       // make it poll with a duration measured before the pause.
       SessionPeerPolicy.remainingBeforeDeadline(clock, deadlineAtMs);
+      // A send that finishes past the deadline is not checked again: the kernel already holds the
+      // bytes it accepted, and the next turn or the end of the frame decides what follows.
       int count = channel.send(data, offset, data.length - offset);
       if (count > 0) {
         offset += count;

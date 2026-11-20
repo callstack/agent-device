@@ -114,7 +114,8 @@ export function discloseHelperTouchDispatch(
   error: unknown,
 ): unknown {
   if ((action !== 'gesture' && action !== 'input') || !(error instanceof AppError)) return error;
-  return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
+  const neverSent = isAdbHostRefusal(error) || error.details?.dispatched === 'no';
+  return discloseDispatch(error, neverSent ? 'no' : 'unknown');
 }
 
 const SESSION_COMMAND_TOO_LARGE_REASON = 'android_snapshot_helper_session_command_too_large';

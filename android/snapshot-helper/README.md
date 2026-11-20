@@ -125,10 +125,11 @@ relays every forwarded connection, including one an emulator guest opens to the 
 `10.0.2.2`. So every connection also proves a per-session secret in both directions. At startup the
 helper draws 32 random bytes and reports them only as `sessionSecret` in its ready record, on the
 stdout of the `am instrument` run the host started; the secret is never in argv, logcat or a file,
-and it never crosses the socket. The peer then sends a 32-byte nonce line; the helper answers with
-its own nonce and `HMAC-SHA256(secret, "agent-device-session-server|" + client nonce + server
-nonce)`; the peer answers with `HMAC-SHA256(secret, "agent-device-session-client|" + server nonce +
-client nonce)`. All fields are 64 lowercase hex characters on their own line. The helper reads the
+and it never crosses the socket. The peer then sends a 32-byte nonce line; the helper answers with one
+line, `<server nonce> <server proof>`, where the proof is `HMAC-SHA256(secret,
+"agent-device-session-server|" + client nonce + server nonce)`; the peer answers with `HMAC-SHA256(secret, "agent-device-session-client|" + server nonce +
+client nonce)`. Every nonce and proof is 64 lowercase hex characters; the host accepts the hello only as exactly
+those two fields and a newline. The helper reads the
 command only after the client proof matches, and the host sends the command only after the server
 proof matches, so a process that bound the freed socket name after the helper exited gets the nonce
 and nothing else. Any failure closes the connection, and the handshake shares the command's read

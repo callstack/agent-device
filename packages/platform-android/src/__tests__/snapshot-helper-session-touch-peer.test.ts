@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import net from 'node:net';
 import { test, vi } from 'vitest';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   getLiveAndroidSnapshotHelperSession,
   retireFailedAndroidSnapshotHelperSession,
@@ -9,6 +10,7 @@ import {
 } from '../snapshot-helper-session-lifecycle.ts';
 import { isAndroidSnapshotHelperSessionPeerUnverified } from '../snapshot-helper-session-protocol.ts';
 import { runAndroidSnapshotHelperSessionTouchCommand } from '../snapshot-helper-session.ts';
+import { FIXTURE_SESSION_SECRET, onSessionCommand } from './snapshot-helper-session.fixtures.ts';
 
 vi.mock('../snapshot-helper-session-lifecycle.ts', () => ({
   getLiveAndroidSnapshotHelperSession: vi.fn(),
@@ -103,3 +105,77 @@ test.each([
     if (!closedBeforeConnect) await listener.close();
   }
 });
+
+const SECRET = Buffer.alloc(32, 5);
+
+function serverProof(clientNonce: string, serverNonce: string): string {
+  return createHmac('sha256', SECRET)
+    .update(`agent-device-session-server|${clientNonce}${serverNonce}`)
+    .digest('hex');
+}
+
+function liveSessionOn(port: number, secret = SECRET): void {
+  vi.mocked(getLiveAndroidSnapshotHelperSession).mockResolvedValue({
+    helper: HELPER,
+    port,
+    secret,
+  } as NonNullable<Awaited<ReturnType<typeof getLiveAndroidSnapshotHelperSession>>>);
+}
+
+test.each([
+  { label: 'a hello longer than one nonce and one proof', extra: ` ${'a'.repeat(200)}` },
+  { label: 'a hello with a third field', extra: ' x' },
+])('$label is refused even with a valid proof', async ({ extra }) => {
+  vi.clearAllMocks();
+  const received: string[] = [];
+  const serverNonce = 'ef'.repeat(32);
+  const listener = await listenOnce((socket) => {
+    socket.on('data', (chunk) => received.push(chunk.toString('utf8')));
+    socket.once('data', (chunk) => {
+      const clientNonce = chunk.toString('utf8').trim();
+      socket.write(`${serverNonce} ${serverProof(clientNonce, serverNonce)}${extra}\n`);
+    });
+  });
+  liveSessionOn(listener.port);
+  try {
+    const headers = await runAndroidSnapshotHelperSessionTouchCommand({
+      deviceKey: 'android:emulator-touch-hello',
+      action: 'input',
+      helper: HELPER,
+      payloadBase64: Buffer.from('{"kind":"key","keyCode":4}').toString('base64'),
+      timeoutMs: 2_000,
+    });
+    assert.equal(headers, undefined);
+    assert.match(received.join(''), /^[0-9a-f]{64}\n$/);
+  } finally {
+    await listener.close();
+  }
+});
+
+test.each([
+  { label: 'before the hello', proveHello: false, dispatched: 'no' },
+  { label: 'after a proven hello', proveHello: true, dispatched: 'unknown' },
+])(
+  'an input timeout $label discloses dispatched=$dispatched',
+  async ({ proveHello, dispatched }) => {
+    vi.clearAllMocks();
+    const listener = await listenOnce((socket) => {
+      // The fixture helper proves the secret and then never answers the command.
+      if (proveHello) onSessionCommand(socket, () => {});
+    });
+    liveSessionOn(listener.port, Buffer.from(FIXTURE_SESSION_SECRET, 'hex'));
+    try {
+      const outcome = await runAndroidSnapshotHelperSessionTouchCommand({
+        deviceKey: 'android:emulator-touch-timeout',
+        action: 'input',
+        helper: HELPER,
+        payloadBase64: Buffer.from('{"kind":"key","keyCode":4}').toString('base64'),
+        timeoutMs: 100,
+      }).catch((error: unknown) => error);
+      assert.ok(outcome instanceof AppError);
+      assert.equal(outcome.details?.dispatched, dispatched);
+    } finally {
+      await listener.close();
+    }
+  },
+);
