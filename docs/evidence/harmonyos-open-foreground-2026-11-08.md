@@ -53,15 +53,29 @@ suspended state (the poll confirmed on its first read, twice, with a fresh
 PIN, which this evidence session does not handle, so the end-to-end
 `no-foreground` open remains maintainer-runnable.
 
+## The maintainer-run protocol for the secure keyguard
+
+The run needs a unit whose secure (PIN) keyguard `aa start` does not
+dismiss. Record three outputs at the current head:
+
+1. Plain `open <bundle> --platform harmonyos` prints the
+   open-not-foreground warning.
+2. `open <bundle> --platform harmonyos --foreground --json` fails with
+   `error.details.reason` `open-not-foreground`, the "Unlock the device
+   screen" hint, and "within 5s".
+3. The raw `aa dump -l` from the locked unit shows mission blocks with
+   zero `state #FOREGROUND` lines, or section headers with no mission
+   blocks at all.
+
+If the dump carries a shape neither rule classifies as
+`no-foreground-mission`, fix the parser for it in the same push.
+
 One wider keyguard shape is pinned in the suite without a live row: a dump
 that answers with its section headers (`User ID #`) but no `Mission ID #`
 block at all (a lock screen that hides the mission list). The parser
 classifies it as `no-foreground-mission` — the unlock-hint path — and
 keeps `unparseable` for an empty answer and for `aa` error text, so a
-locked unit cannot fall through to the connection hint. The
-maintainer-run protocol above also documents this shape: the raw dump
-should show mission blocks with zero `#FOREGROUND` lines, or headers with
-no mission blocks at all.
+locked unit cannot fall through to the connection hint.
 
 ## The failed-probe path, live at the head
 
