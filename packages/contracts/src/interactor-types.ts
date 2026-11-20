@@ -458,6 +458,13 @@ export type Interactor = {
    */
   actionButton?(): Promise<void>;
   /**
+   * Optional (parity with `actionButton`): sends one shake motion event to the device, which only
+   * an owner with a host control for it carries. An owner without it leaves it undefined; its fact
+   * refuses the shake before binding, and the system-button binder fails closed rather than
+   * resolving an absent member as a successful no-op.
+   */
+  shake?(): Promise<void>;
+  /**
    * Optional (parity with `home`): presses the physical volume-up key once, a control phone
    * owners with a volume button carry. An owner without it leaves it undefined; its fact refuses
    * the press before binding, and the system-button binder fails closed rather than resolving an

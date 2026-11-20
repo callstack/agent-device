@@ -53,6 +53,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   setSetting: 'simulator',
   readSetting: 'simulator',
   setFoldPose: 'simulator',
+  shake: 'simulator',
   // Refused on every Apple leaf at admission, so nothing waits on the runner. The volume keys are
   // refused on the simulator leaf too (XCUIDevice exposes no volume press there), and power and
   // the mute/sleep/wake/media keys are refused on every kind and OS.

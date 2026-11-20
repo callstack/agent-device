@@ -105,6 +105,8 @@ const LOCAL_TOOL_METHODS: Record<string, (interactor: Interactor) => Promise<unk
   // `simctl ui ... content_size` is local Apple tooling like the write leg beside it, so a provider-owned
   // device has no way to answer a text-size read.
   readSetting: (i) => i.readSetting!('text-size'),
+  // `simctl spawn notifyutil` is local Apple tooling, so a provider-owned device cannot shake.
+  shake: (i) => i.shake!(),
 };
 
 test('the runner/local partition covers the full provider-backed interactor surface', () => {

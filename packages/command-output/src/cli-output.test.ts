@@ -73,6 +73,7 @@ const FORMATTER_COMMANDS = [
   'scroll',
   'session',
   'settings',
+  'shake',
   'shutdown',
   'snapshot',
   'telephony',

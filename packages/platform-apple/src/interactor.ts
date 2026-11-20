@@ -11,6 +11,7 @@ import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
+import { shakeIosSimulator } from './navigation/shake.ts';
 import {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
@@ -185,6 +186,7 @@ export function createAppleInteractor(
         runnerOpts,
       );
     },
+    shake: () => shakeIosSimulator(device, runnerOpts.signal),
     // Volume presses reach the runner only on physical iPhone/iPad; the facts refuse every other
     // kind, and Apple exposes no power press at all, so no `power` member exists here.
     volumeUp: async () => {
@@ -568,6 +570,10 @@ function withInjectedAppleRunnerTransport(
     readSetting: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readSetting');
       return await interactor.readSetting!(...args);
+    },
+    shake: async (...args) => {
+      if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('shake');
+      return await interactor.shake!(...args);
     },
     // The foldable probe and HID dispatch use local tooling; a provider device keeps the runner.
     setOrientation: async (orientation) =>

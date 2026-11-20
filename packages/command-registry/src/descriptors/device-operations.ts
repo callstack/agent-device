@@ -47,6 +47,7 @@ import {
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
   settingsRuntimePlanUses,
+  shakeRuntimeUse,
   swipeRuntimePlanUses,
   tapPointUse,
   tvRemoteRuntimeUse,
@@ -600,6 +601,19 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       // to leave alone (#2699).
       ...GENERIC_MUTATING_COMMAND_TRAITS,
       platformExecution: { kind: 'device-runtime', uses: [actionButtonRuntimeUse] },
+    },
+    {
+      name: 'shake',
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
+      catalog: { group: 'public' },
+      frameworkTier: 'extended',
+      // Admission is the owner's `shake` fact, the same ADR 0019 §9 shape as `action-button`. No
+      // post-action observation is declared: what an app does with a shake is app-defined (a dev
+      // menu, an undo prompt, nothing), so the caller observes the surface it expects.
+      ...GENERIC_MUTATING_COMMAND_TRAITS,
+      platformExecution: { kind: 'device-runtime', uses: [shakeRuntimeUse] },
     },
     {
       name: 'hardware-button',

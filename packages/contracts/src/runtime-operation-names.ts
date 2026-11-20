@@ -88,6 +88,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'setOrientation',
   'setSetting',
   'setViewport',
+  'shake',
   'shutdownTarget',
   'sleep',
   'tapElementSelector',

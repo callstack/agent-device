@@ -95,6 +95,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   setOrientation: 'mutates',
   setSetting: 'mutates',
   setViewport: 'mutates',
+  shake: 'mutates',
   shutdownTarget: 'mutates',
   sleep: 'mutates',
   tapElementSelector: 'mutates',

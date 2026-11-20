@@ -8,7 +8,9 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
  * The system buttons: one press each, no arguments, nothing returned. `home` and `appSwitcher`
  * reach a springboard or recents surface; `actionButton` presses iPhone/iPad hardware;
  * the rest are the phone hardware keys the `hardware-button` command names — volume, power,
- * mute, the explicit sleep/wake events, and the media keys. What varies between them is which
+ * mute, the explicit sleep/wake events, and the media keys. `shake` is the one cell that is a
+ * device motion rather than a key: it shares the family's shape, one argumentless dispatch that
+ * returns nothing. What varies between them is which
  * owners carry the control, and that is the fact table's job, not a per-button module's: a
  * button joins this list and its owners state a cell.
  */
@@ -16,6 +18,7 @@ export const SYSTEM_BUTTONS = [
   'home',
   'appSwitcher',
   'actionButton',
+  'shake',
   'volumeUp',
   'volumeDown',
   'power',
@@ -39,6 +42,7 @@ export const SYSTEM_BUTTON_LABELS = {
   home: 'home',
   appSwitcher: 'app-switcher',
   actionButton: 'action-button',
+  shake: 'shake',
   volumeUp: 'volume-up',
   volumeDown: 'volume-down',
   power: 'power',
@@ -145,7 +149,11 @@ const androidHardwareButtonKindUnavailable: RuntimeOperationUnavailability = Obj
 const ANDROID_AVAILABLE = Object.freeze({ available: true } as const);
 
 const ANDROID_HARDWARE_BUTTON_CELLS = SYSTEM_BUTTONS.filter(
-  (button) => button !== 'home' && button !== 'appSwitcher' && button !== 'actionButton',
+  (button) =>
+    button !== 'home' &&
+    button !== 'appSwitcher' &&
+    button !== 'actionButton' &&
+    button !== 'shake',
 ) satisfies readonly HardwareButton[];
 
 type HardwareCellsCoverCommandVocabulary =
