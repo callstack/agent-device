@@ -620,7 +620,9 @@ function ReorderRow(props: {
         .blocksExternalGesture(pageScrollRef as unknown as RefObject<ComponentType | null>)
         .onStart(() => callbacks.current.onHoldActivated())
         .onUpdate((event) => callbacks.current.onDrag(event.translationY))
-        .onEnd((event) => callbacks.current.onDrop(event.translationY))
+        .onEnd((event, completed) => {
+          if (completed) callbacks.current.onDrop(event.translationY);
+        })
         .onFinalize(() => callbacks.current.onDragEnd()),
     [pageScrollRef],
   );

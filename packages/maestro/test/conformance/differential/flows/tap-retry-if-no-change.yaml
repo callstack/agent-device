@@ -5,8 +5,8 @@
 # subtree. So a non-interactive target is not enough on its own: any live content
 # anywhere on screen makes the engine see "changed" and skip the retry. Tapping
 # the home screen's title used to look sufficient and was actually a coin flip
-# (#1300) — its gesture lab loads a remote image whose arrival lands on either
-# side of the tap depending on the network.
+# (#1300) — its gesture lab loads asynchronous content, an image and icon glyphs, whose
+# arrival lands on either side of the tap.
 #
 # So this drives the fixture's inert surface (examples/test-app/app/inert.tsx),
 # a screen with nothing that loads, animates, or reacts to touch, presented as a
