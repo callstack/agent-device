@@ -29,6 +29,15 @@ func nativeAuditTypeName(_ type: XCUIAccessibilityAuditType) -> String {
 }
 #endif
 
+#if os(iOS)
+/// The audit must leave the app as it found it. Apple's Dynamic Type and clipped-text checks
+/// resize the app's text while they run, so they are not requested.
+@available(iOS 17.0, *)
+let readOnlyAuditTypes: XCUIAccessibilityAuditType = [
+  .contrast, .elementDetection, .hitRegion, .sufficientElementDescription, .trait,
+]
+#endif
+
 extension RunnerTests {
   @MainActor
   func executeAccessibilityAudit(app: XCUIApplication) -> Response {
@@ -36,7 +45,7 @@ extension RunnerTests {
     if #available(iOS 17.0, *) {
       var issues: [NativeAuditIssuePayload] = []
       do {
-        try app.performAccessibilityAudit(for: .all) { issue in
+        try app.performAccessibilityAudit(for: readOnlyAuditTypes) { issue in
           let frame = issue.element?.frame
           issues.append(NativeAuditIssuePayload(
             auditType: nativeAuditTypeName(issue.auditType),

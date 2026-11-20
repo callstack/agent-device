@@ -4,6 +4,28 @@
 
 The review revision replaces native snapshot annotations with one admitted `accessibilityAudit` operation after heuristic capture. Unknown Apple names map to `unknown:<name>`. Unique native frame matches include a pinned snapshot ref, role, and accessible name. Text geometry rounds to one decimal. Native `hitRegion` and heuristic `small-target` overlap is documented.
 
+## Read-only type set and overlap
+
+Same device and screen (iOS Settings), branch-built `node bin/agent-device.mjs`, at the commit that adds this section.
+
+Per-type cost of `performAccessibilityAudit`, measured inside the runner over three runs, with a temporary timing build that is not committed:
+
+| Types | Time | Issues |
+| --- | --- | --- |
+| `contrast`, `elementDetection`, `hitRegion`, `sufficientElementDescription`, `trait` together | 459–530 ms | 5 |
+| `dynamicType` with `textClipped` | 1971–1992 ms | 0 |
+| `.all` | 2245–2604 ms | 5 |
+
+Screenshots taken during the `dynamicType` and `textClipped` pass showed the app re-laid out at a larger text size twice. The audit therefore requests only the five types in the first row.
+
+Whole-command time over five warm runs: `audit --native` took 2.8–3.2 s before this change and 0.98–1.10 s after it. Plain `audit` took 0.27–0.37 s. The first `audit --native` after a runner build took 19.4 s; the first one in a new session with the runner already up took 1.3 s.
+
+Output after the change: [read-only-native.txt](read-only-native.txt), 8 warnings and 1 observation, identical over the five runs. The native `hitRegion` finding on the "Dictate" frame is no longer printed, because `small-target` reports both buttons on that frame.
+
+`testReadOnlyAuditTypesLeaveOutTheChecksThatResizeText`, `testNativeAuditTypeNamesPreserveAppleTypes`, and `testNativeAuditPayloadEncodesPointsAndMissingElement` passed on this device with the unit-test runner build: 3 executed, 0 failures.
+
+A system alert over the app makes Apple's audit fail with `Invalid target app <pid>`; `audit --native` then exits 1. Plain `audit` is not affected.
+
 The six focused XCTest tests below passed again with the review revision's unit-test runner. Provider scenarios exercise native audit before an explicit snapshot command, capture ordering, repeated native calls, unknown names, and native-only ref publication. The exact final commit and affected-gate receipt are recorded in the PR comment.
 
 ## Final-head capture

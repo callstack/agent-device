@@ -17,6 +17,19 @@ extension RunnerTests {
     }
   }
 
+  func testReadOnlyAuditTypesLeaveOutTheChecksThatResizeText() throws {
+    if #available(iOS 17.0, *) {
+      XCTAssertFalse(readOnlyAuditTypes.contains(.dynamicType))
+      XCTAssertFalse(readOnlyAuditTypes.contains(.textClipped))
+      let requested: [XCUIAccessibilityAuditType] = [
+        .contrast, .elementDetection, .hitRegion, .sufficientElementDescription, .trait,
+      ]
+      for type in requested {
+        XCTAssertTrue(readOnlyAuditTypes.contains(type))
+      }
+    }
+  }
+
   func testNativeAuditPayloadEncodesPointsAndMissingElement() throws {
     let payload = DataPayload(auditIssues: [
       NativeAuditIssuePayload(auditType: "contrast", description: "Low contrast",

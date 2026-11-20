@@ -11,7 +11,7 @@ import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/snapsh
 import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import { formatRole, type Rect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   buildChildrenByParent,
   collectDescendants,
@@ -531,28 +531,36 @@ function auditGuidance(
   return Object.fromEntries(findings.map(({ kind }) => [kind, sentences[kind]]));
 }
 
-/** Attach a ref only when the frame identifies exactly one captured element. */
+/**
+ * Attach a ref only when the frame identifies exactly one captured element. A native `hitRegion`
+ * finding on the frame of a heuristic `small-target` finding is dropped: the heuristic one names
+ * the same defect with a ref and the measured size.
+ */
 export function matchNativeAuditFindings(
   findings: readonly NativeAuditFinding[],
   nodes: readonly SnapshotNode[],
+  heuristicFindings: readonly AuditFinding[] = [],
 ): NativeAuditFinding[] {
+  const smallTargetRects = heuristicFindings.flatMap((finding) =>
+    finding.kind === 'small-target' && finding.rect ? [finding.rect] : [],
+  );
+  const unreported = findings.filter(
+    ({ auditType, rect }) =>
+      auditType !== 'hitRegion' ||
+      rect === undefined ||
+      !smallTargetRects.some((reported) => isSameFrame(reported, rect)),
+  );
   const facts: AuditFacts = {
     platform: 'ios',
     producer: undefined,
     byIndex: new Map(nodes.map((node) => [node.index, node])),
     children: buildChildrenByParent(nodes),
   };
-  return findings.map((finding) => {
+  return unreported.map((finding) => {
     const rect = finding.rect;
     if (!rect) return finding;
     const matches = nodes.filter(
-      (node) =>
-        node.ref !== undefined &&
-        node.rect &&
-        Math.abs(node.rect.x - rect.x) <= SIZE_TOLERANCE &&
-        Math.abs(node.rect.y - rect.y) <= SIZE_TOLERANCE &&
-        Math.abs(node.rect.width - rect.width) <= SIZE_TOLERANCE &&
-        Math.abs(node.rect.height - rect.height) <= SIZE_TOLERANCE,
+      (node) => node.ref !== undefined && node.rect && isSameFrame(node.rect, rect),
     );
     const node = matches.length === 1 ? matches[0] : undefined;
     if (!node) return finding;
@@ -560,4 +568,13 @@ export function matchNativeAuditFindings(
     const label = accessibleName(node, role, facts);
     return { ...finding, ref: `@${node.ref}`, role, ...(label ? { label } : {}) };
   });
+}
+
+function isSameFrame(a: Rect, b: Rect): boolean {
+  return (
+    Math.abs(a.x - b.x) <= SIZE_TOLERANCE &&
+    Math.abs(a.y - b.y) <= SIZE_TOLERANCE &&
+    Math.abs(a.width - b.width) <= SIZE_TOLERANCE &&
+    Math.abs(a.height - b.height) <= SIZE_TOLERANCE
+  );
 }

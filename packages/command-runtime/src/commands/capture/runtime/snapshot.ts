@@ -215,7 +215,7 @@ export const auditSnapshotCommand: RuntimeCommand<
     ...audit,
     findings: [
       ...audit.findings,
-      ...matchNativeAuditFindings(nativeFindings, capture.snapshot.nodes),
+      ...matchNativeAuditFindings(nativeFindings, capture.snapshot.nodes, audit.findings),
     ],
     ...(capture.warnings.length > 0 ? { warnings: capture.warnings } : {}),
   };
