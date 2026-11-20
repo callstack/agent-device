@@ -49,9 +49,16 @@ test('the web-close teardown budget stays pinned to one agent-browser CLI call t
 });
 
 test('the grace a client gives a closing daemon covers the largest teardown the daemon bounds', () => {
-  // The bounded steps around session teardown in `daemon-runtime.ts`: request drain 5 s, lease
-  // release 1 s, provider release 2 s, platform owners 5 s, plugins 5 s, PNG worker 1 s.
-  const fixedStepsMs = 19_000;
+  // Every budget the shutdown path awaits besides the session teardown itself. They are private to
+  // `daemon-runtime.ts`, `server-shutdown.ts` and the app-log process, so they are listed by name.
+  const fixedStepsMs =
+    5_000 + // request drain
+    4_000 + // app-log stop (SIGTERM 2 s, SIGKILL 2 s), outside the session budget
+    1_000 + // lease release
+    2_000 + // provider release drain
+    5_000 + // platform owner shutdown
+    5_000 + // plugin close
+    1_000; // PNG worker release
   const largestSessionMs =
     DAEMON_SESSION_TEARDOWN_TIMEOUT_MS +
     SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS +

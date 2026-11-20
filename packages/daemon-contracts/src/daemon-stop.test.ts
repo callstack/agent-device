@@ -58,7 +58,7 @@ test('retained identity verification is reported as failure without known cleanu
     paths,
     observed,
     mode: 'graceful',
-    termTimeoutMs: undefined,
+    termTimeoutMs: 75_000,
     killTimeoutMs: 2_000,
   });
 });

@@ -36,6 +36,8 @@ import {
 // a daemon this call quiesced can still be leaving. A judgement that went stale is made again after
 // a short wait, for as long as a drain can take.
 const JUDGE_AGAIN_DELAY_MS = 250;
+// The budget is counted in waits, not on a clock: each attempt that judges again waits once, so the
+// waits alone add up to the teardown grace.
 const ENSURE_ATTEMPTS = Math.ceil(DAEMON_TEARDOWN_GRACE_MS / JUDGE_AGAIN_DELAY_MS);
 const DRAIN_POLL_MS = 250;
 const UNRESPONSIVE_PROBES = 3;

@@ -59,11 +59,12 @@ export async function stopDaemon(params: {
   const observed = params.observed;
   if (!observed) return daemonNotRunningStopResult();
   const { stopAndRetireDaemon } = await import('./daemon-registration-owner.ts');
+  const { DAEMON_TEARDOWN_GRACE_MS } = await import('./daemon-process.ts');
   const retirement = await stopAndRetireDaemon({
     paths: params.paths,
     observed,
     mode: 'graceful',
-    termTimeoutMs: params.graceTimeoutMs,
+    termTimeoutMs: params.graceTimeoutMs ?? DAEMON_TEARDOWN_GRACE_MS,
     killTimeoutMs: params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
   });
   if (retirement.status === 'retained' && retirement.termination?.status === 'not-running')
