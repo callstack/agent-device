@@ -291,14 +291,16 @@ export function renderBlock(facts: CommandFacts): string {
     lines.push(`Aliases: ${facts.aliases.map((alias) => `\`${alias}\``).join(', ')}.`, '');
   }
   if (facts.actions.length > 0) {
+    // With an every-action table below, an empty action still reads those options.
+    const noOptions = facts.actions.some((action) => action.everyAction)
+      ? 'No options of its own.'
+      : 'Reads no options.';
     for (const action of facts.actions) {
       lines.push(
         action.everyAction ? `**Every \`${action.label}\` action**` : `**\`${action.label}\`**`,
         '',
       );
-      lines.push(
-        ...(action.options.length > 0 ? optionTable(action.options) : ['Reads no options.', '']),
-      );
+      lines.push(...(action.options.length > 0 ? optionTable(action.options) : [noOptions, '']));
     }
   } else if (facts.flags.length > 0) {
     lines.push(...optionTable(facts.flags));

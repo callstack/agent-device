@@ -274,7 +274,7 @@ describe('an option no action names gets one table of its own', () => {
 
   test('the every-action table is labelled as such and printed once', () => {
     const block = renderBlock(facts);
-    assert.match(block, /^\*\*`diff snapshot`\*\*\n\nReads no options\.$/m);
+    assert.match(block, /^\*\*`diff snapshot`\*\*\n\nNo options of its own\.$/m);
     assert.match(block, /^\*\*Every `diff` action\*\*$/m);
     assert.equal(block.match(/^\| `--baseline, -b <path>` \|/gm)?.length, 1);
   });
