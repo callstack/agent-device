@@ -11,7 +11,7 @@ import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import { vi } from 'vitest';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
-import type { WebProvider } from '../provider.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 
 export function mkdtempForTestSync(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

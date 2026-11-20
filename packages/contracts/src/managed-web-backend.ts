@@ -1,3 +1,6 @@
+/** Deadline that web session teardown must leave for the managed browser. */
+export const AGENT_BROWSER_TIMEOUT_MS = 30_000;
+
 export type ManagedWebBackendStatus = Readonly<{
   version: string;
   stateDir: string;

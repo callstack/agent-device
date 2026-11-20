@@ -6,7 +6,8 @@ import {
   WEB_DESKTOP_DEVICE,
   withNodeRuntime,
 } from '@agent-device/test-kit';
-import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { webSelectionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createProviderScenarioHarness } from './harness.ts';
 
@@ -218,10 +219,8 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
   const stateDir = mkdtempForTestSync('web-ref-route-');
   installFakeManagedAgentBrowser(stateDir);
   await withNodeRuntime({ version: '24.0.0' }, async () => {
-    const provider = await createAgentBrowserWebProvider({
-      stateDir,
-      host: { env: process.env, cwd: process.cwd() },
-    });
+    const web = webSelectionFixture({ env: process.env, cwd: process.cwd() }, stateDir);
+    const provider = await web.get().operations.createProvider('default');
     await withCommandExecutorOverride(
       async (_command, args, options) => {
         const [command, ref] = args.slice(1);

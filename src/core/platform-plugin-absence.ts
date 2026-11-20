@@ -1,6 +1,6 @@
 import type { Platform } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
-import { missingOptionalPlatformError } from '@agent-device/contracts/platform-module';
+import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
 import { readVersion } from '@agent-device/host-kit/version';
 
 /**

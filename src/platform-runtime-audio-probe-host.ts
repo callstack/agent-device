@@ -1,3 +1,4 @@
+import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
@@ -23,6 +24,7 @@ import {
 export function createAudioProbeRuntimeHost(options: {
   ownedProcesses?: OwnedProcessRecordWriter;
   host: HostEnvironment;
+  web?: WebPlatformSelection;
 }): AudioProbeRuntimeHost {
   const host = options.host;
   const ownedProcesses: OwnedProcessRecordWriter =
@@ -63,8 +65,7 @@ export function createAudioProbeRuntimeHost(options: {
     web: Object.freeze({
       resolve: async (device: DeviceInfo): Promise<WebAudioProbeTransport | undefined> => {
         if (device.platform !== 'web') return undefined;
-        const { resolveRequestScopedWebProvider } = await import('@agent-device/platform-web');
-        const provider = await resolveRequestScopedWebProvider();
+        const provider = await options.web?.get().operations.resolveRequestProvider();
         const probeAudio = provider?.probeAudio?.bind(provider);
         if (!probeAudio) return undefined;
         return Object.freeze({

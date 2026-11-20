@@ -11,6 +11,7 @@ import {
 } from '@agent-device/contracts/daemon-http';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { limrunTestDependencies } from './platform-runtime-gateway.fixtures.ts';
+import type { ProviderRuntimeComposition } from './provider-device-runtimes.ts';
 
 const limrunIo = vi.hoisted(() => ({
   listAssets: vi.fn(),
@@ -23,12 +24,15 @@ const rootPorts = vi.hoisted(() => {
     finalizeDaemonShutdown: vi.fn(async () => []),
   };
   return {
-    providerComposition: vi.fn(async () => ({
-      runtimes: [] as unknown[],
-      platformModules: [] as unknown[],
-      inventory: [] as unknown[],
-      shutdown: async () => [],
-    })),
+    providerComposition:
+      vi.fn<
+        () => Promise<
+          Pick<
+            ProviderRuntimeComposition,
+            'runtimes' | 'platformModules' | 'platforms' | 'inventory' | 'shutdown'
+          >
+        >
+      >(),
     createPlatformRuntimeGateway: vi.fn(() => ({
       applicationLifecycle,
       inspectFacts: async () => {
@@ -84,6 +88,7 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
   rootPorts.providerComposition.mockResolvedValue({
     runtimes: [limrun],
     platformModules: [],
+    platforms: [],
     inventory: [],
     shutdown: async () => {
       await limrun.shutdown();

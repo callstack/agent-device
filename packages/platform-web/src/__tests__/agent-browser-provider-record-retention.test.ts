@@ -19,7 +19,7 @@ import {
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
 import { MANAGED_WEB_BROWSER_PROCESS_PURPOSE } from '../agent-browser-process-record.ts';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
-import type { WebProvider } from '../provider.ts';
+import type { WebProvider } from '@agent-device/contracts/web-provider';
 import { agentBrowserJsonResult, mkdtempForTestSync } from './test-utils.ts';
 
 bindTestCommandHost();

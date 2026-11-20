@@ -15,6 +15,9 @@ export type {
 } from '@agent-device/plugins/host';
 export type {
   Contribution,
+  PlatformContribution,
+  PlatformHost,
+  PlatformSetup,
   PluginConnection,
   PluginConnectionContext,
   PluginConnectionResolution,

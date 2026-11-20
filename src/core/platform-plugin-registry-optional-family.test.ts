@@ -7,19 +7,17 @@ import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { PlatformPluginAbsence } from './platform-plugin-registry.ts';
 
 // Simulates a composition whose builtin plugins do not include the extracted `vega` family: the
-// module-level composition inside request-providers must then register only the five remaining
+// module-level composition inside request-providers must then register only the remaining
 // builtins, leaving `vega` absent from the platform-plugin registry.
-vi.mock('./interactors/register-builtins.ts', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./interactors/register-builtins.ts')>();
+vi.mock('./interactors/builtin-platform-plugin-set.ts', async () => {
+  const { BUILTIN_PLATFORM_PLUGINS } = await import('./interactors/register-builtins.ts');
   const { registerPlatformPluginSet } = await import('./platform-plugin-registry.ts');
+  const { missingPlatformPlugin } = await import('./platform-plugin-absence.ts');
   return {
-    ...original,
-    registerBuiltinPlatformPlugins: (reportAbsent: PlatformPluginAbsence) => {
-      registerPlatformPluginSet(
-        original.BUILTIN_PLATFORM_PLUGINS.filter((plugin) => plugin.id !== 'vega'),
-        reportAbsent,
-      );
-    },
+    builtinPlatformPlugins: registerPlatformPluginSet(
+      BUILTIN_PLATFORM_PLUGINS.filter((plugin) => plugin.id !== 'vega'),
+      missingPlatformPlugin,
+    ),
   };
 });
 
@@ -76,9 +74,9 @@ test('the request-provider scope for an absent optional family gates nothing, le
   // The interactor lookup answers presence through the same outcome the module registry raises
   // (#4781 review): the reporter is the one the composed set was given, so a caller of `getPlugin`
   // needs no guard of its own.
-  const { getPlugin } = await import('./platform-plugin-registry.ts');
+  const { builtinPlatformPlugins } = await import('./interactors/builtin-platform-plugin-set.ts');
   assert.throws(
-    () => getPlugin('vega'),
+    () => builtinPlatformPlugins.get('vega'),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_PLATFORM' &&
@@ -101,13 +99,11 @@ test('a duplicate plugin set is rejected before it replaces the composed set or 
       reason: 'plugin-not-installed',
       family,
     });
-  registry.registerPlatformPluginSet(
-    [pluginOwning('apple', ['apple']), pluginOwning('android', ['android'])],
-    composedAbsence,
-  );
-  assert.equal(registry.getPlugin('apple').id, 'apple');
+  const builtins = [pluginOwning('apple', ['apple']), pluginOwning('android', ['android'])];
+  const set = registry.registerPlatformPluginSet(builtins, composedAbsence);
+  assert.equal(set.get('apple').plugin.id, 'apple');
   assert.throws(
-    () => registry.getPlugin('web'),
+    () => set.get('web'),
     (error: unknown) => error instanceof AppError && error.message === 'Composed absence: web',
   );
 
@@ -118,16 +114,16 @@ test('a duplicate plugin set is rejected before it replaces the composed set or 
   assert.throws(
     () =>
       registry.registerPlatformPluginSet(
-        [pluginOwning('web-and-apple', ['web', 'apple'])],
+        [...builtins, pluginOwning('web-and-apple', ['web', 'apple'])],
         rejectedAbsence,
       ),
-    /already registered for platform "apple"/,
+    /Duplicate platform family registration: apple/,
   );
 
   // Neither the duplicate's platform nor its absence policy reached the registry.
-  assert.equal(registry.tryGetPlugin('web'), undefined);
+  assert.equal(set.tryGet('web'), undefined);
   assert.throws(
-    () => registry.getPlugin('web'),
+    () => set.get('web'),
     (error: unknown) => error instanceof AppError && error.message === 'Composed absence: web',
   );
 });

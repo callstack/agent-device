@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createWebInteractor } from './interactor.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { withWebProvider } from './index.ts';
+import { withWebProvider } from './provider.ts';
 import { makeWebProvider } from './__tests__/test-utils.ts';
 
 test('web interactor delegates first-slice operations to the scoped provider', async () => {

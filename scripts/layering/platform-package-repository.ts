@@ -34,6 +34,8 @@ export function readTrackedPlatformPackageDeclarations(
       name?: string;
       private?: boolean;
       exports?: Record<string, unknown>;
+      publishConfig?: { exports?: Record<string, unknown> };
+      'agent-device'?: { platform?: unknown; apiVersion?: unknown };
     };
     const family = path.posix.basename(dir).slice('platform-'.length);
     return {
@@ -41,6 +43,8 @@ export function readTrackedPlatformPackageDeclarations(
       family,
       name: manifest.name ?? '',
       private: manifest.private === true,
+      managedClaim: manifest['agent-device'],
+      publishedSubpaths: Object.keys(manifest.publishConfig?.exports ?? {}),
       exportedSubpaths: Object.keys(manifest.exports ?? {}).map((subpath) =>
         path.posix.join(manifest.name ?? '', subpath),
       ),

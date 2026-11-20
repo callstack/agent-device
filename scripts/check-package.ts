@@ -36,6 +36,7 @@ import {
   parseNpmPackOutput,
   type NpmPackEntry,
 } from './size-report-package.mjs';
+import { packedCoreAbsenceFailures } from './lib/packed-core-absence.ts';
 import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
@@ -43,6 +44,17 @@ type PackedManifest = PackedDependencies & {
   exports: Record<string, unknown>;
   bin: Record<string, string>;
 };
+
+const EXCLUDED_IMPLEMENTATIONS = [
+  {
+    owner: 'web platform',
+    paths: [/(?:^|\/)platform-web\//, /^dist\/src\/agent-browser-.*\.js$/],
+    markers: [
+      'Managed web backend install produced no runnable entry.',
+      'web_agent_browser_process_reap_failed',
+    ],
+  },
+] as const;
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const packDestinationFlag = '--pack-destination';
@@ -248,6 +260,10 @@ try {
     context: `The build packed from ${repoRoot}`,
   });
   const packedPaths = packedEntries.map((file) => file.path);
+  const excluded = packedCoreAbsenceFailures(EXCLUDED_IMPLEMENTATIONS, packedPaths, (packedPath) =>
+    fs.readFileSync(path.join(repoRoot, packedPath), 'utf8'),
+  );
+  if (excluded.length > 0) throw new Error(excluded.join('\n'));
   lintTarball(tarball);
   const installedRoot = installIntoCleanConsumer(tarball);
   // A user's machine is the tree that has to carry the attribution, so the content policy runs again

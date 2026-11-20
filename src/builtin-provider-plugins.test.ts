@@ -1,8 +1,9 @@
+import { createPlatformPluginHost } from './platform-runtime/plugin-host.ts';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { readVersion } from '@agent-device/host-kit/version';
-import { createEmbeddedProviderRuntimeComposition } from './provider-device-runtimes.ts';
+import { createEmbeddedProviderRuntimeComposition as composeEmbeddedProviders } from './provider-device-runtimes.ts';
 import { builtinLimrunConnection } from './builtin-provider-plugins.ts';
 
 // The built-in candidate is composed by the daemon's own registry, so the case runs the real plugin
@@ -48,6 +49,13 @@ afterEach(() => {
   limrunSdk.iosList.mockClear();
   runtimeDependencies.create.mockClear();
 });
+
+function createEmbeddedProviderRuntimeComposition(
+  host: Parameters<typeof composeEmbeddedProviders>[0],
+  candidates: Parameters<typeof composeEmbeddedProviders>[1],
+) {
+  return composeEmbeddedProviders(host, candidates, createPlatformPluginHost(host, host.cwd));
+}
 
 test('an unconfigured built-in Limrun claims its id without an inventory entry or a runtime', async () => {
   const composition = await createEmbeddedProviderRuntimeComposition(

@@ -1,9 +1,16 @@
+import { createPlatformPluginHost } from '../platform-runtime/plugin-host.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createDaemonProviderRuntimeComposition } from '../provider-device-runtimes.ts';
+import { createDaemonProviderRuntimeComposition as composeDaemonProviders } from '../provider-device-runtimes.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
+
+function createDaemonProviderRuntimeComposition(
+  host: Parameters<typeof composeDaemonProviders>[0],
+) {
+  return composeDaemonProviders(host, createPlatformPluginHost(host, host.cwd));
+}
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
   const { home, env } = pluginHome();
