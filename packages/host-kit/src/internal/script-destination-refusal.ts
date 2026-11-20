@@ -66,6 +66,8 @@ export function scriptAncestryFailure(
   destination: string,
   ancestor: string,
   exposure: ScriptAncestryExposure,
+  /** Whether the judgment found `ancestor` owned by the caller, who can then change its mode. */
+  callerOwnsAncestor = false,
 ): AppError {
   // A path that names no file is the caller's input to correct; every other refusal is about the ground.
   return new AppError(
@@ -77,18 +79,25 @@ export function scriptAncestryFailure(
       exposure,
       path: destination,
       ancestor,
-      hint: ancestryHint(exposure, ancestor),
+      hint: ancestryHint(exposure, ancestor, callerOwnsAncestor),
     },
   );
 }
 
-/** What to do about it. A group-writable directory is the one refusal a mode change fixes in place. */
-function ancestryHint(exposure: ScriptAncestryExposure, ancestor: string): string {
+/** What to do about it. A group-writable directory the caller owns is the one refusal they can fix in place. */
+function ancestryHint(
+  exposure: ScriptAncestryExposure,
+  ancestor: string,
+  callerOwnsAncestor: boolean,
+): string {
   if (exposure === 'parent_replaced') {
     return 'Re-record with open --save-script, or save under a directory nobody else can write.';
   }
   if (exposure === 'unnamed_entry') {
     return 'End the script path in a valid file name, such as `--save-script=./workflows/journey.ad`.';
+  }
+  if (exposure === 'shared_group_writable' && !callerOwnsAncestor) {
+    return 'Root owns that directory, so you cannot close it to its group. Save the script under a directory you own.';
   }
   if (exposure === 'shared_group_writable') {
     return `Close the directory to its group with \`chmod g-w ${ancestor}\`, or save the script under a directory only you can write.`;

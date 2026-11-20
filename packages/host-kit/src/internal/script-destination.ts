@@ -328,8 +328,8 @@ function walkSpelledParent(
   trust: ScriptDestinationTrust,
   create: boolean,
 ): WalkGround {
-  const refuse = (ancestor: string, exposure: ScriptAncestryExposure): never => {
-    throw scriptAncestryFailure(destination, ancestor, exposure);
+  const refuse: RefuseAncestor = (ancestor, exposure, callerOwnsAncestor) => {
+    throw scriptAncestryFailure(destination, ancestor, exposure, callerOwnsAncestor);
   };
   let state = standOn('/', pathComponents(parent), trust, 0, refuse);
   let created = false;
@@ -367,6 +367,13 @@ function walkSpelledParent(
   }
 }
 
+/** Refuses the walk at `ancestor`; a directory judgment also says whether the caller owns it. */
+type RefuseAncestor = (
+  ancestor: string,
+  exposure: ScriptAncestryExposure,
+  callerOwnsAncestor?: boolean,
+) => never;
+
 /** Where one named entry leaves the walk: standing on a judged directory, or short of the chain. */
 type EntryStep =
   | Readonly<{ ended: 'stand'; state: WalkState }>
@@ -381,7 +388,7 @@ function stepIntoEntry(
   component: string,
   rest: readonly string[],
   trust: ScriptDestinationTrust,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): EntryStep {
   const entry = path.join(state.deepest, component);
   const stats = lstatEntry(entry);
@@ -397,7 +404,7 @@ function stepIntoEntry(
   if (!stats.isDirectory()) refuse(entry, 'not_a_directory');
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) refuse(entry, exposure);
+  if (exposure) refuse(entry, exposure, authority.uid === trust.uid);
   return {
     ended: 'stand',
     state: {
@@ -417,7 +424,7 @@ function hopThroughLink(
   stats: fs.BigIntStats,
   rest: readonly string[],
   trust: ScriptDestinationTrust,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): EntryStep {
   const exposure = untrustedLinkExposure({ uid: Number(stats.uid) }, state.authority, trust);
   if (exposure) refuse(link, exposure);
@@ -442,13 +449,13 @@ function standOn(
   queue: readonly string[],
   trust: ScriptDestinationTrust,
   hops: number,
-  refuse: (ancestor: string, exposure: ScriptAncestryExposure) => never,
+  refuse: RefuseAncestor,
 ): WalkState {
   const stats = lstatEntry(directory);
   if (stats === undefined || !stats.isDirectory()) refuse(directory, 'not_a_directory');
   const authority = directoryAuthority(stats);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) refuse(directory, exposure);
+  if (exposure) refuse(directory, exposure, authority.uid === trust.uid);
   return { deepest: directory, authority, identity: identityOf(stats), queue, hops };
 }
 
@@ -524,7 +531,9 @@ function createMissingLevel(
   }
   const authority = directoryAuthority(seen);
   const exposure = untrustedAncestryExposure(authority, trust);
-  if (exposure) throw scriptAncestryFailure(destination, level, exposure);
+  if (exposure) {
+    throw scriptAncestryFailure(destination, level, exposure, authority.uid === trust.uid);
+  }
   if (created) {
     // `mkdir` ANDs its mode with the umask, and a umask can take an OWNER bit away: umask 200 would leave
     // this level 0500, where this call could not create the name below it. One `chmod` makes the level the

@@ -669,26 +669,31 @@ skipOnWindows(
   },
 );
 
-skipOnWindows('refuses a group-writable 0775 directory root owns, with a hint', () => {
-  // No non-root owner answers for root's group, and the mode bits cannot say who belongs to it. Reading /etc/group
-  // would not settle it either: systemd userdb answers members those files never show.
-  const home = directoryWith(path.join(root(), 'home'), 0o775);
-  serveOwnership({ [home]: 0 });
-  let hint = '';
-  try {
-    publish(path.join(home, 'journey.ad'));
-  } catch (error) {
-    hint = String((error as AppError).details?.hint);
-  }
+skipOnWindowsAndAsRoot(
+  'refuses a group-writable 0775 directory root owns, with a hint this user can follow',
+  () => {
+    // No non-root owner answers for root's group, and the mode bits cannot say who belongs to it. Reading /etc/group
+    // would not settle it either: systemd userdb answers members those files never show.
+    const home = directoryWith(path.join(root(), 'home'), 0o775);
+    serveOwnership({ [home]: 0 });
+    let hint = '';
+    try {
+      publish(path.join(home, 'journey.ad'));
+    } catch (error) {
+      hint = String((error as AppError).details?.hint);
+    }
 
-  expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
-  expect(hint).toContain(`chmod g-w ${home}`);
-  expect(fs.readdirSync(home)).toEqual([]);
-});
+    expectUntrusted(() => publish(path.join(home, 'journey.ad')), 'shared_group_writable', home);
+    // This user cannot change the mode of root's directory, so the hint names the recovery that works.
+    expect(hint).toContain('Save the script under a directory you own');
+    expect(hint).not.toContain('chmod');
+    expect(fs.readdirSync(home)).toEqual([]);
+  },
+);
 
 skipOnWindows('accepts the same directory once its group write bit is removed', () => {
-  // The recovery the hint names, applied: `chmod g-w` leaves 0755, which shuts every other local user out of
-  // creating the destination's name, whatever the group holds.
+  // What root's `chmod g-w` leaves: 0755, which shuts every other local user out of creating the destination's
+  // name, whatever the group holds.
   const home = directoryWith(path.join(root(), 'home'), 0o775);
   serveOwnership({ [home]: 0 });
   fs.chmodSync(home, 0o755);
