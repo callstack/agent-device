@@ -4,6 +4,7 @@ import {
   type ApplicationLifecycleOperationFacts,
 } from './application-lifecycle-runtime.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import { withHoverRefusalHint } from './touch-runtime.ts';
 import type {
   DeviceBinding,
   RuntimeFacts,
@@ -216,8 +217,8 @@ export function createUnavailablePlatformRuntimeFacts(
       tapPoint: frozen.touch,
       tapRef: frozen.touch,
       longPressPoint: frozen.touch,
-      hoverPoint: frozen.touch,
-      hoverRef: frozen.touch,
+      hoverPoint: withHoverRefusalHint(frozen.touch),
+      hoverRef: withHoverRefusalHint(frozen.touch),
       fillPoint: frozen.touch,
       fillRef: frozen.touch,
       tapElementSelector: frozen.touch,
