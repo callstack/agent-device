@@ -40,6 +40,7 @@ import {
   duplicateClaimError,
   identityOfClaim,
   invalidPlugin,
+  readableClaimsOfValue,
   reservedClaimError,
   validateAgentDevicePlugin,
   validateClaimSetup,
@@ -261,8 +262,10 @@ function reserveClaim(claimed: ClaimedClaims, claim: PluggedClaim): boolean {
  * for the same spaces the same way.
  */
 async function loadSlot(slot: Slot, claimed: ClaimedClaims): Promise<void> {
+  let raw: unknown;
   try {
-    const plugin = validateAgentDevicePlugin(await slot.candidate.load());
+    raw = await slot.candidate.load();
+    const plugin = validateAgentDevicePlugin(raw);
     assertDeclaredClaims(slot.candidate, plugin);
     slot.plugin = plugin;
     for (const contribution of plugin.contributes) {
@@ -287,6 +290,22 @@ async function loadSlot(slot: Slot, claimed: ClaimedClaims): Promise<void> {
     for (const claim of slot.claims) {
       if (claim.contribution === undefined) claim.failure = slot.failure;
     }
+    nameFailedClaims(slot, claimed, raw);
+  }
+}
+
+/**
+ * Names the claims of a slot that failed before its contributions were readable, from the value it
+ * returned, and holds them: what the inventory reports and what a selection resolves must still say
+ * what this plugin was meant to provide. A slot whose metadata already declared its claims was named
+ * before the load and is left alone. Each claim carries the slot's own reason, which is the one the
+ * author can act on.
+ */
+function nameFailedClaims(slot: Slot, claimed: ClaimedClaims, raw: unknown): void {
+  if (slot.candidate.declaredClaims !== undefined || slot.claims.length > 0) return;
+  for (const claim of readableClaimsOfValue(raw)) {
+    reserveClaim(claimed, claim);
+    slot.claims.push({ ...claim, slot, failure: slot.failure });
   }
 }
 
@@ -504,7 +523,15 @@ function requireReplayClaim(
     assertStoreSelectionCurrent(slot, assertSelectionCurrent);
     return held;
   }
-  const failedSlot = failedClaimOwner(resolved, packageName);
+  // A store package that failed before it could name any claim still answers for the name its
+  // selection chose, so a chosen plugin never reports that it is absent.
+  const failedSlot = resolved.slots.find(
+    (slot) =>
+      packageName !== undefined &&
+      slot.candidate.package === packageName &&
+      slot.claims.length === 0 &&
+      slot.failure !== undefined,
+  );
   if (failedSlot) {
     assertStoreSelectionCurrent(failedSlot, assertSelectionCurrent);
     return { ...claim, slot: failedSlot, failure: failedSlot.failure };
@@ -514,25 +541,6 @@ function requireReplayClaim(
     reason: 'plugin-not-installed',
     backend: claim.id,
   });
-}
-
-/**
- * The slot that answers for a claim nothing holds: one that failed before it could name a claim. A
- * store package answers only for the name the caller selected. A candidate with no name, such as a
- * plugin an embedding host supplied, cannot be excluded by name, so the first such failure states why
- * this runtime has no claim. A slot that did name claims never answers here: those claims already
- * settled what it provides, and a claim nobody holds is absence.
- */
-function failedClaimOwner(
-  resolved: ResolvedProviderPlugins,
-  packageName: string | undefined,
-): Slot | undefined {
-  const failed = resolved.slots.find(
-    (slot) => slot.failure !== undefined && slot.claims.length === 0,
-  );
-  if (failed === undefined) return undefined;
-  if (packageName !== undefined && failed.candidate.package === packageName) return failed;
-  return failed.candidate.package === undefined ? failed : undefined;
 }
 
 function replayClaimError(claim: Claim): AppError {

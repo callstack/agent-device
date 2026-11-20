@@ -31,6 +31,7 @@ export type ClaimIdentity = Readonly<{ provider: string } | { backend: string }>
 const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
   provider: {
     metadataField: 'provider',
+    contributionIdField: 'provider',
     reservedIds: ROUTING_PROVIDER_IDENTITIES,
     duplicateReason: 'duplicate_provider',
     identityFor: (id) => ({ provider: id }),
@@ -40,6 +41,7 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
   },
   'replay-backend': {
     metadataField: 'replayBackend',
+    contributionIdField: 'backend',
     reservedIds: [NATIVE_REPLAY_BACKEND],
     duplicateReason: 'duplicate_replay_backend',
     identityFor: (id) => ({ backend: id }),
@@ -59,6 +61,7 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
   },
   'replay-execution': {
     metadataField: 'replayExecution',
+    contributionIdField: 'id',
     reservedIds: [],
     duplicateReason: 'duplicate_replay_execution',
     identityFor: (id) => ({ backend: id }),
@@ -92,6 +95,8 @@ const CLAIM_KINDS: Readonly<Record<ClaimKind, ClaimKindSpec>> = {
 type ClaimKindSpec = Readonly<{
   /** The `agent-device` package.json field that spells this kind's id. */
   metadataField: string;
+  /** The contribution field that spells this kind's id. */
+  contributionIdField: string;
   /** Ids no plugin may claim in this space. */
   reservedIds: readonly string[];
   /** What a claim that loses this space's duplicate race reports. */
@@ -167,6 +172,38 @@ export function reservedClaimError(claim: PluggedClaim): AppError | undefined {
 function assertClaimAvailable(claim: PluggedClaim): void {
   const reserved = reservedClaimError(claim);
   if (reserved !== undefined) throw reserved;
+}
+
+/**
+ * The claims a returned value already names, read through the same table without validating it. Only
+ * a slot that failed before its claims were readable uses this, so the inventory and the plugin that
+ * selected it can still say what it was meant to provide.
+ */
+export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
+  if (!isRecord(value)) return [];
+  const claims: PluggedClaim[] = [];
+  for (const kind of CLAIM_KIND_ORDER) {
+    const spec = CLAIM_KINDS[kind];
+    const declared = claimIdSpelledBy(kind, value[spec.metadataField]);
+    if (declared !== undefined) {
+      claims.push({ kind, id: declared });
+      continue;
+    }
+    if (!Array.isArray(value.contributes)) continue;
+    for (const contribution of value.contributes) {
+      if (!isRecord(contribution) || contribution.kind !== kind) continue;
+      const named = claimIdSpelledBy(kind, contribution[spec.contributionIdField]);
+      if (named !== undefined) claims.push({ kind, id: named });
+    }
+  }
+  return claims;
+}
+
+/** The id this value spells for a kind, or nothing when it does not spell one. */
+function claimIdSpelledBy(kind: ClaimKind, value: unknown): string | undefined {
+  // The native claim's id belongs to the kind, so its metadata spells it as `true`.
+  if (kind === 'replay-execution' && value === true) return NATIVE_REPLAY_BACKEND;
+  return isClaimId(value) ? value : undefined;
 }
 
 /** What the registry records when a later candidate loses this claim to the first one. */
