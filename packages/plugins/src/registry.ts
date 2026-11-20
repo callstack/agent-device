@@ -487,8 +487,9 @@ function assertStoreSelectionCurrent(
 
 /**
  * The claim a replay resolution answers, in candidate order, so the first candidate that named it
- * owns what a resolution surfaces. A selected package that failed before it could claim its space
- * still answers for its own name.
+ * owns what a resolution surfaces. A candidate that failed before its claims were readable still
+ * answers for the selection that named it, so a chosen plugin keeps its own reason instead of
+ * reporting absence.
  */
 function requireReplayClaim(
   resolved: ResolvedProviderPlugins,
@@ -503,13 +504,7 @@ function requireReplayClaim(
     assertStoreSelectionCurrent(slot, assertSelectionCurrent);
     return held;
   }
-  const failedSlot = resolved.slots.find(
-    (slot) =>
-      packageName !== undefined &&
-      slot.candidate.package === packageName &&
-      slot.claims.length === 0 &&
-      slot.failure !== undefined,
-  );
+  const failedSlot = failedClaimOwner(resolved, packageName);
   if (failedSlot) {
     assertStoreSelectionCurrent(failedSlot, assertSelectionCurrent);
     return { ...claim, slot: failedSlot, failure: failedSlot.failure };
@@ -519,6 +514,25 @@ function requireReplayClaim(
     reason: 'plugin-not-installed',
     backend: claim.id,
   });
+}
+
+/**
+ * The slot that answers for a claim nothing holds: one that failed before it could name a claim. A
+ * store package answers only for the name the caller selected. A candidate with no name, such as a
+ * plugin an embedding host supplied, cannot be excluded by name, so the first such failure states why
+ * this runtime has no claim. A slot that did name claims never answers here: those claims already
+ * settled what it provides, and a claim nobody holds is absence.
+ */
+function failedClaimOwner(
+  resolved: ResolvedProviderPlugins,
+  packageName: string | undefined,
+): Slot | undefined {
+  const failed = resolved.slots.find(
+    (slot) => slot.failure !== undefined && slot.claims.length === 0,
+  );
+  if (failed === undefined) return undefined;
+  if (packageName !== undefined && failed.candidate.package === packageName) return failed;
+  return failed.candidate.package === undefined ? failed : undefined;
 }
 
 function replayClaimError(claim: Claim): AppError {

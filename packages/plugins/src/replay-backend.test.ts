@@ -126,6 +126,24 @@ test('backend identity is separate from provider identity and first failure clai
   await registry.close();
 });
 
+test('an embedder candidate on another contract version answers native execution with its reason', async () => {
+  // An embedding host's plugin carries no package metadata, so nothing names its claim before the
+  // factory runs. Its validation failure still answers the selection that named this runtime's
+  // native execution, rather than reporting that nothing is installed.
+  const registry = await startProviderRegistry(
+    await resolveProviderPlugins([candidate({ ...nativeExecution().plugin, apiVersion: 99 })]),
+    { env: {}, cwd: '/' },
+    policy,
+  );
+  expect(registry.inventory).toMatchObject([
+    { source: 'embedder', state: 'failed', error: { reason: 'incompatible-plugin-api' } },
+  ]);
+  await expect(registry.resolveReplayExecution('@agent-device/replay')).rejects.toMatchObject({
+    details: { reason: 'incompatible-plugin-api', declaredApiVersion: 99 },
+  });
+  await registry.close();
+});
+
 test('a format claim of the reserved ad id fails while native execution claims it', async () => {
   const reserved = engine('ad');
   const native = nativeExecution();
