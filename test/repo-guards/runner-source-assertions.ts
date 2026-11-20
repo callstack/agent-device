@@ -38,33 +38,6 @@ export function runnerProductionSources(): Array<{ file: string; source: string 
     }));
 }
 
-/**
- * The string values one Swift enum declares as `static let NAME = "CODE"`, read from the source
- * text between the enum's opening line and its closing brace.
- */
-export function swiftEnumWireCodes(source: string, enumName: string): string[] {
-  return swiftEnumWireConstants(source, enumName).map(({ code }) => code);
-}
-
-/** The `name`/`code` pairs one Swift enum declares as `static let NAME = "CODE"`. */
-export function swiftEnumWireConstants(
-  source: string,
-  enumName: string,
-): Array<{ name: string; code: string }> {
-  const declaration = new RegExp(`enum ${enumName}[^{]*\\{([\\s\\S]*?)\\n[ \\t]*\\}`).exec(source);
-  assert.ok(declaration !== null, `the runner Swift must declare enum ${enumName} with a body`);
-  return [...declaration[1]!.matchAll(/static let (\w+) = "([A-Z0-9_]+)"/g)].map(
-    ([, name, code]) => ({ name: name!, code: code! }),
-  );
-}
-
-/** The source text of one Swift enum, body markers included, for exclusion from scans. */
-export function swiftEnumBody(source: string, enumName: string): string {
-  const declaration = new RegExp(`enum ${enumName}[^{]*\\{[\\s\\S]*?\\n[ \\t]*\\}`).exec(source);
-  assert.ok(declaration !== null, `the runner Swift must declare enum ${enumName} with a body`);
-  return declaration[0]!;
-}
-
 /** One UPPER_SNAKE string literal in production runner Swift. */
 export type SwiftUpperSnakeLiteral = Readonly<{
   file: string;
@@ -148,36 +121,6 @@ export function exportedConstObject(parsed: ReturnType<typeof parseSync>, name: 
     `${name} must be an exported object literal, not ${initializer?.type ?? 'nothing'}`,
   );
   return initializer;
-}
-
-/** The string members of an exported `as const` array (e.g. KNOWN_APP_ERROR_CODES). */
-export function exportedConstArrayValues(source: string, name: string): string[] {
-  const parsed = parseTs(`${name}.ts`, source);
-  const statement = parsed.program.body.find(
-    (candidate) =>
-      candidate.type === 'ExportNamedDeclaration' &&
-      candidate.declaration?.type === 'VariableDeclaration' &&
-      candidate.declaration.declarations.some(
-        (declaration) => declaration.id.type === 'Identifier' && declaration.id.name === name,
-      ),
-  );
-  assert.ok(
-    statement?.type === 'ExportNamedDeclaration' &&
-      statement.declaration?.type === 'VariableDeclaration',
-    `the source must export the const ${name}`,
-  );
-  const declaration = statement.declaration.declarations.find(
-    (candidate) => candidate.id.type === 'Identifier' && candidate.id.name === name,
-  );
-  const initializer = unwrapAssertion(declaration?.init);
-  assert.ok(
-    initializer?.type === 'ArrayExpression',
-    `${name} must be an exported array literal, not ${initializer?.type ?? 'nothing'}`,
-  );
-  return initializer.elements.map((element: any) => {
-    assert.ok(element?.type === 'Literal' && typeof element.value === 'string');
-    return element.value as string;
-  });
 }
 
 export function readRepoFile(relativePath: string): string {

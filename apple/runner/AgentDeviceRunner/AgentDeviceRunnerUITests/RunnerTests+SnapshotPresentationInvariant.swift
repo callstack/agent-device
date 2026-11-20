@@ -6,7 +6,7 @@ extension RunnerTests {
   /// That literal never reaches the wire: the library cannot import this target's enum, and the
   /// runner's wire vocabulary is closed, so the bridge drops it and answers with the runner's own
   /// `RunnerPassThroughErrorCode` constant, carrying the library's message and hint beside it. The
-  /// library owns WHEN the refusal happens; the parity guard owns the code the caller sees.
+  /// library owns WHEN the refusal happens; the literal guard owns the code the caller sees.
   static func snapshotCaptureFailure(
     for failure: SnapshotPresentationFailure
   ) -> SnapshotCaptureFailure {

@@ -5,7 +5,7 @@ After validation, a request to open or ship a PR authorizes branch creation, com
 ## Validate
 
 Follow [validation](testing.md).
-Record the `check:affected --run --head` receipt in the PR body. A serialized gate stage can validate the pushed head instead.
+A serialized gate stage can validate the pushed head instead.
 An authorized incomplete draft can record a blocker. A blocker is not a pass.
 Push once per review round. Each push restarts CI. Drafts skip device lanes.
 
@@ -55,20 +55,13 @@ After a rebase, validate the new head. Keep old evidence attributed to its origi
 
 ## PR body
 
-Use ready-for-review by default. Use draft when requested or incomplete.
-Keep the body below 250 words:
+Open as draft only when requested or incomplete.
+Keep the body below 250 words outside code blocks. Update it after each push.
 
-- `## Summary`: include:
-  - The behavior and reason.
-  - The touched-file count.
-  - Scope expansion.
-  - The linked issue.
-  For public API changes, add 1–3 CLI/Node/MCP examples.
-- `## Validation`: include:
-  - The tested SHA.
-  - Command results.
-  - CI obligations.
-  - Unresolved risks.
+- `## Summary`: the behavior, the reason, the linked issue, and scope expansion.
+- `## Before / after`: required when a caller can observe the change, output and errors included.
+  Show up to 3 calls at base and head, with the output that differs.
+- `## Value`: required for a refactor. Give 2–4 numbers measured at base and head.
+- `## Validation`: the tested SHA and receipt, command results, CI obligations, and unresolved risks.
   Use evidence accessible remotely.
-  For fixes, show base/head SHAs and the same command's results.
   For docs-only changes, explain why runtime tests do not apply.

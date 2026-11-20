@@ -164,6 +164,21 @@ test('a runner XCTest source also selects the test-list and package-source check
   assert.ok(!ids(['apple/runner/Sources/Runner/Main.swift']).includes('xctest-selection'));
 });
 
+test('each input of the generated runner error-code enums selects the drift check', () => {
+  for (const file of [
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerErrorCodes.swift',
+    'packages/apple-runner/src/runner-contract.ts',
+    'scripts/generate-runner-error-codes.ts',
+  ]) {
+    assert.ok(ids([file]).includes('runner-error-codes'), file);
+  }
+  assert.ok(
+    !ids(['apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift']).includes(
+      'runner-error-codes',
+    ),
+  );
+});
+
 test('the scripts that rewrite runner Swift select the packaged-source check', () => {
   // Every packaged byte comes out of these two, and the rewrite they perform is invisible to
   // every other gate: no repo target compiles dist/apple/runner/**.
