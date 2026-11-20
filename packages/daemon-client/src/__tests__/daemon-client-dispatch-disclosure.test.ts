@@ -536,3 +536,50 @@ test('a remote result artifact that is not downloaded names no local path', asyn
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+// #4518: an ok:false result from a remote daemon leaves through the same strip as a JSON-RPC error.
+test('a remote ok:false result cannot carry client-owned fields to the caller', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'client-owned ok:false details')) return;
+  const cwd = mkdtempForTestSync('agent-device-peer-result-');
+  const server = http.createServer((_req, res) => res.writeHead(500).end());
+  const port = await listenOnLoopback(server);
+  try {
+    const details = {
+      savedScript: '/daemon/x.ad',
+      recordingDestinationWarnings: [{ reason: 'recording_destination_not_requested' }],
+      artifacts: [{ field: 'outPath', path: '/daemon/x.mp4', localPath: '/client/x.mp4' }],
+      step: 1,
+    };
+    const { response, error } = await adapt(`http://127.0.0.1:${port}`, cwd, {
+      jsonrpc: '2.0',
+      result: { ok: false, error: { code: 'COMMAND_FAILED', message: 'x', details } },
+    });
+    assert.equal(response, undefined);
+    assert.ok(error instanceof AppError);
+    for (const view of [error.details, normalizeError(error).details]) {
+      assert.equal(view?.recordingDestinationWarnings, undefined);
+      assert.equal(view?.savedScript, undefined);
+      assert.deepEqual(view?.artifacts, [{ field: 'outPath', path: '/daemon/x.mp4' }]);
+      assert.equal(view?.step, 1);
+    }
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a local daemon ok:false result keeps its repair savedScript', async () => {
+  const cwd = mkdtempForTestSync('agent-device-local-result-');
+  try {
+    const details = { savedScript: '/work/repair.ad' };
+    const { response } = await adapt(undefined, cwd, {
+      jsonrpc: '2.0',
+      result: { ok: false, error: { code: 'COMMAND_FAILED', message: 'close failed', details } },
+    });
+    const failed = response as { ok: boolean; error?: { details?: Record<string, unknown> } };
+    assert.equal(failed.ok, false);
+    assert.equal(failed.error?.details?.savedScript, '/work/repair.ad');
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});

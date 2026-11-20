@@ -782,10 +782,7 @@ function resolveMaterializedArtifactPath(
     localFileName(artifact.fileName) ??
     localFileName(`${artifact.field}-${Date.now()}`) ??
     `artifact-${Date.now()}`;
-  const named = path.join(cwd, fileName);
-  // The parent must be the working directory itself; a generated name is the last resort.
-  const fallback = path.dirname(named) === cwd ? named : path.join(cwd, `artifact-${Date.now()}`);
-  return { path: fallback, fallback: true };
+  return { path: path.join(cwd, fileName), fallback: true };
 }
 
 /**

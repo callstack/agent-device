@@ -39,8 +39,15 @@ export function handleDaemonHttpResponseBody(
   const { info, req, stateDir, host, signal, onDelivery, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
-    if (parsed.error) {
-      void rejectDaemonHttpRpcError(parsed.error, { info, req, stateDir, signal, reject });
+    // A remote failure answer leaves only through the error path, which strips client-owned fields
+    // and localizes the log, whether it came as a JSON-RPC error or as an ok:false result (#4518).
+    const remoteFailure =
+      info.baseUrl && parsed.result?.ok === false
+        ? { message: parsed.result.error?.message, data: parsed.result.error }
+        : undefined;
+    const failure = parsed.error ?? remoteFailure;
+    if (failure) {
+      void rejectDaemonHttpRpcError(failure, { info, req, stateDir, signal, reject });
       return;
     }
     if (!parsed.result || typeof parsed.result !== 'object') {
