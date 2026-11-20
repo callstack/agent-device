@@ -8,13 +8,19 @@ import {
   failedOpenLaunchCleanupDetails,
 } from '@agent-device/contracts/device-boot';
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
-import { inspectDeviceClaimAcquisition } from '@agent-device/daemon-contracts/device-claims';
+import {
+  canonicalLocalDeviceKey,
+  deviceClaimIdentity,
+  inspectDeviceClaimAcquisition,
+  withDeviceClaimLockHeld,
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { processStartTimesDiffer } from '@agent-device/host-kit/process';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../../../core/session-store.ts';
+import { findSessionHoldingDevice } from '../../open-device-contention-wait.ts';
 import type { SessionOpenResult } from './session-open-execution.ts';
 
 /**
@@ -64,6 +70,11 @@ export async function withFailedOpenLaunchCleanup(params: {
  * owns the boot, another owner holds the device, or the daemon's policy denies `device-shutdown`.
  * Returns nothing when this open started no device process to report, so an open that never took the
  * boot path stays silent.
+ *
+ * The claim answer the stop depends on and the bounded stop itself run as one exclusion under the
+ * device's claim lock — the lock `acquireDeviceClaim` writes a claim under — so no owner can be
+ * acquired for the device between "nothing conflicts" and the signal. A lock somebody else holds
+ * keeps the launch: a device being claimed right now is not this open's to stop.
  */
 async function stopUnownedLaunch(params: {
   device: DeviceInfo;
@@ -74,19 +85,18 @@ async function stopUnownedLaunch(params: {
   deviceShutdownDenied: boolean;
   launchedProcess: LaunchedDeviceProcessService;
 }): Promise<FailedOpenLaunchCleanup | undefined> {
-  const { launch, device, launchedProcess } = params;
+  const { launch, device, sessionStore } = params;
   if (!launch.attempted) return undefined;
   if (launchHasPublishedSessionOwner(params)) return undefined;
   const identity = launch.identity;
   // An open that lost the booted device to another owner must leave that owner's emulator running,
-  // whatever its own failure was. This check precedes the identity one: a kept launch is reported
-  // with the reason that kept it, not with a missing-identity excuse.
-  if (await deviceHeldByAnotherOwner(params)) {
-    emitLaunchProcessMiss('open-kept-device-in-use', {});
-    return {
-      outcome: 'kept_running',
-      reason: FAILED_OPEN_KEPT_RUNNING_REASONS.deviceInUse,
-    };
+  // whatever its own failure was. These ownership answers precede the reasons this open could keep the
+  // launch for itself, so a kept launch reports the reason that kept it.
+  if (findSessionHoldingDevice(sessionStore, device.id, params.sessionName)) {
+    return keepLaunchForDeviceInUse();
+  }
+  if (await claimHeldByAnotherOwner(params)) {
+    return keepLaunchForDeviceInUse();
   }
   if (!identity) {
     emitLaunchProcessMiss('open-recorded-no-process', {});
@@ -102,6 +112,36 @@ async function stopUnownedLaunch(params: {
       reason: FAILED_OPEN_KEPT_RUNNING_REASONS.daemonPolicyDenied,
     };
   }
+  const settled = await withDeviceClaimLockHeld(
+    canonicalLocalDeviceKey(deviceClaimIdentity(device)),
+    sessionStore.host.env,
+    // The answer above can be stale: a second daemon can clear, then take, this device's claim
+    // while this open is deciding. The same question is asked again under the lock that claim
+    // writes take, and only its answer lets the stop proceed.
+    async () =>
+      (await claimHeldByAnotherOwner(params))
+        ? keepLaunchForDeviceInUse()
+        : await stopLaunch(params, identity),
+  );
+  if (settled.status === 'ran') return settled.result;
+  // A claim is being written for this device right now, which is the same answer a claim that
+  // refuses this open gives: the launch belongs to whoever that claim is for.
+  emitLaunchProcessMiss('open-kept-claim-in-flight', { pid: identity.pid });
+  return {
+    outcome: 'kept_running',
+    reason: FAILED_OPEN_KEPT_RUNNING_REASONS.deviceInUse,
+  };
+}
+
+/**
+ * Stops the launch under the claim lock, reporting what the host confirmed. The stop is bounded at
+ * 3 s (TERM, then KILL), which is what makes it safe to hold the device's claim lock across it.
+ */
+async function stopLaunch(
+  params: { device: DeviceInfo; launchedProcess: LaunchedDeviceProcessService },
+  identity: AndroidEmulatorLaunchIdentity,
+): Promise<FailedOpenLaunchCleanup> {
+  const { device, launchedProcess } = params;
   let confirmation: LaunchedProcessStopConfirmation;
   try {
     confirmation = await launchedProcess.stopLaunchedDeviceProcess(device, identity);
@@ -114,6 +154,12 @@ async function stopUnownedLaunch(params: {
   if (confirmation === 'unconfirmed')
     emitLaunchProcessMiss('launched-process-stop-unconfirmed', { pid: identity.pid });
   return confirmation === 'stopped' ? { outcome: 'stopped' } : { outcome: 'not_confirmed' };
+}
+
+/** The one report for a launch kept because the device has an owner this open must not disturb. */
+function keepLaunchForDeviceInUse(): FailedOpenLaunchCleanup {
+  emitLaunchProcessMiss('open-kept-device-in-use', {});
+  return { outcome: 'kept_running', reason: FAILED_OPEN_KEPT_RUNNING_REASONS.deviceInUse };
 }
 
 /**
@@ -136,21 +182,18 @@ function launchHasPublishedSessionOwner(params: {
 }
 
 /**
- * Whether the booted device belongs to somebody else by the time this failed open would stop its
- * launch: another session in this daemon holds it, or the claim says so. The claim answer is the
- * exact decision acquisition makes for this open — the same session and workspace this open would
- * claim under answers `held`, an unsettled foreign owner answers `conflict` — asked without taking
- * or settling anything. A `reconcile` settlement belongs to acquisition itself and keeps nothing
- * here.
+ * Whether the device's claim refuses this open. The answer is the exact decision acquisition makes
+ * for this open: the same session and workspace this open would claim under answers `held`, an
+ * unsettled foreign owner answers `conflict`. A `reconcile` settlement belongs to acquisition itself
+ * and keeps nothing here. The caller asks twice: once here, and once under
+ * {@link withDeviceClaimLockHeld} when the answer is about to decide a stop.
  */
-async function deviceHeldByAnotherOwner(params: {
+async function claimHeldByAnotherOwner(params: {
   sessionStore: SessionStore;
   sessionName: string;
   workspace: string;
   device: DeviceInfo;
 }): Promise<boolean> {
-  const holder = params.sessionStore.findByDevice(params.device.id);
-  if (holder && holder.address !== params.sessionName) return true;
   const settlements = await inspectDeviceClaimAcquisition({
     device: params.device,
     command: 'open',

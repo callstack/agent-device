@@ -22,6 +22,13 @@ export type LaunchedProcessOwnerAnswers = {
   stop: LaunchedProcessStopConfirmation;
   /** When set, the launch stop answers this instead, standing for a host that refuses the stop. */
   stopError: Error | undefined;
+  /**
+   * When set, the launch stop awaits it while it works, so a case can read the world at that moment,
+   * or hold the stop open while it reads it.
+   */
+  onStop:
+    | ((device: DeviceInfo, identity: AndroidEmulatorLaunchIdentity) => void | Promise<void>)
+    | undefined;
   /** Every check that was asked, in order, with what it was asked about. */
   checks: Array<{ device: DeviceInfo; identity: AndroidEmulatorLaunchIdentity | undefined }>;
   /** Every stop confirmation that was asked, in order. */
@@ -36,6 +43,7 @@ export const launchedProcessOwnerAnswers: LaunchedProcessOwnerAnswers = {
   confirmation: 'stopped',
   stop: 'stopped',
   stopError: undefined,
+  onStop: undefined,
   checks: [],
   confirmations: [],
   stops: [],
@@ -49,6 +57,7 @@ export function resetLaunchedProcessOwnerAnswers(): void {
   launchedProcessOwnerAnswers.confirmation = 'stopped';
   launchedProcessOwnerAnswers.stop = 'stopped';
   launchedProcessOwnerAnswers.stopError = undefined;
+  launchedProcessOwnerAnswers.onStop = undefined;
   launchedProcessOwnerAnswers.checks.length = 0;
   launchedProcessOwnerAnswers.confirmations.length = 0;
   launchedProcessOwnerAnswers.stops.length = 0;
@@ -79,10 +88,11 @@ export const confirmLaunchedProcessStoppedFixture = vi.fn(
 
 export const stopLaunchedDeviceProcessFixture = vi.fn(
   async (
-    _device: DeviceInfo,
+    device: DeviceInfo,
     identity: AndroidEmulatorLaunchIdentity,
   ): Promise<LaunchedProcessStopConfirmation> => {
     launchedProcessOwnerAnswers.stops.push(identity);
+    await launchedProcessOwnerAnswers.onStop?.(device, identity);
     if (launchedProcessOwnerAnswers.stopError) throw launchedProcessOwnerAnswers.stopError;
     return launchedProcessOwnerAnswers.stop;
   },

@@ -51,6 +51,7 @@ import {
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
 export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
+export { withDeviceClaimLockHeld } from './device-claim-store.ts';
 export {
   deviceClaimOwnerCannotRelease,
   deviceClaimRefusalReason,

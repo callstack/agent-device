@@ -9,6 +9,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as hostProcess from '@agent-device/host-kit/process';
+import { acquireProcessLock, inspectProcessLock } from '@agent-device/host-kit/file';
+import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
+import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import {
   bindTestCommandHost,
   createTestHostEnvironment,
@@ -49,6 +52,7 @@ import {
   mockEnsureReadyRuntime,
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
+import { withFailedOpenLaunchCleanup } from '../session-open-launch-cleanup.ts';
 import { makeSession } from '../../../../__tests__/support/session-factories.ts';
 import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
 import { deviceIdentity } from '@agent-device/kernel/device';
@@ -170,6 +174,7 @@ function createRoutedSession() {
       params: Omit<Parameters<typeof runColdOpen>[0], 'sessionStore' | 'env' | 'stateDir'>,
     ) => runColdOpen({ ...params, sessionStore, env, stateDir }),
     seedForeignLiveClaim: (device: DeviceInfo) => seedForeignLiveClaim(env, device),
+    claimsDir: env.AGENT_DEVICE_CLAIMS_DIR!,
     sessionStore,
   };
 }
@@ -376,6 +381,95 @@ test("a cold open that failed against another session's live claim keeps it runn
   expect(owner.stops).toEqual([]);
   expect(launchMissSteps()).toEqual(['open-kept-device-in-use']);
 });
+
+test('a cold open stops its launch only while it holds the device claim lock', async () => {
+  const runs = createRoutedSession();
+  let lockDuringStop: ProcessLockInspection | undefined;
+  let finishStop: () => void = () => undefined;
+  const stopHeld = new Promise<void>((resolve) => {
+    finishStop = resolve;
+  });
+
+  owner.onStop = async () => {
+    // Read from inside the stop: the device's claim lock — the one `acquireDeviceClaim` writes a
+    // claim under — names this process, so no owner can be recorded for the device meanwhile.
+    lockDuringStop = inspectProcessLock(deviceClaimLockPath(runs.claimsDir, BOOTED_EMULATOR));
+    await stopHeld;
+  };
+
+  const settled = failureOf(
+    runs.runColdOpen({
+      afterBoot: async () => {
+        throw new AppError('COMMAND_FAILED', STEP_FAILURE);
+      },
+    }),
+  );
+
+  // Waits for the stop to report what it saw, and releases it right after: no timing assumption.
+  await pollUntilSettled({
+    probe: async () => lockDuringStop,
+    settled: (inspection) => inspection !== undefined,
+    deadline: Deadline.fromTimeoutMs(5_000),
+    intervalMs: 10,
+  });
+  expect(lockDuringStop?.state).toBe('held');
+  expect(lockDuringStop?.state === 'held' ? lockDuringStop.owner.pid : undefined).toBe(process.pid);
+
+  finishStop();
+  const failure = await settled;
+
+  expect(failure.message).toBe(STEP_FAILURE);
+  expect(failure.details.failedOpenEmulatorCleanup).toBe('stopped');
+  expect(owner.stops).toEqual([LAUNCH_IDENTITY]);
+  // Released with the stop: a cleanup that is over fences no later owner of the device.
+  expect(inspectProcessLock(deviceClaimLockPath(runs.claimsDir, BOOTED_EMULATOR)).state).toBe(
+    'absent',
+  );
+});
+
+test('the cleanup keeps the launch when the device claim lock is held by another owner', async () => {
+  const runs = createRoutedSession();
+  // The lock is held by a live process of another owner, so the cleanup cannot make its re-check
+  // safely: it attempts no stop and reports the device as owned. A whole failed open cannot be used
+  // here — its own claim would wait behind this lock — so the cleanup owner is asked directly.
+  const release = await acquireProcessLock({
+    lockDirPath: deviceClaimLockPath(runs.claimsDir, BOOTED_EMULATOR),
+    owner: { pid: process.ppid, startTime: null, acquiredAtMs: Date.now() },
+    timeoutMs: 5_000,
+    description: 'test-held device claim lock',
+  });
+
+  const result = await withFailedOpenLaunchCleanup({
+    device: BOOTED_EMULATOR,
+    launch: { attempted: true, identity: LAUNCH_IDENTITY },
+    sessionStore: runs.sessionStore,
+    sessionName: SESSION,
+    workspace: process.cwd(),
+    deviceShutdownDenied: false,
+    launchedProcess: daemonPlatformServicesFixture().launchedDeviceProcess,
+    run: async () => {
+      throw new AppError('COMMAND_FAILED', STEP_FAILURE);
+    },
+  }).catch((error: unknown) => error);
+
+  await release();
+
+  expect(result).toBeInstanceOf(AppError);
+  expect((result as AppError).message).toBe(STEP_FAILURE);
+  expect((result as AppError).details).toEqual({
+    failedOpenEmulatorCleanup: 'kept_running',
+    failedOpenEmulatorCleanupReason: 'device-in-use',
+  });
+  expect(owner.stops).toEqual([]);
+  expect(launchMissSteps()).toEqual(['open-kept-claim-in-flight']);
+});
+
+/** The host-global per-device lock `acquireDeviceClaim` writes a claim under, for `device`. */
+function deviceClaimLockPath(claimsDir: string, device: DeviceInfo): string {
+  const deviceKey = canonicalLocalDeviceKey(deviceIdentity(device));
+  const hash = crypto.createHash('sha256').update(deviceKey).digest('hex');
+  return path.join(claimsDir, `${hash}.json.lock`);
+}
 
 /**
  * Writes the claim another daemon's session holds for `device`, owned by a live process of its own
