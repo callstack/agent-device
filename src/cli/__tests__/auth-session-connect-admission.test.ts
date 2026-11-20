@@ -28,7 +28,10 @@ afterEach(() => {
 });
 
 /** The control plane: an approved device login, then a connection profile naming `leaseProvider`. */
-function stubControlPlane(leaseProvider: string | undefined): ReturnType<typeof vi.fn> {
+function stubControlPlane(
+  leaseProvider: string | undefined,
+  options: { profileStatus?: number } = {},
+): ReturnType<typeof vi.fn> {
   const json = (body: unknown) =>
     new Response(JSON.stringify(body), {
       status: 200,
@@ -47,6 +50,8 @@ function stubControlPlane(leaseProvider: string | undefined): ReturnType<typeof 
       });
     }
     if (pathname === '/api/control-plane/connection-profile') {
+      if (options.profileStatus)
+        return new Response('unavailable', { status: options.profileStatus });
       return json({
         ok: true,
         connection: {
@@ -65,8 +70,8 @@ function stubControlPlane(leaseProvider: string | undefined): ReturnType<typeof 
   return fetchMock;
 }
 
-async function connect(argv: string[]) {
-  const { root, home, project } = makeTempWorkspace();
+async function connect(argv: string[], workspace = makeTempWorkspace()) {
+  const { root, home, project } = workspace;
   const stateDir = path.join(root, 'state');
   const result = await runCliCapture(
     ['connect', ...argv, '--session', 'ci', '--state-dir', stateDir, '--json'],
@@ -135,5 +140,43 @@ test('connect cloud stores the approved login once when the provider is admitted
   assert.equal(session.refreshCredential, 'refresh-1');
   assert.equal(session.cloudBaseUrl, CLOUD);
   assert.equal(writes.filter((file) => file === resolveCliSessionPath(stateDir)).length, 1);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+function assertStoredLogin(stateDir: string): void {
+  const session = JSON.parse(fs.readFileSync(resolveCliSessionPath(stateDir), 'utf8'));
+  assert.equal(session.id, 'cli-1');
+  assert.equal(session.refreshCredential, 'refresh-1');
+}
+
+test('connect cloud stores the approved login when the profile fetch fails afterward', async () => {
+  stubControlPlane(undefined, { profileStatus: 503 });
+  const { root, stateDir, result } = await connect(['cloud']);
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  const { error } = JSON.parse(result.stdout);
+  assert.equal(error.message, 'Cloud connection profile endpoint rejected the request.');
+  assert.notEqual(error.details?.reason, 'plugin-not-installed');
+  // The failure is not a provider refusal, so a retry does not start device auth again.
+  assertStoredLogin(stateDir);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('connect --remote-config stores the login of the generic auth step when the command fails afterward', async () => {
+  // The profile names no provider, so admission passes and the generic auth step logs in. The
+  // profile lacks a tenant, so the command then fails for a reason that is not a provider refusal.
+  stubControlPlane(undefined);
+  const workspace = makeTempWorkspace();
+  const remoteConfig = path.join(workspace.project, 'remote.json');
+  fs.writeFileSync(
+    remoteConfig,
+    JSON.stringify({ daemonBaseUrl: 'https://bridge.agent-device.dev/api', runId: 'run-1' }),
+  );
+  const { root, stateDir, result } = await connect(['--remote-config', remoteConfig], workspace);
+
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  const { error } = JSON.parse(result.stdout);
+  assert.notEqual(error.details?.reason, 'plugin-not-installed');
+  assertStoredLogin(stateDir);
   fs.rmSync(root, { recursive: true, force: true });
 });

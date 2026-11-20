@@ -3,7 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { CLOUD_LEASE_PROVIDER } from '@agent-device/contracts/lease-scope';
 import { type EnvMap } from '@agent-device/kernel/source-value';
-import { commitPendingCliLogin, resolveCloudAccessForConnect } from '../auth-session.ts';
+import { resolveCloudAccessForConnect } from '../auth-session.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { buildConnectClientId } from './client-id.ts';
@@ -44,8 +44,6 @@ export async function resolveCloudConnectProfile(options: {
   // The control plane chooses the provider. Its plugin is admitted before anything is written, so
   // a missing plugin leaves no profile and no connection state behind.
   await primeProviderConnection(profile.leaseProvider, options.env);
-  // A login this command approved is stored only now that its provider is admitted.
-  commitPendingCliLogin();
   const clientId = buildConnectClientId(
     options.stateDir,
     auth.cloudBaseUrl,

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publishFileSync } from '@agent-device/host-kit/file';
@@ -76,19 +77,37 @@ type AuthIo = {
   openBrowser?: (url: string) => Promise<void>;
 };
 
-/**
- * A login `connect` approved and has not stored yet. `connect` discovers its provider after login,
- * so the session stays in memory until that provider is admitted: a refused route writes no auth
- * state. One CLI process runs one command, so one pending login is enough.
- */
-let pendingCliLogin: { stateDir: string; session: CliSessionRecord } | undefined;
+/** One command's login scope: a login approved inside it is pending until the command ends. */
+const commandLoginScope = new AsyncLocalStorage<{
+  pending?: { stateDir: string; session: CliSessionRecord };
+}>();
 
-/** Stores the login `connect` approved, once its provider is admitted. Does nothing without one. */
-export function commitPendingCliLogin(): void {
-  const pending = pendingCliLogin;
-  if (!pending) return;
-  pendingCliLogin = undefined;
-  writeCliSession(pending);
+/**
+ * Runs one command with its login pending. A command can approve a device login before it learns
+ * which provider it uses. The login is stored when the command ends, on success or on failure,
+ * except when the command ends with the provider-admission refusal `plugin-not-installed`: that
+ * route writes no auth state. A login approved outside a scope is stored at once.
+ */
+export async function withCommandLogin<T>(run: () => Promise<T>): Promise<T> {
+  const scope: { pending?: { stateDir: string; session: CliSessionRecord } } = {};
+  let refused = false;
+  try {
+    return await commandLoginScope.run(scope, run);
+  } catch (error) {
+    refused = scope.pending !== undefined && (await isProviderAdmissionRefusal(error));
+    throw error;
+  } finally {
+    if (scope.pending && !refused) writeCliSession(scope.pending);
+  }
+}
+
+/** Whether a command failed with the typed refusal for a provider plugin that is not installed. */
+async function isProviderAdmissionRefusal(error: unknown): Promise<boolean> {
+  if (!(error instanceof AppError)) return false;
+  // The reason table loads only for a failed command that holds a pending login.
+  const { PLUGIN_INSTALLATION_REASONS } =
+    await import('@agent-device/contracts/plugin-installation');
+  return error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled;
 }
 
 export async function resolveRemoteAuthForCli(options: {
@@ -97,14 +116,11 @@ export async function resolveRemoteAuthForCli(options: {
   stateDir: string;
   env: EnvMap;
 }): Promise<RemoteAuthResolution> {
-  pendingCliLogin = undefined;
   return await resolveRemoteAuth({
     command: options.command,
     flags: options.flags,
     stateDir: options.stateDir,
     allowInteractiveLogin: options.command === 'connect' && !options.flags.noLogin,
-    // `connect` stores a new login itself, after it admits the provider it discovers.
-    deferLoginWrite: options.command === 'connect',
     env: options.env,
   });
 }
@@ -114,8 +130,6 @@ export async function resolveRemoteAuth(options: {
   flags: CliFlags;
   stateDir: string;
   allowInteractiveLogin: boolean;
-  /** Keeps a new login pending for {@link commitPendingCliLogin} instead of storing it. */
-  deferLoginWrite?: boolean;
   env: EnvMap;
   io?: AuthIo;
 }): Promise<RemoteAuthResolution> {
@@ -156,7 +170,6 @@ export async function resolveRemoteAuth(options: {
     flags: options.flags,
     env,
     io: options.io,
-    deferSessionWrite: options.deferLoginWrite,
   });
   return {
     flags: { ...options.flags, daemonAuthToken: login.accessToken },
@@ -209,8 +222,6 @@ export async function resolveCloudAccessForConnect(options: {
     env,
     io: options.io,
     commandLabel: 'agent-device connect',
-    // The profile this login fetches names the provider; the caller commits after admitting it.
-    deferSessionWrite: true,
   });
   return {
     accessToken: login.accessToken,
@@ -224,8 +235,6 @@ export async function loginWithDeviceAuth(options: {
   env: EnvMap;
   io?: AuthIo;
   commandLabel?: string;
-  /** Keeps the session pending for {@link commitPendingCliLogin} instead of storing it. */
-  deferSessionWrite?: boolean;
 }): Promise<{
   accessToken: string;
   expiresAt?: string;
@@ -290,7 +299,8 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
-  if (options.deferSessionWrite) pendingCliLogin = { stateDir: options.stateDir, session };
+  const scope = commandLoginScope.getStore();
+  if (scope) scope.pending = { stateDir: options.stateDir, session };
   else writeCliSession({ stateDir: options.stateDir, session });
   return {
     accessToken: approved.accessToken,
