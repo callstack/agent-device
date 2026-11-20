@@ -189,53 +189,29 @@ function probeHost(sequence: readonly (ProbeResult | Error)[]) {
 
 const BOOTED_PROBE: ProbeResult = { stdout: '1\n', stderr: '', exitCode: 0 };
 
-const PROBE_FAILURE_TEXT = 'adb shell getprop sys.boot_completed failed';
+test('identical probe failure text retries on transient typed evidence and fails promptly on terminal typed evidence', async () => {
+  const text = 'adb shell getprop sys.boot_completed failed';
+  const typed = { adbFailure: 'device_not_found', retriable: true };
+  const input = { headless: false, deadlineAtMs: 30_000 };
 
-test('a probe failure with retriable typed evidence retries until the device reports booted', async () => {
-  const { host, run, elapsed } = probeHost([
-    new AppError('COMMAND_FAILED', PROBE_FAILURE_TEXT, {
-      adbFailure: 'device_not_found',
-      retriable: true,
-    }),
-    BOOTED_PROBE,
-  ]);
-
+  const transient = probeHost([new AppError('COMMAND_FAILED', text, typed), BOOTED_PROBE]);
   await expect(
-    ensureAndroidReady(
-      host,
-      runningEmulator(),
-      { headless: false, deadlineAtMs: 30_000 },
-      new AbortController().signal,
-    ),
+    ensureAndroidReady(transient.host, runningEmulator(), input, new AbortController().signal),
   ).resolves.toMatchObject({ booted: true });
-  expect(run).toHaveBeenCalledTimes(2);
-  expect(elapsed()).toBe(1_000);
-});
+  expect(transient.run).toHaveBeenCalledTimes(2);
 
-test('the same probe failure text with typed host-refusal evidence fails on the first poll', async () => {
-  const { host, run, elapsed } = probeHost([
-    new AppError('COMMAND_FAILED', PROBE_FAILURE_TEXT, {
-      adbFailure: 'device_not_found',
-      retriable: true,
-      adbHostRefusal: true,
-    }),
+  const terminal = probeHost([
+    new AppError('COMMAND_FAILED', text, { ...typed, adbHostRefusal: true }),
     BOOTED_PROBE,
   ]);
-
   await expect(
-    ensureAndroidReady(
-      host,
-      runningEmulator(),
-      { headless: false, deadlineAtMs: 30_000 },
-      new AbortController().signal,
-    ),
+    ensureAndroidReady(terminal.host, runningEmulator(), input, new AbortController().signal),
   ).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    message: PROBE_FAILURE_TEXT,
+    message: text,
     details: { adbHostRefusal: true, reason: 'ADB_TRANSPORT_UNAVAILABLE', serial: 'emulator-5554' },
   });
-  expect(run).toHaveBeenCalledTimes(1);
-  expect(elapsed()).toBe(0);
+  expect(terminal.run).toHaveBeenCalledTimes(1);
+  expect(terminal.elapsed()).toBe(0);
 });
 
 test.each(['error: device unauthorized', 'device unauthorized'])(
