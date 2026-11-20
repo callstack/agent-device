@@ -62,6 +62,7 @@
   "@agent-device/contracts/input-validation",
   "@agent-device/contracts/interaction",
   "@agent-device/contracts/interaction-guarantees",
+  "@agent-device/contracts/interactor-operation-binding",
   "@agent-device/contracts/interactor-operation-catalog",
   "@agent-device/contracts/interactor-types",
   "@agent-device/contracts/ios-snapshot",
