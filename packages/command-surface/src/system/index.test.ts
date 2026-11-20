@@ -15,25 +15,15 @@ import type { CommandResult } from '@agent-device/command-registry/command-resul
 import { readInputFromCli } from '../cli-grammar/registry.ts';
 import { findCommandMetadata } from '../command-metadata.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import {
-  backCliReader,
-  backDaemonWriter,
-  clipboardCliReader,
-  clipboardDaemonWriter,
-  foldCliReader,
-  foldDaemonWriter,
-  hardwareButtonCliReader,
-  hardwareButtonDaemonWriter,
-  keyboardCliReader,
-  keyboardDaemonWriter,
-  orientationCliReader,
-  orientationDaemonWriter,
-  telephonyCliReader,
-  telephonyDaemonWriter,
-  tvRemoteCliReader,
-  tvRemoteDaemonWriter,
-  systemCommandFamily,
-} from './index.ts';
+import { backCliReader, backDaemonWriter } from './back.ts';
+import { clipboardCliReader, clipboardDaemonWriter } from './clipboard.ts';
+import { foldCliReader, foldDaemonWriter } from './fold.ts';
+import { hardwareButtonCliReader, hardwareButtonDaemonWriter } from './hardware-button.ts';
+import { keyboardCliReader, keyboardDaemonWriter } from './keyboard.ts';
+import { orientationCliReader, orientationDaemonWriter } from './orientation.ts';
+import { telephonyCliReader, telephonyDaemonWriter } from './telephony.ts';
+import { tvRemoteCliReader, tvRemoteDaemonWriter } from './tv-remote.ts';
+import { systemCommandFamily } from './index.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;
