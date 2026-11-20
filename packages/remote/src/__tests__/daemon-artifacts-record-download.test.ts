@@ -223,62 +223,34 @@ test.for(['C:foo.mp4', 'CON.mp4', 'clip.mp4:stream', 'nul', '..', 'clip.mp4.'])(
   },
 );
 
-// 2. Chunk paths name the files this client published, matched by each chunk's reported path.
-test.for([
-  { name: 'every chunk', skipped: false },
-  { name: 'a skipped middle chunk', skipped: true },
-])(
-  'a multi-chunk recording with $name reports the chunk paths this client published',
-  async ({ skipped }, t) => {
-    await withServer(t, serveVideo, async (world) => {
-      const response = await materializeRemoteArtifacts(
-        { baseUrl: world.baseUrl, token: 'secret' },
-        stopRequest(world),
-        {
-          ok: true,
-          data: {
-            chunks: [
-              { index: 0, path: '/daemon/demo.mp4' },
-              { index: 1, path: '/daemon/demo.part-001.mp4' },
-              { index: 2, path: '/daemon/demo.part-002.mp4' },
-            ],
-            artifacts: [
-              artifact({ field: 'outPath', path: '/daemon/demo.mp4', fileName: 'demo.mp4' }),
-              skipped
-                ? ({
-                    field: 'chunkPath',
-                    path: '/daemon/demo.part-001.mp4',
-                    localPath: '/elsewhere/demo.part-001.mp4',
-                  } as DaemonArtifact)
-                : artifact({
-                    artifactId: 'c1',
-                    field: 'chunkPath',
-                    path: '/daemon/demo.part-001.mp4',
-                    fileName: 'demo.part-001.mp4',
-                  }),
-              artifact({
-                artifactId: 'c2',
-                field: 'chunkPath',
-                path: '/daemon/demo.part-002.mp4',
-                fileName: 'demo.part-002.mp4',
-              }),
-            ],
-          },
+// 2. Chunk paths name the files this client published, not the daemon's paths.
+test('a multi-chunk recording reports the chunk paths this client published', async (t) => {
+  await withServer(t, serveVideo, async (world) => {
+    const response = await materializeRemoteArtifacts(
+      { baseUrl: world.baseUrl, token: 'secret' },
+      stopRequest(world),
+      {
+        ok: true,
+        data: {
+          chunks: [
+            { index: 0, path: '/daemon/demo.mp4' },
+            { index: 1, path: '/daemon/demo.part-001.mp4' },
+          ],
+          artifacts: [
+            artifact({ field: 'outPath', fileName: 'demo.mp4' }),
+            artifact({ artifactId: 'c1', field: 'chunkPath', fileName: 'demo.part-001.mp4' }),
+          ],
         },
-        createTestHostEnvironment(),
-        path.join(world.root, 'state'),
-      );
-      expect(response.ok && response.data?.chunks).toEqual([
-        { index: 0, path: path.join(world.cwd, 'demo.mp4') },
-        {
-          index: 1,
-          path: skipped ? '/daemon/demo.part-001.mp4' : path.join(world.cwd, 'demo.part-001.mp4'),
-        },
-        { index: 2, path: path.join(world.cwd, 'demo.part-002.mp4') },
-      ]);
-    });
-  },
-);
+      },
+      createTestHostEnvironment(),
+      path.join(world.root, 'state'),
+    );
+    expect(response.ok && response.data?.chunks).toEqual([
+      { index: 0, path: path.join(world.cwd, 'demo.mp4') },
+      { index: 1, path: path.join(world.cwd, 'demo.part-001.mp4') },
+    ]);
+  });
+});
 
 // 4. The fallback text also reaches details.warnings, which the human error renderer prints.
 test('a failed later artifact adds the fallback text to details.warnings', async (t) => {

@@ -212,7 +212,7 @@
     "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES": "sha256:3478986d0e7b0e55e965c087a7b1dfd3cc018abdb372dba256cf90d27e63ed0b",
     "packages/daemon-contracts/src/daemon-resolution.ts#DaemonCapability": "sha256:2a5acf280a72e3d54c5ad7b52aece3ced37a30e4e721ef106a98e3bbd18ddbc3",
     "packages/daemon-contracts/src/daemon-resolution.ts#readDaemonCapabilities": "sha256:e410d36be74d307f7e5d8ddae63af5aae77f8eef77951ce9eeb7724f2fefae88",
-    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:856093b23109e20d8f6abe390dcef88c1d2a65ff42149efcddce783b9c450779",
+    "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts": "sha256:f92f9c73a9d9adbfe535167352277de651b978a260831e11c2edc1fd05c40401",
     "packages/remote/src/session-script-destination.ts#SessionScriptDelivery": "sha256:741fafbb8e2b43e2e967b2f4206f1d60017a636f63e3cde68b6258fd4efefa18",
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:d4fb07e7b2035bbe10e84948232343c9cfc2cb4ce7b6a113f7a1021a4c636243",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:52c7d164a1150bfdfa5636ca3b1938e9bfc818848545d0a3e89c42a9c3f9f061",
@@ -592,8 +592,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
-      "digest": "sha256:856093b23109e20d8f6abe390dcef88c1d2a65ff42149efcddce783b9c450779",
-      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published path, matched by the path the daemon reported for that chunk. A released daemon's fields are read as before."
+      "digest": "sha256:f92f9c73a9d9adbfe535167352277de651b978a260831e11c2edc1fd05c40401",
+      "rationale": "#4518 client-side only: a record artifact always downloads as one staged file chosen from the request, never from the reply's artifactType, and a record artifact without a requested path adds the client-owned recordingDestinationWarnings and warnings fields, and a multi-chunk recording's chunks[].path is rewritten to the client's published paths. A released daemon's fields are read as before."
     }
   ]
 }
