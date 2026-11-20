@@ -239,7 +239,8 @@ test.skipIf(!posix)(
 // names both ways out — the chmod, and the move away the chmod itself cannot do. An unprivileged test process
 // cannot refuse its own `chmod`, so the mode change is taken away at the seam the repair uses.
 test.skipIf(!posix)('a root whose mode change is refused still refuses as not private', () => {
-  const under = mkdtempForTestSync('state-admit-repair-refused-');
+  // `$&` in the name: the fix must spell the path as it is, not as a replacement pattern.
+  const under = mkdtempForTestSync('state-admit-repair-refused-$&-');
   const root = makePrivateRoot(under);
   fs.chmodSync(root, 0o755);
   const realChmod = fs.chmodSync;

@@ -169,7 +169,7 @@ function unsafeStateRoot(
   problem: DaemonStateRootProblem,
 ): AppError {
   const [cause, step] = STATE_ROOT_PROBLEMS[problem];
-  const fix = problem === 'not-private' ? step.replaceAll('<dir>', component) : step;
+  const fix = problem === 'not-private' ? step.replaceAll('<dir>', () => component) : step;
   return new AppError(
     'COMMAND_FAILED',
     `Refusing to use the daemon state directory ${stateDir}: ${component} ${cause}`,
