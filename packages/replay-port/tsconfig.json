@@ -43,6 +43,9 @@
     },
     {
       "path": "../plugins"
+    },
+    {
+      "path": "../gestures"
     }
   ]
 }
