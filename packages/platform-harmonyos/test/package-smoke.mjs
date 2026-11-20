@@ -193,6 +193,17 @@ test('packed core discovers harmonyos only after the managed platform is install
       'harmonyos',
     );
     assert.equal(opened.data.message, 'Opened: com.example.app');
+    // The two capture commands, so the run covers a layout read and a screen grab as well as a
+    // gesture: each answers from the stub's own fixture and is asserted on the reply it returned.
+    const captured = runCliWith(toolchainEnv, 0, 'snapshot', '-i', '--platform', 'harmonyos');
+    assert.deepEqual(
+      captured.data.nodes.map(({ type, value }) => ({ type, value })),
+      [{ type: 'Button', value: 'Continue' }],
+    );
+    const shot = path.join(scratch, 'screen.png');
+    const shotResult = runCliWith(toolchainEnv, 0, 'screenshot', shot, '--platform', 'harmonyos');
+    assert.equal(shotResult.data.path, shot);
+    assert.deepEqual([...fs.readFileSync(shot).subarray(0, 3)], [0xff, 0xd8, 0xff]);
     const pressed = runCliWith(toolchainEnv, 0, 'press', '100', '200', '--platform', 'harmonyos');
     assert.equal(pressed.data.targetKind, 'point');
     runCliWith(toolchainEnv, 0, 'close', '--platform', 'harmonyos');
@@ -204,6 +215,16 @@ test('packed core discovers harmonyos only after the managed platform is install
     assert.ok(
       invoked.some((line) => line.endsWith('list targets')),
       `discovery never ran the toolchain probe: ${invoked.join(' | ')}`,
+    );
+    assert.ok(
+      invoked.some((line) => /^ARGS: -t stub-target shell uitest dumpLayout -p \S+$/.test(line)),
+      `the snapshot never asked the device for a layout: ${invoked.join(' | ')}`,
+    );
+    assert.ok(
+      invoked.some((line) =>
+        /^ARGS: -t stub-target shell snapshot_display -f \S+\.jpeg$/.test(line),
+      ),
+      `the screenshot never asked the device for a frame: ${invoked.join(' | ')}`,
     );
     assert.ok(
       invoked.some((line) => line.endsWith('shell uitest uiInput click 100 200')),

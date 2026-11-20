@@ -55,7 +55,7 @@ export function createHarmonyCommandRunner(host: PlatformHost): HarmonyCommandRu
         ...options,
         env: await harmonySpawnEnvironment(env, isExecutable),
       }),
-    resolveHdc: async () => (await await harmonyToolchainHdc(env, isExecutable)) ?? 'hdc',
+    resolveHdc: async () => (await harmonyToolchainHdc(env, isExecutable)) ?? 'hdc',
     toolchainHdc: async () => await harmonyToolchainHdc(env, isExecutable),
   });
 }
