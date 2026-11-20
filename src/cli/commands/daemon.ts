@@ -2,10 +2,7 @@ import {
   readPluginInventory,
   type PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
-import {
-  admitDaemonStateRoot,
-  resolveDaemonPaths,
-} from '@agent-device/daemon-contracts/daemon-resolution';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   isUnusableRecord,
@@ -33,8 +30,6 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
     cwd: host.cwd,
     env: host.env,
   });
-  // Status and stop inspect the root before any lock or record read; an absent root stays absent.
-  admitDaemonStateRoot({ paths, mode: 'inspect' });
   if (subcommand === 'status') {
     const status = readDaemonStatus(paths);
     const shown = { ...status, plugins: readPluginInventory(status.plugins) };

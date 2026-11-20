@@ -3,7 +3,7 @@
 The CLI client trusts its caller to choose local destinations.
 The client trusts a remote daemon for data and validated identifiers.
 Script publication takes no path from the daemon. Capture delivery still can (#4518).
-The daemon trusts its state directory. Nobody trusts the network or other local users.
+The daemon admits its state directory. Nobody trusts the network or other local users.
 Out of scope: same uid, hostile root, ACLs, mounts, untrusted filesystems.
 
 ## Applied today

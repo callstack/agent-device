@@ -208,10 +208,10 @@ async function releaseRegistrationAfterFailure(
 }
 
 /**
- * The daemon's stdout and stderr append to this inode, so it is emptied in place, never replaced. POSIX
- * answers `ftruncate` on the append handle that also creates the file, and keeping that one handle open is
- * what pins the inode; Windows rejects it there (#3291) and empties the same inode through a write handle.
- * One open and one truncate on both routes: a creation race against a reopen could otherwise drop the pin.
+ * The daemon's stdout and stderr append to this inode, so it is emptied in place, never replaced. POSIX takes
+ * `ftruncate` on the append handle that also creates the file; Windows rejects that there (#3291), so the same
+ * inode is emptied by opening it for writing, which truncates as it creates. Either way it is ONE open of the
+ * name: a creation race against a reopen could otherwise drop the pin this launch holds on the inode.
  */
 function truncateDaemonLog(logPath: string): void {
   const descriptor = fs.openSync(logPath, process.platform === 'win32' ? 'w' : 'a', 0o600);
@@ -257,10 +257,7 @@ export function createOwnedReplayStateDir(): OwnedReplayStateDir {
   return owned;
 }
 
-/**
- * Launches and monitors the actual child. The state root is admitted here, once, before the log is opened, so
- * an unsafe root refuses the launch before it writes anything into the state directory.
- */
+/** Launches and monitors the actual child. The root is admitted once here, before the log is opened. */
 export function launchDaemonProcess(
   input: Readonly<{
     paths: DaemonPaths;

@@ -41,7 +41,6 @@ test.skipIf(process.platform === 'win32')(
       `starters refused the root one of them created: ${codes.join(',')}`,
     );
     assert.equal(fs.statSync(root).mode & 0o777, 0o700);
-    assert.equal(fs.statSync(path.join(root, 'sessions')).mode & 0o777, 0o700);
-    assert.equal(fs.statSync(path.join(root, 'sessions', 'remote-scripts')).mode & 0o777, 0o700);
+    assert.deepEqual(fs.readdirSync(root), []);
   },
 );

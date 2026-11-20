@@ -164,24 +164,27 @@ function spyWindowsLogHandleRules(logPath: string): string[] {
   return logOpenFlags;
 }
 
-test('a Windows host empties the log through one pinned write handle', async () => {
-  const { paths, owner } = await acquire();
-  fs.writeFileSync(paths.logPath, 'previous run\n');
-  const logOpenFlags = spyWindowsLogHandleRules(paths.logPath);
-  await onWindowsHost(async () => {
-    try {
-      owner.publish(fields);
-      assert.equal(fs.readFileSync(paths.logPath, 'utf8'), '');
-      // No append handle and no second open of the path: one write handle
-      // carried the inode from the truncation through to its close, whether or
-      // not the log existed first.
-      assert.deepEqual(logOpenFlags, ['w']);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-  await owner.finish(report);
-});
+test.for(['existing', 'missing'])(
+  'a Windows host empties a %s log through one pinned write handle',
+  async (start) => {
+    const { paths, owner } = await acquire();
+    if (start === 'existing') fs.writeFileSync(paths.logPath, 'previous run\n');
+    const logOpenFlags = spyWindowsLogHandleRules(paths.logPath);
+    await onWindowsHost(async () => {
+      try {
+        owner.publish(fields);
+        assert.equal(fs.readFileSync(paths.logPath, 'utf8'), '');
+        // No append handle and no second open of the path: one write handle did it all, whether or not the
+        // log existed first. An append handle would raise EPERM here, as NTFS does (#3291).
+        assert.deepEqual(logOpenFlags, ['w']);
+        assert.equal(fs.existsSync(paths.logPath), true);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+    await owner.finish(report);
+  },
+);
 
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],

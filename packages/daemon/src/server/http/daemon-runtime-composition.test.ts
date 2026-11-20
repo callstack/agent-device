@@ -220,3 +220,32 @@ test('an unreadable policy stops the assembly before the factory is called', asy
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+// The runtime is the admission an embedded daemon, or one started by another build's launcher, is admitted
+// by: nothing below it may be composed, locked or recovered on a root the rule refuses. An owned root that is
+// merely open is repaired, so the shape that still refuses is one no mode change makes private.
+test('a runtime refuses an unsafe state root before composing any runtime', async () => {
+  const under = mkdtempForTestSync('daemon-unsafe-state-root-');
+  const outside = path.join(under, 'outside');
+  fs.mkdirSync(outside, { mode: 0o700 });
+  const stateDir = path.join(under, 'state');
+  fs.symlinkSync(outside, stateDir);
+  const composeDeps = vi.fn(daemonRuntimeDepsFixture({}));
+
+  const refusal = await startDaemonRuntime({
+    host: createTestHostEnvironment({ env: { AGENT_DEVICE_STATE_DIR: stateDir } }),
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+    composeDeps,
+  }).catch((error: unknown) => error);
+
+  expect((refusal as { details?: Record<string, unknown> }).details).toMatchObject({
+    reason: 'daemon_state_root_unsafe',
+    problem: 'symlink',
+    stateDir,
+    component: stateDir,
+  });
+  expect(composeDeps).not.toHaveBeenCalled();
+  // Nothing was written through the link: no record, no lock, no log.
+  expect(fs.readdirSync(outside)).toEqual([]);
+});

@@ -179,8 +179,8 @@ export class SessionScriptWriter {
 
   /**
    * A remote recording's caller downloads each version once, so every version, the close-time script
-   * included, gets a fresh private (0600) file in a private (0700) directory that only the daemon user can
-   * read. Admission creates that directory with the state root and never chmods one it did not create.
+   * included, gets a fresh private (0600) file in a private (0700) directory that only the daemon user
+   * can read. The `mkdir` below creates that directory; admission owns its mode, so nothing chmods it.
    */
   private remoteScriptPath(): string {
     const directory = path.join(this.sessionsDir, 'remote-scripts');

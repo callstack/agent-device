@@ -62,8 +62,8 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   if (!value) {
     return resolveDefaultDaemonStateDir(options);
   }
-  // A raw parent step is refused before any expansion: what it names depends on ground nothing has judged.
-  if (value.split(/[\\/]/).includes('..')) {
+  // Refused before expansion, and only for the host's own separators: a POSIX file name may hold `\`.
+  if (value.split(process.platform === 'win32' ? /[\\/]/ : '/').includes('..')) {
     throw unsafeStateRoot(value, value, 'parent-step');
   }
   const expanded = expandUserHomePath(value, { env: options.env });
@@ -82,90 +82,68 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
 
 const MANAGED_STATE_DIRS = ['sessions', path.join('sessions', 'remote-scripts')] as const;
 
-/** The one reason every unsafe-state-root refusal answers with; callers branch on it, never on text. */
-export const DAEMON_STATE_ROOT_UNSAFE_REASON = 'daemon_state_root_unsafe';
+/** The one reason every refusal answers with; callers branch on it, never on text. */
+const DAEMON_STATE_ROOT_UNSAFE_REASON = 'daemon_state_root_unsafe';
 
 const MOVE_STATE_DIR_FIX =
   'Point AGENT_DEVICE_STATE_DIR (or --state-dir) at a real private directory you own, such as "$HOME/.agent-device".';
+const UNSAFE_ANCESTRY = 'is writable by group or others, so another account can steer the path.';
+const DRIVE_ABSOLUTE_FIX = String.raw`Use a drive-absolute path, such as C:\Users\you\.agent-device.`;
 
-/**
- * Why a state root is refused, and the one step that ends it. Only `not-private` is fixed in place, with a
- * mode change: no mode change makes a foreign-owned directory, or one a cleaner removes, private.
- */
 const STATE_ROOT_PROBLEMS = {
   symlink: ['is a symbolic link.', MOVE_STATE_DIR_FIX],
   'foreign-owner': ['is owned by another local user.', MOVE_STATE_DIR_FIX],
-  'group-or-other-writable-ancestor': [
-    'is writable by group or others, so another account can steer the path.',
-    MOVE_STATE_DIR_FIX,
-  ],
+  'group-or-other-writable-ancestor': [UNSAFE_ANCESTRY, MOVE_STATE_DIR_FIX],
   'not-private': ['is open to accounts besides its owner.', 'chmod 700'],
   'not-a-directory': ['is not a directory.', MOVE_STATE_DIR_FIX],
   unavailable: ['could not be checked or created.', MOVE_STATE_DIR_FIX],
   'parent-step': ['steps out of its parent with "..".', 'Name a real path, without a `..` step.'],
-  'unsupported-windows-path': [
-    'is not a supported Windows path shape.',
-    String.raw`Use a drive-absolute path, such as C:\Users\you\.agent-device.`,
-  ],
+  'unsupported-windows-path': ['is not a supported Windows path shape.', DRIVE_ABSOLUTE_FIX],
 } as const;
 
-export type DaemonStateRootProblem = keyof typeof STATE_ROOT_PROBLEMS;
+type DaemonStateRootProblem = keyof typeof STATE_ROOT_PROBLEMS;
 
-/** The walk's verdict for one step, in the terms an operator can act on. */
-const PROBLEM_FOR_EXPOSURE: Record<
-  Extract<PrivateRootAdmission, { status: 'refused' }>['exposure'],
-  DaemonStateRootProblem
-> = {
-  planted_link: 'symlink',
-  link_loop_exceeded: 'symlink',
-  foreign_owned: 'foreign-owner',
-  not_private: 'not-private',
-  world_writable: 'group-or-other-writable-ancestor',
-  shared_group_writable: 'group-or-other-writable-ancestor',
-  shared_parent: 'group-or-other-writable-ancestor',
-  not_a_directory: 'not-a-directory',
-  entry_appeared: 'unavailable',
-  parent_replaced: 'unavailable',
-  unresolvable_parent: 'unavailable',
-  unreachable_parent: 'unavailable',
-  relative_destination: 'unavailable',
-  unnamed_entry: 'unavailable',
-};
+/** Words the walk's verdict for an operator. What the walk could not decide is `unavailable`. */
+function problemForExposure(
+  exposure: Extract<PrivateRootAdmission, { status: 'refused' }>['exposure'],
+): DaemonStateRootProblem {
+  if (exposure === 'planted_link' || exposure === 'link_loop_exceeded') return 'symlink';
+  if (exposure === 'foreign_owned') return 'foreign-owner';
+  if (exposure === 'not_private') return 'not-private';
+  if (exposure === 'not_a_directory' || exposure === 'entry_appeared') return 'not-a-directory';
+  if (exposure === 'world_writable' || exposure === 'shared_group_writable')
+    return 'group-or-other-writable-ancestor';
+  return 'unavailable';
+}
 
 /**
- * Admits the daemon's state root once, before the first state-directory I/O of an operation. A root that is
- * private now is accepted as it stands: no enrollment, no repair, no migration. An unsafe one refuses with
- * {@link DAEMON_STATE_ROOT_UNSAFE_REASON} before anything is read, locked or written in it. On Windows only
- * the path shape is judged: multi-account protection is POSIX-only.
+ * Admits the daemon's state root once, before an operation's first state-directory I/O. `establish` creates a
+ * missing root and `repair` creates nothing; both close an owned root the umask left open (#4649). A refusal
+ * answers with `daemon_state_root_unsafe`. On Windows only the path shape is judged.
  */
 export function admitDaemonStateRoot(options: {
   paths: DaemonPaths;
-  /** `establish` (start: may create missing levels) or `inspect` (attach, status, stop: never creates). */
-  mode: 'establish' | 'inspect';
-  /** A seam for the foreign-owner case, which a CI host cannot create with `chown`. */
-  uid?: number;
+  mode: 'repair' | 'establish';
 }): void {
   const { baseDir } = options.paths;
   if (process.platform === 'win32') {
     if (windowsStatePathProblem(baseDir))
       throw unsafeStateRoot(baseDir, baseDir, 'unsupported-windows-path');
+    // Nothing else creates this directory, and mode bits answer nothing about accounts here.
+    if (options.mode === 'establish') fs.mkdirSync(baseDir, { recursive: true });
     return;
   }
   const admitted = admitPrivateRoot({
     rootPath: baseDir,
-    create: options.mode === 'establish',
+    mode: options.mode,
     managedDirs: MANAGED_STATE_DIRS,
-    uid: options.uid,
   });
   if (admitted.status !== 'refused') return;
-  throw unsafeStateRoot(baseDir, admitted.component, PROBLEM_FOR_EXPOSURE[admitted.exposure]);
+  throw unsafeStateRoot(baseDir, admitted.component, problemForExposure(admitted.exposure));
 }
 
-/**
- * The Windows path-shape rule, asked of `path.win32` whatever the host runs, so it is testable with
- * Windows-style inputs. A local drive-absolute route is supported; UNC, device and drive-relative are not.
- */
-export function windowsStatePathProblem(stateDir: string): boolean {
+/** The Windows shape rule, asked of `path.win32` whatever the host runs: a local drive-absolute route. */
+function windowsStatePathProblem(stateDir: string): boolean {
   const rest = /^[A-Za-z]:[\\/](.*)$/.exec(path.win32.normalize(stateDir))?.[1];
   return rest === undefined || rest.includes(':');
 }

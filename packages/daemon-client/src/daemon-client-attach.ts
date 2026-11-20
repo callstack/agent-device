@@ -1,6 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
-import { admitDaemonStateRoot } from '@agent-device/daemon-contracts/daemon-resolution';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
 import type {
   DaemonClientSettings,
@@ -19,8 +18,6 @@ export async function connectToDaemon(
     return await ensureManagedDaemon(settings, healthRecovery);
   }
   const stateDir = settings.paths.baseDir;
-  // Inspected before the lock or the record is read: an attach client creates nothing.
-  admitDaemonStateRoot({ paths: settings.paths, mode: 'inspect' });
   const observed = await observeLocalDaemon(settings, { refineUnreachable: true }).catch(
     (error: unknown) => {
       if (

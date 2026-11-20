@@ -462,3 +462,28 @@ test('daemon stop passes host ownership to shared retirement without detached cl
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+// The one admission of an invocation is asked where `src/cli.ts` resolves the paths, so this handler judges no
+// root of its own: an open root is read as it stands, nothing is created, and no mode is imposed here.
+test.for(['status', 'stop'])(
+  'daemon %s asks nothing of the state root and reads an open root as it stands',
+  async (subcommand) => {
+    const stateDir = mkdtempForTestSync('agent-device-daemon-command-admitted-');
+    fs.writeFileSync(`${stateDir}/daemon.json`, '{"pid":555}\n', { mode: 0o600 });
+    fs.chmodSync(stateDir, 0o755);
+    mocks.readDaemonStatus.mockReturnValue({ state: 'stopped', stateDir, plugins: [] });
+    mocks.stopDaemon.mockResolvedValue({ kind: 'not-running' } as never);
+
+    await daemonCommand({
+      host: createTestHostEnvironment(),
+      positionals: [subcommand],
+      flags: { help: false, json: true, stateDir, version: false },
+      client: {} as never,
+    });
+
+    // The record was read: it is what the reply, or the stop route, was built from.
+    expect(fs.readFileSync(`${stateDir}/daemon.json`, 'utf8')).toContain('555');
+    expect(fs.statSync(stateDir).mode & 0o777).toBe(0o755);
+    expect(fs.readdirSync(stateDir)).toEqual(['daemon.json']);
+  },
+);
