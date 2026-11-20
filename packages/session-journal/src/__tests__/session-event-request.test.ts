@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { onTestFinished, test, vi } from 'vitest';
+import * as redaction from '@agent-device/kernel/redaction';
 import {
   appendSessionEvent,
   buildRequestFinishedEvent,
@@ -416,6 +417,27 @@ test('a request note keeps credential and URL redaction and is bounded after it'
   assert.equal(finished?.details?.note, bounded);
   assert.equal(failed?.details?.note, bounded);
   assert.equal(JSON.stringify([started, finished, failed]).includes('s3cr3t'), false);
+});
+
+test('a long hyphenated note is cut to 1,200 code points before redaction and 300 after it', async () => {
+  const redactText = vi.spyOn(redaction, 'redactDiagnosticText');
+  onTestFinished(() => redactText.mockRestore());
+  // The 1,200th code point is an emoji, so a cut by code units would split it.
+  const redactionInput = `${'a-'.repeat(599)}a😀`;
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `  ${redactionInput}${'a-'.repeat(4096)}  `,
+  );
+  const bounded = `${'a-'.repeat(149)}a…`;
+
+  assert.equal(Array.from(redactionInput).length, 1200);
+  assert.deepEqual(
+    redactText.mock.calls.map(([text]) => text),
+    [redactionInput, redactionInput, redactionInput],
+  );
+  assert.equal(Array.from(bounded).length, 300);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
 });
 
 test('unknown commands keep the existing generic completion event', () => {

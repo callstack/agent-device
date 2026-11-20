@@ -9,6 +9,7 @@ import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 import {
+  boundSessionEventNoteForRedaction,
   buildRequestSuccessEventPresentation,
   readSessionEventNote,
   readSessionEventString,
@@ -60,8 +61,8 @@ export type SessionEventLogPage = {
 export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' | 'session'> & {
   ts?: string;
   /**
-   * The client-written note of a request event. The writer redacts it, bounds it to 300 code
-   * points, and records it as `details.note`.
+   * The client-written note of a request event. The writer redacts its first 1,200 code points,
+   * bounds the result to 300 code points, and records it as `details.note`.
    */
   note?: string;
 };
@@ -96,15 +97,19 @@ export function appendSessionEvent(
 }
 
 /**
- * The note keeps the diagnostic credential and URL redaction. The journal's code-point bound
- * applies last, in place of the redactor's code-unit cap, so a cut never splits a character.
+ * The note keeps the diagnostic credential and URL redaction. Redaction reads only a fixed
+ * code-point prefix of the note, so its cost does not grow with the request body. The journal's
+ * code-point bound applies last, in place of the redactor's code-unit cap, so a cut never splits
+ * a character.
  */
 function withRedactedNote(
   entry: SessionEventLogEntry,
   note: string | undefined,
 ): SessionEventLogEntry {
   const redactedNote =
-    note === undefined ? undefined : readSessionEventNote(redactDiagnosticText(note));
+    note === undefined
+      ? undefined
+      : readSessionEventNote(redactDiagnosticText(boundSessionEventNoteForRedaction(note)));
   return redactedNote ? { ...entry, details: { ...entry.details, note: redactedNote } } : entry;
 }
 

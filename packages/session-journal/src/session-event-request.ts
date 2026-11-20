@@ -6,6 +6,7 @@ const EVENT_LIST_PREVIEW_LIMIT = 5;
 const EVENT_LIST_SUMMARY_LIMIT = 3;
 const EVENT_LABEL_MAX_LENGTH = 120;
 const EVENT_NOTE_MAX_LENGTH = 300;
+const EVENT_NOTE_REDACTION_INPUT_MAX_LENGTH = 4 * EVENT_NOTE_MAX_LENGTH;
 const DEVICE_IDENTIFIER_KEYS = [
   'id',
   'deviceId',
@@ -313,6 +314,19 @@ export function readBoundedSessionEventString(value: unknown): string | undefine
 /** A client-written request note, trimmed and bounded to 300 code points with `…` when cut. */
 export function readSessionEventNote(value: unknown): string | undefined {
   return readBoundedString(value, EVENT_NOTE_MAX_LENGTH);
+}
+
+/**
+ * The trimmed note cut to its first 1,200 code points: the most client text that redaction reads.
+ * Redaction time grows faster than its input, and the daemon accepts much larger request bodies.
+ */
+export function boundSessionEventNoteForRedaction(note: string): string {
+  const characters: string[] = [];
+  for (const character of note.trim()) {
+    if (characters.length === EVENT_NOTE_REDACTION_INPUT_MAX_LENGTH) break;
+    characters.push(character);
+  }
+  return characters.join('');
 }
 
 export function readSessionEventBoolean(value: unknown): boolean | undefined {
