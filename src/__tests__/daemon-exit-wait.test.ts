@@ -277,7 +277,8 @@ test('force termination delivers KILL first and returns its confirmed exit', asy
   });
 });
 
-test('a daemon that becomes a zombie on TERM retains graceful mode without SIGKILL', async () => {
+test('a daemon that becomes a zombie on TERM retains graceful mode without SIGKILL on POSIX', async () => {
+  vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
   onSignal = (signal) => {
     if (signal !== 'SIGTERM') return;
     state.states.set(PID, 'Z');
@@ -290,3 +291,49 @@ test('a daemon that becomes a zombie on TERM retains graceful mode without SIGKI
   expect(signals).toEqual(['SIGTERM']);
   expect(result).toMatchObject({ status: 'exited', mode: 'graceful' });
 });
+
+test.each(['linux', 'win32'] as const)(
+  'graceful SIGTERM exit on %s reports platform-accurate mode',
+  async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
+    onSignal = (signal) => {
+      if (signal === 'SIGTERM') state.alive.set(PID, false);
+    };
+    const result = await stopDaemonProcess(
+      { pid: PID, startTime: OURS },
+      { mode: 'graceful', termTimeoutMs: TIMEOUT_MS, killTimeoutMs: 40 },
+    );
+    expect(signals).toEqual(['SIGTERM']);
+    expect(result).toEqual({
+      status: 'exited',
+      identity: { pid: PID, startTime: OURS },
+      mode: platform === 'win32' ? 'forced' : 'graceful',
+    });
+  },
+);
+
+test.each(['linux', 'win32'] as const)(
+  'graceful stop on %s retains previous exit mode when daemon exits after TERM timeout before SIGKILL',
+  async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
+    vi.mocked(process.kill).mockImplementation(((pid: number, signal: NodeJS.Signals | 0) => {
+      if (pid !== PID || signal === 0) return true;
+      signals.push(signal);
+      if (signal === 'SIGKILL') {
+        state.alive.set(PID, false);
+        throw Object.assign(new Error('No such process'), { code: 'ESRCH' });
+      }
+      return true;
+    }) as typeof process.kill);
+    const result = await stopDaemonProcess(
+      { pid: PID, startTime: OURS },
+      { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 0 },
+    );
+    expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+    expect(result).toEqual({
+      status: 'exited',
+      identity: { pid: PID, startTime: OURS },
+      mode: platform === 'win32' ? 'forced' : 'graceful',
+    });
+  },
+);
