@@ -87,6 +87,8 @@ export type AndroidSnapshotHelperSession = {
   deviceKey: string;
   helper: AndroidSnapshotHelperSessionHelperIdentity;
   port: number;
+  /** The secret the helper printed at readiness; it proves each connection, and nothing logs it. */
+  secret: Buffer;
   adb: AndroidAdbExecutor;
   process: AndroidAdbProcess;
   /** What the helper process printed and how it ended, for a session that dies on its own. */
@@ -353,6 +355,7 @@ async function startAndroidSnapshotHelperSession(params: {
       sha256: params.options.helperSha256,
     },
     port,
+    secret: Buffer.alloc(0),
     adb: params.options.adb,
     process: childProcess,
     processRecord,
@@ -365,13 +368,15 @@ async function startAndroidSnapshotHelperSession(params: {
     // falls back to pays too, so the wait gets a share of the helper-command budget rather than a
     // smaller guess. The caller's own deadline reaches it as an abort on `options.signal`, which is
     // what bounds this below the budget when the command itself is short.
-    session.commands = await waitForAndroidSnapshotHelperSessionReady(
+    const ready = await waitForAndroidSnapshotHelperSessionReady(
       childProcess,
       params.startBudgetMs,
       params.options.signal,
       processRecord,
       launch.socketName,
     );
+    session.commands = ready.commands;
+    session.secret = ready.secret;
     sessions().set(params.deviceKey, session);
     failedSessions().delete(params.identity);
     // `am instrument` force-stops whatever is already instrumenting this package, so a helper that
@@ -609,7 +614,7 @@ async function requestGracefulSessionExit(
   const requestId = `quit-${Date.now()}`;
   try {
     const response = await sendAndroidSnapshotHelperSessionCommand(
-      session.port,
+      session,
       `quit ${requestId}`,
       SESSION_STOP_TIMEOUT_MS,
       signal,

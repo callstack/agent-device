@@ -1,5 +1,7 @@
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   androidCaptureFailureReasonDetail,
   androidCaptureFailureReasonFromHelperResult,
@@ -67,14 +69,46 @@ export function isAndroidSnapshotHelperSessionRequestTimeout(error: unknown): bo
   return error instanceof AppError && error.details?.reason === SESSION_REQUEST_TIMEOUT_REASON;
 }
 
+/**
+ * Where a session listens and the secret its helper reported on stdout at readiness. The secret
+ * stays in this process: it never crosses the socket, and no log or error carries it.
+ */
+export type AndroidSnapshotHelperSessionEndpoint = { port: number; secret: Buffer };
+
+const SESSION_PEER_UNVERIFIED_REASON = 'android_snapshot_helper_session_peer_unverified';
+
+/**
+ * The listener did not prove the session secret, so it is not the helper this session launched
+ * (another process can bind a freed abstract name). No command byte was sent to it.
+ */
+export function isAndroidSnapshotHelperSessionPeerUnverified(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === SESSION_PEER_UNVERIFIED_REASON;
+}
+
+const SERVER_LABEL = 'agent-device-session-server|';
+const CLIENT_LABEL = 'agent-device-session-client|';
+
+function sessionProof(secret: Buffer, label: string, first: string, second: string): string {
+  return createHmac('sha256', secret).update(`${label}${first}${second}`).digest('hex');
+}
+
+/**
+ * Sends one command after a mutual proof of the session secret: the host sends a nonce, the helper
+ * answers with its nonce and an HMAC over both, and only a matching proof lets the host send its own
+ * proof and then the command. A listener that cannot prove the secret gets the nonce and nothing
+ * else.
+ */
 export function sendAndroidSnapshotHelperSessionCommand(
-  port: number,
+  endpoint: AndroidSnapshotHelperSessionEndpoint,
   command: string,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<string> {
+  const { port, secret } = endpoint;
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: '127.0.0.1', port });
+    const clientNonce = randomBytes(32).toString('hex');
+    let hello: Buffer | undefined = Buffer.alloc(0);
     const chunks: Buffer[] = [];
     const timer = setTimeout(() => {
       cleanup();
@@ -97,18 +131,62 @@ export function sendAndroidSnapshotHelperSessionCommand(
       socket.destroy();
       reject(signal?.reason ?? new DOMException('The operation was aborted', 'AbortError'));
     };
+    let refused = false;
+    const refuse = () => {
+      if (refused) return;
+      refused = true;
+      cleanup();
+      socket.destroy();
+      emitDiagnostic({
+        level: 'warn',
+        phase: SESSION_PEER_UNVERIFIED_REASON,
+        data: { port, command: command.split(' ', 1)[0] },
+      });
+      reject(
+        new AppError('COMMAND_FAILED', 'Android snapshot helper session peer is unverified', {
+          port,
+          reason: SESSION_PEER_UNVERIFIED_REASON,
+          dispatched: 'no',
+        }),
+      );
+    };
     signal?.addEventListener('abort', onAbort, { once: true });
     if (signal?.aborted) {
       onAbort();
       return;
     }
-    socket.on('connect', () => socket.write(`${command}\n`));
-    socket.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    socket.on('connect', () => socket.write(`${clientNonce}\n`));
+    // Only the helper that printed the secret can answer the nonce; anything else is refused.
+    socket.on('data', (chunk) => {
+      if (!hello) return void chunks.push(Buffer.from(chunk));
+      hello = Buffer.concat([hello, chunk]);
+      const newline = hello.indexOf(0x0a);
+      if (newline < 0) return void (hello.length > 129 && refuse());
+      const [serverNonce = '', proof = ''] = hello
+        .subarray(0, newline)
+        .toString('latin1')
+        .split(' ');
+      chunks.push(hello.subarray(newline + 1));
+      hello = undefined;
+      const expected = Buffer.from(sessionProof(secret, SERVER_LABEL, clientNonce, serverNonce));
+      const actual = Buffer.from(proof);
+      if (
+        !/^[0-9a-f]{64}$/.test(serverNonce) ||
+        actual.length !== expected.length ||
+        !timingSafeEqual(expected, actual)
+      ) {
+        return refuse();
+      }
+      socket.write(`${sessionProof(secret, CLIENT_LABEL, serverNonce, clientNonce)}\n${command}\n`);
+    });
+    // Before the hello nothing proved the peer, and no command byte has left this process.
     socket.on('error', (error) => {
+      if (hello || refused) return refuse();
       cleanup();
       reject(error);
     });
     socket.on('close', () => {
+      if (hello || refused) return refuse();
       cleanup();
       resolve(Buffer.concat(chunks).toString('utf8'));
     });
@@ -116,7 +194,7 @@ export function sendAndroidSnapshotHelperSessionCommand(
 }
 
 export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
-  port: number;
+  endpoint: AndroidSnapshotHelperSessionEndpoint;
   commandTimeoutMs: number;
   signal?: AbortSignal;
   idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
@@ -133,7 +211,7 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   // `timeoutMs` bounds only the UiAutomation connect wait, not the traversal after it, so a deadline
   // built from that wait plus a fixed overhead cut off slow-but-healthy captures (tester-army/e2e#841).
   const response = await sendAndroidSnapshotHelperSessionCommand(
-    params.port,
+    params.endpoint,
     `${command} ${requestId}`,
     params.commandTimeoutMs,
     params.signal,
@@ -146,7 +224,7 @@ const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exit
 const SESSION_READY_MALFORMED_REASON = 'android_snapshot_helper_session_ready_malformed';
 
 type ReadinessOutcome =
-  | { kind: 'ready'; commands: ReadonlySet<string> }
+  | { kind: 'ready'; commands: ReadonlySet<string>; secret: Buffer }
   | { kind: 'failed'; error: AppError };
 
 type StatusRecord = { fields: Map<string, string>; malformed: boolean };
@@ -168,7 +246,8 @@ function addStatusLine(record: StatusRecord, line: string): void {
 
 /**
  * Classifies one complete status record. A ready record decides readiness only when it is well
- * formed: this protocol, the socket name this host launched, no duplicate or unparsed line. Anything
+ * formed: this protocol, the socket name this host launched, a 32-byte session secret, no duplicate
+ * or unparsed line. Anything
  * else is a start failure, not a capability answer: an older helper refuses the versioned mode
  * before it would report readiness (#4519). A record that is not readiness is ignored, so the wait
  * goes on.
@@ -185,7 +264,8 @@ function classifyReadinessRecord(
   if (
     record.malformed ||
     fields.get('agentDeviceProtocol') !== ANDROID_SNAPSHOT_HELPER_PROTOCOL ||
-    fields.get('sessionSocket') !== launchedSocketName
+    fields.get('sessionSocket') !== launchedSocketName ||
+    !/^[0-9a-f]{64}$/.test(fields.get('sessionSecret') ?? '')
   ) {
     return {
       kind: 'failed',
@@ -197,6 +277,7 @@ function classifyReadinessRecord(
   return {
     kind: 'ready',
     commands: new Set(fields.get('sessionCommands')?.split(',').filter(Boolean)),
+    secret: Buffer.from(fields.get('sessionSecret')!, 'hex'),
   };
 }
 
@@ -223,7 +304,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
   signal: AbortSignal | undefined,
   record: AndroidInstrumentationProcessRecord,
   launchedSocketName: string,
-): Promise<ReadonlySet<string>> {
+): Promise<{ commands: ReadonlySet<string>; secret: Buffer }> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
@@ -238,7 +319,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
     const settle = (outcome: ReadinessOutcome) => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
-      if (outcome.kind === 'ready') resolve(outcome.commands);
+      if (outcome.kind === 'ready') resolve({ commands: outcome.commands, secret: outcome.secret });
       else reject(outcome.error);
     };
     // Instrumentation status records arrive on stdout. Only complete lines from that stream form a

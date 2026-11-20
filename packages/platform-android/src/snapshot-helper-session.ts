@@ -16,6 +16,7 @@ import {
   isAndroidSnapshotHelperSessionRequestTimeout,
   parseAndroidSnapshotHelperSessionTouchResponse,
   requestAndroidSnapshotHelperSessionSnapshot,
+  isAndroidSnapshotHelperSessionPeerUnverified,
   sendAndroidSnapshotHelperSessionCommand,
 } from './snapshot-helper-session-protocol.ts';
 import {
@@ -44,7 +45,7 @@ export async function captureFromAndroidSnapshotHelperSession(
   const reused = session.capturedCount > 0;
   try {
     const output = await requestAndroidSnapshotHelperSessionSnapshot({
-      port: session.port,
+      endpoint: session,
       commandTimeoutMs: resolved.commandTimeoutMs,
       signal: options.signal,
       idleWait: options.idleWait,
@@ -169,7 +170,7 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   let headers: Record<string, string>;
   try {
     const response = await sendAndroidSnapshotHelperSessionCommand(
-      session.port,
+      session,
       command,
       params.timeoutMs,
       params.signal,
@@ -182,6 +183,8 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
       signal: params.signal,
       cause: error,
     });
+    // A listener that did not prove the secret got no command, so this call runs one-shot.
+    if (isAndroidSnapshotHelperSessionPeerUnverified(error)) return undefined;
     throw discloseHelperTouchDispatch(params.action, error);
   }
   if (headers.ok !== 'true') {

@@ -8,6 +8,7 @@
 // viewport, and one-shot instrumentation the callers above it need.
 
 import assert from 'node:assert/strict';
+import { createHmac, randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
@@ -92,8 +93,7 @@ export function createPersistentSnapshotHelperProvider(
       const port = launch.port;
       let snapshotCount = 0;
       const server = net.createServer((socket) => {
-        socket.once('data', (chunk) => {
-          const command = chunk.toString('utf8').trim();
+        onSessionCommand(socket, (command) => {
           options.sessionRequests?.push(command);
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
@@ -200,6 +200,11 @@ export type SessionProviderOptions = {
   answeredSnapshotsBeforeStall?: number;
   /** Called when the helper receives a request it leaves unanswered. */
   onStalledSnapshot?: () => void;
+  /**
+   * Replace the helper's listener with one that cannot prove the session secret, as a process that
+   * bound the freed socket name would: it records every byte it receives and answers like a helper.
+   */
+  unprovenListener?: string[];
   /** Whether `adb features` advertises the shell protocol that forwards device exit status. */
   shellProtocolV2?: boolean;
   /** Make the `adb features` probe fail the way an adb too old to know the command does. */
@@ -238,8 +243,13 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
       const server = net.createServer((socket) => {
         sockets.add(socket);
         socket.once('close', () => sockets.delete(socket));
-        socket.once('data', (chunk) => {
-          const command = chunk.toString('utf8').trim();
+        const received = options.unprovenListener;
+        if (received) {
+          socket.on('data', (chunk) => received.push(chunk.toString('utf8')));
+          socket.once('data', () => socket.end(sessionResponse({ requestId: 'any', body: '' })));
+          return;
+        }
+        onSessionCommand(socket, (command) => {
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
             if (options.quitResponseMode === 'malformed') {
@@ -579,10 +589,57 @@ export function readAndroidSessionLaunch(args: readonly string[]): {
 }
 
 /** The status record a session helper prints once its socket is bound. */
+/** The secret every fake helper prints at readiness and proves on each connection. */
+export const FIXTURE_SESSION_SECRET = 'cd'.repeat(32);
+
+function fixtureSessionProof(label: string, first: string, second: string): string {
+  return createHmac('sha256', Buffer.from(FIXTURE_SESSION_SECRET, 'hex'))
+    .update(`${label}${first}${second}`)
+    .digest('hex');
+}
+
+/**
+ * The helper side of the session handshake, computed independently of the host: answer the client
+ * nonce with a server nonce and proof, require the client proof, then hand over one command line.
+ * A connection that fails the proof is closed before any command is read.
+ */
+export function onSessionCommand(socket: net.Socket, onCommand: (command: string) => void): void {
+  const serverNonce = randomBytes(32).toString('hex');
+  let clientNonce: string | undefined;
+  let proven = false;
+  let buffered = '';
+  const onData = (chunk: Buffer) => {
+    buffered += chunk.toString('utf8');
+    for (let newline = buffered.indexOf('\n'); newline >= 0; newline = buffered.indexOf('\n')) {
+      const line = buffered.slice(0, newline);
+      buffered = buffered.slice(newline + 1);
+      if (clientNonce === undefined) {
+        clientNonce = line;
+        socket.write(
+          `${serverNonce} ${fixtureSessionProof('agent-device-session-server|', clientNonce, serverNonce)}\n`,
+        );
+      } else if (!proven) {
+        proven =
+          line === fixtureSessionProof('agent-device-session-client|', serverNonce, clientNonce);
+        if (!proven) {
+          socket.destroy();
+          return;
+        }
+      } else {
+        socket.off('data', onData);
+        onCommand(line.trim());
+        return;
+      }
+    }
+  };
+  socket.on('data', onData);
+}
+
 export function sessionReadyRecord(launch: { socketName: string }, commands: string): string {
   return [
     'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
     `INSTRUMENTATION_STATUS: sessionCommands=${commands}`,
+    `INSTRUMENTATION_STATUS: sessionSecret=${FIXTURE_SESSION_SECRET}`,
     `INSTRUMENTATION_STATUS: sessionSocket=${launch.socketName}`,
     'INSTRUMENTATION_STATUS: sessionReady=true',
     'INSTRUMENTATION_STATUS_CODE: 2',

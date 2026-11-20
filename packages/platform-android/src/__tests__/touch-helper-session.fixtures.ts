@@ -6,6 +6,7 @@ import {
   androidHelperRuntimeProbeResult,
   isAndroidHelperRuntimeProbe,
   readAndroidSessionLaunch,
+  onSessionCommand,
   sessionReadyRecord,
   type FakeAndroidHelperRuntimeRelease,
 } from './snapshot-helper-session.fixtures.ts';
@@ -87,8 +88,7 @@ export function createFakeTouchHelperSessionProvider(
       const port = launch.port;
       const process = new FakeAndroidProcess();
       const server = net.createServer((socket) => {
-        socket.once('data', (chunk) => {
-          const command = chunk.toString('utf8').trim();
+        onSessionCommand(socket, (command) => {
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
             socket.end(

@@ -12,7 +12,9 @@ import type { AndroidAdbProcess } from '../adb-executor.ts';
 
 const LAUNCHED_SOCKET_NAME = 'agentdevice-snapshot-helper-18093';
 const PROTOCOL = 'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1';
-const COMMANDS = 'INSTRUMENTATION_STATUS: sessionCommands=input,snapshot-immediate';
+const SESSION_SECRET = 'ab'.repeat(32);
+// Every ready record carries the session secret; the commands line keeps it next to the commands.
+const COMMANDS = `INSTRUMENTATION_STATUS: sessionCommands=input,snapshot-immediate\nINSTRUMENTATION_STATUS: sessionSecret=${SESSION_SECRET}`;
 const SOCKET = `INSTRUMENTATION_STATUS: sessionSocket=${LAUNCHED_SOCKET_NAME}`;
 const READY = 'INSTRUMENTATION_STATUS: sessionReady=true';
 const READY_CODE = 'INSTRUMENTATION_STATUS_CODE: 2';
@@ -50,7 +52,10 @@ async function readinessOutcome(record: string): Promise<ReadonlySet<string> | u
     undefined,
     recordInstrumentationProcess(process),
     LAUNCHED_SOCKET_NAME,
-  ).catch((error: unknown) => error);
+  ).then(
+    (ready) => ready.commands,
+    (error: unknown) => error,
+  );
   process.stdout.write(record);
   return ready;
 }
@@ -66,7 +71,7 @@ test('readiness is the launched socket, and a helper naming another socket is re
   const ready = waitForReady(process);
   process.stdout.write([PROTOCOL, COMMANDS, SOCKET, READY, READY_CODE, ''].join('\n'));
 
-  assert.deepEqual([...(await ready)], ['input', 'snapshot-immediate']);
+  assert.deepEqual([...(await ready).commands], ['input', 'snapshot-immediate']);
 
   // The same record, naming a socket this host did not launch: another helper's readiness, or a
   // stale one, and the host must refuse it rather than send commands through the wrong forward.
@@ -94,7 +99,7 @@ test('an adb warning between two halves of the socket line keeps the record whol
     'device-snapshot-helper-18093\nINSTRUMENTATION_STATUS: sessionReady=true\nINSTRUMENTATION_STATUS_CODE: 2\n',
   );
 
-  assert.deepEqual([...(await ready)], ['input', 'snapshot-immediate']);
+  assert.deepEqual([...(await ready).commands], ['input', 'snapshot-immediate']);
 });
 
 test('fields of an earlier record never complete a later ready record', async () => {
@@ -169,5 +174,20 @@ test('a helper that announces no socket is a failed start, not a capability answ
   ]) {
     const outcome = await readinessOutcome([...fields, READY, READY_CODE, ''].join('\n'));
     assert.equal(reasonOf(outcome), MALFORMED, `expected ${fields.join(' | ')} to be refused`);
+  }
+});
+
+test('a ready record must carry a 32-byte session secret, and readiness returns it', async () => {
+  const process = new FakeHelperProcess();
+  const ready = waitForReady(process);
+  process.stdout.write([PROTOCOL, COMMANDS, SOCKET, READY, READY_CODE, ''].join('\n'));
+  assert.equal((await ready).secret.toString('hex'), SESSION_SECRET);
+
+  const commandsOnly = 'INSTRUMENTATION_STATUS: sessionCommands=input,snapshot-immediate';
+  for (const secret of ['', 'ab'.repeat(31), 'AB'.repeat(32), `${'ab'.repeat(32)}00`]) {
+    const fields = [PROTOCOL, commandsOnly, SOCKET];
+    if (secret) fields.push(`INSTRUMENTATION_STATUS: sessionSecret=${secret}`);
+    const outcome = await readinessOutcome([...fields, READY, READY_CODE, ''].join('\n'));
+    assert.equal(reasonOf(outcome), MALFORMED, `expected secret "${secret}" to be refused`);
   }
 });

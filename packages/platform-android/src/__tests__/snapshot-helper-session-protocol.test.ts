@@ -204,7 +204,11 @@ test('helper timeout diagnostics omit encoded text input', async () => {
   const encoded = Buffer.from(JSON.stringify({ text: 'private fill value' })).toString('base64');
   try {
     await assert.rejects(
-      sendAndroidSnapshotHelperSessionCommand(address.port, `input request-1 ${encoded}`, 20),
+      sendAndroidSnapshotHelperSessionCommand(
+        { port: address.port, secret: Buffer.alloc(32) },
+        `input request-1 ${encoded}`,
+        20,
+      ),
       (error) => {
         assert(error instanceof AppError);
         assert(!JSON.stringify(error).includes(encoded));
