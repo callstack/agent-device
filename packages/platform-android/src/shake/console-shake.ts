@@ -17,6 +17,18 @@ const SHAKE_SWING_MS = 80;
 const CONSOLE_REFUSED_HINT =
   'The emulator console refused the accelerometer command. An emulator image without an acceleration sensor has nothing to shake.';
 
+/** The failures a shake publishes as `error.details.reason`; commands.md documents each one. */
+const SHAKE_FAILURES = {
+  restUnreadable: {
+    reason: 'shake-rest-acceleration-unreadable',
+    message: 'The emulator console returned no accelerometer reading',
+  },
+  consoleRefused: {
+    reason: 'shake-console-refused',
+    message: 'The emulator console refused the shake',
+  },
+} as const satisfies Record<string, Readonly<{ reason: string; message: string }>>;
+
 type Acceleration = readonly [x: string, y: string, z: string];
 
 /**
@@ -52,9 +64,9 @@ async function readRestAcceleration(
   if (reply.refusal !== undefined) throw consoleRefused(device, reply, { dispatched: 'no' });
   const reading = /^acceleration\s*=\s*([^:\s]+):([^:\s]+):([^:\s]+)\s*$/m.exec(reply.stdout);
   if (!reading || reading.slice(1).some((axis) => !Number.isFinite(Number(axis)))) {
-    throw new AppError('COMMAND_FAILED', 'The emulator console returned no accelerometer reading', {
+    throw new AppError('COMMAND_FAILED', SHAKE_FAILURES.restUnreadable.message, {
       deviceId: device.id,
-      reason: 'shake-rest-acceleration-unreadable',
+      reason: SHAKE_FAILURES.restUnreadable.reason,
       dispatched: 'no',
       stdout: reply.stdout.trim(),
     });
@@ -80,9 +92,9 @@ function consoleRefused(
   reply: Readonly<{ stdout: string; refusal?: string }>,
   extra: Readonly<{ dispatched?: 'no' }> = {},
 ): AppError {
-  return new AppError('COMMAND_FAILED', 'The emulator console refused the shake', {
+  return new AppError('COMMAND_FAILED', SHAKE_FAILURES.consoleRefused.message, {
     deviceId: device.id,
-    reason: 'shake-console-refused',
+    reason: SHAKE_FAILURES.consoleRefused.reason,
     ...extra,
     stdout: reply.stdout.trim(),
     ...(reply.refusal ? { consoleReason: reply.refusal } : {}),
