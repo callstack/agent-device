@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentRef,
@@ -605,15 +606,24 @@ function ReorderRow(props: {
     Animated.spring(lift, { toValue: dragging ? 1 : 0, useNativeDriver: true }).start();
   }, [dragging, lift]);
 
-  const handleGesture = Gesture.Pan()
-    .activateAfterLongPress(reorderHoldArmMs)
-    .runOnJS(true)
-    // The builder types this ref as a component type; at runtime it takes the scroll view instance.
-    .blocksExternalGesture(props.pageScrollRef as unknown as RefObject<ComponentType | null>)
-    .onStart(() => props.onHoldActivated())
-    .onUpdate((event) => props.onDrag(event.translationY))
-    .onEnd((event) => props.onDrop(event.translationY))
-    .onFinalize(() => props.onDragEnd());
+  // The drag re-renders this row on every move. The gesture is built once and reads the
+  // current callbacks through a ref, so a re-render never reconfigures the native handler.
+  const callbacks = useRef(props);
+  callbacks.current = props;
+  const { pageScrollRef } = props;
+  const handleGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activateAfterLongPress(reorderHoldArmMs)
+        .runOnJS(true)
+        // The builder types this ref as a component type; at runtime it takes the scroll view instance.
+        .blocksExternalGesture(pageScrollRef as unknown as RefObject<ComponentType | null>)
+        .onStart(() => callbacks.current.onHoldActivated())
+        .onUpdate((event) => callbacks.current.onDrag(event.translationY))
+        .onEnd((event) => callbacks.current.onDrop(event.translationY))
+        .onFinalize(() => callbacks.current.onDragEnd()),
+    [pageScrollRef],
+  );
 
   return (
     <Animated.View
