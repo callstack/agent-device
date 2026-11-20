@@ -13,6 +13,7 @@ export type AndroidReadinessHost = Pick<
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { bootFailureHint } from '@agent-device/provision-kit/boot-diagnostics';
 import { androidAdbResultError, attachAdbFailureHint } from '../adb-executor.ts';
 import {
@@ -79,11 +80,58 @@ async function ensureEmulatorReady(
     }
     return ready;
   } catch (error) {
-    if (launchedPid !== undefined && signal.aborted) {
-      await host.deviceReadiness.androidEmulator.terminate(launchedPid);
+    if (launchedPid !== undefined && !keepsBootAfterFailure(host, error, deadlineAtMs, signal)) {
+      // This request's launch has no boot left to wait for: it goes with the failure, so no
+      // emulator is left running with no session to own it (#4847).
+      await terminateLaunch(host, launchedPid, error);
     }
     signal.throwIfAborted();
     throw error;
+  }
+}
+
+/**
+ * Whether a failed boot leaves its emulator booting, and so leaves this request's launch running.
+ * A canceled request always answers stopped — the abort owner owns that decision. Otherwise only a
+ * failure that spent the startup budget keeps booting: each poller throws {@link bootTimeoutError}
+ * once `clock.now()` passes `deadlineAtMs`, and a boot probe that fails at or past that same
+ * deadline reports its own spent budget rather than `BOOT_TIMEOUT_REASON` (see
+ * `buildAndroidBootError`). Every other refusal — the host could not record the launch, a probe
+ * failed inside the budget, discovery went wrong — has no boot left to wait for.
+ */
+function keepsBootAfterFailure(
+  host: AndroidReadinessHost,
+  error: unknown,
+  deadlineAtMs: number,
+  signal: AbortSignal,
+): boolean {
+  if (signal.aborted) return false;
+  return (
+    host.clock.now() >= deadlineAtMs || asAppError(error).details?.reason === BOOT_TIMEOUT_REASON
+  );
+}
+
+/**
+ * Stops the process this request launched, and never replaces the failure that caused the stop: a
+ * host that refuses to signal reports a diagnostic naming that failure instead.
+ */
+async function terminateLaunch(
+  host: AndroidReadinessHost,
+  launchedPid: number,
+  bootFailure: unknown,
+): Promise<void> {
+  try {
+    await host.deviceReadiness.androidEmulator.terminate(launchedPid);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_emulator_launch_terminate_failed',
+      data: {
+        pid: launchedPid,
+        error: error instanceof Error ? error.message : String(error),
+        bootFailure: bootFailure instanceof Error ? bootFailure.message : String(bootFailure),
+      },
+    });
   }
 }
 
