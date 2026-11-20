@@ -155,7 +155,7 @@ function buildRequest(
  */
 async function startStandIn(
   transport: 'http' | 'socket',
-  afterFirst: 'answer' | 'refuse',
+  afterFirst: 'answer' | 'refuse' | 'answer-late',
 ): Promise<{ server: LoopbackServer; port: number; connections: () => number }> {
   let connections = 0;
   // The TCP ordinal lives on the socket the request arrived on, so two requests sharing one
@@ -181,7 +181,8 @@ async function startStandIn(
           const connection = ++connections;
           socket.on('error', () => {});
           if (connection === 1) return;
-          if (afterFirst === 'refuse') {
+          // `answer-late` is a healthy daemon that misses the first probe and answers the next one.
+          if (afterFirst === 'refuse' || (afterFirst === 'answer-late' && connection === 2)) {
             socket.destroy();
             return;
           }
@@ -243,11 +244,12 @@ type RouteRow = Readonly<{
   command: string;
   platform: 'android' | 'ios' | undefined;
   positionals?: readonly string[];
-  afterFirst: 'answer' | 'refuse';
+  afterFirst: 'answer' | 'refuse' | 'answer-late';
   hintPattern: RegExp;
   // The connections the stand-in must observe: 1 = the RPC only (route never probed),
-  // 2 = RPC + probe.
-  connections: 1 | 2;
+  // 2 = RPC + the probe that answered, 3 = RPC + a missed probe + the one that answered,
+  // 4 = RPC + every probe of the unresponsive verdict.
+  connections: 1 | 2 | 3 | 4;
   /** Whether this row's verdict is the reset branch, which clears the daemon's metadata. */
   resets: boolean;
 }>;
@@ -277,13 +279,24 @@ const ROUTE_ROWS: readonly RouteRow[] = [
     resets: false,
   },
   {
+    // One missed probe is not the verdict: a daemon that answers a later one is healthy.
+    name: 'keeps a daemon that misses the first probe and answers a later one',
+    transport: 'socket',
+    command: RESET_POLICY_COMMAND,
+    platform: undefined,
+    afterFirst: 'answer-late',
+    hintPattern: /the daemon was kept alive so the session can still be closed or inspected/,
+    connections: 3,
+    resets: false,
+  },
+  {
     name: 'resets a daemon that answers no probe endpoint',
     transport: 'socket',
     command: RESET_POLICY_COMMAND,
     platform: undefined,
     afterFirst: 'refuse',
-    hintPattern: /The daemon did not answer the liveness probe and was reset after the timeout/,
-    connections: 2,
+    hintPattern: /The daemon did not answer the liveness probes and was reset after the timeout/,
+    connections: 4,
     resets: true,
   },
   {
@@ -486,12 +499,12 @@ test('request-timeout route: an attach client leaves a daemon that answers no pr
         TIMEOUT_MS,
         { host: createTestHostEnvironment(), timeoutRecovery: 'none' },
       ),
-      /did not answer the liveness probe.*does not retire a daemon it did not start.*agent-device daemon stop/s,
+      /did not answer the liveness probes.*does not retire a daemon it did not start.*agent-device daemon stop/s,
     );
     assert.equal(
       daemon.connections(),
-      2,
-      'the probe still asks, so the hint can say what it found',
+      4,
+      'every probe still asks, so the hint can say what it found',
     );
     assert.equal(isProcessAlive(info.pid), true);
     assert.ok(fs.existsSync(paths.infoPath));
@@ -526,7 +539,7 @@ test('request-timeout route: the reset acts on the resolved state paths, not the
         TIMEOUT_MS,
         { host: createTestHostEnvironment() },
       ),
-      /The daemon did not answer the liveness probe and was reset after the timeout/,
+      /The daemon did not answer the liveness probes and was reset after the timeout/,
     );
     assert.ok(!fs.existsSync(resolvedPaths.infoPath), 'the resolved registration is cleared');
     assert.ok(fs.existsSync(requestFlagPaths.infoPath), 'the flag-named state dir is untouched');
