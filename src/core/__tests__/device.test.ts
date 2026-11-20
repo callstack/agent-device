@@ -13,6 +13,11 @@ import {
 } from '@agent-device/kernel/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
+  isOptionalPlatform,
+  OPTIONAL_PLATFORMS,
+  REQUIRED_PLATFORMS,
+} from '@agent-device/contracts/platform-module';
+import {
   ANDROID_TV_DEVICE,
   IOS_SIMULATOR,
   IPADOS_SIMULATOR,
@@ -81,6 +86,17 @@ test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {
   assert.equal(isPlatform('vega'), true);
   assert.equal(isPlatform('windows'), false);
   assert.equal(isPlatform(undefined), false);
+});
+
+test('the required/optional partition owner covers every canonical PLATFORMS family once', () => {
+  // The partition lives in @agent-device/contracts/platform-module (the registry that
+  // enforces completeness); this pins it to the kernel's canonical PLATFORMS tuple so the
+  // two can never drift apart.
+  const partition = [...REQUIRED_PLATFORMS, ...OPTIONAL_PLATFORMS];
+  assert.deepEqual(partition, [...PLATFORMS]);
+  for (const platform of PLATFORMS) {
+    assert.notEqual(REQUIRED_PLATFORMS.includes(platform as never), isOptionalPlatform(platform));
+  }
 });
 
 test('resolveDevice accepts serial selection for Android, HarmonyOS, and Vega', async () => {

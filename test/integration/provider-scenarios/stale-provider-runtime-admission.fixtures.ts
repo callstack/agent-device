@@ -7,6 +7,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
+import { runtimeModuleRegistryFixture } from '../../../src/platform-runtime-gateway.fixtures.ts';
 
 export async function inspectProviderDeploymentAdmission(params: {
   runtime: ProviderDeviceRuntime;
@@ -15,17 +16,14 @@ export async function inspectProviderDeploymentAdmission(params: {
 }): Promise<RuntimeFacts<PlatformRuntimeOperations>> {
   const localLoadCalls: string[] = [];
   const gateway = createComposedPlatformRuntimeGateway({
-    modules: new Map([
-      [
-        'android',
-        {
-          family: 'android',
-          loadRuntime: async () => {
-            localLoadCalls.push('android');
-            throw new Error('provider-owned device must not load a local runtime');
-          },
+    modules: runtimeModuleRegistryFixture([
+      {
+        family: 'android',
+        loadRuntime: async () => {
+          localLoadCalls.push('android');
+          throw new Error('provider-owned device must not load a local runtime');
         },
-      ],
+      },
     ]),
     loadHost: async () => ({}) as PlatformRuntimeHost,
     providerRuntimes: [params.runtime],
