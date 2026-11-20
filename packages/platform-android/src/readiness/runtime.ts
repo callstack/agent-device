@@ -61,11 +61,15 @@ async function ensureEmulatorReady(
         input.headless,
         deadlineAtMs - host.clock.now(),
       );
+  // Where the boot got to, so a failure after the emulator answered tells a spent boot budget
+  // apart from a late step that failed on its own.
+  let bootWaitDone = false;
   try {
     const discovered =
       existing ??
       (await waitForDiscovery(host, selected.name, request, input.serial, deadlineAtMs, signal));
     await waitForBoot(host, discovered.id, deadlineAtMs, signal);
+    bootWaitDone = true;
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
@@ -80,7 +84,7 @@ async function ensureEmulatorReady(
     }
     return ready;
   } catch (error) {
-    if (launchedPid !== undefined && !keepsBootAfterFailure(host, error, deadlineAtMs, signal)) {
+    if (launchedPid !== undefined && !keepsBootAfterFailure(error, bootWaitDone, signal)) {
       // This request's launch has no boot left to wait for: it goes with the failure, so no
       // emulator is left running with no session to own it (#4847).
       await terminateLaunch(host, launchedPid, error);
@@ -92,28 +96,23 @@ async function ensureEmulatorReady(
 
 /**
  * Whether a failed boot leaves its emulator booting, and so leaves this request's launch running.
- * A canceled request always answers stopped — the abort owner owns that decision. Otherwise only a
- * failure that spent the startup budget keeps booting: each poller throws {@link bootTimeoutError}
- * once `clock.now()` passes `deadlineAtMs`, and a boot probe that fails at or past that same
- * deadline reports its own spent budget rather than `BOOT_TIMEOUT_REASON` (see
- * `buildAndroidBootError`). Every other refusal — the host could not record the launch, a probe
- * failed inside the budget, discovery went wrong — has no boot left to wait for.
+ * Only a boot-wait poller that ran out the startup budget answers yes; a canceled request always
+ * answers no — the abort owner owns that decision.
  */
 function keepsBootAfterFailure(
-  host: AndroidReadinessHost,
   error: unknown,
-  deadlineAtMs: number,
+  bootWaitDone: boolean,
   signal: AbortSignal,
 ): boolean {
   if (signal.aborted) return false;
-  return (
-    host.clock.now() >= deadlineAtMs || asAppError(error).details?.reason === BOOT_TIMEOUT_REASON
-  );
+  if (bootWaitDone) return false;
+  const details = asAppError(error).details;
+  return details?.reason === BOOT_TIMEOUT_REASON || details?.bootBudgetSpent === true;
 }
 
 /**
- * Stops the process this request launched, and never replaces the failure that caused the stop: a
- * host that refuses to signal reports a diagnostic naming that failure instead.
+ * Stops this request's launch, keeping the failure that caused the stop: a refused stop, such as a
+ * denied `device-shutdown` policy, is recorded beside that failure, never in its place.
  */
 async function terminateLaunch(
   host: AndroidReadinessHost,
@@ -269,6 +268,9 @@ function throwBootProbeFailure(
     hint: bootFailureHint(reason),
     ...(failure.details ?? {}),
     reason,
+    // Says this probe's own failure ended a boot whose budget ran out, which is what separates it
+    // from a probe that failed with booting still ahead of it.
+    ...(budgetSpent ? { bootBudgetSpent: true } : {}),
   };
   throw buildAndroidBootError(failure, reason, budgetSpent, details);
 }

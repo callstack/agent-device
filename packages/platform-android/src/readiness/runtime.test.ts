@@ -623,8 +623,40 @@ test('a boot probe that spends the startup budget leaves the launched emulator b
       { headless: true, deadlineAtMs: 5_000 },
       new AbortController().signal,
     ),
-  ).rejects.toMatchObject({ details: { reason: 'ANDROID_BOOT_TIMEOUT' } });
+  ).rejects.toMatchObject({
+    details: { reason: 'ANDROID_BOOT_TIMEOUT', bootBudgetSpent: true },
+  });
   expect(terminate).not.toHaveBeenCalled();
+});
+
+test('a step that fails after the boot is done stops the launched emulator past the deadline', async () => {
+  let discoveries = 0;
+  const lateFailure = new AppError('COMMAND_FAILED', 'adb devices failed');
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => {
+      discoveries += 1;
+      if (discoveries === 1) return [stoppedAvd()];
+      // The boot is over; this refresh is the step after it, and it fails once the clock is past
+      // the startup deadline. A spent budget keeps an emulator that is still coming up, and this one
+      // is already up, so the launch is this request's to stop.
+      if (discoveries === 2) {
+        host.clock.sleep(60_000);
+        throw lateFailure;
+      }
+      return [runningEmulator()];
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(lateFailure);
+  expect(terminate).toHaveBeenCalledWith(4242);
 });
 
 test('an emulator that was already running is not stopped when its boot probe fails', async () => {
