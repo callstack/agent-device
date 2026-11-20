@@ -422,10 +422,11 @@ test('a request note keeps credential and URL redaction and is bounded after it'
 test('a long hyphenated note is cut to 1,200 code points before redaction and 300 after it', async () => {
   const redactText = vi.spyOn(redaction, 'redactDiagnosticText');
   onTestFinished(() => redactText.mockRestore());
-  // The 1,200th code point is an emoji, so a cut by code units would split it.
+  // The 1,200th code point is an emoji, so a cut by code units would split it. A space follows
+  // it, so the cut splits no token.
   const redactionInput = `${'a-'.repeat(599)}a😀`;
   const { started, finished, failed } = await writeAndReadNoteEvents(
-    `  ${redactionInput}${'a-'.repeat(4096)}  `,
+    `  ${redactionInput} ${'a-'.repeat(4096)}  `,
   );
   const bounded = `${'a-'.repeat(149)}a…`;
 
@@ -444,9 +445,10 @@ const SEARCH_URL = 'https://shop.example/search?q=';
 const REDACTED_SEARCH_URL = 'https://shop.example/search?REDACTED';
 
 test('a note cut before redaction ends in an ellipsis after redaction shortens it', async () => {
-  // The query reaches the 1,200-code-point cap, so the cap drops the explanation after it.
+  // The query ends at the 1,200-code-point cap, so the cap drops the explanation after it.
+  const query = 'q'.repeat(1200 - `Checked ${SEARCH_URL}`.length);
   const { started, finished, failed } = await writeAndReadNoteEvents(
-    `Checked ${SEARCH_URL}${'q'.repeat(1300)} because the cart total was wrong`,
+    `Checked ${SEARCH_URL}${query} because the cart total was wrong`,
   );
   const bounded = `Checked ${REDACTED_SEARCH_URL}…`;
 
@@ -457,10 +459,11 @@ test('a note cut before redaction ends in an ellipsis after redaction shortens i
 
 test('a note cut before redaction keeps room for the ellipsis within 300 code points', async () => {
   // The cap keeps the URL, a space and `keptEmoji` emoji: exactly 300 code points once redacted.
+  // A space follows the kept emoji, so the cut splits no token.
   const keptEmoji = 300 - REDACTED_SEARCH_URL.length - 1;
   const query = 'q'.repeat(1200 - SEARCH_URL.length - 1 - keptEmoji);
   const { started, finished, failed } = await writeAndReadNoteEvents(
-    `${SEARCH_URL}${query} ${'😀'.repeat(keptEmoji + 50)}`,
+    `${SEARCH_URL}${query} ${'😀'.repeat(keptEmoji)} ${'😀'.repeat(50)}`,
   );
   const bounded = `${REDACTED_SEARCH_URL} ${'😀'.repeat(keptEmoji - 1)}…`;
 
@@ -474,11 +477,18 @@ test('a note cut before redaction keeps room for the ellipsis within 300 code po
 test('only a note longer than 1,200 code points counts as cut before redaction', async () => {
   const whole = `${SEARCH_URL}${'q'.repeat(1200 - SEARCH_URL.length)}`;
   const { started: kept } = await writeAndReadNoteEvents(whole);
-  const { started: cut } = await writeAndReadNoteEvents(`${whole}q`);
+  const { started: cut } = await writeAndReadNoteEvents(`${whole} q`);
 
   assert.equal(Array.from(whole).length, 1200);
   assert.equal(kept?.details?.note, REDACTED_SEARCH_URL);
   assert.equal(cut?.details?.note, `${REDACTED_SEARCH_URL}…`);
+});
+
+test('a note cut inside its first token stores no note', async () => {
+  const { started, finished } = await writeAndReadNoteEvents(`${SEARCH_URL}${'q'.repeat(1200)}`);
+
+  assert.equal(started?.details, undefined);
+  assert.deepEqual(finished?.details, { durationMs: 5 });
 });
 
 test('a note cut inside a quoted credential stores no part of the credential', async () => {
@@ -493,6 +503,57 @@ test('a note cut inside a quoted credential stores no part of the credential', a
   assert.equal(finished?.details?.note, bounded);
   assert.equal(failed?.details?.note, bounded);
   assert.doesNotMatch(JSON.stringify([started, finished, failed]), /horse|battery|staple/);
+});
+
+/**
+ * A note whose 1,200-code-point cap falls right after `kept`, inside a token that `rest` ends.
+ * The query before it shrinks to `?REDACTED`, so text kept after the query fits in 300 code points.
+ */
+function buildNoteCutAfter(kept: string, rest: string): string {
+  const lead = `Checked ${SEARCH_URL}`;
+  const note = `${lead}${'q'.repeat(1200 - lead.length - kept.length)}${kept}${rest}`;
+  assert.ok(Array.from(note).slice(0, 1200).join('').endsWith(kept));
+  return note;
+}
+
+test('a note cut inside URL credentials stores no part of them', async () => {
+  // A URL cut inside its userinfo no longer parses, so URL redaction alone would keep it.
+  for (const { kept, rest } of [
+    { kept: ' then signed in at https://user:pass@', rest: 'host/admin and retried' },
+    { kept: ' then signed in at https://user:pa', rest: 'ss@host/admin and retried' },
+  ]) {
+    const { started, finished, failed } = await writeAndReadNoteEvents(
+      buildNoteCutAfter(kept, rest),
+    );
+    const bounded = `Checked ${REDACTED_SEARCH_URL} then signed in at…`;
+
+    assert.equal(started?.details?.note, bounded);
+    assert.equal(finished?.details?.note, bounded);
+    assert.equal(failed?.details?.note, bounded);
+    assert.doesNotMatch(JSON.stringify([started, finished, failed]), /user|:pa/);
+  }
+});
+
+test('a note cut inside an unquoted value or a bearer token stores no part of it', async () => {
+  for (const { kept, bounded } of [
+    {
+      kept: ' then retried with token=abc123',
+      bounded: `Checked ${REDACTED_SEARCH_URL} then retried with…`,
+    },
+    {
+      kept: ' then retried with Authorization: Bearer abc123',
+      bounded: `Checked ${REDACTED_SEARCH_URL} then retried with Authorization: Bearer…`,
+    },
+  ]) {
+    const { started, finished, failed } = await writeAndReadNoteEvents(
+      buildNoteCutAfter(kept, 'def456 and waited'),
+    );
+
+    assert.equal(started?.details?.note, bounded);
+    assert.equal(finished?.details?.note, bounded);
+    assert.equal(failed?.details?.note, bounded);
+    assert.doesNotMatch(JSON.stringify([started, finished, failed]), /abc123|def456/);
+  }
 });
 
 test('unknown commands keep the existing generic completion event', () => {

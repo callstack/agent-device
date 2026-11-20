@@ -8,6 +8,7 @@ const EVENT_LIST_SUMMARY_LIMIT = 3;
 const EVENT_LABEL_MAX_LENGTH = 120;
 const EVENT_NOTE_MAX_LENGTH = 300;
 const EVENT_NOTE_REDACTION_INPUT_MAX_LENGTH = 4 * EVENT_NOTE_MAX_LENGTH;
+const WHITESPACE_RE = /\s/u;
 const DEVICE_IDENTIFIER_KEYS = [
   'id',
   'deviceId',
@@ -330,17 +331,23 @@ export function prepareRequestNoteForStorage(note: string): string | undefined {
  * The trimmed note cut to its first 1,200 code points: the most client text that redaction reads.
  * Redaction time grows faster than its input, and the daemon accepts much larger request bodies.
  * `truncated` says the cut dropped text, so the stored note can show that it is incomplete.
+ *
+ * A cut inside a whitespace-delimited token drops that whole token. Its fragment, such as a URL
+ * cut inside its userinfo, may no longer match the redaction pattern for the full token.
  */
 function boundNoteForRedaction(note: string): {
   text: string;
   truncated: boolean;
 } {
   const characters: string[] = [];
+  let lastTokenStart = 0;
   for (const character of note.trim()) {
     if (characters.length === EVENT_NOTE_REDACTION_INPUT_MAX_LENGTH) {
-      return { text: characters.join(''), truncated: true };
+      const kept = WHITESPACE_RE.test(character) ? characters : characters.slice(0, lastTokenStart);
+      return { text: kept.join(''), truncated: true };
     }
     characters.push(character);
+    if (WHITESPACE_RE.test(character)) lastTokenStart = characters.length;
   }
   return { text: characters.join(''), truncated: false };
 }
