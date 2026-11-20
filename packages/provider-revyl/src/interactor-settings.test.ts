@@ -86,8 +86,19 @@ test('appearance sets the named mode, and toggle flips the mode the worker repor
   );
 });
 
-test('location sets the coordinates and refuses switching location services', async () => {
+test('iOS refuses location on and off, which are the app grant there, and still sets coordinates', async () => {
+  const { fixture, interactor } = await liveInteractor('ios');
+  await assert.rejects(interactor.setSetting('location', 'on'), refusedForMode);
+  await assert.rejects(interactor.setSetting('location', 'off'), refusedForMode);
+  await interactor.setSetting('location', 'set', undefined, { latitude: 43.65, longitude: -79.38 });
+
+  assert.deepEqual(fixture.bodyFor('set_location'), { latitude: 43.65, longitude: -79.38 });
+  assert.equal(fixture.paths().filter((request) => request.endsWith('/set_location')).length, 1);
+});
+
+test('Android sets the coordinates, answers on as already on, and refuses switching it off', async () => {
   const { fixture, interactor } = await liveInteractor('android');
+  assert.equal(await interactor.setSetting('location', 'on'), undefined);
   await interactor.setSetting('location', 'set', undefined, { latitude: 43.65, longitude: -79.38 });
   await assert.rejects(interactor.setSetting('location', 'off'), refusedForMode);
 

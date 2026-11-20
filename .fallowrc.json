@@ -157,6 +157,11 @@
       "exports": ["default"]
     },
     {
+      // Test runners that drive Revyl's own API beside the plugin (e2e's video recording) find a lease's session by this id; the repository has no consumer of it.
+      "file": "packages/provider-revyl/src/index.ts",
+      "exports": ["revylSessionIdForLease"]
+    },
+    {
       // The version 1 entry a provider package's `agentDevicePlugin.entry` names; hosts without the version 2 contract import the built file and read `default`.
       "file": "packages/provider-*/src/plugin.ts",
       "exports": ["default"]

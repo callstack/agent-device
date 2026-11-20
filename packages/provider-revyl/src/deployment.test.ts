@@ -10,7 +10,7 @@ import {
   type RevylFixtureBackend,
 } from './revyl-backend.fixtures.ts';
 import { deployRevylApp } from './deployment.ts';
-import { revylSessionIdForLease } from './session-identity.ts';
+import { revylSessionIdForLease } from './device.ts';
 
 const openBackends: RevylFixtureBackend[] = [];
 

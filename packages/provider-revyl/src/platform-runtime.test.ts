@@ -98,6 +98,20 @@ test('a live session binds the interactor-backed operations and refuses the rest
   assert.equal(binding.operations.appLogInspect, undefined);
 });
 
+test('a live session binds settings and reaches the interactor with the setting and its state', async () => {
+  const calls: unknown[][] = [];
+  const interactor = {
+    setSetting: async (...args: unknown[]) => {
+      calls.push(args);
+      return { appearance: 'dark' };
+    },
+  } as unknown as Interactor;
+  const binding = await bind(owner({ hasLiveSession: true, interactor }));
+  assert.ok(binding.operations.setSetting);
+  await binding.operations.setSetting({ setting: 'appearance', state: 'dark' } as never);
+  assert.deepEqual(calls[0]?.slice(0, 2), ['appearance', 'dark']);
+});
+
 test('a session that has ended reports the refused facts and binds no device action', async () => {
   const facts = await owner({ hasLiveSession: false }).inspectFacts(IOS_DEVICE);
   assert.equal(facts?.operations.captureSnapshot.available, false);
