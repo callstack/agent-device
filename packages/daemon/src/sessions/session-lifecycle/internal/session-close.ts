@@ -386,7 +386,7 @@ export async function handleSessionCloseCommands(
     implicitShutdownClaimLost: closed.implicitShutdownClaimLost,
     implicitShutdownLaunchedProcessGone: closed.implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified: closed.implicitShutdownLaunchedProcessUnverified,
-    implicitShutdownStopUnconfirmed: closed.implicitShutdownStopUnconfirmed,
+    shutdownStopUnconfirmed: closed.shutdownStopUnconfirmed,
   });
   return remoteCloseScriptDelivery(response, closed.remoteScript);
 }
@@ -422,7 +422,7 @@ type SessionCloseFinalization =
       /** #4585: the device has been rebooted outside this session since its open, so close left it running. */
       implicitShutdownLaunchedProcessGone: boolean;
       implicitShutdownLaunchedProcessUnverified: boolean;
-      implicitShutdownStopUnconfirmed: boolean;
+      shutdownStopUnconfirmed: boolean;
     };
 
 // Everything between a settled repair decision and a success response:
@@ -469,7 +469,7 @@ async function runCloseTeardownAndRelease(params: {
     implicitShutdownClaimLost,
     implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified,
-    implicitShutdownStopUnconfirmed,
+    shutdownStopUnconfirmed,
   } = await runSessionCloseTeardown({
     env: params.env,
     leaseRegistry,
@@ -536,7 +536,7 @@ async function runCloseTeardownAndRelease(params: {
     implicitShutdownClaimLost,
     implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified,
-    implicitShutdownStopUnconfirmed,
+    shutdownStopUnconfirmed,
   };
 }
 
@@ -550,7 +550,7 @@ function buildCloseSuccessResponse(params: {
   implicitShutdownClaimLost: boolean;
   implicitShutdownLaunchedProcessGone: boolean;
   implicitShutdownLaunchedProcessUnverified: boolean;
-  implicitShutdownStopUnconfirmed: boolean;
+  shutdownStopUnconfirmed: boolean;
 }): DaemonResponse {
   const {
     session,
@@ -562,7 +562,7 @@ function buildCloseSuccessResponse(params: {
     implicitShutdownClaimLost,
     implicitShutdownLaunchedProcessGone,
     implicitShutdownLaunchedProcessUnverified,
-    implicitShutdownStopUnconfirmed,
+    shutdownStopUnconfirmed,
   } = params;
   if (repair.aborted && requestedSaveScript) {
     return {
@@ -618,7 +618,7 @@ function buildCloseSuccessResponse(params: {
         : "This session's open booted this device, but open recorded no emulator process identity, so close did not request a stop and left the device as it found it.",
     );
   }
-  if (implicitShutdownStopUnconfirmed) {
+  if (shutdownStopUnconfirmed) {
     appendResponseWarning(
       data,
       'Close asked this device to stop, but could not confirm that its emulator process exited. The device may still be running.',
