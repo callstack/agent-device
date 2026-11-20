@@ -6,20 +6,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { PlatformPluginAbsence } from './platform-plugin-registry.ts';
 
-// Simulates a composition whose builtin plugins do not include the extracted `vega` family: the
-// module-level composition inside request-providers must then register only the remaining
-// builtins, leaving `vega` absent from the platform-plugin registry.
-vi.mock('./interactors/builtin-platform-plugin-set.ts', async () => {
-  const { BUILTIN_PLATFORM_PLUGINS } = await import('./interactors/register-builtins.ts');
-  const { registerPlatformPluginSet } = await import('./platform-plugin-registry.ts');
-  const { missingPlatformPlugin } = await import('./platform-plugin-absence.ts');
-  return {
-    builtinPlatformPlugins: registerPlatformPluginSet(
-      BUILTIN_PLATFORM_PLUGINS.filter((plugin) => plugin.id !== 'vega'),
-      missingPlatformPlugin,
-    ),
-  };
-});
+// `vega` ships as a platform plugin, so the builtin set this process composes never owns it. The
+// scenario below reads that real composition: the request-provider scope must ask the absent
+// family's resolver nothing, and the interactor lookup must answer with the installation outcome.
 
 function pluginOwning(id: string, platforms: readonly Platform[]): PlatformPlugin {
   return {
@@ -31,13 +20,14 @@ function pluginOwning(id: string, platforms: readonly Platform[]): PlatformPlugi
   };
 }
 
-test('the request-provider scope for an absent optional family gates nothing, lets the task run, and getPlugin answers with the typed outcome', async () => {
+test('the request-provider scope for an absent optional family asks no resolver, lets the task run, and getPlugin answers with the typed outcome', async () => {
   // The private request-provider composition submodule is reached only through the root
-  // composition wrapper (R13), exactly as the daemon request path does. A provider-owned device
-  // of an absent family must still reach its provider interactor, so the scope does not fail.
-  // Composing the set is also what installs this process's absence reporter, so the same scenario
-  // checks how the interactor lookup answers for the absent family: a separate test would pass
-  // only when this one happened to run first in the file.
+  // composition wrapper (R13), exactly as the daemon request path does. A resolver may open a
+  // session, lease, or client per call, so a family this process does not serve must not be asked
+  // for one: no scope would wrap it, and nothing would close what it returned. The task still
+  // runs, because the interactor lookup the request then performs is what answers presence — and
+  // the composed set installs this process's absence reporter, so the same scenario checks that
+  // lookup: a separate test would pass only when this one happened to run first in the file.
   const { createRequestPlatformProviders } = await import('../platform-runtime.ts');
   const vegaDevice: DeviceInfo = {
     platform: 'vega',
@@ -68,11 +58,11 @@ test('the request-provider scope for an absent optional family gates nothing, le
   });
 
   assert.equal(taskRan, true);
-  // The vega-gated resolver does not apply while no vega plugin is registered.
+  // The selection is not active, so the descriptor answers before calling the resolver.
   assert.equal(resolverAsked, false);
 
   // The interactor lookup answers presence through the same outcome the module registry raises
-  // (#4781 review): the reporter is the one the composed set was given, so a caller of `getPlugin`
+  // (#4781 review): the reporter is the one the composed set was given, so a caller of the set
   // needs no guard of its own.
   const { builtinPlatformPlugins } = await import('./interactors/builtin-platform-plugin-set.ts');
   assert.throws(

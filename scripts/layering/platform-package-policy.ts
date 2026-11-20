@@ -113,6 +113,7 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
 };
 const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   web: '@agent-device/web',
+  vega: '@agent-device/vega',
 };
 
 const INTERACTOR_COMPOSITION_FILE = 'src/core/interactors/register-builtins.ts';

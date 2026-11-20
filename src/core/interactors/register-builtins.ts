@@ -2,7 +2,6 @@ import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import type { RequiredPlatform } from '@agent-device/contracts/platform-module';
 import { applePlugin } from '@agent-device/platform-apple';
-import { vegaPlugin } from '@agent-device/platform-vega';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const androidPlugin = {
@@ -46,7 +45,6 @@ export const BUILTIN_PLATFORM_PLUGINS = [
   applePlugin,
   androidPlugin,
   harmonyosPlugin,
-  vegaPlugin,
   linuxPlugin,
 ] as const satisfies readonly PlatformPlugin[];
 

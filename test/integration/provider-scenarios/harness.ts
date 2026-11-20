@@ -1,4 +1,6 @@
-import { webPlatformCompositionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
+import { webSelectionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
+import { vegaSelectionFixture } from '../../../src/platform-runtime-vega-provider.fixtures.ts';
+import { composePlatformPlugins } from '../../../src/platform-runtime/platform-plugins.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -172,11 +174,17 @@ export async function createProviderScenarioHarness(
     const providerModules =
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
-    const platforms = webPlatformCompositionFixture(input.host, input.baseDir, {
-      openWebSessionNames: input.openWebSessionNames,
-      ownedProcessRecords: rootDeps.ownedProcessRecords,
-    });
-    const { web } = platforms;
+    const platforms = composePlatformPlugins(
+      [
+        webSelectionFixture(input.host, input.baseDir, {
+          openWebSessionNames: input.openWebSessionNames,
+          ownedProcessRecords: rootDeps.ownedProcessRecords,
+        }).get(),
+        vegaSelectionFixture(input.host, input.baseDir).get(),
+      ],
+      [],
+    );
+    const { web, vega } = platforms;
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
       platforms,
       host: input.host,
@@ -219,6 +227,7 @@ export async function createProviderScenarioHarness(
           appleSimulatorScreenRecordingTransport,
         },
         web,
+        vega,
       });
     return Object.freeze({
       ...rootDeps,
