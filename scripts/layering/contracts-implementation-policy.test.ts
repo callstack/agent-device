@@ -86,6 +86,10 @@ test('gesture vocabulary cannot regain algorithms inside contracts', () => {
   }
   for (const [name, source] of [
     ['gesture-input', 'export function readGesturePayload(input: unknown) { return input; }'],
+    [
+      'gesture-payload-reader',
+      'export function readGesturePayload(input: unknown) { return input; }',
+    ],
     ['gesture-plan', 'export const buildGesturePlan = () => ({ pointers: [] });'],
     ['gesture-plan-types', 'export const GESTURE_PROFILES = { sample: function () {} };'],
     ['gesture-normalization', 'export function normalizePublicGesture() {}'],

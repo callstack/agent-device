@@ -33,7 +33,7 @@ const FORBIDDEN_TIMER_CALLS = new Set([
  * in @agent-device/gestures, so these modules hold types and constants and no function at all.
  */
 const GESTURE_VOCABULARY_MODULE =
-  /^packages\/contracts\/src\/gesture-(?:input|normalization|plan)(?:[-.][^/]*)?\.ts$/;
+  /^packages\/contracts\/src\/gesture-(?:input|normalization|payload-reader|plan)(?:[-.][^/]*)?\.ts$/;
 const FUNCTION_NODE_TYPES = new Set([
   'ArrowFunctionExpression',
   'FunctionDeclaration',
