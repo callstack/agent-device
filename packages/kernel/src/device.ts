@@ -660,7 +660,7 @@ function closestDeviceNameHint(candidates: DeviceInfo[], deviceName: string): st
   const only = close.length === 1 ? close[0] : undefined;
   if (!only) return undefined;
   return (
-    `A device is named ${JSON.stringify(only.name)}, which differs only in punctuation or spacing. ` +
+    `A device is named ${JSON.stringify(only.name)}, which differs only in punctuation. ` +
     `Did you mean --device ${JSON.stringify(only.name)}?`
   );
 }

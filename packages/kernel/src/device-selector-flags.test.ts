@@ -177,7 +177,7 @@ test('a name differing only in curly quotes is answered with the candidate name'
   assert.match(error.message, /No device named iPhone "16"/);
   assert.match(
     String(error.details?.hint ?? ''),
-    /A device is named "iPhone “16”", which differs only in punctuation or spacing\. Did you mean --device "iPhone “16”"\?/,
+    /A device is named "iPhone “16”", which differs only in punctuation\. Did you mean --device "iPhone “16”"\?/,
   );
 });
 
@@ -189,9 +189,12 @@ test('a curly single-quote name folds onto a straight-quote request', async () =
 });
 
 test('a name two candidates share under the quote fold earns no hint', async () => {
-  const CURLED_A: DeviceInfo = { ...APPLE, id: 'SIM-002', name: 'iPhone “16”' };
-  const CURLED_B: DeviceInfo = { ...APPLE, id: 'SIM-003', name: 'iPhone "16"' };
-  const error = await resolveError([CURLED_A, CURLED_B], { deviceName: 'iPhone 16' });
+  // Both candidates fold onto the straight-quote request — one spelled with U+2018 quotes, one
+  // with U+2019 — so the request cannot tell them apart. The request keeps its quotes: a
+  // quote-less request would fold onto neither candidate and make this case vacuous.
+  const CURLED_A: DeviceInfo = { ...ANDROID, id: 'emulator-5581', name: 'Pixel ‘7‘' };
+  const CURLED_B: DeviceInfo = { ...ANDROID, id: 'emulator-5582', name: 'Pixel ’7’' };
+  const error = await resolveError([CURLED_A, CURLED_B], { deviceName: "Pixel '7'" });
   assert.equal(error.code, 'DEVICE_NOT_FOUND');
   assert.equal(error.details?.hint, undefined);
 });
