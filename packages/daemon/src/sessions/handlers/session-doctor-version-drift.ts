@@ -1,4 +1,5 @@
-import { findPathCommandInstances, runCmd } from '@agent-device/host-kit/command';
+import path from 'node:path';
+import { isExecutablePath, runCmd } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -36,9 +37,34 @@ export async function installedBuildsDriftCheck(env: EnvMap): Promise<DoctorChec
 
 async function probeInstalledBuildsDrift(env: EnvMap): Promise<DoctorCheck> {
   const daemonVersion = readVersion();
-  const binaries = await findPathCommandInstances(INSTALLED_BINARY, env);
+  const binaries = await findInstalledBinaries(env);
   const probes = await Promise.all(binaries.map((binaryPath) => probeVersion(binaryPath, env)));
   return installDriftCheck(daemonVersion, probes);
+}
+
+/**
+ * The agent-device binaries PATH reaches, in PATH order. This mirrors the exec owner's
+ * PATH walk (bare-name lookup over the captured env) instead of importing one: the exec
+ * module sits at its eager-closure and file-size gates, and doctor is this scan's only
+ * consumer. Windows .cmd shims are not probed: a child cannot spawn them directly, so
+ * discovery there answers bare executables only.
+ */
+async function findInstalledBinaries(env: EnvMap): Promise<string[]> {
+  const pathValue = env['PATH'] ?? env['Path'];
+  if (!pathValue) return [];
+  const hits: string[] = [];
+  const seen = new Set<string>();
+  for (const directory of pathValue.split(path.delimiter)) {
+    const trimmedDirectory = directory.trim();
+    if (!trimmedDirectory) continue;
+    const hit = path.join(trimmedDirectory, INSTALLED_BINARY);
+    if (seen.has(hit)) continue;
+    if (await isExecutablePath(hit)) {
+      seen.add(hit);
+      hits.push(hit);
+    }
+  }
+  return hits;
 }
 
 /** The drift verdict for probed installs; exported for tests beside the probe path. */
