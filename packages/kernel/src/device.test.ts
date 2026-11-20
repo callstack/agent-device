@@ -215,3 +215,61 @@ test('a record without appleOs still ranks as an iPad by its name', async () => 
   const selected = await resolveDevice([legacyIpad, legacyIphone], { platform: 'ios' });
   assert.equal(selected.id, legacyIphone.id);
 });
+
+// A tie can span booted and shut-down devices, and an id picked without the
+// state can aim at a device that cannot answer — the refusal's candidate list
+// carries the boot state beside the id, and omits it when discovery reported
+// none.
+test('an ambiguous device refusal carries each tied device boot state', async () => {
+  const bootedIphone: DeviceInfo = {
+    ...shutDownIphone,
+    id: 'sim-a',
+    name: 'iPhone 17',
+    booted: true,
+  };
+  const secondBootedIphone: DeviceInfo = {
+    ...shutDownIphone,
+    id: 'sim-b',
+    name: 'iPhone 16',
+    booted: true,
+  };
+  await assert.rejects(
+    () => resolveDevice([bootedIphone, secondBootedIphone], {}),
+    (error: unknown) => {
+      const refusal = error as AppError;
+      assert.equal(refusal.code, 'AMBIGUOUS_MATCH');
+      // The tie lists the equally preferred devices in the comparator's name order.
+      assert.deepEqual(refusal.details?.devices, [
+        { id: 'sim-b', name: 'iPhone 16', booted: true },
+        { id: 'sim-a', name: 'iPhone 17', booted: true },
+      ]);
+      return true;
+    },
+  );
+});
+
+test('a shut-down tie marks every candidate shut down and an unknown state omits the marker', async () => {
+  const shutDownAndroid: DeviceInfo = {
+    platform: 'android',
+    id: 'Pixel_9_Pro_XL',
+    name: 'Pixel 9 Pro XL',
+    kind: 'emulator',
+    booted: false,
+  };
+  const shutDownSecond: DeviceInfo = { ...shutDownAndroid, id: 'Pixel_8', name: 'Pixel 8' };
+  const unknownState: DeviceInfo = { ...shutDownAndroid, id: 'emulator-5556', name: 'Pixel 7' };
+  delete (unknownState as { booted?: boolean }).booted;
+  await assert.rejects(
+    () => resolveDevice([shutDownAndroid, shutDownSecond, unknownState], {}),
+    (error: unknown) => {
+      const refusal = error as AppError;
+      assert.equal(refusal.code, 'AMBIGUOUS_MATCH');
+      assert.deepEqual(refusal.details?.devices, [
+        { id: 'Pixel_9_Pro_XL', name: 'Pixel 9 Pro XL', booted: false },
+        { id: 'Pixel_8', name: 'Pixel 8', booted: false },
+        { id: 'emulator-5556', name: 'Pixel 7' },
+      ]);
+      return true;
+    },
+  );
+});

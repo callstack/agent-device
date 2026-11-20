@@ -157,6 +157,43 @@ test('formatHumanError lists four or more ambiguous candidates in the body', () 
   assert.match(body.join('\n'), /Candidates:\n {2}@e2 \[button\] "A"/);
 });
 
+// A candidate born stamped at an earlier epoch would paste into an immediate
+// superseded refusal — the one outcome a suggested ref must not cause. The
+// render chain re-pins every printed line to the generation the caller will
+// face, the same answer the daemon issuance seam gives at production time.
+test('formatHumanError re-pins a candidate born stamped at an earlier epoch', () => {
+  const err = new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements: text~="Save"', {
+    matches: 2,
+    refsGeneration: 750596,
+    candidates: ['@e2~s750595 [button] "Save"', '@e5 [button] "Save draft"'],
+  });
+
+  const { summary } = formatHumanError(err);
+
+  assert.match(summary, /@e2~s750596 \[button\] "Save"; @e5~s750596 \[button\] "Save draft"$/);
+});
+
+// A tie can span booted and shut-down devices, and an id picked without the
+// state can aim at a device that cannot answer. Same `booted` term the device
+// list prints.
+test('formatHumanError prints the boot state of device candidates that reported one', () => {
+  const err = new AppError('AMBIGUOUS_MATCH', '2 devices match this request equally.', {
+    matches: 2,
+    devices: [
+      { id: 'emulator-5554', name: 'Pixel', booted: true },
+      { id: 'Pixel_9_Pro_XL', name: 'Pixel 9 Pro XL', booted: false },
+      { id: 'prov-1', name: 'Leased device' },
+    ],
+    hint: 'Retry with the id of the intended device.',
+  });
+
+  const output = renderLines(err);
+
+  assert.match(output, / {2}emulator-5554 {2}Pixel {2}booted=true/);
+  assert.match(output, / {2}Pixel_9_Pro_XL {2}Pixel 9 Pro XL {2}booted=false/);
+  assert.match(output, / {2}prov-1 {2}Leased device$/);
+});
+
 test('formatHumanError keeps candidates of a non-ambiguity failure in the body', () => {
   const err = new AppError('COMMAND_FAILED', 'not hittable', {
     matches: 2,

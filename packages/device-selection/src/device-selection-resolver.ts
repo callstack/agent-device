@@ -5,6 +5,7 @@ import type {
   DeviceSelectionSource,
 } from '@agent-device/contracts/client';
 import {
+  deviceCandidateSummary,
   hasExplicitDeviceIdentitySelector,
   isApplePlatform,
   isIosFamily,
@@ -269,11 +270,12 @@ function withDeviceRetrySelectors(
 /**
  * The device-domain candidate list. Keyed `devices`, not `candidates`: the find
  * handler's element matches own that key with an incompatible shape
- * (@agent-device/kernel/errors).
+ * (@agent-device/kernel/errors). Each entry is the kernel's candidate summary
+ * (id, name, boot state), so both refusal sites print one shape.
  */
 function deviceCandidateDetails(devices: readonly DeviceInfo[]) {
   return {
-    devices: devices.slice(0, 10).map((device) => ({ id: device.id, name: device.name })),
+    devices: devices.slice(0, 10).map(deviceCandidateSummary),
   };
 }
 

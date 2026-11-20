@@ -102,6 +102,11 @@ export function elementMatchCandidateDetails(
   };
 }
 
+// Candidate lines leave this renderer bare; the surfaces that print them pin
+// them at render time from the issuing response's `refsGeneration`. That pin
+// grammar lives with its only consumer (the CLI error renderer), not beside
+// the renderer, so the command-output entry closure stays free of this module.
+
 /**
  * Accessibility custom actions render as a named list rather than bracketed
  * metadata: they are the element's hidden affordances, and an agent reading the
