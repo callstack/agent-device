@@ -19,6 +19,16 @@ export type ProviderPluginHost = Readonly<{
   runHostCommand: RunHostCommand;
 }>;
 
+/**
+ * The host a replay contribution's `setup` receives: version and error construction only. Replay
+ * setup stays engine-free and reaches no command, environment, or options; the format backend's
+ * lazy `create(host)` keeps the full replay backend host.
+ */
+export type ReplaySetupHost = Readonly<{
+  clientVersion: string;
+  createError(code: AppErrorCode, message: string, details?: AppErrorDetails): AppError;
+}>;
+
 export function createPluginHost(
   host: HostEnvironment,
   options: Record<string, unknown> | undefined,
@@ -39,4 +49,11 @@ export function createPluginHost(
       return { stdout };
     },
   } satisfies ProviderPluginHost);
+}
+
+export function createReplaySetupHost(): ReplaySetupHost {
+  return Object.freeze({
+    clientVersion: readVersion(),
+    createError: (code, message, details) => new AppError(code, message, details),
+  } satisfies ReplaySetupHost);
 }

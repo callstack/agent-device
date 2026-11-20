@@ -128,9 +128,10 @@ async function cloudWebDriverOptions(
   if (!factory) throw new Error(`Unknown cloud WebDriver plugin "${plugin}".`);
   // The package's default export is the plugin factory; the WebDriver is what its setup() builds.
   const plugin_ = factory();
-  if (!plugin_.setup)
+  const [contribution] = plugin_.contributes;
+  if (contribution.kind !== 'provider')
     throw new Error(`The ${plugin} plugin exposes no setup() to build a WebDriver from.`);
-  const created = (await plugin_.setup({
+  const created = (await contribution.setup({
     ...createPluginHost({ env: PROVIDER_ENV, cwd: '/' }, undefined),
     clientVersion: '0.0.0',
     runHostCommand,
@@ -288,8 +289,9 @@ async function revylSupport(
       apiKey: 'revyl-placeholder-key',
       apiUrl: 'https://revyl.invalid.test',
     });
-    if (!plugin.setup) throw new Error('The Revyl plugin exposes no setup().');
-    const created = await plugin.setup({ env: {}, clientVersion: '0.0.0' } as never);
+    const [contribution] = plugin.contributes;
+    if (contribution.kind !== 'provider') throw new Error('The Revyl plugin exposes no setup().');
+    const created = await contribution.setup({ env: {}, clientVersion: '0.0.0' } as never);
     if (!('runtime' in created)) throw new Error('The Revyl plugin built no device runtime.');
     const runtime = created.runtime as unknown as ProviderDeviceRuntime;
     const owner = (await created.platformModule.loadRuntime(host as never)) as PlatformRuntimeOwner;

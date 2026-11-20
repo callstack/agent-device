@@ -11,7 +11,7 @@ import {
   isConnectProviderName,
   primeProviderConnection,
 } from './provider-policy.ts';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 
 test('provider policy projects provider identity into semantic capabilities', () => {
   assert.deepEqual(connectionProviderCapabilities('limrun', {}), {
@@ -36,10 +36,10 @@ test('provider policy projects provider identity into semantic capabilities', ()
 
 test('an installed AWS Device Farm plugin declares its capabilities once the store is primed', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(
+  selectPlugin(
     home,
     '@agent-device/aws-device-farm',
-    v2RegistrationSource('aws-device-farm', {
+    pluginSource('aws-device-farm', {
       extra: `connection: { capabilities: { leaseKind: 'direct-device-provider', requiresAppAttachment: true, requiresRemoteDaemon: false, supportsArtifacts: true, supportsDeferredAppSelection: false, supportsDirectPortReverse: false, usesCloudWebDriverLease: true }, resolve() {}, verify() {} },`,
     }),
   );
@@ -51,7 +51,7 @@ test('an installed AWS Device Farm plugin declares its capabilities once the sto
 
 test('a manifest connection on a store package supplies no capabilities', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'), {
+  selectPlugin(home, 'example', pluginSource('example'), {
     manifest: {
       agentDevicePlugin: {
         apiVersion: 1,
@@ -88,10 +88,10 @@ test('a v2 plugin declares its capabilities in code, so they are read once the s
     supportsDirectPortReverse: false,
     usesCloudWebDriverLease: true,
   } as const;
-  selectV2Plugin(
+  selectPlugin(
     home,
     'example-v2',
-    v2RegistrationSource('example-v2', {
+    pluginSource('example-v2', {
       extra: `connection: { capabilities: ${JSON.stringify(connection)}, resolve() {}, verify() {} },`,
     }),
   );
@@ -104,7 +104,7 @@ test('a v2 plugin declares its capabilities in code, so they are read once the s
 
 test('a store plugin that fails to load is named where an unknown connect provider is refused', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'broken-v2', 'throw new Error("import failed");');
+  selectPlugin(home, 'broken-v2', 'throw new Error("import failed");');
   await primeProviderConnection('broken-v2', env);
   expect(connectProviderNamesForError(env)).toMatch(
     /Plugins that failed to load: broken-v2: import failed/,
@@ -113,7 +113,7 @@ test('a store plugin that fails to load is named where an unknown connect provid
 
 test('a plugin that fails to load supplies no connection name even after priming', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(home, 'dup', v2RegistrationSource('aws-device-farm'));
+  selectPlugin(home, 'dup', pluginSource('aws-device-farm'));
   await primePluginConnections(env, ['aws-device-farm']);
   // The built-in claimed the id first, so the store package registers nothing.
   expect(pluginConnectionNames(env)).toEqual([]);

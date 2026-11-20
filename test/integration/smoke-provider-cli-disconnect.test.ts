@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { pluginHome, selectV2Plugin } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 import { formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import './support/provider-disconnect-fetch.mjs';
 
@@ -15,39 +15,42 @@ const PROVIDER = 'smoke-cloud';
  * is the built CLI's connect, open, and disconnect ordering, not a particular provider's API.
  */
 const PROVIDER_PLUGIN_SOURCE = `export default () => ({
-  apiVersion: 2,
-  provider: ${JSON.stringify(PROVIDER)},
-  credentials: { variables: [] },
-  connection: {
-    capabilities: {
-      leaseKind: 'direct-device-provider',
-      requiresAppAttachment: false,
-      requiresRemoteDaemon: false,
-      supportsArtifacts: true,
-      supportsDeferredAppSelection: false,
-      supportsDirectPortReverse: false,
-      usesCloudWebDriverLease: true,
-    },
-    resolve: ({ flags }) => ({
-      profile: {
-        leaseProvider: ${JSON.stringify(PROVIDER)},
-        platform: flags.platform,
-        device: flags.device,
-        providerOsVersion: flags.providerOsVersion,
-        providerApp: flags.providerApp,
+  apiVersion: 3,
+  contributes: [{
+    kind: 'provider',
+    provider: ${JSON.stringify(PROVIDER)},
+    credentials: { variables: [] },
+    connection: {
+      capabilities: {
+        leaseKind: 'direct-device-provider',
+        requiresAppAttachment: false,
+        requiresRemoteDaemon: false,
+        supportsArtifacts: true,
+        supportsDeferredAppSelection: false,
+        supportsDirectPortReverse: false,
+        usesCloudWebDriverLease: true,
       },
-    }),
-    verify: async ({ flags }) => ({
-      provider: ${JSON.stringify(PROVIDER)},
-      service: 'Smoke Cloud',
-      verificationMessage: 'Credentials, device, and uploaded app verified.',
-      device: { status: 'verified', name: flags.device, platform: flags.platform, osVersion: flags.providerOsVersion },
-      app: { status: 'verified', reference: flags.providerApp },
-    }),
-  },
-  setup: async () => {
-    throw new Error('The smoke daemon is remote and sets up no provider runtime.');
-  },
+      resolve: ({ flags }) => ({
+        profile: {
+          leaseProvider: ${JSON.stringify(PROVIDER)},
+          platform: flags.platform,
+          device: flags.device,
+          providerOsVersion: flags.providerOsVersion,
+          providerApp: flags.providerApp,
+        },
+      }),
+      verify: async ({ flags }) => ({
+        provider: ${JSON.stringify(PROVIDER)},
+        service: 'Smoke Cloud',
+        verificationMessage: 'Credentials, device, and uploaded app verified.',
+        device: { status: 'verified', name: flags.device, platform: flags.platform, osVersion: flags.providerOsVersion },
+        app: { status: 'verified', reference: flags.providerApp },
+      }),
+    },
+    setup: async () => {
+      throw new Error('The smoke daemon is remote and sets up no provider runtime.');
+    },
+  }],
 });`;
 
 test('built CLI provider flow closes its named session before disconnect cleanup', async (t) => {
@@ -89,7 +92,7 @@ function createProviderEnv(fixture: ProviderDaemonFixture): NodeJS.ProcessEnv {
     path.join(import.meta.dirname, 'support/provider-disconnect-fetch.mjs'),
   ).href;
   const { home, env: pluginEnv } = pluginHome();
-  selectV2Plugin(home, '@agent-device/smoke-cloud', PROVIDER_PLUGIN_SOURCE);
+  selectPlugin(home, '@agent-device/smoke-cloud', PROVIDER_PLUGIN_SOURCE);
   return {
     ...process.env,
     ...pluginEnv,

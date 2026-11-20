@@ -6,7 +6,7 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { browserstackPluginInventory } from './__tests__/test-utils/browserstack-plugin-inventory.ts';
 import { awsDeviceFarmPluginInventory } from './__tests__/test-utils/aws-device-farm-plugin-inventory.ts';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import { BUILTIN_PROVIDER_IDS } from './builtin-provider-ids.ts';
 
 // BrowserStack and AWS Device Farm are installed plugins, so their credential variables come
@@ -153,10 +153,10 @@ async function storeInventory(env: Record<string, string>) {
 
 function pluginWithCredentialVariables(credentialVariables?: string[], provider = 'example') {
   const { home, env } = pluginHome();
-  selectV2Plugin(
+  selectPlugin(
     home,
     '@example/provider',
-    v2RegistrationSource(provider, {
+    pluginSource(provider, {
       credentials: `{ variables: ${JSON.stringify(credentialVariables ?? [])} }`,
     }),
   );
@@ -222,10 +222,10 @@ test('an installed AWS Device Farm plugin declares no credential variables', asy
 
 test('a store plugin declares per-backend credential variables in code', async () => {
   const { home, env } = pluginHome();
-  selectV2Plugin(
+  selectPlugin(
     home,
     '@example/backend',
-    v2RegistrationSource('example', {
+    pluginSource('example', {
       credentials:
         '{ variables: ["EXAMPLE_ACCOUNT"], byBackend: { "shared-session": ["EXAMPLE_POOL"] } }',
     }),

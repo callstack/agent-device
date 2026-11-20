@@ -129,19 +129,24 @@ export async function hostConsumer(host: NonNullable<StartAgentDeviceOptions['ho
 type ExampleOptions = { credentials?: { username: string; accessKey: string } };
 
 const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
-  apiVersion: 2,
-  provider: 'example',
-  credentials: {
-    variables: options.credentials ? [] : ['EXAMPLE_USERNAME', 'EXAMPLE_ACCESS_KEY'],
-    byBackend: { 'android-instance': ['EXAMPLE_USERNAME'] },
-  },
-  setup: async (host) => ({
-    runtime: { provider: 'example', shutdown: async () => {}, hostEnv: host.env },
-    platformModule: {
-      owner: { kind: 'provider-runtime', provider: 'example', instance: 'example' },
-      loadRuntime: async () => ({}),
+  apiVersion: 3,
+  contributes: [
+    {
+      kind: 'provider',
+      provider: 'example',
+      credentials: {
+        variables: options.credentials ? [] : ['EXAMPLE_USERNAME', 'EXAMPLE_ACCESS_KEY'],
+        byBackend: { 'android-instance': ['EXAMPLE_USERNAME'] },
+      },
+      setup: async (host) => ({
+        runtime: { provider: 'example', shutdown: async () => {}, hostEnv: host.env },
+        platformModule: {
+          owner: { kind: 'provider-runtime', provider: 'example', instance: 'example' },
+          loadRuntime: async () => ({}),
+        },
+      }),
     },
-  }),
+  ],
 });
 
 export default example;
@@ -364,33 +369,36 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       String.raw`
 export const disposed = [];
 export const setups = [];
-export function fixture(provider) {
+export function fixture(provider, setupOverride) {
   return {
-    apiVersion: 2,
-    provider,
-    credentials: { variables: [] },
-    setup: (host) => {
-      setups.push([provider, host.env.HOST_MARKER]);
-      return {
-        runtime: {
-          provider,
-          leaseLifecycle: {},
-          ownsDevice: () => false,
-          getInteractor: () => undefined,
-          deviceInventoryProvider: () => ({ listDevices: async () => [] }),
-          shutdown: async () => {
-            disposed.push(provider + ':shutdown');
+    apiVersion: 3,
+    contributes: [{
+      kind: 'provider',
+      provider,
+      credentials: { variables: [] },
+      setup: setupOverride ?? ((host) => {
+        setups.push([provider, host.env.HOST_MARKER]);
+        return {
+          runtime: {
+            provider,
+            leaseLifecycle: {},
+            ownsDevice: () => false,
+            getInteractor: () => undefined,
+            deviceInventoryProvider: () => ({ listDevices: async () => [] }),
+            shutdown: async () => {
+              disposed.push(provider + ':shutdown');
+            },
           },
-        },
-        platformModule: {
-          owner: { kind: 'provider-runtime', provider, instance: provider },
-          loadRuntime: async () => ({}),
-        },
-        dispose: () => {
-          disposed.push(provider + ':dispose');
-        },
-      };
-    },
+          platformModule: {
+            owner: { kind: 'provider-runtime', provider, instance: provider },
+            loadRuntime: async () => ({}),
+          },
+          dispose: () => {
+            disposed.push(provider + ':dispose');
+          },
+        };
+      }),
+    }],
   };
 }
 `,
@@ -435,12 +443,9 @@ const a = await startAgentDevice({
     fixture('limrun'),
     null,
     { ...fixture('wrong-version'), apiVersion: 1 },
-    {
-      ...fixture('broken'),
-      setup() {
-        throw new Error('fixture setup failure');
-      },
-    },
+    fixture('broken', () => {
+      throw new Error('fixture setup failure');
+    }),
   ],
 });
 const bCwd = path.join(cwd, 'b-cwd');
@@ -467,7 +472,7 @@ try {
   );
   assert.equal(inventory.find((p) => p.provider === 'broken').state, 'failed');
   assert.equal(inventory.find((p) => p.source === 'embedder' && p.provider === undefined).error.reason, 'invalid_plugin');
-  assert.equal(inventory.find((p) => p.provider === 'wrong-version').error.reason, 'incompatible_plugin');
+  assert.equal(inventory.find((p) => p.provider === 'wrong-version').error.reason, 'incompatible-plugin-api');
   assert.equal(process.cwd(), cwd);
   assert.deepEqual({ ...process.env }, beforeEnv);
   assert.deepEqual(

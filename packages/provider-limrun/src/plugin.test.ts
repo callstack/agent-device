@@ -7,6 +7,13 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { limrunPlugin } from './plugin.ts';
+import type { AgentDevicePlugin } from '@agent-device/plugins/contract';
+
+function providerOf<P extends AgentDevicePlugin>(plugin: P) {
+  const [contribution] = plugin.contributes;
+  if (contribution.kind !== 'provider') throw new Error('expected a provider contribution');
+  return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
+}
 
 const sdk = vi.hoisted(() => ({
   runtimeCalls: [] as { options: Record<string, unknown>; mode: unknown }[],
@@ -74,9 +81,9 @@ function stubDependencies(): LimrunRuntimeDependencies {
 
 test('the plugin declares its provider and the credential variables per lease backend', () => {
   const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
-  assert.equal(plugin.apiVersion, 2);
-  assert.equal(plugin.provider, 'limrun');
-  assert.deepEqual(plugin.credentials, {
+  assert.equal(plugin.apiVersion, 3);
+  assert.equal(providerOf(plugin).provider, 'limrun');
+  assert.deepEqual(providerOf(plugin).credentials, {
     variables: [
       'LIMRUN_API_KEY',
       'LIMRUN_REGION',
@@ -106,14 +113,14 @@ test('the plugin declares its provider and the credential variables per lease ba
 
 test('the plugin declares the connection callbacks without setting up any runtime', async () => {
   const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
-  assert.ok(plugin.connection, 'the plugin routes connect');
-  assert.equal(plugin.connection.capabilities.requiresRemoteDaemon, false);
+  assert.ok(providerOf(plugin).connection, 'the plugin routes connect');
+  assert.equal(providerOf(plugin).connection!.capabilities.requiresRemoteDaemon, false);
 
   // `resolve` runs the provider's own callbacks: the refusal comes from the provider, and nothing
   // here calls setup, loads a runtime, or reads the SDK.
   await assert.rejects(
     async () =>
-      await plugin.connection?.resolve({
+      await providerOf(plugin).connection?.resolve({
         flags: { json: false, help: false, version: false },
         stateDir: '/state',
         cwd: '/project',
@@ -131,7 +138,7 @@ test('verify runs its own SDK check over scoped credentials, version and platfor
   // and nothing here sets up a runtime.
   const plugin = limrunPlugin({ createDependencies: () => stubDependencies() });
 
-  const verification = await plugin.connection?.verify({
+  const verification = await providerOf(plugin).connection?.verify({
     flags: { json: false, help: false, version: false, platform: 'ios' },
     env: { LIMRUN_API_KEY: ' lim_test_key ', LIMRUN_REGION: 'eu', LIMRUN_KEEP_ALIVE: '1' },
     host: pluginHost({ LIMRUN_API_KEY: 'lim_test_key' }),
@@ -159,7 +166,7 @@ test('setup builds the runtime over the credentials, host and HAR directory it w
   const createDependencies = vi.fn(() => dependencies);
   const stateDir = mkdtempForTestSync('limrun-plugin-state-');
 
-  const setup = await limrunPlugin({ createDependencies, stateDir }).setup(host);
+  const setup = await providerOf(limrunPlugin({ createDependencies, stateDir })).setup(host);
 
   if (!('runtime' in setup)) throw new Error('Limrun sets up its own runtime');
   assert.equal(setup.runtime.provider, 'limrun');
@@ -179,7 +186,7 @@ test('setup builds the runtime over the credentials, host and HAR directory it w
 });
 
 test('setup with only an attached instance builds a runtime without an API key or HAR directory', async () => {
-  await limrunPlugin({ createDependencies: () => stubDependencies() }).setup(
+  await providerOf(limrunPlugin({ createDependencies: () => stubDependencies() })).setup(
     pluginHost({ LIM_IOS_INSTANCE_URL: 'https://x/api', LIM_IOS_INSTANCE_TOKEN: 'token' }),
   );
   const options = sdk.runtimeCalls.at(-1)?.options;
@@ -195,7 +202,9 @@ test('setup refuses a host with no Limrun credentials before asking for host ada
   const createDependencies = vi.fn(() => stubDependencies());
   await assert.rejects(
     async () => {
-      await limrunPlugin({ createDependencies }).setup(pluginHost({ LIMRUN_REGION: 'eu' }));
+      await providerOf(limrunPlugin({ createDependencies })).setup(
+        pluginHost({ LIMRUN_REGION: 'eu' }),
+      );
     },
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -211,7 +220,7 @@ test('setup refuses a partial instance set naming the variable it still needs', 
   const createDependencies = vi.fn(() => stubDependencies());
   await assert.rejects(
     async () => {
-      await limrunPlugin({ createDependencies }).setup(
+      await providerOf(limrunPlugin({ createDependencies })).setup(
         pluginHost({
           LIMRUN_API_KEY: 'lim_test_key',
           LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_x/api',
