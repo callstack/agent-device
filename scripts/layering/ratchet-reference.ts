@@ -22,6 +22,7 @@ import {
   type ResolvedImportEdge,
 } from './model.ts';
 import { workspaceSpecifierTargetsFromManifests } from './package-boundaries.ts';
+import { countPromiseRaces } from './promise-race-ratchet.ts';
 import { measureTestOnlyExports, type TestOnlyExport } from './package-export-surface.ts';
 import {
   measureSessionAuthorityOverlay,
@@ -49,6 +50,8 @@ export type LayeringRatchets = Readonly<{
   unmatchedTests: readonly string[];
   /** R89: untyped `reason: '<literal>'` sites per file, each group sorted by line. */
   untypedReasonLiterals: UntypedReasonLiterals;
+  /** R88: `Promise.race(...)` calls per package, production sources. */
+  promiseRaces: Readonly<Record<string, number>>;
 }>;
 
 /** What R83 and R84 measure a tree from: its package manifests and its tracked `src/` and `packages/` paths. */
@@ -83,6 +86,7 @@ export function measureRatchets(
     testOnlyExports: measureTestOnlyExports(tree.manifests, tree.files),
     unmatchedTests: measureUnmatchedTests(tree.files),
     untypedReasonLiterals: measureUntypedReasonLiterals(sources),
+    promiseRaces: countPromiseRaces(sources),
   };
 }
 

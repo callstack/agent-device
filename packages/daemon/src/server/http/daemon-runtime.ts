@@ -10,6 +10,7 @@ import { asAppError, AppError, normalizeError } from '@agent-device/kernel/error
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
+  admitDaemonStateRoot,
   resolveDaemonPaths,
   resolveDaemonServerMode,
   type DaemonRuntimeOwnership,
@@ -43,7 +44,6 @@ import {
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
-  settleWithinBudget,
   type ShutdownReport,
   type StartupRollback,
 } from './server-shutdown.ts';
@@ -76,7 +76,7 @@ import {
   reapOwnedProcessRecordsAtStartup,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { isEnvTruthy } from '@agent-device/host-kit/retry';
+import { isEnvTruthy, settleWithin } from '@agent-device/host-kit/retry';
 import {
   parseIntegerEnv,
   readVersion,
@@ -205,6 +205,8 @@ async function startDaemonRuntimeOnHost(
   } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
+  // A daemon from another build, or embedded, reaches the root without the launcher's admission.
+  admitDaemonStateRoot({ paths: daemonPaths, mode: 'establish' });
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -712,15 +714,11 @@ async function startDaemonRuntimeOnHost(
     const total = inFlightRequests.size;
     if (total === 0) return { drained: 0, abandoned: 0 };
     cancelAllRequests();
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    const outcome = await Promise.race([
-      Promise.allSettled(inFlightRequests).then(() => 'drained' as const),
-      new Promise<'deadline'>((resolve) => {
-        deadlineTimer = setTimeout(() => resolve('deadline'), requestDrainTimeoutMs);
-      }),
-    ]);
-    clearTimeout(deadlineTimer);
-    abandonedRequests = outcome === 'drained' ? 0 : inFlightRequests.size;
+    const outcome = await settleWithin(
+      () => Promise.allSettled(inFlightRequests).then(() => 'drained' as const),
+      requestDrainTimeoutMs,
+    );
+    abandonedRequests = outcome.kind === 'settled' ? 0 : inFlightRequests.size;
     if (abandonedRequests > 0) {
       await emitDaemonDiagnostic(logPath, 'daemon_shutdown_requests_abandoned', {
         abandoned: abandonedRequests,
@@ -799,19 +797,16 @@ async function startDaemonRuntimeOnHost(
       },
     );
     expiredProviderLeaseReleaser.shutdown();
-    const ownerClose = await settleWithinBudget(
-      () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
-      options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
-    );
-    platformOwners =
-      ownerClose.kind === 'rejected'
-        ? 'failed'
-        : ownerClose.kind === 'deadline'
-          ? 'pending'
-          : 'closed';
-    if (ownerClose.kind === 'rejected') {
+    try {
+      const ownerClose = await settleWithin(
+        () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
+        options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
+      );
+      platformOwners = ownerClose.kind === 'deadline' ? 'pending' : 'closed';
+    } catch (error) {
+      platformOwners = 'failed';
       await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
-        error: normalizeError(ownerClose.error),
+        error: normalizeError(error),
       });
     }
     const plugins = await pluginClose.close();
@@ -852,10 +847,7 @@ async function startDaemonRuntimeOnHost(
       return report;
     } finally {
       await Promise.allSettled([
-        settleWithinBudget(
-          async () => await releasePngWorker(),
-          DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS,
-        ),
+        settleWithin(async () => await releasePngWorker(), DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
         Promise.resolve().then(() => pluginClose.close()),
       ]);
       await Promise.allSettled([

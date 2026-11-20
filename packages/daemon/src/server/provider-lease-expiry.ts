@@ -8,7 +8,7 @@ import type {
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/retry';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';
@@ -408,11 +408,9 @@ export function createExpiredProviderLeaseReleaser(options: {
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
       // provider call that hangs must not keep the daemon alive indefinitely.
-      const deadline = new AbortController();
-      await Promise.race([
-        retryPending().finally(() => deadline.abort()),
-        sleep(Math.max(0, timeoutMs), deadline.signal),
-      ]);
+      // A release that fails inside the budget is still a pending release: the
+      // drain reports it, it never throws past the bounded window.
+      await settleWithin(() => retryPending(), Math.max(0, timeoutMs)).catch(() => undefined);
       const result = {
         pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
         unknown: [
@@ -550,13 +548,12 @@ function writeLeaseRecord(stateDir: string, file: string, leases: readonly Devic
     fs.rmSync(filePath, { force: true });
     return;
   }
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const record: PersistedProviderLeaseRecord = {
+  const contents = `${JSON.stringify({
     version: LEASE_RECORD_VERSION,
     leases: [...leases],
-  };
-  publishFileSync({ destination: filePath, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
-  fs.chmodSync(filePath, 0o600);
+  } satisfies PersistedProviderLeaseRecord)}\n`;
+  // `exactMode` is what makes 0600 exact under a wide umask, so no chmod follows.
+  publishFileSync({ destination: filePath, contents, mode: 0o600, exactMode: true });
 }
 
 /**

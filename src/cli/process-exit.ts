@@ -1,4 +1,4 @@
-import { sleep } from '@agent-device/host-kit/retry';
+import { settleWithin } from '@agent-device/host-kit/retry';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -13,7 +13,7 @@ const FLUSH_TIMEOUT_MS = 2000;
  * rather than hanging the process.
  */
 export async function exitAfterFlush(code: number): Promise<never> {
-  await Promise.race([drainStdio(), sleep(FLUSH_TIMEOUT_MS)]);
+  await settleWithin(drainStdio, FLUSH_TIMEOUT_MS);
   process.exit(code);
 }
 

@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import {
+  admitPrivateRoot,
+  expandUserHomePath,
+  resolveUserPath,
+  type PrivateRootAdmission,
+} from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -57,6 +62,10 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   if (!value) {
     return resolveDefaultDaemonStateDir(options);
   }
+  // Before expansion, and of the host's own separators only: a POSIX file name may hold `\`.
+  if (value.split(process.platform === 'win32' ? /[\\/]/ : '/').includes('..')) {
+    throw unsafeStateRoot(value, value, 'parent-step');
+  }
   const expanded = expandUserHomePath(value, { env: options.env });
   if (path.isAbsolute(expanded)) return expanded;
   if (options.cwd === undefined) {
@@ -69,6 +78,103 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
     );
   }
   return resolveUserPath(value, { env: options.env, cwd: options.cwd });
+}
+
+const MOVE_STATE_DIR_FIX =
+  'Point AGENT_DEVICE_STATE_DIR (or --state-dir) at a real private directory you own, such as "$HOME/.agent-device".';
+const DAEMON_STATE_ROOT_REASONS = {
+  unsafe: 'daemon_state_root_unsafe',
+} as const satisfies Record<string, string>;
+
+/** What the operator is told, per problem: how the component fails, and what ends it. */
+const STATE_ROOT_PROBLEMS = {
+  symlink: ['is a symbolic link.', MOVE_STATE_DIR_FIX],
+  'foreign-owner': ['is owned by another local user.', MOVE_STATE_DIR_FIX],
+  'group-or-other-writable-ancestor': [
+    'is writable by group or others, so another account can steer the path.',
+    MOVE_STATE_DIR_FIX,
+  ],
+  'not-private': [
+    'is open to accounts besides its owner.',
+    'Run `chmod 700 <dir>`, or point AGENT_DEVICE_STATE_DIR at a private directory you own if that is refused.',
+  ],
+  'not-a-directory': ['is not a directory.', MOVE_STATE_DIR_FIX],
+  unavailable: ['could not be checked or created.', MOVE_STATE_DIR_FIX],
+  'parent-step': ['steps out of its parent with "..".', 'Name a real path, without a `..` step.'],
+  'unsupported-windows-path': [
+    'is not a supported Windows path shape.',
+    String.raw`Use a drive-absolute path, such as C:\Users\you\.agent-device.`,
+  ],
+} as const satisfies Record<string, readonly [string, string]>;
+
+type DaemonStateRootProblem = keyof typeof STATE_ROOT_PROBLEMS;
+
+/** Every exposure the walk answers with; `unavailable` is what it could NOT decide. */
+const STATE_ROOT_PROBLEM_BY_EXPOSURE: Record<
+  Extract<PrivateRootAdmission, { status: 'refused' }>['exposure'],
+  DaemonStateRootProblem
+> = {
+  planted_link: 'symlink',
+  link_loop_exceeded: 'symlink',
+  foreign_owned: 'foreign-owner',
+  not_private: 'not-private',
+  not_a_directory: 'not-a-directory',
+  entry_appeared: 'not-a-directory',
+  world_writable: 'group-or-other-writable-ancestor',
+  shared_group_writable: 'group-or-other-writable-ancestor',
+  shared_parent: 'group-or-other-writable-ancestor',
+  relative_destination: 'unavailable',
+  unnamed_entry: 'unavailable',
+  unresolvable_parent: 'unavailable',
+  unreachable_parent: 'unavailable',
+  parent_replaced: 'unavailable',
+};
+
+/**
+ * Admits the daemon's state root: `establish` creates a missing root, `repair` creates nothing, both close a
+ * root the umask left open, and a refusal answers `daemon_state_root_unsafe`. Nothing is remembered between
+ * calls: an absent root is admitted and can become a planted link before the next one. On Windows only the
+ * path shape is judged (#4649, ADR 0016).
+ */
+export function admitDaemonStateRoot(options: {
+  paths: DaemonPaths;
+  mode: 'repair' | 'establish';
+}): void {
+  const { baseDir } = options.paths;
+  const repair = options.mode === 'repair';
+  if (process.platform === 'win32') {
+    // Of `path.win32` whatever the host runs: a local drive-absolute route. Mode bits answer nothing here.
+    const route = /^[A-Za-z]:[\\/](.*)$/.exec(path.win32.normalize(baseDir))?.[1];
+    if (route === undefined || route.includes(':'))
+      throw unsafeStateRoot(baseDir, baseDir, 'unsupported-windows-path');
+    if (!repair) fs.mkdirSync(baseDir, { recursive: true });
+    return;
+  }
+  const admitted = admitPrivateRoot({
+    rootPath: baseDir,
+    mode: options.mode,
+    managedDirs: ['sessions', path.join('sessions', 'remote-scripts')],
+  });
+  if (admitted.status === 'refused')
+    throw unsafeStateRoot(
+      baseDir,
+      admitted.component,
+      STATE_ROOT_PROBLEM_BY_EXPOSURE[admitted.exposure],
+    );
+}
+
+function unsafeStateRoot(
+  stateDir: string,
+  component: string,
+  problem: DaemonStateRootProblem,
+): AppError {
+  const [cause, step] = STATE_ROOT_PROBLEMS[problem];
+  const fix = problem === 'not-private' ? step.replaceAll('<dir>', () => component) : step;
+  return new AppError(
+    'COMMAND_FAILED',
+    `Refusing to use the daemon state directory ${stateDir}: ${component} ${cause}`,
+    { reason: DAEMON_STATE_ROOT_REASONS.unsafe, stateDir, component, problem, fix, hint: fix },
+  );
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

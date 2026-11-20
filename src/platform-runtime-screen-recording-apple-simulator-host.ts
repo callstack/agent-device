@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { execFailureDetails } from '@agent-device/host-kit/command';
+import { settleWithin } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   HostCommandResult,
@@ -156,15 +157,11 @@ async function rollbackAcquiredSimulatorProcess(
   // CONSERVATIVE: Give simctl time to detach from CoreSimulator before forcing exit;
   // revisit only when the transport can explicitly acknowledge detachment.
   process.child.kill('SIGINT');
-  const grace = new AbortController();
-  const settled = await Promise.race([
-    process.wait.then(
-      () => true,
-      () => true,
-    ),
-    delay(UNPUBLISHED_STOP_GRACE_MS, grace.signal).then(() => false),
-  ]).finally(() => grace.abort());
-  if (!settled) {
+  const outcome = await settleWithin(
+    () => process.wait.catch(() => undefined),
+    UNPUBLISHED_STOP_GRACE_MS,
+  );
+  if (outcome.kind === 'deadline') {
     process.child.kill('SIGKILL');
     await process.wait.catch(() => undefined);
   }

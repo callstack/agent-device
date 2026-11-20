@@ -6,7 +6,10 @@ import {
   normalizeError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import {
+  admitDaemonStateRoot,
+  resolveDaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -279,8 +282,7 @@ async function parseCliInputOrExit(
   }
 
   const isHelpAlias = parsed.command === 'help';
-  const isHelpFlag = parsed.flags.help;
-  if (isHelpAlias || isHelpFlag) {
+  if (isHelpAlias || parsed.flags.help) {
     if (isHelpAlias && parsed.positionals.length > 1) {
       await printHumanError(new AppError('INVALID_ARGS', 'help accepts at most one command.'));
       return exitAfterFlush(1);
@@ -412,6 +414,8 @@ async function resolveRunContextOrExit(
       env: base.host.env,
       cwd: base.host.cwd,
     });
+    // The connection defaults below read, and the upgrade notifier writes, this directory.
+    admitDaemonStateRoot({ paths: daemonPaths, mode: 'repair' });
     const sessionName = flags.session ?? 'default';
     const connectionDefaults = resolveActiveConnectionDefaults({
       host: base.host,

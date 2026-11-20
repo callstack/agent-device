@@ -45,6 +45,7 @@ const REFERENCE: LayeringRatchets = {
   testOnlyExports: [],
   unmatchedTests: [],
   untypedReasonLiterals: {},
+  promiseRaces: {},
 };
 
 /** The same measurement as the reference except where a test moves one number. */
