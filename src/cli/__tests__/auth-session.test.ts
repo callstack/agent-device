@@ -597,7 +597,7 @@ test('a rewritten CLI session replaces the file, so a reader never sees a partia
       fs.closeSync(openedBeforeRewrite);
     }
     assert.equal(readCliSession({ stateDir: tempRoot })?.id, 'session-second');
-    assert.equal(fs.statSync(sessionPath).mode & 0o077, 0);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(sessionPath).mode & 0o077, 0);
     assert.deepEqual(fs.readdirSync(path.dirname(sessionPath)), [path.basename(sessionPath)]);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
