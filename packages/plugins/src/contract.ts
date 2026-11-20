@@ -5,9 +5,10 @@ import type {
   RemoteConfigProfile,
 } from '@agent-device/contracts/remote';
 import type { ProviderPluginHost } from './host.ts';
+import type { ReplayBackendContribution, ReplayExecutionContribution } from './replay-backend.ts';
 
-/** The provider plugin contract version this module defines. */
-export const PROVIDER_PLUGIN_API_VERSION = 2;
+/** The plugin contract version this module defines. Version 2 had no compatibility shim. */
+export const PLUGIN_API_VERSION = 3;
 
 /** Provider ids that name daemon routing; no plugin can claim either of them. */
 export const ROUTING_PROVIDER_IDENTITIES: readonly string[] = ['cloud', 'proxy'];
@@ -89,9 +90,10 @@ export type PluginSetupResult<WebDriver extends WebDriverDescriptor = WebDriverD
   | PluginRuntimeSetup
   | PluginWebDriverSetup<WebDriver>;
 
-export type AgentDevicePlugin<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
+/** A `provider` contribution: the current provider declaration plus setup with a provider host. */
+export type ProviderContribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
   Readonly<{
-    apiVersion: typeof PROVIDER_PLUGIN_API_VERSION;
+    kind: 'provider';
     /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
     provider: string;
     credentials: PluginCredentials;
@@ -101,6 +103,34 @@ export type AgentDevicePlugin<WebDriver extends WebDriverDescriptor = WebDriverD
       host: ProviderPluginHost,
     ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
   }>;
+
+/** One independently activated claim a plugin declares. New kinds need an explicit decision. */
+export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
+  | ProviderContribution<WebDriver>
+  | ReplayBackendContribution
+  | ReplayExecutionContribution;
+
+/**
+ * The object a plugin factory returns: the contract version plus every contribution the package
+ * claims. Each contribution activates and cleans up independently of the others. A package that
+ * declares a single kind may narrow `C` (e.g. to `ProviderContribution`) so its published types
+ * stay within that kind's branch of the union.
+ */
+export type AgentDevicePlugin<
+  WebDriver extends WebDriverDescriptor = WebDriverDescriptor,
+  C extends Contribution<WebDriver> = Contribution<WebDriver>,
+> = Readonly<{
+  apiVersion: typeof PLUGIN_API_VERSION;
+  contributes: readonly [C, ...C[]];
+}>;
+
+/**
+ * A plugin whose only contribution is a `provider` claim. Provider packages declare this as the
+ * factory return type so their published declarations stay within the provider branch of the
+ * union.
+ */
+export type ProviderOnlyPlugin<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
+  AgentDevicePlugin<WebDriver, ProviderContribution<WebDriver>>;
 
 /**
  * The default export of a plugin package's `./agent-device` entry. The store calls it with

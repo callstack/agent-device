@@ -102,8 +102,8 @@ export {
 } from './loopback.ts';
 export {
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
   webDriverPluginSource,
 } from './plugin.fixtures.ts';
 export {

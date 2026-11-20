@@ -45,6 +45,10 @@
     "./replay-backend": {
       "types": "./src/replay-backend.ts",
       "default": "./src/replay-backend.ts"
+    },
+    "./validate": {
+      "types": "./src/validate.ts",
+      "default": "./src/validate.ts"
     }
   },
   "devDependencies": {

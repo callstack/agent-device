@@ -2,8 +2,8 @@ import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import {
   pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
+  selectPlugin,
+  pluginSource,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import {
@@ -25,10 +25,10 @@ const LOCAL_CAPABILITIES = {
 test('a stored profile for a v2 plugin provider needs no remote daemon URL', async () => {
   const { home } = pluginHome();
   vi.stubEnv('AGENT_DEVICE_HOME', home);
-  selectV2Plugin(
+  selectPlugin(
     home,
     'example-v2',
-    v2RegistrationSource('example-v2', {
+    pluginSource('example-v2', {
       extra: `connection: { capabilities: ${JSON.stringify(LOCAL_CAPABILITIES)}, resolve() {}, verify() {} },`,
     }),
   );

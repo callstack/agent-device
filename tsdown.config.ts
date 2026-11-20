@@ -160,8 +160,12 @@ export default defineConfig({
           { test: dtsTest, name: `${name}.d` },
           { test: jsTest, name },
         ]),
+        // The plugin contract and the host, format-backend and native-execution types it names
+        // share this chunk with the replay contracts. Split across two chunks, one declaration file
+        // lands in both and TypeScript sees two unrelated types with the same name, so a consumer
+        // cannot pass a plugin from one public entry into another entry's function.
         {
-          test: /packages[\\/]contracts[\\/]src[\\/]replay-backend\.d\.[cm]?ts$/,
+          test: /packages[\\/](?:contracts[\\/]src[\\/](?:provider-connection|replay-backend)|plugins[\\/]src[\\/](?:contract|host|replay-backend))\.d\.[cm]?ts$/,
           name: 'sdk-replay-backend.d',
         },
       ],

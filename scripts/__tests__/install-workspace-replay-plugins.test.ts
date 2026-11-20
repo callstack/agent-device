@@ -3,7 +3,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { storePluginCandidates } from '@agent-device/plugins/store';
+import { readPluginPackageClaims } from '@agent-device/plugins/validate';
 import { installWorkspaceReplayPlugins } from '../install-workspace-replay-plugins.ts';
+
+/** The manifest of one package in the one installation this script staged into `home`. */
+function installedManifest(home: string, packageId: string): Record<string, unknown> {
+  const directory = path.join(home, 'plugins');
+  const installation = fs
+    .readdirSync(directory)
+    .find((name) =>
+      fs.existsSync(path.join(directory, name, 'node_modules', `@agent-device/${packageId}`)),
+    );
+  assert.ok(installation, `no staged installation holds @agent-device/${packageId}`);
+  return JSON.parse(
+    fs.readFileSync(
+      path.join(
+        directory,
+        installation,
+        'node_modules',
+        `@agent-device/${packageId}`,
+        'package.json',
+      ),
+      'utf8',
+    ),
+  ) as Record<string, unknown>;
+}
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -23,6 +48,55 @@ test('failed second staging keeps the previous config and removes both new insta
   );
   assert.equal(fs.readFileSync(file, 'utf8'), config);
   assert.deepEqual(fs.readdirSync(path.join(home, 'plugins')), []);
+});
+
+test('a non-source workspace install keeps the manifest fields the store reads before import', async () => {
+  const home = mkdtempForTestSync('workspace-plugin-nonsource-');
+  const env = { AGENT_DEVICE_HOME: home };
+  installWorkspaceReplayPlugins(env, false);
+
+  // The written manifest is what the store validates before it imports anything: the typed claims of
+  // the `agent-device` field, and the `engines.node` floor.
+  const claims = Object.fromEntries(
+    (['maestro', 'replay'] as const).map((packageId) => [
+      packageId,
+      readPluginPackageClaims(installedManifest(home, packageId)['agent-device']),
+    ]),
+  );
+  assert.deepEqual(claims, {
+    maestro: [{ kind: 'replay-backend', id: 'maestro' }],
+    replay: [{ kind: 'replay-execution', id: 'ad' }],
+  });
+  for (const packageId of ['maestro', 'replay'] as const) {
+    const workspace = path.resolve(import.meta.dirname, `../../packages/${packageId}`);
+    const source = JSON.parse(
+      fs.readFileSync(path.join(workspace, 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    const installed = installedManifest(home, packageId);
+    assert.deepEqual(installed.engines, source.engines);
+    assert.deepEqual(installed['agent-device'], source['agent-device']);
+  }
+
+  // Both candidates carry their claims into the registry, so the store-installed replay and Maestro
+  // packages are the ones the device lanes resolve.
+  const candidates = await storePluginCandidates(env);
+  assert.deepEqual(
+    candidates.map(({ package: name, declaredClaims }) => [name, declaredClaims]),
+    [
+      ['@agent-device/maestro', [{ kind: 'replay-backend', id: 'maestro' }]],
+      ['@agent-device/replay', [{ kind: 'replay-execution', id: 'ad' }]],
+    ],
+  );
+  const { listPlugins } = await import('@agent-device/plugins/store');
+  const listed = await listPlugins(env, []);
+  assert.deepEqual(
+    listed.map(({ name, backend, compatible }) => [name, backend, compatible]),
+    [
+      ['@agent-device/maestro', 'maestro', true],
+      ['@agent-device/replay', 'ad', true],
+    ],
+    JSON.stringify(listed),
+  );
 });
 
 test('failed publication keeps the previous config and removes staged installations', () => {

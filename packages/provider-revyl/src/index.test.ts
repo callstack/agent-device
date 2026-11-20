@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
-import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import revyl from './index.ts';
+
+function providerOf<P extends AgentDevicePlugin>(plugin: P) {
+  const [contribution] = plugin.contributes;
+  if (contribution.kind !== 'provider') throw new Error('expected a provider contribution');
+  return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
+}
+
 import { startRevylFixtureBackend, type RevylFixtureBackend } from './revyl-backend.fixtures.ts';
 import { REVYL_DEFAULT_BACKEND_URL } from './revyl-client.ts';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
@@ -39,27 +46,27 @@ async function verifyWith(
   options: Parameters<typeof revyl>[0],
   env: Readonly<Record<string, string | undefined>>,
 ) {
-  const connection = revyl(options).connection;
+  const connection = providerOf(revyl(options)).connection;
   if (!connection?.verify) throw new Error('Revyl declares a verify callback');
   return await connection.verify({ flags: PROFILE_FLAGS, host: host(env) } as never);
 }
 
 test('the plugin declares only the variables it still reads from the environment', () => {
-  assert.deepEqual(revyl().credentials?.variables, ['REVYL_API_KEY', 'REVYL_API_URL']);
+  assert.deepEqual(providerOf(revyl()).credentials?.variables, ['REVYL_API_KEY', 'REVYL_API_URL']);
   // A variable an option carries is no longer one the daemon compares against the shell, so a
   // host-provided key is not reported as a rotated credential.
-  assert.deepEqual(revyl({ apiKey: 'k' }).credentials?.variables, ['REVYL_API_URL']);
-  assert.deepEqual(revyl({ apiUrl: 'https://backend.test' }).credentials?.variables, [
+  assert.deepEqual(providerOf(revyl({ apiKey: 'k' })).credentials?.variables, ['REVYL_API_URL']);
+  assert.deepEqual(providerOf(revyl({ apiUrl: 'https://backend.test' })).credentials?.variables, [
     'REVYL_API_KEY',
   ]);
   assert.deepEqual(
-    revyl({ apiKey: 'k', apiUrl: 'https://backend.test' }).credentials?.variables,
+    providerOf(revyl({ apiKey: 'k', apiUrl: 'https://backend.test' })).credentials?.variables,
     [],
   );
 });
 
 test('the plugin declares what a Revyl lease is and is not', () => {
-  const capabilities = revyl().connection?.capabilities;
+  const capabilities = providerOf(revyl()).connection?.capabilities;
   assert.deepEqual(capabilities, {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
@@ -82,7 +89,7 @@ test('each credential option replaces only its own variable', async () => {
   assert.equal(fixture.requests.at(-1)?.authorization, 'Bearer env-key');
 
   // `apiKey` alone: the option names the key, the URL still comes from the environment.
-  const urlOnly = revyl({ apiKey: 'option-key' }).connection;
+  const urlOnly = providerOf(revyl({ apiKey: 'option-key' })).connection;
   if (!urlOnly?.verify) throw new Error('Revyl declares a verify callback');
   await urlOnly.verify({
     flags: PROFILE_FLAGS,
@@ -111,7 +118,7 @@ test('setup builds the runtime and owner from the credential options, not the en
   const fixture = await backend();
   // The environment holds neither variable, so only the options can reach the runtime it builds.
   const plugin = revyl({ apiKey: 'option-key', apiUrl: fixture.backendUrl });
-  const setup = await plugin.setup(host({}));
+  const setup = await providerOf(plugin).setup(host({}));
   if (!('runtime' in setup)) throw new Error('Revyl sets up a runtime, not a WebDriver descriptor');
 
   // The owner identity hashes the key and the origin together, so this equality says both came from
