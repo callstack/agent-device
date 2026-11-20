@@ -162,7 +162,7 @@ test('reports a bound launch identity once for the discovered serial', async () 
     stoppedAvd(),
     {
       headless: true,
-      onAndroidEmulatorLaunchIdentity: observer,
+      onAndroidEmulatorLaunch: observer,
     },
     new AbortController().signal,
   );
@@ -171,7 +171,7 @@ test('reports a bound launch identity once for the discovered serial', async () 
   expect(result).toEqual({ ...runningEmulator(), booted: true });
 });
 
-test('prebooted and unbound launches do not report an identity', async () => {
+test('only a launch this host made reports, including one it could not name', async () => {
   const observer = vi.fn();
   const existing = timedHost({ bootCompleted: '1', discover: () => [runningEmulator()] });
   const bind = vi.fn(async () => undefined);
@@ -179,10 +179,11 @@ test('prebooted and unbound launches do not report an identity', async () => {
   await ensureAndroidReady(
     existing.host,
     stoppedAvd(),
-    { headless: false, onAndroidEmulatorLaunchIdentity: observer },
+    { headless: false, onAndroidEmulatorLaunch: observer },
     new AbortController().signal,
   );
   expect(bind).not.toHaveBeenCalled();
+  expect(observer).not.toHaveBeenCalled();
   let discoveries = 0;
   const launched = timedHost({
     bootCompleted: '1',
@@ -192,11 +193,13 @@ test('prebooted and unbound launches do not report an identity', async () => {
   await ensureAndroidReady(
     launched.host,
     stoppedAvd(),
-    { headless: true, onAndroidEmulatorLaunchIdentity: observer },
+    { headless: true, onAndroidEmulatorLaunch: observer },
     new AbortController().signal,
   );
   expect(bind).toHaveBeenCalledOnce();
-  expect(observer).not.toHaveBeenCalled();
+  // The host launched this emulator and could not read its start time: the caller is told a launch
+  // happened with no identity, which is what keeps it from mistaking an outside emulator for its own.
+  expect(observer).toHaveBeenCalledExactlyOnceWith(undefined);
 });
 
 test('abort during binding suppresses the observation and terminates the launched emulator', async () => {
@@ -220,7 +223,7 @@ test('abort during binding suppresses the observation and terminates the launche
       stoppedAvd(),
       {
         headless: true,
-        onAndroidEmulatorLaunchIdentity: observer,
+        onAndroidEmulatorLaunch: observer,
       },
       controller.signal,
     ),

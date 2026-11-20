@@ -21,6 +21,7 @@ import {
   checkAndroidEmulatorLaunchProcess,
   confirmAndroidEmulatorLaunchProcessStopped,
   readAndroidEmulatorLaunchStartTime,
+  stopAndroidEmulatorLaunchProcess,
 } from './device-boot.ts';
 
 /** The identity `open` recorded for the emulator process it launched. */
@@ -130,4 +131,24 @@ test('a launched process that survives every stop is reported unconfirmed', asyn
     signal: 'SIGKILL',
   });
   expect(await confirmAndroidEmulatorLaunchProcessStopped(IDENTITY)).toBe('unconfirmed');
+});
+
+// #4764: an open that launched this emulator and published no session has no device to ask to shut
+// down, so its cleanup addresses the process alone.
+test('a launch stopped without a device shutdown is signalled by its recorded identity', async () => {
+  expect(await stopAndroidEmulatorLaunchProcess(IDENTITY)).toBe('stopped');
+  expect(mocks.waitForProcessExit).not.toHaveBeenCalled();
+  expect(mocks.stopProcessAndConfirmExit).toHaveBeenCalledExactlyOnceWith(
+    { pid: 4112, identity: { startTime: IDENTITY.startTime } },
+    { termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
+  );
+});
+
+test('a launch that survives that stop is reported unconfirmed', async () => {
+  mocks.stopProcessAndConfirmExit.mockResolvedValue({
+    status: 'retained',
+    reason: 'exit-timeout',
+    signal: 'SIGKILL',
+  });
+  expect(await stopAndroidEmulatorLaunchProcess(IDENTITY)).toBe('unconfirmed');
 });
