@@ -1042,8 +1042,8 @@ agent-device keyboard enter
 
 Things to know:
 
-- `keyboard status` reports whether the software keyboard is visible. When it can identify the Return key, it reports the key's action as `returnKey`. A value of `unknown` means that the keyboard is visible but the action could not be identified. On iOS, `OBSERVATION_UNAVAILABLE` means that the runner could not establish visibility.
-- `keyboard enter` sends Return to the focused input, so focus the intended field first. The app decides what Return does: submit, advance focus, or insert a newline. It can work with the software keyboard hidden.
+- `keyboard status` (alias `keyboard get`) reports whether the software keyboard is visible. When it can identify the Return key, it reports the key's action as `returnKey`. A value of `unknown` means that the keyboard is visible but the action could not be identified. On iOS, `OBSERVATION_UNAVAILABLE` means that the runner could not establish visibility.
+- `keyboard enter` (alias `keyboard return`) sends Return to the focused input, so focus the intended field first. The app decides what Return does: submit, advance focus, or insert a newline. It can work with the software keyboard hidden.
 - On iOS, `keyboard dismiss` does not close a visible keyboard. It returns `keyboard_dismiss_unavailable` with `dispatched: no`. Press the visible Hide Keyboard key or the app control that ends editing. If the app supports interactive dismissal, drag down from inside the scrollable content with `gesture pan x y 0 dy durationMs` and a positive `dy`. Check the result with `keyboard status`.
 - On Android, `keyboard dismiss` asks the platform to close the keyboard. If the keyboard stays up, it returns `keyboard_dismiss_unavailable`.
 
