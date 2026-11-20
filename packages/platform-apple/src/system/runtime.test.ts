@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import { hostAppDevice, type AppleOS, type DeviceInfo } from '@agent-device/kernel/device';
@@ -274,4 +275,31 @@ test('binds the settings write leg without the read leg on an unverified simulat
   });
   expect(bound.setSetting).toBeTypeOf('function');
   expect(bound.readSetting).toBeUndefined();
+});
+
+test('the system runtime binds every catalog operation its facts admit', () => {
+  // The runtime names the families it binds, so an admitted operation outside them would go unbound.
+  const host = { localInteractors: { resolve: vi.fn(async () => ({}) as unknown as Interactor) } };
+  const signal = new AbortController().signal;
+  const devices = [
+    appleDevice('ios', 'simulator'),
+    appleDevice('ios', 'device'),
+    appleDevice('tvos', 'simulator'),
+    appleDevice('macos', 'device'),
+  ];
+  for (const device of devices) {
+    const facts: Readonly<Record<string, { available: boolean }>> = appleSystemFacts(device);
+    const bound: Readonly<Record<string, unknown>> = createAppleSystemOperations({
+      host,
+      device,
+      signal,
+    });
+    for (const { operation } of INTERACTOR_OPERATIONS) {
+      const fact = facts[operation];
+      if (fact === undefined) continue;
+      expect(typeof bound[operation], `${device.id} ${operation}`).toBe(
+        fact.available ? 'function' : 'undefined',
+      );
+    }
+  }
 });
