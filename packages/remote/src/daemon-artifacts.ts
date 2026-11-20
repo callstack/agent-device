@@ -559,19 +559,21 @@ async function downloadResponseArtifacts(
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
   const fallbacks: RecordingDestinationWarning[] = [];
+  const published = new Map<string, string>();
   try {
     await downloadEachArtifact(endpoint, req, artifacts, {
       ...client,
       nextData,
       nextArtifacts,
       fallbacks,
+      published,
     });
   } catch (error) {
     // Files already written to cwd stay on disk, so the failure still names them (#4518).
     throw fallbacks.length === 0 ? error : withRecordingFallbacks(error, fallbacks);
   }
   nextData.artifacts = nextArtifacts;
-  if (req.command === 'record') projectPublishedChunks(nextData, nextArtifacts);
+  if (req.command === 'record') projectPublishedChunks(nextData, published);
   if (fallbacks.length > 0) {
     nextData.recordingDestinationWarnings = fallbacks;
     const previous = Array.isArray(nextData.warnings) ? nextData.warnings : [];
@@ -591,6 +593,7 @@ async function downloadEachArtifact(
     nextData: Record<string, unknown>;
     nextArtifacts: DaemonArtifact[];
     fallbacks: RecordingDestinationWarning[];
+    published: Map<string, string>;
   }>,
 ): Promise<void> {
   const { host, scripts, nextData, nextArtifacts } = client;
@@ -630,6 +633,9 @@ async function downloadEachArtifact(
     // Directory artifacts download into a caller-owned root, then atomically publish their one
     // top-level entry beneath it. Use the path the download actually published rather than the
     // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
+    // The daemon names each chunk by the path it reports in `chunks`: its localPath, else its path.
+    const reported = hasNonEmptyString(artifact.localPath) ? artifact.localPath : artifact.path;
+    if (typeof reported === 'string') client.published.set(reported, materializedPath);
     nextData[artifact.field] = materializedPath;
     nextArtifacts.push({
       ...artifact,
@@ -639,21 +645,19 @@ async function downloadEachArtifact(
 }
 
 /**
- * A multi-chunk recording lists its chunks by the daemon's paths. The first chunk is published as
- * `outPath`, and each later one as a `chunkPath` artifact in chunk order, so each entry is
- * rewritten to the path this client published it at.
+ * A multi-chunk recording lists each chunk by the path the daemon reported for it. Each entry is
+ * matched to its published file by that path; a chunk this client did not download is unchanged.
  */
-function projectPublishedChunks(data: Record<string, unknown>, artifacts: DaemonArtifact[]): void {
+function projectPublishedChunks(
+  data: Record<string, unknown>,
+  published: Map<string, string>,
+): void {
   if (!Array.isArray(data.chunks)) return;
-  const published = [
-    ...artifacts.filter((artifact) => artifact.field === 'outPath'),
-    ...artifacts.filter((artifact) => artifact.field === 'chunkPath'),
-  ].map((artifact) => artifact.localPath);
-  data.chunks = data.chunks.map((chunk: unknown, index: number) =>
-    typeof chunk === 'object' && chunk !== null && typeof published[index] === 'string'
-      ? { ...chunk, path: published[index] }
-      : chunk,
-  );
+  data.chunks = data.chunks.map((chunk: unknown) => {
+    const reported = (chunk as { path?: unknown } | null)?.path;
+    const local = typeof reported === 'string' ? published.get(reported) : undefined;
+    return local === undefined ? chunk : { ...(chunk as object), path: local };
+  });
 }
 
 /** #4518: a recording file that landed in cwd because the request named no destination for it. */
