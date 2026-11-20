@@ -14,6 +14,15 @@ import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { createDaemonLifecycleAdmission, daemonShuttingDownResponse } from './daemon-idle-reap.ts';
 
+// The test must not depend on the host: pin the canonical token to a `posix:` value and the raw
+// (released) rendering to a distinct string, as the lock test does.
+const RAW_START = 'Tue Nov 17 19:42:27 2026';
+vi.mock('../../../../host-kit/src/internal/host-process.ts', async (original) => ({
+  ...(await original<typeof import('../../../../host-kit/src/internal/host-process.ts')>()),
+  readProcessStartTime: () => 'posix:1794944547000',
+  readProcessStartTimeRaw: () => RAW_START,
+}));
+
 const TOKEN = 'daemon-token';
 const FENCE = { pid: 4242, processStartTime: 'Fri Oct 17 09:00:00 2026' };
 
@@ -112,7 +121,8 @@ test('a quiesce fence carrying the published legacy value is admitted', async ()
   const identity = readCurrentOwnerIdentity();
   const record = writePersistedOwner(identity);
   assert.ok(identity.startTime);
-  assert.ok(record.startTime);
+  assert.equal(record.startTime, RAW_START);
+  assert.notEqual(record.startTime, identity.startTime);
   const seam = makeSeam({ identity: { pid: identity.pid, processStartTime: identity.startTime } });
   assert.deepEqual(
     await seam.admit(seam.served)(
@@ -120,6 +130,22 @@ test('a quiesce fence carrying the published legacy value is admitted', async ()
     ),
     { ok: true, data: { outcome: 'draining' } },
   );
+});
+
+test('a quiesce fence carrying a different raw start time is refused', async () => {
+  const identity = readCurrentOwnerIdentity();
+  const record = writePersistedOwner(identity);
+  assert.equal(record.startTime, RAW_START);
+  assert.notEqual(record.startTime, identity.startTime);
+  assert.ok(identity.startTime);
+  const seam = makeSeam({ identity: { pid: identity.pid, processStartTime: identity.startTime } });
+  const refusal = await seam.admit(seam.served)(
+    lifecycleRequest({
+      fence: { pid: record.pid, processStartTime: 'Wed Nov 18 08:00:00 2026' },
+    }),
+  );
+  assert.equal(reasonOf(refusal), 'daemon-instance-mismatch');
+  assert.equal(seam.drained.mock.calls.length, 0);
 });
 
 test('a host-owned runtime refuses quiesce and keeps serving', async () => {

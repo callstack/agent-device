@@ -11,13 +11,16 @@ vi.mock('./host-process.ts', async (original) => ({
 }));
 
 test.each([
-  ['Linux linux:boot:123', 'linux:boot:123', 'linux:boot:123'],
+  ['Linux', 'linux:boot:123', 'linux:boot:123'],
   ['POSIX', 'posix:1794944547000', 'mar. 17 nov. 19:42:27 2026'],
   ['Windows', '202611171942270000000', '202611171942270000000'],
-])('lock and guard publish the %s legacy field', async (_name, token, legacy) => {
+])('lock and guard publish the %s legacy field', async (_name, token, expected) => {
   vi.resetModules();
   host.token = token;
-  host.legacy = legacy;
+  // The raw reader always returns a `ps` rendering that differs from the token, so the expected
+  // field shows which path ran: Linux/Windows keep the token, POSIX takes the `ps` rendering.
+  host.legacy = 'mar. 17 nov. 19:42:27 2026';
+  const legacy = expected;
   const { readCurrentOwnerIdentity } = await import('./owner-identity.ts');
   const { tryAcquireProcessLock } = await import('./process-lock.ts');
   const lockDirPath = path.join(mkdtempForTestSync('persisted-lock-'), 'daemon.lock');
