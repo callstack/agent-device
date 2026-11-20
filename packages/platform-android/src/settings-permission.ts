@@ -216,7 +216,8 @@ async function setAllAndroidPermissions(
   }
   const grants = action === 'grant' ? undefined : revokedGrants;
   const applied: string[] = [];
-  const warnings: string[] = [];
+  const warnings: string[] =
+    requested.length === 0 ? [`${appPackage} declares no permissions, so none was changed.`] : [];
   for (const unit of allPermissionUnits(requested)) {
     await applyAllPermissionUnit(
       { device, appPackage, action, userArgs, grants, applied, warnings },

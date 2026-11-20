@@ -7,6 +7,7 @@ import {
   setAndroidPermission,
 } from '../settings-permission.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -757,7 +758,15 @@ test('setAndroidPermission revoke all warns for the held runtime id', async () =
 // Validation happens before mutation: an unreadable dump issues no pm call.
 test.each([
   ['dumpsys fails', { stderr: 'error', exitCode: 1 }],
-  ['no requested section', dumpsys([{ id: 0, runtime: [[MICROPHONE, false]] }])],
+  [
+    'no requested section beside runtime grants',
+    'Packages:\n  Package [com.example.app] (abc):\n    User 0: ceDataInode=0 installed=true\n      runtime permissions:\n        android.permission.CAMERA: granted=false',
+  ],
+  ['no requested section beside install permissions', dumpsys([{ id: 0, runtime: [] }])],
+  [
+    'the dump ends before the runtime block',
+    'Packages:\n  Package [com.example.app] (abc):\n    User 0: ceDataInode=0 installed=true',
+  ],
 ] as const)('setAndroidPermission all refuses when %s', async (_label, reply) => {
   await withFakeAdb(
     fakeAdb((flat) => {
@@ -772,6 +781,74 @@ test.each([
             permissionTarget: 'all',
           }),
         { code: 'COMMAND_FAILED', message: /declared permissions|requested permissions/i },
+      );
+      assert.ok(
+        calls.every((args) => !args.includes('pm')),
+        calls.map((args) => args.join(' ')).join('; '),
+      );
+    },
+  );
+});
+
+// Android prints no requested section for a package that declares nothing,
+// as for a real app with no <uses-permission>: its user's runtime block is
+// empty and it has no install section. `all` then changes nothing.
+const NO_PERMISSIONS_DUMP = [
+  'Packages:',
+  '  Package [com.example.app] (abc):',
+  '    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]',
+  '    User 0: ceDataInode=0 installed=true',
+  '      runtime permissions:',
+  'Queries:',
+  '  queryable via interaction:',
+  '    User 0:',
+].join('\n');
+
+test.each(['grant', 'deny', 'reset'] as const)(
+  'setAndroidPermission %s all on a package that declares nothing changes nothing',
+  async (action) => {
+    await withFakeAdb(
+      fakeAdb((flat) => {
+        if (flat === CURRENT_USER) return '0';
+        if (flat === DUMPSYS) return NO_PERMISSIONS_DUMP;
+        return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+      }),
+      async ({ calls, device }) => {
+        const result = await setPermission(device, action, 'com.example.app', {
+          permissionTarget: 'all',
+        });
+        assert.deepEqual(result, {
+          permission: 'all',
+          permissions: [],
+          warnings: ['com.example.app declares no permissions, so none was changed.'],
+        });
+        assert.ok(
+          calls.every((args) => !args.includes('pm') && !args.includes('appops')),
+          calls.map((args) => args.join(' ')).join('; '),
+        );
+      },
+    );
+  },
+);
+
+// A named target on that package fails before any pm call, as it does when the
+// app declares other ids.
+test('setAndroidPermission grant camera on a package that declares nothing fails before pm', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return NO_PERMISSIONS_DUMP;
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    }),
+    async ({ calls, device }) => {
+      await assert.rejects(
+        () => setPermission(device, 'grant', 'com.example.app', { permissionTarget: 'camera' }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.deepEqual(error.details?.permissions, ['android.permission.CAMERA']);
+          return true;
+        },
       );
       assert.ok(
         calls.every((args) => !args.includes('pm')),
