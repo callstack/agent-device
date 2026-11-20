@@ -3,9 +3,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
-import { getReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+
+const stubbedBackend = vi.hoisted(() => ({ current: undefined as ReplayBackend | undefined }));
+
+vi.mock('@agent-device/replay-port/replay-backend-registry', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/replay-port/replay-backend-registry')>();
+  const withReplayBackend: typeof actual.withReplayBackend = (id, host, run, resolve) =>
+    stubbedBackend.current
+      ? Promise.resolve(run(stubbedBackend.current))
+      : actual.withReplayBackend(id, host, run, resolve);
+  return { ...actual, withReplayBackend };
+});
 
 describe('exportReplayScriptToMaestro', () => {
   test.each([
@@ -57,13 +69,16 @@ test('replay export prints each warning as one folded Warning line', async () =>
   const dir = mkdtempForTestSync('agent-device-export-warning-');
   const sourcePath = path.join(dir, 'flow.ad');
   fs.writeFileSync(sourcePath, 'open com.example.app\n');
-  // The CLI reads the cached Maestro backend, so the stub reaches it; an export warning can carry a newline.
-  const backend = await getReplayBackend('maestro');
-  const exportScript = vi.spyOn(backend, 'exportReplayScript').mockReturnValue({
-    yaml: '- launchApp\n',
-    warnings: [{ line: 1, action: 'open', message: 'first part\nsecond part' }],
+  // The CLI opens the managed Maestro backend per export, so the stub replaces that scope; an export warning can carry a newline.
+  stubbedBackend.current = {
+    exportReplayScript: () => ({
+      yaml: '- launchApp\n',
+      warnings: [{ line: 1, action: 'open', message: 'first part\nsecond part' }],
+    }),
+  } as unknown as ReplayBackend;
+  onTestFinished(() => {
+    stubbedBackend.current = undefined;
   });
-  onTestFinished(() => exportScript.mockRestore());
 
   const result = await runCliCapture([
     'replay',
