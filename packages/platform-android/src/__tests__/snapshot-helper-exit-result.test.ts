@@ -9,7 +9,10 @@ import {
 } from '../snapshot-helper-capture.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
-import { waitForAndroidSnapshotHelperSessionReady } from '../snapshot-helper-session-protocol.ts';
+import {
+  androidSnapshotHelperSessionLaunchArgs,
+  waitForAndroidSnapshotHelperSessionReady,
+} from '../snapshot-helper-session-protocol.ts';
 import { recordInstrumentationProcess } from '../instrumentation-helper.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
@@ -17,7 +20,7 @@ import { snapshotAndroid } from '../snapshot.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
+import { type AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import type { AndroidAdbProvider } from '../adb-executor.ts';
 import {
   androidHelperRuntimeProbeResult,
@@ -463,6 +466,7 @@ test('a startup failure attaches no raw helper stream to its details or the log'
       timeoutMs,
       undefined,
       recordInstrumentationProcess(process),
+      androidSnapshotHelperSessionLaunchArgs(18093).socketName,
     );
 
   const exited = new FakeAndroidProcess();
@@ -812,7 +816,15 @@ test('a malformed helper report names its size, never the snapshot text it held'
 test('a ready timeout in the middle of a record leaves the final fields intact', async () => {
   const child = new FakeAndroidProcess();
   const record = recordInstrumentationProcess(child);
-  const failure = rejection(waitForAndroidSnapshotHelperSessionReady(child, 30, undefined, record));
+  const failure = rejection(
+    waitForAndroidSnapshotHelperSessionReady(
+      child,
+      30,
+      undefined,
+      record,
+      androidSnapshotHelperSessionLaunchArgs(18093).socketName,
+    ),
+  );
   child.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation fai');
   const timedOut = await failure;
 
@@ -882,6 +894,7 @@ test('a session that exits while its streams stay open still fails startup promp
       5_000,
       controller.signal,
       recordInstrumentationProcess(child),
+      androidSnapshotHelperSessionLaunchArgs(18093).socketName,
     ),
   );
   child.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');

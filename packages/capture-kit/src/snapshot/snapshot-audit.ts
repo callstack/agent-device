@@ -6,7 +6,9 @@ import type {
   AuditResult,
   AuditSizeUnit,
 } from '@agent-device/contracts/capture';
+import { readSnapshotClickabilityEvidence } from '@agent-device/contracts/snapshot-private-evidence';
 import { isNativeIosSnapshotBarNode, normalizeType } from '@agent-device/contracts/snapshot';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
@@ -43,6 +45,9 @@ const CONTROL_ROLES: ReadonlyArray<readonly [suffix: string, role: string]> = [
 ];
 
 const EDITABLE_ROLES = new Set(['text-field', 'search-field', 'combobox']);
+
+/** Role a role-less Android touchable reports as: the tap fact is all the capture published. */
+const ANDROID_TOUCHABLE_ROLE = 'clickable';
 
 type SizeRule =
   | { kind: 'checked'; unit: AuditSizeUnit; recommended: number; scale: number }
@@ -105,14 +110,19 @@ export function auditSnapshot(nodes: readonly SnapshotNode[], context: AuditCont
 
 /** A control the app owns and the user can see, or none when the audit does not judge the node. */
 function evaluateControl(node: SnapshotNode, facts: AuditFacts): EvaluatedControl | undefined {
-  const role = controlRole(node);
+  const role = auditRole(node, facts);
   if (role === undefined || node.ref === undefined) return undefined;
   const ownership = controlOwnership(node, facts);
   if (!isActionable(node, ownership)) return undefined;
   return { role, ownership, name: accessibleName(node, role, facts) };
 }
 
-/** Counts logical controls per name group: one control exposed twice counts once. */
+/**
+ * Counts logical controls per name group: one control exposed twice counts once. A role-less
+ * Android touchable never joins a group: its name comes from its first named descendant, while
+ * TalkBack announces it by joining every descendant's text, so two containers with an equal first
+ * child can announce different names and a shared first child proves nothing.
+ */
 function countSharedNames(
   nodes: readonly SnapshotNode[],
   evaluated: ReadonlyMap<number, EvaluatedControl>,
@@ -121,12 +131,41 @@ function countSharedNames(
   const counts = new Map<string, number>();
   for (const node of nodes) {
     const control = evaluated.get(node.index);
-    if (control?.name === undefined || isDuplicateExposure(node, control.role, facts, evaluated))
-      continue;
+    if (control?.name === undefined) continue;
+    // TalkBack reads a role-less touchable named by its descendants as their joined text, which the
+    // audit does not rebuild. Only a touchable with its own name joins a group.
+    if (control.role === ANDROID_TOUCHABLE_ROLE && ownName(node, false) === undefined) continue;
+    if (isDuplicateExposure(node, control.role, facts, evaluated)) continue;
     const group = nameGroupKey(control.role, control.name);
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
   return new Map([...counts].filter(([, count]) => count > 1));
+}
+
+/**
+ * Audits one captured screen held in a snapshot state. Regular Android snapshots leave the raw
+ * tap facts off their nodes, so the helper's retained clickability evidence is folded back onto
+ * the nodes first; platforms that publish no tap fact audit the nodes as captured.
+ */
+export function auditSnapshotState(snapshot: SnapshotState, context: AuditContext): AuditResult {
+  return auditSnapshot(withRetainedTapFacts(snapshot), context);
+}
+
+function withRetainedTapFacts(snapshot: SnapshotState): readonly SnapshotNode[] {
+  const evidence = readSnapshotClickabilityEvidence(snapshot);
+  if (!evidence || evidence.kind !== 'exact' || evidence.provider !== 'android-helper') {
+    return snapshot.nodes;
+  }
+  return snapshot.nodes.map((node) => {
+    const clickable = evidence.clickableByNodeIndex.get(node.index);
+    const longClickable = evidence.longClickableByNodeIndex.get(node.index);
+    if (clickable === undefined && longClickable === undefined) return node;
+    return {
+      ...node,
+      ...(clickable === undefined ? {} : { clickable }),
+      ...(longClickable === undefined ? {} : { longClickable }),
+    };
+  });
 }
 
 function snapshotCompleteness(context: AuditContext): AuditChecks['snapshot'] {
@@ -136,7 +175,7 @@ function snapshotCompleteness(context: AuditContext): AuditChecks['snapshot'] {
 
 function auditNode(node: SnapshotNode, scan: AuditScan, rule: SizeRule): AuditFinding[] {
   if (node.ref === undefined) return [];
-  const role = controlRole(node);
+  const role = auditRole(node, scan);
   const control =
     role === undefined
       ? []
@@ -167,6 +206,8 @@ function controlFindings(
 /**
  * One control exposed twice: the only child of a control of the same role. The child's finding
  * drops only when that parent reports the same kind, so a collapse never leaves a screen silent.
+ * A role-less clickable container whose only actionable descendant is a control counts as that
+ * control's wrapper too, so the pair reports once, on the container.
  */
 function collapseIntoParent(
   node: SnapshotNode,
@@ -176,9 +217,12 @@ function collapseIntoParent(
   rule: SizeRule,
 ): AuditFinding[] {
   const parent = parentOf(node, scan);
-  if (!parent || !isDuplicateExposure(node, role, scan, scan.evaluated)) return findings;
-  const parentKinds = new Set(controlFindings(parent, role, scan, rule).map(({ kind }) => kind));
-  return findings.filter(({ kind }) => !parentKinds.has(kind));
+  if (parent && isDuplicateExposure(node, role, scan, scan.evaluated)) {
+    return dropFindingsInto(parent, role, findings, scan, rule);
+  }
+  const container = touchableContainerAncestor(node, scan);
+  if (!container || !isSoleActionableDescendant(container, node, scan)) return findings;
+  return dropFindingsInto(container, ANDROID_TOUCHABLE_ROLE, findings, scan, rule);
 }
 
 /**
@@ -200,9 +244,63 @@ function isDuplicateExposure(
   );
 }
 
+/** Drops the findings the parent reports itself, so the pair speaks once, through the parent. */
+function dropFindingsInto(
+  parent: SnapshotNode,
+  parentRole: string,
+  findings: AuditFinding[],
+  scan: AuditScan,
+  rule: SizeRule,
+): AuditFinding[] {
+  const parentKinds = new Set(
+    controlFindings(parent, parentRole, scan, rule).map(({ kind }) => kind),
+  );
+  return findings.filter(({ kind }) => !parentKinds.has(kind));
+}
+
+/** The nearest evaluated role-less clickable ancestor of a node, stopping at any control. */
+function touchableContainerAncestor(node: SnapshotNode, scan: AuditScan): SnapshotNode | undefined {
+  let current = parentOf(node, scan);
+  while (current) {
+    if (scan.evaluated.get(current.index)?.role === ANDROID_TOUCHABLE_ROLE) return current;
+    if (scan.evaluated.has(current.index)) return undefined;
+    current = parentOf(current, scan);
+  }
+  return undefined;
+}
+
+/** Whether the container's one and only actionable descendant is this node. */
+function isSoleActionableDescendant(
+  container: SnapshotNode,
+  node: SnapshotNode,
+  scan: AuditScan,
+): boolean {
+  const actionable = collectDescendants(scan.children, container.index).filter((descendant) =>
+    scan.evaluated.has(descendant.index),
+  );
+  return actionable.length === 1 && actionable[0]?.index === node.index;
+}
+
 function controlRole(node: SnapshotNode): string | undefined {
   const type = normalizeType(node.type ?? '');
   return CONTROL_ROLES.find(([suffix]) => type.endsWith(suffix))?.[1];
+}
+
+/** The role a node is audited as: its control role, else the Android tap fact on a role-less node. */
+function auditRole(node: SnapshotNode, facts: AuditFacts): string | undefined {
+  return controlRole(node) ?? androidTouchableRole(node, facts);
+}
+
+/**
+ * Android reports a custom touchable — a React Native Pressable without an accessibilityRole —
+ * as clickable or long-clickable with no control class, so the tap fact is what makes it a
+ * control. Other platforms publish no tap fact on their regular nodes, so they stay role-only.
+ */
+function androidTouchableRole(node: SnapshotNode, facts: AuditFacts): string | undefined {
+  if (facts.platform !== 'android') return undefined;
+  return node.clickable === true || node.longClickable === true
+    ? ANDROID_TOUCHABLE_ROLE
+    : undefined;
 }
 
 type ControlOwnership = 'app' | 'platform-sized' | 'system';
@@ -335,25 +433,25 @@ function ambiguousNameFinding(
  * The occlusion pass already decided this node is covered. Only controls and rows are reported,
  * and the sole child of a covered control or row collapses into that parent, which reports.
  */
-function coveredFinding(node: SnapshotNode, scan: AuditFacts): AuditFinding | undefined {
-  const role = coveredRole(node);
+function coveredFinding(node: SnapshotNode, scan: AuditScan): AuditFinding | undefined {
+  const role = coveredRole(node, scan);
   if (node.interactionBlocked !== 'covered' || role === undefined) return undefined;
   if (isOnlyChildOfReportedCover(node, scan)) return undefined;
   return { ...findingBase(node, role), kind: 'covered-control', severity: 'observation' };
 }
 
-function coveredRole(node: SnapshotNode): string | undefined {
+function coveredRole(node: SnapshotNode, scan: AuditScan): string | undefined {
   if (node.interactionBlocked !== 'covered') return undefined;
-  return controlRole(node) ?? (isRow(node) ? 'cell' : undefined);
+  return auditRole(node, scan) ?? (isRow(node) ? 'cell' : undefined);
 }
 
 function isRow(node: SnapshotNode): boolean {
   return normalizeType(node.type ?? '').endsWith('cell');
 }
 
-function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditFacts): boolean {
+function isOnlyChildOfReportedCover(node: SnapshotNode, scan: AuditScan): boolean {
   const parent = parentOf(node, scan);
-  if (!parent || parent.ref === undefined || coveredRole(parent) === undefined) return false;
+  if (!parent || parent.ref === undefined || coveredRole(parent, scan) === undefined) return false;
   return scan.children.get(parent.index)?.length === 1;
 }
 

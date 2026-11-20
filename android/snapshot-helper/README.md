@@ -102,11 +102,65 @@ The `gesture` payload is a base64-encoded JSON object using protocol `android-to
 
 ## Persistent Session
 
-Passing `-e sessionPort <port>` keeps the instrumentation alive after startup and serves repeated
-commands over a local TCP server on `127.0.0.1:<port>`, instead of exiting after one snapshot. This
-avoids paying UiAutomation connect/teardown cost per call. Each command uses one short-lived
-connection: the client connects, sends a single command line, reads the response, and the server
-closes that connection; the process stays alive for the next connection:
+Passing `-e mode authenticated-session-v1 -e sessionSocket <name>` keeps the instrumentation alive
+after startup and serves repeated commands over an abstract `localabstract:` socket named `<name>`,
+reached from the host through `adb forward tcp:<port> localabstract:<name>`, instead of exiting after
+one snapshot. This avoids paying UiAutomation connect/teardown cost per call. Each command uses one
+short-lived connection: the client connects, sends a single command line, reads the response, and the
+server closes that connection; the process stays alive for the next connection.
+
+The host owns the socket name and declares it in the launch; the helper binds it unchanged and
+refuses a name outside the `agentdevice-snapshot-helper-` namespace. The ready record repeats that
+name in `sessionSocket`, and the host refuses a record that names any other socket. The versioned
+mode is the whole answer to an old build: a helper that does not implement `authenticated-session-v1`
+rejects the launch before it binds anything, and it reads no `sessionPort` argument, so no launch can
+talk it into an open loopback TCP listener. The host then fails that start and keeps the device on the
+one-shot transport.
+
+Each accepted connection is admitted before any command byte is read. The helper first reads the
+peer's kernel credentials with `LocalSocket.getPeerCredentials()` and serves only adbd (shell uid
+2000, or root uid 0 under `adb root`); any other uid, or a credential read that yields nothing usable,
+is closed without a response. The uid alone does not bind the connection to the host, because adbd
+relays every forwarded connection, including one an emulator guest opens to the host forward through
+`10.0.2.2`. So every connection also proves a per-session secret in both directions. At startup the
+helper draws 32 random bytes and reports them only as `sessionSecret` in its ready record, on the
+stdout of the `am instrument` run the host started; the secret is never in argv, logcat or a file,
+and it never crosses the socket. The peer then sends a 32-byte nonce line; the helper answers with one
+line, `<server nonce> <server proof>`, where the proof is `HMAC-SHA256(secret,
+"agent-device-session-server|" + client nonce + server nonce)`; the peer answers with `HMAC-SHA256(secret, "agent-device-session-client|" + server nonce +
+client nonce)`. Every nonce and proof is 64 lowercase hex characters; the host accepts the hello only as exactly
+those two fields and a newline. The helper reads the
+command only after the client proof matches, and the host sends the command only after the server
+proof matches, so a process that bound the freed socket name after the helper exited gets the nonce
+and nothing else. Any failure closes the connection, and the handshake shares the command's read
+deadline.
+
+Each connection gets a command read deadline from acceptance, independent of the capture
+`timeoutMs`. The deadline is two seconds, plus one second for each 64 KiB of command bytes that
+has arrived, so the largest frame can take about 10 s over a slow remote adb link (at least
+~0.5 Mbit/s). Bytes after the newline earn no time, and bytes that arrive after the deadline earn
+none either: expiry is checked before they are counted. Reads are nonblocking, and the helper waits
+for data with poll only as long as the deadline has left. Each wait takes the deadline itself and
+measures its own poll duration when it starts, so a pause before the wait cannot extend it. The
+helper does not use the socket timeout, which Android 7.0 and 7.1.0 apply to sends only. A silent
+peer closes at two seconds, and a drip-feeding peer cannot hold the command reader past its
+deadline. A command ends with a newline. A connection whose read expires, or whose stream ends before
+the newline, closes without a response, so a peer that never reads cannot hold the accept loop with a
+reply. The line is capped at 513 KiB, a bound derived from the largest supported producer of this
+channel. A 10 s two-contact gesture carries 1,252 densified samples, at most ~130 KB Base64. The
+documented 64 KiB `fill --text-stdin` contract is larger in the worst case: JSON escapes an accepted
+control character such as U+001E from one byte to six, so the value encodes to 524,368 Base64 bytes
+before the action and request id. The cap is decided from the raw byte count as soon as it is
+crossed, before the newline arrives: a capped prefix is never decoded to decide anything, because
+platforms before Android 7.1 decode malformed UTF-8 to fewer bytes than they occupy. A line over the
+cap receives a session error and closes. A complete line that is not well-formed UTF-8 closes the
+connection without dispatch too. Each response is one frame. The helper builds it inside the
+command's failure boundary, so a failure while encoding, such as an out-of-memory on a large
+snapshot, returns a minimal error frame with no success payload. The frame goes out in nonblocking
+sends under one deadline, fixed when the write starts: eight seconds plus the frame size at 64 KiB/s,
+and each readiness wait takes that same deadline. A peer that stops reading is closed at that
+deadline, and the connection then closes. A response write failure closes that connection without
+another frame. The session keeps serving the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling

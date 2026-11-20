@@ -65,6 +65,10 @@
 //     ratchet, and production code may not import those exports or test-kit (R83).
 //   - Over UNIT TESTS: each `*.test.ts` under `src/` and `packages/*/src/` is named for a module
 //     beside it; the unmatched set is a merge-base ratchet (R84).
+//   - Over PRODUCTION SOURCES: a reason literal PUBLISHED on the wire (the `reason` property inside
+//     a `new AppError(...)` construction, its subclass's construction, or a subclass's own
+//     `super(...)`) may not name a value the file did not publish at the merge-base; typed internal
+//     `reason` properties are not wire vocabulary and are not measured (R89).
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
 // R6, R9, and the R10 R7 counts are ratchets with no written-down reference: each is the same
@@ -147,6 +151,10 @@ import {
 } from './package-export-surface.ts';
 import { checkPackageEntrySurfaces } from './package-entry-surface.ts';
 import { checkTestColocation, testColocationSummary } from './test-colocation.ts';
+import {
+  checkUntypedReasonLiterals,
+  type UntypedReasonLiterals,
+} from './untyped-reason-ratchet.ts';
 import { uniqueExportedTypeNamesViolations } from './unique-exported-type-names.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
@@ -424,6 +432,11 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
   return violations;
 }
 
+/** The total number of wire-published `reason` literal sites a measurement holds. */
+function untypedReasonSiteCount(measurement: UntypedReasonLiterals): number {
+  return Object.values(measurement).reduce((sum, sites) => sum + sites.length, 0);
+}
+
 function report(
   files: readonly string[],
   violations: readonly LayeringViolation[],
@@ -464,7 +477,11 @@ function report(
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +
         `every production daemon file lives under a layer folder with no upward static edges ` +
         `across core < resources < execution < sessions < server (R81; dynamic cross-layer edges ` +
-        `are reported above when present).\n`,
+        `are reported above when present); and every wire-published reason literal names a value ` +
+        `its file published at the merge-base (${untypedReasonSiteCount(ratchets.untypedReasonLiterals)} sites in ` +
+        `${Object.keys(ratchets.untypedReasonLiterals).length} file(s) against ` +
+        `${untypedReasonSiteCount(reference.untypedReasonLiterals)} in ` +
+        `${Object.keys(reference.untypedReasonLiterals).length}).\n`,
     );
     return 0;
   }
@@ -551,6 +568,7 @@ export const LAYERING_RULE_IDS = [
   'plugin-framework-independence',
   'test-colocation',
   'unique-exported-type-names',
+  'untyped-reason-literals',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -647,6 +665,11 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     uniqueExportedTypeNamesViolations(
       [...context.sources].map(([path, source]) => ({ path, source })),
       workspaceSpecifierTargets(repoRoot),
+    ),
+  'untyped-reason-literals': (context) =>
+    checkUntypedReasonLiterals(
+      context.ratchets.untypedReasonLiterals,
+      context.reference.untypedReasonLiterals,
     ),
 };
 

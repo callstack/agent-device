@@ -23,12 +23,16 @@ test('mutate globs expand to real kernel sources and exclude selector tests', ()
   );
 });
 
-test('the thread-hostile exclusion is derived from imports, not listed', () => {
+test('the thread-hostile exclusion is derived from test sources, not listed', () => {
   const files = threadHostileTestFiles(repoRoot);
   // Both reasons are represented: process.chdir (CLI capture harness) and a
   // worker inside a worker (the node:worker_threads PNG pipeline).
   assert.ok(files.includes('src/__tests__/cli-help.test.ts'));
   assert.ok(files.includes('packages/capture-kit/src/png-worker.test.ts'));
+  // Setting the umask throws in a worker thread; only reading it is allowed.
+  assert.ok(files.includes('packages/host-kit/src/internal/script-destination-ancestry.test.ts'));
+  assert.ok(files.includes('packages/host-kit/src/internal/atomic-publish.test.ts'));
+  assert.ok(!files.includes('packages/host-kit/src/internal/archive-extraction.test.ts'));
   // A pure decision-kernel test is never excluded — that would hide survivors.
   assert.ok(!files.includes('packages/daemon/src/core/__tests__/ref-frame.test.ts'));
   assert.ok(files.every((file) => file.endsWith('.test.ts')));

@@ -16,6 +16,7 @@ import {
   type SessionProviderOptions,
 } from './snapshot-helper-session.fixtures.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
+import type { AndroidSnapshotHelperCaptureOptions } from '../snapshot-helper-types.ts';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
@@ -57,6 +58,33 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
 
   assert.equal(output, undefined);
   assert.deepEqual(calls, []);
+});
+
+test('a session-capable helper that never answers readiness earns only finite backoff', async () => {
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls: [], spawnArgs });
+  // Nothing about the artifact predicted the failure, so it is treated as transient: one start, a
+  // timed backoff, and the build is tried again once the backoff has run out.
+  const adbProvider: AndroidAdbProvider = {
+    ...provider,
+    spawn: (args) => {
+      spawnArgs.push(args);
+      return new FakeAndroidProcess();
+    },
+  };
+  const options: AndroidSnapshotHelperCaptureOptions = {
+    adb: provider.exec,
+    adbProvider,
+    deviceKey: 'android:emulator-5554',
+    commandTimeoutMs: 50,
+  };
+
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(spawnArgs.length, 1);
+  skewClockPastSessionBackoff();
+  assert.equal(await captureAndroidSnapshotWithHelperSession(options), undefined);
+  assert.equal(spawnArgs.length, 2);
 });
 
 test('a helper that never starts is not spawned again on every command', async () => {
@@ -377,6 +405,15 @@ test('starts and reuses a persistent Android snapshot helper session', async () 
     calls.filter((args) => args[0] === 'forward' && args[1]?.startsWith('tcp:')).length,
     1,
   );
+  // The device end of the forward is the helper's abstract socket, so the helper can admit only
+  // the forwarded adbd peer before reading a command (#4519); never a device TCP port.
+  const forward = calls.find((args) => args[0] === 'forward' && args[1]?.startsWith('tcp:'));
+  const forwardedPort = Number(String(forward?.[1]).slice('tcp:'.length));
+  assert.deepEqual(forward, [
+    'forward',
+    `tcp:${forwardedPort}`,
+    `localabstract:agentdevice-snapshot-helper-${forwardedPort}`,
+  ]);
 });
 
 test('restarts the helper session when capture options change', async () => {

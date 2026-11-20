@@ -31,6 +31,7 @@ import {
 } from './snapshot-helper-capture.ts';
 import {
   allocateAndroidSnapshotHelperSessionPort,
+  androidSnapshotHelperSessionLaunchArgs,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
@@ -86,6 +87,8 @@ export type AndroidSnapshotHelperSession = {
   deviceKey: string;
   helper: AndroidSnapshotHelperSessionHelperIdentity;
   port: number;
+  /** The secret the helper printed at readiness; it proves each connection, and nothing logs it. */
+  secret: Buffer;
   adb: AndroidAdbExecutor;
   process: AndroidAdbProcess;
   /** What the helper process printed and how it ended, for a session that dies on its own. */
@@ -106,8 +109,9 @@ const sessionsSlot = Symbol('androidSnapshotHelperSessions');
 const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
   runtimeSlot(sessionsSlot, () => new Map<string, AndroidSnapshotHelperSession>());
 /**
- * Capture identity → when this process may spawn that helper build again after a failed start or a
- * failed session capture.
+ * Capture identity → when this process may start that helper again after a failed start or a failed
+ * session capture. Every entry here is timed, except a build whose live session went silent, which
+ * stays one-shot until reset.
  */
 const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
 const failedSessions = (): Map<string, number> =>
@@ -139,10 +143,17 @@ export async function acquireAndroidSnapshotHelperSession(
   }
   const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
   const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions(callerResolved);
-  const identity = createSessionIdentity(deviceKey, resolved, options);
+  const build = {
+    deviceKey,
+    packageName: resolved.packageName,
+    runner: resolved.runner,
+    helperVersion: options.helperVersion,
+    helperVersionCode: options.helperVersionCode,
+    helperSha256: options.helperSha256,
+  };
   const session = await resolveAndroidSnapshotHelperSession({
     deviceKey,
-    identity,
+    identity: createSessionIdentity(build, resolved),
     options,
     resolved,
     startBudgetMs: resolveAndroidSnapshotHelperSessionBudgetMs(callerResolved.commandTimeoutMs),
@@ -172,7 +183,9 @@ async function resolveAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
-  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
+  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) {
+    return undefined;
+  }
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
   return sessions().get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
 }
@@ -193,8 +206,10 @@ async function retireUnusableAndroidSnapshotHelperSession(
 
 /**
  * Starts the helper, or answers `undefined` for a start that failed. A start that failed is not a
- * command that failed — the caller answers with the one-shot transport — and this helper build is
- * not spawned again until the backoff it just earned is over.
+ * command that failed — the caller answers with the one-shot transport. Any failure earns the same
+ * timed backoff under the capture identity, so a burst of commands does not re-pay a slow failure.
+ * An older helper refuses the versioned session mode at launch, so its start fails here like any
+ * other and later commands stay one-shot until the backoff expires. No answer marks a build for good.
  */
 async function tryStartAndroidSnapshotHelperSession(params: {
   deviceKey: string;
@@ -208,6 +223,7 @@ async function tryStartAndroidSnapshotHelperSession(params: {
     return await startAndroidSnapshotHelperSession(params);
   } catch (error) {
     params.options.signal?.throwIfAborted();
+    const reason = error instanceof AppError ? error.details?.reason : undefined;
     failedSessions().set(
       params.identity,
       Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
@@ -217,7 +233,7 @@ async function tryStartAndroidSnapshotHelperSession(params: {
       phase: 'android_snapshot_helper_session_start_failed',
       data: {
         deviceKey: params.deviceKey,
-        reason: error instanceof AppError ? error.details?.reason : undefined,
+        reason,
         instrumentation: error instanceof AppError ? error.details?.instrumentation : undefined,
         detail: error instanceof Error ? error.message : String(error),
       },
@@ -311,14 +327,17 @@ async function startAndroidSnapshotHelperSession(params: {
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession> {
   const port = await allocateAndroidSnapshotHelperSessionPort();
-  await params.options.adb(['forward', `tcp:${port}`, `tcp:${port}`], {
+  // The host names the abstract socket the helper binds, so the forward and the helper cannot end up
+  // describing different sockets, and nothing is left for a helper to derive (#4519).
+  const launch = androidSnapshotHelperSessionLaunchArgs(port);
+  await params.options.adb(['forward', `tcp:${port}`, launch.forwardTarget], {
     allowFailure: false,
     timeoutMs: FORWARD_TIMEOUT_MS,
     signal: params.options.signal,
   });
   const sessionArgs = buildAndroidSnapshotHelperArgs(
     { ...params.resolved, emitChunks: false },
-    { sessionPort: port },
+    launch,
   );
   const childProcess = params.options.adbProvider!.spawn!(sessionArgs, {
     allowFailure: true,
@@ -336,6 +355,7 @@ async function startAndroidSnapshotHelperSession(params: {
       sha256: params.options.helperSha256,
     },
     port,
+    secret: Buffer.alloc(0),
     adb: params.options.adb,
     process: childProcess,
     processRecord,
@@ -348,12 +368,15 @@ async function startAndroidSnapshotHelperSession(params: {
     // falls back to pays too, so the wait gets a share of the helper-command budget rather than a
     // smaller guess. The caller's own deadline reaches it as an abort on `options.signal`, which is
     // what bounds this below the budget when the command itself is short.
-    session.commands = await waitForAndroidSnapshotHelperSessionReady(
+    const ready = await waitForAndroidSnapshotHelperSessionReady(
       childProcess,
       params.startBudgetMs,
       params.options.signal,
       processRecord,
+      launch.socketName,
     );
+    session.commands = ready.commands;
+    session.secret = ready.secret;
     sessions().set(params.deviceKey, session);
     failedSessions().delete(params.identity);
     // `am instrument` force-stops whatever is already instrumenting this package, so a helper that
@@ -407,24 +430,17 @@ async function startAndroidSnapshotHelperSession(params: {
 }
 
 function createSessionIdentity(
-  deviceKey: string,
+  build: { deviceKey: string } & AndroidSnapshotHelperSessionHelperIdentity,
   resolved: AndroidSnapshotHelperResolvedCaptureOptions,
-  options: AndroidSnapshotHelperCaptureOptions,
 ): string {
-  const identity = JSON.stringify({
-    deviceKey,
-    packageName: resolved.packageName,
-    runner: resolved.runner,
-    helperVersion: options.helperVersion,
-    helperVersionCode: options.helperVersionCode,
-    helperSha256: options.helperSha256,
+  return JSON.stringify({
+    ...build,
     waitForIdleTimeoutMs: resolved.waitForIdleTimeoutMs,
     waitForIdleQuietMs: resolved.waitForIdleQuietMs,
     timeoutMs: resolved.timeoutMs,
     maxDepth: resolved.maxDepth,
     maxNodes: resolved.maxNodes,
   });
-  return identity;
 }
 
 /**
@@ -598,7 +614,7 @@ async function requestGracefulSessionExit(
   const requestId = `quit-${Date.now()}`;
   try {
     const response = await sendAndroidSnapshotHelperSessionCommand(
-      session.port,
+      session,
       `quit ${requestId}`,
       SESSION_STOP_TIMEOUT_MS,
       signal,

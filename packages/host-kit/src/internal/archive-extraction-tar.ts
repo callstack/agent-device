@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar-stream';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ArchiveBudget,
   archiveError,
@@ -49,14 +50,14 @@ export async function extractTarArchive(options: TarOptions): Promise<void> {
           'Archive contents changed after inspection',
         );
       }
-      await writeTarEntry(entry, manifestEntry, options.outputRoot, reservation);
+      await writeTarEntry(entry, manifestEntry, options.outputRoot, reservation, options.signal);
       reservation.commitEntry();
     }
     await extraction;
   } catch (error) {
     extractor.destroy();
     await extraction.catch(() => {});
-    throw error;
+    throw cancellationOwnedFailure(options.signal, error);
   }
   if (manifest.length !== 0) {
     throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
@@ -94,20 +95,32 @@ async function inspectTar(
   } catch (error) {
     extractor.destroy();
     await inspection.catch(() => {});
-    throw error;
+    throw cancellationOwnedFailure(options.signal, error);
   }
   return manifest;
 }
 
+/**
+ * Starts the archive pipeline with its outcome observed at once: a cancellation can reject it
+ * while the entry loop still awaits a filesystem operation, before the loop joins it.
+ */
 function streamTar(
   archivePath: string,
   gzip: boolean,
   extractor: tar.Extract,
   signal?: AbortSignal,
 ): Promise<void> {
-  return gzip
+  const stream = gzip
     ? pipeline(createReadStream(archivePath), createGunzip(), extractor, { signal })
     : pipeline(createReadStream(archivePath), extractor, { signal });
+  stream.catch(() => {});
+  return stream;
+}
+
+/** A cancelled walk reports the signal's typed reason; a classified archive failure stays. */
+function cancellationOwnedFailure(signal: AbortSignal | undefined, error: unknown): unknown {
+  if (!signal?.aborted || error instanceof AppError) return error;
+  return signal.reason;
 }
 
 function readTarKind(type: tar.Headers['type']): 'directory' | 'file' {
@@ -133,19 +146,27 @@ function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry |
   return { name, kind, size, mode: extractedEntryMode(kind, header.mode) };
 }
 
+/**
+ * Writes one entry under the extraction's signal. The signal is checked after each
+ * filesystem await, so no writer opens after a cancellation, and the entry pipeline joins
+ * its own writer before it settles, so cleanup never races an open write.
+ */
 async function writeTarEntry(
   entry: tar.Entry,
   manifestEntry: ArchiveManifestEntry,
   outputRoot: string,
   reservation: { chargeBytes(bytes: number): void },
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   const outputPath = resolveArchiveOutputPath(outputRoot, manifestEntry.name);
   if (manifestEntry.kind === 'directory') {
-    await createExtractedDirectory(outputPath, manifestEntry.mode);
+    await createExtractedDirectory(outputPath, manifestEntry.mode, signal);
+    signal?.throwIfAborted();
     await drainTarEntry(entry);
     return;
   }
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  signal?.throwIfAborted();
   await pipeline(
     entry,
     async function* (source) {
@@ -155,6 +176,7 @@ async function writeTarEntry(
       }
     },
     createWriteStream(outputPath, { flags: 'wx', mode: manifestEntry.mode }),
+    { signal },
   );
 }
 

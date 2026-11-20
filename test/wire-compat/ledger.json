@@ -100,7 +100,7 @@
     "packages/daemon/src/server/http/http-rpc-methods.ts#COMMAND_RPC_METHODS": "sha256:4b675a84ef475c2fe0e864457c254c2e888de942e4ae428d5b3e1fa72101e97b",
     "packages/daemon/src/server/http/http-authorization.ts#HttpAuthDecision": "sha256:a7fc2a91f998ce62b107b14dd9b6fcf1f4ca5abe2e30d4df5a0896d56a0a52f8",
     "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHook": "sha256:1ed0ba84708f040787d81d7f546c8b6e0cb8c319625d6c654ece3819be2de8e6",
-    "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext": "sha256:c555532dcc31c106d893445d2cff01ad6c5e5b3390b86fad982385059ec69663",
+    "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext": "sha256:f6b0b0ff2db474168b53af51994c81d32459b5010f643c965eba66f3ca89b737",
     "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookResult": "sha256:d52c3f14ff05da925a8efc53b9eac4538826ba615ab9fc073eeed4f3df678086",
     "packages/daemon/src/server/http/http-rpc-methods.ts#INSTALL_FROM_SOURCE_RPC_METHODS": "sha256:d0dc3f3d872e7384343e28aaaf2b57e0da822e654a2e345fb108d160f520c16d",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#JsonRpcRequest": "sha256:7c299fe17818993a0bacbb48e12dcd1fd28b3595cf8efcae3484acbec383ce22",
@@ -110,7 +110,7 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_REQUEST_MAX_BYTES": "sha256:4348e1d7a6d025d6d75fddf075e52fe0555ce7c7b69b4dd4d64dc28ce1f73a87",
     "packages/daemon/src/server/http/http-rpc-methods.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "packages/daemon/src/server/http/http-rpc-methods.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
-    "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
+    "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest": "sha256:be2f3a9965bb6fe456ab8b1f0a696cf80ffcc8016262a4aee28dee25d18650d0",
     "packages/daemon/src/server/http/http-rpc-envelope.ts#createRpcError": "sha256:1921762129636afc7772937d48e8afb8f09047b343e3a27d18b49c1c4385bbe8",
     "packages/daemon/src/server/http/http-authorization.ts#enforceDaemonToken": "sha256:60036cffc34388b33fc0dad39c905d9cb3fc18c9ed0cf24255bb7105f5d444c7",
     "packages/daemon/src/server/http/http-rpc-methods.ts#isCommandRpcMethod": "sha256:9922102ba9c72c3032f205717d772ab7c3506c6f3012f55b8e7e5636b672ed7e",
@@ -128,16 +128,16 @@
     "packages/daemon/src/server/http/http-rpc-envelope.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
     "packages/daemon/src/core/session-tenant-scope.ts#TenantSessionNamespace": "sha256:a6613d22933caa053e479f05b7f016664f6be8d0afdbbf81e578ff497fc1b13d",
     "packages/daemon/src/core/session-tenant-scope.ts#isTenantAddressableSessionName": "sha256:cc8ae18094b7f57d4bb694678f84ba767637b1087fd28058ffd6a3c92c79f05d",
-    "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:6521ffa355c57af97bfc8095699f2a2b38745a6ef8d61a34c8cfc80ee690b6b5",
+    "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:939b227d303574f90d59f01dd1bcb99eec7c5831b8e40dc5a6412be62c673e7e",
     "packages/daemon/src/server/upload-http.ts#DIRECT_UPLOAD_PATH_PREFIX": "sha256:6fe7d42a65baceb595d96b6aa83fe9aa84527d9aa2e448d7ef47882d31a03276",
     "packages/daemon/src/server/upload-http.ts#UploadFinalizeBody": "sha256:c358aea9b3c341f51f3fa263032dfda8a3fbbf729396fcf7f2d8aa051b231b8b",
     "packages/daemon/src/server/upload-http.ts#UploadHttpRoute": "sha256:3fee66976292bedc9587e266f7f584ff27574e939329bb3ecb98f100c4c54b2e",
     "packages/daemon/src/server/upload-http.ts#UploadPreflightBody": "sha256:05b5e8bd75887f821c44cd54b027f09de1ea08c6e41c44d4dc9ec7cf09fc1ea5",
     "packages/daemon/src/server/upload-http.ts#buildUploadTicketAuthHeaders": "sha256:04d65207c440424257ea04a86fa50fd27f5e6b62e8cede884d9af1db4fb86475",
-    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:b1e1cfd79f13470a1111a377b87975ed5c721500d99f3160a8b631194af37ce5",
-    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:bba7347a32f53b265cded1c7d73f943431ba3b5a0c8b347d621266ea20c10cd6",
-    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:f6879ce6b62d916265d98f6b6aa5f99650c82a9d391a7d5873015036d9289a24",
-    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
+    "packages/daemon/src/server/upload-http.ts#handleResumableUpload": "sha256:294c54016839b3a98ad9a01b2201dcad662af7a4caf581ae3976fa646d435b35",
+    "packages/daemon/src/server/upload-http.ts#handleUpload": "sha256:9d89e442631e057467c2543be81150caa39f389bc582c6d69628a9dad52af75b",
+    "packages/daemon/src/server/upload-http.ts#handleUploadFinalize": "sha256:2fc9137a076fba30139ed2eb8109560552e57a9efa81f6478fc87506c66dffef",
+    "packages/daemon/src/server/upload-http.ts#handleUploadPreflight": "sha256:c17b3a0576819308720d55e8b6b14507fa6f70cb884dc7e1f3bac4e6151c8f74",
     "packages/daemon/src/server/upload-http.ts#readUploadFinalizeBody": "sha256:076298afa73d7e498a964b6c48d823de1cc8b15e9e971d0a22b7e6c3fd98d685",
     "packages/daemon/src/server/upload-http.ts#readUploadPreflightBody": "sha256:2e56302178b75d9a6f5424f01dfc46551dca2056ba06a43e48ae09ec528956b6",
     "packages/contracts/src/daemon-http.ts#resolveHttpRequestBaseUrl": "sha256:6ef76a849a7c61c7ae035cbf162dd1dfac3631f6a2df421560f19f798853e50f",
@@ -146,7 +146,7 @@
     "packages/contracts/src/daemon-http.ts#containsInvalidHttpUrlCharacter": "sha256:008c59ed9aa9338f7259877253783446762e603dad6dd91948a8aafc5eee37e0",
     "packages/daemon/src/server/upload-http.ts#resolveUploadHttpRoute": "sha256:d744044d036a46221c3b8220179cc30e1e66b8619a4e5cd3f7dd5f8582817aba",
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
-    "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
+    "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:8a8873eb6437a32f7045c87a7b16226a48ff7fc4d61c5de459809e2558758768",
     "packages/remote/src/artifact-download.ts#RemoteArtifactDownload": "sha256:25a3271876166d94f8df6bc1fa2a83915011300ba433548ffc5c93b05766ac46",
     "packages/remote/src/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:0dfd0e7c3ca16d0d5b14cb1699551cef7bb84d99524f2408f247908c26629337",
     "packages/remote/src/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
@@ -217,7 +217,8 @@
     "packages/remote/src/script-version-publisher.ts#publishScriptVersion": "sha256:3482119f201a54a397507af79804e0959ae1dc640ba2838cc1037e28d9de8199",
     "packages/remote/src/script-version-publisher.ts#PublishOutcome": "sha256:52c7d164a1150bfdfa5636ca3b1938e9bfc818848545d0a3e89c42a9c3f9f061",
     "packages/remote/src/session-script-destination.ts#sendRemoteScriptOpen": "sha256:10ab07a6f276c7b03996c6b46fa218e03e7b1d21e2c95df5515dfb88095416b6",
-    "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15"
+    "packages/remote/src/session-script-destination.ts#RemoteEndpoint": "sha256:9c48e8e0ee14a25b85ebd930243fd263134836b35ecda55fb927919911263c15",
+    "packages/daemon/src/server/upload-http.ts#authorizeUpload": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740"
   },
   "compatibleChanges": [
     {
@@ -312,8 +313,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
-      "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "digest": "sha256:be2f3a9965bb6fe456ab8b1f0a696cf80ffcc8016262a4aee28dee25d18650d0",
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -572,8 +573,28 @@
     },
     {
       "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadPreflight",
-      "digest": "sha256:8f9915c23fbf86903bee4db02e1b45aa835bc4d234c8e9a0fe4da5e67da8163e",
-      "rationale": "#4434 passes the origin validated by the HTTP ingress owner, or the explicitly configured publicOrigin, into the existing ticket producer. Protocol-2 clients receive the same uploadId and upload URL/header object, use the returned absolute URL, and keep the existing byte, range, authentication and finalize contracts. Forwarding headers no longer select authority under the documented operator migration; no wire field becomes required or changes interpretation."
+      "digest": "sha256:c17b3a0576819308720d55e8b6b14507fa6f70cb884dc7e1f3bac4e6151c8f74",
+      "rationale": "#4441 adds finite server-side ingress budgets to the existing upload routes: a 600-second aggregate and a 120-second body-inactivity ceiling admitted per request, renewed only after body bytes pass the bounded JSON reader or file writer, and stopped at body completion so post-body work observes just the aggregate, plus explicit daemon listener ceilings: a 30 s header ceiling and a request ceiling derived from the header ceiling, the connections-checking interval, the upload aggregate and a margin. Routes, methods, request fields, response fields, status codes (including the 308 resume framing) and ticket/artifact payloads are unchanged, so a released peer parses and answers exactly as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. Expiry is also checked on the monotonic clock before a ticket is created, a chunk offset is committed and an artifact is registered, and an expired exchange ends with the same typed error answer; status codes and body shapes are unchanged. Every answer, ticket publish and registration now commits through the request's single commit gate; a newly created preflight ticket is removed when its answer is refused. Status codes, headers and bodies are unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleUpload",
+      "digest": "sha256:9d89e442631e057467c2543be81150caa39f389bc582c6d69628a9dad52af75b",
+      "rationale": "#4441 bounds the single-shot upload with the same finite ingress budgets and threads the request's ingress signal into the owned post-body hash and extraction; the route, headers, response artifact framing and status codes are unchanged, so a released peer interoperates as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. Expiry is also checked on the monotonic clock before a ticket is created, a chunk offset is committed and an artifact is registered, and an expired exchange ends with the same typed error answer; status codes and body shapes are unchanged. Every answer, ticket publish and registration now commits through the request's single commit gate; a newly created preflight ticket is removed when its answer is refused. Status codes, headers and bodies are unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleResumableUpload",
+      "digest": "sha256:294c54016839b3a98ad9a01b2201dcad662af7a4caf581ae3976fa646d435b35",
+      "rationale": "#4441 bounds the direct chunk receive with the same finite ingress budgets and renews the ticket idle timer on accepted bytes; the 308 range/x-upload-offset framing and completion status are unchanged, so a released client resumes exactly as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. Expiry is also checked on the monotonic clock before a ticket is created, a chunk offset is committed and an artifact is registered, and an expired exchange ends with the same typed error answer; status codes and body shapes are unchanged. Every answer, ticket publish and registration now commits through the request's single commit gate; a newly created preflight ticket is removed when its answer is refused. Status codes, headers and bodies are unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#handleUploadFinalize",
+      "digest": "sha256:2fc9137a076fba30139ed2eb8109560552e57a9efa81f6478fc87506c66dffef",
+      "rationale": "#4441 bounds the finalize request with the same finite ingress budgets, renews inactivity on JSON bytes accepted by the bounded reader, and passes the request's ingress signal through the serialized admission into the post-body hash, the owned extraction stream and the artifact registration boundary; the request body, response artifact framing and status codes are unchanged, so a released peer interoperates as before. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. Expiry is also checked on the monotonic clock before a ticket is created, a chunk offset is committed and an artifact is registered, and an expired exchange ends with the same typed error answer; status codes and body shapes are unchanged. Every answer, ticket publish and registration now commits through the request's single commit gate; a newly created preflight ticket is removed when its answer is refused. Status codes, headers and bodies are unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse",
+      "digest": "sha256:8a8873eb6437a32f7045c87a7b16226a48ff7fc4d61c5de459809e2558758768",
+      "rationale": "#4441 removes an unregistered upload directory if ingress is canceled before the registry takes ownership. Successful responses retain the same status and uploadId envelope. Expiry is also checked on the monotonic clock before a ticket is created, a chunk offset is committed and an artifact is registered, and an expired exchange ends with the same typed error answer; status codes and body shapes are unchanged. Every answer, ticket publish and registration now commits through the request's single commit gate; a newly created preflight ticket is removed when its answer is refused. Status codes, headers and bodies are unchanged."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifact",
@@ -599,6 +620,21 @@
       "declaration": "packages/daemon-client/src/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
       "digest": "sha256:69ecc4d2b747102463267a6a51e49008ff54c400688aee4284dd1026b1b37975",
       "rationale": "#4518 client-side only: the RPC error branch takes the caller's AbortSignal. A caller abort skips the batch receipt settlement, and an abort during it stops the script download before anything publishes. The error fields read and the error the caller receives are unchanged. For a remote daemon only, the error details drop a peer's savedScript, recordingDestinationWarnings and artifact localPath, which only this client's own delivery may set; a local daemon's details are unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/http/http-authorization.ts#HttpAuthHookContext",
+      "digest": "sha256:f6b0b0ff2db474168b53af51994c81d32459b5010f643c965eba66f3ca89b737",
+      "rationale": "#4441 adds an optional signal to the auth hook context, aborted when the authorized upload request expires or its client disconnects. The field is server-internal to the hook module the operator loads; no wire request or response field changes, so a released peer parses everything as before."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#AuxiliaryHttpAuthorizer",
+      "digest": "sha256:939b227d303574f90d59f01dd1bcb99eec7c5831b8e40dc5a6412be62c673e7e",
+      "rationale": "#4441 adds the upload ingress signal to the internal authorizer callback the upload routes call. It is not a wire field; routes, headers, bodies and status codes are unchanged, so a released peer interoperates as before. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
+    },
+    {
+      "declaration": "packages/daemon/src/server/upload-http.ts#authorizeUpload",
+      "digest": "sha256:69ee5039c7eadbe0f96cdf57bcd947b16cdc815671ba4c966ace93ad353cc740",
+      "rationale": "#4441 moves the upload routes' existing authorize call into one helper: the same command 'upload', the same per-route positionals and the same token/auth-hook gate, now under the ingress signal. No request, response or status framing changes for a released peer. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     }
   ]
 }

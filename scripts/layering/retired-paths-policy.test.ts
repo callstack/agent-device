@@ -22,6 +22,7 @@ const EMPTY_RATCHETS: LayeringRatchets = {
   sessionAuthority: { shapeFiles: [], authorityFiles: [] },
   testOnlyExports: [],
   unmatchedTests: [],
+  untypedReasonLiterals: {},
 };
 
 function contextWithFiles(

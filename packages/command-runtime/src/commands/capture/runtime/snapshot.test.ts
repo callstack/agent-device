@@ -945,6 +945,10 @@ test('runtime snapshot carries backend clickability evidence through presentatio
       [0, false],
       [1, true],
     ]),
+    longClickableByNodeIndex: new Map([
+      [0, false],
+      [1, false],
+    ]),
   } as const;
   const state = makeSnapshotState(
     [

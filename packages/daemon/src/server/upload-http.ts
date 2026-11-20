@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import http from 'node:http';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -10,6 +11,7 @@ import {
 } from './resumable-upload.ts';
 import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
+import { beginUploadTransferIngress, type UploadTransferIngress } from './upload-ingress.ts';
 import { readNodeHttpRequestBody } from '@agent-device/host-kit/transport';
 
 const DIRECT_UPLOAD_PATH_PREFIX = '/upload/direct/';
@@ -39,6 +41,10 @@ type AuxiliaryHttpAuthorizer = (params: {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
+  /** The upload ingress signal: authorization stops at the same deadline or disconnect. */
+  signal: AbortSignal;
+  /** The upload ingress commit gate: a refusal after the hook answers through it. */
+  commit: <T>(work: () => T) => T;
 }) => Promise<{ tenantId?: string } | null>;
 
 export function tryHandleUploadHttpRoute(params: {
@@ -94,26 +100,64 @@ function resolveUploadHttpRoute(req: http.IncomingMessage): UploadHttpRoute | nu
   return null;
 }
 
+/**
+ * Runs one upload route under its ingress owner (#4441): finite budgets admitted at the
+ * callback (a 600-second aggregate plus a 120-second body-inactivity ceiling), the
+ * authorization under the same signal, one failure answer, and one release.
+ */
+async function runUploadRoute(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  authorize: AuxiliaryHttpAuthorizer,
+  positionals: string[],
+  handle: (auth: { tenantId?: string }, ingress: UploadTransferIngress) => Promise<void>,
+): Promise<void> {
+  const ingress = beginUploadTransferIngress({ req, res });
+  try {
+    const auth = await authorizeUpload(authorize, req, res, ingress, positionals);
+    if (!auth) return;
+    await handle(auth, ingress);
+  } catch (error) {
+    answerUploadFailure(res, error, ingress.commit);
+  } finally {
+    ingress.dispose();
+  }
+}
+
+/** The upload command and positionals the auth hook sees, under the ingress signal. */
+async function authorizeUpload(
+  authorize: AuxiliaryHttpAuthorizer,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  ingress: { signal: AbortSignal; commit: <T>(work: () => T) => T },
+  positionals: string[],
+): Promise<{ tenantId?: string } | null> {
+  return await authorize({
+    req,
+    res,
+    signal: ingress.signal,
+    commit: ingress.commit,
+    daemonRequest: { command: 'upload', positionals },
+  });
+}
+
 async function handleUpload(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
-  try {
-    const auth = await authorize({
-      req,
+  await runUploadRoute(req, res, authorize, [], async (auth, ingress) => {
+    sendUploadedArtifactResponse(
       res,
-      daemonRequest: {
-        command: 'upload',
-        positionals: [],
-      },
-    });
-    if (!auth) return;
-
-    sendUploadedArtifactResponse(res, await receiveUpload(req), auth.tenantId);
-  } catch (error) {
-    sendRestJsonError(res, normalizeError(error));
-  }
+      await receiveUpload(req, {
+        signal: ingress.signal,
+        onBodyBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
+        onBodyComplete: () => ingress.bodyComplete(),
+      }),
+      auth.tenantId,
+      ingress.commit,
+    );
+  });
 }
 
 async function handleUploadPreflight(
@@ -123,30 +167,25 @@ async function handleUploadPreflight(
   token: string,
   origin: string,
 ): Promise<void> {
-  try {
-    const auth = await authorize({
-      req,
-      res,
-      daemonRequest: {
-        command: 'upload',
-        positionals: ['preflight'],
-      },
-    });
-    if (!auth) return;
-
-    const body = await readRestJsonBody(req, 64 * 1024);
+  await runUploadRoute(req, res, authorize, ['preflight'], async (auth, ingress) => {
+    const body = await readRestJsonBody(req, 64 * 1024, ingress.onAcceptedBodyBytes);
+    // The JSON body is fully received: inactivity stops here and the remaining work
+    // observes only the aggregate (#4441).
+    ingress.bodyComplete();
     const preflight = readUploadPreflightBody(body);
-    const upload = beginResumableUpload({
-      baseUrl: origin,
-      tokenHeaders: buildUploadTicketAuthHeaders(token),
-      ...preflight,
-      tenantId: auth.tenantId,
-    });
-
-    sendJson(res, { ok: true, ...upload });
-  } catch (error) {
-    sendRestJsonError(res, normalizeError(error));
-  }
+    // bodyComplete above committed under the recorded deadlines in this same turn, so no
+    // ticket is created after a deadline. A ticket created here is published only when
+    // its answer commits; a refused commit removes it again.
+    beginResumableUpload(
+      {
+        baseUrl: origin,
+        tokenHeaders: buildUploadTicketAuthHeaders(token),
+        ...preflight,
+        tenantId: auth.tenantId,
+      },
+      (upload) => ingress.commit(() => sendJson(res, { ok: true, ...upload })),
+    );
+  });
 }
 
 async function handleResumableUpload(
@@ -155,33 +194,30 @@ async function handleResumableUpload(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
-  try {
-    const auth = await authorize({
+  await runUploadRoute(req, res, authorize, ['direct', uploadId], async (auth, ingress) => {
+    const result = await receiveResumableUploadChunk({
+      uploadId,
       req,
-      res,
-      daemonRequest: {
-        command: 'upload',
-        positionals: ['direct', uploadId],
-      },
+      tenantId: auth.tenantId,
+      signal: ingress.signal,
+      commit: ingress.commit,
+      onAcceptedBytes: (bytes) => ingress.onAcceptedBodyBytes(bytes),
+      onBodyComplete: () => ingress.bodyComplete(),
     });
-    if (!auth) return;
-
-    const result = await receiveResumableUploadChunk({ uploadId, req, tenantId: auth.tenantId });
-    if (result.complete) {
-      res.statusCode = 200;
-      res.end('ok');
-      return;
-    }
-
-    res.statusCode = 308;
-    if (result.offset > 0) {
-      res.setHeader('range', `bytes=0-${result.offset - 1}`);
-    }
-    res.setHeader('x-upload-offset', String(result.offset));
-    res.end();
-  } catch (error) {
-    sendRestJsonError(res, normalizeError(error));
-  }
+    ingress.commit(() => {
+      if (result.complete) {
+        res.statusCode = 200;
+        res.end('ok');
+        return;
+      }
+      res.statusCode = 308;
+      if (result.offset > 0) {
+        res.setHeader('range', `bytes=0-${result.offset - 1}`);
+      }
+      res.setHeader('x-upload-offset', String(result.offset));
+      res.end();
+    });
+  });
 }
 
 async function handleUploadFinalize(
@@ -189,27 +225,24 @@ async function handleUploadFinalize(
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
-  try {
-    const auth = await authorize({
-      req,
-      res,
-      daemonRequest: {
-        command: 'upload',
-        positionals: ['finalize'],
-      },
-    });
-    if (!auth) return;
-
-    const body = await readRestJsonBody(req, 64 * 1024);
+  await runUploadRoute(req, res, authorize, ['finalize'], async (auth, ingress) => {
+    const body = await readRestJsonBody(req, 64 * 1024, ingress.onAcceptedBodyBytes);
+    // The JSON body is fully received: inactivity stops here, so the post-body hash,
+    // extraction and registration observe only the aggregate (#4441).
+    ingress.bodyComplete();
     const finalize = readUploadFinalizeBody(body);
     sendUploadedArtifactResponse(
       res,
-      await finalizeResumableUpload(finalize.uploadId, auth.tenantId),
+      // The request's ingress signal is threaded through the serialized admission into
+      // the post-body hash, the owned extraction stream and artifact materialization.
+      await finalizeResumableUpload(finalize.uploadId, auth.tenantId, {
+        signal: ingress.signal,
+        commit: ingress.commit,
+      }),
       auth.tenantId,
+      ingress.commit,
     );
-  } catch (error) {
-    sendRestJsonError(res, normalizeError(error));
-  }
+  });
 }
 
 function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void {
@@ -218,25 +251,59 @@ function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void
   res.end(JSON.stringify(body));
 }
 
+/**
+ * Registers a finished artifact and answers, as one commit. A refused commit (a deadline
+ * that passed first) removes the unregistered directory and answers with the same typed
+ * expiry as the timer.
+ */
 function sendUploadedArtifactResponse(
   res: http.ServerResponse,
   result: { artifactPath: string; tempDir: string },
   tenantId: string | undefined,
+  commit: <T>(work: () => T) => T,
 ): void {
-  const uploadId = trackUploadedArtifact({
-    artifactPath: result.artifactPath,
-    tempDir: result.tempDir,
-    tenantId,
-  });
-  sendJson(res, { ok: true, uploadId });
+  let registered = false;
+  try {
+    commit(() => {
+      const uploadId = trackUploadedArtifact({
+        artifactPath: result.artifactPath,
+        tempDir: result.tempDir,
+        tenantId,
+      });
+      registered = true;
+      sendJson(res, { ok: true, uploadId });
+    });
+  } catch (error) {
+    if (!registered) fs.rmSync(result.tempDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
+ * Answers a route failure through the same deadline check as a success: a deadline that
+ * passed first answers with its own expiry instead, and an exchange the ingress already
+ * ended gets no second answer.
+ */
+function answerUploadFailure(
+  res: http.ServerResponse,
+  error: unknown,
+  commit: <T>(work: () => T) => T,
+): void {
+  if (res.headersSent) return;
+  try {
+    commit(() => sendRestJsonError(res, normalizeError(error)));
+  } catch {
+    // The ingress answered with its expiry, or the client is gone.
+  }
 }
 
 async function readRestJsonBody(
   req: http.IncomingMessage,
   maxBodyBytes: number,
+  onAcceptedBytes: (bytes: number) => void,
 ): Promise<Record<string, unknown>> {
   const raw = (
-    await readNodeHttpRequestBody(req, maxBodyBytes, 'Request body is too large.')
+    await readNodeHttpRequestBody(req, maxBodyBytes, 'Request body is too large.', onAcceptedBytes)
   ).toString('utf8');
   try {
     const parsed = JSON.parse(raw) as unknown;

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { AppError } from '@agent-device/kernel/errors';
+import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
 import {
   requireTenantOwnedEntry,
@@ -15,6 +16,7 @@ import {
   validateArtifactContentLength,
 } from './artifact-download.ts';
 import { computeUploadHash, receiveResumableTransfer } from './resumable-upload-transfer.ts';
+import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
 
 const RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
 const RESUMABLE_UPLOAD_RESOURCE: TenantOwnedResourceKind = {
@@ -72,21 +74,51 @@ type ResumableUploadEntry = {
   timer?: ReturnType<typeof setTimeout>;
   generation: number;
   tail: Promise<void>;
-  activeReceive?: IncomingMessage;
+  /** Aborts the active receive with the ticket's typed expiry. */
+  activeReceive?: AbortController;
   closed: boolean;
   finalized: boolean;
 };
 
-export function beginResumableUpload(options: BeginResumableUploadOptions): {
+type ResumableUploadTicket = {
   uploadId: string;
   cacheHit: false;
   upload: { url: string; headers: Record<string, string> };
-} {
+};
+
+/**
+ * Returns the ticket for this upload attempt, creating it when none exists. With `publish`,
+ * a newly created ticket is provisional until `publish` returns: when `publish` throws (a
+ * refused commit), the new ticket and its directory are removed again. An existing ticket
+ * returned for the same attempt is kept either way.
+ */
+export function beginResumableUpload(
+  options: BeginResumableUploadOptions,
+  publish?: (ticket: ResumableUploadTicket) => void,
+): ResumableUploadTicket {
   validateResumableUploadOptions(options);
   const key = buildResumableUploadKey(options);
   const existingId = RESUMABLE_UPLOADS_BY_KEY().get(key);
   const existing = existingId ? RESUMABLE_UPLOADS_BY_ID().get(existingId) : undefined;
   const entry = existing ?? createResumableUploadEntry(options, key);
+  const ticket = describeResumableUploadTicket(entry, options);
+  if (!publish) return ticket;
+  try {
+    publish(ticket);
+  } catch (error) {
+    if (!existing) {
+      closeEntry(entry);
+      fs.rmSync(entry.tempDir, { recursive: true, force: true });
+    }
+    throw error;
+  }
+  return ticket;
+}
+
+function describeResumableUploadTicket(
+  entry: ResumableUploadEntry,
+  options: BeginResumableUploadOptions,
+): ResumableUploadTicket {
   return {
     uploadId: entry.id,
     cacheHit: false,
@@ -107,49 +139,116 @@ export async function receiveResumableUploadChunk(params: {
   uploadId: string;
   req: IncomingMessage;
   tenantId?: string;
+  signal?: AbortSignal;
+  /** The request owner's commit gate; the chunk offset commits through it. */
+  commit?: <T>(work: () => T) => T;
+  onAcceptedBytes?: (bytes: number) => void;
+  onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number }> {
   const entry = requireResumableUpload(params.uploadId, params.tenantId);
-  return await runExclusive(entry, 'receive', params.req, async () => {
-    const { appended, ...result } = await receiveResumableTransfer({
-      entry,
-      req: params.req,
-      invalidate: async () => await terminateEntry(entry),
-    });
-    if (appended && !entry.closed) refreshResumableUploadTimer(entry);
-    return result;
-  });
+  // The ticket's own expiry reaches the receive through this controller, never by
+  // destroying the request: the request owner ends the exchange in response order.
+  const ticketExpiry = new AbortController();
+  const signal = params.signal
+    ? AbortSignal.any([params.signal, ticketExpiry.signal])
+    : ticketExpiry.signal;
+  return await runExclusive(
+    entry,
+    'receive',
+    ticketExpiry,
+    async () => {
+      const { appended, ...result } = await receiveResumableTransfer({
+        entry,
+        req: params.req,
+        signal,
+        commit: params.commit,
+        invalidate: async () => await terminateEntry(entry),
+        onAcceptedBytes: (bytes) => {
+          // Accepted (flushed) body bytes renew the ticket's idle lifetime during
+          // actual progress, not only when a whole chunk completes (#4441). The request
+          // deadline is checked first, so an overdue write never extends the ticket.
+          params.onAcceptedBytes?.(bytes);
+          if (!entry.closed && !signal.aborted) refreshResumableUploadTimer(entry);
+        },
+        onBodyComplete: params.onBodyComplete,
+      });
+      if (appended && !entry.closed) refreshResumableUploadTimer(entry);
+      return result;
+    },
+    params.signal,
+  );
 }
+
+/**
+ * The ingress owner a finalize runs under (#4441): its signal is threaded through the
+ * serialized admission and into the post-body hash, the owned extraction stream, and
+ * the artifact materialization, so expiry or client disconnect cancels that work with
+ * the owner's typed reason instead of running it unbounded.
+ */
+export type FinalizeUploadIngressLink = {
+  signal?: AbortSignal;
+  /** The request owner's commit gate; each finalize step checks it. */
+  commit?: <T>(work: () => T) => T;
+};
 
 export async function finalizeResumableUpload(
   uploadId: string,
   tenantId?: string,
+  ingress?: FinalizeUploadIngressLink,
 ): Promise<{ artifactPath: string; tempDir: string }> {
   const entry = requireResumableUpload(uploadId, tenantId);
-  return await runExclusive(entry, 'finalize', undefined, async () => {
-    const offset = fs.statSync(entry.payloadPath).size;
-    if (offset !== entry.sizeBytes) {
-      throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
-        uploadId,
-        offset,
-        sizeBytes: entry.sizeBytes,
-      });
-    }
-    try {
-      const actualHash = await computeUploadHash(entry.payloadPath);
-      if (actualHash !== entry.sha256) {
-        throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
+  const signal = ingress?.signal;
+  // The owner's typed expiry, including a recorded deadline whose timer has not run yet.
+  const ensureActive = () => {
+    ingress?.commit?.(() => undefined);
+    throwIfIngressAborted(signal);
+  };
+  return await runExclusive(
+    entry,
+    'finalize',
+    undefined,
+    async () => {
+      // Admission of the serialized queue: an already-fired owner stays authoritative,
+      // and a close/cancel that raced the wait keeps its own typed expiry error.
+      ensureActive();
+      // fs.statSync is inherently synchronous; the owner was checked immediately before.
+      const offset = fs.statSync(entry.payloadPath).size;
+      if (offset !== entry.sizeBytes) {
+        // An incomplete finalize is not terminal: the ticket stays resumable and keeps
+        // its original idle lifetime, so the timer is left armed exactly as it was (#4441).
+        throw new AppError('INVALID_ARGS', 'Upload is incomplete', {
           uploadId,
-          expectedSha256: entry.sha256,
-          actualSha256: actualHash,
+          offset,
+          sizeBytes: entry.sizeBytes,
         });
       }
-      const artifactPath = await materializeFinalArtifact(entry);
-      markFinalized(entry);
-      return { artifactPath, tempDir: entry.tempDir };
-    } catch (error) {
-      throw await cleanupTerminalFinalizeFailure(entry, error);
-    }
-  });
+      // A complete finalize is active work that owns the entry: disarm the idle timer so
+      // expiry cannot fire during the post-write checks (hash, extraction, rename). Both
+      // terminal outcomes close the entry and clean up through closeEntry (#4441).
+      disarmResumableUploadTimer(entry);
+      try {
+        ensureActive();
+        const actualHash = await computeUploadHash(entry.payloadPath, signal);
+        if (actualHash !== entry.sha256) {
+          throw new AppError('INVALID_ARGS', 'Upload hash mismatch', {
+            uploadId,
+            expectedSha256: entry.sha256,
+            actualSha256: actualHash,
+          });
+        }
+        ensureActive();
+        const artifactPath = await materializeFinalArtifact(entry, signal);
+        ensureActive();
+        markFinalized(entry);
+        return { artifactPath, tempDir: entry.tempDir };
+      } catch (error) {
+        // Joined cleanup runs on every terminal failure; the typed first failure —
+        // including an abort-owned one mapped back to the owner's reason — is rethrown.
+        throw await cleanupTerminalFinalizeFailure(entry, resolveIngressFailure(signal, error));
+      }
+    },
+    signal,
+  );
 }
 
 function createResumableUploadEntry(
@@ -193,12 +292,20 @@ function refreshResumableUploadTimer(entry: ResumableUploadEntry): void {
   entry.timer.unref();
 }
 
+/**
+ * Stops the idle timer without arming a new one and invalidates any in-flight fire,
+ * for an operation (finalize) that owns the entry until it closes it.
+ */
+function disarmResumableUploadTimer(entry: ResumableUploadEntry): void {
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = undefined;
+  entry.generation += 1;
+}
+
 function expireEntry(entry: ResumableUploadEntry, generation: number): void {
   if (entry.generation !== generation || entry.closed) return;
   closeEntry(entry);
-  const activeReceive = entry.activeReceive;
-  activeReceive?.once('error', () => {});
-  activeReceive?.destroy(
+  entry.activeReceive?.abort(
     new AppError('COMMAND_FAILED', 'Upload expired while receiving data', {
       reason: 'RESOURCE_EXPIRED',
     }),
@@ -212,30 +319,47 @@ function expireEntry(entry: ResumableUploadEntry, generation: number): void {
 async function runExclusive<T>(
   entry: ResumableUploadEntry,
   kind: 'receive' | 'finalize',
-  req: IncomingMessage | undefined,
+  receive: AbortController | undefined,
   action: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const operation = entry.tail
-    .catch(() => {})
-    .then(async () => {
-      if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
-      if (kind === 'receive') entry.activeReceive = req;
-      try {
-        return await action();
-      } finally {
-        if (kind === 'receive') entry.activeReceive = undefined;
-      }
-    });
-  entry.tail = operation.then(
-    () => {},
-    () => {},
-  );
+  const predecessor = entry.tail;
+  const operation = (async () => {
+    // Admission is abortable: an expired or disconnected waiter leaves the queue with the
+    // owner's typed reason and never waits for a predecessor it does not own (#4441).
+    await awaitWithSignal(
+      predecessor.catch(() => {}),
+      signal,
+      () => {
+        throwIfIngressAborted(signal);
+      },
+    );
+    if (entry.closed) requireResumableUpload(entry.id, entry.tenantId);
+    // The close check above runs first, so a close/cancel race keeps the close side's
+    // typed expiry error, and the entry's ownership is untouched either way (#4441).
+    throwIfIngressAborted(signal);
+    if (kind === 'receive') entry.activeReceive = receive;
+    try {
+      return await action();
+    } finally {
+      if (kind === 'receive') entry.activeReceive = undefined;
+    }
+  })();
+  // Later work waits for both the predecessor and this operation, so a released
+  // waiter never lets its successor overlap the work still running ahead of it.
+  entry.tail = Promise.allSettled([predecessor, operation]).then(() => {});
   return await operation;
 }
 
-async function materializeFinalArtifact(entry: ResumableUploadEntry): Promise<string> {
+async function materializeFinalArtifact(
+  entry: ResumableUploadEntry,
+  signal?: AbortSignal,
+): Promise<string> {
   if (entry.artifactType === 'file') {
     const artifactPath = path.join(entry.tempDir, entry.fileName);
+    // rename is a single non-cancellable filesystem operation; the owner is checked
+    // immediately before it and the entry's cleanup still owns any failure.
+    throwIfIngressAborted(signal);
     await fs.promises.rename(entry.payloadPath, artifactPath);
     return artifactPath;
   }
@@ -244,6 +368,7 @@ async function materializeFinalArtifact(entry: ResumableUploadEntry): Promise<st
     tempDir: entry.tempDir,
     platform: entry.platform === 'android' ? 'android' : 'ios',
     expectedRootName: entry.fileName,
+    signal,
   });
   await fs.promises.rm(entry.payloadPath, { force: true });
   return artifactPath;

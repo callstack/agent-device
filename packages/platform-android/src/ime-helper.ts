@@ -176,6 +176,18 @@ export function isAndroidImeHelperPackage(packageName: string | undefined): pack
 // but a co-installed third-party app cannot — that permission gate (not the transport) is the
 // trust boundary. Broadcasts are package-scoped (`-p`) to the in-process dynamic receiver.
 
+// TestInputMethodService.MAX_TEXT_LENGTH: one broadcast commits at most this many UTF-16 units, and
+// the service drops a Base64 payload longer than twice that.
+const ANDROID_IME_HELPER_MAX_TEXT_LENGTH = 32_000;
+
+/** Whether one helper broadcast can commit the whole text, untruncated. */
+export function canAndroidImeHelperCommitText(text: string): boolean {
+  return (
+    text.length <= ANDROID_IME_HELPER_MAX_TEXT_LENGTH &&
+    Buffer.from(text, 'utf8').toString('base64').length <= ANDROID_IME_HELPER_MAX_TEXT_LENGTH * 2
+  );
+}
+
 export async function sendAndroidImeHelperText(
   adb: AndroidAdbExecutor,
   packageName: string,

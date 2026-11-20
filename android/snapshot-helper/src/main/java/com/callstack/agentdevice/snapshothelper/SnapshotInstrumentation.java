@@ -3,23 +3,21 @@ package com.callstack.agentdevice.snapshothelper;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.res.Resources;
+import android.net.Credentials;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
-import java.io.BufferedReader;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.concurrent.TimeoutException;
 
@@ -27,6 +25,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
+  private static final int SESSION_COMMAND_READ_BASE_TIMEOUT_MS = 2_000;
+  private static final int SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS = 8_000;
   private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
@@ -54,7 +54,6 @@ public final class SnapshotInstrumentation extends Instrumentation {
     int maxNodes = readIntArgument(arguments, "maxNodes", DEFAULT_MAX_NODES);
     String outputPath = readStringArgument(arguments, "outputPath");
     boolean emitChunks = readBooleanArgument(arguments, "emitChunks", true);
-    int sessionPort = readIntArgument(arguments, "sessionPort", 0);
     String mode = readStringArgument(arguments, "mode");
     Bundle result = new Bundle();
     putBaseMetadata(result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
@@ -68,29 +67,36 @@ public final class SnapshotInstrumentation extends Instrumentation {
         runOneShotGesture(result, readStringArgument(arguments, "payloadBase64"));
         return;
       }
-      if (mode != null && !"snapshot".equals(mode)) {
-        throw new IllegalArgumentException("Unsupported mode: " + mode);
-      }
-      if (sessionPort > 0) {
+      // Versioned activation (#4519): the host names this transport in argv, so a helper that does
+      // not implement it rejects the launch instead of serving an unauthenticated listener. This
+      // helper reads no `sessionPort`, so it cannot be talked into the old TCP session either.
+      if (SessionPeerPolicy.AUTHENTICATED_SESSION_MODE.equals(mode)) {
+        String sessionSocket = readStringArgument(arguments, "sessionSocket");
+        if (sessionSocket == null) {
+          throw new IllegalArgumentException("authenticated-session-v1 requires sessionSocket");
+        }
         runSnapshotSession(
-            sessionPort, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+            sessionSocket,
+            waitForIdleQuietMs,
+            waitForIdleTimeoutMs,
+            timeoutMs,
+            maxDepth,
+            maxNodes);
         result.putString("ok", "true");
         result.putString("sessionEnded", "true");
         finishSafely(0, result);
         return;
       }
-      long startedAtMs = System.currentTimeMillis();
-      DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
-      AccessibilityTreeCapture.Result capture =
-          captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
-      DisplayExtent.Extent display =
-          DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
-      writeOutputFile(outputPath, capture.xml);
-      if (emitChunks) {
-        emitChunks(capture.xml);
+      if (mode != null && !"snapshot".equals(mode)) {
+        throw new IllegalArgumentException("Unsupported mode: " + mode);
       }
-      result.putString("ok", "true");
-      putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
+      String xml =
+          captureInto(
+              result, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+      writeOutputFile(outputPath, xml);
+      if (emitChunks) {
+        emitChunks(xml);
+      }
       finishSafely(0, result);
     } catch (Throwable error) {
       result.putString("ok", "false");
@@ -171,86 +177,159 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   private void runSnapshotSession(
-      int sessionPort,
+      String launchedSocketName,
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,
       long timeoutMs,
       int maxDepth,
       int maxNodes)
       throws IOException {
-    try (ServerSocket server =
-        new ServerSocket(sessionPort, 1, InetAddress.getByName("127.0.0.1"))) {
+    // LocalServerSocket(String) binds in the abstract namespace, which the host reaches through
+    // `adb forward tcp:<port> localabstract:<name>`.
+    try (LocalServerSocket server =
+        new LocalServerSocket(SessionPeerPolicy.sessionSocketName(launchedSocketName))) {
+      // The secret goes only to the host that ran `am instrument`, in this status record on its
+      // stdout; it is never in argv, logcat or a file, and it never crosses the socket.
+      SecureRandom random = new SecureRandom();
+      byte[] secret = new byte[32];
+      random.nextBytes(secret);
       Bundle ready = new Bundle();
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
+      ready.putString("sessionSocket", launchedSocketName);
+      ready.putString("sessionSecret", SessionPeerPolicy.hex(secret));
       ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate,snapshot-short-idle"
           + (android.os.Build.VERSION.SDK_INT >= 31 ? ",app" : ""));
-      ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
       while (!Thread.currentThread().isInterrupted()) {
-        try (Socket socket = server.accept()) {
-          String command =
-              new BufferedReader(
-                      new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-                  .readLine();
-          if (command == null) {
-            SessionResponseWriter.writeSessionError(
-                socket.getOutputStream(), "", new EOFException("empty command"));
+        try (LocalSocket socket = server.accept()) {
+          // Positive peer identity first: a peer that is not adbd, or whose credentials cannot be
+          // read at all, is rejected before any command byte is read or any response is written.
+          if (!admitSessionPeer(socket)) {
             continue;
           }
-          String[] parts = command.trim().split("\\s+", 3);
-          String action = parts.length > 0 ? parts[0] : "";
-          String requestId = parts.length > 1 ? parts[1] : "";
-          if ("quit".equals(action)) {
-            SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
-            return;
-          }
-          if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
-            AutomationCommandHandler.writeSessionResponse(
-                socket.getOutputStream(), requestId, action,
-                parts.length > 2 ? parts[2] : "", getConnectedUiAutomationUnchecked(), getContext());
-            continue;
-          }
-          if ("viewport".equals(action)) {
-            TouchCommandHandler.writeSessionViewport(
-                socket.getOutputStream(), requestId, getConnectedUiAutomationUnchecked());
-            continue;
-          }
-          if ("gesture".equals(action)) {
-            TouchCommandHandler.writeSessionGesture(
-                socket.getOutputStream(),
+          // A response sink, set as soon as the frame can be answered. A read that fails before it
+          // closes the connection without a reply: a peer that never reads could otherwise hold the
+          // only accept loop with the reply.
+          SessionResponseWriter.FrameSink sink = null;
+          String requestId = "";
+          try {
+            LocalSocketSessionChannel channel =
+                new LocalSocketSessionChannel(socket, SystemClock::elapsedRealtime);
+            // Each response goes out in nonblocking sends under one deadline from its first byte.
+            sink =
+                new SessionFrameWriter(
+                    channel,
+                    SystemClock::elapsedRealtime,
+                    SESSION_RESPONSE_WRITE_BASE_TIMEOUT_MS,
+                    SessionPeerPolicy.MIN_COMMAND_BYTES_PER_SECOND);
+            // The handshake shares the accept deadline with the command it guards.
+            long baseDeadlineAtMs = SystemClock.elapsedRealtime() + SESSION_COMMAND_READ_BASE_TIMEOUT_MS;
+            byte[] serverNonce = new byte[32];
+            random.nextBytes(serverNonce);
+            SessionPeerPolicy.authenticatePeer(
+                channel, sink, SystemClock::elapsedRealtime, baseDeadlineAtMs, secret, serverNonce);
+            String[] parts =
+                SessionPeerPolicy.readSessionCommand(
+                        channel,
+                        SystemClock::elapsedRealtime,
+                        baseDeadlineAtMs,
+                        SessionPeerPolicy.MAX_COMMAND_LINE_BYTES)
+                    .trim()
+                    .split("\\s+", 3);
+            String action = parts.length > 0 ? parts[0] : "";
+            requestId = parts.length > 1 ? parts[1] : "";
+            if ("quit".equals(action)) {
+              writeSessionOkQuietly(sink, requestId);
+              return;
+            }
+            boolean automationCommand =
+                "input".equals(action) || "screenshot".equals(action)
+                    || "focus".equals(action) || "app".equals(action);
+            if (automationCommand || "viewport".equals(action) || "gesture".equals(action)) {
+              UiAutomation automation;
+              try {
+                automation = getConnectedUiAutomationUnchecked();
+              } catch (RuntimeException error) {
+                sink.write(SessionResponseWriter.errorFrame(requestId, error));
+                continue;
+              }
+              if (automationCommand) {
+                AutomationCommandHandler.writeSessionResponse(
+                    sink, requestId, action,
+                    parts.length > 2 ? parts[2] : "", automation, getContext());
+              } else if ("viewport".equals(action)) {
+                TouchCommandHandler.writeSessionViewport(sink, requestId, automation);
+              } else {
+                TouchCommandHandler.writeSessionGesture(
+                    sink, requestId, parts.length > 2 ? parts[2] : "", automation);
+              }
+              continue;
+            }
+            if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
+                && !"snapshot-short-idle".equals(action)) {
+              sink.write(
+                  SessionResponseWriter.errorFrame(
+                      requestId, new IllegalArgumentException("unknown session command")));
+              continue;
+            }
+            writeSessionSnapshot(
+                sink,
                 requestId,
-                parts.length > 2 ? parts[2] : "",
-                getConnectedUiAutomationUnchecked());
-            continue;
+                waitForIdleQuietMs,
+                "snapshot-immediate".equals(action) ? 0
+                    : "snapshot-short-idle".equals(action) ? Math.min(waitForIdleTimeoutMs, SHORT_IDLE_TIMEOUT_MS)
+                    : waitForIdleTimeoutMs,
+                timeoutMs,
+                maxDepth,
+                maxNodes);
+          } catch (SessionPeerPolicy.CommandRejected rejection) {
+            // The frame cannot be dispatched, but the peer is entitled to one answer.
+            try {
+              sink.write(SessionResponseWriter.errorFrame(requestId, rejection));
+            } catch (IOException ignored) {
+              // A peer that will not take the error frame gets a closed connection.
+            }
+          } catch (IOException ignored) {
+            // Close the failed connection without appending another frame to a partial response.
           }
-          if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
-              && !"snapshot-short-idle".equals(action)) {
-            SessionResponseWriter.writeSessionError(
-                socket.getOutputStream(),
-                requestId,
-                new IllegalArgumentException("unknown session command"));
-            continue;
-          }
-          writeSessionSnapshot(
-              socket.getOutputStream(),
-              requestId,
-              waitForIdleQuietMs,
-              "snapshot-immediate".equals(action) ? 0
-                  : "snapshot-short-idle".equals(action) ? Math.min(waitForIdleTimeoutMs, SHORT_IDLE_TIMEOUT_MS)
-                  : waitForIdleTimeoutMs,
-              timeoutMs,
-              maxDepth,
-              maxNodes);
         }
       }
     }
   }
 
+  /**
+   * Admits only a peer positively identified as adbd: a credential read that fails, or answers with
+   * nothing, rejects.
+   */
+  private static boolean admitSessionPeer(LocalSocket socket) {
+    Credentials credentials;
+    try {
+      credentials = socket.getPeerCredentials();
+    } catch (Throwable error) {
+      return false;
+    }
+    return credentials != null && SessionPeerPolicy.isAdmittedPeer(credentials.getUid());
+  }
+
+  private static void writeSessionOkQuietly(
+      SessionResponseWriter.FrameSink sink, String requestId) {
+    try {
+      sink.write(SessionResponseWriter.okFrame(requestId));
+    } catch (IOException ignored) {
+      // A quit the peer never read still ends the session; the host reads release from the
+      // process exit, not from this acknowledgement.
+    }
+  }
+
+  /**
+   * Captures and encodes a snapshot inside the command failure boundary, so an out-of-memory while
+   * the frame is built fails only this request. The XML is encoded once, as the frame body.
+   */
   private void writeSessionSnapshot(
-      OutputStream output,
+      SessionResponseWriter.FrameSink sink,
       String requestId,
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,
@@ -258,23 +337,21 @@ public final class SnapshotInstrumentation extends Instrumentation {
       int maxDepth,
       int maxNodes)
       throws IOException {
-    Bundle result = new Bundle();
-    putBaseMetadata(result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
-    result.putString("requestId", requestId);
-    try {
-      long startedAtMs = System.currentTimeMillis();
-      DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
-      AccessibilityTreeCapture.Result capture =
-          captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
-      DisplayExtent.Extent display =
-          DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
-      result.putString("ok", "true");
-      putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
-      result.putString("byteLength", Integer.toString(capture.xml.getBytes(StandardCharsets.UTF_8).length));
-      SessionResponseWriter.writeSessionResponse(output, result, capture.xml);
-    } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error);
-    }
+    SessionResponseWriter.respondOnce(
+        sink,
+        () -> {
+          Bundle result = new Bundle();
+          putBaseMetadata(
+              result, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
+          result.putString("requestId", requestId);
+          String xml =
+              captureInto(
+                  result, waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+          byte[] body = xml.getBytes(StandardCharsets.UTF_8);
+          result.putString("byteLength", Integer.toString(body.length));
+          return SessionResponseWriter.encodeSessionResponse(result, body);
+        },
+        error -> SessionResponseWriter.errorFrame(requestId, error));
   }
 
   private static String readStringArgument(Bundle arguments, String key) {
@@ -355,6 +432,28 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   @SuppressWarnings("deprecation")
+  /** Captures the tree, records its metadata in result, and returns the XML. */
+  private String captureInto(
+      Bundle result,
+      long waitForIdleQuietMs,
+      long waitForIdleTimeoutMs,
+      long timeoutMs,
+      int maxDepth,
+      int maxNodes)
+      throws TimeoutException,
+          InterruptedException,
+          AccessibilityCaptureStabilizer.IncompleteCaptureException {
+    long startedAtMs = System.currentTimeMillis();
+    DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
+    AccessibilityTreeCapture.Result capture =
+        captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+    DisplayExtent.Extent display =
+        DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
+    result.putString("ok", "true");
+    putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
+    return capture.xml;
+  }
+
   private AccessibilityTreeCapture.Result captureXml(
       long waitForIdleQuietMs,
       long waitForIdleTimeoutMs,

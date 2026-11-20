@@ -16,6 +16,7 @@ import {
 } from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
+  ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
   ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
@@ -25,6 +26,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_QUIET_MS,
   ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
 } from './snapshot-helper-types.ts';
+import type { AndroidSnapshotHelperSessionLaunch } from './snapshot-helper-session-protocol.ts';
 import type {
   AndroidAdbExecutor,
   AndroidSnapshotHelperArtifact,
@@ -219,7 +221,7 @@ function withDefault<T>(value: T | undefined, fallback: T): T {
 
 export function buildAndroidSnapshotHelperArgs(
   options: AndroidSnapshotHelperResolvedCaptureOptions,
-  session: Readonly<{ sessionPort?: number }> = {},
+  session?: AndroidSnapshotHelperSessionLaunch,
 ): readonly string[] {
   return deviceShellArgv('adb', 'shell', [
     'am',
@@ -241,7 +243,19 @@ export function buildAndroidSnapshotHelperArgs(
     'maxNodes',
     String(options.maxNodes),
     ...(options.emitChunks !== undefined ? ['-e', 'emitChunks', String(options.emitChunks)] : []),
-    ...(session.sessionPort === undefined ? [] : ['-e', 'sessionPort', session.sessionPort]),
+    // Versioned activation (#4519): the session is named by its mode and socket, never by a TCP
+    // port. A helper that predates the mode rejects the launch and opens no listener, so an
+    // unverified build can never serve a session.
+    ...(session?.socketName === undefined
+      ? []
+      : [
+          '-e',
+          'mode',
+          ANDROID_SNAPSHOT_HELPER_SESSION_MODE,
+          '-e',
+          'sessionSocket',
+          session.socketName,
+        ]),
     options.runner,
   ]);
 }

@@ -4,7 +4,6 @@ import android.app.UiAutomation;
 import android.graphics.Rect;
 import android.os.Bundle;
 import java.io.IOException;
-import java.io.OutputStream;
 
 /**
  * Populates viewport/gesture results against an already-connected {@link UiAutomation}, for both
@@ -34,27 +33,33 @@ final class TouchCommandHandler {
     result.putString("elapsedMs", Long.toString(System.currentTimeMillis() - startedAtMs));
   }
 
-  static void writeSessionViewport(OutputStream output, String requestId, UiAutomation automation)
+  static void writeSessionViewport(
+      SessionResponseWriter.FrameSink sink, String requestId, UiAutomation automation)
       throws IOException {
-    Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
-    try {
-      populateViewport(result, automation);
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error);
-    }
+    SessionResponseWriter.respondOnce(
+        sink,
+        () -> {
+          Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
+          populateViewport(result, automation);
+          return SessionResponseWriter.encodeSessionResponse(result, new byte[0]);
+        },
+        error -> SessionResponseWriter.errorFrame(requestId, error));
   }
 
   static void writeSessionGesture(
-      OutputStream output, String requestId, String payloadBase64, UiAutomation automation)
+      SessionResponseWriter.FrameSink sink,
+      String requestId,
+      String payloadBase64,
+      UiAutomation automation)
       throws IOException {
-    Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
-    try {
-      populateGesture(result, automation, payloadBase64);
-      SessionResponseWriter.writeSessionResponse(output, result, "");
-    } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error);
-    }
+    SessionResponseWriter.respondOnce(
+        sink,
+        () -> {
+          Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
+          populateGesture(result, automation, payloadBase64);
+          return SessionResponseWriter.encodeSessionResponse(result, new byte[0]);
+        },
+        error -> SessionResponseWriter.errorFrame(requestId, error));
   }
 
   private static void putViewportMetadata(Bundle result, Rect viewport) {

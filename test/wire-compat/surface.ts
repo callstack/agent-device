@@ -197,7 +197,14 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'enforceDaemonToken',
         'authorizeAuxiliaryHttpRequest',
       ),
-      ...from(UPLOAD_HTTP, 'AuxiliaryHttpAuthorizer', 'buildUploadTicketAuthHeaders'),
+      // Every upload route authorizes through authorizeUpload: it names the command the
+      // auth hook sees, and each route names its positionals.
+      ...from(
+        UPLOAD_HTTP,
+        'AuxiliaryHttpAuthorizer',
+        'buildUploadTicketAuthHeaders',
+        'authorizeUpload',
+      ),
       ...from(ARTIFACT_HTTP, 'DownloadableArtifactHttpAuthorizer'),
       // The diagnostics route's authorization: the same token/auth-hook gate as
       // the artifact routes, plus the tenant rule that decides which sessions a

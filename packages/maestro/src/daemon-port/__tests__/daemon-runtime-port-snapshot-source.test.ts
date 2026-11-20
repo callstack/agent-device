@@ -17,6 +17,7 @@ test('carries clickability sidecar through one public snapshot capture without w
     kind: 'exact' as const,
     provider: 'android-helper' as const,
     clickableByNodeIndex: new Map<number, boolean | undefined>([[0, true]]),
+    longClickableByNodeIndex: new Map<number, boolean | undefined>([[0, false]]),
   };
   attachSnapshotClickabilityEvidence(data, evidence);
   const source = createDaemonMaestroSnapshotSource({
