@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { receiveUpload } from '../upload.ts';
-import { streamReadableToFile, validateArtifactContentLength } from '../artifact-download.ts';
+import { validateArtifactContentLength } from '../artifact-download.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -48,6 +48,82 @@ test('receiveUpload verifies x-artifact-hash and removes its temp dir on mismatc
       makeUploadRequest(body, { ...headers, 'x-artifact-hash': sha256(body).toUpperCase() }),
     );
     assert.equal(fs.readFileSync(upload.artifactPath, 'utf8'), 'apk-bytes');
+  } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('receiveUpload cancels post-body work when its ingress owner fires at body completion', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-upload-owned-');
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  try {
+    const body = Buffer.from('owned-bytes');
+    const controller = new AbortController();
+    const typed = new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
+      reason: 'transfer_ingress_deadline_exceeded',
+      transferPhase: 'request-body',
+      timeoutMs: 600_000,
+    });
+    // The synthetic owner fires exactly when the body pipeline completes, before the
+    // hash phase: the post-body work is owned, not admitted unbounded behind the cap.
+    await assert.rejects(
+      receiveUpload(
+        makeUploadRequest(body, {
+          'x-artifact-type': 'file',
+          'x-artifact-filename': 'Sample.apk',
+          'x-artifact-hash': sha256(body),
+        }),
+        {
+          signal: controller.signal,
+          onBodyComplete: () => controller.abort(typed),
+        },
+      ),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'transfer_ingress_deadline_exceeded',
+    );
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
+  } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('receiveUpload aborts an in-flight post-body hash under its ingress owner', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-upload-hash-abort-');
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  try {
+    // 64 MiB hashes across real I/O time, so the owner can fire mid-hash.
+    const body = Buffer.alloc(64 * 1024 * 1024, 0x62);
+    const controller = new AbortController();
+    const typed = new AppError('COMMAND_FAILED', 'Upload body stalled', {
+      reason: 'transfer_phase_timeout',
+      transferPhase: 'request-body',
+      timeoutMs: 120_000,
+    });
+    const upload = receiveUpload(
+      makeUploadRequest(body, {
+        'x-artifact-type': 'file',
+        'x-artifact-filename': 'Sample.apk',
+        'x-artifact-hash': sha256(body),
+      }),
+      {
+        signal: controller.signal,
+        onBodyComplete: () => {
+          setTimeout(() => controller.abort(typed), 5);
+        },
+      },
+    );
+    await assert.rejects(
+      upload,
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'transfer_phase_timeout',
+    );
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
   } finally {
     if (previousTmpDir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpDir;
@@ -136,20 +212,24 @@ test('receiveUpload extracts gzip-compressed app bundle archives', async () => {
   }
 });
 
-test('streamReadableToFile removes partial files after stream errors', async () => {
+test('receiveUpload removes its partial file when the request stream fails', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-upload-error-');
-  const destPath = path.join(tempRoot, 'partial.bin');
-  const source = new Readable({
-    read() {
-      this.push('partial');
-      this.destroy(new Error('source failed'));
-    },
+  const previousTmpDir = process.env.TMPDIR;
+  process.env.TMPDIR = tempRoot;
+  const source = Object.assign(new PassThrough(), {
+    headers: { 'x-artifact-type': 'file', 'x-artifact-filename': 'partial.bin' },
   });
-
   try {
-    await assert.rejects(async () => await streamReadableToFile(source, destPath), /source failed/);
-    assert.equal(fs.existsSync(destPath), false);
+    const failure = new Error('source failed');
+    const receiving = receiveUpload(source as unknown as IncomingMessage, {
+      onBodyBytes: () => source.destroy(failure),
+    });
+    source.write('partial');
+    await assert.rejects(receiving, (error: unknown) => error === failure);
+    assert.deepEqual(fs.readdirSync(tempRoot), []);
   } finally {
+    if (previousTmpDir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpDir;
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });

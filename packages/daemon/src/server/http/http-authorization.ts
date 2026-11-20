@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
+import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { restrictRemoteHostInputs } from '../remote-host-input-policy.ts';
 import {
@@ -26,6 +27,12 @@ export type HttpAuthHookContext = {
   headers: IncomingHttpHeaders;
   rpcRequest: JsonRpcRequest;
   daemonRequest: DaemonRequest;
+  /**
+   * Aborts when the request that the hook authorizes expires or its client disconnects.
+   * The daemon stops waiting for the hook at that moment; a hook that does slow work can
+   * observe it to stop that work too.
+   */
+  signal?: AbortSignal;
 };
 
 export type HttpAuthHookResult =
@@ -79,7 +86,7 @@ async function runHttpAuthHook(
   context: HttpAuthHookContext,
 ): Promise<HttpAuthDecision> {
   if (!authHook) return { ok: true };
-  const result = await authHook(context);
+  const result = await awaitWithSignal(Promise.resolve(authHook(context)), context.signal);
   if (result === undefined || result === true) return { ok: true };
   const reject = (statusCode: number, rpcCode: number, error: AppError): HttpAuthDecision => {
     const normalized = normalizeError(error);
@@ -170,8 +177,16 @@ async function authorizeAuxiliaryHttpRequest(params: {
   authHook: HttpAuthHook | null;
   expectedToken?: string;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
+  /** The request's own cancellation: the hook gets it, and a late result is not applied. */
+  signal?: AbortSignal;
+  /**
+   * The request owner's commit gate: a refusal answered after the hook goes through the
+   * same deadline check as any other answer.
+   */
+  commit?: <T>(work: () => T) => T;
 }): Promise<{ tenantId?: string; sessionNamespace?: TenantSessionNamespace } | null> {
-  const { req, res, authHook, expectedToken, daemonRequest } = params;
+  const { req, res, authHook, expectedToken, daemonRequest, signal } = params;
+  const commit = params.commit ?? (<T>(work: () => T): T => work());
   const token = resolveToken({}, req.headers);
   const tenantId = normalizeTenantId(readHeaderValue(req.headers, DAEMON_HTTP_TENANT_HEADER));
   const tokenError = enforceDaemonToken(token, expectedToken);
@@ -195,9 +210,11 @@ async function authorizeAuxiliaryHttpRequest(params: {
       positionals: daemonRequest.positionals,
       ...(tenantId ? { meta: { tenantId } } : {}),
     },
+    ...(signal ? { signal } : {}),
   });
+  signal?.throwIfAborted();
   if (!authResult.ok) {
-    sendAuxiliaryAuthHookRejection(res, authResult);
+    commit(() => sendAuxiliaryAuthHookRejection(res, authResult));
     return null;
   }
 
@@ -207,7 +224,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
     clientDeclaredTenant: tenantId,
   });
   if (!tenantTrust.trusted) {
-    sendRestJsonError(res, tenantTrustRejectionError());
+    commit(() => sendRestJsonError(res, tenantTrustRejectionError()));
     return null;
   }
 

@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
+import { PassThrough, finished, type Transform, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { createByteLimitStream } from '@agent-device/host-kit/archive';
 import { parseUploadContentLength, parseUploadContentRange } from './resumable-upload-range.ts';
+import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
 
 export type ResumableTransferEntry = {
   payloadPath: string;
@@ -15,6 +17,11 @@ export async function receiveResumableTransfer(params: {
   entry: ResumableTransferEntry;
   req: IncomingMessage;
   invalidate: (error: unknown) => Promise<void>;
+  signal?: AbortSignal;
+  /** The request owner's commit gate; the offset commits through it inside rollback. */
+  commit?: <T>(work: () => T) => T;
+  onAcceptedBytes?: (bytes: number) => void;
+  onBodyComplete?: () => void;
 }): Promise<{ complete: boolean; offset: number; appended: boolean }> {
   const oldSize = await currentOffset(params.entry);
   const range = parseUploadContentRange(
@@ -40,29 +47,112 @@ export async function receiveResumableTransfer(params: {
     createLimitError: () =>
       new AppError('INVALID_ARGS', 'Upload chunk exceeds its permitted byte range'),
   });
+  const payloadStream = fs.createWriteStream(params.entry.payloadPath, { flags: 'a' });
+  observeAcceptedWrites(payloadStream, params.onAcceptedBytes);
+  let offset: number;
   try {
-    await pipeline(
-      params.req,
-      limiter,
-      fs.createWriteStream(params.entry.payloadPath, { flags: 'a' }),
-    );
+    await pipeRequestBody(params.req, limiter, payloadStream, params.signal);
     if (range && limiter.bytesSeen !== range.span) {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-range');
     }
     if (contentLength !== undefined && limiter.bytesSeen !== contentLength) {
       throw new AppError('INVALID_ARGS', 'Upload chunk length does not match content-length');
     }
+    // The body is complete: inactivity no longer applies to this request, so valid
+    // post-body work observes only the owner's aggregate (#4441).
+    params.onBodyComplete?.();
+    // The final offset check and the owner's last cancellation check stay inside the
+    // rollback boundary: a cancelled chunk never commits its offset (#4441).
+    const finalOffset = await currentOffset(params.entry);
+    throwIfIngressAborted(params.signal);
+    offset = params.commit ? params.commit(() => finalOffset) : finalOffset;
   } catch (error) {
-    await rollback(params.entry.payloadPath, oldSize, error, params.invalidate);
-    throw error;
+    // An aborted ingress signal owns the failure with its typed reason; an earlier
+    // classified failure (limiter, ticket expiry) is preserved unchanged (#4441).
+    const failure = resolveIngressFailure(params.signal, error);
+    await rollback(params.entry.payloadPath, oldSize, failure, params.invalidate);
+    throw failure;
   }
-  const offset = await currentOffset(params.entry);
   return { complete: offset === params.entry.sizeBytes, offset, appended: offset > oldSize };
 }
 
-export async function computeUploadHash(filePath: string): Promise<string> {
+/**
+ * Pipes an upload request body through `limiter` into `output` without handing the
+ * request to the pipeline. A pipeline that owns the request destroys it on any abort or
+ * failure (expiry, byte cap, length mismatch), and Node then detaches the request's
+ * socket, so the ingress owner's lingering close finds no socket and the connection
+ * closes under a client that is still sending. Keeping the request out of the pipeline
+ * keeps `req.socket` attached: the ingress owner answers and ends the exchange with its
+ * lingering close in response order. A request that fails (client disconnect) still
+ * fails the pipeline.
+ */
+export async function pipeRequestBody(
+  req: IncomingMessage,
+  limiter: Transform,
+  output: Writable,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const body = new PassThrough();
+  req.pipe(body);
+  const stopWatching = finished(req, (error) => {
+    if (error) body.destroy(error);
+  });
+  try {
+    await pipeline(body, limiter, output, { signal });
+  } finally {
+    req.unpipe(body);
+    stopWatching();
+  }
+}
+
+/**
+ * Reports each nonempty chunk only after its write to the payload file completed
+ * without error: completed-byte progress, never bytes merely read from the socket.
+ * The wrapper preserves the caller's arguments and callback.
+ */
+export function observeAcceptedWrites(
+  stream: fs.WriteStream,
+  onAcceptedBytes: ((bytes: number) => void) | undefined,
+): void {
+  if (!onAcceptedBytes) return;
+  const originalWrite = stream.write.bind(stream);
+  stream.write = function (
+    chunk: unknown,
+    encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void),
+    callback?: (error?: Error | null) => void,
+  ): boolean {
+    const encoding = typeof encodingOrCallback === 'string' ? encodingOrCallback : undefined;
+    const callerCallback = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
+    const bytes =
+      typeof chunk === 'string'
+        ? Buffer.byteLength(chunk, encoding ?? 'utf8')
+        : Buffer.isBuffer(chunk) || ArrayBuffer.isView(chunk)
+          ? chunk.byteLength
+          : 0;
+    return originalWrite(chunk as never, encoding as never, (error?: Error | null) => {
+      if (!error && bytes > 0) onAcceptedBytes(bytes);
+      callerCallback?.(error);
+    });
+  } as typeof stream.write;
+}
+
+/**
+ * Hashes a received payload under the ingress owner's signal when given: the read
+ * stream is destroyed with the owner's typed reason on abort, and an abort-owned
+ * generic failure is mapped back to that reason. The file is bounded by the byte
+ * cap that admitted it.
+ */
+export async function computeUploadHash(filePath: string, signal?: AbortSignal): Promise<string> {
   const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk);
+  try {
+    const stream = fs.createReadStream(filePath, signal ? { signal } : undefined);
+    for await (const chunk of stream) {
+      signal?.throwIfAborted();
+      hash.update(chunk);
+    }
+  } catch (error) {
+    throw resolveIngressFailure(signal, error);
+  }
   return hash.digest('hex');
 }
 

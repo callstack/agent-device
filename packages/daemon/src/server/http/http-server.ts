@@ -40,6 +40,13 @@ import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { shouldStreamRequestProgress } from '@agent-device/daemon-contracts/request-progress-protocol';
 import { statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
+import {
+  DAEMON_HTTP_CONNECTIONS_CHECKING_INTERVAL_MS,
+  DAEMON_HTTP_HEADERS_TIMEOUT_MS,
+  UPLOAD_AGGREGATE_SOCKET_MARGIN_MS,
+  UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS,
+  requestTimeoutBehindUploads,
+} from './ingress-budget.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
@@ -172,6 +179,8 @@ export async function createDaemonHttpServer(options: {
             authHook,
             expectedToken: token,
             daemonRequest: request.daemonRequest,
+            signal: request.signal,
+            commit: request.commit,
           }),
       })
     ) {
@@ -239,7 +248,25 @@ export async function createDaemonHttpServer(options: {
       });
     });
   });
-  return http.createServer(onRequest);
+  // Socket ingress ceilings from one owner (ingress-budget.ts). They bound socket ingress
+  // only; RPC execution keeps its own deadlines. The header ceiling acts before admission
+  // and per connection: when a later pipelined header block expires, Node closes the whole
+  // socket, including earlier answers still owned on it. No upload owner exists yet at that
+  // point, so this stays socket-wide by design.
+  const server = http.createServer(
+    {
+      headersTimeout: DAEMON_HTTP_HEADERS_TIMEOUT_MS,
+      requestTimeout: requestTimeoutBehindUploads({
+        headersTimeoutMs: DAEMON_HTTP_HEADERS_TIMEOUT_MS,
+        connectionsCheckingIntervalMs: DAEMON_HTTP_CONNECTIONS_CHECKING_INTERVAL_MS,
+        uploadAggregateMs: UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS,
+        marginMs: UPLOAD_AGGREGATE_SOCKET_MARGIN_MS,
+      }),
+      connectionsCheckingInterval: DAEMON_HTTP_CONNECTIONS_CHECKING_INTERVAL_MS,
+    },
+    onRequest,
+  );
+  return server;
 }
 
 /** Accumulates one `/rpc` body and hands it to the flow once the stream ends. */
