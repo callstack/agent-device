@@ -37,6 +37,7 @@ import {
 } from './daemon-client-metadata.ts';
 import { canConnect, isDaemonTransportUnavailableError } from './daemon-client-transport.ts';
 import {
+  DAEMON_UNAVAILABLE_REASONS,
   daemonContendedError,
   daemonTakeoverRetirementError,
   daemonStopCommand,
@@ -259,6 +260,8 @@ function newerDaemonRefusedError(
     'COMMAND_FAILED',
     `Daemon (pid ${info.pid}, v${daemonVersion}) is newer than this client (v${clientVersion}); refusing to replace it.`,
     {
+      reason: DAEMON_UNAVAILABLE_REASONS.incompatible,
+      mismatch: 'newer',
       daemonPid: info.pid,
       daemonVersion,
       clientVersion,

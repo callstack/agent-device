@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
-import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -14,7 +13,13 @@ import {
   waitForRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
-import { okResult, startScriptedDaemon, stateDirAndPaths } from './explicit-lifecycle-fixture.ts';
+import {
+  failureOf,
+  identityIn,
+  okResult,
+  startScriptedDaemon,
+  stateDirAndPaths,
+} from './explicit-lifecycle-fixture.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -45,20 +50,6 @@ afterEach(async () => {
   vi.mocked(sleep).mockImplementation(async () => {});
   await finishRegisteredDaemonFixtures();
 });
-
-function identityIn(error: AppError, key: 'daemon' | 'client'): Record<string, unknown> {
-  return (error.details?.[key] ?? {}) as Record<string, unknown>;
-}
-
-async function failureOf(run: Promise<unknown>): Promise<AppError> {
-  try {
-    await run;
-  } catch (error) {
-    assert.ok(error instanceof AppError, 'expected a typed AppError');
-    return error;
-  }
-  return assert.fail('expected the call to reject');
-}
 
 test('ensureDaemon reports a newer daemon that wins a startup race as incompatible', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
