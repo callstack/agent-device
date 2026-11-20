@@ -4,7 +4,9 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
+import { DAEMON_TEARDOWN_GRACE_MS } from '@agent-device/daemon-contracts/daemon-process';
 import { DAEMON_QUIESCE_COMMAND } from '@agent-device/daemon-contracts/daemon-resolution';
+import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
@@ -36,6 +38,23 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
   sleep: vi.fn(async () => {}),
 }));
+// Reading the registration judges its lock owner, and one judgement runs one process-table snapshot.
+// The contention budget is 300 judgements of a registration that does not change under the client,
+// so its inspection is read once from the real host and replayed for the rest of the loop. The seam
+// answers only that one lock path, and `afterEach` clears it.
+let recordedRegistrationLock:
+  | { readonly lockPath: string; readonly inspection: ProcessLockInspection }
+  | undefined;
+vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/file')>();
+  return {
+    ...actual,
+    inspectProcessLock: (lockPath: string) =>
+      recordedRegistrationLock?.lockPath === lockPath
+        ? recordedRegistrationLock.inspection
+        : actual.inspectProcessLock(lockPath),
+  };
+});
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import * as transport from '../daemon-client-transport.ts';
@@ -57,8 +76,44 @@ afterEach(async () => {
   spawn.mockReset();
   vi.mocked(sleep).mockReset();
   vi.mocked(sleep).mockImplementation(async () => {});
+  recordedRegistrationLock = undefined;
   await finishRegisteredDaemonFixtures();
 });
+
+/**
+ * Leaves the lock inspection of this registration at what the host really says right now. A daemon
+ * that keeps changing under `ensureDaemon` is judged once per attempt and one judgement runs one
+ * process-table snapshot, so a full budget is 300 snapshots of a registration these cases keep
+ * alive and unchanged. The first snapshot is the host's own answer, taken here.
+ */
+function registrationLockStaysAsRecorded(
+  paths: ReturnType<typeof stateDirAndPaths>['paths'],
+): void {
+  const inspection = inspectProcessLock(paths.lockPath);
+  if (inspection.state !== 'held')
+    assert.fail(
+      `the registered daemon must hold its own registration lock, saw "${inspection.state}"`,
+    );
+  recordedRegistrationLock = { lockPath: paths.lockPath, inspection };
+}
+
+/**
+ * The attempt budget, through the waits it asks for: the judge-again waits must just cover the
+ * teardown grace, so one fewer wait falls short of it. Halving the loop halves this total.
+ */
+function assertJudgedAgainForTheFullBudget(): void {
+  const waits = vi.mocked(sleep).mock.calls.map(([ms]) => Number(ms));
+  assert.ok(waits.length > 0, 'a contended ensure judged again at least once');
+  const delays = [...new Set(waits)];
+  assert.equal(delays.length, 1, `every attempt judged again with one delay, saw ${delays}`);
+  const [delay] = delays;
+  assert.ok(delay !== undefined && delay > 0, `a judge-again wait must be positive, saw ${delay}`);
+  const totalMs = waits.reduce((total, ms) => total + ms, 0);
+  assert.ok(
+    totalMs >= DAEMON_TEARDOWN_GRACE_MS && totalMs - delay < DAEMON_TEARDOWN_GRACE_MS,
+    `${waits.length} judge-again waits of ${delay}ms must just cover the ${DAEMON_TEARDOWN_GRACE_MS}ms teardown grace (${totalMs}ms)`,
+  );
+}
 
 /** Real waits, so a start can poll the child it launched. */
 function launchesFreshDaemonAt(
@@ -552,6 +607,7 @@ test('ensureDaemon reports contention when the daemon keeps changing under it', 
     version: '0.0.0-stale',
     capabilities: ['quiesce'],
   });
+  registrationLockStaysAsRecorded(paths);
 
   try {
     const error = await failureOf(ensureDaemon({ stateDir, daemonTransport: 'http' }));
@@ -559,6 +615,7 @@ test('ensureDaemon reports contention when the daemon keeps changing under it', 
     assert.equal(error.details?.reason, 'daemon-lifecycle-contended');
     assert.equal(isProcessAlive(child.pid), true);
     assert.equal(spawn.mock.calls.length, 0);
+    assertJudgedAgainForTheFullBudget();
   } finally {
     await closeLoopbackServer(stale.server);
   }
@@ -702,10 +759,12 @@ test('a quiesce the daemon never hears is judged again, not reported as a transp
     version: '0.0.0-stale',
     capabilities: ['quiesce'],
   });
+  registrationLockStaysAsRecorded(paths);
 
   const error = await failureOf(ensureDaemon({ stateDir, daemonTransport: 'http' }));
 
   assert.equal(error.details?.reason, 'daemon-lifecycle-contended');
   assert.equal(isProcessAlive(child.pid), true);
   assert.equal(spawn.mock.calls.length, 0);
+  assertJudgedAgainForTheFullBudget();
 });
