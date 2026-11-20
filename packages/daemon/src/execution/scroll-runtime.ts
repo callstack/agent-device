@@ -6,6 +6,7 @@ import {
   DEFAULT_REFRESH_PULL_DURATION_MS,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
+  SCROLL_REFRESH_REFUSALS,
   type ResolvedScrollExecutionOptions,
   type ScrollCommandOptions,
   type ScrollMovementObservation,
@@ -299,10 +300,8 @@ async function executeRefreshScroll(
   const top = await captureEdgeState(runtime, 'top', undefined, context);
   if ('refused' in top) throw buildScrollEdgeCaptureError('top', top.refused);
   if (top.canScroll) {
-    throw new AppError('COMMAND_FAILED', 'scroll refresh needs the content at its top', {
-      reason: 'scroll_refresh_not_at_top',
-      hint: 'Run scroll top, then scroll refresh.',
-    });
+    const { message, ...details } = SCROLL_REFRESH_REFUSALS.notAtTop;
+    throw new AppError('COMMAND_FAILED', message, details);
   }
   const pullOptions =
     top.containerRect === undefined ? options : { ...options, containerRect: top.containerRect };
