@@ -233,7 +233,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
     name: 'clipboard',
     deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+      ? { ownerFiles: ['packages/command-surface/src/system/clipboard.ts'] as const }
       : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
@@ -255,7 +255,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
     name: 'keyboard',
     deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+      ? { ownerFiles: ['packages/command-surface/src/system/keyboard.ts'] as const }
       : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',

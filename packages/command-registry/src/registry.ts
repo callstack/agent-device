@@ -420,7 +420,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'appstate',
     deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+      ? { ownerFiles: ['packages/command-surface/src/system/appstate.ts'] as const }
       : {}),
     catalog: { group: 'public', key: 'appState' },
     frameworkTier: 'extended',
