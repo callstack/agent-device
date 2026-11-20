@@ -1,11 +1,9 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
+import { readAndroidEmulatorLaunchStartTime } from '@agent-device/platform-android/device-boot';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { runCmd, runCmdDetached, runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import {
-  readProcessIdentityFacts,
-  stopProcessAndConfirmExit,
-} from '@agent-device/host-kit/process';
+import { stopProcessAndConfirmExit } from '@agent-device/host-kit/process';
 
 const LSAPPINFO_PID = /"pid"=(\d+)/;
 const EMULATOR_STOP_BUDGET = { termTimeoutMs: 1_500, killTimeoutMs: 1_500 } as const;
@@ -80,10 +78,18 @@ export function createAndroidEmulatorHost(
       const pid = runCmdDetached('emulator', args);
       launched.set(pid, {
         avdName,
-        startTime: readProcessIdentityFacts(pid).then((facts) => facts.startTime),
+        startTime: readAndroidEmulatorLaunchStartTime(pid),
       });
       if (frontmostPid !== undefined) returnFocusAfterLaunch(pid, frontmostPid, bootBudgetMs);
       return pid;
+    },
+    bindLaunchedEmulator: async (pid) => {
+      // Binding is recording what this launch was: the pid this process spawned and when the host
+      // says it started. Close proves the emulator answering the serial is still that process.
+      const record = launched.get(pid);
+      if (!record) return undefined;
+      const startTime = await record.startTime;
+      return startTime ? { pid, startTime } : undefined;
     },
     terminate,
   });

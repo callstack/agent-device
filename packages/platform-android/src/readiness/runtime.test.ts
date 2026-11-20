@@ -147,6 +147,88 @@ test('a launched emulator gets the remaining startup budget for its window watch
   expect(launch).toHaveBeenCalledWith('Pixel_9', false, 30_000);
 });
 
+test('reports a bound launch identity once for the discovered serial', async () => {
+  let discoveries = 0;
+  const { host } = timedHost({
+    bootCompleted: '1',
+    discover: () => (++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()]),
+  });
+  const identity = { pid: 4242, startTime: 'start' };
+  const bind = vi.fn(async () => identity);
+  Object.assign(host.deviceReadiness.androidEmulator, { bindLaunchedEmulator: bind });
+  const observer = vi.fn();
+  const result = await ensureAndroidReady(
+    host,
+    stoppedAvd(),
+    {
+      headless: true,
+      onAndroidEmulatorLaunchIdentity: observer,
+    },
+    new AbortController().signal,
+  );
+  expect(bind).toHaveBeenCalledWith(4242, expect.objectContaining({ id: 'emulator-5554' }));
+  expect(observer).toHaveBeenCalledExactlyOnceWith(identity);
+  expect(result).toEqual({ ...runningEmulator(), booted: true });
+});
+
+test('prebooted and unbound launches do not report an identity', async () => {
+  const observer = vi.fn();
+  const existing = timedHost({ bootCompleted: '1', discover: () => [runningEmulator()] });
+  const bind = vi.fn(async () => undefined);
+  Object.assign(existing.host.deviceReadiness.androidEmulator, { bindLaunchedEmulator: bind });
+  await ensureAndroidReady(
+    existing.host,
+    stoppedAvd(),
+    { headless: false, onAndroidEmulatorLaunchIdentity: observer },
+    new AbortController().signal,
+  );
+  expect(bind).not.toHaveBeenCalled();
+  let discoveries = 0;
+  const launched = timedHost({
+    bootCompleted: '1',
+    discover: () => (++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()]),
+  });
+  Object.assign(launched.host.deviceReadiness.androidEmulator, { bindLaunchedEmulator: bind });
+  await ensureAndroidReady(
+    launched.host,
+    stoppedAvd(),
+    { headless: true, onAndroidEmulatorLaunchIdentity: observer },
+    new AbortController().signal,
+  );
+  expect(bind).toHaveBeenCalledOnce();
+  expect(observer).not.toHaveBeenCalled();
+});
+
+test('abort during binding suppresses the observation and terminates the launched emulator', async () => {
+  let discoveries = 0;
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => (++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()]),
+  });
+  const controller = new AbortController();
+  const reason = new Error('cancel binding');
+  Object.assign(host.deviceReadiness.androidEmulator, {
+    bindLaunchedEmulator: async () => {
+      controller.abort(reason);
+      return { pid: 4242, startTime: 'start' };
+    },
+  });
+  const observer = vi.fn();
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      {
+        headless: true,
+        onAndroidEmulatorLaunchIdentity: observer,
+      },
+      controller.signal,
+    ),
+  ).rejects.toBe(reason);
+  expect(observer).not.toHaveBeenCalled();
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
 test('without a deadline the default 120s boot wait applies', async () => {
   const { host, elapsed } = timedHost({ bootCompleted: '0', discover: () => [runningEmulator()] });
 
