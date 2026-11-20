@@ -76,9 +76,10 @@ hint: The UI kept changing for the whole settle budget (animation, carousel, or 
 export const PRIVATE_AX_RECOVERY_SAMPLE = {
   command: 'agent-device snapshot -i',
   output: `Snapshot: 2 nodes
-Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.
 @e5 [button] "Search"
-@e8 [tab] "Home" [selected]`,
+@e8 [tab] "Home" [selected]
+
+Warning: Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`,
 };
 
 // DEVICE_IN_USE from buildDeviceInUseBySessionError

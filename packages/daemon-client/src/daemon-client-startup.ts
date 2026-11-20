@@ -5,6 +5,7 @@ import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/ho
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
 import { settleWithin, sleep } from '@agent-device/host-kit/retry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import {
   DAEMON_STARTUP_EXIT_CODES,
@@ -30,6 +31,7 @@ import {
   type DaemonObservationSettings,
   type DaemonObservationOptions,
   observedDaemonIdentityOf,
+  formatDaemonTakeoverNotice,
   readDaemonInfo,
   type DaemonInfo,
 } from './daemon-client-metadata.ts';
@@ -42,7 +44,11 @@ import {
   getDaemonMetadataState,
   resolveDaemonStartupHint,
 } from './daemon-lifecycle-errors.ts';
-import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type {
+  DaemonClientSettings,
+  DaemonTakeoverNotice,
+  EnsuredDaemon,
+} from './daemon-client-lifecycle.ts';
 
 type DaemonStartupWaitResult =
   | { kind: 'ready'; daemon: EnsuredDaemon }
@@ -139,7 +145,13 @@ export async function readReusableLocalDaemon(
   if (!settings.retireIncompatibleContender) throw daemonContendedError();
 
   if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
-  emitDaemonTakeoverNotice(existing, decision.reason, settings.paths.baseDir);
+  const notice = {
+    stateDir: settings.paths.baseDir,
+    previous: { pid: existing.pid, ...(existing.version ? { version: existing.version } : {}) },
+    reason: decision.reason,
+  };
+  if (settings.onTakeover) settings.onTakeover(notice);
+  else emitDaemonTakeoverNotice(notice);
   await retireDaemonForTakeover(existing, settings.paths);
   return null;
 }
@@ -255,10 +267,10 @@ function newerDaemonRefusedError(
   );
 }
 
-function emitDaemonTakeoverNotice(info: DaemonInfo, reason: string, stateDir: string): void {
+/** The notice for a caller that passed no `onTakeover`, escaped like every terminal write. */
+function emitDaemonTakeoverNotice(notice: DaemonTakeoverNotice): void {
   try {
-    const identity = info.version ? `pid ${info.pid}, v${info.version}` : `pid ${info.pid}`;
-    process.stderr.write(`Replacing daemon (${identity}) in ${stateDir}: ${reason}\n`);
+    process.stderr.write(escapeTerminalText(formatDaemonTakeoverNotice(notice)));
   } catch {}
 }
 

@@ -27,7 +27,7 @@ import {
   resolveDaemonPaths,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { sendToDaemon } from '../index.ts';
+import { ensureProxyUpstreamDaemon, sendToDaemon } from '../index.ts';
 import * as lifecycle from '../daemon-client-lifecycle.ts';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 
@@ -782,3 +782,56 @@ test.for(['default', 'private replay'] as const)(
     }
   },
 );
+
+test('a proxy upstream takeover goes to its onTakeover callback, not stderr', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-proxy-takeover-'));
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
+  const http = await startHttpDaemonFixture({ devices: [] });
+  const deferred = path.join(paths.baseDir, 'defer-publication');
+  fs.writeFileSync(deferred, 'wait');
+  const winner = spawnRegisteredDaemonFixture(paths, fields(http.port, '0.0.1'), {
+    stdio: 'ignore',
+  });
+  await awaitFile(path.join(paths.baseDir, 'registration-held'));
+  let joined = false;
+  spawn.mockImplementation(
+    planRegisteredDaemonLaunches([
+      {
+        kind: 'registered',
+        paths,
+        fields: fields(http.port),
+        observe(child) {
+          void child.exited.then(() => {
+            joined = true;
+          });
+        },
+      },
+      () => ({ kind: 'registered', paths, fields: fields(http.port) }),
+    ]),
+  );
+  pause.mockImplementation(async () => {
+    if (joined) fs.rmSync(deferred, { force: true });
+    await actualRetry.sleep(10);
+  });
+  const notices: unknown[] = [];
+  const stderrCapture = beginStderrCapture();
+  try {
+    await ensureProxyUpstreamDaemon({
+      stateDir: paths.baseDir,
+      host: { env: { ...process.env }, cwd: process.cwd() },
+      onTakeover: (notice) => notices.push(notice),
+    });
+    await winner.exited;
+
+    const [notice] = notices as { stateDir: string; previous: unknown; reason: unknown }[];
+    assert.equal(notices.length, 1);
+    assert.equal(notice?.stateDir, paths.baseDir);
+    assert.deepEqual(notice?.previous, { pid: winner.pid, version: '0.0.1' });
+    assert.equal(typeof notice?.reason, 'string');
+    assert.equal(stderrCapture.read().includes('Replacing daemon'), false);
+  } finally {
+    stderrCapture.restore();
+    await closeLoopbackServer(http.server);
+  }
+});

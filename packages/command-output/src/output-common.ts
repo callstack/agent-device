@@ -1,5 +1,6 @@
 import type { CommandMetadata, CommandName } from '@agent-device/command-surface';
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
 /**
@@ -22,6 +23,11 @@ export type CliOutput = {
   jsonData?: unknown;
   text?: string | null;
   stderr?: string | null;
+  /**
+   * The text escaped its own values to carry intended color, so the CLI writes it raw. Warnings the dispatcher appends
+   * come escaped from `collapseWarningText`.
+   */
+  terminalSafe?: boolean;
 };
 
 export type CliOutputFormatterParams = {
@@ -79,20 +85,16 @@ function collectResponseWarnings(result: Record<string, unknown>): string[] {
 }
 
 /**
- * One `Warning:` line per response warning, after text a formatter rendered itself. A warning the
- * text already carries is skipped: a report builder may render the channel inside its own text, and
- * the dispatcher must then say it once, not twice.
+ * One `Warning:` line per response warning, after the text the command rendered. Formatters never print
+ * response warnings themselves, so each warning is printed here exactly once.
  */
 export function appendWarningLinesText(
   text: string | null | undefined,
   result: Record<string, unknown>,
 ): string | null {
-  const rendered = text ?? '';
-  const lines = collectResponseWarnings(result)
-    .filter((warning) => !rendered.includes(warning))
-    .map((warning) => `Warning: ${warning}`);
+  const lines = collectResponseWarnings(result).map((warning) => `Warning: ${warning}`);
   if (lines.length === 0) return text ?? null;
-  return [...(rendered === '' ? [] : [rendered]), ...lines].join('\n');
+  return [...(text ? [text] : []), ...lines].join('\n');
 }
 
 /**
@@ -120,10 +122,7 @@ export function routeResponseWarnings(
   // (`close`, `devices`) would otherwise be able to swallow the warnings channel with it.
   const data = (response ?? {}) as Record<string, unknown>;
   if (route === 'text') return { ...output, text: appendWarningLinesText(output.text, data) };
-  const rendered = `${output.text ?? ''}\n${output.stderr ?? ''}`;
-  const lines = collectResponseWarnings(data)
-    .filter((warning) => !rendered.includes(warning))
-    .map((warning) => `Warning: ${warning}`);
+  const lines = collectResponseWarnings(data).map((warning) => `Warning: ${warning}`);
   if (lines.length === 0) return output;
   const stderr = output.stderr ?? '';
   return {
@@ -134,6 +133,12 @@ export function routeResponseWarnings(
 
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
 export function collapseWarningText(warning: string): string {
+  // Escaped too, so a warning stays safe inside text a formatter marks `terminalSafe`.
+  return escapeTerminalText(foldWarningText(warning));
+}
+
+/** A warning folded onto one line, its text otherwise exact: for files and structured output. */
+export function foldWarningText(warning: string): string {
   return warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace));
 }
 

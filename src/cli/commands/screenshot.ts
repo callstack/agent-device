@@ -1,5 +1,9 @@
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { formatScreenshotDiffText, formatSnapshotDiffText } from '@agent-device/command-output';
+import {
+  appendWarningLinesText,
+  formatScreenshotDiffText,
+  formatSnapshotDiffText,
+} from '@agent-device/command-output';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
@@ -45,8 +49,7 @@ export const screenshotCommand: ClientCommandHandler = async ({
     const summary = result.overlayRefs
       ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
       : formatScreenshotSummary(result);
-    const warnings = result.warnings ?? [];
-    return warnings.length > 0 ? [summary, ...warnings].join('\n') : summary;
+    return appendWarningLinesText(summary, { warnings: result.warnings ?? [] });
   });
   return true;
 };
@@ -60,8 +63,11 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
       flags,
       env: host.env,
     });
-    await writeCommandOutput(flags, result, () =>
-      formatSnapshotDiffText(result, host.env, process.stdout),
+    await writeCommandOutput(
+      flags,
+      result,
+      () => formatSnapshotDiffText(result, host.env, process.stdout),
+      { terminalSafe: true },
     );
     return true;
   }
@@ -113,8 +119,11 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     surface: flags.surface,
   });
 
-  await writeCommandOutput(flags, result, () =>
-    formatScreenshotDiffText(result as ScreenshotDiffResult, host, process.stdout),
+  await writeCommandOutput(
+    flags,
+    result,
+    () => formatScreenshotDiffText(result as ScreenshotDiffResult, host, process.stdout),
+    { terminalSafe: true },
   );
   return true;
 };

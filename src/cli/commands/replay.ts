@@ -6,6 +6,8 @@ import { resolveUserPath } from '@agent-device/host-kit/file';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
+import { writeStderr } from '../process-exit.ts';
+import { appendWarningLinesText } from '@agent-device/command-output';
 
 type ReplayCommandParams = Parameters<ClientCommandHandler>[0];
 
@@ -57,9 +59,11 @@ async function handleReplayExportCommand({
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, result.yaml);
   }
-  for (const warning of result.warnings) {
-    process.stderr.write(`Warning: line ${warning.line}: ${warning.message}\n`);
-  }
+  // One folded `Warning:` line per export warning, like every other response warning.
+  const warningLines = appendWarningLinesText(null, {
+    warnings: result.warnings.map((warning) => `line ${warning.line}: ${warning.message}`),
+  });
+  if (warningLines) writeStderr(`${warningLines}\n`);
 
   await writeCommandOutput(
     flags,

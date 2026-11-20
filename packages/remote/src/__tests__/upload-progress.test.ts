@@ -105,3 +105,82 @@ test('the stderr reporter formats byte magnitudes and clamps progress percentage
     'Uploaded 0 B of 0 B (100%)',
   ]);
 });
+
+const CONTROL_FILE_NAME = 'app\u001b[8m\u009b.apk';
+
+test('the reporter escapes a file name it writes to stderr itself', () => {
+  const output = renderEvents([
+    {
+      type: 'start',
+      stage: 'direct',
+      fileName: CONTROL_FILE_NAME,
+      transferredBytes: 0,
+      totalBytes: 10,
+    },
+  ]);
+
+  assert.ok(output.includes(String.raw`Uploading app\u001b[8m\u009b.apk`), output);
+  assert.equal(output.includes('\u001b[8m'), false);
+});
+
+test('with a progress sink, the reporter hands each event to it instead of writing stderr', () => {
+  const received: unknown[] = [];
+  let written = '';
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    written += String(chunk);
+    return true;
+  });
+  vi.stubEnv('CI', undefined);
+  const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
+  Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
+  try {
+    const sink = createStderrUploadProgressReporter(process.env, (event) => received.push(event));
+    sink?.({
+      type: 'start',
+      stage: 'direct',
+      fileName: CONTROL_FILE_NAME,
+      transferredBytes: 0,
+      totalBytes: 10,
+    });
+  } finally {
+    if (isTTYDescriptor) Object.defineProperty(process.stderr, 'isTTY', isTTYDescriptor);
+    else delete (process.stderr as unknown as Record<string, unknown>).isTTY;
+    write.mockRestore();
+    vi.unstubAllEnvs();
+  }
+
+  assert.equal(written, '');
+  assert.deepEqual(received, [
+    {
+      type: 'command',
+      status: 'progress',
+      message: `Uploading ${CONTROL_FILE_NAME} (10 B) via direct upload`,
+    },
+  ]);
+});
+
+test('an upload completes when its progress observer throws mid-upload', async () => {
+  const { createUploadProgressTransform } = await import('../upload-progress.ts');
+  const { Readable } = await import('node:stream');
+  const { pipeline } = await import('node:stream/promises');
+  const chunk = Buffer.alloc(8 * 1024 * 1024);
+  let calls = 0;
+  const transform = createUploadProgressTransform({
+    stage: 'direct',
+    fileName: 'app.apk',
+    startOffset: 0,
+    totalBytes: chunk.byteLength * 3,
+    onProgress: () => {
+      calls += 1;
+      throw new Error('observer failed');
+    },
+  });
+  let received = 0;
+
+  await pipeline(Readable.from([chunk, chunk, chunk]), transform, async (source) => {
+    for await (const part of source) received += (part as Buffer).byteLength;
+  });
+
+  assert.equal(received, chunk.byteLength * 3);
+  assert.equal(calls, 3);
+});

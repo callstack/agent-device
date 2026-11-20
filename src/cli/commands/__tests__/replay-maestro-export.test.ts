@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, onTestFinished, test, vi } from 'vitest';
+import { getReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   exportReplayActionsToMaestro,
@@ -348,3 +349,26 @@ function exportReplayScriptToMaestro(script: string) {
 function parseYamlDocs(script: string): unknown[] {
   return parseAllDocuments(script).map((doc) => doc.toJSON());
 }
+
+test('replay export prints each warning as one folded Warning line', async () => {
+  const dir = mkdtempForTestSync('agent-device-export-warning-');
+  const sourcePath = path.join(dir, 'flow.ad');
+  fs.writeFileSync(sourcePath, 'open com.example.app\n');
+  // The CLI reads the cached Maestro backend, so the stub reaches it; an export warning can carry a newline.
+  const backend = await getReplayBackend('maestro');
+  const exportScript = vi.spyOn(backend, 'exportReplayScript').mockReturnValue({
+    yaml: '- launchApp\n',
+    warnings: [{ line: 1, action: 'open', message: 'first part\nsecond part' }],
+  });
+  onTestFinished(() => exportScript.mockRestore());
+
+  const result = await runCliCapture([
+    'replay',
+    'export',
+    sourcePath,
+    '--out',
+    path.join(dir, 'flow.yaml'),
+  ]);
+
+  expect(result.stderr).toBe('Warning: line 1: first part second part\n');
+});

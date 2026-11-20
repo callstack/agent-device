@@ -1,5 +1,6 @@
 import { emitRequestProgress } from '@agent-device/host-kit/request';
 import {
+  doctorCheckStatusMarker,
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
 } from '@agent-device/host-kit/doctor-lines';
@@ -22,32 +23,29 @@ export function sortChecks(checks: DoctorCheck[]): DoctorCheck[] {
   return [...checks].sort((a, b) => order[a.status] - order[b.status]);
 }
 
-export function appendDoctorChecks(
-  checks: DoctorCheck[],
-  useColor: boolean,
-  ...items: DoctorCheck[]
-): void {
+export function appendDoctorChecks(checks: DoctorCheck[], ...items: DoctorCheck[]): void {
   for (const check of items) {
-    appendDoctorCheck(checks, check, useColor);
+    appendDoctorCheck(checks, check);
   }
 }
 
-export function appendDoctorCheck(
-  checks: DoctorCheck[],
-  check: DoctorCheck,
-  useColor: boolean,
-): void {
+export function appendDoctorCheck(checks: DoctorCheck[], check: DoctorCheck): void {
   checks.push(check);
   emitRequestProgress({
     type: 'command',
     status: 'progress',
-    message: formatDoctorCheckProgressMessage(check, useColor),
+    message: formatDoctorCheckProgressMessage(check),
+    marker: doctorCheckStatusMarker(check.status),
   });
 }
 
-function formatDoctorCheckProgressMessage(check: DoctorCheck, useColor: boolean): string {
+/**
+ * The line streamed for one check, uncolored: the marker's status travels as `marker`, and the CLI colors it after
+ * escaping the text, so no color code crosses the wire.
+ */
+function formatDoctorCheckProgressMessage(check: DoctorCheck): string {
   return [
-    formatDoctorCheckSummaryLine(check, { useColor }),
+    formatDoctorCheckSummaryLine(check, { useColor: false }),
     ...formatDoctorCheckDetailLines(check),
   ].join('\n');
 }

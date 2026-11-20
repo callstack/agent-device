@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   mkdtempForTestSync,
   createTestHostEnvironment,
+  withCapturedOutput,
   withCapturedStdoutAsync,
 } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '@agent-device/client';
@@ -173,4 +175,101 @@ test('open --json at a non-default response level still prints lease.device', as
     }),
   );
   assert.deepEqual((JSON.parse(json) as { data: Record<string, unknown> }).data.lease, { device });
+});
+
+// One warning naming a path with an SGR conceal sequence and a C1 character, as a peer could send it.
+const CONTROL_WARNING = 'The remote script could not be saved to /tmp/a\u001b[8mb\u009bc.ad.';
+const ESCAPED_CONTROL_WARNING = String.raw`/tmp/a\u001b[8mb\u009bc.ad.`;
+
+/** The CLI output of one command answered with `data`, stdout and stderr together. */
+async function terminalOutputOf(command: string, data: Record<string, unknown>, json = false) {
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    { transport: async (): Promise<DaemonResponse> => ({ ok: true, data }) },
+  );
+  const { stdout, stderr } = await withCapturedOutput(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: command as ClientBackedCliCommandName,
+      positionals: command === 'open' ? ['Demo'] : [],
+      flags: { json } as CliFlags,
+      client,
+    }),
+  );
+  return { stdout, stderr, all: `${stdout}${stderr}` };
+}
+
+/** The characters the CLI writer would escape, by the writer's own rule. */
+function rawControls(text: string): string[] {
+  return [...text].filter((char) => escapeTerminalText(char) !== char);
+}
+
+test.each([
+  { command: 'open', data: { session: 'qa', appName: 'Demo', warnings: [CONTROL_WARNING] } },
+  { command: 'snapshot', data: { nodes: [], truncated: false, warnings: [CONTROL_WARNING] } },
+  { command: 'close', data: { session: 'qa', warnings: [CONTROL_WARNING] } },
+])(
+  '$command writes one escaped warning and no raw control character',
+  async ({ command, data }) => {
+    const { all } = await terminalOutputOf(command, data);
+
+    assert.equal(all.split(ESCAPED_CONTROL_WARNING).length - 1, 1, all);
+    assert.deepEqual(rawControls(all), []);
+  },
+);
+
+test('--json escapes DEL and C1 and still parses to the exact warning', async () => {
+  const { stdout } = await terminalOutputOf(
+    'close',
+    { session: 'qa', warnings: [CONTROL_WARNING] },
+    true,
+  );
+
+  assert.deepEqual(rawControls(stdout), []);
+  assert.ok(stdout.includes(String.raw`\u001b[8mb\u009bc.ad`), stdout);
+  const parsed = JSON.parse(stdout) as { data: { warnings?: string[] } };
+  assert.deepEqual(parsed.data.warnings, [CONTROL_WARNING]);
+});
+
+test('default open writes a multi-line warning once', async () => {
+  const { all } = await terminalOutputOf('open', {
+    session: 'qa',
+    appName: 'Demo',
+    warnings: ['First line\nsecond line'],
+  });
+
+  assert.equal(all.split('First line second line').length - 1, 1, all);
+  assert.ok(!all.includes('First line\nsecond line'), all);
+});
+
+test('snapshot folds a multi-line capture warning onto one line', async () => {
+  const { all } = await terminalOutputOf('snapshot', {
+    nodes: [],
+    truncated: false,
+    warnings: ['Capture degraded\nretry with --raw'],
+  });
+
+  assert.equal(all.split('Capture degraded retry with --raw').length - 1, 1, all);
+  assert.ok(!all.includes('Capture degraded\nretry'), all);
+});
+
+test('get attrs prints the node as JSON that parses exactly despite a C1 character in a label', async () => {
+  const node = { ref: 'e1', type: 'button', label: 'Pay\u009bnow' };
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    { transport: async (): Promise<DaemonResponse> => ({ ok: true, data: { node } }) },
+  );
+
+  const { stdout } = await withCapturedOutput(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: 'get' as ClientBackedCliCommandName,
+      positionals: ['attrs', '@e1'],
+      flags: {} as CliFlags,
+      client,
+    }),
+  );
+
+  assert.equal(stdout.includes('\u009b'), false);
+  assert.deepEqual(JSON.parse(stdout), node);
 });

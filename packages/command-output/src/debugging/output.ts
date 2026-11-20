@@ -8,9 +8,7 @@ function debugSymbolsCliOutput(result: DebugSymbolsResult): CliOutput {
   for (const image of result.matchedImages) {
     lines.push(`Matched: ${image.name} ${image.uuid}${image.arch ? ` ${image.arch}` : ''}`);
   }
-  for (const warning of result.warnings ?? []) {
-    lines.push(`Warning: ${warning}`);
-  }
+  // Response warnings are printed once by the dispatcher.
   return { data: result, text: lines.join('\n') };
 }
 

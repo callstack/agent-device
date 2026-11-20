@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { dispatchCliOutput } from '../cli-output.ts';
 import { formatSnapshotText } from './snapshot.ts';
 
 const oneButtonSnapshot = {
@@ -7,13 +8,20 @@ const oneButtonSnapshot = {
   truncated: false,
 } as const;
 
-test('formatSnapshotText compacts unchanged snapshots while preserving warnings', () => {
-  const text = formatSnapshotText({
-    ...oneButtonSnapshot,
-    warnings: ['Snapshot warning stays visible.'],
-    unchanged: { ageMs: 8_200, nodeCount: 1 },
+test('an unchanged snapshot prints compactly and keeps its warnings', async () => {
+  const output = await dispatchCliOutput({
+    env: {},
+    stderrIsTTY: false,
+    name: 'snapshot',
+    input: {},
+    result: {
+      ...oneButtonSnapshot,
+      warnings: ['Snapshot warning stays visible.'],
+      unchanged: { ageMs: 8_200, nodeCount: 1 },
+    },
   });
-  assert.match(text, /Snapshot warning stays visible/);
+  const text = String(output?.text);
+  assert.match(text, /\nWarning: Snapshot warning stays visible\.$/);
   assert.match(text, /Snapshot unchanged since previous read 8\.2s ago/);
   assert.equal(text.includes('Refs from the previous snapshot are still valid'), true);
   assert.equal(text.includes('find/get/is'), true);

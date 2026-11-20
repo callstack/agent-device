@@ -48,6 +48,11 @@ export type CommandProgressEvent = {
   type: 'command';
   status: 'progress';
   message: string;
+  /**
+   * The status of a line that starts with a status marker (a doctor check). The message stays uncolored, and a client
+   * that renders color colors the marker after escaping the text.
+   */
+  marker?: 'pass' | 'fail' | 'warn' | 'skip';
 };
 
 export type RequestProgressEvent =

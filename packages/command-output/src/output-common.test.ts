@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { appendWarningLinesText, routeResponseWarnings } from './output-common.ts';
-import { collapseWarningText } from './index.ts';
+import {
+  appendWarningLinesText,
+  collapseWarningText,
+  routeResponseWarnings,
+} from './output-common.ts';
 
 const WARNING = 'The session app was not foreground when this command arrived.';
 
@@ -36,9 +39,17 @@ test('appendWarningLinesText collapses newlines inside a warning', () => {
  * The dedupe that lets a report builder keep its own notice line: the dispatcher runs after every
  * formatter, and a warning the text already carries must not be said twice.
  */
-test('appendWarningLinesText skips a warning the text already carries', () => {
-  const text = `Snapshot: 15 visible nodes\nWarning: ${WARNING}`;
-  assert.equal(appendWarningLinesText(text, { warnings: [WARNING] }), text);
+test('appendWarningLinesText appends every warning, even one the text already shows', () => {
+  const text = `Snapshot: 15 visible nodes\n${WARNING}`;
+  assert.equal(
+    appendWarningLinesText(text, { warnings: [WARNING] }),
+    `${text}\nWarning: ${WARNING}`,
+  );
+});
+
+test('appendWarningLinesText returns the text unchanged without warnings', () => {
+  assert.equal(appendWarningLinesText('Done', { warnings: [] }), 'Done');
+  assert.equal(appendWarningLinesText(undefined, {}), null);
 });
 
 test('routeResponseWarnings appends to text for a report command', () => {

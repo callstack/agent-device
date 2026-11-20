@@ -223,3 +223,36 @@ test('JUnit preserves legal XML whitespace, Unicode boundaries and markup charac
   const suite = await renderCharacterSuite(value);
   assertCharacterValues(suite, value);
 });
+
+test('buildReplayJunitXml keeps a warning exact: no terminal escape in system-out', () => {
+  const suite: ReplaySuiteResult = {
+    total: 1,
+    executed: 1,
+    passed: 0,
+    failed: 1,
+    skipped: 0,
+    notRun: 0,
+    durationMs: 10,
+    failures: [],
+    tests: [
+      {
+        file: '/tmp/flows/login.yaml',
+        title: 'sign-in',
+        session: 'default',
+        status: 'failed',
+        durationMs: 10,
+        attempts: 1,
+        warnings: ['next\u0085line and esc\u001b here'],
+        error: { code: 'COMMAND_FAILED', message: 'boom' },
+      },
+    ],
+  };
+  suite.failures = suite.tests.filter((result) => result.status === 'failed');
+
+  const nodes = writeSuiteAndParse(suite);
+  const testcase = findChild(findChild(nodes[0]!, 'testsuite')!, 'testcase')!;
+  const text = findChild(testcase, 'system-out')?.text ?? '';
+  // U+0085 is legal XML and stays as is; ESC is not, so the JUnit writer replaces it with U+FFFD.
+  assert.ok(text.includes('warning: next\u0085line and esc� here'), JSON.stringify(text));
+  assert.equal(text.includes(String.raw`\u0085`), false);
+});

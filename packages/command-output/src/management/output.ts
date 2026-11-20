@@ -19,8 +19,10 @@ import type {
   DaemonArtifactsResult,
 } from '@agent-device/contracts/observability';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { snapshotCliOutput } from '../capture/output.ts';
 import {
+  appendWarningLinesText,
   type CliOutputFormatter,
   type CliOutputFormatterParams,
   messageCliOutput,
@@ -98,9 +100,6 @@ export async function openCliOutput(
   if (reader === 'terminal' && typeof data.sessionStateDir === 'string') {
     lines.push(`Session state: ${data.sessionStateDir}`);
   }
-  for (const warning of result.warnings ?? []) {
-    lines.push(`Warning: ${warning}`);
-  }
   // open --foreground: the composed initial snapshot renders through the SAME
   // path `snapshot -i` uses (label dedupe + interactive tree text), after the
   // open confirmation — the one-call promise holds on default stdout, not just
@@ -108,7 +107,12 @@ export async function openCliOutput(
   const snapshotOutput = await buildOpenInitialSnapshotOutput(result.snapshot);
   if (snapshotOutput) {
     data.snapshot = snapshotOutput.jsonData ?? snapshotOutput.data;
-    if (snapshotOutput.text) lines.push(snapshotOutput.text);
+    // The nested snapshot is not the response, so the dispatcher never sees its warnings: they print here, once.
+    const snapshotText = appendWarningLinesText(
+      snapshotOutput.text,
+      result.snapshot as unknown as Record<string, unknown>,
+    );
+    if (snapshotText) lines.push(snapshotText);
   }
   return {
     data,
@@ -212,25 +216,36 @@ export async function doctorCliOutput(
   const { shouldColorStatusMarkers } = await import('@agent-device/host-kit/status-markers');
   const useColor = shouldColorStatusMarkers(env, stderrIsTTY);
   const data = result as Record<string, unknown>;
-  const status = typeof data.status === 'string' ? data.status : 'unknown';
+  // The text keeps its colored status markers, so it is written raw: every value in it is escaped here.
+  const status = escapeTerminalText(typeof data.status === 'string' ? data.status : 'unknown');
   const lines = [`Doctor: ${status}`];
-  const checks = readDoctorChecks(data.checks);
+  const checks = readDoctorChecks(data.checks).map(escapeDoctorCheckText);
 
   // Progress streamed the per-check lines to stderr already; repeating them
   // below the summary would print every check twice.
   if (progress?.renderedToStderr) {
     const summary = typeof data.summary === 'string' ? data.summary : undefined;
-    if (summary) lines.push(summary);
+    if (summary) lines.push(escapeTerminalText(summary));
   } else if (checks.length === 0) {
     const summary = typeof data.summary === 'string' ? data.summary : 'No blockers found.';
-    lines.push(summary);
+    lines.push(escapeTerminalText(summary));
   } else {
     for (const check of checks) {
       lines.push(formatDoctorCheckSummaryLine(check, { useColor }));
       lines.push(...formatDoctorCheckDetailLines(check));
     }
   }
-  return { data, text: lines.join('\n') };
+  return { data, text: lines.join('\n'), terminalSafe: true };
+}
+
+/** A doctor check with its text fields escaped, for a line that is written raw. */
+function escapeDoctorCheckText<T extends Record<string, unknown>>(check: T): T {
+  return Object.fromEntries(
+    Object.entries(check).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? escapeTerminalText(value) : value,
+    ]),
+  ) as T;
 }
 
 export const managementCliOutputFormatters = {

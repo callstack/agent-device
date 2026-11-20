@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
-import { mkdtempForTest } from '@agent-device/test-kit';
+import {
+  mkdtempForTest,
+  withCapturedStderr,
+  withCapturedStderrAsync,
+} from '@agent-device/test-kit';
+import { createReplayTestReporterRuntime } from '../reporting.ts';
 
 test.each([false, true])('CLI refuses a wrapping reporter exit code (json=%s)', async (json) => {
   const root = await mkdtempForTest('agent-device-reporter-exit-');
@@ -50,4 +55,91 @@ test.each([false, true])('CLI refuses a wrapping reporter exit code (json=%s)', 
     assert.match(result.stderr, /INVALID_ARGS/);
     assert.match(result.stderr, /wrapping.*getExitCode.*0 to 255/);
   }
+});
+
+test('a test run prints command progress, such as an upload, to stderr escaped', async () => {
+  const runtime = await createReplayTestReporterRuntime({});
+
+  const stderr = withCapturedStderr(() => {
+    runtime.onProgress({
+      type: 'command',
+      status: 'progress',
+      message: 'Uploading app\u001b[8m.apk (10 B) via direct upload',
+    });
+  });
+
+  assert.equal(stderr, String.raw`Uploading app\u001b[8m.apk (10 B) via direct upload` + '\n');
+});
+
+test('in a terminal, a test run writes command progress on its own row after a drawn live row', async () => {
+  const previousCi = process.env.CI;
+  delete process.env.CI;
+  try {
+    const stderr = await withCapturedStderrAsync(
+      async () => {
+        const runtime = await createReplayTestReporterRuntime({});
+        runtime.onProgress({
+          type: 'replay-test',
+          file: '/tmp/checkout.yaml',
+          title: 'Checkout',
+          status: 'progress',
+          index: 1,
+          total: 1,
+          stepIndex: 1,
+          stepTotal: 2,
+          stepCommand: 'tapOn',
+        });
+        runtime.onProgress({ type: 'command', status: 'progress', message: 'Uploading app.apk' });
+        await runtime.reporters[0]?.onSuiteEnd?.(
+          {
+            total: 0,
+            executed: 0,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+            notRun: 0,
+            durationMs: 0,
+            failures: [],
+            tests: [],
+          },
+          runtime.context,
+        );
+      },
+      { interactive: true },
+    );
+
+    assert.ok(stderr.includes('\r\u001B[2KUploading app.apk\n'), JSON.stringify(stderr));
+  } finally {
+    if (previousCi !== undefined) process.env.CI = previousCi;
+  }
+});
+
+test('a custom reporter never receives command progress, so its hook cannot fail the run', async () => {
+  const root = await mkdtempForTest('agent-device-reporter-progress-');
+  const reporter = path.join(root, 'reporter.mjs');
+  await fs.writeFile(
+    reporter,
+    "export default { name: 'thrower', onCommandProgress() { throw new Error('hook failed'); } };\n",
+  );
+  const runtime = await createReplayTestReporterRuntime({ reporter: [reporter] });
+
+  const stderr = withCapturedStderr(() => {
+    runtime.onProgress({ type: 'command', status: 'progress', message: 'Uploading app.apk' });
+  });
+
+  assert.equal(stderr, 'Uploading app.apk\n');
+});
+
+test('a command progress line that cannot be written is reported and does not fail the run', async () => {
+  const runtime = await createReplayTestReporterRuntime({});
+  const written: string[] = [];
+  runtime.context.stderr.write = (text) => {
+    if (text.includes('Uploading')) throw new Error('write\u001b[8m failed');
+    written.push(text);
+    return true;
+  };
+
+  runtime.onProgress({ type: 'command', status: 'progress', message: 'Uploading app.apk' });
+
+  assert.deepEqual(written, [String.raw`Command progress failed: write\u001b[8m failed` + '\n']);
 });

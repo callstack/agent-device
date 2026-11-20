@@ -6,7 +6,7 @@ export function formatDoctorCheckSummaryLine(
   check: DoctorLineCheck,
   options: { useColor: boolean },
 ): string {
-  const statusMarker = formatCliStatusMarker(doctorStatusMarker(check.status), options);
+  const statusMarker = formatCliStatusMarker(doctorCheckStatusMarker(check.status), options);
   return `${statusMarker} ${formatDoctorCheckLabel(check)}`;
 }
 
@@ -17,7 +17,8 @@ export function formatDoctorCheckDetailLines(check: DoctorLineCheck): string[] {
   return [];
 }
 
-function doctorStatusMarker(status: unknown): CliStatusMarkerStatus {
+/** The status marker a doctor check status shows. */
+export function doctorCheckStatusMarker(status: unknown): CliStatusMarkerStatus {
   if (status === 'pass') return 'pass';
   if (status === 'fail') return 'fail';
   if (status === 'warn') return 'warn';

@@ -280,3 +280,32 @@ test.each([-1, 0.5, 256, 512, Number.NaN, Infinity, -Infinity, '3', null])(
     }
   },
 );
+
+test('a reporter hook error is reported with its control characters escaped', () => {
+  const output = createRecordingContext();
+  const reporters: ReplayTestReporter[] = [
+    {
+      name: 'throwing',
+      onTestResult() {
+        throw new Error('boom \u001b[8mhidden\u009b');
+      },
+    },
+  ];
+
+  runReplayTestReporterProgress(
+    reporters,
+    {
+      type: 'replay-test',
+      file: '/tmp/flow.ad',
+      status: 'pass',
+      index: 1,
+      total: 1,
+      durationMs: 1,
+    },
+    output.context,
+  );
+
+  assert.deepEqual(output.stderr, [
+    String.raw`Reporter throwing onTestResult failed: boom \u001b[8mhidden\u009b` + '\n',
+  ]);
+});

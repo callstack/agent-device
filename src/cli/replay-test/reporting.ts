@@ -3,6 +3,7 @@ import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import {
   getReplayTestReporterExitCode,
   resolveReplayTestReporters,
+  runReplayTestCommandProgress,
   runReplayTestReporterProgress,
   runReplayTestReporters,
 } from './reporters/registry.ts';
@@ -66,7 +67,9 @@ export async function createReplayTestReporterRuntime(options: {
     reporters,
     context,
     onProgress(event) {
-      runReplayTestReporterProgress(reporters, event, context);
+      // A command progress line (an upload, for one) is not a reporter event.
+      if (event.type === 'command') runReplayTestCommandProgress(reporters, event.message, context);
+      else runReplayTestReporterProgress(reporters, event, context);
     },
   };
 }

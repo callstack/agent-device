@@ -10,8 +10,9 @@ import {
   formatCliStatusMarker,
   shouldColorStatusMarkers,
 } from '@agent-device/host-kit/status-markers';
-import { formatDurationSeconds } from './duration-format.ts';
+import { formatDurationSeconds, formatReplayCount } from './duration-format.ts';
 import { colorize, supportsColor } from '@agent-device/command-output';
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 
 export type ReplayTestProgressFormatOptions = {
   verbose?: boolean;
@@ -29,6 +30,8 @@ export type ReplayTestProgressRender = {
 
 export type ReplayTestProgressRenderer = {
   render(event: ReplayTestReporterProgressEvent): ReplayTestProgressRender | undefined;
+  /** The codes that clear a drawn live row, or '' when none is drawn; the next live row starts on a fresh line. */
+  clearLiveRow(): string;
 };
 
 const REPLAY_TEST_PROGRESS_SPINNER = {
@@ -100,6 +103,17 @@ export function createReplayTestProgressRenderer(
       if (event.type === 'test-step') return renderLiveStep(event);
       return event.type === 'test-result' ? renderTestResult(event) : undefined;
     },
+    clearLiveRow() {
+      if (!hasLiveProgressLine) return '';
+      const clear = clearLiveProgressPrefix(
+        liveProgressWidth,
+        options.columns,
+        options.terminalReflowsOnResize !== false,
+      );
+      hasLiveProgressLine = false;
+      liveProgressWidth = 0;
+      return clear;
+    },
   };
 }
 
@@ -128,8 +142,8 @@ function formatReplayTestLiveProgressLine(
   options: ReplayTestProgressFormatOptions,
   spinnerFrame: string,
 ): string {
-  const title = event.title?.trim();
-  const file = path.basename(event.file);
+  const title = display(event.title ?? '').trim();
+  const file = display(path.basename(event.file));
   const useColor = supportsColor(process.env, process.stderr);
   const spinner = formatReplayTestProgressSpinner(spinnerFrame, { useColor });
   const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
@@ -146,6 +160,15 @@ function formatReplayTestLiveProgressLine(
   return trimToColumns(`${prefix}${formattedTitle}${suffix}`, options.columns);
 }
 
+/**
+ * A run value as a progress line shows it: kept raw until here, then folded onto one row (a live row is redrawn in
+ * place, so every field stays on it before its width is measured) and escaped by the CLI rule. The renderer's own
+ * color and cursor codes are added around it.
+ */
+function display(text: string): string {
+  return escapeTerminalText(text.replaceAll(/[\n\t]+/g, ' '));
+}
+
 function formatReplayTestProgressSpinner(
   frame: string,
   options: { useColor?: boolean } = {},
@@ -157,11 +180,11 @@ function formatReplayTestLiveProgressStepSuffix(
   event: ReplayTestStep,
   options: { useColor?: boolean } = {},
 ): string {
-  const stepIndex = event.stepIndex ?? 0;
-  const stepTotal = event.stepTotal ?? 0;
-  const stepMarker = `${stepIndex}/${stepTotal}`;
-  const command = event.stepCommand?.trim();
-  const value = event.stepValue?.trim();
+  const stepMarker = display(
+    `${formatReplayCount(event.stepIndex ?? 0)}/${formatReplayCount(event.stepTotal ?? 0)}`,
+  );
+  const command = event.stepCommand ? display(event.stepCommand).trim() : undefined;
+  const value = event.stepValue ? display(event.stepValue).trim() : undefined;
   if (!options.useColor) {
     const details = [stepMarker, command, value].filter(Boolean).join(' ');
     return ` [${details}]`;
@@ -199,26 +222,26 @@ function shouldSuppressReplayTestCaseDetailLines(
 
 function replayTestProgressFailureFileLine(event: ReplayTestResult): string | undefined {
   return event.status === 'fail' && event.title?.trim()
-    ? `    file: ${path.basename(event.file)}`
+    ? `    file: ${display(path.basename(event.file))}`
     : undefined;
 }
 
 function replayTestProgressMessageLine(event: ReplayTestResult): string | undefined {
-  const message = event.message?.replaceAll(/\s+/g, ' ').trim();
+  const message = event.message ? display(event.message.replaceAll(/\s+/g, ' ')).trim() : undefined;
   if (!message) return undefined;
   return `    ${event.status === 'fail' ? `failed at: ${message}` : message}`;
 }
 
 function appendReplayTestProgressHintLine(lines: string[], event: ReplayTestResult): void {
-  const hint = event.hint?.replaceAll(/\s+/g, ' ').trim();
+  const hint = event.hint ? display(event.hint.replaceAll(/\s+/g, ' ')).trim() : undefined;
   if (event.status === 'fail' && hint) lines.push(`    hint: ${hint}`);
 }
 
 function replayTestProgressFailureContextLines(event: ReplayTestResult): string[] {
   if (event.status !== 'fail' || event.retrying) return [];
   const lines: string[] = [];
-  if (event.session) lines.push(`    session: ${event.session}`);
-  if (event.artifactsDir) lines.push(`    artifacts: ${event.artifactsDir}`);
+  if (event.session) lines.push(`    session: ${display(event.session)}`);
+  if (event.artifactsDir) lines.push(`    artifacts: ${display(event.artifactsDir)}`);
   return lines;
 }
 
@@ -233,9 +256,8 @@ function formatReplayTestCaseSummaryLine(event: ReplayTestResult): string {
 }
 
 function formatReplayTestProgressName(event: ReplayTestResult | ReplayTestStep): string {
-  const title = event.title?.trim();
-  const file = path.basename(event.file);
-  return title ? title : file;
+  const title = event.title ? display(event.title).trim() : undefined;
+  return title ? title : display(path.basename(event.file));
 }
 
 function formatReplayTestProgressStatusLabel(event: ReplayTestResult): string {
@@ -257,19 +279,21 @@ function formatReplayTestProgressShardSuffix(
   event: ReplayTestResult | ReplayTestStep,
   options: { useColor?: boolean } = {},
 ): string {
-  if (typeof event.shardIndex !== 'number') return '';
-  const shardCount = typeof event.shardCount === 'number' ? event.shardCount : '?';
+  const { shardIndex } = event;
+  if (typeof shardIndex !== 'number' || !Number.isSafeInteger(shardIndex) || shardIndex < 0)
+    return '';
+  const shardCount = formatReplayCount(event.shardCount);
   const device = replayTestProgressShardDeviceName(event);
-  const suffix = ` [${event.shardIndex + 1}/${shardCount}${device ? ` ${device}` : ''}]`;
+  const suffix = ` [${shardIndex + 1}/${shardCount}${device ? ` ${device}` : ''}]`;
   return options.useColor ? colorizeProgressMarker(suffix, 'dim') : suffix;
 }
 
 function replayTestProgressShardDeviceName(
   event: ReplayTestResult | ReplayTestStep,
 ): string | undefined {
-  const name = event.deviceName?.trim();
+  const name = event.deviceName ? display(event.deviceName).trim() : undefined;
   if (name) return name;
-  const id = event.deviceId?.trim();
+  const id = event.deviceId ? display(event.deviceId).trim() : undefined;
   return id || undefined;
 }
 
@@ -380,7 +404,8 @@ function replayTestProgressStepLines(event: ReplayTestResult): string[] {
     event.status === 'pass'
       ? buildPassedReplayTestProgressResult(event)
       : buildFailedReplayTestProgressResult(event);
-  return replayTestStepLines(result).map((line) => `    ${line}`);
+  // The trace is read through the raw artifacts path; only the rendered lines are escaped.
+  return replayTestStepLines(result).map((line) => `    ${display(line)}`);
 }
 
 function buildPassedReplayTestProgressResult(

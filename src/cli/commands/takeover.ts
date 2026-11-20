@@ -5,6 +5,7 @@ import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { HumanControlHold } from '@agent-device/contracts/client';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
+import { writeStdout } from '../process-exit.ts';
 
 const FOREGROUND_HOLD_TTL_MS = 15_000;
 const FOREGROUND_HEARTBEAT_MS = 5_000;
@@ -80,7 +81,7 @@ async function runForegroundTakeover(
   }
   if (heartbeatError) throw heartbeatError;
   if (!flags.json) {
-    process.stdout.write(
+    writeStdout(
       released
         ? 'Human control released. Agent interactions are enabled.\n'
         : 'Release could not be confirmed. The safety TTL will re-enable agent interactions automatically.\n',

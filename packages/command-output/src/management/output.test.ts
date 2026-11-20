@@ -1,5 +1,18 @@
 import { describe, expect, test } from 'vitest';
+import { dispatchCliOutput } from '../cli-output.ts';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
+
+/** The open output as the CLI prints it: the formatter, then the response warnings the dispatcher appends. */
+async function printOpen(result: Record<string, unknown>) {
+  const output = await dispatchCliOutput({
+    env: {},
+    stderrIsTTY: false,
+    name: 'open',
+    input: {},
+    result,
+  });
+  return output!;
+}
 import { withNoColorAsync, bindTestCommandHost } from '@agent-device/test-kit';
 import type { AppOpenResult } from '@agent-device/contracts/client';
 
@@ -53,7 +66,7 @@ describe('openCliOutput', () => {
   test('preserves open warnings in JSON data and renders them immediately', async () => {
     const warning =
       'Script publication was aborted by a second successful open; start a fresh session.';
-    const output = await openCliOutput({
+    const output = await printOpen({
       session: 'authoring',
       warnings: [warning],
       identifiers: { session: 'authoring' },
@@ -61,6 +74,16 @@ describe('openCliOutput', () => {
 
     expect(output.data).toMatchObject({ warnings: [warning] });
     expect(output.text).toBe(`Opened: authoring\nWarning: ${warning}`);
+  });
+
+  test('prints a warning with trailing whitespace once', async () => {
+    const output = await printOpen({
+      session: 'authoring',
+      warnings: ['Start a fresh session.  '],
+      identifiers: { session: 'authoring' },
+    });
+
+    expect(output.text).toBe('Opened: authoring\nWarning: Start a fresh session.  ');
   });
 
   test('preserves device-selection evidence in the CLI payload', async () => {
@@ -142,10 +165,28 @@ describe('openCliOutput', () => {
     expect(openJsonSnapshot).toEqual(snapshotOutput.jsonData ?? snapshotOutput.data);
   });
 
+  test('open --foreground prints the top-level and the nested snapshot warnings once each', async () => {
+    const { attachRefs } = await import('@agent-device/kernel/snapshot');
+    const nodes = attachRefs([{ index: 0, type: 'Button', label: 'Sign In', depth: 0 }]);
+    const output = await withNoColorAsync(() =>
+      printOpen({
+        session: 'default',
+        warnings: ['Open warning.'],
+        snapshot: { nodes, truncated: false, warnings: ['Snapshot warning.'] },
+        identifiers: { session: 'default' },
+      }),
+    );
+
+    const lines = String(output.text).split('\n');
+    expect(lines.filter((line) => line === 'Warning: Open warning.')).toHaveLength(1);
+    expect(lines.filter((line) => line === 'Warning: Snapshot warning.')).toHaveLength(1);
+    expect(lines.filter((line) => line.includes('warning.'))).toHaveLength(2);
+  });
+
   test('renders the initialSnapshotError warning without a tree when the composed capture failed', async () => {
     const warning =
       'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';
-    const output = await openCliOutput({
+    const output = await printOpen({
       session: 'default',
       warnings: [warning],
       initialSnapshotError: {

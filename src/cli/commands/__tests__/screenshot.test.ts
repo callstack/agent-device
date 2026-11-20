@@ -1,9 +1,10 @@
+import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import {
   createTestHostEnvironment,
   mkdtempForTestSync,
   withCapturedStdoutAsync,
 } from '@agent-device/test-kit';
-import { test } from 'vitest';
+import { onTestFinished, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -60,7 +61,7 @@ test('screenshot surfaces response-level warnings under the summary', async () =
     screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
   );
 
-  assert.equal(out, `/tmp/shot.png (40x20)\n${CROP_WARNING}\n`);
+  assert.equal(out, `/tmp/shot.png (40x20)\nWarning: ${CROP_WARNING}\n`);
 });
 
 test('screenshot --json carries response-level warnings in the data', async () => {
@@ -196,4 +197,127 @@ test('the Node screenshot client sends the mask in its daemon request', async ()
   );
   const result = await client.capture.screenshot({ path: '/tmp/masked.png', screenMask: 'black' });
   assert.equal(result.path, '/tmp/masked.png');
+});
+
+const CONTROL_WARNING = 'The remote script could not be saved to /tmp/a\u001b[8mb\u009bc.ad.';
+const ESCAPED_CONTROL_WARNING = String.raw`/tmp/a\u001b[8mb\u009bc.ad.`;
+
+/** The characters the CLI writer would escape, by the writer's own rule. */
+function rawControls(text: string): string[] {
+  return [...text].filter((char) => escapeTerminalText(char) !== char);
+}
+
+test.each([
+  { level: undefined, json: false },
+  { level: 'full' as const, json: false },
+])(
+  'screenshot (level $level) writes one escaped warning and no raw control character',
+  async ({ level, json }) => {
+    const full = { path: '/tmp/shot.png', width: 40, height: 20, warnings: [CONTROL_WARNING] };
+    const client = clientReturning(full, level);
+    const flags = { json, ...(level ? { responseLevel: level } : {}) } as CliFlags;
+
+    const out = await withCapturedStdoutAsync(() =>
+      screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
+    );
+
+    const shown =
+      level === 'full' ? String.raw`/tmp/a\u001b[8mb\u009bc.ad.` : ESCAPED_CONTROL_WARNING;
+    assert.equal(out.split(shown).length - 1, 1, out);
+    assert.deepEqual(rawControls(out), []);
+  },
+);
+
+test.each([false, true])(
+  'snapshot diff (color %s) writes one escaped warning and keeps only its own color codes',
+  async (color) => {
+    const client = createAgentDeviceClient(
+      { session: 'qa' },
+      {
+        transport: async (): Promise<DaemonResponse> => ({
+          ok: true,
+          data: {
+            baselineInitialized: false,
+            summary: { additions: 1, removals: 0, unchanged: 0 },
+            lines: [{ kind: 'added', text: 'label \u001b[8mhidden' }],
+            warnings: [CONTROL_WARNING],
+          },
+        }),
+      },
+    );
+    const host = createTestHostEnvironment({
+      env: color ? { FORCE_COLOR: '1' } : { NO_COLOR: '1' },
+    });
+    // node:util styleText reads the process environment, not the host one.
+    if (color) vi.stubEnv('FORCE_COLOR', '1');
+    else vi.stubEnv('NO_COLOR', '1');
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const out = await withCapturedStdoutAsync(() =>
+      diffCommand({ host, positionals: ['snapshot'], flags: {} as CliFlags, client }),
+    );
+
+    assert.equal(out.split(ESCAPED_CONTROL_WARNING).length - 1, 1, out);
+    assert.ok(out.includes(String.raw`label \u001b[8mhidden`), out);
+    // With color on, the only control characters left are the color codes the formatter added.
+    const colorCode = new RegExp(`${String.fromCharCode(27)}\\[\\d+m`, 'g');
+    const remaining = out.replaceAll(colorCode, '');
+    assert.deepEqual(rawControls(remaining), []);
+    assert.equal(out.includes('\u001b[8m'), false);
+    assert.equal(new RegExp(colorCode.source).test(out), color, out);
+  },
+);
+
+const MULTI_LINE_WARNING = 'Capture degraded\nretry with --raw';
+
+test('screenshot folds a multi-line capture warning onto one line', async () => {
+  const client = clientReturning({
+    path: '/tmp/shot.png',
+    width: 40,
+    height: 20,
+    warnings: [MULTI_LINE_WARNING],
+  });
+
+  const out = await withCapturedStdoutAsync(() =>
+    screenshotCommand({
+      host: createTestHostEnvironment(),
+      positionals: [],
+      flags: {} as CliFlags,
+      client,
+    }),
+  );
+
+  assert.ok(out.includes('Capture degraded retry with --raw'), out);
+  assert.ok(!out.includes(MULTI_LINE_WARNING), out);
+});
+
+test('snapshot diff folds a multi-line notice onto one line', async () => {
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    {
+      transport: async (): Promise<DaemonResponse> => ({
+        ok: true,
+        data: {
+          baselineInitialized: false,
+          summary: { additions: 0, removals: 0, unchanged: 0 },
+          lines: [],
+          warnings: [MULTI_LINE_WARNING],
+        },
+      }),
+    },
+  );
+
+  const out = await withCapturedStdoutAsync(() =>
+    diffCommand({
+      host: createTestHostEnvironment(),
+      positionals: ['snapshot'],
+      flags: {} as CliFlags,
+      client,
+    }),
+  );
+
+  assert.ok(out.includes('Capture degraded retry with --raw'), out);
+  assert.ok(!out.includes(MULTI_LINE_WARNING), out);
 });
