@@ -13,6 +13,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
+  PlatformRuntimeModule,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -23,10 +24,37 @@ import {
   createUnavailableRuntimeFactsForTest,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
+import { readVersion } from '@agent-device/host-kit/version';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
 } from './platform-runtime-gateway.ts';
+import {
+  createPlatformModuleRegistry,
+  REQUIRED_PLATFORMS,
+} from '@agent-device/contracts/platform-module';
+
+/** The family module registry a gateway reads, composed the way root composition composes it: the
+ * caller's modules plus a lazy stub for each required family the test does not name, so the
+ * composition is complete and an unnamed optional family stays absent (ADR 0034). */
+export function runtimeModuleRegistryFixture(modules: readonly PlatformRuntimeModule[] = []) {
+  const families = new Set(modules.map((module) => module.family));
+  return createPlatformModuleRegistry<PlatformRuntimeModule>(
+    [
+      ...modules,
+      ...REQUIRED_PLATFORMS.filter((family) => !families.has(family)).map(
+        (family) =>
+          ({
+            family,
+            loadRuntime: async () => {
+              throw new Error(`Required family ${family} is not part of this test`);
+            },
+          }) as PlatformRuntimeModule,
+      ),
+    ],
+    readVersion(),
+  );
+}
 
 export const gatewayFixtureDevice: DeviceInfo = {
   platform: 'apple',
@@ -55,7 +83,7 @@ export type LifecycleFacet = (typeof LIFECYCLE_FACETS)[number][0];
 
 export function gatewayFixture(registrations: readonly PlatformRuntimeProviderRegistration[]) {
   return createComposedPlatformRuntimeGateway({
-    modules: new Map(),
+    modules: runtimeModuleRegistryFixture(),
     loadHost: async () => ({}) as PlatformRuntimeHost,
     providerRuntimes: registrations.map(({ runtime }) => runtime),
     providerModules: registrations,

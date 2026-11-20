@@ -1,3 +1,4 @@
+import { readVersion } from '@agent-device/host-kit/version';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
@@ -6,6 +7,7 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 bindTestCommandHost();
 
 const gateway = createPlatformRuntimeGateway({
+  coreVersion: readVersion(),
   host: createLiveTestHostEnvironment(),
   resolveSessionArtifacts: () => ({
     outputPath: '/sessions/gesture-admission/app.log',
