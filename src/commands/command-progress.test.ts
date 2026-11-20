@@ -9,10 +9,14 @@ test('the stderr sink renders command progress and records that it did', () => {
   assert.equal(state.renderedToStderr, false);
 
   const stderr = withCapturedStderr(() => {
-    sink({ type: 'command', status: 'progress', message: 'Building Apple runner...' });
+    sink({
+      type: 'command',
+      status: 'progress',
+      message: 'Building Apple runner (one-time per agent-device version)...',
+    });
   });
 
-  assert.equal(stderr, 'Building Apple runner...\n');
+  assert.equal(stderr, 'Building Apple runner (one-time per agent-device version)...\n');
   assert.equal(state.renderedToStderr, true);
 });
 

@@ -1,5 +1,6 @@
 import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import {
+  type AccessibilityAuditRuntimeOperations,
   copySnapshotClickabilityEvidence,
   snapshotCaptureAnnotationsFrom,
   summarizeSnapshotDiagnostics,
@@ -80,6 +81,7 @@ export async function dispatchSnapshotRuntimeCommand(
         snapshotScope,
         capturedQuality,
         captureSnapshotData: capture.captureSnapshot,
+        accessibilityAudit: capture.accessibilityAudit,
       });
       const getSession = () => {
         const currentRef = sessions.getRef();
@@ -146,6 +148,7 @@ async function createSnapshotRuntime(params: {
   snapshotScope: string | undefined;
   capturedQuality: CapturedSnapshotQuality;
   captureSnapshotData: () => Promise<SnapshotResult>;
+  accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
 }) {
   const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
   const sessions = createDaemonRuntimeSessionStore({
@@ -198,6 +201,7 @@ async function createSnapshotRuntime(params: {
       snapshotScope,
       capturedQuality: params.capturedQuality,
       captureSnapshotData: params.captureSnapshotData,
+      accessibilityAudit: params.accessibilityAudit,
     }),
     ...createDaemonRuntimePolicy('snapshot'),
     signal: getRequestSignal(req.meta?.requestId),
@@ -252,10 +256,22 @@ function createDaemonSnapshotBackend(params: {
   snapshotScope: string | undefined;
   capturedQuality: CapturedSnapshotQuality;
   captureSnapshotData: () => Promise<SnapshotResult>;
+  accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
 }): AgentDeviceBackend {
   const { req, logPath, session, device, snapshotScope } = params;
+  const accessibilityAudit = params.accessibilityAudit;
   return {
     platform: publicPlatformString(device),
+    ...(accessibilityAudit
+      ? {
+          accessibilityAudit: async (context) =>
+            await accessibilityAudit({
+              ...context,
+              requestId: req.meta?.requestId,
+              logPath,
+            }),
+        }
+      : {}),
     captureSnapshot: async (context): Promise<BackendSnapshotResult> => {
       const capture = await captureSnapshot({
         device,

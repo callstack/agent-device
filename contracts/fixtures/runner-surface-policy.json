@@ -37,5 +37,6 @@
   "activate": "none",
   "terminate": "none",
   "targetReset": "none",
-  "shutdown": "none"
+  "shutdown": "none",
+  "accessibilityAudit": "app-windows"
 }

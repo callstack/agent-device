@@ -229,7 +229,9 @@ function mergeAuditRefPins(
 ): void {
   const refsGeneration = result.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
-  const issued = result.findings.map((finding) => finding.ref.replace(/^@/, ''));
+  const issued = result.findings.flatMap((finding) =>
+    finding.ref ? [finding.ref.replace(/^@/, '')] : [],
+  );
   mergeIntoScopedPins(refPinsByScope, scopeKey, issued, refsGeneration);
 }
 

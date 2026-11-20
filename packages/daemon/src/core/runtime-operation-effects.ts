@@ -14,6 +14,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   Record<RuntimeOperationKey<PlatformRuntimeOperations>, RuntimeOperationEffect>
 > = Object.freeze({
   acceptAlert: 'mutates',
+  accessibilityAudit: 'repeatable',
   actionButton: 'mutates',
   appLogCleanup: 'repeatable',
   appLogDoctor: 'repeatable',

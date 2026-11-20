@@ -479,7 +479,20 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
   pins.mergeCommandResult(
     'audit',
     {
-      findings: [{ kind: 'missing-name', severity: 'warning', ref: '@e2', role: 'button' }],
+      findings: [
+        { kind: 'missing-name', severity: 'warning', ref: '@e2', role: 'button' },
+        {
+          source: 'native',
+          kind: 'native',
+          severity: 'warning',
+          platform: 'ios',
+          auditType: 'contrast',
+          description: 'Low contrast',
+          ref: '@e3',
+          role: 'button',
+          label: 'Save',
+        },
+      ],
       guidance: {
         'missing-name':
           'Set an accessibility label (iOS accessibilityLabel, Android contentDescription, React Native accessibilityLabel).',
@@ -495,6 +508,10 @@ test('ref-pin store pins audit finding refs to the audit generation and keeps ot
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e2' }, undefined), {
     session: 'demo',
     ref: '@e2~s9',
+  });
+  assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e3' }, undefined), {
+    session: 'demo',
+    ref: '@e3~s9',
   });
   assert.deepEqual(pins.pinInput('press', { session: 'demo', ref: '@e37' }, undefined), {
     session: 'demo',

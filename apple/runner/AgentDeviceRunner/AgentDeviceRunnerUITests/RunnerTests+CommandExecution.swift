@@ -63,6 +63,8 @@ extension RunnerTests {
           message: "\(command.command.rawValue) cannot be executed through the prepared command path"
         )
       )
+    case .accessibilityAudit:
+      return executeAccessibilityAudit(app: activeApp)
     case .tap:
       if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
         let expectedPoint: CGPoint?

@@ -1,3 +1,4 @@
+import type { AccessibilityAuditRuntimeOperations } from './audit.ts';
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
 import type { AppInventoryRuntimeOperations } from './app-inventory-runtime.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -61,7 +62,8 @@ import {
 import { runtimeUse } from './platform-runtime-use.ts';
 import type { AndroidToolHost } from './platform-runtime-host.ts';
 
-export type PlatformRuntimeOperations = AppLogRuntimeOperations &
+export type PlatformRuntimeOperations = AccessibilityAuditRuntimeOperations &
+  AppLogRuntimeOperations &
   AppInventoryRuntimeOperations &
   AppDeploymentRuntimeOperations &
   AppStateRuntimeOperations &
@@ -550,7 +552,32 @@ export const snapshotRuntimePlanUses = Object.freeze([
   captureSnapshotWithCustomActionsWithoutActiveAppUse,
 ] as const);
 
+/**
+ * `audit` reports heuristic findings from one capture on every owner. The owner's native
+ * accessibility audit is CONDITIONAL (ADR 0019 §2): an owner that advertises it adds its findings
+ * to the same answer, and an owner that does not answers with the heuristic findings alone.
+ */
+const auditUse = defineUse({
+  required: ['captureSnapshot'],
+  conditional: ['accessibilityAudit'],
+});
+const auditWithoutActiveAppUse = defineUse({
+  required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
+  conditional: ['accessibilityAudit'],
+});
+export const auditRuntimePlanUses = Object.freeze([auditUse, auditWithoutActiveAppUse] as const);
+
 export type SnapshotRuntimePlan =
+  | Readonly<{
+      kind: 'audit-active-app';
+      operation: 'captureSnapshot';
+      use: typeof auditUse;
+    }>
+  | Readonly<{
+      kind: 'audit-without-active-app';
+      operation: 'captureSnapshotWithoutActiveApp';
+      use: typeof auditWithoutActiveAppUse;
+    }>
   | Readonly<{
       kind: 'active-app';
       operation: 'captureSnapshot';
@@ -684,8 +711,18 @@ function selectorCapturePlan<const Intent extends SelectorCaptureRuntimeIntent>(
 /** Selects one owner-fact-backed capture plan from normalized command/session intent. */
 export function resolveSnapshotRuntimePlan(input: {
   customActions: boolean;
+  audit?: boolean;
   hasActiveApp: boolean;
 }): SnapshotRuntimePlan {
+  if (input.audit) {
+    return input.hasActiveApp
+      ? Object.freeze({ kind: 'audit-active-app', operation: 'captureSnapshot', use: auditUse })
+      : Object.freeze({
+          kind: 'audit-without-active-app',
+          operation: 'captureSnapshotWithoutActiveApp',
+          use: auditWithoutActiveAppUse,
+        });
+  }
   if (!input.customActions) {
     return input.hasActiveApp
       ? Object.freeze({ kind: 'active-app', operation: 'captureSnapshot', use: captureSnapshotUse })

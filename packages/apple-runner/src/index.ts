@@ -45,6 +45,7 @@ export {
 } from './runner-contract.ts';
 export { runnerCommandSurfacePolicy } from './runner-command-traits.ts';
 export { isRunnerMainThreadTimeoutError } from './runner-error-classification.ts';
+export { isRunnerNativeAuditUnavailableError } from './runner-contract.ts';
 export {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,

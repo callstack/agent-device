@@ -82,6 +82,15 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
   };
 }
 
+/** The native audit `audit` runs after its capture on an XCTest-served iOS target: no issues. */
+const NO_NATIVE_ISSUES: ProviderScenarioProviderEntry = {
+  command: 'ios.runner.accessibilityAudit',
+  deviceId: DEVICE_ID,
+  platform: 'apple',
+  repeat: true,
+  result: { auditIssues: [] },
+};
+
 const TAP_ENTRY: ProviderScenarioProviderEntry = {
   command: 'ios.runner.tap',
   deviceId: DEVICE_ID,
@@ -135,6 +144,7 @@ test('Provider-backed integration audit publishes pinned finding refs and keeps 
       TAP_ENTRY,
       snapshotEntry(FINDING_NODES),
       TAP_ENTRY,
+      NO_NATIVE_ISSUES,
     ],
     async (daemon, tapRequests) => {
       assertRpcOk(await daemon.callCommand('snapshot'));
@@ -179,6 +189,7 @@ test('Provider-backed integration an audit without findings leaves an expired fr
       snapshotEntry(FINDING_NODES),
       TAP_ENTRY,
       snapshotEntry(CLEAN_NODES),
+      NO_NATIVE_ISSUES,
     ],
     async (daemon) => {
       assertRpcOk(await daemon.callCommand('snapshot'));
@@ -190,6 +201,130 @@ test('Provider-backed integration an audit without findings leaves an expired fr
 
       // A plain ref remembered from the snapshot is still refused: the audit issued nothing.
       assert.equal(refusalReason(await daemon.callCommand('press', ['@e2'])), 'ref_frame_expired');
+    },
+  );
+});
+
+test('Provider-backed integration native audit preserves Apple issues beside heuristics', async () => {
+  let nativeCalls = 0;
+  const order: string[] = [];
+  await withAuditScenario(
+    [
+      {
+        ...snapshotEntry(FINDING_NODES),
+        repeat: true,
+        result: () => {
+          order.push('snapshot');
+          return { nodes: FINDING_NODES, truncated: false };
+        },
+      },
+      {
+        command: 'ios.runner.accessibilityAudit',
+        deviceId: DEVICE_ID,
+        platform: 'apple',
+        repeat: true,
+        result: () => {
+          nativeCalls++;
+          order.push('audit');
+          return {
+            auditIssues: [
+              {
+                auditType: 'contrast',
+                description: 'Low contrast',
+                rect: { x: 10, y: 60, width: 30, height: 30 },
+              },
+              { auditType: 'dynamicType', description: 'Does not scale' },
+            ],
+          };
+        },
+      },
+      snapshotEntry(FINDING_NODES),
+      snapshotEntry(FINDING_NODES),
+    ],
+    async (daemon) => {
+      const result = assertRpcOk(await daemon.callCommand('audit', []));
+      assert.equal(nativeCalls, 1);
+      assert.equal(order.at(-1), 'audit');
+      assert.ok(order.slice(0, -1).every((call) => call === 'snapshot'));
+      const findings = result.findings as Array<Record<string, unknown>>;
+      assert.deepEqual(
+        findings.filter((finding) => finding.source === 'native'),
+        [
+          {
+            source: 'native',
+            kind: 'native',
+            severity: 'warning',
+            platform: 'ios',
+            auditType: 'contrast',
+            description: 'Low contrast',
+            ref: '@e2',
+            role: 'button',
+            label: 'Menu',
+            rect: { x: 10, y: 60, width: 30, height: 30 },
+          },
+          {
+            source: 'native',
+            kind: 'native',
+            severity: 'warning',
+            platform: 'ios',
+            auditType: 'dynamicType',
+            description: 'Does not scale',
+          },
+        ],
+      );
+      assert.deepEqual(
+        findings.filter((finding) => finding.kind !== 'native').map((finding) => finding.kind),
+        ['small-target', 'missing-name'],
+      );
+      const second = assertRpcOk(await daemon.callCommand('audit', []));
+      assert.equal(nativeCalls, 2);
+      assert.deepEqual(second.findings, result.findings);
+    },
+  );
+});
+
+test('Provider-backed integration publishes a native-only matched ref without an earlier snapshot command', async () => {
+  await withAuditScenario(
+    [
+      snapshotEntry(CLEAN_NODES),
+      snapshotEntry(CLEAN_NODES),
+      {
+        command: 'ios.runner.accessibilityAudit',
+        deviceId: DEVICE_ID,
+        platform: 'apple',
+        result: {
+          auditIssues: [
+            {
+              auditType: 'futureAppleCheck',
+              description: 'Check image',
+              rect: { x: 20, y: 300, width: 20, height: 20 },
+            },
+          ],
+        },
+      },
+      TAP_ENTRY,
+    ],
+    async (daemon, tapRequests) => {
+      const result = assertRpcOk(await daemon.callCommand('audit', []));
+      assert.deepEqual(result.findings, [
+        {
+          source: 'native',
+          kind: 'native',
+          severity: 'warning',
+          platform: 'ios',
+          auditType: 'unknown:futureAppleCheck',
+          description: 'Check image',
+          rect: { x: 20, y: 300, width: 20, height: 20 },
+          ref: '@e4',
+          role: 'image',
+        },
+      ]);
+      assert.equal(typeof result.refsGeneration, 'number');
+      assertRpcOk(await daemon.callCommand('press', [`@e4~s${result.refsGeneration}`]));
+      assert.deepEqual(
+        tapRequests().map(({ x, y }) => ({ x, y })),
+        [{ x: 30, y: 310 }],
+      );
     },
   );
 });

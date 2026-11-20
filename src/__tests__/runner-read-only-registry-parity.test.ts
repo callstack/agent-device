@@ -20,7 +20,7 @@ const { isReadOnlyRunnerCommand, RUNNER_COMMAND_TRAITS } = (await import(
 )) as RunnerTraits;
 
 type RegistryRequest = Pick<DispatchedCommand, 'command'> &
-  Partial<Pick<DispatchedCommand, 'positionals'>>;
+  Partial<Pick<DispatchedCommand, 'positionals'>> & { unrecordedRead?: true };
 
 // The runner owns no mapping to the registry, so this is the one declared place that pairs each
 // runner wire command with the registry request that issues it. A runner command with no counterpart
@@ -39,6 +39,7 @@ const REGISTRY_COUNTERPART: Record<RunnerName, RegistryRequest> = {
   querySelector: { command: 'is' },
   readText: { command: 'get' },
   snapshot: { command: 'snapshot' },
+  accessibilityAudit: { command: 'audit', unrecordedRead: true },
   screenshot: { command: 'screenshot' },
   backInApp: { command: 'back' },
   home: { command: 'home' },
@@ -90,9 +91,14 @@ test('every runner command is paired with a registry request, internal, declared
   assert.deepEqual(declared, [...RUNNER_COMMANDS].sort());
 });
 
-test('the runner read-only set equals the runner commands whose registry request observes the app', () => {
+test('runner read-only traits agree with recorded effects and unrecorded reads', () => {
   for (const [name, request] of Object.entries(REGISTRY_COUNTERPART)) {
     const effect = resolveCommandRecordingEffect({ positionals: [], ...request, flags: {} });
+    if (request.unrecordedRead) {
+      assert.equal(effect, undefined, `${name} is not recorded`);
+      assert.equal(isReadOnlyRunnerCommand({ command: name }), true, name);
+      continue;
+    }
     assert.equal(
       isReadOnlyRunnerCommand({ command: name }),
       effect === 'observes-app',

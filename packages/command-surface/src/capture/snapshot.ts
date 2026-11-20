@@ -111,42 +111,77 @@ export const AUDIT_COMMAND_OUTPUT_SCHEMAS = {
     {
       findings: {
         type: 'array',
-        items: objectSchema(
-          {
-            kind: enumSchema(['small-target', 'missing-name', 'ambiguous-name', 'covered-control']),
-            severity: enumSchema(['warning', 'observation']),
-            ref: stringSchema('Plain ref, usable in the frame this audit published.'),
-            rect: objectSchema(
+        items: {
+          oneOf: [
+            objectSchema(
               {
-                x: numberSchema(),
-                y: numberSchema(),
-                width: numberSchema(),
-                height: numberSchema(),
-              },
-              ['x', 'y', 'width', 'height'],
-            ),
-            role: stringSchema(),
-            label: stringSchema(),
-            identifier: stringSchema(),
-            detail: {
-              oneOf: [
-                // A `small-target` detail.
-                objectSchema(
+                kind: enumSchema([
+                  'small-target',
+                  'missing-name',
+                  'ambiguous-name',
+                  'covered-control',
+                ]),
+                severity: enumSchema(['warning', 'observation']),
+                ref: stringSchema('Plain ref, usable in the frame this audit published.'),
+                rect: objectSchema(
                   {
-                    unit: enumSchema(['pt', 'dp']),
+                    x: numberSchema(),
+                    y: numberSchema(),
                     width: numberSchema(),
                     height: numberSchema(),
-                    recommendedSize: numberSchema(),
                   },
-                  ['unit', 'width', 'height', 'recommendedSize'],
+                  ['x', 'y', 'width', 'height'],
                 ),
-                // An `ambiguous-name` detail.
-                objectSchema({ name: stringSchema(), count: numberSchema() }, ['name', 'count']),
-              ],
-            },
-          },
-          ['kind', 'severity', 'ref', 'role'],
-        ),
+                role: stringSchema(),
+                label: stringSchema(),
+                identifier: stringSchema(),
+                detail: {
+                  oneOf: [
+                    // A `small-target` detail.
+                    objectSchema(
+                      {
+                        unit: enumSchema(['pt', 'dp']),
+                        width: numberSchema(),
+                        height: numberSchema(),
+                        recommendedSize: numberSchema(),
+                      },
+                      ['unit', 'width', 'height', 'recommendedSize'],
+                    ),
+                    // An `ambiguous-name` detail.
+                    objectSchema({ name: stringSchema(), count: numberSchema() }, [
+                      'name',
+                      'count',
+                    ]),
+                  ],
+                },
+              },
+              ['kind', 'severity', 'ref', 'role'],
+            ),
+            objectSchema(
+              {
+                ref: stringSchema(),
+                role: stringSchema(),
+                label: stringSchema(),
+                source: enumSchema(['native']),
+                kind: enumSchema(['native']),
+                severity: enumSchema(['warning']),
+                platform: enumSchema(['ios', 'android']),
+                auditType: stringSchema(),
+                description: stringSchema(),
+                rect: objectSchema(
+                  {
+                    x: numberSchema(),
+                    y: numberSchema(),
+                    width: numberSchema(),
+                    height: numberSchema(),
+                  },
+                  ['x', 'y', 'width', 'height'],
+                ),
+              },
+              ['source', 'kind', 'severity', 'platform', 'auditType', 'description'],
+            ),
+          ],
+        },
       },
       guidance: objectSchema(
         {
@@ -187,7 +222,7 @@ export const auditCommandFacet = defineParameterlessCommandFacet({
     summary: 'Report advisory accessibility findings',
     searchHint: 'a11y lint voiceover talkback',
     cliDetail:
-      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role; a clickable Android container whose only actionable descendant is already a control reports that control once, for each finding kind the container reports itself. An Android role-less touchable reports under role `clickable`, a role the snapshot itself never shows, and joins the shared-name check only with a name of its own: one named only by its descendants is excluded, because TalkBack announces it by joining their text. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name.',
+      'Findings are a partial ref publication, like find: the text prints each ref pinned (@eN~sG), and a plain ref from before the audit stays refused after the frame expires. An audit with no findings changes no ref state. Target size is checked on iOS in points (44) and on Android in dp (48, from the captured display density); other targets report a limitation instead. Duplicate wrapper controls collapse only when a control is the sole child of a control with the same role; a clickable Android container whose only actionable descendant is already a control reports that control once, for each finding kind the container reports itself. An Android role-less touchable reports under role `clickable`, a role the snapshot itself never shows, and joins the shared-name check only with a name of its own: one named only by its descendants is excluded, because TalkBack announces it by joining their text. A name two or more controls of one role share is reported once per control, ignoring case and surrounding whitespace; controls of different roles may share a name. On iOS 17+ targets served by XCTest, the audit adds Apple contrast, element detection, hit region, description, and trait checks; it leaves out a hit region that small-target already reports. A unique frame match includes a ref, role, and name. Report findings without a rect without acting on an element.',
   },
   run: (client, input) => client.capture.audit(input),
 });
