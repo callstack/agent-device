@@ -293,18 +293,6 @@ export function mergeParentFlags<TFlags extends Record<string, unknown>>(
   return childFlags;
 }
 
-/**
- * The parent request's meta for a child command it dispatches. `note` is the client's text about
- * the parent request, so a child never carries it. All other meta passes through unchanged.
- */
-export function childRequestMeta<TMeta extends { note?: string }>(
-  meta: TMeta | undefined,
-): Omit<TMeta, 'note'> | undefined {
-  if (meta?.note === undefined) return meta;
-  const { note: _note, ...childMeta } = meta;
-  return childMeta;
-}
-
 // Phase 4 (agent-cost) batch-step elision. When a non-default response level is
 // requested for the whole batch, INTERMEDIATE steps are forced to `digest` so a
 // multi-step run collapses tokens, while the FINAL step keeps the requested
@@ -320,11 +308,10 @@ function batchStepResponseLevel(
 }
 
 function batchStepMeta(meta: BatchRequest['meta'], isFinalStep: boolean): BatchRequest['meta'] {
-  const stepMeta = childRequestMeta(meta);
-  const requested = stepMeta?.responseLevel;
+  const requested = meta?.responseLevel;
   const stepLevel = batchStepResponseLevel(requested, isFinalStep);
-  if (stepLevel === requested) return stepMeta;
-  return { ...stepMeta, responseLevel: stepLevel };
+  if (stepLevel === requested) return meta;
+  return { ...meta, responseLevel: stepLevel };
 }
 
 async function runBatchStep(
