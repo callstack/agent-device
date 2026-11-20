@@ -2409,15 +2409,37 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 
 ### Scroll
 
-* `scroll <direction> [amount]` takes the finger path as a fraction of the viewport (`0.5` is half), or `--pixels <n>` for a fixed distance. Large distances are clamped. The app’s scroll physics decide the final offset, so a scroll does not land on an exact position.
-* `scroll refresh` is pull-to-refresh: one slow pull down (`scroll up 0.4 --duration-ms 1200` by default; an amount, `--pixels` or `--duration-ms` overrides it). Android aims the pull inside the scroll container. On iOS it runs down the middle of the screen, so a list that sits only in the top or bottom part of the screen is not pulled. A result of `movement: unchanged` means the pull changed nothing on screen, not that a refresh ran and found nothing new; check the app’s own refresh indicator or content. It refuses with `reason: scroll_refresh_not_at_top` when content is hidden above; run `scroll top` first.
-* `scroll <direction> --until <selector>` repeats passes until the selector is on screen. A vertical search fails with `COMMAND_FAILED` and `reason: scroll_until_no_progress` if repeated captures show no progress in the selected scroll container. If content moved before stopping, the reason is `scroll_until_edge_reached`. If no container is found, it compares the visible tree. It stops after at most 12 gestures by default. For a longer list, use `scroll down --until 'id="row-512"' --max-passes 90` (1–200 gestures). The pass limit does not extend the 90-second request timeout. Large pass budgets can hit that timeout; inspect the current screen and continue with another search if that happens. Add an amount (`scroll down 0.8 --until <selector>`) to widen each pass. Use it in `.ad` scripts too, instead of fixed amounts that depend on screen size; see [Replay and E2E testing](/docs/replay-e2e).
-* Default snapshot text summarizes off-screen interactive content instead of listing refs. `scroll <direction> --settle` (and `back --settle`) waits for the UI to go quiet and returns the diff with fresh refs, so you don’t need another `snapshot -i`. Settle is best-effort and never fails the action.
-* On Android, settle ignores an allowlist of system-bar containers and shade/keyguard status headers; other SystemUI overlays remain content. Appium settle also applies package rules for keyboard and system chrome.
-* With a keyboard up on iOS or Android, the swipe stays above the keyboard (reported as `keyboardAvoided` and `keyboardMinY`) and the keyboard stays open. If too little room is left, the command refuses with `scroll_keyboard_occludes_surface`; end editing first. On Android, use `keyboard dismiss`. On iOS, use a visible dismissal control.
-* A directional scroll reports what it observed as `movement`: `moved`, `at-edge` (no change and no more content that way), `unchanged` (no change, no edge signal), or `unobserved` (no reliable comparison). If nothing changed, the swipe ran inside a container, and that container still has hidden content in that direction, it refuses with `scroll_no_progress`; the hint names the usual causes: a focused keyboard, a nested scroller, or a list that needs a raw `swipe`. See `agent-device help scroll`.
-* `--no-post-gesture-stabilization` is for a caller that verifies the screen by polling it, for example a test runner that re-reads the tree every 100ms. It skips the two checks that follow a gesture: the `movement` check above (`scroll <direction>` only), and the wait that makes the first read after the gesture agree across two captures (see [Assertions](#assertions)). The scroll returns right after its gesture with no `movement` field and no `scroll_no_progress` refusal, and the next read is a plain capture without `postGestureOutcome`. Without your own polling, that read can return a tree the gesture is still moving. `swipe` and `gesture swipe` accept it too; other gestures never stabilize, so the CLI refuses the flag on them and the other routes ignore it. None of the checks run on web and desktop targets. With `--settle`, the settle observation already reports the outcome, so the option only removes the wait before settle’s first capture. The per-pass checks of `scroll top`, `scroll bottom`, and `scroll --until` stay.
-* The opt-out belongs to the caller. Pass `--no-post-gesture-stabilization` on the command, or `postGestureStabilization: false` in the Node client or a batch step. `open` accepts it too: when the open launches an app, it skips the first-screen wait and drops any wait an earlier scroll or swipe left pending (see [Navigation](#navigation)). To apply it to every `scroll`, `swipe`, `gesture swipe`, and `open` command, set `postGestureStabilization` to `false` in your user config, or set `AGENT_DEVICE_POST_GESTURE_STABILIZATION=0`. `./agent-device.json` rejects the key, so a repository cannot turn the check off for whoever runs it, and a recorded `.ad` script does not carry it, so a replay keeps the wait. MCP and AI SDK tools do not offer it; an operator sets the variable or the user config key for the process that serves them.
+Scroll in a direction or to an edge.
+
+```bash
+agent-device scroll <direction|top|bottom|refresh> [amount] [--until <selector>] [--max-passes <n>] [--pixels <n>] [--duration-ms <ms>] [--settle]
+```
+
+| Option                            | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--duration-ms <ms>`              | Scroll: pace the gesture over this duration when supported                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--pixels <n>`                    | Scroll: explicit gesture distance in pixels                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `--until <selector>`              | Scroll: repeat passes until the selector is visible on screen                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `--max-passes <n>`                | Scroll –until: maximum gestures                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--settle`                        | After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response (best-effort; never fails the action)                                                                                                                                                                                                                                                                                                                       |
+| `--settle-quiet <ms>`             | Settle: quiet window the UI must hold to count as settled (default 500ms; 300ms when the settled tree comes from the iOS simulator snapshot bridge). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the –timeout settle deadline; a replacement from a screen the pre-action capture read as presenting nothing, such as a tab switch, gets no 1500ms confirmation and keeps the asked window |
+| `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen                                                                                                                                                                                                                                       |
+| `--timeout <ms>`                  | Boot/Open/Prepare: startup budget covering the device boot (and runner preparation for prepare). Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With –settle: the settle-wait deadline (default 10s)                                                                                                                                                                                                                                                   |
+
+Supported targets: [Scroll](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help scroll`.
+
+Things to know:
+
+* A scroll does not land on an exact position. The amount is a fraction of the viewport (`0.5` is half), and the app’s scroll physics decide the final offset.
+* To reach an off-screen element, use `scroll down --until <selector>`. It also works in `.ad` scripts on any screen size; see [Replay and E2E testing](/docs/replay-e2e). It stops after 12 gestures by default. For a long list, raise `--max-passes` (1–200 gestures). If the 90-second request timeout ends the search, inspect the screen and continue with another search.
+* Add `--settle` to get the changed screen with fresh refs in the same response. You then do not need another `snapshot -i`.
+* Read `movement` in the result: `moved`, `at-edge`, `unchanged`, or `unobserved`. After `scroll refresh`, `unchanged` means that nothing changed on screen. It does not mean that a refresh ran and found nothing new, so check the app’s refresh indicator or content.
+* `scroll refresh` is one slow pull down (`scroll up 0.4 --duration-ms 1200` by default; an amount, `--pixels`, or `--duration-ms` overrides it). On iOS, the pull runs down the middle of the screen. A list that sits only in the top or bottom part of the screen is not pulled.
+* With a keyboard up, the scroll stays above the keyboard and leaves it open. The result reports this as `keyboardAvoided` and `keyboardMinY`. If too little room is left, end editing first. On Android, use `keyboard dismiss`. On iOS, use a visible dismissal control.
+* A refused scroll names its cause in `details.reason`, and the hint gives the next step. The reasons are `scroll_refresh_not_at_top` (run `scroll top` first), `scroll_until_no_progress`, `scroll_until_edge_reached`, `scroll_keyboard_occludes_surface`, and `scroll_no_progress`.
+* `--no-post-gesture-stabilization` is for a caller that verifies the screen by polling it, such as a test runner. Without your own polling, the next read can return a tree that the gesture is still moving. In the Node client or a batch step, pass `postGestureStabilization: false`. To apply it to every command, set `postGestureStabilization` to `false` in your user config, or set `AGENT_DEVICE_POST_GESTURE_STABILIZATION=0`. `./agent-device.json` rejects the key, a recorded `.ad` script does not carry it, and MCP and AI SDK tools do not offer it.
 
 ## Retry after a failed command
 
@@ -2748,18 +2770,39 @@ The `snapshot` response carries `targetActivation` and a warning:
 
 ## Clipboard
 
+Read or write device clipboard text.
+
+```bash
+agent-device clipboard read | clipboard write <text>
+```
+
+Supported targets: [Clipboard read and write](/docs/capabilities#system-and-hardware).
+
+Exact behavior: `agent-device help clipboard`.
+
 ```bash
 agent-device clipboard read
 agent-device clipboard write "https://example.com"
 agent-device clipboard write ""   # clear clipboard
 ```
 
-* `clipboard read` returns the target’s clipboard text; `clipboard write <text>` replaces it. Treat read output as sensitive: it can contain copied secrets.
-* Works with the session device or a device selector (`--platform`, `--device`, `--udid`, `--serial`).
-* Supported on macOS, iOS simulators, and Android builds whose clipboard service answers `cmd clipboard`. iOS physical devices return `UNSUPPORTED_OPERATION`.
-* On Android 16 (API 36), both actions return `UNSUPPORTED_OPERATION` and `capabilities` omits `clipboard`; see [Known limitations](/docs/known-limitations#android-no-clipboard-access-over-adb-on-android-16).
+Things to know:
+
+* Treat `clipboard read` output as sensitive. It can contain copied secrets.
+* The command works without a session when you pass a device selector (`--platform`, `--device`, `--udid`, `--serial`).
+* iOS physical devices return `UNSUPPORTED_OPERATION`. Android 16 (API 36) does too, and `capabilities` omits `clipboard` there; see [Known limitations](/docs/known-limitations#android-no-clipboard-access-over-adb-on-android-16).
 
 ## Keyboard
+
+Inspect, press, or dismiss the device keyboard.
+
+```bash
+agent-device keyboard [status|get|dismiss|enter|return]
+```
+
+Supported targets: [Keyboard dismiss, enter, and status](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help keyboard`.
 
 ```bash
 agent-device keyboard status
@@ -2768,9 +2811,12 @@ agent-device keyboard dismiss
 agent-device keyboard enter
 ```
 
-* `keyboard status` (alias `keyboard get`) reports whether the software keyboard is visible. When it can identify a visible Return control, it reports its action as `returnKey` and can include its localized accessibility label as `returnKeyLabel`. A visible keyboard whose Return action cannot be identified reports `unknown`. The native iOS runner uses a recognized Return key accessibility identifier, such as `Search`, to report the action and label. A label alone leaves the action unknown and the label field absent. Only Android can report `none`. The native iOS runner returns `OBSERVATION_UNAVAILABLE` when it cannot establish visibility.
-* `keyboard enter` (alias `keyboard return`) sends Return to the focused input. Focus the intended field first. The app can submit, advance focus, or insert a newline. This can work with the software keyboard hidden.
-* `keyboard dismiss` dismisses the keyboard on Android. On the native iOS runner it succeeds as a no-op when the software keyboard is hidden. With a visible keyboard it returns `keyboard_dismiss_unavailable` with `dispatched: no`. Press the visible Hide Keyboard key or the app control that ends editing. If the app supports interactive dismissal, use `gesture pan x y 0 dy durationMs` with a positive `dy` to drag down. Choose a start point inside the scrollable content from a fresh screenshot and check the result with `keyboard status`. Appium uses its own dismissal behavior.
+Things to know:
+
+* `keyboard status` (alias `keyboard get`) reports whether the software keyboard is visible. When it can identify the Return key, it reports the key’s action as `returnKey`. A value of `unknown` means that the keyboard is visible but the action could not be identified. On iOS, `OBSERVATION_UNAVAILABLE` means that the runner could not establish visibility.
+* `keyboard enter` (alias `keyboard return`) sends Return to the focused input, so focus the intended field first. The app decides what Return does: submit, advance focus, or insert a newline. It can work with the software keyboard hidden.
+* On iOS, `keyboard dismiss` does not close a visible keyboard. It returns `keyboard_dismiss_unavailable` with `dispatched: no`. Press the visible Hide Keyboard key or the app control that ends editing. If the app supports interactive dismissal, drag down from inside the scrollable content with `gesture pan x y 0 dy durationMs` and a positive `dy`. Check the result with `keyboard status`.
+* On Android, `keyboard dismiss` asks the platform to close the keyboard. If the keyboard stays up, it returns `keyboard_dismiss_unavailable`.
 
 ## Performance diagnostics
 
