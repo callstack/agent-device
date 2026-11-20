@@ -138,12 +138,12 @@ export async function readReusableLocalDaemon(
   if (!observed) return null;
   const { info: existing, decision } = observed;
   if (decision.kind === 'reuse') return existing;
+  // Ordered before the newer-daemon refusal on purpose: a client that may not retire a contender
+  // reports the race and lets `ensureDaemon` judge the winner again, where that refusal belongs.
+  if (!settings.retireIncompatibleContender) throw daemonContendedError();
   if (decision.kind === 'refuseNewer') {
     throw newerDaemonRefusedError(existing, decision, settings.paths.baseDir);
   }
-
-  if (!settings.retireIncompatibleContender) throw daemonContendedError();
-
   if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
   const notice = {
     stateDir: settings.paths.baseDir,
