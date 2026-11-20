@@ -1,9 +1,13 @@
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
-import { registerPlatformPlugin } from '../platform-plugin-registry.ts';
+import type { RequiredPlatform } from '@agent-device/contracts/platform-module';
+import {
+  registerPlatformPluginSet,
+  type PlatformPluginAbsence,
+} from '../platform-plugin-registry.ts';
 import { applePlugin } from '@agent-device/platform-apple';
 import { vegaPlugin } from '@agent-device/platform-vega';
-import type { Platform, DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const androidPlugin = {
   id: 'android',
@@ -68,31 +72,30 @@ export const BUILTIN_PLATFORM_PLUGINS = [
 type CoveredPlatform = (typeof BUILTIN_PLATFORM_PLUGINS)[number]['platforms'][number];
 
 /**
- * Compile-time EXHAUSTIVENESS: a new `Platform` literal added to `PLATFORMS`
- * without a plugin makes `Platform` no longer extend `CoveredPlatform`, so this
- * alias resolves to `false`, violating the `extends true` constraint and failing
- * the build. This is the registry counterpart of the deleted `getInteractor`
- * switch's exhaustive `never` default. (Equivalent in spirit to an
- * `Object.fromEntries(registeredPlatforms()...) satisfies Record<Platform, true>`
- * sketch, but type-level so it cannot be satisfied vacuously by a runtime map.)
+ * The registry counterpart of the deleted `getInteractor` switch's exhaustive `never` default: a
+ * new required family (ADR 0034: `apple`, `android`) added to `REQUIRED_PLATFORMS` without a plugin
+ * makes `RequiredPlatform` no longer extend `CoveredPlatform`, so the alias resolves to `false` and
+ * the build fails. Optional families may be absent — they move into `platform` plugins — so they
+ * are deliberately not required here.
  */
 type AssertTrue<T extends true> = T;
 /** Exported only so `noUnusedLocals` keeps the guard alive. */
-export type BuiltinPluginsCoverAllPlatforms = AssertTrue<
-  [Platform] extends [CoveredPlatform] ? true : false
+export type BuiltinPluginsCoverRequiredPlatforms = AssertTrue<
+  [RequiredPlatform] extends [CoveredPlatform] ? true : false
 >;
 
 let registered = false;
 
 /**
- * Registers every builtin plugin into the shared registry exactly once
- * (idempotent). Called at the top of `core/interactors.ts` so the registry is
- * populated before any `getPlugin` lookup; safe to call again from tests.
+ * Composes every builtin plugin into the shared registry exactly once (idempotent), and gives the
+ * registry the builtin set's absence reporter as one input. Called at the top of `core/interactors.ts`
+ * so the registry is populated before any `getPlugin` lookup; safe to call again from tests.
+ * `reportAbsent` is how the registry reports a family the builtin set does not own, so the caller
+ * decides which core's plugin release an installation hint names (ADR 0034). It belongs to the set —
+ * not to a plugin — so no plugin can swap this process's absence policy.
  */
-export function registerBuiltinPlatformPlugins(): void {
+export function registerBuiltinPlatformPlugins(reportAbsent: PlatformPluginAbsence): void {
   if (registered) return;
-  for (const plugin of BUILTIN_PLATFORM_PLUGINS) {
-    registerPlatformPlugin(plugin);
-  }
+  registerPlatformPluginSet(BUILTIN_PLATFORM_PLUGINS, reportAbsent);
   registered = true;
 }

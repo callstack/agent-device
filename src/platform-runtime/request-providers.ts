@@ -20,6 +20,7 @@ import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-sc
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { tryGetPlugin } from '../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
+import { missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
 import { loadAndroidMechanics } from '../platform-runtime-android-mechanics.ts';
 
 export type PlatformProviderResolver<TResult> = (
@@ -329,11 +330,13 @@ function platformGatedResolverApplies(
   key: PlatformGatedProviderResolverKey,
   device: DeviceInfo,
 ): boolean {
+  // A predicate, never a throw: an absent optional family gates no resolver, and the runtime or
+  // interactor lookup the same request then performs raises the typed plugin-not-installed outcome.
   // The registry is intentionally loaded by the root composition, not by the daemon request path.
   return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
 }
 
-registerBuiltinPlatformPlugins();
+registerBuiltinPlatformPlugins(missingPlatformPlugin);
 
 async function requestPlatformProviderScopeWrappers(
   scopedProviders: ResolvedRequestPlatformProviders,

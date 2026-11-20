@@ -11,6 +11,7 @@ import {
   type DeviceClaimSelectors,
   type DeviceClaimStaleReleaseOutcome,
 } from '@agent-device/daemon-contracts/device-claims';
+import { readVersion } from '@agent-device/host-kit/version';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 
 /**
@@ -27,6 +28,9 @@ export const createClaimRecoveryGatewayFor =
     createPlatformRuntimeGateway({
       host,
       stateDir: input.stateDir,
+      // This composition names its own core version so an absent family's install hint points at
+      // the release this process runs (ADR 0034).
+      coreVersion: readVersion(),
       sessionsDir: input.sessionsDir,
       ownedProcesses: input.ownedProcesses,
       resolveSessionArtifacts: input.resolveSessionArtifacts,

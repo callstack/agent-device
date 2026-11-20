@@ -26,6 +26,7 @@ import { composeDaemonRuntimeDeps } from './daemon-composition.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import {
   gatewayFixture as gateway,
+  runtimeModuleRegistryFixture as moduleRegistry,
   gatewayFixtureDevice as device,
   gatewayFixtureScope as scope,
   LIFECYCLE_FACETS,
@@ -506,9 +507,9 @@ describe('composed platform runtime gateway', () => {
       throw new Error('unselected web runtime must stay lazy');
     });
     const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map([
-        ['apple', { family: 'apple', loadRuntime: appleLoad }],
-        ['web', { family: 'web', loadRuntime: webLoad }],
+      modules: moduleRegistry([
+        { family: 'apple', loadRuntime: appleLoad },
+        { family: 'web', loadRuntime: webLoad },
       ]),
       loadHost: async () => ({}) as PlatformRuntimeHost,
     });
@@ -604,9 +605,9 @@ describe('composed platform runtime gateway', () => {
       throw new Error('unselected Apple runtime must stay lazy');
     });
     const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map([
-        ['web', { family: 'web', loadRuntime: webLoad }],
-        ['apple', { family: 'apple', loadRuntime: appleLoad }],
+      modules: moduleRegistry([
+        { family: 'web', loadRuntime: webLoad },
+        { family: 'apple', loadRuntime: appleLoad },
       ]),
       loadHost: async () => ({}) as PlatformRuntimeHost,
     });
@@ -641,7 +642,7 @@ describe('composed platform runtime gateway', () => {
     } as unknown as PlatformRuntimeHost;
     const loadHost = vi.fn(async () => host);
     const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map(),
+      modules: moduleRegistry(),
       loadHost,
     });
     const lifecycle = runtimeGateway.applicationLifecycle;
@@ -725,7 +726,7 @@ describe('composed platform runtime gateway', () => {
       throw new Error('stale Limrun identity must not fall back to local Android');
     });
     const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map([['android', { family: 'android', loadRuntime: localLoad }]]),
+      modules: moduleRegistry([{ family: 'android', loadRuntime: localLoad }]),
       loadHost: async () => ({}) as PlatformRuntimeHost,
       providerRuntimes: [registration.runtime],
       providerModules: [{ runtime: registration.runtime, module: providerModule }],
@@ -817,7 +818,7 @@ describe('composed platform runtime gateway', () => {
       runtimeOwner({ ref: { kind: 'local-family', family: 'apple' } }),
     );
     const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map([['apple', { family: 'apple', loadRuntime: localLoad }]]),
+      modules: moduleRegistry([{ family: 'apple', loadRuntime: localLoad }]),
       loadHost: hostLoad,
       providerRuntimes: [
         {
@@ -866,7 +867,7 @@ describe('composed platform runtime gateway', () => {
         load: async () => owner,
       });
       const runtimeGateway = createComposedPlatformRuntimeGateway({
-        modules: new Map([['apple', { family: 'apple', loadRuntime: localLoad }]]),
+        modules: moduleRegistry([{ family: 'apple', loadRuntime: localLoad }]),
         loadHost: async () => ({}) as PlatformRuntimeHost,
         providerRuntimes: [registration.runtime],
         providerModules: [registration],
@@ -893,38 +894,14 @@ describe('composed platform runtime gateway', () => {
     },
   );
 
-  test('rejects a swapped local module before loading host mechanics', async () => {
-    const hostLoad = vi.fn(async () => ({}) as PlatformRuntimeHost);
-    const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map([
-        [
-          'apple',
-          {
-            family: 'android',
-            loadRuntime: async () =>
-              runtimeOwner({ ref: { kind: 'local-family', family: 'android' } }),
-          },
-        ],
-      ]),
-      loadHost: hostLoad,
-    });
-    await expect(
-      runtimeGateway.bind({ device, intent: { kind: 'ordinary' }, scope }),
-    ).rejects.toMatchObject({ details: { reason: 'runtime-contract-invalid' } });
-    expect(hostLoad).not.toHaveBeenCalled();
-  });
-
   test('accepts transport-composed facts from the selected local family owner', async () => {
     const ref = { kind: 'local-family', family: 'apple' } as const;
     const runtimeGateway = createComposedPlatformRuntimeGateway({
-      modules: new Map([
-        [
-          'apple',
-          {
-            family: 'apple',
-            loadRuntime: async () => runtimeOwner({ ref, providerMode: 'transport-composed' }),
-          },
-        ],
+      modules: moduleRegistry([
+        {
+          family: 'apple',
+          loadRuntime: async () => runtimeOwner({ ref, providerMode: 'transport-composed' }),
+        },
       ]),
       loadHost: async () => ({}) as PlatformRuntimeHost,
     });
