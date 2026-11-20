@@ -71,12 +71,16 @@ function testInventoryModules(
   ];
 }
 
+/** A core version no release channel pins, so a fixture's install hint names the bare package. */
+export const TEST_CORE_VERSION = '0.0.0-test';
+
 export function createTestDeviceInventoryGateways(
   options: TestDeviceInventoryOptions = {},
 ): ComposedDeviceInventoryGateways {
   return createComposedDeviceInventoryGateways({
     registry: createPlatformModuleRegistry(
       testInventoryModules(options.local ?? (async () => [] as readonly DeviceInfo[])),
+      TEST_CORE_VERSION,
     ),
     loadHost: async () => testInventoryHost,
     provider: options.provider,

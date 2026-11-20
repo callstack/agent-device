@@ -22,6 +22,7 @@ import {
   createUnavailablePlatformRuntimeFacts,
 } from '@agent-device/contracts/platform-runtime-unavailable';
 import { runStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
+import type { PlatformModuleRegistry } from '@agent-device/contracts/platform-module';
 import {
   deviceIdentity,
   deviceShape,
@@ -52,7 +53,8 @@ const PLATFORM_RUNTIME_GATEWAY_REASONS = {
 } as const satisfies ReasonTable<'platform runtime'>;
 
 export function createComposedPlatformRuntimeGateway(options: {
-  modules: ReadonlyMap<Platform, PlatformRuntimeModule>;
+  /** The composed family modules: the one authority on which families this runtime has. */
+  modules: PlatformModuleRegistry<PlatformRuntimeModule>;
   loadHost: () => Promise<PlatformRuntimeHost>;
   providerRuntimes?: readonly ProviderDeviceRuntime[];
   providerModules?: readonly PlatformRuntimeProviderRegistration[];
@@ -131,13 +133,10 @@ export function createComposedPlatformRuntimeGateway(options: {
     ensureOpen();
     const existing = localLoads.get(family);
     if (existing) return await existing;
+    // The module registry is the one authority on which families this runtime has (ADR 0034): an
+    // absent optional family raises the typed plugin-not-installed outcome here, before any host
+    // load, and a composition cannot be built without a required family at all.
     const module = options.modules.get(family);
-    if (!module) throw runtimeContractError(`Missing platform runtime module for ${family}`);
-    if (module.family !== family) {
-      throw runtimeContractError(
-        `Platform runtime module registered for ${family} declares ${module.family}`,
-      );
-    }
     const pending = loadHost().then(async (host) => {
       const owner = await module.loadRuntime(host);
       if (owner.owner.kind !== 'local-family' || owner.owner.family !== family) {
