@@ -3,6 +3,11 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { LimrunPlatform } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 
+/** The `error.details.reason` values a Limrun credential refusal publishes. */
+export const LIMRUN_CREDENTIAL_REASONS = {
+  missing: 'missing_provider_credentials',
+} as const satisfies Record<string, string>;
+
 /** The Limrun account and instance facts one host gives the provider. */
 export type LimrunCredentials = Readonly<{
   apiKey?: string;
@@ -67,7 +72,7 @@ export function requireLimrunCredentials(env: EnvMap): LimrunCredentials {
     'INVALID_ARGS',
     'Limrun requires LIMRUN_API_KEY, or an instance variable set.',
     {
-      reason: 'missing_provider_credentials',
+      reason: LIMRUN_CREDENTIAL_REASONS.missing,
       hint: 'Set LIMRUN_API_KEY for the account, or the full LIM_IOS_INSTANCE_* or LIM_ANDROID_INSTANCE_* set for an existing instance.',
     },
   );

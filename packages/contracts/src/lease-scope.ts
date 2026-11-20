@@ -94,13 +94,18 @@ type LeaseOptionsLike = {
   clientId?: string;
 };
 
+/** The `error.details.reason` values a lease-scope refusal publishes. */
+const LEASE_SCOPE_REASONS = {
+  remoteSessionRequired: 'REMOTE_SESSION_REQUIRED',
+} as const satisfies Record<string, string>;
+
 /** The refusal for a request on a provider lease that names no session. */
 export function remoteSessionRequiredError(leaseProvider: string | undefined): AppError {
   return new AppError(
     'INVALID_ARGS',
     'A leased remote connection needs its session named: pass --session <name>, set AGENT_DEVICE_SESSION, or send the session parameter.',
     {
-      reason: 'REMOTE_SESSION_REQUIRED',
+      reason: LEASE_SCOPE_REASONS.remoteSessionRequired,
       ...(leaseProvider === undefined ? {} : { leaseProvider }),
       hint: "Without a name, a command could reach another agent's connection.",
     },

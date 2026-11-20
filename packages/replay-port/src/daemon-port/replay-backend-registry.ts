@@ -120,7 +120,8 @@ async function missingReplayBackend(id: ReplayFormat): Promise<AppError> {
     'INVALID_ARGS',
     `Replay backend ${id} requires ${packageName}. Run ${installCommand}, then retry the original command with all its arguments.`,
     {
-      reason: 'plugin-not-installed',
+      reason: (await import('@agent-device/contracts/plugin-installation'))
+        .PLUGIN_INSTALLATION_REASONS.notInstalled,
       backend: id,
       package: packageName,
       installCommand,
