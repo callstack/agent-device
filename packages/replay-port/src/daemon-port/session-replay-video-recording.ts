@@ -49,12 +49,10 @@ export async function startReplayTestVideoRecordingIfReady(
   const videoPath = artifactsDir
     ? path.join(artifactsDir, `recording${extension}`)
     : defaultRecordingPath(activeSession.device.platform);
-  const hideTouches = req.flags?.hideTouches === true;
   appendVideoTimingEvent(appendTimingEvent, {
     type: 'video_recording_start',
     session: sessionName,
     videoPath,
-    showTouches: !hideTouches,
   });
   emitDiagnostic({
     phase: 'replay_test_video_recording_start',
@@ -67,7 +65,7 @@ export async function startReplayTestVideoRecordingIfReady(
       sessionName,
       phase: 'start',
       outputPath: videoPath,
-      hideTouches,
+      hideTouches: req.flags?.hideTouches === true,
     }),
   );
   if (!startResponse.ok) {

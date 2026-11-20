@@ -100,3 +100,15 @@ test('buildNestedReplayFlags strips the suite recording flags from every attempt
   });
   assert.deepEqual(result, { timeoutMs: 5000, artifactsDir: '/suite-root/flow/attempt-1' });
 });
+
+// A config or env default can set `hideTouches` on every command. Without `--record-video` it has no
+// effect, so it must not reach an attempt either.
+test('buildNestedReplayFlags drops a hideTouches default when the suite records nothing', () => {
+  const result = buildNestedReplayFlags({
+    parentFlags: { hideTouches: true },
+    platform: undefined,
+    target: undefined,
+    artifactsDir: '/suite-root/flow/attempt-1',
+  });
+  assert.deepEqual(result, { artifactsDir: '/suite-root/flow/attempt-1' });
+});

@@ -140,8 +140,9 @@ export function buildNestedReplayFlags(params: {
 
 /**
  * Strips what belongs to the SUITE rather than to one attempt: the harness's own
- * `--record-video` and its `--hide-touches`, and (#1802) `replayScriptSources` — the suite's whole discovery result, which
- * `buildNestedReplayFlags` replaces with the single `replayScriptSource` this attempt runs.
+ * `--record-video` and its `--hide-touches`, and (#1802) `replayScriptSources` — the suite's
+ * whole discovery result, which `buildNestedReplayFlags` replaces with the single
+ * `replayScriptSource` this attempt runs.
  */
 function stripReplayTestHarnessFlags(flags: CommandFlags | undefined): CommandFlags | undefined {
   if (!flags) return flags;
@@ -461,12 +462,6 @@ function toReplayTestSuiteRequest(
   hostCwd: string,
 ): ReplayTestSuiteRequest {
   const flags = req.flags ?? {};
-  if (flags.hideTouches === true && flags.recordVideo !== true) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'test --hide-touches applies only to the attempt recordings of --record-video. Add --record-video, or drop --hide-touches.',
-    );
-  }
   const cwd = req.meta?.cwd;
   const artifactsDir = stringFlag(flags.artifactsDir);
   return {

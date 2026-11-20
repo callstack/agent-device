@@ -317,7 +317,7 @@ async function runRecordVideoSuite(params: {
     .readFileSync(timingPath, 'utf8')
     .trim()
     .split('\n')
-    .map((line) => JSON.parse(line) as { type?: string; showTouches?: boolean })
+    .map((line) => JSON.parse(line) as { type?: string })
     .filter((event) => event.type?.startsWith('video_'));
   return {
     recordingState,
@@ -357,7 +357,6 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     run.videoTimingEvents.map((event) => event.type),
     ['video_recording_start', 'video_preroll_done', 'video_tail_start', 'video_recording_stop'],
   );
-  assert.equal(run.videoTimingEvents[0]?.showTouches, true);
   assert.equal(
     fixture.nestedRequests.some((nestedReq) => nestedReq.flags?.recordVideo === true),
     false,
@@ -377,8 +376,6 @@ test('test --hide-touches starts each attempt recording without the touch overla
   });
 
   expectRecordVideoCalls({ ...run, startFlags: { hideTouches: true }, throwIfCanceled });
-  assert.equal(run.videoTimingEvents[0]?.type, 'video_recording_start');
-  assert.equal(run.videoTimingEvents[0]?.showTouches, false);
   assert.equal(
     fixture.nestedRequests.some(
       (nestedReq) => nestedReq.flags?.recordVideo === true || nestedReq.flags?.hideTouches,
