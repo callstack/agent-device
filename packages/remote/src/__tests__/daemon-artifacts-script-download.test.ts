@@ -11,7 +11,9 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
-import { materializeRemoteArtifacts } from '../daemon-artifacts.ts';
+import { downloadRemoteArtifact, materializeRemoteArtifacts } from '../daemon-artifacts.ts';
+import { withRecordLock } from '../script-publication-record.ts';
+import { publishScriptVersion } from '../script-version-publisher.ts';
 import { sendRemoteScriptOpen } from '../session-script-destination.ts';
 import {
   answer,
@@ -20,6 +22,7 @@ import {
   records,
   request,
   script,
+  soleRecord,
 } from './support/script-publication-fixtures.ts';
 
 vi.mock('@agent-device/host-kit/file', async (importOriginal) => {
@@ -663,4 +666,46 @@ test('an abort during script delivery keeps the recording fallback warning', asy
       ],
     },
   });
+});
+
+// #4518: an abort that lands while the publish waits for the record lock still publishes nothing.
+test('an abort while the publish waits for the record lock leaves the destination unchanged', async () => {
+  const { root, stateDir, destination } = journey();
+  const baseUrl = await artifactServer({ v1: { body: 'v1\n' }, v2: { body: 'v2\n' } });
+  const { id } = await open(baseUrl, stateDir, destination);
+  const { file } = soleRecord(stateDir);
+  const controller = new AbortController();
+  const download = Object.assign(
+    async (params: Parameters<typeof downloadRemoteArtifact>[0]) => {
+      const downloaded = await downloadRemoteArtifact({ ...params, signal: controller.signal });
+      // Hold the record lock, so the publish waits for it; abort, then release it.
+      let entered!: () => void;
+      const held = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let release!: () => void;
+      const releasing = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      void withRecordLock(file, async () => {
+        entered();
+        await releasing;
+      });
+      await held;
+      setImmediate(() => {
+        controller.abort();
+        release();
+      });
+      return downloaded;
+    },
+    { signal: controller.signal },
+  );
+  const outcome = await publishScriptVersion(
+    { endpoint: { baseUrl, token: 't' }, req: request('click'), stateDir, download },
+    script('v2', 2, id),
+    false,
+  );
+  expect(outcome).toMatchObject({ failure: expect.anything() });
+  expect(fs.readFileSync(destination, 'utf8')).toBe('v1\n');
+  expect(fs.readdirSync(path.join(root, 'caller'))).toEqual(['journey.ad']);
 });

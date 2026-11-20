@@ -27,6 +27,7 @@ import {
   materializeRemoteArtifacts,
   sendRemoteScriptOpen,
 } from '@agent-device/remote/daemon-artifacts';
+import { handleDaemonHttpResponseBody } from '../daemon-client-rpc.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 
@@ -316,22 +317,30 @@ test('a caller abort after a record stop answer stops the artifact download', as
   }
 });
 
-// #4518: a caller abort during a remote RPC-error answer cancels at once and delivers no script.
-test('a caller abort during a remote error answer with a receipt cancels and publishes nothing', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t, 'remote error answer cancellation')) return;
-  const paths = statePaths();
-  const destination = path.join(paths.baseDir, 'caller', 'journey.ad');
-  const controller = new AbortController();
-  let publicationId = '';
-  const server = http.createServer((req, res) => {
-    if (req.url?.endsWith('/artifacts/open-v1')) return void res.end('open Demo\n');
-    if (req.url?.endsWith('/artifacts/v2')) return void res.end('open Demo\nwait\n');
-    if (req.url?.includes('/diagnostics')) {
-      controller.abort();
-      return void res.writeHead(404).end();
-    }
-    req.resume();
-    req.on('end', () => {
+// #4518: no receipt settlement of a remote RPC-error answer publishes after the caller aborts. The
+// reject callback runs only after that settlement finished, so the destination is read there.
+test.for(['before the answer is handled', 'during the script download'] as const)(
+  'a caller abort %s publishes nothing from an error answer receipt',
+  async (when, t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'remote error answer cancellation')) return;
+    const paths = statePaths();
+    const destination = path.join(paths.baseDir, 'caller', 'journey.ad');
+    const controller = new AbortController();
+    let versionHits = 0;
+    const server = http.createServer((req, res) => {
+      if (req.url?.endsWith('/artifacts/open-v1')) return void res.end('open Demo\n');
+      if (req.url?.endsWith('/artifacts/v2')) {
+        versionHits += 1;
+        if (when === 'during the script download') controller.abort();
+        return void res.end('open Demo\nwait\n');
+      }
+      res.writeHead(404).end();
+    });
+    const port = await listenOnLoopback(server);
+    const info = { ...IDENTITY, baseUrl: `http://127.0.0.1:${port}` };
+    try {
+      const publicationId = await openRecording(info.baseUrl, paths.baseDir, destination);
+      if (when === 'before the answer is handled') controller.abort();
       const version = {
         field: 'savedScript',
         artifactType: 'session-script',
@@ -344,67 +353,74 @@ test('a caller abort during a remote error answer with a receipt cancels and pub
         command: 'wait',
         scriptDeliveryReceipt: { publicationId, version },
       };
-      const data = {
-        code: 'COMMAND_FAILED',
-        message: 'batch failed',
-        details,
-        diagnosticsRecord: { session: 'journey', requestId: 'r1' },
-      };
-      res.end(JSON.stringify({ jsonrpc: '2.0', error: { message: 'batch failed', data } }));
-    });
-  });
-  const port = await listenOnLoopback(server);
-  const baseUrl = `http://127.0.0.1:${port}`;
-  try {
-    const openRequest = {
-      ...request('open'),
-      session: 'journey',
-      flags: { saveScript: true },
-      meta: { clientArtifactPaths: { savedScript: destination } },
-    };
-    const opened = await sendRemoteScriptOpen(
-      { baseUrl, token: IDENTITY.token, capabilities: ['script-artifacts'] },
-      openRequest,
-      paths.baseDir,
-      async (next) => {
-        publicationId = next.meta?.scriptPublicationId as string;
-        const artifact = {
-          field: 'savedScript',
-          artifactType: 'session-script' as const,
-          artifactId: 'open-v1',
-          scriptPublicationId: publicationId,
-          scriptRevision: 1,
-        };
-        return { ok: true, data: { scriptPublicationId: publicationId, artifacts: [artifact] } };
-      },
-    );
-    if (!opened.ok) throw new Error('open failed');
-    await materializeRemoteArtifacts(
-      { baseUrl, token: IDENTITY.token },
-      openRequest,
-      opened,
-      createTestHostEnvironment(),
-      paths.baseDir,
-    );
-    assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
-    await assert.rejects(
-      sendRequest(
-        { ...IDENTITY, baseUrl },
-        {
-          ...request('batch'),
-          session: 'journey',
-          flags: { batchSteps: [{ command: 'wait', input: {} }] },
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          message: 'batch failed',
+          data: { code: 'COMMAND_FAILED', message: 'batch failed', details },
         },
-        'http',
-        paths,
-        undefined,
-        { host: createTestHostEnvironment(), signal: controller.signal },
-      ),
-      (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
-    );
-    assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
-  } finally {
-    await closeLoopbackServer(server);
-    fs.rmSync(paths.baseDir, { recursive: true, force: true });
-  }
-});
+      });
+      const settled = await new Promise<{ error: unknown; destination: string }>((resolve) => {
+        handleDaemonHttpResponseBody(body, {
+          info,
+          req: {
+            ...request('batch'),
+            session: 'journey',
+            flags: { batchSteps: [{ command: 'wait', input: {} }] },
+          },
+          stateDir: paths.baseDir,
+          host: createTestHostEnvironment(),
+          signal: controller.signal,
+          resolve: () => resolve({ error: undefined, destination: '' }),
+          reject: (error) => resolve({ error, destination: fs.readFileSync(destination, 'utf8') }),
+        });
+      });
+      assert.equal(settled.destination, 'open Demo\n');
+      if (when === 'before the answer is handled') {
+        // An aborted request skips the settlement: nothing is fetched and nothing is disclosed.
+        assert.equal(versionHits, 0);
+        assert.equal((settled.error as AppError).details?.scriptDeliveryFailure, undefined);
+      }
+    } finally {
+      await closeLoopbackServer(server);
+      fs.rmSync(paths.baseDir, { recursive: true, force: true });
+    }
+  },
+);
+
+/** Opens a remote recording so the client holds its record and first version; returns its ID. */
+async function openRecording(baseUrl: string, stateDir: string, destination: string) {
+  let publicationId = '';
+  const openRequest = {
+    ...request('open'),
+    session: 'journey',
+    flags: { saveScript: true },
+    meta: { clientArtifactPaths: { savedScript: destination } },
+  };
+  const opened = await sendRemoteScriptOpen(
+    { baseUrl, token: IDENTITY.token, capabilities: ['script-artifacts'] },
+    openRequest,
+    stateDir,
+    async (next) => {
+      publicationId = next.meta?.scriptPublicationId as string;
+      const artifact = {
+        field: 'savedScript',
+        artifactType: 'session-script' as const,
+        artifactId: 'open-v1',
+        scriptPublicationId: publicationId,
+        scriptRevision: 1,
+      };
+      return { ok: true, data: { scriptPublicationId: publicationId, artifacts: [artifact] } };
+    },
+  );
+  if (!opened.ok) throw new Error('open failed');
+  await materializeRemoteArtifacts(
+    { baseUrl, token: IDENTITY.token },
+    openRequest,
+    opened,
+    createTestHostEnvironment(),
+    stateDir,
+  );
+  assert.equal(fs.readFileSync(destination, 'utf8'), 'open Demo\n');
+  return publicationId;
+}

@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, ScriptDeliveryFailure } from '@agent-device/kernel/contracts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   confirmScriptDestination,
@@ -12,7 +12,7 @@ import {
   prepareScriptDestination,
   type ScriptDestination,
 } from '@agent-device/host-kit/file';
-import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
+import type { ArtifactDownload, DaemonArtifactEndpoint } from './daemon-artifacts.ts';
 import {
   readRecord,
   recordPath,
@@ -56,7 +56,7 @@ export async function publishScriptVersion(
     endpoint: Required<DaemonArtifactEndpoint>;
     req: DaemonWireRequest;
     stateDir: string;
-    download: typeof downloadRemoteArtifact;
+    download: ArtifactDownload;
   }>,
   artifact: DaemonArtifact,
   closesRecording: boolean,
@@ -123,6 +123,7 @@ export async function publishScriptVersion(
       // What host-kit answered above, carried for the one confirmation before the rename.
       prepared,
       pending,
+      signal: context.download.signal,
     };
     return await withRecordLock(file, async () => publishStaged(file, version));
   } catch (error) {
@@ -193,9 +194,10 @@ function publishStaged(
     staged: string;
     prepared: ScriptDestination;
     pending: { named: boolean };
+    signal: AbortSignal | undefined;
   }>,
 ): PublishOutcome {
-  const { revision, staging, staged, prepared, pending } = version;
+  const { revision, staging, staged, prepared, pending, signal } = version;
   const record = readRecord(file);
   if (!record) return { published: undefined };
   // A copy that became a repeat while it downloaded is answered exactly as an early repeat is.
@@ -208,6 +210,8 @@ function publishStaged(
   const current = settleInterrupted(file, record, entry);
   const promoted = committedRepeat(current, revision);
   if (promoted) return promoted;
+  // A caller abort while this publish waited for the lock wins: the staged file is released, not renamed.
+  if (signal?.aborted) throw createRequestCanceledError({}, signal.reason);
   const publishing = { revision, file: verifiedStagedIdentity(staged), staging };
   // A second name keeps the inode on disk after the rename while the record may name it.
   fs.linkSync(staged, `${staged}.anchor`);

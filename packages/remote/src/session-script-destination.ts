@@ -13,7 +13,7 @@ import type { DaemonError } from '@agent-device/kernel/errors';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { assertScriptArtifactsCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DaemonArtifactEndpoint, downloadRemoteArtifact } from './daemon-artifacts.ts';
+import type { ArtifactDownload, DaemonArtifactEndpoint } from './daemon-artifacts.ts';
 import {
   createRecord,
   readRecord,
@@ -83,7 +83,7 @@ async function settleScriptReceipt(
     endpoint: Required<DaemonArtifactEndpoint>;
     req: DaemonWireRequest;
     stateDir: string;
-    download: typeof downloadRemoteArtifact;
+    download: ArtifactDownload;
   }>,
   receipt: ScriptDeliveryReceipt,
   data: Record<string, unknown>,
@@ -167,7 +167,7 @@ export function sessionScriptDelivery(
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string,
-  download: typeof downloadRemoteArtifact,
+  download: ArtifactDownload,
 ): SessionScriptDelivery {
   const context = { endpoint, req, stateDir, download };
   const receipt = req.command === 'batch' ? readScriptDeliveryReceipt(response) : undefined;
@@ -298,7 +298,7 @@ export async function settleScriptDeliveryReceiptOfFailure(
   req: DaemonWireRequest,
   error: DaemonError,
   stateDir: string,
-  download: typeof downloadRemoteArtifact,
+  download: ArtifactDownload,
 ): Promise<DaemonError> {
   if (req.command !== 'batch') return error;
   const receipt = readScriptDeliveryReceipt({ ok: false, error });
