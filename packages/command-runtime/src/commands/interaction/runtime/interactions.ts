@@ -9,12 +9,16 @@ import type {
   ScreenshotVerification,
 } from '@agent-device/contracts/interaction';
 import { isSemanticTouchTarget } from '@agent-device/selectors/touch-semantics';
-import { containsPoint } from '@agent-device/kernel/rect';
+import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { isFillableType, isViewportRootNode } from '@agent-device/contracts/snapshot';
+import {
+  isFillableType,
+  isViewportRootNode,
+  resolveViewportRect,
+} from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { sleep, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
@@ -202,13 +206,7 @@ async function tapCommand(
       atRest.kind === 'point' &&
       baseline !== undefined &&
       runtime.backend.captureVerifyScreenshot !== undefined &&
-      !baseline.nodes.some(
-        (node) =>
-          node.rect &&
-          !isViewportRootNode(node) &&
-          (node.hittable === true || isSemanticTouchTarget(node)) &&
-          containsPoint(node.rect, point.x, point.y),
-      );
+      !baseline.nodes.some((node) => blocksPixelPairAtPoint(baseline.nodes, node, point));
     if (useScreenshot) {
       const { withScreenshotVerification } = await import('./verify-screenshot.ts');
       ({ result: backendResult, screenshot } = await withScreenshotVerification(
@@ -463,4 +461,28 @@ function formatTargetForWarning(result: {
   if (result.target?.kind === 'ref') return result.target.ref;
   if (result.target?.kind === 'selector') return result.target.selector;
   return 'point';
+}
+
+/**
+ * Whether a pre-action tree node keeps the coordinate pixel pair off at `point`
+ * (the `--verify` screenshot fallback's tree-coverage gate).
+ *
+ * A node blocks when it covers the point and is a semantic touch target, or is
+ * hittable and smaller than the point's resolved viewport. The exemption is
+ * the ruling on #4297 (option a): a hittable node whose rect CONTAINS the
+ * point's resolved viewport — `resolveViewportRect`, including its
+ * largest-containing-rect fallback, which is what answers on Android where no
+ * window nodes exist — is the viewport-filling container every real tree
+ * carries (Android content `FrameLayout`, iOS full-screen `CollectionView`),
+ * not a touch target; excluding it keeps the gate reachable without a
+ * per-platform type list. A full-screen marked button still blocks: semantic
+ * targets never take the exemption.
+ */
+function blocksPixelPairAtPoint(baselineNodes: SnapshotNode[], node: SnapshotNode, point: Point): boolean {
+  if (!node.rect || !containsPoint(node.rect, point.x, point.y)) return false;
+  if (isViewportRootNode(node)) return false;
+  if (isSemanticTouchTarget(node)) return true;
+  if (node.hittable !== true) return false;
+  const viewport = resolveViewportRect(baselineNodes, node.rect);
+  return !rectContains(node.rect, viewport ?? node.rect);
 }
