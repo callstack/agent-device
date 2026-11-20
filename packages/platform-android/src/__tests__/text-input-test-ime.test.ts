@@ -218,7 +218,7 @@ test('fillAndroid batches ASCII text when the device is already on the helper IM
   );
 });
 
-test('the test IME bounds above agree with TestInputMethodService', async () => {
+test('the helper declares the per-broadcast bound that the host chunks under', async () => {
   const java = await fs.readFile(
     new URL(
       '../../../../android/ime-helper/src/main/java/com/callstack/agentdevice/imehelper/TestInputMethodService.java',
@@ -226,57 +226,42 @@ test('the test IME bounds above agree with TestInputMethodService', async () => 
     ),
     'utf8',
   );
-  assert.match(java, /MAX_TEXT_LENGTH = 32_000;/);
-  assert.match(java, /encoded\.length\(\) > MAX_TEXT_LENGTH \* 2/);
+  assert.match(java, /MAX_BASE64_LENGTH = 64_000;/);
+  assert.match(java, /MAX_TEXT_BYTES = MAX_BASE64_LENGTH \/ 4 \* 3;/);
 });
 
-// TestInputMethodService drops a payload over 64,000 Base64 characters and cuts text after 32,000
-// UTF-16 units, so a replacement past either bound must be refused before the field is cleared.
+// One broadcast carries at most 48,000 UTF-8 bytes. A longer replacement goes out as ordered
+// chunks under that bound, so it is committed whole instead of being refused or cut.
 test.each([
-  { label: 'over the text length', text: 'a'.repeat(32_001), refused: true },
-  { label: 'over the Base64 payload', text: '€'.repeat(21_334), refused: true },
-  { label: 'at the text length', text: 'a'.repeat(32_000), refused: false },
-])('fillAndroid with a replacement $label refused=$refused', async ({ text, refused }) => {
+  { label: 'one UTF-16 unit over one broadcast', text: 'a'.repeat(48_001) },
+  { label: 'multi-byte text over one broadcast', text: '€'.repeat(21_334) },
+])('fillAndroid commits a replacement $label in ordered chunks', async ({ text }) => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
-  let currentText = 'stale value';
-  const broadcasts: string[] = [];
+  const state = { currentText: 'stale value' };
+  const payloadBytes: number[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
       if (args[1] === 'am' && args[2] === 'broadcast') {
-        const action = args[args.indexOf('-a') + 1] ?? '';
-        broadcasts.push(action);
-        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
-          currentText = '';
-        } else if (action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-          currentText += decodeBroadcastText(args);
+        if (args[args.indexOf('-a') + 1] === INPUT_ACTION) {
+          payloadBytes.push(Buffer.byteLength(decodeBroadcastText(args), 'utf8'));
         }
+        return imeBroadcastAck(args, state);
       }
       return { exitCode: 0, stdout: '', stderr: '' };
     },
-    captureXml: () => androidInputXml({ text: currentText }),
+    captureXml: () => androidInputXml({ text: state.currentText }),
   });
 
-  const outcome = await withAndroidAdbProvider(
+  await withAndroidAdbProvider(
     { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     { serial: ANDROID_EMULATOR.id },
-    async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, text).catch((error: unknown) => error),
+    async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, text),
   );
 
-  if (refused) {
-    assert.equal(
-      (outcome as AppError | undefined)?.details?.reason,
-      'android-test-ime-text-too-large',
-    );
-    assert.deepEqual(
-      broadcasts,
-      [],
-      'the field must keep its value when the IME cannot carry text',
-    );
-    assert.equal(currentText, 'stale value');
-  } else {
-    assert.equal(outcome, undefined);
-    assert.equal(currentText, text);
-  }
+  assert.equal(state.currentText, text);
+  assert.equal(payloadBytes.length, 2);
+  assert.ok(payloadBytes.every((bytes) => bytes <= 48_000));
 });
 
 test('fillAndroid re-focuses the target when the first helper attempt fails verification', async () => {
