@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  resolveSessionScreenshotPath,
+  resolveSessionScreenshotStagingDir,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
 import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 
 const outputOptions = { field: 'path', ext: '.png', artifactType: 'screenshot' as const };
@@ -104,4 +108,66 @@ test('automatic crop output retains cancellation and owned-file cleanup before p
     await reserved.cleanup?.();
   }
   expect(fs.existsSync(path.dirname(reserved.path))).toBe(false);
+});
+
+test('a capture without a destination lands on the stable session path and stays there', async () => {
+  const sessionDir = mkdtempForTestSync('stable-session-');
+  const adapter = createDaemonScreenshotArtifactAdapter(false, undefined, {
+    defaultPath: resolveSessionScreenshotPath(sessionDir),
+  });
+  const stablePath = resolveSessionScreenshotPath(sessionDir);
+
+  const first = await adapter.reserveOutput(undefined, outputOptions);
+  expect(first.path).toBe(stablePath);
+  fs.writeFileSync(first.path, 'first');
+  await first.publish();
+  expect(fs.readFileSync(stablePath, 'utf8')).toBe('first');
+
+  // A second capture in the same session predicts the same file: no minted temp path to parse.
+  const second = await adapter.reserveOutput(undefined, outputOptions);
+  expect(second.path).toBe(stablePath);
+  expect(first.cleanup).toBeUndefined();
+  expect(second.cleanup).toBeUndefined();
+});
+
+test('crop staging runs inside the session dir and its cleanup spares the published destination', async () => {
+  const sessionDir = mkdtempForTestSync('crop-staging-session-');
+  const stagingDir = resolveSessionScreenshotStagingDir(sessionDir);
+  const destination = path.join(sessionDir, 'crop.png');
+  const reserved = await createDaemonScreenshotArtifactAdapter(true, undefined, {
+    stagingDir,
+  }).reserveOutput({ kind: 'path', path: destination }, outputOptions);
+
+  expect(reserved.path.startsWith(stagingDir)).toBe(true);
+  fs.writeFileSync(reserved.path, 'cropped image');
+  await reserved.publish();
+
+  expect(fs.readFileSync(destination, 'utf8')).toBe('cropped image');
+  await reserved.cleanup?.();
+  expect(fs.existsSync(stagingDir)).toBe(false);
+  expect(fs.readFileSync(destination, 'utf8')).toBe('cropped image');
+});
+
+test('a crop publish failure leaves the session staging dir removable and the destination absent', async () => {
+  const sessionDir = mkdtempForTestSync('crop-staging-failure-');
+  const stagingDir = resolveSessionScreenshotStagingDir(sessionDir);
+  const destination = path.join(sessionDir, 'elsewhere.png');
+  const reserved = await createDaemonScreenshotArtifactAdapter(true, undefined, {
+    stagingDir,
+  }).reserveOutput({ kind: 'path', path: destination }, outputOptions);
+  fs.writeFileSync(reserved.path, 'complete image');
+  const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+    throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+  });
+  try {
+    await expect(reserved.publish()).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'screenshot_publication_failed' },
+    });
+  } finally {
+    rename.mockRestore();
+    await reserved.cleanup?.();
+  }
+  expect(fs.existsSync(destination)).toBe(false);
+  expect(fs.existsSync(stagingDir)).toBe(false);
 });

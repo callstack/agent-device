@@ -14,6 +14,37 @@ export function resolveSessionTestArtifactsRoot(sessionDir: string): string {
   return path.join(sessionDir, 'test-artifacts');
 }
 
+/** Root for the screenshots this session's daemon mints itself, so one dir owns them all. */
+export function resolveSessionScreenshotsDir(sessionDir: string): string {
+  return path.join(sessionDir, 'screenshots');
+}
+
+/**
+ * The stable default screenshot destination for one session. A capture that names no
+ * destination lands here every time, so a caller reads the file from this path without
+ * parsing a minted temp path out of the output.
+ */
+export function resolveSessionScreenshotPath(sessionDir: string): string {
+  return path.join(resolveSessionScreenshotsDir(sessionDir), 'screenshot.png');
+}
+
+/**
+ * The stable destination for the sparse-snapshot fallback screenshot, distinct from
+ * {@link resolveSessionScreenshotPath} so a fallback never overwrites the capture a
+ * caller asked for earlier in the same session.
+ */
+export function resolveSessionFallbackScreenshotPath(sessionDir: string): string {
+  return path.join(resolveSessionScreenshotsDir(sessionDir), 'snapshot-fallback.png');
+}
+
+/**
+ * Staging root for one crop publish into an explicit destination. The publish owns this
+ * dir and removes it, so nothing else may store artifacts there.
+ */
+export function resolveSessionScreenshotStagingDir(sessionDir: string): string {
+  return path.join(resolveSessionScreenshotsDir(sessionDir), 'crop-staging');
+}
+
 /** Path to request-scoped daemon diagnostics for this session. */
 export function resolveSessionRequestLogPath(
   sessionDir: string,

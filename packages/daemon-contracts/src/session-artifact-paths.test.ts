@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireManagedSessionArtifactPath, resolveSessionDir } from './session-artifact-paths.ts';
+import {
+  requireManagedSessionArtifactPath,
+  resolveSessionDir,
+  resolveSessionFallbackScreenshotPath,
+  resolveSessionScreenshotPath,
+  resolveSessionScreenshotStagingDir,
+  resolveSessionScreenshotsDir,
+} from './session-artifact-paths.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
@@ -27,6 +34,36 @@ test('resolveSessionDir keeps every session dir beneath the sessions dir', () =>
       `expected resolveSessionDir(${JSON.stringify(name)}) to reject`,
     );
   }
+});
+
+test('the session screenshot paths sit in one screenshots dir with distinct stable names', () => {
+  const sessionDir = path.join(
+    mkdtempForTestSync('agent-device-screenshot-paths-'),
+    'sessions',
+    'one',
+  );
+  const screenshotsDir = resolveSessionScreenshotsDir(sessionDir);
+
+  assert.equal(screenshotsDir, path.join(sessionDir, 'screenshots'));
+  assert.equal(
+    resolveSessionScreenshotPath(sessionDir),
+    path.join(screenshotsDir, 'screenshot.png'),
+  );
+  assert.equal(
+    resolveSessionFallbackScreenshotPath(sessionDir),
+    path.join(screenshotsDir, 'snapshot-fallback.png'),
+  );
+  assert.equal(
+    resolveSessionScreenshotStagingDir(sessionDir),
+    path.join(screenshotsDir, 'crop-staging'),
+  );
+  // Re-resolving is pure: the same session dir predicts the same destination every time.
+  assert.equal(resolveSessionScreenshotPath(sessionDir), resolveSessionScreenshotPath(sessionDir));
+  // A fallback capture never overwrites the capture the `screenshot` command owns.
+  assert.notEqual(
+    resolveSessionFallbackScreenshotPath(sessionDir),
+    resolveSessionScreenshotPath(sessionDir),
+  );
 });
 
 const roots: string[] = [];

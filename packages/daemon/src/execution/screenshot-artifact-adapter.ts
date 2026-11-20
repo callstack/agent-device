@@ -6,9 +6,22 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+/**
+ * Where the adapter mints a destination itself: the stable default for a capture that
+ * names none, and the crop staging root. The session-artifact-paths owner resolves both;
+ * a caller that passes nothing keeps the legacy temp-dir lottery.
+ */
+export type DaemonScreenshotArtifactDefaults = Readonly<{
+  /** Stable destination for this surface's captures without an explicit destination. */
+  defaultPath?: string;
+  /** Root the crop publish stages into and owns. */
+  stagingDir?: string;
+}>;
+
 export function createDaemonScreenshotArtifactAdapter(
   atomic: boolean,
   signal: AbortSignal | undefined,
+  defaults: DaemonScreenshotArtifactDefaults = {},
 ): ArtifactAdapter {
   return {
     resolveInput: async () => {
@@ -20,13 +33,15 @@ export function createDaemonScreenshotArtifactAdapter(
         let outputPath: string;
         if (ref?.kind === 'path') {
           outputPath = ref.path;
+        } else if (defaults.defaultPath !== undefined) {
+          outputPath = defaults.defaultPath;
         } else {
           tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-screenshot-'));
           outputPath = path.join(tempRoot, 'screenshot.png');
         }
         await fs.mkdir(path.dirname(outputPath), { recursive: true });
         if (atomic && ref?.kind === 'path') {
-          return await reserveCroppedOutput(outputPath, signal);
+          return await reserveCroppedOutput(outputPath, signal, defaults.stagingDir);
         }
         return {
           path: outputPath,
@@ -76,9 +91,12 @@ function screenshotPublicationError(error: unknown, outputPath: string): AppErro
 async function reserveCroppedOutput(
   outputPath: string,
   signal: AbortSignal | undefined,
+  stagingDir: string | undefined,
 ): Promise<ReservedOutputFile> {
   const destination = await resolveScreenshotDestination(outputPath);
-  const stagingRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-crop-'));
+  const stagingRoot =
+    stagingDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-crop-')));
+  await fs.mkdir(stagingRoot, { recursive: true });
   const stagingPath = path.join(stagingRoot, `screenshot${path.extname(outputPath) || '.png'}`);
   const cleanup = async () => {
     await fs.rm(stagingRoot, { recursive: true, force: true }).catch((error: unknown) => {

@@ -1,5 +1,9 @@
 import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
+import {
+  resolveSessionScreenshotPath,
+  resolveSessionScreenshotStagingDir,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
@@ -55,6 +59,11 @@ export async function resolveScreenshotGenericExecution(
     createCommandSurface: CreateDaemonCommandSurface;
     /** The runtime host's working directory: the fallback base for a client-typed output path. */
     hostCwd: string;
+    /**
+     * This session's artifact directory: the base a capture without an explicit destination
+     * resolves its stable default path against, instead of minting a temp dir.
+     */
+    sessionDir?: string;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {
@@ -91,6 +100,7 @@ export async function resolveScreenshotGenericExecution(
   const runtime = resolved.runtime;
   const cropRun: ScreenshotCropRun = { warnings: [] };
   const { createCommandSurface } = params;
+  const sessionDir = params.sessionDir;
   return {
     ok: true,
     recorded: request.recorded,
@@ -106,6 +116,7 @@ export async function resolveScreenshotGenericExecution(
         runtime,
         cropOn,
         cropRun,
+        sessionDir,
       }),
   };
 }
@@ -121,6 +132,13 @@ export async function captureScreenshotArtifact(
     session: SessionState;
     sessionName: string;
     outPath?: string;
+    /**
+     * The stable destination a capture without an explicit one lands on, resolved from the
+     * session dir by the session-artifact-paths owner. Absent: the adapter mints a temp dir.
+     */
+    defaultOutputPath?: string;
+    /** This session's artifact directory; the crop staging root resolves against it. */
+    sessionDir?: string;
     dispatchContext: DaemonCommandContext;
     captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
     crop?: ScreenshotCropBinding;
@@ -132,6 +150,12 @@ export async function captureScreenshotArtifact(
     artifacts: createDaemonScreenshotArtifactAdapter(
       params.crop !== undefined,
       dispatchContext.signal,
+      {
+        defaultPath: params.defaultOutputPath,
+        stagingDir: params.sessionDir
+          ? resolveSessionScreenshotStagingDir(params.sessionDir)
+          : undefined,
+      },
     ),
     sessions: createReadonlyRuntimeSessionStore(sessionName, session),
     policy: localCommandPolicy(),
@@ -196,6 +220,7 @@ async function executeScreenshot(
     runtime: BoundScreenshotRuntime;
     cropOn?: string;
     cropRun?: ScreenshotCropRun;
+    sessionDir?: string;
   }>,
 ): Promise<Record<string, unknown>> {
   const { session, runtime, flags } = params;
@@ -210,6 +235,10 @@ async function executeScreenshot(
     session,
     sessionName: params.sessionName,
     outPath: params.outPath,
+    ...(!params.outPath && params.sessionDir
+      ? { defaultOutputPath: resolveSessionScreenshotPath(params.sessionDir) }
+      : {}),
+    sessionDir: params.sessionDir,
     dispatchContext: params.dispatchContext,
     captureScreenshot: runtime.captureScreenshot,
     ...(crop ? { crop } : {}),

@@ -29,6 +29,7 @@ import type { SessionState } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
+import { resolveSessionScreenshotPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import {
@@ -152,8 +153,8 @@ test('screenshot resolves --out flag path against request cwd', async () => {
   expect(path.isAbsolute(capturedPath(runtime)!)).toBe(true);
 });
 
-test('screenshot runtime supplies default output path when none is requested', async () => {
-  const { handler, runtime } = screenshotRouter(makeSession('default'));
+test('screenshot runtime supplies the stable session path when none is requested', async () => {
+  const { handler, runtime, sessionStore } = screenshotRouter(makeSession('default'));
 
   const response = await handler({
     token: 'test-token',
@@ -163,12 +164,32 @@ test('screenshot runtime supplies default output path when none is requested', a
     meta: { requestId: 'req-default-screenshot' },
   });
 
+  const stablePath = resolveSessionScreenshotPath(sessionStore.resolveSessionDir('default'));
   expect(response.ok).toBe(true);
-  expect(capturedPath(runtime)).toContain('agent-device-screenshot-');
-  expect(path.basename(capturedPath(runtime) ?? '')).toBe('screenshot.png');
+  expect(capturedPath(runtime)).toBe(stablePath);
+  expect(fs.existsSync(stablePath)).toBe(true);
   if (response.ok) {
     expect(response.data?.path).toBe(capturedPath(runtime));
   }
+});
+
+test('captures without a destination land on the same predictable session path', async () => {
+  const { handler, runtime, sessionStore } = screenshotRouter(makeSession('default'));
+
+  for (const requestId of ['req-stable-1', 'req-stable-2']) {
+    const response = await handler({
+      token: 'test-token',
+      session: 'default',
+      command: 'screenshot',
+      positionals: [],
+      meta: { requestId },
+    });
+    expect(response.ok).toBe(true);
+    expect(capturedPath(runtime)).toBe(
+      resolveSessionScreenshotPath(sessionStore.resolveSessionDir('default')),
+    );
+  }
+  expect(runtime.captureScreenshot.mock.calls).toHaveLength(2);
 });
 
 test('screenshot forwards macOS session surface to the bound capture', async () => {
