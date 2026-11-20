@@ -660,6 +660,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/apple-runner',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/gestures',
     '@agent-device/host-kit',
     '@agent-device/kernel',
     '@agent-device/provision-kit',
@@ -672,6 +673,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/gestures',
     '@agent-device/host-kit',
     '@agent-device/kernel',
     '@agent-device/provision-kit',
@@ -692,6 +694,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/ad-script',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/gestures',
     '@agent-device/host-kit',
     '@agent-device/kernel',
     '@agent-device/provision-kit',
@@ -703,6 +706,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...adScriptPackage.exportTargets.keys()], ['@agent-device/ad-script']);
   assert.deepEqual([...adScriptPackage.workspaceDependencies].sort(), [
     '@agent-device/contracts',
+    '@agent-device/gestures',
     '@agent-device/kernel',
   ]);
   const adReplayPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-replay');

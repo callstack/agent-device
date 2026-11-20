@@ -36,19 +36,19 @@ Reopen a resolved concern only when new evidence changes the conclusion.
   The table names who chooses the path, what the kernel resolves, what can change between checks, where bytes are first written, which failures keep the action result, and the accepted cases.
   If prose, tests, configuration, or dependencies change the security contract, review again.
   Fix a regression that this change introduces at every entry point.
-  For an unrelated finding, link an existing independent issue.
 - Bulk prose rewrites (docs, ADRs, help): get a review from another model provider.
   The reviewer compares each changed sentence with the base. A self-review is not evidence.
 
 Use CI Size evidence.
-At about 700 net production lines or 3 kB npm growth, require an independent reviewer to assess a smaller design.
+At about 700 net production lines, 3 kB npm growth, or a third round that adds requirements, require an independent reviewer to assess a smaller design.
+Ask the maintainer to re-scope.
 Also assess each new abstraction, dependency, seam, and ownership rule.
-
-For moves, weigh gross churn. Explain justified growth.
 
 ## Report findings
 
 Report only triggering scenarios. Include `file:line`, severity, what breaks, and the fix.
+A finding blocks only if the change breaks the PR's invariant or regresses behavior.
+Send other findings to an issue, adjacent code included.
 
 If there are no findings, say so. Reject incorrect findings with evidence.
 Prove claims such as "one reader", "pure move", or "no shim left" with search or `git diff -M90%`.

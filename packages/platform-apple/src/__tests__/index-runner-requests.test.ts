@@ -10,7 +10,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { Interactor, PressPointOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';

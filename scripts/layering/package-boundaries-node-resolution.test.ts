@@ -14,7 +14,7 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/kernel/internal-not-exported',
     '@agent-device/kernel',
     '@agent-device/contracts/not-an-export',
-    '@agent-device/contracts/src/gesture-plan.ts',
+    '@agent-device/contracts/src/gesture-plan-types.ts',
     '@agent-device/contracts',
     '@agent-device/contracts/src/snapshot-text.ts',
     '@agent-device/contracts/src/facades/snapshot.ts',

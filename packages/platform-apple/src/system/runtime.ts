@@ -1,9 +1,27 @@
-import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
-import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
-import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
-import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  ALERT_INTERACTOR_OPERATIONS,
+  alertRuntimeOperationFacts,
+} from '@agent-device/contracts/alert-runtime';
+import {
+  APP_EVENT_INTERACTOR_OPERATIONS,
+  appEventRuntimeOperationFacts,
+} from '@agent-device/contracts/app-event-runtime';
+import {
+  CLIPBOARD_INTERACTOR_OPERATIONS,
+  clipboardRuntimeOperationFacts,
+} from '@agent-device/contracts/clipboard-runtime';
+import {
+  SETTINGS_INTERACTOR_OPERATIONS,
+  settingsRuntimeOperationFacts,
+} from '@agent-device/contracts/settings-runtime';
+import {
+  bindAdmittedLocalInteractorOperations,
+  type InteractorOperationDefinition,
+} from '@agent-device/contracts/interactor-operation-binding';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type {
   RuntimeOperationFact,
   RuntimeOperationUnavailability,
@@ -199,6 +217,15 @@ export function appleSystemFacts(device: DeviceInfo) {
   });
 }
 
+/** The rows of the families {@link appleSystemFacts} declares, in catalog order. */
+const APPLE_SYSTEM_INTERACTOR_OPERATIONS: readonly InteractorOperationDefinition<PlatformRuntimeOperations>[] =
+  [
+    ...CLIPBOARD_INTERACTOR_OPERATIONS,
+    ...APP_EVENT_INTERACTOR_OPERATIONS,
+    ...SETTINGS_INTERACTOR_OPERATIONS,
+    ...ALERT_INTERACTOR_OPERATIONS,
+  ];
+
 /** Binds whichever system operations {@link appleSystemFacts} admitted. */
 export function createAppleSystemOperations(params: {
   host: Pick<PlatformRuntimeHost, 'localInteractors'>;
@@ -207,6 +234,7 @@ export function createAppleSystemOperations(params: {
 }) {
   const { host, device, signal } = params;
   return bindAdmittedLocalInteractorOperations({
+    operations: APPLE_SYSTEM_INTERACTOR_OPERATIONS,
     device,
     signal,
     resolveInteractor: host.localInteractors.resolve,

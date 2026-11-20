@@ -8,8 +8,8 @@ Completed process history is in git history.
 
 ## Rules at a glance
 
-- Normalize public gesture input once in `packages/contracts/src/gesture-normalization.ts`.
-- Plan canonical intent in `packages/contracts/src/gesture-plan.ts`. Keep contact topology separate from motion.
+- Normalize public gesture input once in `packages/gestures/src/gesture-normalization.ts`.
+- Plan canonical intent in `packages/gestures/src/gesture-plan.ts`. Keep contact topology separate from motion.
 - Reject removed deprecated arguments with actionable `INVALID_ARGS` messages. Do not silently reinterpret them.
 - Carry Maestro's `endpoint-hold` profile only on the private daemon wire. A genuine public `pan` uses `timed-pan`.
 - Every injected sample must fit the freshly resolved active-app interaction viewport.
@@ -47,7 +47,7 @@ Its Android physical movement still lowers to the Android planned-touch executor
 
 ## Decision
 
-Public gesture inputs normalize once in `packages/contracts/src/gesture-normalization.ts`.
+Public gesture inputs normalize once in `packages/gestures/src/gesture-normalization.ts`.
 This is the explicit public compatibility boundary.
 Canonical semantic intent is produced before the input enters the runtime.
 These removed deprecated arguments are rejected with actionable `INVALID_ARGS` messages, not silently reinterpreted:
@@ -60,7 +60,7 @@ The private daemon wire remains free to carry compatibility-only hints that do n
 Maestro timed swipes use `internal.gestureExecutionProfile: 'endpoint-hold'` and still route through the canonical `pan` input.
 This preserves the iOS fast-swipe-then-hold behavior.
 
-The runtime plans canonical intent in `packages/contracts/src/gesture-plan.ts`.
+The runtime plans canonical intent in `packages/gestures/src/gesture-plan.ts`.
 Contact topology is separate from motion:
 
 - One contact: pan, fling, or target-authored drag with a complete pointer trajectory and an explicit execution profile.

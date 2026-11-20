@@ -75,6 +75,40 @@ test('network traffic vocabulary cannot grow parser implementation inside contra
   );
 });
 
+test('gesture vocabulary cannot regain algorithms inside contracts', () => {
+  const vocabulary = [
+    "import type { Point } from '@agent-device/kernel/snapshot';",
+    "export const GESTURE_KINDS = ['pan', 'drag'] as const;",
+    'export type TapGesturePayload = { points: Point[]; read: (input: unknown) => Point };',
+  ].join('\n');
+  for (const name of ['gesture-input', 'gesture-plan-types']) {
+    assert.deepEqual(messages(vocabulary, `packages/contracts/src/${name}.ts`), []);
+  }
+  for (const [name, source] of [
+    ['gesture-input', 'export function readGesturePayload(input: unknown) { return input; }'],
+    [
+      'gesture-payload-reader',
+      'export function readGesturePayload(input: unknown) { return input; }',
+    ],
+    ['gesture-plan', 'export const buildGesturePlan = () => ({ pointers: [] });'],
+    ['gesture-plan-types', 'export const GESTURE_PROFILES = { sample: function () {} };'],
+    ['gesture-normalization', 'export function normalizePublicGesture() {}'],
+  ] as const) {
+    assert.match(
+      messages(source, `packages/contracts/src/${name}.ts`)[0]!,
+      /belong in @agent-device\/gestures/,
+      name,
+    );
+  }
+  assert.deepEqual(
+    messages(
+      'export function gestureDirectionDelta() {}',
+      'packages/contracts/src/scroll-gesture.ts',
+    ),
+    [],
+  );
+});
+
 test('contracts rejects mutable interaction-outcome lifecycle', () => {
   assert.match(
     messages('const targets = new WeakMap();', 'packages/contracts/src/interaction-outcome.ts')[0]!,

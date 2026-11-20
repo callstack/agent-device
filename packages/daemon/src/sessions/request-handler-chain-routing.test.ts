@@ -15,7 +15,7 @@ import {
   LINUX_DEVICE,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
-import { buildGesturePlan, singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan, singlePointerPlanEndpoints } from '@agent-device/gestures/gesture-plan';
 import { makeIosSession, makeSession } from '../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../execution/interaction/index.ts';

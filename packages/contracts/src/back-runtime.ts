@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { BackMode, Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -52,3 +53,8 @@ export function bindBack(
     },
   });
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const BACK_INTERACTOR_OPERATIONS = [
+  { operation: 'back', label: 'back', bind: bindBack },
+] as const satisfies readonly InteractorOperationDefinition<BackRuntimeOperations>[];

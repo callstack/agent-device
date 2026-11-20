@@ -116,7 +116,7 @@ export function touchRuntimeOperationFacts(
 }
 
 /** Both hover legs answer with the same redirection to longpress when they are refused. */
-function withHoverRefusalHint(fact: RuntimeOperationFact): RuntimeOperationFact {
+export function withHoverRefusalHint(fact: RuntimeOperationFact): RuntimeOperationFact {
   return fact.available
     ? fact
     : Object.freeze({ ...fact, hint: fact.hint ?? HOVER_UNAVAILABLE_HINT });

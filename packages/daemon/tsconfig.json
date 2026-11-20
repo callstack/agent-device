@@ -36,6 +36,9 @@
       "path": "../device-selection"
     },
     {
+      "path": "../gestures"
+    },
+    {
       "path": "../host-kit"
     },
     {

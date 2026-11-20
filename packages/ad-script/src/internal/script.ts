@@ -3,7 +3,7 @@ import { recordingQualityInputToExportQuality } from '@agent-device/contracts/re
 import {
   describeReplayGestureArityError,
   describeReplayGestureFlagError,
-} from '@agent-device/contracts/gesture-normalization';
+} from '@agent-device/gestures/gesture-normalization';
 import {
   RETIRED_SCREENSHOT_MAX_SIZE,
   readScreenshotScriptFlag,

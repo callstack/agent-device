@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { resolveKeyboardTapOcclusion } from '@agent-device/contracts/tap-keyboard-occlusion';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { WebDriverClient, W3CActionSequence } from './webdriver-client.ts';

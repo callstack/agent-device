@@ -1,3 +1,4 @@
+import type { InteractorOperationDefinition } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -55,3 +56,8 @@ export function bindAppEvent(
     },
   });
 }
+
+/** The family's rows for the interactor-operation adapters: one fact, one bind call. */
+export const APP_EVENT_INTERACTOR_OPERATIONS = [
+  { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
+] as const satisfies readonly InteractorOperationDefinition<AppEventRuntimeOperations>[];

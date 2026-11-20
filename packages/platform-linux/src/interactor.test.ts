@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { createLinuxInteractor } from './interactor.ts';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import { middleClickLinux, pressLinux, rightClickLinux, swipeLinux } from './index.ts';
 
 vi.mock('./index.ts', () => ({

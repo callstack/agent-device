@@ -1,6 +1,6 @@
-import { readGesturePayload } from '@agent-device/contracts/gesture-input';
-import { normalizePublicGesture } from '@agent-device/contracts/gesture-normalization';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { readGesturePayload } from '@agent-device/gestures/gesture-payload-reader';
+import { normalizePublicGesture } from '@agent-device/gestures/gesture-normalization';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import assert from 'node:assert/strict';
 import { describe, expect, test } from 'vitest';
 import {

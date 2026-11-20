@@ -13,6 +13,7 @@
   "references": [
     { "path": "../capture-kit" },
     { "path": "../contracts" },
+    { "path": "../gestures" },
     { "path": "../host-kit" },
     { "path": "../kernel" },
     { "path": "../provision-kit" },

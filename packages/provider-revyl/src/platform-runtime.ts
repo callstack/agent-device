@@ -15,7 +15,8 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { availableApplicationLifecycleOperations } from '@agent-device/contracts/application-lifecycle-runtime';
-import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { bindRevylInteractionOperations } from './interaction-operations.ts';
 import { bindRevylApplicationLifecycle } from './lifecycle.ts';
 import { revylFacts, revylUnavailableCells, revylLifecycleFacts } from './facts-runtime.ts';
@@ -107,6 +108,7 @@ function bindRevylRuntime(
     }),
     ...bindRevylDeployment(options, device, signal),
     ...bindAdmittedProviderInteractorOperations({
+      operations: INTERACTOR_OPERATIONS,
       device,
       signal,
       resolveInteractor: (runner) => options.getInteractor(device, runner),

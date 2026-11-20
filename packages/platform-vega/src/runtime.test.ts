@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
@@ -162,6 +163,12 @@ test.each([
     // the same VVD-only gate the retired `vegaPlugin` closure applied to all three. Orientation
     // and every keyboard action never carried a Vega capability bucket at all.
     const supported = device.kind === 'emulator' && device.target === 'tv';
+    // The runtime names the families it binds, so its facts must admit no operation outside them.
+    for (const { operation } of INTERACTOR_OPERATIONS) {
+      expect(typeof binding.operations[operation], operation).toBe(
+        binding.facts.operations[operation].available ? 'function' : 'undefined',
+      );
+    }
     for (const operation of ['back', 'home', 'tvRemote'] as const) {
       expect(binding.facts.operations[operation].available).toBe(supported);
       expect(binding.operations[operation]).toBeTypeOf(supported ? 'function' : 'undefined');

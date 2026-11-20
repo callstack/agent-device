@@ -38,12 +38,11 @@ Fix accepted findings with the smallest change. Prefer configuration or deletion
 Rerun affected checks.
 For rejected findings, record a reason.
 If no independent reviewer is available, read the full diff again cold. Report that limitation.
-At the growth thresholds in [review guidance](review.md), this fallback does not replace the required independent reviewer.
+At the [review](review.md) growth thresholds, this fallback is not enough.
 
 ## Scope and commits
 
 Keep gross diffs below 1,000 lines, or 2,500 for one coherent change in self-contained commits.
-Measure with `git diff --stat origin/main...HEAD`.
 Stack only layers that can merge independently.
 Rename-only `refactor(move)` PRs are exempt when `git diff -M90% --stat origin/main...HEAD` proves no material content change.
 Use conventional commit prefixes, without agent tags.
@@ -58,7 +57,7 @@ After a rebase, validate the new head. Keep old evidence attributed to its origi
 Open as draft only when requested or incomplete.
 Keep the body below 250 words outside code blocks. Update it after each push.
 
-- `## Summary`: the behavior, the reason, the linked issue, and scope expansion.
+- `## Summary`: the invariant and behavior, the reason, the linked issue, and scope expansion.
 - `## Before / after`: required when a caller can observe the change, output and errors included.
   Show up to 3 calls at base and head, with the output that differs.
 - `## Value`: required for a refactor. Give 2–4 numbers measured at base and head.

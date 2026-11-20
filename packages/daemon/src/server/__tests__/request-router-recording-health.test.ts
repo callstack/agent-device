@@ -1,7 +1,7 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { buildGesturePlan } from '@agent-device/gestures/gesture-plan';
 import type { GestureSemanticInput } from '@agent-device/contracts/gesture-plan-types';
 import type { DaemonGestureResult } from '@agent-device/contracts/daemon-command-surface';
 

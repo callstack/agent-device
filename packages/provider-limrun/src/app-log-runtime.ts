@@ -5,7 +5,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { bindLimrunInteractionOperations } from './interaction-operations.ts';
-import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-binding';
+import { INTERACTOR_OPERATIONS } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSupportedLimrunAppLogDevice, parseLimrunDeviceId } from './device.ts';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
@@ -230,6 +231,7 @@ function bindLimrunAppLogs(
         : await options.getAppState(device, signal);
     },
     ...bindAdmittedProviderInteractorOperations({
+      operations: INTERACTOR_OPERATIONS,
       device,
       signal,
       resolveInteractor: (runner) => requireLimrunInteractor(device, runner),

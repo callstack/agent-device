@@ -4,6 +4,7 @@ import {
   type ApplicationLifecycleOperationFacts,
 } from './application-lifecycle-runtime.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import { withHoverRefusalHint } from './touch-runtime.ts';
 import type {
   DeviceBinding,
   RuntimeFacts,
@@ -11,26 +12,6 @@ import type {
   RuntimeOwnerRef,
   RuntimeProviderMode,
 } from './platform-runtime.ts';
-import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
-import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
-import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
-import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
-import { focusRuntimeOperationFacts } from './focus-runtime.ts';
-import { gestureRuntimeOperationFacts } from './gesture-runtime.ts';
-import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
-import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
-import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
-import { backRuntimeOperationFacts } from './back-runtime.ts';
-import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
-import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
-import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
-import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
-import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
-import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
-import { alertRuntimeOperationFacts } from './alert-runtime.ts';
-import { audioProbeRuntimeOperationFacts } from './audio-probe-runtime.ts';
-import { perfRuntimeOperationFacts } from './perf-runtime.ts';
-import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
@@ -38,6 +19,12 @@ import { touchRuntimeOperationFacts } from './touch-runtime.ts';
  *
  * A family is one cell where all of its operations share one reason, and one cell per operation
  * only where the reasons genuinely differ per operation.
+ *
+ * Every operation is stated here by name, never through its family's facts builder: each owner
+ * builds on this value, so a family this module evaluated would be one every owner evaluates,
+ * whether or not it implements that family. `RuntimeFacts` refuses a value that omits an operation.
+ * The one exception is `withHoverRefusalHint` from `touch-runtime.ts`: a refused hover leg carries
+ * its redirection to longpress on every owner, so the hub evaluates that module.
  */
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
@@ -211,65 +198,78 @@ export function createUnavailablePlatformRuntimeFacts(
       screenRecordingStart: frozen.screenRecording,
       screenRecordingReattach: frozen.screenRecording,
       screenRecordingCleanup: frozen.screenRecording,
-      ...screenshotRuntimeOperationFacts({ capture: frozen.screenshot }),
-      ...snapshotRuntimeOperationFacts({
-        capture: frozen.snapshot,
-        customActions: frozen.snapshot,
-        withoutActiveApp: frozen.snapshot,
-      }),
+      captureScreenshot: frozen.screenshot,
+      captureSnapshot: frozen.snapshot,
+      captureSnapshotWithCustomActions: frozen.snapshot,
+      captureSnapshotWithoutActiveApp: frozen.snapshot,
       // The preferred text reading starts unavailable for every family, on the same sentinel as
       // capture: an owner that has a native reading declares it explicitly, and one that does not
       // sends every text wait to the canonical tree. The live selector read starts unavailable for
       // the same reason: an owner without it refuses on its bulk-tree verdict unchanged.
-      ...selectorObservationRuntimeOperationFacts({
-        findText: frozen.snapshot,
-        querySelector: frozen.snapshot,
-      }),
-      ...viewportRuntimeOperationFacts({ setViewport: frozen.viewport }),
-      ...focusRuntimeOperationFacts({ focus: frozen.focus }),
-      ...gestureRuntimeOperationFacts({ unsupported: frozen.gesture }),
-      ...scrollRuntimeOperationFacts({ scroll: frozen.scroll }),
-      ...typeTextRuntimeOperationFacts({ type: frozen.typeText }),
-      ...touchRuntimeOperationFacts({
-        unsupported: frozen.touch,
-        tap: frozen.touch,
-        longPress: frozen.touch,
-        fill: frozen.touch,
-      }),
-      ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
-      ...backRuntimeOperationFacts({ back: frozen.back }),
-      ...orientationRuntimeOperationFacts({
-        orientation: frozen.orientation,
-        unlock: frozen.orientation,
-      }),
-      // Stated directly rather than through `foldRuntimeOperationFacts`, so this hub does not
-      // evaluate the fold contract for owners that never pose a hinge (eager-closure budgets).
+      findText: frozen.snapshot,
+      querySelector: frozen.snapshot,
+      setViewport: frozen.viewport,
+      focusPoint: frozen.focus,
+      performGesturePlan: frozen.gesture,
+      performDirectionalFlingPlan: frozen.gesture,
+      performMultiTouchGesturePlan: frozen.gesture,
+      performTargetAuthoredDrag: frozen.gesture,
+      gestureViewport: frozen.gesture,
+      scrollDirection: frozen.scroll,
+      typeText: frozen.typeText,
+      tapPoint: frozen.touch,
+      tapRef: frozen.touch,
+      longPressPoint: frozen.touch,
+      hoverPoint: withHoverRefusalHint(frozen.touch),
+      hoverRef: withHoverRefusalHint(frozen.touch),
+      fillPoint: frozen.touch,
+      fillRef: frozen.touch,
+      tapElementSelector: frozen.touch,
+      readTextAtPoint: frozen.elementText,
+      back: frozen.back,
+      setOrientation: frozen.orientation,
+      unlockOrientation: frozen.orientation,
       setFoldPose: frozen.fold,
       sendTelephonyEvent: frozen.telephony,
-      ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
-      ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
-      ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
-      ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
-      ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
+      tvRemote: frozen.tvRemote,
+      keyboardStatus: frozen.keyboard,
+      keyboardDismiss: frozen.keyboard,
+      keyboardEnter: frozen.keyboard,
+      readClipboard: frozen.clipboard,
+      writeClipboard: frozen.clipboard,
+      home: frozen.systemButton,
+      appSwitcher: frozen.systemButton,
+      actionButton: frozen.systemButton,
+      shake: frozen.systemButton,
+      volumeUp: frozen.systemButton,
+      volumeDown: frozen.systemButton,
+      power: frozen.systemButton,
+      mute: frozen.systemButton,
+      sleep: frozen.systemButton,
+      wake: frozen.systemButton,
+      mediaPlayPause: frozen.systemButton,
+      mediaNext: frozen.systemButton,
+      mediaPrevious: frozen.systemButton,
+      mediaRewind: frozen.systemButton,
+      mediaFastForward: frozen.systemButton,
+      triggerAppEvent: frozen.triggerAppEvent,
       setSetting: frozen.settings,
       readSetting: frozen.settings,
-      ...alertRuntimeOperationFacts({
-        read: frozen.readAlert,
-        wait: frozen.awaitAlert,
-        accept: frozen.acceptAlert,
-        dismiss: frozen.dismissAlert,
-      }),
-      ...audioProbeRuntimeOperationFacts({
-        capture: frozen.audioProbeCapture,
-        query: frozen.audioProbeQuery,
-      }),
-      ...perfRuntimeOperationFacts({
-        frames: frozen.perf,
-        memorySample: frozen.perf,
-        memorySnapshot: frozen.perf,
-        nativeCapture: frozen.perf,
-        profileReport: frozen.perf,
-      }),
+      readAlert: frozen.readAlert,
+      awaitAlert: frozen.awaitAlert,
+      acceptAlert: frozen.acceptAlert,
+      dismissAlert: frozen.dismissAlert,
+      audioProbeStart: frozen.audioProbeCapture,
+      audioProbeReattach: frozen.audioProbeCapture,
+      audioProbeCleanup: frozen.audioProbeCapture,
+      audioProbeQuery: frozen.audioProbeQuery,
+      perfFrames: frozen.perf,
+      perfMemorySample: frozen.perf,
+      perfMemorySnapshot: frozen.perf,
+      perfNativeCaptureStart: frozen.perf,
+      perfNativeCaptureReattach: frozen.perf,
+      perfNativeCaptureCleanup: frozen.perf,
+      perfProfileReport: frozen.perf,
       ensureReady: frozen.readiness,
       bootTarget: frozen.readiness,
       bootTargetHeadless: frozen.readiness,

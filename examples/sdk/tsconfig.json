@@ -51,6 +51,7 @@
     { "path": "../../packages/daemon-client" },
     { "path": "../../packages/daemon-contracts" },
     { "path": "../../packages/device-selection" },
+    { "path": "../../packages/gestures" },
     { "path": "../../packages/host-kit" },
     { "path": "../../packages/host-swift" },
     { "path": "../../packages/kernel" },
