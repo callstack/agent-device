@@ -394,7 +394,7 @@ function openInputFixture(overrides: Partial<OpenApplicationInput> = {}): OpenAp
     prewarmRunnerBeforeOpen: false,
     enableTestIme: false,
     stateDir: '/tmp/agent-device-runtime-foreground',
-    runtimeHints: {},
+    runtimeHints: { values: {}, apply: async () => {} },
     execution: {},
     ...overrides,
   };
