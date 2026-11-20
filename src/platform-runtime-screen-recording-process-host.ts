@@ -4,6 +4,7 @@ import type {
   ManagedProcessOwnership,
 } from '@agent-device/contracts/platform-runtime-host';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { settleWithin } from '@agent-device/host-kit/retry';
 import { errorMessage } from '@agent-device/kernel/errors';
 import {
   expandProcessTree,
@@ -249,11 +250,6 @@ async function settleMarkerSet(
 }
 
 async function settlesWithin(wait: Promise<unknown>, timeoutMs: number): Promise<boolean> {
-  return await Promise.race([
-    wait.then(
-      () => true,
-      () => true,
-    ),
-    new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
-  ]);
+  const outcome = await settleWithin(() => wait.catch(() => undefined), timeoutMs);
+  return outcome.kind === 'settled';
 }

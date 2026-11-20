@@ -3,7 +3,7 @@ import { AppError, normalizeError, type NormalizedError } from '@agent-device/ke
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
-import { sleep } from '@agent-device/host-kit/retry';
+import { settleWithin, sleep } from '@agent-device/host-kit/retry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import {
@@ -412,17 +412,7 @@ async function retireStartupAttempt(
 }
 
 async function joinStartup(launch: DaemonStartupLaunch): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      launch.exited.then(() => true),
-      new Promise<boolean>((resolve) => {
-        timer = setTimeout(() => resolve(false), 1_000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return (await settleWithin(() => launch.exited, 1_000)).kind === 'settled';
 }
 
 function remainingStartupBudget(deadline?: number): number {

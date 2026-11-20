@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
-import { afterEach, test, vi } from 'vitest';
-
-vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
-  return { ...actual, sleep: vi.fn(async () => {}) };
-});
-
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { exitAfterFlush } from './process-exit.ts';
-import { sleep } from '@agent-device/host-kit/retry';
+
+const FLUSH_TIMEOUT_MS = 2000;
 
 type FakeWriteStream = {
   writableLength: number;
@@ -41,8 +36,12 @@ function drainedStream(): FakeWriteStream {
   return { writableLength: 0, once: vi.fn() };
 }
 
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
 afterEach(() => {
-  vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 test('exitAfterFlush exits immediately when both streams are already drained', async () => {
@@ -62,11 +61,8 @@ test('exitAfterFlush exits immediately when both streams are already drained', a
 // #1596: proves the queued-write branch — a stream with buffered data must be
 // let drain before the process exits, not raced against immediately.
 test('exitAfterFlush waits for a backlogged stream to drain before exiting', async () => {
-  // The FLUSH_TIMEOUT_MS race's other arm is `sleep`, mocked module-wide to
-  // resolve immediately; override it here to a promise that never resolves so
-  // this test can only pass via the drain callback, not the timeout racing
-  // ahead of it.
-  vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+  // Timers are faked and never advanced past the flush deadline here, so this
+  // test can only pass via the drain callback, not the deadline.
   let drainCallback: (() => void) | undefined;
   const backloggedStderr: FakeWriteStream = {
     writableLength: 1024,
@@ -79,10 +75,9 @@ test('exitAfterFlush waits for a backlogged stream to drain before exiting', asy
 
   try {
     const pending = exitAfterFlush(2);
-    // Give the microtask queue a turn: exit must not have fired yet, since the
-    // backlogged stream hasn't drained.
-    await Promise.resolve();
-    await Promise.resolve();
+    // Just short of the deadline, exit must not have fired: the backlogged
+    // stream hasn't drained.
+    await vi.advanceTimersByTimeAsync(FLUSH_TIMEOUT_MS - 1);
     assert.deepEqual(exitSpy.calls, [], 'exit fired before the backlogged stream drained');
     assert.equal(typeof drainCallback, 'function');
 
@@ -97,15 +92,18 @@ test('exitAfterFlush waits for a backlogged stream to drain before exiting', asy
 });
 
 // A stream that never emits 'drain' (a stalled or broken pipe) must not hang
-// the process — the FLUSH_TIMEOUT_MS race still exits. `sleep` is mocked
-// above so this resolves instantly instead of waiting the real timeout.
+// the process — the FLUSH_TIMEOUT_MS deadline still exits.
 test('exitAfterFlush still exits when a stream never drains', async () => {
   const neverDrains: FakeWriteStream = { writableLength: 1024, once: vi.fn() };
   const restoreStdio = installFakeStdio({ stdout: drainedStream(), stderr: neverDrains });
   const exitSpy = installExitSpy();
 
   try {
-    await exitAfterFlush(3);
+    const pending = exitAfterFlush(3);
+    await vi.advanceTimersByTimeAsync(FLUSH_TIMEOUT_MS - 1);
+    assert.deepEqual(exitSpy.calls, [], 'exit fired before the flush deadline');
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
   } finally {
     restoreStdio();
     exitSpy.restore();
