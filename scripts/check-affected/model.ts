@@ -87,6 +87,7 @@ export const ALL_CHECKS = [
   'docs-prose',
   'agent-guidance',
   'xctest-selection',
+  'runner-error-codes',
   'packaged-runner-swift',
   'maestro-conformance',
   'maestro-differential',
@@ -489,6 +490,17 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     rule: 'own:xctest-selection',
     detail: 'runner test methods must stay selected in CI and stripped from the npm source bundle',
     owns: (file) => file.startsWith('apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/'),
+  },
+  // The Swift error-code enums are generated from the TypeScript declarations, so each of the
+  // three files that decide the result owns the drift check.
+  {
+    check: 'runner-error-codes',
+    rule: 'own:runner-error-codes',
+    detail: 'the Swift runner error-code enums are generated from runner-contract.ts',
+    owns: (file) =>
+      file === 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerErrorCodes.swift' ||
+      file === 'packages/apple-runner/src/runner-contract.ts' ||
+      file === 'scripts/generate-runner-error-codes.ts',
   },
   // The packager rewrites every runner Swift file on its way into the npm package, and nothing in
   // this repo reads the result — the first consumer is a user's `xcodebuild`. Both the source and
