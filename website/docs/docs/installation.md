@@ -74,6 +74,12 @@ vega doctor
 vega device list
 ```
 
+Install the Vega platform plugin before you run any `--platform vega` command:
+
+```bash
+agent-device plugins add @agent-device/vega
+```
+
 - Start and stop the local emulator with `vega virtual-device start` and `vega virtual-device stop`; `agent-device` does not boot it implicitly.
 - Appium is optional. You don't need it for device discovery, app lifecycle, or remote-button control.
 - For selecting the VVD and what Vega OS supports, see [TV targets](/docs/commands#tv-targets).

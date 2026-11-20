@@ -690,6 +690,8 @@ agent-device tv-remote android-keycode:300 --platform android --target tv
 agent-device screenshot tv-focus.png --overlay-refs --platform android --target tv
 agent-device open Settings --platform ios --target tv
 agent-device screenshot apple-tv.png --platform ios --target tv
+agent-device plugins add @agent-device/vega
+agent-device plugins add @agent-device/vega
 vega virtual-device start
 agent-device devices --platform vega --target tv
 agent-device open com.example.app.main --platform vega --target tv --session vega-tv
@@ -707,7 +709,7 @@ vega virtual-device stop
 - On Android TV, `longpress` has no exact hold time. On tvOS and Vega, `--duration-ms` is an exact hold.
 - Fire TV with Fire OS connects as an Android TV device over ADB: enable ADB debugging in Settings > My Fire TV > Developer options, run `adb connect <device-ip>:5555`, and use `--platform android --target tv`. Android TV snapshots need Android 6.0 or newer.
 - tvOS supports the same runner commands as iOS. `back` is the Menu button and `home` is Home. Simulator-only helpers such as `settings` and `push` stay simulator-only, and multi-touch gestures are refused.
-- Vega OS: use `--platform vega --target tv` with component IDs such as `com.example.app.main`. The VVD supports open, close, `back`, `home`, and the eight navigation buttons. It has no snapshot, screenshot, or selectors, so use the VVD display as visual truth. Physical Vega OS devices, including some Fire TV models, are not supported.
+- Vega OS: install the optional `@agent-device/vega` plugin first. use `--platform vega --target tv` with component IDs such as `com.example.app.main`. The VVD supports open, close, `back`, `home`, and the eight navigation buttons. It has no snapshot, screenshot, or selectors, so use the VVD display as visual truth. Physical Vega OS devices, including some Fire TV models, are not supported.
 - LG webOS and Samsung Tizen TVs run through optional plugins. See [LG webOS](/docs/webos) and [Samsung Tizen](/docs/tizen).
 - On Android TV and tvOS, use `screenshot --overlay-refs` to see which control has focus when focus metadata is missing.
 

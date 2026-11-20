@@ -1,8 +1,10 @@
 import type { ManagedWebBackend } from './managed-web-backend.ts';
 import type { DoctorCheck } from './doctor.ts';
+import type { HostDiagnosticsContext } from './host-diagnostics.ts';
 import type { InventoryPlatformModule, PlatformModuleRegistry } from './platform-module.ts';
 import type { PlatformRuntimeModule } from './platform-runtime-operations.ts';
 import type { WebProvider } from './web-provider.ts';
+import type { VegaToolProvider } from './vega-tool-provider.ts';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -92,12 +94,32 @@ export type WebPlatformSelection = Readonly<{
   get(): WebPlatformRegistration;
 }>;
 
+/** The host-side checks the Vega plugin answers for the daemon's doctor. */
+export type VegaPlatformOperations = Readonly<{
+  toolchainCheck(context: HostDiagnosticsContext): Promise<DoctorCheck>;
+}>;
+
+export type VegaPlatformRegistration = Readonly<{
+  family: 'vega';
+  inventoryModule: InventoryPlatformModule<'vega'>;
+  runtimeModule: PlatformRuntimeModule & { readonly family: 'vega' };
+  createInteractor: PlatformPlugin['createInteractor'];
+  withRequestProvider<T>(provider: VegaToolProvider, task: () => Promise<T>): Promise<T>;
+  operations: VegaPlatformOperations;
+}>;
+
+export type VegaPlatformSelection = Readonly<{
+  active?: VegaPlatformRegistration;
+  get(): VegaPlatformRegistration;
+}>;
+
 export type PlatformPluginSet<Plugin extends PlatformPlugin = PlatformPlugin> =
   PlatformModuleRegistry<{ family: Platform; plugin: Plugin }>;
 
 export type PlatformModuleSelection = Readonly<{
   interactors: PlatformPluginSet;
   web: WebPlatformSelection;
+  vega: VegaPlatformSelection;
   inventoryModules: readonly InventoryPlatformModule[];
   runtimeModules: readonly PlatformRuntimeModule[];
   reportAbsent(family: Platform): AppError;
