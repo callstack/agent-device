@@ -666,17 +666,6 @@ async function startDaemonRuntimeOnHost(
   publishDaemonInfo(socketPort, httpPort);
   options.startupProgress?.report('registered');
   options.startupProgress?.close();
-  // A detached daemon without its registration is one no new client can find, and a successor settles
-  // the device claims it held, so it leaves. An embedded runtime still serves its host.
-  stopMetadataLossWatch = armDaemonMetadataLossWatch(
-    baseDir,
-    infoPath,
-    logPath,
-    daemonIdentity,
-    () => {
-      if (ownership === 'detached') void close();
-    },
-  );
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
     await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
@@ -903,6 +892,19 @@ async function startDaemonRuntimeOnHost(
     }
     return closing;
   };
+
+  // Armed once `close` exists: the watch calls it.
+  // A detached daemon without its registration is one no new client can find, and a successor settles
+  // the device claims it held, so it leaves. An embedded runtime still serves its host.
+  stopMetadataLossWatch = armDaemonMetadataLossWatch(
+    baseDir,
+    infoPath,
+    logPath,
+    daemonIdentity,
+    () => {
+      if (ownership === 'detached') void close();
+    },
+  );
 
   startingUp = false;
 
