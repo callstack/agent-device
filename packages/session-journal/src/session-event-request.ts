@@ -324,7 +324,11 @@ export function readBoundedSessionEventString(value: unknown): string | undefine
  */
 export function prepareRequestNoteForStorage(note: string): string | undefined {
   const { text, truncated } = boundNoteForRedaction(note);
-  return readBoundedString(redactDiagnosticText(text), EVENT_NOTE_MAX_LENGTH, truncated);
+  return readBoundedString(
+    redactDiagnosticText(text, { truncated }),
+    EVENT_NOTE_MAX_LENGTH,
+    truncated,
+  );
 }
 
 /**

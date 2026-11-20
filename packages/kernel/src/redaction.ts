@@ -2,10 +2,17 @@ const SENSITIVE_KEY_RE =
   /(token|secret|password|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key|user[_-]?code|device[_-]?code|refresh[_-]?credential)/i;
 const SECRET_TOKEN_RE =
   /\b(?:bearer\s+[a-z0-9._-]+|adc_(?:agent|live|refresh|cli)_[a-z0-9._-]+)\b/gi;
-// A quoted value with no closing quote, as in text cut short, runs to the end of the input. Each
+const SENSITIVE_ASSIGNMENT_KEY_SOURCE = String.raw`\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)`;
+const SENSITIVE_ASSIGNMENT_RE = new RegExp(
+  String.raw`${SENSITIVE_ASSIGNMENT_KEY_SOURCE}("[^"]*"|'[^']*'|\S+)`,
+  'gi',
+);
+// In text cut short, a quoted value with no closing quote runs to the end of the input. Each
 // quoted scan ends its match, so a scan never repeats over the same text.
-const SENSITIVE_ASSIGNMENT_RE =
-  /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*(?:"|$)|'[^']*(?:'|$)|\S+)/gi;
+const TRUNCATED_SENSITIVE_ASSIGNMENT_RE = new RegExp(
+  String.raw`${SENSITIVE_ASSIGNMENT_KEY_SOURCE}("[^"]*(?:"|$)|'[^']*(?:'|$)|\S+)`,
+  'gi',
+);
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 const REDACTED_STRING_MAX_LENGTH = 400;
 const REDACTED_STDERR_MAX_LENGTH = 8192;
@@ -76,24 +83,32 @@ function redactObject(value: object, traversal: RedactionTraversal): unknown {
 
 /**
  * Applies the credential and URL redaction of `redactDiagnosticData` to one free-text string,
- * without its length cap. The caller owns the bound and applies it to the result.
+ * without its length cap. The caller owns the bound and applies it to the result. Pass
+ * `truncated` when the caller cut the text from a longer one: a quoted sensitive value with no
+ * closing quote is then masked to the end of the text, since the cut may fall inside it.
  */
-export function redactDiagnosticText(value: string): string {
-  return redactSensitiveText(value.trim());
+export function redactDiagnosticText(
+  value: string,
+  { truncated = false }: { truncated?: boolean } = {},
+): string {
+  return redactSensitiveText(
+    value.trim(),
+    truncated ? TRUNCATED_SENSITIVE_ASSIGNMENT_RE : SENSITIVE_ASSIGNMENT_RE,
+  );
 }
 
 function redactString(value: string, keyHint?: string): string {
   const trimmed = value.trim();
   if (!trimmed) return boundRedactedString(value, keyHint);
   if (keyHint && SENSITIVE_KEY_RE.test(keyHint)) return '[REDACTED]';
-  return boundRedactedString(redactSensitiveText(trimmed), keyHint);
+  return boundRedactedString(redactSensitiveText(trimmed, SENSITIVE_ASSIGNMENT_RE), keyHint);
 }
 
-function redactSensitiveText(value: string): string {
+function redactSensitiveText(value: string, assignmentRe: RegExp): string {
   let output = redactUrls(value);
   output = output.replace(SECRET_TOKEN_RE, '[REDACTED]');
   output = output.replace(
-    SENSITIVE_ASSIGNMENT_RE,
+    assignmentRe,
     (match, key: string, separator: string, rawValue: string, offset: number, input: string) => {
       if (isSafeSetupUrlAssignment({ key, separator, rawValue, offset, input })) return match;
       if (isDocumentedTokenPlaceholder(rawValue)) return match;
