@@ -68,29 +68,34 @@ test('connection resolve and verify use each call host independently', async () 
     {
       source: 'embedder',
       load: () => ({
-        apiVersion: 2,
-        provider: 'example',
-        credentials: { variables: [] },
-        setup: () => ({}),
-        connection: {
-          capabilities: {
-            leaseKind: 'direct-device-provider',
-            requiresAppAttachment: false,
-            requiresRemoteDaemon: false,
-            supportsArtifacts: true,
-            supportsDeferredAppSelection: false,
-            supportsDirectPortReverse: false,
-            usesCloudWebDriverLease: true,
+        apiVersion: 3,
+        contributes: [
+          {
+            kind: 'provider',
+            provider: 'example',
+            credentials: { variables: [] },
+            setup: () => ({}),
+            connection: {
+              capabilities: {
+                leaseKind: 'direct-device-provider',
+                requiresAppAttachment: false,
+                requiresRemoteDaemon: false,
+                supportsArtifacts: true,
+                supportsDeferredAppSelection: false,
+                supportsDirectPortReverse: false,
+                usesCloudWebDriverLease: true,
+              },
+              resolve: async ({ host }: { host: import('./host.ts').ProviderPluginHost }) => {
+                await run(host);
+                return { profile: { leaseProvider: 'example', platform: 'ios' } };
+              },
+              verify: async ({ host }: { host: import('./host.ts').ProviderPluginHost }) => {
+                await run(host);
+                return { provider: 'example', service: 'example', verificationMessage: 'ok' };
+              },
+            },
           },
-          resolve: async ({ host }: { host: import('./host.ts').ProviderPluginHost }) => {
-            await run(host);
-            return { profile: { leaseProvider: 'example', platform: 'ios' } };
-          },
-          verify: async ({ host }: { host: import('./host.ts').ProviderPluginHost }) => {
-            await run(host);
-            return { provider: 'example', service: 'example', verificationMessage: 'ok' };
-          },
-        },
+        ],
       }),
     },
   ]);
@@ -119,17 +124,22 @@ test('provider registry setup receives its supplied command host', async () => {
     {
       source: 'embedder',
       load: () => ({
-        apiVersion: 2,
-        provider: 'example',
-        credentials: { variables: [] },
-        setup: async (host: import('./host.ts').ProviderPluginHost) => {
-          const result = await host.runHostCommand(process.execPath, [
-            '-e',
-            'process.stdout.write(JSON.stringify([process.cwd(), process.env.SETUP_VALUE]))',
-          ]);
-          observed = JSON.parse(result.stdout);
-          return { webDriver: { provider: 'example' } };
-        },
+        apiVersion: 3,
+        contributes: [
+          {
+            kind: 'provider',
+            provider: 'example',
+            credentials: { variables: [] },
+            setup: async (host: import('./host.ts').ProviderPluginHost) => {
+              const result = await host.runHostCommand(process.execPath, [
+                '-e',
+                'process.stdout.write(JSON.stringify([process.cwd(), process.env.SETUP_VALUE]))',
+              ]);
+              observed = JSON.parse(result.stdout);
+              return { webDriver: { provider: 'example' } };
+            },
+          },
+        ],
       }),
     },
   ]);

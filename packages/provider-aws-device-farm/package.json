@@ -1,6 +1,13 @@
 {
   "name": "@agent-device/aws-device-farm",
   "version": "0.22.0-dev",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "agent-device": {
+    "apiVersion": 3,
+    "provider": "aws-device-farm"
+  },
   "type": "module",
   "description": "AWS Device Farm real-device plugin for agent-device.",
   "files": [

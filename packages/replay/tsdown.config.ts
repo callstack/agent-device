@@ -21,6 +21,12 @@ export default defineConfig({
   minify: true,
   dts: true,
   hash: false,
-  deps: { alwaysBundle: [/^@agent-device\//] },
+  deps: {
+    // The declaration references the host's published contract types, as the Maestro entry does.
+    // Inlining them here declares a second, unrelated copy of `AppError` and the snapshot types,
+    // and a host could not pass this plugin to `startAgentDevice`.
+    neverBundle: ['agent-device/plugins'],
+    alwaysBundle: [/^@agent-device\//],
+  },
   inputOptions: { onLog: rejectUnresolvedWorkspaceImports },
 });

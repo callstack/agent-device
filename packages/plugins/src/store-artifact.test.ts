@@ -7,7 +7,7 @@ import * as command from '@agent-device/host-kit/command';
 import { tryAcquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync, pluginHome, v2RegistrationSource } from '@agent-device/test-kit';
+import { mkdtempForTestSync, pluginHome, pluginSource } from '@agent-device/test-kit';
 import {
   addPluginArtifact,
   changePlugin,
@@ -31,6 +31,8 @@ function packFixture(
       name,
       version: '1.2.3',
       type: 'module',
+      engines: { node: '>=22.12' },
+      'agent-device': { apiVersion: 3, provider: name },
       exports: exportsField,
       scripts: {
         preinstall: `node sentinel.cjs`,
@@ -43,20 +45,20 @@ function packFixture(
     path.join(source, 'sentinel.cjs'),
     `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'script')`,
   );
-  let pluginSource = v2RegistrationSource(name).replace(
+  let factorySource = pluginSource(name).replace(
     'export default (options = {}) => (',
     `export default (options = {}) => (fs.writeFileSync(${JSON.stringify(sentinel)}, 'factory'), `,
   );
   if (factoryGate) {
-    pluginSource = pluginSource.replace('export default ', 'const createPlugin = ');
-    pluginSource += `\nexport default async (options) => {
+    factorySource = factorySource.replace('export default ', 'const createPlugin = ');
+    factorySource += `\nexport default async (options) => {
       const gate = globalThis[Symbol.for(${JSON.stringify(factoryGate)})];
       gate.enter();
       await gate.resume;
       return createPlugin(options);
     };`;
   }
-  fs.writeFileSync(path.join(source, 'plugin.mjs'), pluginSource);
+  fs.writeFileSync(path.join(source, 'plugin.mjs'), factorySource);
   const packed = command.runCmdSync(
     'npm',
     ['pack', '--ignore-scripts', '--json', '--pack-destination', root],

@@ -76,18 +76,23 @@ async function embedded(label) {
     plugins: [
       {
         ...plugin,
-        setup: async (host) => {
-          const setup = await plugin.setup(host);
-          return {
-            ...setup,
-            replayBackend: {
-              create: async (host) => {
-                backend = await setup.replayBackend.create(host);
-                return backend;
-              },
+        contributes: [
+          {
+            ...plugin.contributes[0],
+            setup: async (host) => {
+              const setup = await plugin.contributes[0].setup(host);
+              return {
+                ...setup,
+                replayBackend: {
+                  create: async (host) => {
+                    backend = await setup.replayBackend.create(host);
+                    return backend;
+                  },
+                },
+              };
             },
-          };
-        },
+          },
+        ],
       },
     ],
   });

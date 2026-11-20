@@ -7,12 +7,7 @@ import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
 import * as pluginStore from '@agent-device/plugins/store';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import {
-  pluginHome,
-  selectV2Plugin,
-  v2RegistrationSource,
-  beginStdoutCapture,
-} from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource, beginStdoutCapture } from '@agent-device/test-kit';
 import { parseArgs, parseRawArgs, usageForCommand } from '../../parser/args.ts';
 
 vi.mock('../../../provider-device-runtimes.ts', () => {
@@ -29,13 +24,14 @@ test('plugins list and remove route through the CLI and emits JSON without daemo
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', path.join(home, 'state'));
   vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
   const marker = path.join(home, 'setup');
-  selectV2Plugin(
+  selectPlugin(
     home,
     'example',
     `import fs from 'node:fs';
      export default () => ({
-       apiVersion: 2, provider: 'example', credentials: { variables: [] },
+       apiVersion: 3, contributes: [{ kind: 'provider', provider: "example", credentials: { variables: [] },
        setup: async () => { fs.writeFileSync(${JSON.stringify(marker)}, 'yes'); throw new Error('must not set up'); },
+       }],
      });`,
   );
   const sendToDaemon = vi.fn(async () => {
@@ -103,7 +99,7 @@ test('plugins list reports the running daemon inventory next to the store select
       plugins: [failed],
     }),
   );
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  selectPlugin(home, 'example', pluginSource('example'));
   const stdoutCapture = beginStdoutCapture();
   try {
     await runCli(['plugins', 'list', '--json'], {
@@ -177,7 +173,7 @@ test('plugins list names a plugin the running daemon did not register', async ()
       ],
     }),
   );
-  selectV2Plugin(home, 'example', v2RegistrationSource('example'));
+  selectPlugin(home, 'example', pluginSource('example'));
   const text = await listPluginsAsText(home, stateDir);
   assert.match(text, /example@.* \(example\)/);
   assert.match(text, /The running daemon did not register example: bad plugin/);
@@ -209,6 +205,8 @@ test.each(['relative', 'absolute'])(
         name: 'cli-artifact',
         version: '1.0.0',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider: 'cli-artifact' },
         exports: { './agent-device': './plugin.mjs' },
         scripts: { preinstall: 'node sentinel.cjs' },
       }),
@@ -387,10 +385,12 @@ test('plugins add installs a scoped pinned registry selector through the store',
         name: '@example/provider',
         version: '1.2.3',
         type: 'module',
+        engines: { node: '>=22.12' },
+        'agent-device': { apiVersion: 3, provider: 'example' },
         exports: { './agent-device': './plugin.mjs' },
       }),
     );
-    fs.writeFileSync(path.join(directory, 'plugin.mjs'), v2RegistrationSource('example'));
+    fs.writeFileSync(path.join(directory, 'plugin.mjs'), pluginSource('example'));
     return { stdout: '', stderr: '', exitCode: 0 };
   });
   const capture = beginStdoutCapture();

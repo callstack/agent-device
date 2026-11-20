@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import type { ProviderPluginHost } from 'agent-device/plugins';
+import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import testmu from './index.ts';
+
+function providerOf<P extends AgentDevicePlugin>(plugin: P) {
+  const [contribution] = plugin.contributes;
+  if (contribution.kind !== 'provider') throw new Error('expected a provider contribution');
+  return contribution as Extract<P['contributes'][number], { kind: 'provider' }>;
+}
+
 import { verifyTestMuConnection } from './testmu-connection-verification.ts';
 
 vi.mock('./testmu-connection-verification.ts', () => ({ verifyTestMuConnection: vi.fn() }));
@@ -35,8 +42,11 @@ function capturedAuthorization(): { read(): string | undefined } {
   return { read: () => authorization };
 }
 
-async function listArtifacts(plugin: ReturnType<typeof testmu>, env: Record<string, string>) {
-  const setup = await plugin.setup(host(env));
+async function listArtifacts(
+  provider: Extract<AgentDevicePlugin['contributes'][number], { kind: 'provider' }>,
+  env: Record<string, string>,
+) {
+  const setup = await provider.setup(host(env));
   if (!('webDriver' in setup)) throw new Error('TestMu AI sets up a WebDriver descriptor');
   await setup.webDriver.listArtifacts!({ provider: 'testmu', providerSessionId: 'SESSION1' });
 }
@@ -45,17 +55,22 @@ const basic = (username: string, accessKey: string) =>
   `Basic ${Buffer.from(`${username}:${accessKey}`).toString('base64')}`;
 
 test('the plugin declares the LT variables only when it reads credentials from the environment', () => {
-  assert.deepEqual(testmu().credentials, { variables: ['LT_USERNAME', 'LT_ACCESS_KEY'] });
-  assert.deepEqual(testmu({ credentials: { username: 'u', accessKey: 'k' } }).credentials, {
-    variables: [],
+  assert.deepEqual(providerOf(testmu()).credentials, {
+    variables: ['LT_USERNAME', 'LT_ACCESS_KEY'],
   });
+  assert.deepEqual(
+    providerOf(testmu({ credentials: { username: 'u', accessKey: 'k' } })).credentials,
+    {
+      variables: [],
+    },
+  );
 });
 
 test('a credentials object missing one key still declares the variable it reads from the environment', () => {
-  assert.deepEqual(testmu({ credentials: { username: 'u' } as never }).credentials, {
+  assert.deepEqual(providerOf(testmu({ credentials: { username: 'u' } as never })).credentials, {
     variables: ['LT_ACCESS_KEY'],
   });
-  assert.deepEqual(testmu({ credentials: { accessKey: 'k' } as never }).credentials, {
+  assert.deepEqual(providerOf(testmu({ credentials: { accessKey: 'k' } as never })).credentials, {
     variables: ['LT_USERNAME'],
   });
 });
@@ -64,13 +79,19 @@ test('credentials passed as options replace the environment, which stays the fal
   const captured = capturedAuthorization();
   const env = { LT_USERNAME: 'env-user', LT_ACCESS_KEY: 'env-key' };
 
-  await listArtifacts(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } }), env);
+  await listArtifacts(
+    providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
+    env,
+  );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } }), {});
+  await listArtifacts(
+    providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
+    {},
+  );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(testmu(), env);
+  await listArtifacts(providerOf(testmu()), env);
   assert.equal(captured.read(), basic('env-user', 'env-key'));
-  await assert.rejects(listArtifacts(testmu(), {}), { code: 'INVALID_ARGS' });
+  await assert.rejects(listArtifacts(providerOf(testmu()), {}), { code: 'INVALID_ARGS' });
 });
 
 test('connect uses the option credentials without an environment and verifies with them', async () => {
@@ -81,7 +102,9 @@ test('connect uses the option credentials without an environment and verifies wi
     device: { status: 'verified', name: 'iPhone 16', platform: 'ios', osVersion: '18.0' },
     app: { status: 'verified', reference: 'lt://APP1' },
   });
-  const { connection } = testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } });
+  const { connection } = providerOf(
+    testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } }),
+  );
   const flags = {
     json: false,
     help: false,
@@ -110,7 +133,7 @@ test('connect uses the option credentials without an environment and verifies wi
   );
   await assert.rejects(
     async () =>
-      await testmu().connection!.resolve({
+      await providerOf(testmu()).connection!.resolve({
         flags,
         stateDir: '/state',
         cwd: '/work',
@@ -123,10 +146,10 @@ test('connect uses the option credentials without an environment and verifies wi
 
 test('the plugin declares its provider, capabilities and credential variables', () => {
   const plugin = testmu();
-  assert.equal(plugin.apiVersion, 2);
-  assert.equal(plugin.provider, 'testmu');
-  assert.deepEqual(plugin.credentials, { variables: ['LT_USERNAME', 'LT_ACCESS_KEY'] });
-  assert.deepEqual(plugin.connection?.capabilities, {
+  assert.equal(plugin.apiVersion, 3);
+  assert.equal(providerOf(plugin).provider, 'testmu');
+  assert.deepEqual(providerOf(plugin).credentials, { variables: ['LT_USERNAME', 'LT_ACCESS_KEY'] });
+  assert.deepEqual(providerOf(plugin).connection?.capabilities, {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
     requiresRemoteDaemon: false,
@@ -139,7 +162,7 @@ test('the plugin declares its provider, capabilities and credential variables', 
 
 test('a credentials object missing one key falls back to the environment for that key', async () => {
   const captured = capturedAuthorization();
-  await listArtifacts(testmu({ credentials: { username: 'opt-user' } as never }), {
+  await listArtifacts(providerOf(testmu({ credentials: { username: 'opt-user' } as never })), {
     LT_USERNAME: 'env-user',
     LT_ACCESS_KEY: 'env-key',
   });

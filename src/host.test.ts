@@ -11,6 +11,7 @@ import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-re
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
+import type { AgentDevicePlugin } from './sdk/plugins.ts';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { stopRecordedDaemon } from '@agent-device/daemon-client';
 import { startAgentDevice } from './host.ts';
@@ -99,7 +100,7 @@ type Booted = {
 
 async function bootHost(
   options: {
-    plugins?: readonly import('@agent-device/plugins/contract').AgentDevicePlugin[];
+    plugins?: readonly AgentDevicePlugin[];
     env?: Record<string, string>;
   } = {},
 ): Promise<Booted> {
@@ -210,13 +211,18 @@ test('a host runs its runtime on the socket its client is given, whatever the pr
 
 test('a host registers the plugins its embedder imported and reports the inventory', async () => {
   const plugin = {
-    apiVersion: 2 as const,
-    provider: 'embedder-plugin',
-    credentials: { variables: [] },
-    setup: async () => {
-      throw new Error('not invoked by composition fixture');
-    },
-  };
+    apiVersion: 3 as const,
+    contributes: [
+      {
+        kind: 'provider' as const,
+        provider: 'embedder-plugin',
+        credentials: { variables: [] },
+        setup: async () => {
+          throw new Error('not invoked by composition fixture');
+        },
+      },
+    ],
+  } satisfies AgentDevicePlugin;
   const { stateDir, paths, host } = await bootHost({ plugins: [plugin] });
   try {
     // The embedder's objects reach the composition as candidates the registry claims in order, and the
@@ -236,7 +242,7 @@ test('a host registers the plugins its embedder imported and reports the invento
 
 test.each([
   { plugin: 'not-a-plugin', reason: 'invalid_plugin' },
-  { plugin: { apiVersion: 1, provider: 'wrong-version' }, reason: 'incompatible_plugin' },
+  { plugin: { apiVersion: 2, provider: 'wrong-version' }, reason: 'incompatible-plugin-api' },
 ])(
   'plugin validation reports $reason through the registry inventory',
   async ({ plugin, reason }) => {
