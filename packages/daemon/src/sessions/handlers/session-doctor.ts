@@ -26,6 +26,7 @@ import {
   remoteConnectionChecks,
   sessionChecks,
 } from './session-doctor-options.ts';
+import { installedBuildsDriftCheck } from './session-doctor-version-drift.ts';
 import {
   appendDoctorCheck,
   appendDoctorChecks,
@@ -83,6 +84,10 @@ export async function handleDoctorCommand(params: {
   if (options.remote) {
     return doctorResponse(checks, options);
   }
+
+  // Host-level identity check: the daemon's build against the installs PATH reaches. Runs before
+  // device probing so a mixed-entry caller sees the drift line even when no device resolves.
+  appendDoctorCheck(checks, await installedBuildsDriftCheck(params.host.env));
 
   const context = hostDiagnosticsContext(options, stateDir, androidAdbExecutor);
   const inventory = await appendDeviceInventoryCheck(checks, req, session, params.host.env);

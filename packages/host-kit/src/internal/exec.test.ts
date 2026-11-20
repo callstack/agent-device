@@ -13,7 +13,6 @@ import {
   runCmdDetached,
   runCmdStreaming,
   runCmdSync,
-  whichCmd,
   withCommandHost,
   type ExecResult,
 } from './exec.ts';
@@ -114,10 +113,6 @@ test('runCmdBackground aborts with request cancellation details', async () => {
   await assertRejectsRequestCanceled(wait);
 });
 
-test('whichCmd resolves absolute executable paths without invoking a shell', async () => {
-  assert.equal(await whichCmd(process.execPath, process.env), true);
-});
-
 async function assertRejectsRequestCanceled(promise: Promise<unknown>): Promise<void> {
   await assert.rejects(promise, (error: unknown) => {
     const err = error as { code?: string; message?: string; details?: Record<string, unknown> };
@@ -128,10 +123,6 @@ async function assertRejectsRequestCanceled(promise: Promise<unknown>): Promise<
     );
   });
 }
-
-test('whichCmd resolves bare commands from PATH', async () => {
-  assert.equal(await whichCmd('node', process.env), true);
-});
 
 test.runIf(process.platform !== 'win32')(
   'process helpers reject relative executable paths',
@@ -197,24 +188,6 @@ test.runIf(process.platform !== 'win32')(
     }
   },
 );
-
-test('whichCmd rejects suspicious command strings', async () => {
-  assert.equal(await whichCmd('node; rm -rf /', process.env), false);
-  assert.equal(await whichCmd('./node', process.env), false);
-});
-
-test('whichCmd ignores directories that match a command name in PATH', async () => {
-  const root = mkdtempForTestSync('agent-device-whichcmd-');
-  const fakeCommandDir = path.join(root, 'fake-tool');
-  fs.mkdirSync(fakeCommandDir);
-
-  try {
-    const env = { PATH: `${root}${path.delimiter}${process.env.PATH ?? ''}` };
-    assert.equal(await whichCmd('fake-tool', env), false);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test('requireExecSuccess passes a zero-exit result through untouched', () => {
   const result: ExecResult = { stdout: 'ok', stderr: '', exitCode: 0 };
