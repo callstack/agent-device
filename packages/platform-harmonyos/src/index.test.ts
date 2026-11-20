@@ -4,6 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HarmonyPlatformRegistration } from '@agent-device/contracts/platform-plugin';
 import type { DeviceInventoryHostFor } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformHost } from 'agent-device/plugins';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import harmonyPlatformPlugin from './index.ts';
 
 const HARMONY_DEVICE = {
@@ -16,15 +17,15 @@ const HARMONY_DEVICE = {
 } satisfies DeviceInfo;
 
 /** The host the composition hands the plugin: one captured environment, no device authority. */
-function createPluginHost(env: Record<string, string | undefined> = {}): PlatformHost {
+function createPluginHost(env: PlatformHost['env'] = {}): PlatformHost {
   return {
     env,
     cwd: '/host-cwd',
     stateDir: '/host-state',
     runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-    emitDiagnostic: () => undefined,
-    withDiagnosticTimer: async (_label, run) => await run(),
-  } as unknown as PlatformHost;
+    emitDiagnostic,
+    withDiagnosticTimer,
+  };
 }
 
 function setupHarmonyPlatform(host?: PlatformHost): HarmonyPlatformRegistration {
@@ -131,10 +132,14 @@ test('setup hands the host it was set up with to the inventory module it registe
 
 test('setup creates the HarmonyOS interactor lazily', async () => {
   const registration = setupHarmonyPlatform();
-  const interactor = await registration.createInteractor(HARMONY_DEVICE, {}, {
-    env: {},
-    cwd: '/host-cwd',
-  });
+  const interactor = await registration.createInteractor(
+    HARMONY_DEVICE,
+    {},
+    {
+      env: {},
+      cwd: '/host-cwd',
+    },
+  );
 
   assert.equal(typeof interactor.snapshot, 'function');
   assert.equal(typeof interactor.tap, 'function');
