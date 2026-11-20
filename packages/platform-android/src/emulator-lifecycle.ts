@@ -193,6 +193,10 @@ export function buildAndroidBootError(
   budgetSpent: boolean,
   details: AndroidBootFailureDetails,
 ): AppError {
+  // A missing tool is not a slow boot: it keeps its code and message even on a spent budget.
+  if (appError.code === 'TOOL_MISSING') {
+    return new AppError('TOOL_MISSING', appError.message, details, appError.cause);
+  }
   if (budgetSpent) {
     return new AppError(
       'COMMAND_FAILED',
@@ -200,9 +204,6 @@ export function buildAndroidBootError(
       details,
       appError.cause,
     );
-  }
-  if (appError.code === 'TOOL_MISSING') {
-    return new AppError('TOOL_MISSING', appError.message, details, appError.cause);
   }
   if (reason === 'ADB_TRANSPORT_UNAVAILABLE') {
     return new AppError('COMMAND_FAILED', appError.message, details, appError.cause);

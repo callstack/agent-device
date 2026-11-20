@@ -372,6 +372,25 @@ test('a probe failure that lands on the readiness deadline reports the spent bud
   });
 });
 
+test('a missing tool keeps its code and message when the probe also spent the budget', async () => {
+  const { host } = probeHost([]);
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      throw new AppError('TOOL_MISSING', 'adb not found in PATH');
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 5_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ code: 'TOOL_MISSING', message: 'adb not found in PATH' });
+});
+
 test('a probe that throws a plain Error fails as a command failure, not UNKNOWN', async () => {
   const { host } = probeHost([new Error('spawn adb EACCES')]);
 
