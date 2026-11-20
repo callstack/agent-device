@@ -14,6 +14,6 @@ Remote script delivery caps in-memory bytes and error answers.
 
 ## Proposed in #4669
 
-#4669 proposes judging caller output as ADR 0016 does, and validating a peer-named entry's single name before filesystem work, with ADR 0016 staging and byte caps as candidates.
+#4669 proposes private writes for credentials, client state, and daemon state (#4649): create each under a verified state root, and never write through a link at the final name.
 Do not apply these before #4669 is approved.
-Screenshot `--out`, contact sheets, the JUnit reporter, trace and recording outputs, client state, and daemon state do not follow these rules yet (#4669).
+Do not apply the ADR 0016 walk to other caller outputs. Screenshot `--out`, contact sheets, the JUnit reporter, and trace and recording outputs keep a plain write to the path the caller names.
