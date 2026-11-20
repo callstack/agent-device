@@ -535,6 +535,7 @@ async function downloadResponseArtifacts(
   if (artifacts.length === 0) return data === response.data ? response : { ok: true, data };
   const nextData: Record<string, unknown> = { ...(data ?? {}) };
   const nextArtifacts: DaemonArtifact[] = [];
+  const dropped: DroppedArtifact[] = [];
   for (const artifact of artifacts) {
     if (isSessionScriptArtifact(artifact)) {
       await scripts?.publish(artifact, nextData, nextArtifacts);
@@ -544,30 +545,50 @@ async function downloadResponseArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
-    if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) continue;
-    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
-    const materializedPath = await downloadRemoteArtifact({
-      ...endpoint,
-      artifactId: artifact.artifactId,
-      destinationPath: downloadPath,
-      requestScope: req.meta,
-      // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
-      // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
-      // racing the response headers (a directory destination must never be `rm`'d wholesale; see
-      // `downloadRemoteArtifact`).
-      isDirectory: artifact.artifactType === 'test-artifacts',
-    });
-    // Directory artifacts download into a caller-owned root, then atomically publish their one
-    // top-level entry beneath it. Use the path the download actually published rather than the
-    // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
-    nextData[artifact.field] = materializedPath;
-    nextArtifacts.push({
-      ...artifact,
-      localPath: materializedPath,
-    });
+    await downloadOneArtifact(endpoint, req, host, artifact, { nextData, nextArtifacts, dropped });
   }
   nextData.artifacts = nextArtifacts;
+  if (dropped.length > 0) discloseDroppedArtifacts(nextData, dropped);
   return { ok: true, data: nextData };
+}
+
+/** Downloads one non-script response artifact into the response being built, or drops it. */
+async function downloadOneArtifact(
+  endpoint: Required<DaemonArtifactEndpoint>,
+  req: DaemonWireRequest,
+  host: HostEnvironment,
+  artifact: DaemonArtifact & { artifactId: string },
+  into: {
+    nextData: Record<string, unknown>;
+    nextArtifacts: DaemonArtifact[];
+    dropped: DroppedArtifact[];
+  },
+): Promise<void> {
+  if (typeof artifact.field !== 'string' || isClientOwnedResponseField(artifact.field)) return;
+  const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
+  if (downloadPath === undefined) {
+    into.dropped.push({ field: artifact.field, reason: 'artifact_name_invalid' });
+    return;
+  }
+  const materializedPath = await downloadRemoteArtifact({
+    ...endpoint,
+    artifactId: artifact.artifactId,
+    destinationPath: downloadPath,
+    requestScope: req.meta,
+    // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
+    // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
+    // racing the response headers (a directory destination must never be `rm`'d wholesale; see
+    // `downloadRemoteArtifact`).
+    isDirectory: artifact.artifactType === 'test-artifacts',
+  });
+  // Directory artifacts download into a caller-owned root, then atomically publish their one
+  // top-level entry beneath it. Use the path the download actually published rather than the
+  // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
+  into.nextData[artifact.field] = materializedPath;
+  into.nextArtifacts.push({
+    ...artifact,
+    localPath: materializedPath,
+  });
 }
 
 function hasDownloadableArtifactId(
@@ -590,8 +611,27 @@ function isClientOwnedResponseField(field: string): boolean {
     field === 'artifacts' ||
     field === 'savedScript' ||
     field === 'scriptDeliveryFailure' ||
+    field === 'droppedArtifacts' ||
     field === 'warnings'
   );
+}
+
+/** A response artifact the client did not download, and why. */
+type DroppedArtifact = { field: string; reason: 'artifact_name_invalid' };
+
+/**
+ * Adds the artifacts this client dropped, and one warning for each, to a response body. The action
+ * keeps its own outcome; only the dropped artifacts are missing from `artifacts`.
+ */
+function discloseDroppedArtifacts(data: Record<string, unknown>, dropped: DroppedArtifact[]): void {
+  data.droppedArtifacts = dropped;
+  data.warnings = [
+    ...(Array.isArray(data.warnings) ? data.warnings : []),
+    ...dropped.map(
+      ({ field }) =>
+        `The remote artifact for ${JSON.stringify(field)} was not downloaded: its name cannot be a file name.`,
+    ),
+  ];
 }
 
 // Only a successfully published version can name a caller's savedScript destination.
@@ -626,18 +666,31 @@ function finishesEarlierClientCapture(req: DaemonWireRequest): boolean {
  * Where this client writes one downloaded artifact. The client chooses: a path it registered in
  * this request wins, and a response `localPath` is accepted only on a stop or report that echoes an
  * earlier request's destination. Anything else lands in cwd under the response file name's basename.
+ * A destination that cannot be a file path (a NUL byte, a file name that is not a string) answers
+ * `undefined`, so it never reaches a filesystem call.
  */
 function resolveMaterializedArtifactPath(
   artifact: DaemonArtifact,
   req: DaemonWireRequest,
   host: HostEnvironment,
-): string {
+): string | undefined {
+  const destination = chooseMaterializedArtifactPath(artifact, req, host);
+  return destination === undefined || destination.includes('\0') ? undefined : destination;
+}
+
+function chooseMaterializedArtifactPath(
+  artifact: DaemonArtifact,
+  req: DaemonWireRequest,
+  host: HostEnvironment,
+): string | undefined {
   const requestedPath = req.meta?.clientArtifactPaths?.[artifact.field];
   if (hasNonEmptyString(requestedPath)) return requestedPath;
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return artifact.localPath;
   }
-  const responseName = path.basename(artifact.fileName?.trim() ?? '');
+  const rawName: unknown = artifact.fileName ?? '';
+  if (typeof rawName !== 'string') return undefined;
+  const responseName = path.basename(rawName.trim());
   const fileName =
     responseName && responseName !== '.' && responseName !== '..'
       ? responseName
