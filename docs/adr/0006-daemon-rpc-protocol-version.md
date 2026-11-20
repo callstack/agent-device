@@ -137,6 +137,8 @@ and its command line proves it is a daemon process.
 A daemon that still answers is left alone. The call fails with `daemon-drain-timeout`.
 A client never signals a daemon that did not accept a quiesce. The exception is an unreachable
 daemon that the client retires deliberately.
+A closing daemon stops listening before it removes its registration, so it also reads as unreachable.
+A graceful retirement therefore waits 75 s after SIGTERM, longer than the bounded teardown, before it sends SIGKILL.
 
 The census counts what the contract names and nothing else.
 A resumable upload that is still streaming is outside the census. A host-administration

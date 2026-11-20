@@ -15,7 +15,6 @@ import type {
   ProviderReleaseRecord,
 } from './daemon-shutdown-report.ts';
 
-const DAEMON_STOP_GRACE_TIMEOUT_MS = 10_000;
 const DAEMON_STOP_KILL_TIMEOUT_MS = 2_000;
 
 export type DaemonStopResult = {
@@ -64,7 +63,7 @@ export async function stopDaemon(params: {
     paths: params.paths,
     observed,
     mode: 'graceful',
-    termTimeoutMs: params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
+    termTimeoutMs: params.graceTimeoutMs,
     killTimeoutMs: params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
   });
   if (retirement.status === 'retained' && retirement.termination?.status === 'not-running')

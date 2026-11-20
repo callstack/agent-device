@@ -67,6 +67,14 @@ export type DaemonExitWait = {
 const DAEMON_EXIT_POLL_MS = 100;
 
 /**
+ * How long a daemon that was asked to leave may take before anything forces it. A closing daemon
+ * stops listening first and removes its registration last, so until it exits it looks unreachable.
+ * This covers its own bounded teardown: about 19 s of fixed steps plus the largest session budget
+ * (46 s, a web session that also records). The wait ends as soon as the process exits.
+ */
+export const DAEMON_TEARDOWN_GRACE_MS = 75_000;
+
+/**
  * Confirms termination from a released pid, a verified zombie, or a different
  * readable process lifetime. An unreadable process observation is not proof.
  */

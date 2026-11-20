@@ -5,6 +5,7 @@ import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/ho
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
 import { settleWithin, sleep } from '@agent-device/host-kit/retry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { DAEMON_TEARDOWN_GRACE_MS } from '@agent-device/daemon-contracts/daemon-process';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import {
@@ -152,7 +153,12 @@ export async function readReusableLocalDaemon(
   };
   if (settings.onTakeover) settings.onTakeover(notice);
   else emitDaemonTakeoverNotice(notice);
-  await retireDaemonForTakeover(existing, settings.paths);
+  await retireDaemonForTakeover(
+    existing,
+    settings.paths,
+    'graceful',
+    remainingStartupBudget(deadline),
+  );
   return null;
 }
 
@@ -169,11 +175,13 @@ export async function stopDaemonForTakeover(
   existing: DaemonInfo,
   paths: DaemonPaths,
   mode: 'graceful' | 'force' = 'graceful',
+  budgetMs = Number.POSITIVE_INFINITY,
 ): Promise<DaemonRetirementResult> {
   return await stopAndRetireDaemon({
     paths: paths,
     observed: observedDaemonIdentityOf(existing),
     mode,
+    termTimeoutMs: Math.min(DAEMON_TEARDOWN_GRACE_MS, budgetMs),
   });
 }
 
@@ -181,8 +189,9 @@ export async function retireDaemonForTakeover(
   existing: DaemonInfo,
   paths: DaemonPaths,
   mode: 'graceful' | 'force' = 'graceful',
+  budgetMs?: number,
 ): Promise<void> {
-  const retirement = await stopDaemonForTakeover(existing, paths, mode);
+  const retirement = await stopDaemonForTakeover(existing, paths, mode, budgetMs);
   if (retirement.status === 'retained')
     throw daemonTakeoverRetirementError(retirement, existing, paths);
 }
@@ -391,6 +400,7 @@ async function recoverFailedDaemonLaunch(
         observed: null,
         mode: 'graceful',
         ownedStateDir: settings.ownedStateDir,
+        termTimeoutMs: 3_000,
         lockTimeoutMs: 0,
       })
     : await recoverAbandonedDaemonRegistration({
