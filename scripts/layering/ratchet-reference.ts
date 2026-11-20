@@ -29,6 +29,10 @@ import {
 } from './session-authority-overlay.ts';
 import { sessionStateWritePressure, type SessionStateWritePressure } from './session-state.ts';
 import { measureUnmatchedTests } from './test-colocation.ts';
+import {
+  measureUntypedReasonLiterals,
+  type UntypedReasonLiterals,
+} from './untyped-reason-ratchet.ts';
 
 export type LayeringRatchets = Readonly<{
   /** R6: distinct type-only spine inversions per `from -> to` zone pair. */
@@ -43,6 +47,8 @@ export type LayeringRatchets = Readonly<{
   testOnlyExports: readonly TestOnlyExport[];
   /** R84: unit tests named for no module beside them, sorted. */
   unmatchedTests: readonly string[];
+  /** R89: untyped `reason: '<literal>'` sites per file, each group sorted by line. */
+  untypedReasonLiterals: UntypedReasonLiterals;
 }>;
 
 /** What R83 and R84 measure a tree from: its package manifests and its tracked `src/` and `packages/` paths. */
@@ -76,6 +82,7 @@ export function measureRatchets(
     sessionAuthority: measureSessionAuthorityOverlay(sources, edges),
     testOnlyExports: measureTestOnlyExports(tree.manifests, tree.files),
     unmatchedTests: measureUnmatchedTests(tree.files),
+    untypedReasonLiterals: measureUntypedReasonLiterals(sources),
   };
 }
 

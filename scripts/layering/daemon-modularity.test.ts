@@ -44,6 +44,7 @@ const REFERENCE: LayeringRatchets = {
   sessionAuthority: { shapeFiles: [], authorityFiles: [] },
   testOnlyExports: [],
   unmatchedTests: [],
+  untypedReasonLiterals: {},
 };
 
 /** The same measurement as the reference except where a test moves one number. */

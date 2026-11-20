@@ -235,6 +235,7 @@ function attachAndroidPresentationFailureEvidence(params: {
         kind: 'exact',
         provider: 'android-helper',
         clickableByNodeIndex: new Map(),
+        longClickableByNodeIndex: new Map(),
       },
     },
   );

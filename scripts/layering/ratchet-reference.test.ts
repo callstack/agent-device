@@ -72,6 +72,7 @@ test('measureRatchets reports all ratchets from one tree', () => {
     sessionAuthority: { shapeFiles: [], authorityFiles: [] },
     testOnlyExports: [],
     unmatchedTests: [],
+    untypedReasonLiterals: {},
   });
   const withExports = measureRatchets(sources, resolveImportEdges(sources), {
     manifests: new Map([
