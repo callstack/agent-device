@@ -112,6 +112,7 @@
   "@agent-device/contracts/screenshot-runtime",
   "@agent-device/contracts/scroll-command",
   "@agent-device/contracts/scroll-gesture",
+  "@agent-device/contracts/scroll-reasons",
   "@agent-device/contracts/scroll-runtime",
   "@agent-device/contracts/selector-observation-runtime",
   "@agent-device/contracts/session",

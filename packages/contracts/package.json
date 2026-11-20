@@ -464,6 +464,10 @@
       "types": "./src/scroll-gesture.ts",
       "default": "./src/scroll-gesture.ts"
     },
+    "./scroll-reasons": {
+      "types": "./src/scroll-reasons.ts",
+      "default": "./src/scroll-reasons.ts"
+    },
     "./scroll-runtime": {
       "types": "./src/scroll-runtime.ts",
       "default": "./src/scroll-runtime.ts"

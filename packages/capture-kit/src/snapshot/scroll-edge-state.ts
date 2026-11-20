@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScrollMovementObservation } from '@agent-device/contracts/scroll-command';
+import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { Point, RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -244,13 +245,23 @@ export async function runScrollEdgePasses<TResult>(params: {
         'COMMAND_FAILED',
         `scroll ${edge} reached the safety limit before the snapshot showed the edge`,
         {
-          reason: 'scroll_edge_pass_limit',
+          reason: SCROLL_REASONS.edgePassLimit.reason,
           edge,
           passes,
           hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
         },
       ),
-    noProgressError: (passes) => buildScrollEdgeNoProgressError(edge, passes),
+    noProgressError: (passes) =>
+      new AppError(
+        'COMMAND_FAILED',
+        `scroll ${edge} moved nothing across ${passes} ${passes === 1 ? 'pass' : 'passes'}: the container still reports hidden content but its contents never shifted`,
+        {
+          reason: SCROLL_REASONS.edgeNoProgress.reason,
+          edge,
+          passes,
+          hint: scrollNoProgressHint({ targetDirectly: 'with scroll <dir> --until <selector>' }),
+        },
+      ),
     scroll,
     ...(settleAfterPass ? { settleAfterPass: async () => await settleAfterPass(scope) } : {}),
   });
@@ -301,20 +312,6 @@ export function formatScrollEdgeMessage(params: {
   return `Scrolled ${direction}`;
 }
 
-function buildScrollEdgeNoProgressError(edge: ScrollEdge, passes: number): AppError {
-  const spent = `${passes} ${passes === 1 ? 'pass' : 'passes'}`;
-  return new AppError(
-    'COMMAND_FAILED',
-    `scroll ${edge} moved nothing across ${spent}: the container still reports hidden content but its contents never shifted`,
-    {
-      reason: 'scroll_edge_no_progress',
-      edge,
-      passes,
-      hint: scrollNoProgressHint({ targetDirectly: 'with scroll <dir> --until <selector>' }),
-    },
-  );
-}
-
 /**
  * What a caller does next when a scroll moved nothing while the container still had content to
  * reveal: one hint, because every loop that notices has the same recovery.
@@ -349,7 +346,7 @@ export function buildScrollEdgeCaptureError(
     'COMMAND_FAILED',
     `scroll ${edge} could not read the screen: ${refusal.detail}`,
     {
-      reason: 'scroll_edge_capture_unreadable',
+      reason: SCROLL_REASONS.edgeCaptureUnreadable.reason,
       edge,
       captureRefusal: refusal.reason,
       hint:

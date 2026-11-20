@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SettleObservation } from './interaction.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
+import { SCROLL_REASONS } from './scroll-reasons.ts';
 import type { Rect } from '@agent-device/kernel/snapshot';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
@@ -15,15 +16,6 @@ export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
  */
 export const DEFAULT_REFRESH_PULL_DURATION_MS = 1200;
 export const DEFAULT_REFRESH_PULL_AMOUNT = 0.4;
-
-/** The typed refusals `scroll refresh` publishes as `details.reason`. */
-export const SCROLL_REFRESH_REFUSALS = {
-  notAtTop: {
-    reason: 'scroll_refresh_not_at_top',
-    message: 'scroll refresh needs the content at its top',
-    hint: 'Run scroll top, then scroll refresh.',
-  },
-} as const satisfies Record<string, Readonly<{ reason: string; message: string; hint: string }>>;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 
@@ -110,7 +102,7 @@ export function assertScrollUntilCompatible(
   if (input.maxPasses !== undefined) {
     if (input.until === undefined) {
       throw new AppError('INVALID_ARGS', 'scroll maxPasses requires until', {
-        reason: 'scroll_max_passes_requires_until',
+        reason: SCROLL_REASONS.maxPassesRequiresUntil.reason,
       });
     }
     if (
@@ -122,7 +114,7 @@ export function assertScrollUntilCompatible(
         'INVALID_ARGS',
         `scroll maxPasses must be an integer from 1 to ${SCROLL_UNTIL_MAX_PASSES}`,
         {
-          reason: 'scroll_max_passes_invalid',
+          reason: SCROLL_REASONS.maxPassesInvalid.reason,
         },
       );
     }

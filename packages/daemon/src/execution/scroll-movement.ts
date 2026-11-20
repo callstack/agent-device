@@ -1,5 +1,6 @@
 import type { ScrollMovementObservation } from '@agent-device/contracts/scroll-command';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { isMobilePlatform, type DeviceInfo } from '@agent-device/kernel/device';
@@ -605,7 +606,7 @@ function scrollNoProgressError(
       edge === 'bottom' ? 'below' : 'above'
     } and its contents never shifted`,
     {
-      reason: 'scroll_no_progress',
+      reason: SCROLL_REASONS.noProgress.reason,
       direction,
       hiddenContentAt: edge,
       containerRect,
