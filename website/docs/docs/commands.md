@@ -25,6 +25,26 @@ agent-device mcp
 
 For MCP client setup and what MCP does not expose, see [AI agent setup](/docs/agent-setup#mcp-server).
 
+## Common options
+
+<!-- generated:common-options -->
+
+These options are allowed by 5 or more commands, so they are documented here once: `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`, `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`, `--out <path>`. A command's own entry omits them and names them in its `Also accepts` line. The shared row is the general case: where a command's semantics differ, that command states its own row.
+
+| Option | What it does |
+| --- | --- |
+| `--settle` | After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response (best-effort; never fails the action) |
+| `--settle-quiet <ms>` | Settle: quiet window the UI must hold to count as settled (default 500ms; 300ms when the settled tree comes from the iOS simulator snapshot bridge). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the --timeout settle deadline; a replacement from a screen the pre-action capture read as presenting nothing, such as a tab switch, gets no 1500ms confirmation and keeps the asked window |
+| `--timeout <ms>` | Boot/Open/Prepare: startup budget covering the device boot (and runner preparation for prepare). Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s) |
+| `--depth, -d <depth>` | Snapshot: limit snapshot depth |
+| `--scope, -s <scope>` | Snapshot: scope snapshot to label/identifier |
+| `--raw` | Snapshot: raw node output |
+| `--out <path>` | Output path |
+
+Exact behavior for one command: `agent-device help <command>`.
+
+<!-- /generated -->
+
 ## Output and warnings
 
 In text mode, every command prints each response warning as a `Warning:` line after its own output.
@@ -638,10 +658,9 @@ agent-device scroll <direction|top|bottom|refresh> [amount] [--until <selector>]
 | `--pixels <n>` | Scroll: explicit gesture distance in pixels |
 | `--until <selector>` | Scroll: repeat passes until the selector is visible on screen |
 | `--max-passes <n>` | Scroll --until: maximum gestures |
-| `--settle` | After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response (best-effort; never fails the action) |
-| `--settle-quiet <ms>` | Settle: quiet window the UI must hold to count as settled (default 500ms; 300ms when the settled tree comes from the iOS simulator snapshot bridge). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the --timeout settle deadline; a replacement from a screen the pre-action capture read as presenting nothing, such as a tab switch, gets no 1500ms confirmation and keeps the asked window |
 | `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
-| `--timeout <ms>` | Boot/Open/Prepare: startup budget covering the device boot (and runner preparation for prepare). Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s) |
+
+Also accepts: [common options](#common-options): `--settle`, `--settle-quiet <ms>`, `--timeout <ms>`.
 
 Supported targets: [Scroll](/docs/capabilities#interact-with-the-app).
 
@@ -653,7 +672,7 @@ Things to know:
 
 - A scroll does not land on an exact position. The amount is a fraction of the viewport (`0.5` is half), and the app's scroll physics decide the final offset.
 - To reach an off-screen element, use `scroll down --until <selector>`. It also works in `.ad` scripts on any screen size; see [Replay and E2E testing](/docs/replay-e2e). It stops after 12 gestures by default. For a long list, raise `--max-passes` (1–200 gestures). If the 90-second request timeout ends the search, inspect the screen and continue with another search.
-- Add `--settle` to get the changed screen with fresh refs in the same response. You then do not need another `snapshot -i`.
+- `--settle` returns the settled diff with fresh refs for the changed screen, so you do not need another `snapshot -i` before the next action.
 - Read `movement` in the result: `moved`, `at-edge`, `unchanged`, or `unobserved`. After `scroll refresh`, `unchanged` means that nothing changed on screen. It does not mean that a refresh ran and found nothing new, so check the app's refresh indicator or content.
 - `scroll refresh` is one slow pull down (`scroll up 0.4 --duration-ms 1200` by default; an amount, `--pixels`, or `--duration-ms` overrides it). On iOS, the pull runs down the middle of the screen. A list that sits only in the top or bottom part of the screen is not pulled.
 - With a keyboard up, the scroll stays above the keyboard and leaves it open. The result reports this as `keyboardAvoided` and `keyboardMinY`. If too little room is left, end editing first. On Android, use `keyboard dismiss`. On iOS, use a visible dismissal control.
@@ -1014,8 +1033,6 @@ Exact behavior: `agent-device help clipboard`.
 <!-- /generated -->
 
 ```bash
-agent-device clipboard read
-agent-device clipboard write "https://example.com"
 agent-device clipboard write ""   # clear clipboard
 ```
 
@@ -1040,13 +1057,6 @@ Supported targets: [Keyboard dismiss, enter, and status](/docs/capabilities#inte
 Exact behavior: `agent-device help keyboard`.
 
 <!-- /generated -->
-
-```bash
-agent-device keyboard status
-agent-device keyboard get
-agent-device keyboard dismiss
-agent-device keyboard enter
-```
 
 Things to know:
 
