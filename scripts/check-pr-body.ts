@@ -8,7 +8,7 @@ import fs from 'node:fs';
 
 const WORD_LIMIT = 250;
 /** Review bots append a footer to the body. The author did not write it, so it is not counted. */
-const BOT_FOOTER = /<!--\s*(?:codesmith:footer|This is an auto-generated description)/;
+const BOT_FOOTER = /^<!--\s*(?:codesmith:footer|This is an auto-generated description)/m;
 
 const SECTION_HINTS: Readonly<Record<string, string>> = {
   Summary: 'the invariant and behavior, the reason, the linked issue, and scope expansion',
@@ -49,14 +49,14 @@ function sectionText(prose: string, heading: string): string | undefined {
   return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
-/** Drops HTML comments, such as the template's prompts. An unclosed comment runs to the end. */
+/** Drops HTML comments, such as the template's prompts. An unclosed `<!--` is kept as text. */
 function withoutComments(text: string): string {
   return text
     .split('<!--')
     .map((part, index) => {
       if (index === 0) return part;
       const end = part.indexOf('-->');
-      return end === -1 ? '' : part.slice(end + 3);
+      return end === -1 ? part : part.slice(end + 3);
     })
     .join('');
 }
@@ -66,7 +66,7 @@ function bodyViolations(title: string, body: string): string[] {
   // from the comment strip, and adds no word to the count.
   const fenceless = body
     .replaceAll('\r', '')
-    .replaceAll(/^(`{3,}|~{3,})[\s\S]*?^\1[^\n]*$/gm, '```');
+    .replaceAll(/^[ \t]*(`{3,}|~{3,})[\s\S]*?^[ \t]*\1[^\n]*$/gm, '```');
   const prose = withoutComments(fenceless.split(BOT_FOOTER)[0] ?? '');
   const violations = requiredSections(title)
     .filter((heading) => !sectionText(prose, heading))
