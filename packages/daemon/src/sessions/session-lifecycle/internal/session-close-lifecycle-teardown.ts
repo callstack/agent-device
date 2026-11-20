@@ -64,10 +64,11 @@ export type SessionCloseTeardownResult = Readonly<{
    */
   implicitShutdownLaunchedProcessUnverified: boolean;
   /**
-   * The stop was asked for, but the process this session launched was still running when the
-   * confirmation budget ended and the pid stop could not confirm its exit.
+   * #4807: the stop was asked for, on either the implicit or the explicit `--shutdown` path, but the
+   * process this session launched was still running when the confirmation budget ended and the pid
+   * stop could not confirm its exit.
    */
-  implicitShutdownStopUnconfirmed: boolean;
+  shutdownStopUnconfirmed: boolean;
 }> &
   Omit<CloseDeviceStopDecision, 'shutdownRequested'>;
 
@@ -131,9 +132,10 @@ async function checkLaunchedProcessOwnership(
 }
 
 /**
- * Step 3 of the implicit stop: the platform asked its device to shut down, so confirm the process
- * this session launched actually left. A launch that recorded no process has nothing to confirm, and
- * the owner refuses to signal a process that no longer carries the recorded start time.
+ * Step 3 of a stop this close asked for: the platform asked its device to shut down, so confirm the
+ * process this session launched actually left. Both the implicit stop and an explicit `--shutdown`
+ * come through here. A launch that recorded no process has nothing to confirm, and the owner refuses
+ * to signal a process that no longer carries the recorded start time.
  */
 async function confirmLaunchedProcessStopped(
   session: SessionState,
@@ -272,12 +274,14 @@ export async function runSessionCloseTeardown(params: {
   );
   // The platform has asked the emulator it owns to shut down; this is where this session checks the
   // process it launched actually left, because `adb emu kill` answers for the guest, not for the
-  // host process. An explicit `--shutdown` is the user's own command for the device and is not this
-  // session's launched process to confirm.
-  const stopUnconfirmed =
-    implicitStop && stopOwed
-      ? await confirmLaunchedProcessStopped(session, params.launchedProcess)
-      : false;
+  // host process. #4807: an explicit `--shutdown` earns the same confirmation as the implicit stop,
+  // without the ownership read above — the user commanded the stop, so what the recorded process
+  // says cannot gate it. A `--shutdown` on a session that recorded no process (a prebooted device
+  // this daemon never launched) has no process to confirm, so nothing is asked of the owner and no
+  // exit is claimed for a launch this session did not cause.
+  const stopUnconfirmed = stopOwed
+    ? await confirmLaunchedProcessStopped(session, params.launchedProcess)
+    : false;
   const saveScriptOutcome = repairArmed
     ? {}
     : finalizeOrdinaryCloseScript({ req, ref, sessionStore, platformCloseError });
@@ -293,7 +297,7 @@ export async function runSessionCloseTeardown(params: {
     ...stopReasons,
     implicitShutdownLaunchedProcessGone: launchedProcess === 'changed',
     implicitShutdownLaunchedProcessUnverified: launchedProcess === 'unverified',
-    implicitShutdownStopUnconfirmed: stopUnconfirmed,
+    shutdownStopUnconfirmed: stopUnconfirmed,
   };
 }
 
