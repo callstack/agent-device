@@ -4,6 +4,7 @@ import type {
 } from '@agent-device/contracts/platform-plugin';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type {
   HostDiagnostics,
@@ -32,8 +33,9 @@ export function createHostDiagnostics(
         return await androidToolchainCheck(env, process.platform);
       }
       if (platform === 'vega') {
-        if (!vega?.active) return undefined;
-        return await vega.active.operations.toolchainCheck(context);
+        const { active } = vega ?? {};
+        if (active) return await active.operations.toolchainCheck(context);
+        return await vegaAbsenceCheck(vega);
       }
       if (platform === 'harmonyos') {
         const { harmonyToolchainCheck } = await import('@agent-device/platform-harmonyos');
@@ -66,4 +68,30 @@ export function createHostDiagnostics(
       return await appleRunnerWarmupCheck(device, context);
     },
   });
+}
+
+// Doctor reaches this only for a run whose selector named Vega, so an inactive selection is the
+// user's blocker rather than one family among many. The selection's own lookup owns the answer: an
+// uninstalled plugin raises the typed plugin-not-installed outcome and a plugin whose load failed
+// raises its own error, both through the composition's one absence reporter. The check reports that
+// outcome's own fields; it never re-derives them.
+async function vegaAbsenceCheck(
+  vega: VegaPlatformSelection | undefined,
+): Promise<DoctorCheck | undefined> {
+  if (!vega) return undefined;
+  try {
+    vega.get();
+    return undefined;
+  } catch (error) {
+    const report = normalizeError(error);
+    const installCommand = report.details?.installCommand;
+    return {
+      id: 'toolchain',
+      status: 'fail',
+      summary: `Vega toolchain: ${report.message}`,
+      hint: report.hint,
+      ...(typeof installCommand === 'string' ? { command: installCommand } : {}),
+      evidence: { code: report.code, ...report.details },
+    };
+  }
 }

@@ -100,6 +100,7 @@ type RequestPlatformProviderDescriptor = {
   resolve: (
     providers: PlatformProviderResolvers,
     context: PlatformProviderRequestContext,
+    selections: RequestPlatformSelections,
   ) => ResolvedRequestPlatformProviders;
   appendWrapper: (
     scopedProviders: ResolvedRequestPlatformProviders,
@@ -126,7 +127,11 @@ export function createComposedRequestPlatformProviders(
       task: (scope: RequestPlatformProviderScope) => Promise<T>,
     ): Promise<T> => {
       const effectiveProviders = await providersForContext(providers, options.web, context);
-      const scopedProviders = resolveRequestPlatformProviders(effectiveProviders, context);
+      const scopedProviders = resolveRequestPlatformProviders(
+        effectiveProviders,
+        context,
+        selections,
+      );
       const scope: RequestPlatformProviderScope = {
         androidAdbExecutor: scopedProviders.androidAdb?.executor,
       };
@@ -224,18 +229,20 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   },
   {
     resolverKey: 'vegaToolProvider',
-    resolve(providers, context) {
+    resolve(providers, context, selections) {
+      // The selection gates before the resolver: a request whose family this process does not
+      // serve has no scope to wrap the provider into, and a resolver may open a session, lease, or
+      // client per call with nothing to close what it returned. The runtime and interactor lookups
+      // the same request then performs raise the typed plugin-not-installed outcome.
+      if (!selections.vega?.active) return {};
       const resolver = providers.vegaToolProvider;
       if (!resolver || context.device.platform !== 'vega') return {};
       return { vegaTool: { provider: resolver(context) } };
     },
     async appendWrapper(scopedProviders, wrappers, selections) {
-      if (!scopedProviders.vegaTool?.provider || !selections.vega) return;
-      appendRequestProviderWrapper(
-        wrappers,
-        scopedProviders.vegaTool,
-        selections.vega.get().withRequestProvider,
-      );
+      const active = selections.vega?.active;
+      if (!scopedProviders.vegaTool?.provider || !active) return;
+      appendRequestProviderWrapper(wrappers, scopedProviders.vegaTool, active.withRequestProvider);
     },
   },
   {
@@ -305,9 +312,13 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
 function resolveRequestPlatformProviders(
   providers: PlatformProviderResolvers,
   context: PlatformProviderRequestContext,
+  selections: RequestPlatformSelections,
 ): ResolvedRequestPlatformProviders {
   return REQUEST_PLATFORM_PROVIDER_DESCRIPTORS.reduce<ResolvedRequestPlatformProviders>(
-    (resolved, descriptor) => ({ ...resolved, ...descriptor.resolve(providers, context) }),
+    (resolved, descriptor) => ({
+      ...resolved,
+      ...descriptor.resolve(providers, context, selections),
+    }),
     {},
   );
 }

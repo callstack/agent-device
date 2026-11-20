@@ -26,6 +26,7 @@ import {
   WEB_DESKTOP_DEVICE,
 } from '@agent-device/test-kit';
 import { builtinPlatformPlugins } from './interactors/builtin-platform-plugin-set.ts';
+import { vegaSelectionFixture } from '../platform-runtime-vega-provider.fixtures.ts';
 import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
@@ -132,6 +133,9 @@ test('every family carries the providers facet with the resolvers it owns', () =
 });
 
 test('root provider composition invokes exactly the resolvers the former gate did', async () => {
+  // The plugin-owned families are supplied here: an optional family this process does not serve is
+  // not asked for a provider at all, so the table equivalence below needs the selection.
+  const vega = vegaSelectionFixture();
   for (const device of SAMPLE_DEVICES) {
     const invoked = new Set<string>();
     const spy = (key: string) => (): undefined => {
@@ -156,7 +160,10 @@ test('root provider composition invokes exactly the resolvers the former gate di
       requestedSession: name,
       requestId: `req-${device.id}`,
     };
-    await createRequestPlatformProviders({ providers }).run(context, async () => {});
+    await createRequestPlatformProviders({
+      providers,
+      vega,
+    }).run(context, async () => {});
 
     const gatedInvoked = new Set(GATED_KEYS.filter((key) => invoked.has(key)));
     assert.deepEqual(
