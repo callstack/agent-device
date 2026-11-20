@@ -13,7 +13,7 @@ import type {
 import {
   COMMAND_ALREADY_FINISHED_RUNNER_CODE,
   RUNNER_WEDGED_RUNNER_CODE,
-  runnerErrorCodeRow,
+  type RunnerTableErrorCode,
   type RunnerCommand,
   RUNNER_TOKEN_UNSUPPORTED_REASON,
 } from './runner-contract.ts';
@@ -74,11 +74,11 @@ const hasRunnerTokenUnsupportedReason: RunnerErrorDetailsMatch = (details) =>
   details.reason === RUNNER_TOKEN_UNSUPPORTED_REASON;
 /**
  * The runner refused the command before running it while abandoned main-thread work drains (#1105).
- * The RUNNER_ERROR_CODES row publishing `runner_busy` owns the verdict — never `details.retriable`,
- * which also marks producers that must not be resent.
+ * The runner code owns the verdict — never `details.reason`, which a host path can publish for its
+ * own refusals, and never `details.retriable`, which also marks producers that must not be resent.
  */
 const hasRunnerBusyCode: RunnerErrorDetailsMatch = (details) =>
-  runnerErrorCodeRow(details.runnerErrorCode)?.reason === 'runner_busy';
+  details.runnerErrorCode === ('RUNNER_BUSY' satisfies RunnerTableErrorCode);
 /**
  * The host's own `DevToolsSecurity -status` read, published as typed details by the probe that
  * takes it. The build-failure rule below keys on this field and never on the probe's message, so
@@ -714,7 +714,7 @@ export function runnerMainThreadOccupancyReport(error: unknown): RunnerMainThrea
 export function isRunnerMainThreadTimeoutError(error: unknown): boolean {
   return (
     error instanceof AppError &&
-    runnerErrorCodeRow(error.details?.runnerErrorCode)?.reason === 'runner_main_thread_timeout'
+    error.details?.runnerErrorCode === ('MAIN_THREAD_TIMEOUT' satisfies RunnerTableErrorCode)
   );
 }
 
