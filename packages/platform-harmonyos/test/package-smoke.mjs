@@ -43,6 +43,13 @@ function hdcStubSource(logFile) {
     'else if (joined.includes("bm dump -n"))',
     '  answer(JSON.stringify({ hapModuleInfos: [{ moduleName: "entry", mainElementName: "EntryAbility" }] }));',
     'else if (joined.includes("aa start")) answer("start ability successfully.");',
+    // The app-log owner asks the device for the application's PID and then streams that PID's log.
+    // `hilog` never returns on a device, so the stub keeps its stream open the way the tool does.
+    'else if (joined.includes("pidof")) answer("4242");',
+    'else if (joined.includes("hilog")) {',
+    '  answer("01-01 00:00:00.000  4242  4242 I A00000: stub line");',
+    '  setInterval(() => {}, 1_000);',
+    '}',
     'else if (joined.includes("dumpLayout")) answer("DumpLayout saved to:/data/local/tmp/layout.json");',
     'else if (args[2] === "file" && args[3] === "recv") {',
     '  const destination = args[5];',
@@ -206,6 +213,23 @@ test('packed core discovers harmonyos only after the managed platform is install
     assert.deepEqual([...fs.readFileSync(shot).subarray(0, 3)], [0xff, 0xd8, 0xff]);
     const pressed = runCliWith(toolchainEnv, 0, 'press', '100', '200', '--platform', 'harmonyos');
     assert.equal(pressed.data.targetKind, 'point');
+    // App logs, the third command family: `logs start` asks the device for the application PID and
+    // streams that PID's log through the host's managed process service. Both calls must reach the
+    // same toolchain-root HDC the rest of the family uses — the stream included, which is the part a
+    // plugin cannot spawn through the core's own local process transport.
+    const logs = runCliWith(toolchainEnv, 0, 'logs', 'start', '--platform', 'harmonyos');
+    assert.equal(logs.data.started, true);
+    assert.ok(logs.data.path.endsWith('app.log'), `unexpected log path: ${logs.data.path}`);
+    // The stream is a background process, so its first line lands a moment after the reply.
+    let streamed = '';
+    for (let attempt = 0; attempt < 100 && !streamed.includes('stub line'); attempt += 1) {
+      // Synchronous wait: this process must keep the daemon's parent alive without a timer.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      streamed = fs.existsSync(logs.data.path) ? fs.readFileSync(logs.data.path, 'utf8') : '';
+    }
+    assert.match(streamed, /stub line/);
+    const stopped = runCliWith(toolchainEnv, 0, 'logs', 'stop', '--platform', 'harmonyos');
+    assert.equal(stopped.data.stopped, true);
     runCliWith(toolchainEnv, 0, 'close', '--platform', 'harmonyos');
 
     const recorded = fs.readFileSync(hdcCalls, 'utf8').split('\n').filter(Boolean);
@@ -229,6 +253,14 @@ test('packed core discovers harmonyos only after the managed platform is install
     assert.ok(
       invoked.some((line) => line.endsWith('shell uitest uiInput click 100 200')),
       `the press command never reached HDC through the documented root: ${invoked.join(' | ')}`,
+    );
+    assert.ok(
+      invoked.some((line) => /^ARGS: -t stub-target shell pidof com\.example\.app$/.test(line)),
+      `the log owner never asked the device for the application PID: ${invoked.join(' | ')}`,
+    );
+    assert.ok(
+      invoked.some((line) => /^ARGS: -t stub-target shell hilog -P 4242$/.test(line)),
+      `the log stream never ran HDC through the documented root: ${invoked.join(' | ')}`,
     );
     assert.ok(
       invoked.every((line) => line === 'ARGS: list targets' || line.includes('-t stub-target')),

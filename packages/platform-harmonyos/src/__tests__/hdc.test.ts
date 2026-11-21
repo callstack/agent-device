@@ -199,3 +199,41 @@ test('the command runner dedupes a root already on PATH', async () => {
 
   assert.deepEqual(harmonyCommandPath(stub.commands[0]!), [root, '/usr/bin']);
 });
+
+test('the command runner streams with the same toolchain environment it runs with', async () => {
+  // One root, one PATH preparation: a toolchain whose HDC needs a sibling executable on `PATH` has
+  // to serve the streamed `hilog` as well as it serves a one-shot command.
+  const root = createHarmonyToolchainRoot();
+  const stub = createHarmonyHostStub({ env: { HDC_SDK_PATH: root, PATH: '/usr/bin' } });
+  const commands = createHarmonyCommandRunner(stub.host);
+
+  const stream = await commands.start(
+    await commands.resolveHdc(),
+    ['-t', 'target-1', 'shell', 'hilog', '-P', '456'],
+    {
+      output: { write: async () => {}, [Symbol.asyncDispose]: async () => {} },
+      markerPath: '/sessions/s1/app-log.pid',
+      allowFailure: true,
+    },
+  );
+
+  assert.equal(stub.streams[0]?.executable, path.join(root, 'hdc'));
+  assert.deepEqual(stub.streams[0]?.args, ['-t', 'target-1', 'shell', 'hilog', '-P', '456']);
+  assert.deepEqual(harmonyCommandPath(stub.streams[0]!), [root, '/usr/bin']);
+  assert.equal(stub.streams[0]?.markerPath, '/sessions/s1/app-log.pid');
+  assert.equal(stub.streams[0]?.allowFailure, true);
+  await stream.terminate();
+  assert.equal((await stream.wait).exitCode, 0);
+});
+
+test('the command runner refuses to stream on a host with no managed process service', async () => {
+  const host = { ...createHarmonyHostStub().host, startBackgroundCommand: undefined };
+  const commands = createHarmonyCommandRunner(host);
+
+  await assert.rejects(
+    commands.start('hdc', ['shell', 'hilog'], {
+      output: { write: async () => {}, [Symbol.asyncDispose]: async () => {} },
+    }),
+    (error: unknown) => asAppError(error).code === 'UNSUPPORTED_OPERATION',
+  );
+});

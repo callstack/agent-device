@@ -1,16 +1,39 @@
 import type { PlatformHost } from '@agent-device/plugins/contract';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
+/**
+ * The host a platform plugin's `setup` receives. Alongside the one-shot command port and the
+ * executable probe, it answers a request to keep one of the plugin's commands running — a streamed
+ * device log — through the same managed app-log process service the core's own runtime host uses, so
+ * a plugin never spawns a process of its own and its stream gets the same ownership marker, stop, and
+ * cleanup. The command's own `env` is what the plugin prepared, so a family that resolves its tool
+ * chain from roots the core does not name streams with the same `PATH` it runs one-shot commands with.
+ *
+ * That process service belongs to the operation-host zone, which the daemon itself reaches only
+ * through a lazy seam. A plugin host is built when a process starts, so it loads the service with the
+ * first streamed command rather than statically, exactly as this file's command port does.
+ */
 export function createPlatformPluginHost(
   host: HostEnvironment,
   stateDir: string,
-  resources?: Pick<PlatformHost, 'openWebSessionNames' | 'ownedProcessRecords'>,
+  resources: Readonly<{
+    openWebSessionNames?: () => readonly string[];
+    ownedProcessRecords?: PlatformHost['ownedProcessRecords'];
+    /** The session root a managed process marker must stay inside; the state dir's by default. */
+    sessionsDir?: string;
+  }> = {},
 ): PlatformHost {
+  const {
+    sessionsDir = resolveDaemonPaths(stateDir, { env: host.env, cwd: host.cwd }).sessionsDir,
+    ...pluginResources
+  } = resources;
+  let processes: Awaited<ReturnType<typeof loadManagedAppLogProcesses>> | undefined;
   return Object.freeze({
     ...host,
     stateDir,
-    ...resources,
+    ...pluginResources,
     emitDiagnostic,
     withDiagnosticTimer,
     runCommand: async (executable, args, options) => {
@@ -21,5 +44,21 @@ export function createPlatformPluginHost(
       const { isExecutablePath } = await import('@agent-device/host-kit/command');
       return await isExecutablePath(path);
     },
+    startBackgroundCommand: async (request, signal) => {
+      processes ??= await loadManagedAppLogProcesses(sessionsDir, host.env);
+      return await processes.start(
+        {
+          command: { kind: 'host', request: request.command },
+          output: request.output,
+          ...(request.markerPath === undefined ? {} : { markerPath: request.markerPath }),
+        },
+        signal,
+      );
+    },
   } satisfies PlatformHost);
+}
+
+async function loadManagedAppLogProcesses(sessionsDir: string, env: HostEnvironment['env']) {
+  const { createManagedAppLogProcesses } = await import('../platform-runtime-app-log-process.ts');
+  return createManagedAppLogProcesses(sessionsDir, env);
 }

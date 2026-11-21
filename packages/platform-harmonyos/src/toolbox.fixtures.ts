@@ -17,11 +17,23 @@ export type HarmonyHostStubCommand = Readonly<{
   signal: AbortSignal | undefined;
 }>;
 
+/** One streamed command this stubbed host was asked to keep running. */
+export type HarmonyHostStubStream = Readonly<{
+  executable: string;
+  args: readonly string[];
+  env: HostEnvironment['env'] | undefined;
+  markerPath: string | undefined;
+  allowFailure: boolean | undefined;
+  signal: AbortSignal | undefined;
+}>;
+
 export type HarmonyHostStub = Readonly<{
   toolbox: HarmonyToolbox;
   host: PlatformHost;
   /** Every command the plugin asked the host to run, in order. */
   commands: HarmonyHostStubCommand[];
+  /** Every streamed command the plugin asked the host to keep running, in order. */
+  streams: HarmonyHostStubStream[];
   /** Queues one answer for the next command; exit code 0 is the common case. */
   answer(answer?: Partial<HarmonyCommandResult> & Readonly<{ stdout?: string }>): void;
 }>;
@@ -47,10 +59,16 @@ export function createHarmonyHostStub(
     ) => Partial<HarmonyCommandResult> & Readonly<{ stdout?: string }>;
     /** Rejected one command, the way the host rejects a spawn it cannot start. */
     reject?: (executable: string, args: readonly string[]) => Error;
+    /**
+     * Held the managed start open, the way a slow spawn does, so a test can cancel a request while
+     * its stream is still being started and see what the host was asked to abort.
+     */
+    holdStreamStart?: (signal: AbortSignal | undefined) => Promise<void>;
   }> = {},
 ): HarmonyHostStub {
   const env = input.env ?? { PATH: '/usr/bin' };
   const commands: HarmonyHostStubCommand[] = [];
+  const streams: HarmonyHostStubStream[] = [];
   const answers: HarmonyCommandResult[] = [];
   const host = Object.freeze({
     env,
@@ -93,11 +111,51 @@ export function createHarmonyHostStub(
       if (input.respond) return toResult(input.respond(executable, args));
       return answers.shift() ?? NO_ANSWER;
     },
+    // The managed process service, stubbed the same way the one-shot port is: the plugin names the
+    // command and the environment, and the recorded call is what a test asserts on.
+    startBackgroundCommand: async (
+      request: {
+        command: {
+          executable: string;
+          args: readonly string[];
+          env?: Readonly<Record<string, string>>;
+          allowFailure?: boolean;
+        };
+        markerPath?: string;
+      },
+      signal?: AbortSignal,
+    ) => {
+      streams.push({
+        executable: request.command.executable,
+        args: request.command.args,
+        env: request.command.env,
+        markerPath: request.markerPath,
+        allowFailure: request.command.allowFailure,
+        signal,
+      });
+      let resolveWait: (() => void) | undefined;
+      const wait = new Promise<{
+        stdout: string;
+        stderr: string;
+        exitCode: number | null;
+      }>((resolve) => {
+        resolveWait = () => resolve({ stdout: '', stderr: '', exitCode: 0 });
+      });
+      const process = {
+        marker: { pid: 4_242, startTime: '100', command: request.command.executable },
+        wait,
+        terminate: async () => resolveWait?.(),
+        [Symbol.asyncDispose]: async () => resolveWait?.(),
+      };
+      if (input.holdStreamStart) await input.holdStreamStart(signal);
+      return process;
+    },
   }) as unknown as PlatformHost;
   return Object.freeze({
     toolbox: createHarmonyToolbox(host),
     host,
     commands,
+    streams,
     answer: (answer) => {
       answers.push(toResult(answer));
     },
@@ -126,7 +184,9 @@ export function createHarmonyToolchainRoot(contents = '#!/bin/sh\necho stub\n'):
 }
 
 /** The `PATH` entries the plugin handed one command. */
-export function harmonyCommandPath(command: HarmonyHostStubCommand): readonly string[] {
+export function harmonyCommandPath(
+  command: Readonly<{ env: HostEnvironment['env'] | undefined }>,
+): readonly string[] {
   return (command.env?.PATH ?? '').split(path.delimiter).filter(Boolean);
 }
 

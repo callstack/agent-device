@@ -20,6 +20,7 @@ export {
 } from './app-log-process-recovery.ts';
 export {
   createPidScopedAppLogRuntimeOwner,
+  firstNumericAppLogPid,
   resolveFirstNumericAppLogPid,
 } from './app-log-pid-runtime.ts';
 export { appLogCommandSucceeded, bestEffortAppLogCheck } from './app-log-probe.ts';

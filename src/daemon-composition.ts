@@ -116,6 +116,7 @@ export async function composeDaemonRuntimeDeps(
   const platformHost = createPlatformPluginHost(host, baseDir, {
     ownedProcessRecords,
     openWebSessionNames,
+    sessionsDir,
   });
   const providerComposition =
     providerCandidates === undefined

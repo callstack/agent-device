@@ -1,5 +1,10 @@
 import path from 'node:path';
-import type { PlatformHost } from 'agent-device/plugins';
+import { AppError } from '@agent-device/kernel/errors';
+import type {
+  PlatformBackgroundProcess,
+  PlatformHost,
+  PlatformOutputSink,
+} from 'agent-device/plugins';
 
 /** What the host answered a command: its streams and its exit code. */
 export type HarmonyCommandResult = Awaited<ReturnType<PlatformHost['runCommand']>>;
@@ -7,6 +12,16 @@ export type HarmonyCommandResult = Awaited<ReturnType<PlatformHost['runCommand']
 export type HarmonyRunOptions = Readonly<{
   allowFailure?: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
+}>;
+
+/** What a streamed HDC command needs: where its output goes, and where its owner's proof lives. */
+export type HarmonyStreamOptions = Readonly<{
+  /** Where the host-managed process's output is appended, opened and owned by the core. */
+  output: PlatformOutputSink;
+  /** The app-log marker path the host publishes while the stream lives and clears when it ends. */
+  markerPath?: string;
+  allowFailure?: boolean;
   signal?: AbortSignal;
 }>;
 
@@ -23,7 +38,8 @@ export type HarmonyRunOptions = Readonly<{
  *
  * Each command is launched with the documented HarmonyOS toolchain roots prepended to `PATH`, so this
  * family resolves the same HDC an interactive shell does while the core names no HarmonyOS
- * configuration.
+ * configuration. A streamed command gets the same preparation, so a toolchain that needs a sibling
+ * executable on `PATH` serves `logs start` as well as it serves discovery and interaction.
  */
 export type HarmonyCommandRunner = Readonly<{
   /** `executable` is an absolute path from a configured root, or a name the host `PATH` resolves. */
@@ -33,9 +49,18 @@ export type HarmonyCommandRunner = Readonly<{
     options?: HarmonyRunOptions,
   ): Promise<HarmonyCommandResult>;
   /**
+   * Starts one command the core keeps running after this call returns — the family's `hilog` stream —
+   * through the setup host's managed process service, so the stream gets an ownership marker, a stop,
+   * and the same toolchain environment as {@link run}.
+   */
+  start(
+    executable: string,
+    args: readonly string[],
+    options: HarmonyStreamOptions,
+  ): Promise<PlatformBackgroundProcess>;
+  /**
    * HDC to spawn: an absolute path from a documented toolchain root when one carries it, else the
-   * bare `hdc` for the host `PATH` to resolve. Host-minted commands need the path, because the core
-   * builds their environment without this family's roots.
+   * bare `hdc` for the host `PATH` to resolve.
    */
   resolveHdc(): Promise<string>;
   /** True when a documented root carries an executable HDC, so no `PATH` lookup is needed. */
@@ -49,16 +74,41 @@ export type HarmonyCommandRunner = Readonly<{
 export function createHarmonyCommandRunner(host: PlatformHost): HarmonyCommandRunner {
   const env = host.env;
   const isExecutable = (candidate: string) => host.isFileExecutable(candidate);
+  const spawnEnvironment = () => harmonySpawnEnvironment(env, isExecutable);
   return Object.freeze({
     run: async (executable, args, options) =>
       await host.runCommand(executable, [...args], {
         ...options,
-        env: await harmonySpawnEnvironment(env, isExecutable),
+        env: await spawnEnvironment(),
       }),
+    start: async (executable, args, options) => {
+      const startManaged = host.startBackgroundCommand;
+      if (!startManaged) {
+        throw new AppError('UNSUPPORTED_OPERATION', NO_MANAGED_PROCESS_MESSAGE, {
+          hint: 'Run logs start against a daemon, which owns the managed app-log process service.',
+        });
+      }
+      return await startManaged(
+        {
+          command: {
+            executable,
+            args: [...args],
+            env: await spawnEnvironment(),
+            ...(options.allowFailure === undefined ? {} : { allowFailure: options.allowFailure }),
+          },
+          output: options.output,
+          ...(options.markerPath === undefined ? {} : { markerPath: options.markerPath }),
+        },
+        options.signal,
+      );
+    },
     resolveHdc: async () => (await harmonyToolchainHdc(env, isExecutable)) ?? 'hdc',
     toolchainHdc: async () => await harmonyToolchainHdc(env, isExecutable),
   });
 }
+
+const NO_MANAGED_PROCESS_MESSAGE =
+  'The selected host cannot keep a HarmonyOS command running, so it cannot stream hilog.';
 
 /**
  * DevEco's command-line tools do not amend `PATH` for non-interactive processes. Honoring the
