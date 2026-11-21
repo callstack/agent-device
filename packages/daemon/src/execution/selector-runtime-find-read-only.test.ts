@@ -240,3 +240,37 @@ test('read-only find while recording is intentionally deferred from target-v1 ev
   // an explicit deferral, not an accident.
   expect(recordedAction?.targetEvidence).toBeUndefined();
 });
+
+// #4685: `--first`/`--last` are the only narrowing an ambiguous `find get text|attrs` accepts, so
+// the read-only route has to hand them to the command family rather than drop them.
+test('read-only find forwards --first and --last to the command family', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'default';
+  sessionStore.publish(sessionName, makeAuthoringSession(sessionName));
+  const seen: DaemonFindOptions[] = [];
+  const createCommandSurface = commandSurfaceWithMembers(() => ({
+    selectors: {
+      find: async (options: DaemonFindOptions) => {
+        seen.push(options);
+        return { kind: 'found' as const, found: true as const };
+      },
+    },
+  }));
+
+  for (const flags of [{ findFirst: true }, { findLast: true }]) {
+    const response = await invokeFindHandler({
+      createCommandSurface,
+      sessionName,
+      sessionStore,
+      positionals: ['dup', 'get', 'text'],
+      flags,
+      invoke: async () => ({ ok: true, data: {} }),
+    });
+    expect(response?.ok).toBe(true);
+  }
+
+  expect(seen.map(({ findFirst, findLast }) => ({ findFirst, findLast }))).toEqual([
+    { findFirst: true, findLast: undefined },
+    { findFirst: undefined, findLast: true },
+  ]);
+});

@@ -148,9 +148,10 @@ export function issueSettleRefs(
  * candidate `@ref`s must be able to ISSUE them, and issuance is only ever
  * valid against the tree the session's generation describes. The routes that
  * owe that contract run their error through here — the acting touch runtime
- * (`press`/`click`/`fill`) and the strict-read dispatches (`is`, `get attrs`)
+ * (`press`/`click`/`fill`) and the strict-read dispatches (`is`, `get attrs`,
+ * and find's value reads `get text`/`get attrs`)
  * — so the rule has one implementation beside the partial-frame primitive it
- * wraps, exactly like {@link issueSettleRefs}. The `find` refusals
+ * wraps, exactly like {@link issueSettleRefs}. The mutating `find` refusals
  * (`buildAmbiguousMatchError`, `buildNestedTextFieldsError`) deliberately do
  * NOT consume this rule: the first predates it (#1597), neither prints a
  * `refsGeneration`, and both route the caller to narrow the locator; unlike

@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { preferOnscreenMatches } from '../find-match-ranking.ts';
+import { preferOnscreenMatches } from './interaction-targeting.ts';
 
 const VIEWPORT = { x: 0, y: 0, width: 390, height: 844 };
 const DUPLICATE_MATCH_COUNT = 32;

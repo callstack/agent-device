@@ -30,9 +30,11 @@ import {
 import { selectorFailureHint, STALE_REF_HINT } from './internal/resolve.ts';
 import { matchesWaitText } from './internal/node.ts';
 import {
+  findAmbiguousMatchMessage,
   findBestMatchesByLocator,
   checkFindArgs,
   isReadOnlyFindAction,
+  narrowFindMatches,
   normalizeFindActionToken,
   parseFindArgs,
   parseFindSelectorExpression,
@@ -69,8 +71,10 @@ export {
   checkWaitText,
   detectUnknownSelectorKeyToken,
   evaluateIsPredicate,
+  findAmbiguousMatchMessage,
   findBestMatchesByLocator,
   isReadOnlyFindAction,
+  narrowFindMatches,
   normalizeFindActionToken,
   isRoleHintWord,
   isSelectorToken,

@@ -6,7 +6,7 @@ import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import { selectorCaptureFixture } from '../__tests__/support/selector-capture-fixture.ts';
 import { refFrameScope, refFrameState } from '../core/ref-frame.ts';
 import type { DaemonRequest } from '../index.ts';
-import { dispatchIsViaRuntime } from './selector-runtime.ts';
+import { dispatchFindReadOnlyViaRuntime, dispatchIsViaRuntime } from './selector-runtime.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
@@ -36,6 +36,16 @@ const testCreateCommandSurface = createTouchCommandSurface({
           { includeRects: true },
         );
         throw ambiguousIsError();
+      },
+      find: async ({ session, requestId, signal }) => {
+        await config.backend.captureSnapshot?.(
+          { session, requestId, signal: signal ?? config.signal },
+          { includeRects: true },
+        );
+        throw new AppError('AMBIGUOUS_MATCH', 'find matched 2 elements for any "Deploy"', {
+          matches: 2,
+          candidates: ['@e2 [button] "Deploy"', '@e3 [button] "Deploy"'],
+        });
       },
     },
   }),
@@ -331,4 +341,37 @@ test('an ambiguous press issues its printed candidates from its own capture', as
   );
   // Nothing was tapped: the refusal preceded dispatch.
   expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+// #4685: an ambiguous `find get text` prints candidates minted from its own full capture, so it
+// owes the same issuance as `is`: pinned candidates and a frame holding exactly them.
+test('an ambiguous find get text issues its printed candidates', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'find-read-ambiguity-issuance';
+  const session = makeStaleRefSession(sessionName);
+  session.device = IOS_SIMULATOR;
+  sessionStore.publish(sessionName, session);
+
+  const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
+  const response = await dispatchFindReadOnlyViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'find',
+      positionals: ['Deploy', 'get', 'text'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  if (!response || response.ok) throw new Error('expected the ambiguity refusal');
+  expect(response.error.code).toBe('AMBIGUOUS_MATCH');
+  expect(typeof response.error.details?.refsGeneration).toBe('number');
+  expect(refFrameState(session)).toBe('active');
+  expect([...refFrameScope(session)].sort()).toEqual(['e2', 'e3']);
 });
