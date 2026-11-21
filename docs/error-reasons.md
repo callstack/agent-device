@@ -8,6 +8,18 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ## Commands
 
+### `audit`
+
+| Reason | Meaning |
+| --- | --- |
+| `native-audit-invalid-result` | The runner answered the native audit with a missing or malformed result. |
+
+### `close`
+
+| Reason | Meaning |
+| --- | --- |
+| `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
+
 ### `fold`
 
 | Reason | Meaning |
@@ -26,11 +38,30 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fold-angle-unverified` | The iOS simulator hinge did not reach the angle of the final keyframe. |
 | `fold-pose-unsettled` | The iOS simulator hinge reached the pose but never came to rest. |
 
+### `logs`
+
+| Reason | Meaning |
+| --- | --- |
+| `simulator-log-stream-launch-timeout` | The simulator log stream did not start in time. |
+
+### `open`
+
+| Reason | Meaning |
+| --- | --- |
+| `ios-simulator-openurl-timeout` | CoreSimulator did not answer `simctl openurl` in time, so the URL open failed. |
+| `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
+| `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
+| `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
+
 ### `orientation`
 
 | Reason | Meaning |
 | --- | --- |
 | `fold-helper-build-failed` | The iOS simulator fold helper could not be built with the selected Xcode. |
+| `orientation-hid-dispatch-failed` | The fold helper could not send the orientation to the iOS simulator. |
+| `unsupported-foldable-orientation` | A foldable iOS simulator cannot rotate to portrait-upside-down. |
+| `orientation-unverified` | The orientation was sent, but the panel table does not report it afterwards. |
+| `orientation-panel-table-unavailable` | The foldable's guest panel table could not be read. |
 
 ### `record`
 
@@ -60,6 +91,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `CROP_FRAME_MISMATCH` | `--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured frame. |
 | `PENDING_PIXEL_IDENTITY_EVIDENCE` | The `details.rejectionReason` of a target whose crop is not yet verified against an independent capture. |
 | `SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME` | `--fullscreen` names a macOS helper surface, which always captures the main display. |
+| `simulator-screenshot-timeout` | `simctl io screenshot` timed out (ETIMEDOUT) on the simulator. |
 
 ### `scroll`
 
@@ -78,6 +110,19 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `scroll_edge_no_progress` | The `scroll top` or `scroll bottom` gestures did not move the content. |
 | `scroll_edge_capture_unreadable` | `scroll top` or `scroll bottom` could not read the screen between passes. |
 
+### `settings`
+
+| Reason | Meaning |
+| --- | --- |
+| `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+
+### `snapshot`
+
+| Reason | Meaning |
+| --- | --- |
+| `observation-unavailable` | The runner answered an observe-only snapshot request without an observe-only snapshot. |
+| `empty-snapshot` | XCTest returned a snapshot with no nodes on an iOS simulator. |
+
 ### `wait`
 
 | Reason | Meaning |
@@ -95,6 +140,18 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 These reasons can come from more than one command.
 
+### Apple app resolution
+
+| Reason | Meaning |
+| --- | --- |
+| `app-list-unreadable` | `simctl` produced no list of the simulator's installed apps, so the app could not be resolved. |
+
+### Apple runner
+
+| Reason | Meaning |
+| --- | --- |
+| `apple_runner_host_unbound` | The Apple runner was asked for its host before the daemon bound one. |
+
 ### Daemon lifecycle
 
 | Reason | Meaning |
@@ -106,6 +163,15 @@ These reasons can come from more than one command.
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
+
+### Foldable panels
+
+| Reason | Meaning |
+| --- | --- |
+| `capture-panel-unidentified` | The foldable's panel table did not say which of its lit panels to capture. |
+| `fold-helper-panels-unreadable` | The fold helper returned no panel table for the iOS simulator. |
+| `panel-table-unreadable` | The foldable's lit panel could not be named from its panel table, so nothing was sent. |
+| `panel-probe-budget-exhausted` | Reading the panel table spent the request's time budget, so nothing was sent. |
 
 ### Interaction
 
@@ -133,6 +199,23 @@ These reasons can come from more than one command.
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
 
+### Macos helper
+
+| Reason | Meaning |
+| --- | --- |
+| `background-pointer-gesture` | A double-click or press-and-hold has no accessibility equivalent in a background macOS app. |
+| `no-accessible-target` | No accessibility element the action can use is at the point. |
+| `no-settable-text-input` | No settable text input is at the point, or the input refused the new value. |
+| `no-scroll-bar` | No scroll area with a settable scroll bar is under the front window's center. |
+| `no-context-menu` | No element at the point offers a context menu. |
+| `window-not-found` | The app has no on-screen window on the current Space. |
+| `front-window-capture-excluded` | The app excludes its front window from screen capture; use `snapshot` to read it. |
+| `front-window-not-shareable` | ScreenCaptureKit does not offer the front window, for example while it opens or closes. |
+| `context-menu-not-observed` | The element offered a context menu, but no menu window appeared. |
+| `window-list-unreadable` | The app's on-screen window list could not be read. |
+| `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
+| `missing_button` | No button on the alert fits the requested accept or dismiss. |
+
 ### Request admission
 
 | Reason | Meaning |
@@ -142,3 +225,15 @@ These reasons can come from more than one command.
 | `named_session_not_found` | The request names a session that this daemon does not hold. |
 | `app_not_installed` | The named app resolves to no installed app on the target. |
 | `malformed_request` | The transport refused the request envelope before any handler read it. |
+
+### Snapshot capture
+
+| Reason | Meaning |
+| --- | --- |
+| `runner-snapshot-bridge-target-unavailable` | The runner could not name the app's foreground process; `details.bridgeFailureCode` says why. |
+| `simulator-target-discovery-pending` | The wait ran out while the discovery of the app's simulator process was still running. |
+| `simulator-target-unavailable` | The app has no running process on the simulator. |
+| `simulator-target-probe-failed` | The simulator could not be asked for its running apps. |
+| `simulator-target-identity-unavailable` | The app's simulator process was found, but its identity could not be read. |
+| `simulator-runtime-probe-failed` | The simulator could not be asked for its runtime. |
+| `simulator-runtime-unavailable` | The simulator reported no runtime. |
