@@ -1,6 +1,6 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
 import { createHash } from 'node:crypto';
-import type { AndroidTestImeFlushRecord } from './ime-flush-record.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 
 export type AndroidAdbHostStub = AndroidAdbHost & {
   diagnostics: Array<{ phase: string; level?: string }>;
