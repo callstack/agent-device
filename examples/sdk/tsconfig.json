@@ -15,6 +15,7 @@
       "agent-device/android-adb": ["../../src/sdk/android-adb.ts"],
       "agent-device/plugins": ["../../src/sdk/plugins.ts"],
       "agent-device/plugins/webdriver": ["../../src/sdk/plugin-webdriver.ts"],
+      "agent-device/plugins/device-host": ["../../src/sdk/plugin-device-host.ts"],
       "agent-device/contracts": ["../../src/sdk/contracts.ts"],
       "agent-device/finders": ["../../src/sdk/finders.ts"],
       "agent-device/selectors": ["../../src/sdk/selectors.ts"],

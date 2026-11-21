@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publishFileSync } from '@agent-device/host-kit/file';
@@ -75,6 +76,39 @@ type AuthIo = {
   fetch?: typeof fetch;
   openBrowser?: (url: string) => Promise<void>;
 };
+
+/** One command's login scope: a login approved inside it is pending until the command ends. */
+const commandLoginScope = new AsyncLocalStorage<{
+  pending?: { stateDir: string; session: CliSessionRecord };
+}>();
+
+/**
+ * Runs one command with its login pending. A command can approve a device login before it learns
+ * which provider it uses. The login is stored when the command ends, on success or on failure,
+ * except when the command ends with the provider-admission refusal `plugin-not-installed`: that
+ * route writes no auth state. A login approved outside a scope is stored at once.
+ */
+export async function withCommandLogin<T>(run: () => Promise<T>): Promise<T> {
+  const scope: { pending?: { stateDir: string; session: CliSessionRecord } } = {};
+  let refused = false;
+  try {
+    return await commandLoginScope.run(scope, run);
+  } catch (error) {
+    refused = scope.pending !== undefined && (await isProviderAdmissionRefusal(error));
+    throw error;
+  } finally {
+    if (scope.pending && !refused) writeCliSession(scope.pending);
+  }
+}
+
+/** Whether a command failed with the typed refusal for a provider plugin that is not installed. */
+async function isProviderAdmissionRefusal(error: unknown): Promise<boolean> {
+  if (!(error instanceof AppError)) return false;
+  // The reason table loads only for a failed command that holds a pending login.
+  const { PLUGIN_INSTALLATION_REASONS } =
+    await import('@agent-device/contracts/plugin-installation');
+  return error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled;
+}
 
 export async function resolveRemoteAuthForCli(options: {
   command: string;
@@ -265,7 +299,9 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
-  writeCliSession({ stateDir: options.stateDir, session });
+  const scope = commandLoginScope.getStore();
+  if (scope) scope.pending = { stateDir: options.stateDir, session };
+  else writeCliSession({ stateDir: options.stateDir, session });
   return {
     accessToken: approved.accessToken,
     expiresAt: approved.expiresAt,

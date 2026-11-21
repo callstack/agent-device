@@ -17,6 +17,12 @@ const limrun = vi.hoisted(() => ({
   iosDisconnect: vi.fn(),
 }));
 
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./__tests__/test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
+
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly iosInstances = {

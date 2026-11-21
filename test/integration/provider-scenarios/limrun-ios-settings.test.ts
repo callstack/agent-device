@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { createLimrunRuntimeDependencies } from '../../../src/sdk/limrun-runtime-dependencies.ts';
+import { limrunRuntimeDependencies } from '../../../src/provider-plugin-host-capabilities.fixtures.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import { bindLimrunDeployment } from './limrun-deployment-cancellation.fixtures.ts';
 
@@ -66,7 +66,7 @@ test('a Limrun iOS permission the runtime refuses reports the local unsupported 
   const { binding, dispose } = await bindLimrunDeployment(
     'ios',
     new AbortController().signal,
-    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+    (await limrunRuntimeDependencies({ env: {}, cwd: process.cwd() })).ios,
   );
   try {
     const refusal = binding.operations.setSetting!({
@@ -97,7 +97,7 @@ test('a Limrun iOS simctl failure that is not a refusal stays a command failure'
   const { binding, dispose } = await bindLimrunDeployment(
     'ios',
     new AbortController().signal,
-    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+    (await limrunRuntimeDependencies({ env: {}, cwd: process.cwd() })).ios,
   );
   try {
     await expect(
@@ -123,7 +123,7 @@ test('a Limrun iOS permission resolves an app display name through the remote ap
   const { binding, dispose } = await bindLimrunDeployment(
     'ios',
     new AbortController().signal,
-    createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() }).ios,
+    (await limrunRuntimeDependencies({ env: {}, cwd: process.cwd() })).ios,
   );
   try {
     await binding.operations.setSetting!({

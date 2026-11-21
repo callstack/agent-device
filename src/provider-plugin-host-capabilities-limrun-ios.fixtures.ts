@@ -1,5 +1,8 @@
-import { fileStore, type FileStoreOptions } from './limrun-ios-files.fixtures.ts';
-import { createAppleApplicationTools } from '../../platform-runtime-apple-application-tools.ts';
+import {
+  fileStore,
+  type FileStoreOptions,
+} from './provider-plugin-host-capabilities-limrun-ios-files.fixtures.ts';
+import { limrunIosHost } from './provider-plugin-host-capabilities.fixtures.ts';
 import { EventEmitter } from 'node:events';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { promises as fs } from 'node:fs';
@@ -7,8 +10,9 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { afterEach, vi, type Mock } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
-import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
-import { createLimrunIosRunner } from './limrun-ios-runner.ts';
+import type { LimrunRuntimeDependencies } from '@agent-device/limrun/runtime';
+import type { LimrunIosHost } from '@agent-device/limrun/host';
+import { createLimrunIosRunner } from '@agent-device/limrun/host';
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.reverse()) await cleanup();
@@ -24,6 +28,7 @@ type RunnerFixture = {
   runner: Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>>;
   storage: ReturnType<typeof fileStore>;
   session: Session;
+  host: LimrunIosHost;
   directory: string;
   admit(): void;
   readonly admissionClosed: boolean | undefined;
@@ -306,11 +311,13 @@ export async function fixture(
         : { AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS: String(options.idleMs) }),
     },
   };
+  const iosHost = await limrunIosHost(host);
   const runner: Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>> =
-    await createLimrunIosRunner(session, host, createAppleApplicationTools(host.env));
+    await createLimrunIosRunner(session, iosHost);
   cleanups.push(() => runner.dispose());
   return {
     runner,
+    host: iosHost,
     storage,
     session,
     directory,

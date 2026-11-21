@@ -5,7 +5,7 @@ import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack-runtime.ts';
-import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/limrun/runtime';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';

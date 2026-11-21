@@ -1,8 +1,9 @@
 import { EventEmitter } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import type { InstanceClient, LogStream } from '@limrun/api/ios-client';
-import { fixture } from './limrun-ios-runner.fixtures.ts';
-import { createLimrunRuntimeDependencies } from '../../sdk/limrun-runtime-dependencies.ts';
+import { createLimrunRuntimeDependencies } from '@agent-device/limrun/host';
+import { fixture } from './provider-plugin-host-capabilities-limrun-ios.fixtures.ts';
+import { limrunPluginHost } from './provider-plugin-host-capabilities.fixtures.ts';
 
 const plist = Buffer.from(
   '<plist><dict><key>CFBundleExecutable</key><string>Example</string></dict></plist>',
@@ -29,7 +30,9 @@ async function logFixture(options: { holdFileDownload?: boolean; failFileStatus?
     streamSyslog: stream,
     appLogTail: vi.fn(async () => ''),
   } as unknown as InstanceClient;
-  const dependencies = createLimrunRuntimeDependencies({ env: {}, cwd: f.directory });
+  const dependencies = await createLimrunRuntimeDependencies(
+    limrunPluginHost({ env: {}, cwd: f.directory }),
+  );
   const reader = dependencies.ios.createAppLogReader({ ...f.session, client });
   const read = () => reader.readLogs('com.example.app', 100, new AbortController().signal);
   return { reader, read, streams, storage: f.storage, client };

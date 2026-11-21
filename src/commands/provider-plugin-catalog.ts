@@ -10,6 +10,11 @@ type ProviderPluginDeclaration = PluginReleaseDeclaration &
   Readonly<{
     provider: string;
     label: string;
+    /**
+     * The plugin's own `forgetsEndedConnectionLease` declaration, readable without loading the
+     * plugin. A command that loads no plugin store reads it for a connection that records no policy.
+     */
+    forgetsEndedConnectionLease?: boolean;
   }>;
 
 export const AWS_DEVICE_FARM: ProviderPluginDeclaration = {
@@ -26,9 +31,18 @@ export const BROWSERSTACK: ProviderPluginDeclaration = {
   nightlyTag: 'nightly-0.22',
 };
 
+export const LIMRUN: ProviderPluginDeclaration = {
+  provider: 'limrun',
+  package: '@agent-device/limrun',
+  label: 'Limrun',
+  nightlyTag: 'nightly-0.22',
+  forgetsEndedConnectionLease: true,
+};
+
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   AWS_DEVICE_FARM,
   BROWSERSTACK,
+  LIMRUN,
   { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
   { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
   { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },

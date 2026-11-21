@@ -29,6 +29,7 @@ import { TV_PLUGIN_FLOWS } from './cli-help-tv.ts';
 import {
   AWS_DEVICE_FARM,
   BROWSERSTACK,
+  LIMRUN,
   providerPluginHelp,
   providerPluginInstallCommand,
 } from '../provider-plugin-catalog.ts';
@@ -483,7 +484,7 @@ Providers:
   BrowserStack (plugin, install separately): agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.
   AWS Device Farm (plugin, install separately): install the @agent-device/aws-device-farm plugin, then agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
   TestMu AI (plugin, install separately): agent-device connect testmu verifies credentials and the exact virtual device (emulator or simulator) or, with --provider-device-type real, real device and OS version, then stores a local provider profile. --provider-app takes an lt:// app reference, an https URL, or a local path: connect looks an lt:// id up among your uploads for that device pool, while URL and local sources are uploaded and validated when open creates the session. It does not create a hub session.
-  Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
+  Limrun (plugin, install separately): agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
   Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
 
 Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
@@ -576,6 +577,7 @@ AWS Device Farm hosted-device flow:
   AWS Device Farm currently supports Android and iOS WebDriver sessions only; Vega OS and Vega Fire TV ARNs are not routed.
 
 Limrun direct-device flow:
+  ${providerPluginInstallCommand(LIMRUN, coreVersion)}
   export LIMRUN_API_KEY=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect limrun --platform android
 

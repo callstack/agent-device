@@ -2,20 +2,23 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import {
-  type AppleToolProvider,
-  type AppleToolExecOptions,
+import type {
+  AppleToolProvider,
+  AppleToolExecOptions,
 } from '@agent-device/platform-apple/tool-provider';
-import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { downloadLimrunFile } from '../limrun-download-file.ts';
+import { downloadLimrunFile } from './download-file.ts';
+import type { LimrunIosHost } from './ios-host.ts';
 
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 type Files = AppleToolProvider['simulatorFiles'];
+type ParsePlist = LimrunIosHost['apple']['tools']['parsePlist'];
 type Container = Parameters<Files['openContainer']>[0];
 
 export function createLimrunSimulatorFiles(
   session: Session,
+  parsePlist: ParsePlist,
   lifetime: AbortSignal,
   requestSignal?: AbortSignal,
 ): { simulatorFiles: Files; readInfoPlist: AppleToolProvider['simulatorApps']['readInfoPlist'] } {
@@ -161,6 +164,7 @@ export function createLimrunSimulatorFiles(
       if (metadata.has(key)) return metadata.get(key)!;
       const info = await readLimrunAppInfo(
         session,
+        parsePlist,
         input.bundleId,
         signalFor(input.signal),
         input.timeoutMs,
@@ -173,6 +177,7 @@ export function createLimrunSimulatorFiles(
 
 export async function readLimrunAppInfo(
   access: { apiUrl: string; token: string },
+  parsePlist: ParsePlist,
   bundleId: string,
   signal: AbortSignal,
   timeoutMs = 15_000,
@@ -193,8 +198,7 @@ export async function readLimrunAppInfo(
       timeoutMs,
       signal,
     });
-    const { parseApplePlist } = await import('@agent-device/platform-apple/tool-provider');
-    return await parseApplePlist(await fs.readFile(destinationPath, { signal }));
+    return await parsePlist(await fs.readFile(destinationPath, { signal }));
   } catch (error) {
     if (error instanceof AppError && error.details?.statusCode === 404) return null;
     throw error;

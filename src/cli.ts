@@ -59,7 +59,7 @@ import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
-import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
+import { resolveRemoteAuthForCli, withCommandLogin } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -185,7 +185,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         debugOutputEnabled,
       });
       registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
-      let logTailStopper: (() => void) | null = null;
+      const logTail: { stop: (() => void) | null } = { stop: null };
       try {
         if (command === 'react-devtools') {
           await exitAfterFlush(await runReactDevtoolsCli(ctx));
@@ -208,39 +208,42 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
         });
-        await resolveRemoteContext(ctx, transport);
-        registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
-        if (command === 'cdp') {
-          await exitAfterFlush(
-            await runAgentCdpCommand(positionals, {
+        // A login approved in here is stored when the command ends, unless a provider plugin is refused.
+        await withCommandLogin(async () => {
+          await resolveRemoteContext(ctx, transport);
+          registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
+          if (command === 'cdp') {
+            await exitAfterFlush(
+              await runAgentCdpCommand(positionals, {
+                flags: ctx.effectiveFlags,
+                runtime: ctx.resolvedRuntime,
+                cwd: host.cwd,
+                env: host.env,
+              }),
+            );
+            return;
+          }
+          logTail.stop = maybeStartDaemonLogTail(ctx);
+          const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
+          const commandProgress = createCommandProgressState();
+          const client = createAgentDeviceClient(buildClientConfig(ctx), {
+            host: ctx.host,
+            devicePin: ctx.devicePin,
+            transport: createCliDaemonTransport({
+              host,
+              command,
               flags: ctx.effectiveFlags,
-              runtime: ctx.resolvedRuntime,
-              cwd: host.cwd,
-              env: host.env,
+              replayTestReporterRuntime,
+              commandProgress,
+              transport,
             }),
-          );
-          return;
-        }
-        logTailStopper = maybeStartDaemonLogTail(ctx);
-        const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
-        const commandProgress = createCommandProgressState();
-        const client = createAgentDeviceClient(buildClientConfig(ctx), {
-          host: ctx.host,
-          devicePin: ctx.devicePin,
-          transport: createCliDaemonTransport({
-            host,
-            command,
-            flags: ctx.effectiveFlags,
-            replayTestReporterRuntime,
-            commandProgress,
-            transport,
-          }),
+          });
+          await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
         });
-        await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
       } catch (error) {
-        await handleRunCliFailure(error, ctx, logTailStopper);
+        await handleRunCliFailure(error, ctx, logTail.stop);
       } finally {
-        if (logTailStopper) logTailStopper();
+        logTail.stop?.();
       }
     },
   );
@@ -348,6 +351,8 @@ type CliRunContext = {
   daemonPaths: ReturnType<typeof resolveDaemonPaths>;
   sessionName: string;
   connectionDefaults: ReturnType<typeof resolveActiveConnectionDefaults>;
+  /** The lease provider an explicit remote config profile names; the flags do not carry it. */
+  remoteConfigLeaseProvider: string | undefined;
   explicitFlagKeys: Set<FlagKey>;
   // Mutated in place by resolveRemoteContext (auth, materialization) so the
   // failure handler always sees the same state the throwing phase saw.
@@ -419,6 +424,7 @@ async function resolveRunContextOrExit(
       daemonPaths,
       sessionName,
       connectionDefaults,
+      remoteConfigLeaseProvider: parsed.remoteConfigLeaseProvider,
       explicitFlagKeys,
       effectiveFlags,
       resolvedRuntime: connectionDefaults?.runtime,
@@ -462,6 +468,15 @@ async function resolveRemoteContext(
       throw new AppError('INVALID_ARGS', 'batch does not accept positional arguments.');
     }
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
+  }
+
+  // A missing provider plugin answers with its install command before any login or auth state.
+  if (ctx.command === 'connect' || ctx.effectiveFlags.remoteConfig) {
+    const { admitConnectionProvider } = await import('./cli/connection/provider-admission.ts');
+    await admitConnectionProvider({
+      ...ctx,
+      materializes: shouldMaterializeRemoteConnection(ctx.command),
+    });
   }
 
   if (shouldResolveRemoteAuth(ctx.command)) {

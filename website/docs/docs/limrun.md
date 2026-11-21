@@ -5,6 +5,31 @@ description: Drive Limrun iOS simulators and Android emulators with agent-device
 
 Use Limrun to run agent-device on remote iOS simulators and Android emulators. You need a Limrun API key, or the URL and token of an instance someone else created. Limrun does not use local or physical-device selectors such as `--udid`, `--serial`, or `--device`.
 
+## Install the plugin
+
+Install the plugin on the host that runs the daemon.
+
+```bash
+agent-device plugins add @agent-device/limrun@nightly-0.22
+```
+
+If the CLI prints an install command in a missing-plugin error, use that command.
+
+After installing or changing a plugin, finish sessions and run `agent-device daemon stop --state-dir <path>` for the matching detached daemon, then retry the command.
+
+For an embedded runtime, import the factory and pass it to `startAgentDevice`. The embedded runtime does not read the CLI plugin store. After changing plugins, close and recreate the runtime.
+
+```ts
+import { startAgentDevice } from "agent-device";
+import limrun from "@agent-device/limrun/agent-device";
+
+const runtime = await startAgentDevice({ stateDir: "./.agent-device-state", plugins: [limrun()] });
+// Close the runtime when its owner is finished.
+await runtime.close();
+```
+
+The plugin installs the Limrun SDK (`@limrun/api`) as its own dependency. Run `agent-device plugins update @agent-device/limrun` to pick up SDK fixes.
+
 ## Set credentials and connect
 
 Export your Limrun API key, for example from CI secrets. Set `LIMRUN_REGION` to pick a region.
@@ -44,7 +69,7 @@ An agent in a sandbox can drive an instance that someone else created, such as t
 | iOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
 | Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
 
-The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon registers without Limrun, lists it as `failed` in `agent-device daemon status`, and records `provider_plugin_failed` in `daemon.log`.
+The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon registers without Limrun, lists it as `failed` in `agent-device daemon status`, and records `provider_plugin_failed` in `daemon.log`. A daemon started with none of the Limrun variables lists the plugin as `failed` with `reason: missing_provider_credentials` and still serves every other provider.
 
 ```bash
 export LIM_IOS_INSTANCE_URL=...

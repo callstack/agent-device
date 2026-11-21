@@ -7,6 +7,7 @@ import { resolveCloudAccessForConnect } from '../auth-session.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { buildConnectClientId } from './client-id.ts';
+import { primeProviderConnection } from './provider-policy.ts';
 
 const CONNECTION_PROFILE_PATH = '/api/control-plane/connection-profile';
 const HTTP_TIMEOUT_MS = 15_000;
@@ -40,6 +41,9 @@ export async function resolveCloudConnectProfile(options: {
     accessToken: auth.accessToken,
     fetchImpl: options.fetchImpl,
   });
+  // The control plane chooses the provider. Its plugin is admitted before anything is written, so
+  // a missing plugin leaves no profile and no connection state behind.
+  await primeProviderConnection(profile.leaseProvider, options.env);
   const clientId = buildConnectClientId(
     options.stateDir,
     auth.cloudBaseUrl,

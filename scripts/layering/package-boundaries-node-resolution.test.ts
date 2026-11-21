@@ -25,8 +25,8 @@ test('Node resolution enforces the exports map at runtime', () => {
     '@agent-device/contracts/src/facades/snapshot.ts',
     '@agent-device/provider-webdriver/runtime',
     '@agent-device/provider-webdriver/src/runtime.ts',
-    '@agent-device/provider-limrun/runtime',
-    '@agent-device/provider-limrun/src/runtime.ts',
+    '@agent-device/limrun/internal',
+    '@agent-device/limrun/src/runtime.ts',
     '@agent-device/xml/internal/parser',
     '@agent-device/xml/src/index.ts',
     '@agent-device/ad-script/codec',
@@ -70,7 +70,7 @@ test('Node resolution enforces the exports map at runtime', () => {
     providerWebDriverResolved.endsWith('packages/provider-webdriver/src/plugin.ts'),
     providerWebDriverResolved,
   );
-  const providerLimrunResolved = import.meta.resolve('@agent-device/provider-limrun');
+  const providerLimrunResolved = import.meta.resolve('@agent-device/limrun');
   assert.ok(
     providerLimrunResolved.endsWith('packages/provider-limrun/src/index.ts'),
     providerLimrunResolved,

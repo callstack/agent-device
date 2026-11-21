@@ -19,7 +19,8 @@
     "noEmit": true,
     "paths": {
       "agent-device/plugins": ["./src/sdk/plugins.ts"],
-      "agent-device/plugins/webdriver": ["./src/sdk/plugin-webdriver.ts"]
+      "agent-device/plugins/webdriver": ["./src/sdk/plugin-webdriver.ts"],
+      "agent-device/plugins/device-host": ["./src/sdk/plugin-device-host.ts"]
     }
   },
   "include": ["src", "test", "scripts/**/*.ts", "packages/command-registry/src/global.d.ts"]

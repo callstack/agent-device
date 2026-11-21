@@ -32,8 +32,11 @@ export type ReplaySetupHost = Readonly<{
 export function createPluginHost(
   host: HostEnvironment,
   options: Record<string, unknown> | undefined,
+  capabilities?: object,
 ): ProviderPluginHost {
   return Object.freeze({
+    // The composing root's own additions, such as platform facets; this package names none.
+    ...capabilities,
     env: Object.freeze({ ...host.env }),
     options: Object.freeze({ ...options }),
     clientVersion: readVersion(),

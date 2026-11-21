@@ -214,10 +214,11 @@ async function limrunSupport(
 ): Promise<Map<string, TargetFacts>> {
   // The hooks must be in place before the provider's own `@limrun/api` import resolves.
   stubLimrunSdk();
-  const { createLimrunRuntime } = await import('@agent-device/provider-limrun');
-  const { createLimrunIosRunner } = await import('../../src/core/interactors/limrun-ios-runner.ts');
-  const { createAppleApplicationTools } =
-    await import('../../src/platform-runtime-apple-application-tools.ts');
+  const { createLimrunRuntime } = await import('@agent-device/limrun/runtime');
+  const { createLimrunIosRunner } = await import('@agent-device/limrun/host');
+  const { createProviderHostCapabilities } =
+    await import('../../src/provider-plugin-host-capabilities.ts');
+  const capabilities = createProviderHostCapabilities({ env: {}, cwd: process.cwd() });
   const runtime = createLimrunRuntime(
     {
       instances: {
@@ -234,12 +235,14 @@ async function limrunSupport(
       android: { createPortReverse: async () => ({}) },
       host: {},
       ios: {
-        createRunner: (session: Parameters<typeof createLimrunIosRunner>[0]) =>
-          createLimrunIosRunner(
-            session,
-            { env: {}, cwd: process.cwd() },
-            createAppleApplicationTools({}),
-          ),
+        createRunner: async (session: Parameters<typeof createLimrunIosRunner>[0]) =>
+          createLimrunIosRunner(session, {
+            apple: await capabilities.loadApple(),
+            kit: await capabilities.loadHostKit(),
+            env: {},
+            clientVersion: '0.0.0',
+            emitDiagnostic: capabilities.emitDiagnostic,
+          }),
       },
     } as never,
     { includePlatformModule: true },

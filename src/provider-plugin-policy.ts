@@ -4,9 +4,12 @@ import type { CloudWebDriverRuntimeOptions } from '@agent-device/provider-webdri
 
 /**
  * The policy every provider registry in this process runs under. A plugin that returns a
- * `{ webDriver }` descriptor gets the shared WebDriver engine, loaded only then.
+ * `{ webDriver }` descriptor gets the shared WebDriver engine, loaded only then. Every provider
+ * `setup` host carries the platform facets, each loaded when a plugin first asks for it.
  */
 export const PROVIDER_PLUGIN_POLICY: PluginRegistryPolicy = Object.freeze({
+  hostCapabilities: async (host) =>
+    (await import('./provider-plugin-host-capabilities.ts')).createProviderHostCapabilities(host),
   adaptWebDriver: async (descriptor, { clientVersion }) => {
     const options = readWebDriverOptions(descriptor);
     const { createCloudWebDriverRuntime } = await import('@agent-device/provider-webdriver/plugin');

@@ -1,24 +1,21 @@
-import { limrunRunnerError, withLimrunRunnerErrors } from './limrun-ios-runner-errors.ts';
+import { limrunRunnerError, withLimrunRunnerErrors } from './ios-runner-errors.ts';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
-import { Deadline, type DeadlineClock, retryWithPolicy } from '@agent-device/host-kit/retry';
-import { createLimrunAppleToolProvider } from './limrun-ios-tools.ts';
-import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { DeadlineClock } from '@agent-device/host-kit/retry';
+import { createLimrunAppleToolProvider } from './ios-tools.ts';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
-import { createLimrunAppleApplicationTools } from './limrun-ios-application-tools.ts';
+import { createLimrunAppleApplicationTools } from './ios-application-tools.ts';
 import { randomInt } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import type { LimrunIosHost } from './ios-host.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { readVersion } from '@agent-device/host-kit/version';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   prepareLimrunRunnerProducts,
   uploadLimrunRunnerProducts,
   writeLimrunRunnerConfiguration,
-} from './limrun-ios-runner-products.ts';
+} from './ios-runner-products.ts';
 
 type LimrunIosRunner = Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>>;
 type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
@@ -26,28 +23,18 @@ type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 /** Owns the lease’s XCTest runs; closing an attached lease never terminates its simulator. */
 export async function createLimrunIosRunner(
   session: Session,
-  host: HostEnvironment,
-  appleApplications: Pick<
-    AppleApplicationTools,
-    'resolveOpenTarget' | 'applyRuntimeHints' | 'clearRuntimeHints'
-  >,
+  host: LimrunIosHost,
 ): Promise<LimrunIosRunner> {
-  const {
-    createAppleRunnerRuntime,
-    createLaunchedAppleRunnerProvider,
-    RUNNER_STARTUP_TIMEOUT_MS,
-    mintRunnerToken,
-  } = await import('@agent-device/platform-apple/runner/operations');
-  const { withAppleToolProvider, hasScopedAppleToolProvider, runXcrun } =
-    await import('@agent-device/platform-apple/tool-provider');
-  const { buildSimctlArgsForDevice } = await import('@agent-device/platform-apple/simctl');
+  const { apple, kit, emitDiagnostic } = host;
+  const { Deadline, retryWithPolicy } = kit;
   const lifetime = new AbortController();
   const withTools = <T>(task: () => Promise<T>, signal?: AbortSignal) =>
-    withAppleToolProvider(createLimrunAppleToolProvider(session, lifetime.signal, signal), () =>
-      withLimrunRunnerErrors(task),
+    apple.tools.withProvider(
+      createLimrunAppleToolProvider(session, host, lifetime.signal, signal),
+      () => withLimrunRunnerErrors(task),
     );
-  const hostTools = withMethodScope({ ...appleApplications }, (task) =>
-    hasScopedAppleToolProvider() ? task() : withTools(task),
+  const hostTools = withMethodScope({ ...apple.applicationTools }, (task) =>
+    apple.tools.hasScopedProvider() ? task() : withTools(task),
   );
   const port = randomInt(20000, 50000);
   const apiUrl = session.apiUrl.replace(/\/$/, '');
@@ -59,15 +46,11 @@ export async function createLimrunIosRunner(
   let preparationWaiters = 0;
   let prepared = false;
   let canceledRunMayHoldSlot = false;
-  const endpoint = { port, token: mintRunnerToken(), http: { url: commandUrl, headers } };
-  const provider = await createLaunchedAppleRunnerProvider(
-    session.device,
-    { endpoint, launch },
-    host.env,
-  );
+  const endpoint = { port, token: apple.runner.mintToken(), http: { url: commandUrl, headers } };
+  const provider = await apple.runner.createLaunchedProvider(session.device, { endpoint, launch });
   const { stop, release, prepare, isStarted, releaseSpeculative } = provider;
   const isReady = provider.hasLiveSession;
-  const transport = await createAppleRunnerRuntime({ device: session.device, host, provider });
+  const transport = await apple.runner.createRuntime({ device: session.device, provider });
 
   const prepareProducts = async (callerSignal?: AbortSignal) => {
     const preparation = AbortSignal.any([lifetime.signal, ...(callerSignal ? [callerSignal] : [])]);
@@ -79,9 +62,9 @@ export async function createLimrunIosRunner(
     });
     if (bind.code !== 0)
       throw limrunRunnerError('limrun_runner_bind_address_missing', 'Limrun did not expose USE_IP');
-    const directory = await prepareLimrunRunnerProducts({
+    const directory = await prepareLimrunRunnerProducts(host, {
       directory: staging,
-      version: readVersion(),
+      version: host.clientVersion,
       appPath: host.env.AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP,
       bindAddress: bind.stdout.trim(),
       endpoint,
@@ -152,7 +135,7 @@ export async function createLimrunIosRunner(
     try {
       startupSignal.throwIfAborted();
       const { directory, bindAddress } = await cachedProducts(signal);
-      await writeLimrunRunnerConfiguration(directory, bindAddress, ownedEndpoint);
+      await writeLimrunRunnerConfiguration(host, directory, bindAddress, ownedEndpoint);
       await uploadLimrunRunnerProducts(directory, apiUrl, session.token, signal, [
         'Runner.xctestrun',
       ]);
@@ -283,7 +266,7 @@ export async function createLimrunIosRunner(
           await provider.ensure(input);
           return;
         }
-        await prepare(session.device, { ...input, healthTimeoutMs: RUNNER_STARTUP_TIMEOUT_MS });
+        await prepare(session.device, { ...input, healthTimeoutMs: apple.runner.startupTimeoutMs });
       },
       prepare: (_device, input, signal) => transport.prepare(input, signal),
       resetTarget,
@@ -294,6 +277,7 @@ export async function createLimrunIosRunner(
       releaseSpeculative,
     },
     hostTools,
+    emitDiagnostic,
   );
   return {
     applicationTools,
@@ -312,14 +296,17 @@ export async function createLimrunIosRunner(
         ...request,
         appleApplications: applicationTools,
         ensureReady: async (device, signal, options) => {
-          await runXcrun(buildSimctlArgsForDevice(device, ['bootstatus', device.id, '-b']), {
-            signal,
-            ...(options?.deadlineAtMs === undefined
-              ? {}
-              : {
-                  timeoutMs: Math.max(1, options.deadlineAtMs - Date.now()),
-                }),
-          });
+          await apple.tools.runXcrun(
+            apple.tools.simctlArgsForDevice(device, ['bootstatus', device.id, '-b']),
+            {
+              signal,
+              ...(options?.deadlineAtMs === undefined
+                ? {}
+                : {
+                    timeoutMs: Math.max(1, options.deadlineAtMs - Date.now()),
+                  }),
+            },
+          );
           return { ...device, booted: true };
         },
       });

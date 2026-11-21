@@ -17,6 +17,7 @@ import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
+  connectionLeaseProvider,
   connectionProviderCapabilities,
   primeProviderConnection,
 } from '../connection/provider-policy.ts';
@@ -85,7 +86,10 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   }
 
-  await primeProviderConnection(providerOf(existingState, remoteConfig.profile), host.env);
+  await primeProviderConnection(
+    connectionLeaseProvider(existingState, remoteConfig.profile.leaseProvider),
+    host.env,
+  );
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(
@@ -181,14 +185,6 @@ async function persistMaterializedConnection(options: {
     }
   }
   await stopMetroCleanup(options.metroCleanupToStop);
-}
-
-// A stored connection names its provider; before one exists, the remote config profile does.
-function providerOf(
-  existingState: Pick<RemoteConnectionState, 'leaseProvider'> | null | undefined,
-  profile: Pick<RemoteConnectionState, 'leaseProvider'>,
-): string | undefined {
-  return existingState?.leaseProvider ?? profile.leaseProvider;
 }
 
 function createRemoteConnectionStateFromFlags(

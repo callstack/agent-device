@@ -1,13 +1,15 @@
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
-import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import type { ProviderAppLogReader } from '@agent-device/capture-kit/provider-app-log';
 import type { LogStream } from '@limrun/api/ios-client';
+import type { LimrunIosHost } from './ios-host.ts';
 
 const MAX_LOG_BYTES = 1024 * 1024;
 
 /** Keeps app console and filtered unified logs in one bounded tail for the shared log collector. */
 export function createLimrunIosAppLogReader(
   input: Parameters<LimrunRuntimeDependencies['ios']['createAppLogReader']>[0],
+  loadPlistParser: () => Promise<LimrunIosHost['apple']['tools']['parsePlist']>,
 ): ProviderAppLogReader {
   const lifetime = new AbortController();
   let active: { app: string; controller: AbortController; streams: LogStream[] } | undefined;
@@ -65,8 +67,8 @@ export function createLimrunIosAppLogReader(
     // Metadata can outlive a short poll, but never the app's streams or the reader.
     const pending = (async () => {
       try {
-        const { readLimrunAppInfo } = await import('./limrun-ios-files.ts');
-        const info = await readLimrunAppInfo(input, app, signal);
+        const { readLimrunAppInfo } = await import('./ios-files.ts');
+        const info = await readLimrunAppInfo(input, await loadPlistParser(), app, signal);
         if (active !== owned) return;
         executable =
           typeof info?.CFBundleExecutable === 'string' ? info.CFBundleExecutable : undefined;

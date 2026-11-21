@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { limrunRunnerError, withLimrunRunnerErrors } from './limrun-ios-runner-errors.ts';
+import { limrunRunnerError, withLimrunRunnerErrors } from './ios-runner-errors.ts';
 
 test.each(['capture-failed', 'budget'] as const)(
   'reports %s snapshot failure with a remote recovery hint',

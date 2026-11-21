@@ -1,7 +1,7 @@
 import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { LimrunIosHost } from './ios-host.ts';
 
 type RunnerLifecycle = {
   prepareCache(signal?: AbortSignal): Promise<void>;
@@ -27,6 +27,7 @@ export function createLimrunAppleApplicationTools(
     AppleApplicationTools,
     'resolveOpenTarget' | 'applyRuntimeHints' | 'clearRuntimeHints'
   >,
+  emitDiagnostic: LimrunIosHost['emitDiagnostic'],
 ): AppleApplicationTools {
   const requireDevice = (target: DeviceInfo | string) => {
     if ((typeof target === 'string' ? target : target.id) !== device.id)

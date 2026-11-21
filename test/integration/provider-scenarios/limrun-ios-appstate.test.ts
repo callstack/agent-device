@@ -1,10 +1,13 @@
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { withAppleToolProvider } from '@agent-device/platform-apple/tool-provider';
-import { createLimrunAppleToolProvider } from '../../../src/core/interactors/limrun-ios-tools.ts';
+import {
+  createLimrunAppleToolProvider,
+  limrunIosHost,
+} from '../../../src/provider-plugin-host-capabilities.fixtures.ts';
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/limrun/runtime';
 import {
   limrunTestDependencies,
   createTestLimrunIosRunner,
@@ -158,12 +161,13 @@ function limrunRuntimeDependencies(): LimrunRuntimeDependencies {
       createRunner: async (session) => {
         const runner = await createTestLimrunIosRunner(session.device);
         const lifetime = new AbortController();
+        const iosHost = await limrunIosHost({ env: {}, cwd: process.cwd() });
         return {
           ...runner,
           createInteractor: (context) =>
             withMethodScope(runner.createInteractor(context), (task) =>
               withAppleToolProvider(
-                createLimrunAppleToolProvider(session, lifetime.signal, context?.signal),
+                createLimrunAppleToolProvider(session, iosHost, lifetime.signal, context?.signal),
                 task,
               ),
             ),

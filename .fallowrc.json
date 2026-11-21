@@ -6,6 +6,7 @@
     "scripts/check-provider-plugin.mjs",
     "scripts/check-affected/command.ts",
     "packages/provider-aws-device-farm/test/package-smoke.mjs",
+    "packages/provider-limrun/test/package-smoke.mjs",
     "packages/provider-browserstack/test/package-smoke.mjs",
     "packages/provider-browserstack/tsdown.config.ts",
     "packages/provider-testmu/test/package-smoke.mjs",
@@ -37,6 +38,7 @@
     "src/sdk/install-source.ts",
     "src/sdk/plugins.ts",
     "src/sdk/plugin-webdriver.ts",
+    "src/sdk/plugin-device-host.ts",
     "src/sdk/android-adb.ts",
     "src/sdk/contracts.ts",
     "src/sdk/selectors.ts",
@@ -110,9 +112,6 @@
     // @agent-device/maestro owns the source import, while the published root
     // build externalizes yaml and retains runtime imports in packed chunks.
     "yaml",
-    // @agent-device/provider-limrun owns the source import, while the published
-    // root build externalizes @limrun/api and retains runtime imports in packed chunks.
-    "@limrun/api",
     // @agent-device/browserstack and @agent-device/testmu import agent-device type-only, and their
     // tsconfigs map those specifiers through this workspace link to core source so typecheck needs
     // no build; Fallow then credits the source files rather than the package.

@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
-import { fixture } from './limrun-ios-runner.fixtures.ts';
-import { createLimrunAppleToolProvider } from './limrun-ios-tools.ts';
+import { fixture } from './provider-plugin-host-capabilities-limrun-ios.fixtures.ts';
+import { createLimrunAppleToolProvider } from './provider-plugin-host-capabilities.fixtures.ts';
 import { withAppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import { resolveIosSimulatorDeepLinkBundleId } from '@agent-device/platform-apple/app-resolution';
 import { promises as fs } from 'node:fs';
@@ -23,7 +23,8 @@ test('remote app metadata resolves Expo and deep-link ownership and rejects dupl
     { bundleId: 'com.example.app', name: 'Example', installType: 'User' },
   ]);
   f.session.client.listApps = listApps;
-  const provider = () => createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const provider = () =>
+    createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   await withAppleToolProvider(provider(), async () => {
     expect(await resolveIosSimulatorDeepLinkBundleId(f.device, 'exp+example://route')).toBe(
       'com.example.app',
@@ -59,7 +60,7 @@ test('clear state uses the shared reset and preserves container identity without
     { bundleId: 'com.example.app', name: 'Example', installType: 'User' },
   ];
   await withAppleToolProvider(
-    createLimrunAppleToolProvider(f.session, new AbortController().signal),
+    createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal),
     async () => {
       await f.runner.createInteractor().setSetting('clear-app-state', 'clear', 'com.example.app');
     },
@@ -88,7 +89,7 @@ test.each([false, true])(
     });
     const payloadPath = path.join(f.directory, 'payload.apns');
     const payload = { aps: { alert: 'hello' }, custom: 'value' };
-    const { createAppleToolHost } = await import('../../platform-runtime-apple-tool-host.ts');
+    const { createAppleToolHost } = await import('./platform-runtime-apple-tool-host.ts');
     const host = {
       deviceReadiness: {
         appleAutomation: {
@@ -188,7 +189,7 @@ test.each([
 ])('clear state rejects invalid input before modifying files: %j', async ({ state, app }) => {
   const f = await fixture();
   await withAppleToolProvider(
-    createLimrunAppleToolProvider(f.session, new AbortController().signal),
+    createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal),
     async () => {
       await expect(
         f.runner.createInteractor().setSetting('clear-app-state', state, app),
@@ -203,6 +204,7 @@ test('staged payload cleanup survives cancellation of its command', async () => 
   const cancellation = new AbortController();
   const provider = createLimrunAppleToolProvider(
     f.session,
+    f.host,
     new AbortController().signal,
     cancellation.signal,
   );
@@ -223,7 +225,7 @@ test('clear state reports file deletion failure without relaunching or recreatin
     { bundleId: 'com.example.app', name: 'Example', installType: 'User' },
   ];
   await withAppleToolProvider(
-    createLimrunAppleToolProvider(f.session, new AbortController().signal),
+    createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal),
     async () => {
       await expect(
         f.runner.createInteractor().setSetting('clear-app-state', 'clear', 'com.example.app'),
@@ -239,7 +241,7 @@ test('clear state reports file deletion failure without relaunching or recreatin
 test('clear state reports the shared no-data-container result without mutating files', async () => {
   const f = await fixture({ failFileMethod: 'GET', failFileStatus: 404 });
   await withAppleToolProvider(
-    createLimrunAppleToolProvider(f.session, new AbortController().signal),
+    createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal),
     async () => {
       await expect(
         f.runner.createInteractor().setSetting('clear-app-state', 'clear', 'com.apple.Preferences'),
@@ -261,7 +263,7 @@ test('deep-link ownership ignores missing metadata for another installed app', a
     { bundleId: 'com.example.app', name: 'Example', installType: 'User' },
   ];
   await withAppleToolProvider(
-    createLimrunAppleToolProvider(f.session, new AbortController().signal),
+    createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal),
     async () => {
       expect(await resolveIosSimulatorDeepLinkBundleId(f.device, 'exp+example://route')).toBe(
         'com.example.app',
@@ -272,7 +274,7 @@ test('deep-link ownership ignores missing metadata for another installed app', a
 
 test.each([401, 500])('app metadata HTTP %s is not treated as an absent plist', async (status) => {
   const f = await fixture({ failFileMethod: 'GET', failFileStatus: status });
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   await expect(
     tools.simulatorApps.readInfoPlist({
       device: f.device,
@@ -297,7 +299,7 @@ test('container operations receive fresh deadlines after earlier operations have
       deadline.abort(new DOMException('deadline expired', 'TimeoutError'));
   };
   try {
-    const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+    const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
     const container = await tools.simulatorFiles.openContainer({
       device: f.device,
       bundleId: 'com.example.app',
@@ -328,7 +330,7 @@ test('a container download deadline remains a typed timeout and removes the part
   const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
   const destinationPath = path.join(f.directory, 'timed-out.bin');
   try {
-    const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+    const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
     await expect(
       tools.simulatorFiles.copyToHost({
         device: f.device,
@@ -349,7 +351,7 @@ test('a failed upload reply removes the staged file before rejecting', async () 
   const f = await fixture({ invalidUploadReply: true });
   const local = path.join(f.directory, 'push.apns');
   await fs.writeFile(local, '{}');
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   await expect(tools.simulatorFiles.stageFile(local)).rejects.toThrow();
   expect([...f.storage.files.keys()]).toEqual([]);
   expect(f.storage.calls.map((call) => call.method)).toEqual(['PUT', 'DELETE']);
@@ -360,7 +362,7 @@ test('concurrent metadata reads do not inherit another caller cancellation', asy
     holdFileDownload: true,
     containers: { 'com.example.app': { app: { 'Info.plist': plist('exp+example') } } },
   });
-  const tools = createLimrunAppleToolProvider(f.session, new AbortController().signal);
+  const tools = createLimrunAppleToolProvider(f.session, f.host, new AbortController().signal);
   const canceled = new AbortController();
   const input = { device: f.device, bundleId: 'com.example.app', timeoutMs: 5000 };
   const first = tools.simulatorApps.readInfoPlist({ ...input, signal: canceled.signal });
