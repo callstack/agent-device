@@ -39,16 +39,13 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
       .filter((entry) => mayNameSeed(entry.source) && namesSeed(parse(entry).program()))
       .map(({ file }) => file),
   );
-  // Parsing every file to build the whole import graph costs seconds, so only a file that could
-  // import a family member is parsed. An escape can spell any request, so every file with one is a
-  // candidate.
-  const escaped = files.filter(({ source }) => source.includes('\\'));
-  const unescaped = files.filter(({ source }) => !source.includes('\\'));
+  // Parsing every file to build the whole import graph costs seconds, so only a possible importer
+  // of a family member is parsed.
+  const { escaped, possibleImporters } = indexPossibleImporters(files, paths);
   const pending = [...family];
   while (pending.length > 0) {
     const member = pending.pop()!;
-    const candidates = [...escaped, ...unescaped.filter(mayImport(member))];
-    for (const candidate of candidates) {
+    for (const candidate of [...escaped, ...(possibleImporters.get(member) ?? [])]) {
       if (family.has(candidate.file) || !importsOf(candidate).has(member)) continue;
       family.add(candidate.file);
       pending.push(candidate.file);
@@ -60,27 +57,36 @@ export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): stri
 }
 
 /**
- * A cheap superset of the unescaped files whose relative request resolves to `member`.
- * {@link resolveLocalImport} reaches `member` from the member path, its `.js` alias, or its
- * extensionless path. Each segment of a resolved path is spelled by the request, unless `.` and `..`
- * steps take it from the importer's own path, which puts the importer under that path. A request to
- * an index passes through its directory, so the directory stands for every form of an index.
+ * Indexes each unescaped file under every path its relative requests could resolve to. An escape
+ * can spell any request, so a file with one is a possible importer of every member.
  */
-function mayImport(member: string): (entry: FixtureSource) => boolean {
-  const stem = member.replace(/\.ts$/, '');
-  const targets =
-    lastSegment(stem) === 'index' ? [path.posix.dirname(member)] : [member, `${stem}.js`, stem];
-  // Every target's last segment contains this name. A module named `.ts` has an empty one, which
-  // admits every file.
-  const name = lastSegment(targets.at(-1)!);
-  const ancestors = targets.map((target) => `${target}/`);
-  return ({ file, source }) =>
-    source.includes(name) || ancestors.some((ancestor) => file.startsWith(ancestor));
+function indexPossibleImporters(files: readonly FixtureSource[], paths: ReadonlySet<string>) {
+  const escaped: FixtureSource[] = [];
+  const possibleImporters = new Map<string, FixtureSource[]>();
+  for (const entry of files) {
+    if (entry.source.includes('\\')) {
+      escaped.push(entry);
+      continue;
+    }
+    const targets = quotedRelativeText(entry.source).flatMap(
+      (text) => resolveLocalImport(entry.file, text, paths) ?? [],
+    );
+    for (const target of new Set(targets)) {
+      const importers = possibleImporters.get(target);
+      if (importers) importers.push(entry);
+      else possibleImporters.set(target, [entry]);
+    }
+  }
+  return { escaped, possibleImporters };
 }
 
-/** Unlike `path.basename`, keeps an empty segment empty (`src/fixtures/` gives ``). */
-function lastSegment(target: string): string {
-  return target.slice(target.lastIndexOf('/') + 1);
+/**
+ * The text of every quote pair that opens with `.` on one line, overlaps included. In a source
+ * without escapes, a module request's text is its value, so this is a superset of its relative
+ * requests.
+ */
+function quotedRelativeText(source: string): string[] {
+  return [...source.matchAll(/(?=(['"])(\.(?:(?!\1)[^\n\r])*)\1)/g)].map((match) => match[2]!);
 }
 
 type ParsedFixtureSource = Readonly<{ program: () => AstNode; dependencies: readonly string[] }>;

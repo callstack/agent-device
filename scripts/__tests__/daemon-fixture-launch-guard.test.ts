@@ -125,6 +125,22 @@ for (const [fixture, consumer, specifier] of [
   });
 }
 
+test('a stray quote before a request on the same line cannot hide the request', () => {
+  const bad = `import { runCmdDetachedMonitored } from '@agent-device/host-kit/command'; const spawn = vi.mocked(runCmdDetachedMonitored); spawn.mockImplementation(() => { throw new Error('raw'); });`;
+  const violations = scanDaemonFixtureLaunches([
+    {
+      file: 'src/support.ts',
+      source: `import { createRegisteredDaemonFixtures } from '@agent-device/test-kit'; export const fixtures = createRegisteredDaemonFixtures({});`,
+    },
+    {
+      file: 'src/consumer.test.ts',
+      source: `const note = "it'."; import { fixtures } from './support.ts'; ${bad}`,
+    },
+  ]);
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0]!.includes('src/consumer.test.ts'));
+});
+
 for (const expression of [
   '(spawn as any)',
   'spawn!',
