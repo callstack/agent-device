@@ -1,15 +1,13 @@
 import {
+  ALERT_REFUSAL_REASONS,
   type AlertAction,
   ALERT_ACTION_RETRY_MS,
-  ALERT_BUTTON_UNDECIDED_REASON,
-  ALERT_CAPTURE_UNDECIDED_REASON,
   type AlertCapture,
   type AlertInfo,
   type AlertPlatform,
   ALERT_NOT_FOUND_REASON,
   ALERT_POLL_INTERVAL_MS,
   ALERT_WAIT_TIMEOUT_REASON,
-  ALERT_WINDOW_EXPIRED_REASON,
   type AlertStatusKind,
   DEFAULT_ALERT_TIMEOUT_MS,
   MAX_ALERT_WINDOW_MS,
@@ -252,7 +250,7 @@ async function actOnTreeAlert<
       'COMMAND_FAILED',
       `alert ${action} found an alert but no button that clearly matches the action`,
       {
-        reason: ALERT_BUTTON_UNDECIDED_REASON,
+        reason: ALERT_REFUSAL_REASONS.buttonUndecided.reason,
         dispatched: 'no',
         alert: candidate.alert,
         hint: 'Inspect alert get --json for the visible buttons, then press the choice you want by label/ref.',
@@ -350,7 +348,7 @@ async function confirmTreeAlertGone<
     `alert ${action} pressed the button but the dismissal could not be confirmed`,
     {
       alert: dismissed,
-      reason: ALERT_WINDOW_EXPIRED_REASON,
+      reason: ALERT_REFUSAL_REASONS.windowExpired.reason,
       hint: 'The alert button was pressed; the post-press checks never settled the dialog as gone, so it may already be gone. Run alert get --json before retrying.',
     },
   );
@@ -369,7 +367,7 @@ function lookupRefusal(
       'COMMAND_FAILED',
       `alert ${action} refused: the capture is alert-shaped but cannot be resolved to one alert`,
       {
-        reason: ALERT_CAPTURE_UNDECIDED_REASON,
+        reason: ALERT_REFUSAL_REASONS.captureUndecided.reason,
         dispatched: 'no',
         hint: 'Inspect alert get --json and snapshot -i, then press the visible choice by label/ref.',
       },
@@ -392,7 +390,7 @@ function visibleAfterPressFailure<TAlert extends AlertInfo & { buttons: string[]
 ): AppError {
   return new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
     alert: dismissed,
-    reason: ALERT_WINDOW_EXPIRED_REASON,
+    reason: ALERT_REFUSAL_REASONS.windowExpired.reason,
     hint: 'The alert button was pressed but the dialog was visible on the last check that answered. Inspect alert get --json, then press the visible button by label/ref or retry.',
   });
 }

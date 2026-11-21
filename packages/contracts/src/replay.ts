@@ -1,4 +1,4 @@
-import type { DaemonError } from '@agent-device/kernel/errors';
+import type { DaemonError, ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
@@ -28,14 +28,20 @@ export type ReplayTargetGuardDenotation = {
   structural: NodeStructuralDenotation;
 };
 
-/**
- * `details.reason` marker on the pre-action refusal thrown by dispatch's
- * post-resolution guard (`assertExpectedResolvedTarget`,
- * `packages/command-runtime/src/commands/interaction/runtime/replay-target-guard.ts`), detected by the replay
- * step loop to convert the refusal into an identity-mismatch target-binding
- * divergence.
- */
-export const REPLAY_TARGET_GUARD_MISMATCH_REASON = 'replay_target_guard_mismatch';
+/** Why a replay step refuses to act on the node dispatch resolved for it. */
+const REPLAY_TARGET_GUARD_REASONS = {
+  /**
+   * `details.reason` marker on the pre-action refusal thrown by dispatch's
+   * post-resolution guard (`assertExpectedResolvedTarget`,
+   * `packages/command-runtime/src/commands/interaction/runtime/replay-target-guard.ts`), detected by the replay
+   * step loop to convert the refusal into an identity-mismatch target-binding
+   * divergence.
+   */
+  // Dispatch resolved a different node than the replay plan verified for this step.
+  mismatch: { reason: 'replay_target_guard_mismatch' },
+} as const satisfies ReasonTable<'replay'>;
+
+export const REPLAY_TARGET_GUARD_MISMATCH_REASON = REPLAY_TARGET_GUARD_REASONS.mismatch.reason;
 
 /**
  * #1349: `details.reason` marker on the timeout refusal `wait` throws when

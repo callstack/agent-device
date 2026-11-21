@@ -1,4 +1,9 @@
-import { AppError, appNotInstalledDetails, discloseDispatch } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  appNotInstalledDetails,
+  discloseDispatch,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import {
   APPEARANCE_ACTIONS,
   MOBILE_PERMISSION_TARGETS,
@@ -120,12 +125,20 @@ export function settingsAppScope(
 }
 
 /**
- * The reason a request is told its app names nothing: what a caller does about it — drop the app or
- * move to a target whose mutation is app-scoped — is the reason's meaning, so a driver can branch
- * on `error.details.reason` instead of the prose. Paired with `dispatched: no`, because the
- * refusal runs before a device is touched.
+ * The `settings` refusal family: a request is told what its input cannot do, paired with
+ * `dispatched: no`, because the refusal runs before a device is touched.
  */
-export const SETTINGS_APP_NOT_CONSUMED_REASON = 'setting_app_not_consumed';
+export const SETTINGS_REFUSAL_REASONS = {
+  /**
+   * The reason a request is told its app names nothing: what a caller does about it — drop the app
+   * or move to a target whose mutation is app-scoped — is the reason's meaning, so a driver can
+   * branch on `error.details.reason` instead of the prose.
+   */
+  // The asked-for setting applies to the target itself, so the named app consumes nothing.
+  appNotConsumed: { reason: 'setting_app_not_consumed' },
+} as const satisfies ReasonTable<'settings'>;
+
+export const SETTINGS_APP_NOT_CONSUMED_REASON = SETTINGS_REFUSAL_REASONS.appNotConsumed.reason;
 
 /**
  * The refusal a mutation answers with when its target consumes no app: the code, sentence, typed
@@ -148,7 +161,7 @@ export function settingsAppNotConsumedRefusal(
     code: 'INVALID_ARGS',
     message: `settings ${described} applies to the target itself, not to an app: ${app} names nothing it can grant or revoke.`,
     details: {
-      reason: SETTINGS_APP_NOT_CONSUMED_REASON,
+      reason: SETTINGS_REFUSAL_REASONS.appNotConsumed.reason,
       dispatched: 'no',
       setting: described,
       app,

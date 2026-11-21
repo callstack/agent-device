@@ -5,7 +5,7 @@ import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifac
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
-import { selector } from './selector-read-utils.ts';
+import { FIND_READ_REASONS, selector } from './selector-read-utils.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   createFakeClock,
@@ -287,9 +287,10 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.equal(error.message, 'find could not read the current accessibility tree');
-      const details = (error as { details?: { reason?: string; hint?: string } }).details;
-      assert.equal(details?.reason, 'sparse tree');
-      assert.match(details?.hint ?? '', /snapshot quality verdict is sparse/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, FIND_READ_REASONS.snapshotUnreadable.reason);
+      assert.equal(details?.verdictReason, 'sparse tree');
+      assert.match(String(details?.hint ?? ''), /snapshot quality verdict is sparse/);
       return true;
     },
   );

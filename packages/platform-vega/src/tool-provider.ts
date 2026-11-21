@@ -1,5 +1,5 @@
 import type { VegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { runCmd, type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
@@ -53,10 +53,16 @@ export function createLocalVegaCliAdapter(host: HostEnvironment): VegaCliAdapter
  * runs, so reaching this default means the caller forgot to bind one — refuse instead of reading
  * an ambient environment (#3794).
  */
+/** Why this tool provider refuses when its CLI adapter was never bound to a host. */
+export const VEGA_TOOL_PROVIDER_REFUSAL_REASONS = {
+  // A Vega CLI call reached the scope default: no caller composed a host-bound adapter first.
+  adapterHostUnbound: { reason: 'vega-adapter-host-unbound' },
+} as const satisfies ReasonTable<'Vega CLI adapter'>;
+
 function unboundVegaCliAdapter(): VegaCliAdapter {
   const refuse = async (): Promise<never> => {
     throw new AppError('COMMAND_FAILED', 'The Vega CLI adapter is not bound to a host.', {
-      reason: 'vega-adapter-host-unbound',
+      reason: VEGA_TOOL_PROVIDER_REFUSAL_REASONS.adapterHostUnbound.reason,
     });
   };
   return { run: refuse, isAvailable: refuse };

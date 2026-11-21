@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import { settleWithin } from '@agent-device/host-kit/settle-within';
@@ -13,6 +13,14 @@ import { VIDEO_VALIDATION_SCRIPT } from '@agent-device/host-swift/video-validato
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
+
+/** Why the MP4 playability validator cannot answer. */
+export const VIDEO_VALIDATOR_REFUSAL_REASONS = {
+  // The Swift compile is still running past the caller's wait; try the stop again.
+  compileTimeout: { reason: 'video_validator_compile_timeout' },
+  // The validator could not be built or run at all, so playability stays unverified.
+  unavailable: { reason: 'video_validator_unavailable' },
+} as const satisfies ReasonTable<'record'>;
 
 // A cold Swift module cache makes the validator compile take over 30 s on a loaded CI runner, so a
 // caller with a deadline, such as `record stop`, waits for the compile until that deadline instead.
@@ -159,7 +167,7 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
     'COMMAND_FAILED',
     `The video validator did not compile within ${Math.round(waitMs)}ms`,
     {
-      reason: 'video_validator_compile_timeout',
+      reason: VIDEO_VALIDATOR_REFUSAL_REASONS.compileTimeout.reason,
       timeoutMs: waitMs,
       retriable: true,
       hint:
@@ -170,7 +178,10 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
 }
 
 function unavailableVideoValidator(cause: unknown): AppError {
-  if (cause instanceof AppError && cause.details?.reason === 'video_validator_unavailable')
+  if (
+    cause instanceof AppError &&
+    cause.details?.reason === VIDEO_VALIDATOR_REFUSAL_REASONS.unavailable.reason
+  )
     return cause;
   // A cache the validator may not be run from keeps its own reason: the fix is the cache, not the toolchain.
   if (isUntrustedSwiftCacheError(cause)) return cause;
@@ -180,7 +191,7 @@ function unavailableVideoValidator(cause: unknown): AppError {
     'The video validator is unavailable; MP4 playability could not be verified.',
     {
       ...details,
-      reason: 'video_validator_unavailable',
+      reason: VIDEO_VALIDATOR_REFUSAL_REASONS.unavailable.reason,
       retriable: false,
       hint:
         details?.hint ??

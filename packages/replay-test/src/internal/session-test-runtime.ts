@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   replayTestAttemptFailure,
   type ReplayTestAttemptFailed,
@@ -17,7 +17,14 @@ import {
 const REPLAY_TIMEOUT_CLEANUP_GRACE_MS = 2_000;
 const REPLAY_TEST_TIMEOUT_HINT =
   'Replay test timeouts are cooperative; the active command may take a short grace period to stop.';
-const REPLAY_TIMEOUT_CLEANUP_PENDING_REASON = 'timeout_cleanup_pending';
+
+/** Why a `replay --test` attempt ends as an infrastructure failure on the timeout path. */
+export const REPLAY_TEST_TIMEOUT_REASONS = {
+  // The cooperative deadline ended the attempt while the abandoned replay may still run.
+  timeout: { reason: 'timeout' },
+  // Cleanup of an abandoned replay is still pending, so the suite stops instead of retrying.
+  cleanupPending: { reason: 'timeout_cleanup_pending' },
+} as const satisfies ReasonTable<'replay'>;
 
 export async function runReplayTestAttempt(
   params: {
@@ -328,7 +335,7 @@ function markReplayTimeoutCleanupPending(
       ...outcome.error,
       details: {
         ...(outcome.error.details ?? {}),
-        reason: REPLAY_TIMEOUT_CLEANUP_PENDING_REASON,
+        reason: REPLAY_TEST_TIMEOUT_REASONS.cleanupPending.reason,
         timeoutCleanupPending: true,
       },
     },
@@ -399,7 +406,7 @@ function createReplayTestTimeoutOutcome(
       message: `TIMEOUT after ${timeoutMs}ms`,
       hint: REPLAY_TEST_TIMEOUT_HINT,
       details: {
-        reason: 'timeout',
+        reason: REPLAY_TEST_TIMEOUT_REASONS.timeout.reason,
         timeoutMs,
         timeoutMode: 'cooperative',
         artifactPaths,

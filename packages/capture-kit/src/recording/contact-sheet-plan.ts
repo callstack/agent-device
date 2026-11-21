@@ -1,4 +1,4 @@
-import { CONTACT_SHEET_DURATION_REASON } from './contact-sheet-report.ts';
+import { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 /** Spacing between requested sample times, in milliseconds. */
@@ -38,7 +38,7 @@ export function planContactSheetSampleTimes(
       'COMMAND_FAILED',
       `Cannot plan a contact sheet: the video timeline of ${videoPath} could not be read`,
       {
-        reason: CONTACT_SHEET_DURATION_REASON,
+        reason: CONTACT_SHEET_REASONS.durationUnknown.reason,
         videoPath,
         hint: 'Retry once the recording finished finalizing; a clip whose container is still being written has no readable duration.',
       },

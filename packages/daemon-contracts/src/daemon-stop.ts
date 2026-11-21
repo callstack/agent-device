@@ -1,5 +1,14 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonRetirementResult } from './daemon-registration-owner.ts';
+
+/**
+ * Why `daemon stop` reports a retirement it could not prove. The owner is the retirement watchdog:
+ * it signaled the process and the observation never came back the way the rule needs.
+ */
+const DAEMON_STOP_REASONS = {
+  // The process was signaled but stayed alive, so the stop cannot claim it ended.
+  exitUnconfirmed: { reason: 'daemon_exit_unconfirmed' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 import {
   DAEMON_LIFECYCLE_REASONS,
@@ -142,7 +151,8 @@ function daemonRetirementError(
       pid: info.pid,
       processStartTime: info.startTime,
       reason:
-        refusal?.reason ?? (failure ? 'daemon_exit_unconfirmed' : 'daemon_retirement_unconfirmed'),
+        refusal?.reason ??
+        (failure ? DAEMON_STOP_REASONS.exitUnconfirmed.reason : 'daemon_retirement_unconfirmed'),
       terminationReason: failure?.reason,
       signal: failure?.signal,
       retirement,

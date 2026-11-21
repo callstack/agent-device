@@ -60,6 +60,28 @@ export const INTERACTION_ERROR_REASONS = {
    */
   // The target did not come to rest before the press; wait for the screen, then retry.
   targetStillMoving: { reason: 'target_still_moving' },
+  /**
+   * Every tappable region of the target belongs to one of its interactive children, so a press on
+   * the parent would land on a child control. `details.competitorRefs` names up to five of those
+   * children and `details.competitorCount` counts them. The owner is
+   * `packages/selectors/src/node-touch-point.ts`.
+   */
+  // Every tappable region of the target belongs to one of its interactive children.
+  coveredByInteractiveDescendants: { reason: 'covered_by_interactive_descendants' },
+  /**
+   * The acting pipeline's off-screen stage refused a target named by selector: the resolved node
+   * sits outside the screen, so nothing was pressed and `details.selector` names the target. The
+   * owner is `packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts`.
+   */
+  // A selector resolved to an element outside the screen, so nothing was pressed.
+  offscreenSelector: { reason: 'offscreen_selector' },
+  /**
+   * The acting pipeline's off-screen stage refused a target named by `@ref`: the resolved node sits
+   * outside the screen, so nothing was pressed and `details.ref` names it. The owner is
+   * `packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts`.
+   */
+  // An @ref resolved to an element outside the screen, so nothing was pressed.
+  offscreenRef: { reason: 'offscreen_ref' },
 } as const satisfies ReasonTable<'interaction'>;
 
 /** The part of a covered node a refusal reports. */

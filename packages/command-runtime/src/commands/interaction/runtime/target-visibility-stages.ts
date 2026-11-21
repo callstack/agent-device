@@ -15,12 +15,15 @@ import type {
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import {
+  coveredInteractionDetails,
+  INTERACTION_ERROR_REASONS,
+} from '@agent-device/selectors/interaction-error';
+import {
   runNodePipelineStages,
   type SelectorPipelineHooks,
 } from '@agent-device/selectors/selector-pipeline';
 import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
-import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
 import {
   classifyOffscreenScrollDirection,
   type OffscreenScrollDirection,
@@ -129,7 +132,10 @@ export async function assertVisibleSelectorTarget(
 ): Promise<SnapshotNode> {
   return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
     message: `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
-    details: { reason: 'offscreen_selector', selector },
+    details: {
+      reason: INTERACTION_ERROR_REASONS.offscreenSelector.reason,
+      selector,
+    },
     // A selector re-resolves against a fresh snapshot on every attempt, so the
     // recovery is: move the named direction, then retry THIS selector — no
     // separate snapshot step, and no @ref (a scroll expires the ref frame,
@@ -151,7 +157,10 @@ export async function assertVisibleRefTarget(
 ): Promise<SnapshotNode> {
   return await throwIfOffscreenInteractionTarget(runtime, options, node, nodes, {
     message: `Ref ${refInput} is off-screen and not safe to ${action}`,
-    details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
+    details: {
+      reason: INTERACTION_ERROR_REASONS.offscreenRef.reason,
+      ref: normalizeRef(refInput),
+    },
     // The scroll that reveals the target expires the ref frame (#1366, ADR
     // 0014), so retrying this @ref would be rejected next. Steer to a selector,
     // which re-resolves against a fresh snapshot and bypasses the ref-frame guard

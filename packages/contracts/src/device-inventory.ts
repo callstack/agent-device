@@ -11,7 +11,15 @@ import {
   type DeviceTarget,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+/** The refusals this inventory's own input validation and provider-instance lookup answer with. */
+const DEVICE_INVENTORY_REFUSAL_REASONS = {
+  // A device-pin selector names a platform, device, udid, or serial the request cannot carry.
+  invalidDevicePin: { reason: 'invalid_device_pin' },
+  // The provider connection has no allocated instance to route to.
+  providerInstanceUnallocated: { reason: 'provider_instance_unallocated' },
+} as const satisfies ReasonTable<'device inventory'>;
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = [
   'android',
@@ -125,7 +133,7 @@ export function isDeviceClaimConflictReason(value: unknown): value is DeviceClai
 /** A provider connection that has no live instance: none was allocated, or the last one ended. */
 export function providerInstanceUnallocatedError(leaseProvider: string): AppError {
   return new AppError('DEVICE_NOT_FOUND', 'The provider connection has no allocated instance.', {
-    reason: 'provider_instance_unallocated',
+    reason: DEVICE_INVENTORY_REFUSAL_REASONS.providerInstanceUnallocated.reason,
     hint: 'Run boot or open to allocate an instance. SDK callers allocate one with leases.allocate and pass its leaseId.',
     leaseProvider,
   });
@@ -184,7 +192,10 @@ export function readDevicePin(value: unknown): DevicePin | undefined {
 }
 
 function invalidDevicePin(message: string, pinSource: string): never {
-  throw new AppError('INVALID_ARGS', message, { reason: 'invalid_device_pin', pinSource });
+  throw new AppError('INVALID_ARGS', message, {
+    reason: DEVICE_INVENTORY_REFUSAL_REASONS.invalidDevicePin.reason,
+    pinSource,
+  });
 }
 
 function isPinRecord(value: unknown): value is Record<string, unknown> {

@@ -3,7 +3,7 @@ import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-devic
 import { beforeEach, test, vi } from 'vitest';
 import {
   buildRecordingContactSheet,
-  CONTACT_SHEET_THRESHOLD_REASON,
+  CONTACT_SHEET_REASONS,
 } from '@agent-device/capture-kit/recording-contact-sheet';
 import type {
   ArtifactAdapter,
@@ -179,7 +179,7 @@ test('record contact-sheet refuses a change threshold that is not a share of the
         }),
       (error: unknown) =>
         (error as { details?: { reason?: string } }).details?.reason ===
-        CONTACT_SHEET_THRESHOLD_REASON,
+        CONTACT_SHEET_REASONS.thresholdInvalid.reason,
     );
   }
   // Nothing is decoded for an argument that could only print every frame or none of them.

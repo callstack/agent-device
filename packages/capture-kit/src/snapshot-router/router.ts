@@ -13,7 +13,11 @@ import type {
 } from '@agent-device/contracts/ios-snapshot';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  isRequestCanceledError,
+  REQUEST_CANCELED_REASON,
+} from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   buildIosSnapshotPresentationKey,
@@ -325,9 +329,11 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
 function rethrowCancelledFailure(failure: SnapshotSourceFailure, signal: AbortSignal): void {
   if (failure.kind !== 'cancelled') return;
   signal.throwIfAborted();
+  // Every cancelled source failure stamps `request_canceled` into its own details; the router's
+  // own reason is that same typed value, never the bridge's internal `abort-signal` code.
   throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
-    reason: failure.code,
     ...failure.details,
+    reason: REQUEST_CANCELED_REASON,
   });
 }
 

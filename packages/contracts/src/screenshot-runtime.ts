@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   localInteractorSource,
@@ -16,6 +16,14 @@ import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ScreenshotCaptureBackend } from './screenshot.ts';
 
 export type { ScreenshotCaptureFacts, ScreenshotOptions } from './interactor-types.ts';
+
+/** Why this capture seam refuses an option the selected capture owner cannot honour. */
+export const SCREENSHOT_CAPTURE_REFUSAL_REASONS = {
+  // `--capture-backend` names a backend the selected capture owner does not declare.
+  captureBackendUnsupported: { reason: 'screenshot-capture-backend-unsupported' },
+  // `--screen-mask` was asked for on a device whose capture path cannot read the screen mask.
+  screenMaskUnsupported: { reason: 'screenshot-screen-mask-unsupported' },
+} as const satisfies ReasonTable<'screenshot'>;
 
 /** Runner metadata needed by the selected capture implementation, without request-owned state. */
 export type ScreenshotRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>;
@@ -64,7 +72,7 @@ export async function assertScreenshotCaptureSupport(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `--capture-backend ${backend} is not supported: ${capabilities.captureBackendRefusal ?? 'this capture owner declares no such backend'}`,
-      { reason: 'screenshot-capture-backend-unsupported' },
+      { reason: SCREENSHOT_CAPTURE_REFUSAL_REASONS.captureBackendUnsupported.reason },
     );
   }
   if (options?.screenMask === undefined) return;
@@ -74,7 +82,7 @@ export async function assertScreenshotCaptureSupport(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       '--screen-mask requires a handheld iOS simulator simctl capture',
-      { reason: 'screenshot-screen-mask-unsupported' },
+      { reason: SCREENSHOT_CAPTURE_REFUSAL_REASONS.screenMaskUnsupported.reason },
     );
   }
 }

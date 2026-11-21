@@ -1,5 +1,12 @@
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { IosViewportEvidence } from './ios-snapshot.ts';
+
+/** Why coordinate-derived input is refused on top of the capture it was measured from. */
+const SCREEN_ORIGIN_REFUSAL_REASONS = {
+  // The capture never established where its window sits on screen, so coordinates are unverifiable.
+  windowOriginUnknown: { reason: 'window-origin-unknown' },
+} as const satisfies ReasonTable<'snapshot'>;
 
 /**
  * Capture-local clickability facts for consumers that reproduce Maestro's private
@@ -50,7 +57,7 @@ export async function assertSnapshotScreenOrigin(owner: object, label: string): 
     const { AppError, discloseDispatch } = await import('@agent-device/kernel/errors');
     throw discloseDispatch(
       new AppError('COMMAND_FAILED', `${label} has no established screen-coordinate origin`, {
-        reason: 'window-origin-unknown',
+        reason: SCREEN_ORIGIN_REFUSAL_REASONS.windowOriginUnknown.reason,
         hint: 'Take a fresh snapshot after the accessibility channel recovers, or use screenshot to choose screen coordinates.',
       }),
       'no',
