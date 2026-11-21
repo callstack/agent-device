@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { buildRequestFinishedEvent, buildRequestStartedEvent } from '../session-event-log.ts';
+import { onTestFinished, test, vi } from 'vitest';
+import * as redaction from '@agent-device/kernel/redaction';
+import {
+  appendSessionEvent,
+  buildRequestFinishedEvent,
+  buildRequestStartedEvent,
+  flushSessionEventLogWrites,
+  readSessionEventLog,
+  resolveSessionEventLogPath,
+} from '../session-event-log.ts';
 import type { DaemonRequest, DaemonResponseData } from '@agent-device/kernel/contracts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 function buildSuccessEvent(
   command: string,
@@ -328,6 +337,223 @@ test('request lifecycle events omit internal diagnostic paths', () => {
   });
   assert.equal(JSON.stringify([started, failed]).includes('/private/customer'), false);
   assert.equal(JSON.stringify([started, failed]).includes('private failure message'), false);
+});
+
+/** Writes one request's lifecycle events to a fresh journal and reads them back. */
+async function writeAndReadNoteEvents(note: unknown) {
+  const req: DaemonRequest = {
+    token: 'test-token',
+    session: 'public-session',
+    command: 'snapshot',
+    positionals: [],
+    meta: { requestId: 'req-1', note: note as string },
+  };
+  const eventLogPath = resolveSessionEventLogPath(mkdtempForTestSync('agent-device-event-note-'));
+  for (const event of [
+    buildRequestStartedEvent({ req }),
+    buildRequestFinishedEvent({ req, response: { ok: true, data: {} }, durationMs: 5 }),
+    buildRequestFinishedEvent({
+      req,
+      response: { ok: false, error: { code: 'COMMAND_FAILED', message: 'private failure' } },
+      durationMs: 7,
+    }),
+  ]) {
+    appendSessionEvent(eventLogPath, 'public-session', event, {});
+  }
+  await flushSessionEventLogWrites(eventLogPath);
+  const [started, finished, failed] = readSessionEventLog(eventLogPath).events;
+  return { started, finished, failed };
+}
+
+test('request lifecycle events record the client-written note', async () => {
+  const note = 'Open settings to check the order notifications. The toggle should be on.';
+  const { started, finished, failed } = await writeAndReadNoteEvents(`  ${note}  `);
+
+  assert.deepEqual(started?.details, { note });
+  assert.deepEqual(finished?.details, { durationMs: 5, note });
+  assert.deepEqual(failed?.details, { durationMs: 7, code: 'COMMAND_FAILED', note });
+});
+
+test('request lifecycle events omit an absent, blank, or non-string note', async () => {
+  for (const note of [undefined, '', '   \n', 42, { text: 'not a string' }]) {
+    const { started, finished, failed } = await writeAndReadNoteEvents(note);
+
+    assert.equal(started?.details, undefined);
+    assert.deepEqual(finished?.details, { durationMs: 5 });
+    assert.deepEqual(failed?.details, { durationMs: 7, code: 'COMMAND_FAILED' });
+  }
+});
+
+test('a request note of 300 emoji-heavy code points is written and read back whole', async () => {
+  const fitting = `a${'😀'.repeat(299)}`;
+  const { started, finished, failed } = await writeAndReadNoteEvents(fitting);
+
+  assert.equal(started?.details?.note, fitting);
+  assert.equal(finished?.details?.note, fitting);
+  assert.equal(failed?.details?.note, fitting);
+});
+
+test('a longer emoji request note is cut at a code point and ends in an ellipsis', async () => {
+  const { started, finished, failed } = await writeAndReadNoteEvents(`a${'😀'.repeat(300)}`);
+  const bounded = `a${'😀'.repeat(298)}…`;
+
+  assert.equal(Array.from(bounded).length, 300);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+test('a request note keeps credential and URL redaction and is bounded after it', async () => {
+  const prefix = 'Signed in with token=x at https://shop.example/cart?session=s3cr3t then ';
+  const redactedPrefix =
+    'Signed in with token=[REDACTED] at https://shop.example/cart?REDACTED then ';
+  // 299 code points as sent; redaction lengthens it past the 300 code point bound.
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `${prefix}${'a'.repeat(299 - prefix.length)}`,
+  );
+  const bounded = `${redactedPrefix}${'a'.repeat(299 - redactedPrefix.length)}…`;
+
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+  assert.equal(JSON.stringify([started, finished, failed]).includes('s3cr3t'), false);
+});
+
+test('a long hyphenated note is cut to 1,200 code points before redaction and 300 after it', async () => {
+  const redactText = vi.spyOn(redaction, 'redactDiagnosticText');
+  onTestFinished(() => redactText.mockRestore());
+  // The 1,200th code point is an emoji, so a cut by code units would split it. A space follows
+  // it, so the cut splits no token.
+  const redactionInput = `${'a-'.repeat(599)}a😀`;
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `  ${redactionInput} ${'a-'.repeat(4096)}  `,
+  );
+  const bounded = `${'a-'.repeat(149)}a…`;
+
+  assert.equal(Array.from(redactionInput).length, 1200);
+  assert.deepEqual(
+    redactText.mock.calls.map(([text]) => text),
+    [redactionInput, redactionInput, redactionInput],
+  );
+  assert.equal(Array.from(bounded).length, 300);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+const SEARCH_URL = 'https://shop.example/search?q=';
+const REDACTED_SEARCH_URL = 'https://shop.example/search?REDACTED';
+
+test('a note cut before redaction ends in an ellipsis after redaction shortens it', async () => {
+  // The query ends at the 1,200-code-point cap, so the cap drops the explanation after it.
+  const query = 'q'.repeat(1200 - `Checked ${SEARCH_URL}`.length);
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `Checked ${SEARCH_URL}${query} because the cart total was wrong`,
+  );
+  const bounded = `Checked ${REDACTED_SEARCH_URL}…`;
+
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+test('a note cut before redaction keeps room for the ellipsis within 300 code points', async () => {
+  // The cap keeps the URL, a space and `keptEmoji` emoji: exactly 300 code points once redacted.
+  // A space follows the kept emoji, so the cut splits no token.
+  const keptEmoji = 300 - REDACTED_SEARCH_URL.length - 1;
+  const query = 'q'.repeat(1200 - SEARCH_URL.length - 1 - keptEmoji);
+  const { started, finished, failed } = await writeAndReadNoteEvents(
+    `${SEARCH_URL}${query} ${'😀'.repeat(keptEmoji)} ${'😀'.repeat(50)}`,
+  );
+  const bounded = `${REDACTED_SEARCH_URL} ${'😀'.repeat(keptEmoji - 1)}…`;
+
+  assert.equal(Array.from(`${REDACTED_SEARCH_URL} ${'😀'.repeat(keptEmoji)}`).length, 300);
+  assert.equal(Array.from(bounded).length, 300);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+});
+
+test('only a note longer than 1,200 code points counts as cut before redaction', async () => {
+  const whole = `${SEARCH_URL}${'q'.repeat(1200 - SEARCH_URL.length)}`;
+  const { started: kept } = await writeAndReadNoteEvents(whole);
+  const { started: cut } = await writeAndReadNoteEvents(`${whole} q`);
+
+  assert.equal(Array.from(whole).length, 1200);
+  assert.equal(kept?.details?.note, REDACTED_SEARCH_URL);
+  assert.equal(cut?.details?.note, `${REDACTED_SEARCH_URL}…`);
+});
+
+test('a note cut inside its first token stores no note', async () => {
+  const { started, finished } = await writeAndReadNoteEvents(`${SEARCH_URL}${'q'.repeat(1200)}`);
+
+  assert.equal(started?.details, undefined);
+  assert.deepEqual(finished?.details, { durationMs: 5 });
+});
+
+test('a note cut inside a quoted credential stores no part of the credential', async () => {
+  // The URL query shrinks to `?REDACTED`, so text kept after the credential's key would fit in
+  // the 300 code points. The 1,200-code-point cap falls inside the quoted multi-word value.
+  const note = `Checked ${SEARCH_URL}${'q'.repeat(900)} with password="${'correct horse battery staple '.repeat(40)}" and retried`;
+  const { started, finished, failed } = await writeAndReadNoteEvents(note);
+  const bounded = `Checked ${REDACTED_SEARCH_URL} with password=[REDACTED]…`;
+
+  assert.equal(Array.from(note).slice(0, 1200).join('').split('"').length, 2);
+  assert.equal(started?.details?.note, bounded);
+  assert.equal(finished?.details?.note, bounded);
+  assert.equal(failed?.details?.note, bounded);
+  assert.doesNotMatch(JSON.stringify([started, finished, failed]), /horse|battery|staple/);
+});
+
+/**
+ * A note whose 1,200-code-point cap falls right after `kept`, inside a token that `rest` ends.
+ * The query before it shrinks to `?REDACTED`, so text kept after the query fits in 300 code points.
+ */
+function buildNoteCutAfter(kept: string, rest: string): string {
+  const lead = `Checked ${SEARCH_URL}`;
+  const note = `${lead}${'q'.repeat(1200 - lead.length - kept.length)}${kept}${rest}`;
+  assert.ok(Array.from(note).slice(0, 1200).join('').endsWith(kept));
+  return note;
+}
+
+test('a note cut inside URL credentials stores no part of them', async () => {
+  // A URL cut inside its userinfo no longer parses, so URL redaction alone would keep it.
+  for (const { kept, rest } of [
+    { kept: ' then signed in at https://user:pass@', rest: 'host/admin and retried' },
+    { kept: ' then signed in at https://user:pa', rest: 'ss@host/admin and retried' },
+  ]) {
+    const { started, finished, failed } = await writeAndReadNoteEvents(
+      buildNoteCutAfter(kept, rest),
+    );
+    const bounded = `Checked ${REDACTED_SEARCH_URL} then signed in at…`;
+
+    assert.equal(started?.details?.note, bounded);
+    assert.equal(finished?.details?.note, bounded);
+    assert.equal(failed?.details?.note, bounded);
+    assert.doesNotMatch(JSON.stringify([started, finished, failed]), /user|:pa/);
+  }
+});
+
+test('a note cut inside an unquoted value or a bearer token stores no part of it', async () => {
+  for (const { kept, bounded } of [
+    {
+      kept: ' then retried with token=abc123',
+      bounded: `Checked ${REDACTED_SEARCH_URL} then retried with…`,
+    },
+    {
+      kept: ' then retried with Authorization: Bearer abc123',
+      bounded: `Checked ${REDACTED_SEARCH_URL} then retried with Authorization: Bearer…`,
+    },
+  ]) {
+    const { started, finished, failed } = await writeAndReadNoteEvents(
+      buildNoteCutAfter(kept, 'def456 and waited'),
+    );
+
+    assert.equal(started?.details?.note, bounded);
+    assert.equal(finished?.details?.note, bounded);
+    assert.equal(failed?.details?.note, bounded);
+    assert.doesNotMatch(JSON.stringify([started, finished, failed]), /abc123|def456/);
+  }
 });
 
 test('unknown commands keep the existing generic completion event', () => {
