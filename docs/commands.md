@@ -1974,6 +1974,10 @@ The `snapshot` response carries `targetActivation` and a warning:
   a `wait <text>` satisfied on its first poll may re-activate the app without saying so. When it
   matters, run `snapshot -i` and read its disclosure
   ([#2694](https://github.com/callstack/agent-device/issues/2694)).
+- **A coordinate `press` on a system surface runs in place.** While the session app is in the
+  background, a `press <x> <y>` on a point that SpringBoard owns (a notification banner, the Home
+  Screen, Control Center) reaches that point and does not bring the app back. A point over another
+  app still brings the session app back first.
 - **No read launches a stopped app.** `snapshot`, `wait`, `is`, `get`, a reading `find`, and the
   leading read of `gesture` or a selector `click`/`fill` bring a backgrounded app forward but never
   start one that is not running, because a launch could drop a URL waiting behind an "Open in …?"
