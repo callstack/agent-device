@@ -31,6 +31,34 @@ struct RunnerAlertLabelVocabulary {
   }
 }
 
+extension RunnerAlertLabelVocabulary {
+  /// The system prompts' buttons in the languages the built-in table covers, for the devices
+  /// whose OS string files the runner process cannot read. A simulated OS reads its own strings
+  /// instead, so this table is the only vocabulary a physical device has.
+  static let device = RunnerAlertLabelVocabulary(translations: deviceTranslations)
+
+  /// The built-in translations behind `device`. Each entry pairs the system prompt's English
+  /// button label with one language's wording of it, so the localized label ranks exactly like
+  /// the English original; the initializer's guards (#3627) drop an entry that would claim both
+  /// actions. A row's wording needs device evidence, so the table grows only with a label a
+  /// device really shows.
+  static let deviceTranslations: [(english: String, localized: String)] = [
+    // Notification and privacy prompts.
+    ("Allow", "允许"),
+    ("Don’t Allow", "不允许"),
+    // App Tracking Transparency.
+    ("Ask App Not to Track", "要求 App 不跟踪"),
+    // Location.
+    ("Allow While Using App", "仅在使用期间允许"),
+    ("Allow Once", "仅本次允许"),
+    // General-purpose prompt buttons.
+    ("OK", "好"),
+    ("Cancel", "取消"),
+    // SpringBoard's launch confirmation.
+    ("Open", "打开")
+  ]
+}
+
 #if os(iOS) && targetEnvironment(simulator)
 extension RunnerAlertLabelVocabulary {
   /// The device languages' vocabulary, read once from the OS strings. iOS words a prompt in the
@@ -81,6 +109,8 @@ extension RunnerAlertLabelVocabulary {
 }
 #else
 extension RunnerAlertLabelVocabulary {
-  static let system = english
+  /// A device keeps its OS string files from the runner process, so its vocabulary is the
+  /// built-in table.
+  static let system = device
 }
 #endif
