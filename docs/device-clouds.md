@@ -33,7 +33,7 @@ Every provider follows the same steps:
 4. Follow the printed next command to install or open the app.
 5. Run normal device commands, then `agent-device close` and `agent-device disconnect`.
 
-Every command on a provider connection must name its session, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, before it leases anything, instead of using the connection that another agent or job on the same machine saved last. This includes `connect` itself.
+Every command on a provider connection that takes a session must name it, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, before it leases anything, instead of using the connection that another agent or job on the same machine saved last. This includes `connect` itself.
 
 Each provider accepts only its own provider flags (`--provider-*` and `--aws-*`). A flag the provider does not use fails with `INVALID_ARGS` naming the flag, whether you pass it to `connect`, `client.leases.allocate()`, or a remote-config profile, so no setting is silently dropped.
 
