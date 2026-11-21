@@ -4,7 +4,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   createCloudWebDriverCapabilities,
@@ -15,13 +15,27 @@ import { WebDriverClient, type WebDriverSession } from './webdriver-client.ts';
 import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 import { snapshotBackendForPlatform } from './runtime-helpers.ts';
-import { releaseOnFailure, WEBDRIVER_PROVIDER_REASONS } from './webdriver-utils.ts';
+import { releaseOnFailure } from './webdriver-utils.ts';
 import type {
   CloudWebDriverBaseSession,
   CloudWebDriverPreparedSession,
   CloudWebDriverRuntimeOptions,
 } from './runtime.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
+
+/** Why a provider WebDriver session could not be allocated or cleaned up. */
+const WEBDRIVER_SESSION_REASONS = {
+  // The provider did not create the WebDriver session within the session-creation budget.
+  sessionCreateTimeout: { reason: 'provider_session_create_timeout' },
+  // The provider ended the session an allocation was waiting on by releasing its lease.
+  sessionReleasedDuringAllocation: { reason: 'provider_session_released_during_allocation' },
+  // The provider ended the session an allocation was waiting on while shutting down.
+  sessionShutdownDuringAllocation: { reason: 'provider_session_shutdown_during_allocation' },
+  // The lease is still releasing its previous session, so a new allocation gets no session.
+  sessionReleaseInProgress: { reason: 'provider_session_release_in_progress' },
+  // Shutdown left WebDriver sessions running, so they may still be billed.
+  sessionCleanupIncomplete: { reason: 'provider_session_cleanup_incomplete' },
+} as const satisfies ReasonTable<'webdriver provider'>;
 
 export type WebDriverProviderSession = Readonly<{
   lease: DeviceLease;
@@ -653,7 +667,7 @@ function sessionCreateTimeoutError(
     'COMMAND_FAILED',
     `${provider} did not create the WebDriver session within ${String(timeoutMs)}ms.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.sessionCreateTimeout.reason,
+      reason: WEBDRIVER_SESSION_REASONS.sessionCreateTimeout.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -688,8 +702,8 @@ function refusalForTeardown(
     {
       reason:
         by === 'release'
-          ? WEBDRIVER_PROVIDER_REASONS.sessionReleasedDuringAllocation.reason
-          : WEBDRIVER_PROVIDER_REASONS.sessionShutdownDuringAllocation.reason,
+          ? WEBDRIVER_SESSION_REASONS.sessionReleasedDuringAllocation.reason
+          : WEBDRIVER_SESSION_REASONS.sessionShutdownDuringAllocation.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -730,7 +744,7 @@ function refusalForTeardownInProgress(
     'DEVICE_IN_USE',
     `${provider} is releasing lease ${lease.leaseId} and allocated no WebDriver session for it.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.sessionReleaseInProgress.reason,
+      reason: WEBDRIVER_SESSION_REASONS.sessionReleaseInProgress.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -752,7 +766,7 @@ function allocationRefusedAfterShutdown(provider: string, lease: DeviceLease): A
     'COMMAND_FAILED',
     `${provider} is shut down and created no WebDriver session for lease ${lease.leaseId}.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.sessionShutdownDuringAllocation.reason,
+      reason: WEBDRIVER_SESSION_REASONS.sessionShutdownDuringAllocation.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -797,7 +811,7 @@ function shutdownLeftSessionsRunning(
     'COMMAND_FAILED',
     `${provider} left ${String(outcomes.length)} WebDriver session(s) running after shutdown: ${providerSessionIds.join(', ')}.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.sessionCleanupIncomplete.reason,
+      reason: WEBDRIVER_SESSION_REASONS.sessionCleanupIncomplete.reason,
       provider,
       providerSessionIds,
       cleanup: 'uncertain',

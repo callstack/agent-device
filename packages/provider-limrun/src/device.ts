@@ -25,7 +25,7 @@ export const LIMRUN_PROVIDER_REASONS = {
   adbTunnelCleanedUp: { reason: 'limrun_adb_tunnel_cleaned_up' },
   // The app-sync session of this lease has ended, so no further sync runs on it.
   appSyncRetired: { reason: 'limrun_app_sync_retired' },
-  // Syncing the app to the instance stopped with nothing installed.
+  // App sync or local cache maintenance failed; check the device for the app before retrying.
   appSyncFailed: { reason: 'limrun_app_sync_failed' },
 } as const satisfies ReasonTable<'limrun provider'>;
 

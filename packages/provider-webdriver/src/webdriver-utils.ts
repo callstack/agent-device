@@ -14,38 +14,14 @@ import {
 import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 
-/**
- * Every `details.reason` the hosted WebDriver providers (BrowserStack and AWS Device Farm) publish,
- * keyed by what the failure means. Each refusal site reads a row here, so the bundle's wire
- * vocabulary has one owner in the one module every raise site already loads.
- */
-export const WEBDRIVER_PROVIDER_REASONS = {
+/** Why an app upload to the provider failed. */
+const WEBDRIVER_APP_UPLOAD_REASONS = {
   // The app upload to the provider's storage did not answer within its own deadline.
   hubAppUploadTimeout: { reason: 'hub_app_upload_timeout' },
   // The app upload to the provider's storage never completed its transport.
   hubAppUploadTransportFailed: { reason: 'hub_app_upload_transport_failed' },
   // `--provider-app` is a relative path and the request names no working directory to resolve it in.
   providerAppCwdMissing: { reason: 'provider_app_cwd_missing' },
-  // The transport stopped waiting on a WebDriver request the driver may still be carrying out.
-  requestTimeout: { reason: 'webdriver_request_timeout' },
-  // The request never reached the driver: the connection was refused or the host is unreachable.
-  connectRefused: { reason: 'webdriver_connect_refused' },
-  // The connection to the driver failed after the request may have reached it.
-  requestInterrupted: { reason: 'webdriver_request_interrupted' },
-  // The driver answered that it does not implement the route.
-  routeUnsupported: { reason: 'webdriver_route_unsupported' },
-  // The provider did not create the WebDriver session within the session-creation budget.
-  sessionCreateTimeout: { reason: 'provider_session_create_timeout' },
-  // The provider ended the session an allocation was waiting on by releasing its lease.
-  sessionReleasedDuringAllocation: { reason: 'provider_session_released_during_allocation' },
-  // The provider ended the session an allocation was waiting on while shutting down.
-  sessionShutdownDuringAllocation: { reason: 'provider_session_shutdown_during_allocation' },
-  // The lease is still releasing its previous session, so a new allocation gets no session.
-  sessionReleaseInProgress: { reason: 'provider_session_release_in_progress' },
-  // Shutdown left WebDriver sessions running, so they may still be billed.
-  sessionCleanupIncomplete: { reason: 'provider_session_cleanup_incomplete' },
-  // `fill` has no focused element reference to clear before it types the replacement text.
-  textEntryClearTargetUnavailable: { reason: 'text_entry_clear_target_unavailable' },
 } as const satisfies ReasonTable<'webdriver provider'>;
 
 /** Best-effort release after a failure; a failed release rides along as `cleanupError`, never masks the primary. */
@@ -172,8 +148,8 @@ export async function postHubAppUpload(
       `${options.service} app upload failed.`,
       {
         reason: timedOut
-          ? WEBDRIVER_PROVIDER_REASONS.hubAppUploadTimeout.reason
-          : WEBDRIVER_PROVIDER_REASONS.hubAppUploadTransportFailed.reason,
+          ? WEBDRIVER_APP_UPLOAD_REASONS.hubAppUploadTimeout.reason
+          : WEBDRIVER_APP_UPLOAD_REASONS.hubAppUploadTransportFailed.reason,
         ...(timedOut ? { timeoutMs: HUB_APP_UPLOAD_TIMEOUT_MS } : {}),
         hint: `Check network access to the ${options.service} upload API, then retry.`,
       },
@@ -255,7 +231,7 @@ function requireAppCwd(options: { service: string; app: string; cwd?: string }):
     `${options.service} --provider-app ${options.app} is a relative path and the request names no working directory; pass an absolute path.`,
     {
       providerApp: options.app,
-      reason: WEBDRIVER_PROVIDER_REASONS.providerAppCwdMissing.reason,
+      reason: WEBDRIVER_APP_UPLOAD_REASONS.providerAppCwdMissing.reason,
     },
   );
 }

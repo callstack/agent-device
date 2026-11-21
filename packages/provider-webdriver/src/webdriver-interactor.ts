@@ -17,7 +17,7 @@ import {
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   capabilitySupported,
   unsupportedCapabilityMessage,
@@ -26,13 +26,18 @@ import {
 } from './capabilities.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
 import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
-import { WEBDRIVER_PROVIDER_REASONS } from './webdriver-utils.ts';
 import { touchPointer } from './webdriver-gestures.ts';
 import {
   scrollFrameFromAndroidWebDriverSource,
   scrollFrameFromIosWebDriverSource,
 } from './webdriver-scroll-frame.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
+
+/** Why WebDriver text entry refused. */
+const WEBDRIVER_TEXT_ENTRY_REASONS = {
+  // `fill` has no focused element reference to clear before it types the replacement text.
+  textEntryClearTargetUnavailable: { reason: 'text_entry_clear_target_unavailable' },
+} as const satisfies ReasonTable<'webdriver provider'>;
 
 /**
  * How long a tapped field gets to take text entry focus before `fill` gives up.
@@ -81,7 +86,7 @@ function textEntryClearTargetUnavailableError(): AppError {
   return new AppError(
     'UNSUPPORTED_OPERATION',
     'fill requires a focused element reference to clear and replace the field',
-    { reason: WEBDRIVER_PROVIDER_REASONS.textEntryClearTargetUnavailable.reason },
+    { reason: WEBDRIVER_TEXT_ENTRY_REASONS.textEntryClearTargetUnavailable.reason },
   );
 }
 

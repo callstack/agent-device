@@ -214,7 +214,7 @@ These reasons can come from more than one command.
 | `limrun_instance_unreachable` | The instance stopped answering, so its app state cannot be read. |
 | `limrun_adb_tunnel_cleaned_up` | The ADB tunnel of this lease was already cleaned up, so nothing can be typed over it. |
 | `limrun_app_sync_retired` | The app-sync session of this lease has ended, so no further sync runs on it. |
-| `limrun_app_sync_failed` | Syncing the app to the instance stopped with nothing installed. |
+| `limrun_app_sync_failed` | App sync or local cache maintenance failed; check the device for the app before retrying. |
 
 ### Macos helper
 
@@ -295,16 +295,16 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `hub_app_upload_timeout` | The app upload to the provider's storage did not answer within its own deadline. |
-| `hub_app_upload_transport_failed` | The app upload to the provider's storage never completed its transport. |
-| `provider_app_cwd_missing` | `--provider-app` is a relative path and the request names no working directory to resolve it in. |
-| `webdriver_request_timeout` | The transport stopped waiting on a WebDriver request the driver may still be carrying out. |
-| `webdriver_connect_refused` | The request never reached the driver: the connection was refused or the host is unreachable. |
-| `webdriver_request_interrupted` | The connection to the driver failed after the request may have reached it. |
-| `webdriver_route_unsupported` | The driver answered that it does not implement the route. |
 | `provider_session_create_timeout` | The provider did not create the WebDriver session within the session-creation budget. |
 | `provider_session_released_during_allocation` | The provider ended the session an allocation was waiting on by releasing its lease. |
 | `provider_session_shutdown_during_allocation` | The provider ended the session an allocation was waiting on while shutting down. |
 | `provider_session_release_in_progress` | The lease is still releasing its previous session, so a new allocation gets no session. |
 | `provider_session_cleanup_incomplete` | Shutdown left WebDriver sessions running, so they may still be billed. |
 | `text_entry_clear_target_unavailable` | `fill` has no focused element reference to clear before it types the replacement text. |
+| `webdriver_request_timeout` | The transport stopped waiting on a WebDriver request the driver may still be carrying out. |
+| `webdriver_connect_refused` | The request never reached the driver: the connection was refused or the host is unreachable. |
+| `webdriver_request_interrupted` | The connection to the driver failed after the request may have reached it. |
+| `webdriver_route_unsupported` | The driver answered that it does not implement the route. |
+| `hub_app_upload_timeout` | The app upload to the provider's storage did not answer within its own deadline. |
+| `hub_app_upload_transport_failed` | The app upload to the provider's storage never completed its transport. |
+| `provider_app_cwd_missing` | `--provider-app` is a relative path and the request names no working directory to resolve it in. |

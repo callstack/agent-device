@@ -1,12 +1,19 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure, type ReasonTable } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
-import {
-  basicAuthHeader,
-  trimLeadingSlash,
-  WEBDRIVER_PROVIDER_REASONS,
-  withTrailingSlash,
-} from './webdriver-utils.ts';
+import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
+
+/** Why a WebDriver request failed at the transport. */
+const WEBDRIVER_TRANSPORT_REASONS = {
+  // The transport stopped waiting on a WebDriver request the driver may still be carrying out.
+  requestTimeout: { reason: 'webdriver_request_timeout' },
+  // The request never reached the driver: the connection was refused or the host is unreachable.
+  connectRefused: { reason: 'webdriver_connect_refused' },
+  // The connection to the driver failed after the request may have reached it.
+  requestInterrupted: { reason: 'webdriver_request_interrupted' },
+  // The driver answered that it does not implement the route.
+  routeUnsupported: { reason: 'webdriver_route_unsupported' },
+} as const satisfies ReasonTable<'webdriver provider'>;
 
 export type WebDriverAuth = {
   username: string;
@@ -30,7 +37,7 @@ export type WebDriverRequestPolicy = {
 export function isWebDriverRequestTimeout(error: unknown): error is AppError {
   return (
     error instanceof AppError &&
-    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.requestTimeout.reason
+    error.details?.reason === WEBDRIVER_TRANSPORT_REASONS.requestTimeout.reason
   );
 }
 
@@ -63,7 +70,7 @@ const ERROR_CAUSE_DEPTH_LIMIT = 4;
 export function isWebDriverConnectRefused(error: unknown): error is AppError {
   return (
     error instanceof AppError &&
-    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.connectRefused.reason
+    error.details?.reason === WEBDRIVER_TRANSPORT_REASONS.connectRefused.reason
   );
 }
 
@@ -216,7 +223,7 @@ export class WebDriverTransport {
     const payload = parsed.json;
     const error = webdriverError(status, payload);
     if (isWebDriverRouteUnsupported(error)) {
-      emitWebDriverDiagnostic(WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason, {
+      emitWebDriverDiagnostic(WEBDRIVER_TRANSPORT_REASONS.routeUnsupported.reason, {
         method,
         path,
         status,
@@ -414,11 +421,11 @@ export function isWebDriverInvalidSession(error: unknown): error is AppError {
  * the route. A command that tried every route it has and was refused by each carries the same.
  */
 export function unsupportedRouteRefusal(): {
-  reason: typeof WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason;
+  reason: typeof WEBDRIVER_TRANSPORT_REASONS.routeUnsupported.reason;
   dispatched: DispatchDisclosure;
 } {
   return {
-    reason: WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason,
+    reason: WEBDRIVER_TRANSPORT_REASONS.routeUnsupported.reason,
     ...dispatchDisclosure('no'),
   };
 }
@@ -473,7 +480,7 @@ export function emitWebDriverDiagnostic(phase: string, data: Record<string, unkn
 export function isWebDriverRouteUnsupported(error: unknown): error is AppError {
   return (
     error instanceof AppError &&
-    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason
+    error.details?.reason === WEBDRIVER_TRANSPORT_REASONS.routeUnsupported.reason
   );
 }
 
@@ -487,7 +494,7 @@ function webdriverTimeoutError(
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} timed out after ${timeoutMs}ms.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.requestTimeout.reason,
+      reason: WEBDRIVER_TRANSPORT_REASONS.requestTimeout.reason,
       method,
       path,
       timeoutMs,
@@ -503,7 +510,7 @@ function webdriverConnectRefusedError(method: string, path: string, cause: unkno
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} could not reach the driver.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.connectRefused.reason,
+      reason: WEBDRIVER_TRANSPORT_REASONS.connectRefused.reason,
       method,
       path,
       ...dispatchDisclosure('no'),
@@ -517,7 +524,7 @@ function webdriverRequestInterruptedError(method: string, path: string, cause: u
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} lost its connection to the driver.`,
     {
-      reason: WEBDRIVER_PROVIDER_REASONS.requestInterrupted.reason,
+      reason: WEBDRIVER_TRANSPORT_REASONS.requestInterrupted.reason,
       method,
       path,
       ...dispatchDisclosure('unknown'),
@@ -531,7 +538,7 @@ function isRetriableWebDriverError(error: unknown): boolean {
   if (isWebDriverConnectRefused(error)) return true;
   if (
     error instanceof AppError &&
-    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.requestInterrupted.reason
+    error.details?.reason === WEBDRIVER_TRANSPORT_REASONS.requestInterrupted.reason
   ) {
     return true;
   }
