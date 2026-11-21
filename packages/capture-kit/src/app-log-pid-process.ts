@@ -19,7 +19,7 @@ export type PidScopedAppLogProcessOptions = Readonly<{
   processStart: AppLogProcessStart;
   setupSignal: AbortSignal;
   resolvePid(signal?: AbortSignal): Promise<string>;
-  command(pid: string): AppLogProcessCommand;
+  command(pid: string): AppLogProcessCommand | Promise<AppLogProcessCommand>;
   cleanupFailureMessage: string;
 }>;
 
@@ -43,7 +43,7 @@ export async function createPidScopedAppLogProcess(
       try {
         active = await options.processStart(
           {
-            command: options.command(initialPid),
+            command: await options.command(initialPid),
             output,
             markerPath: options.pidPath,
           },
@@ -80,7 +80,7 @@ export async function createPidScopedAppLogProcess(
     resolvePid: async () => await options.resolvePid(),
     startProcess: async (pid) =>
       await options.processStart({
-        command: options.command(pid),
+        command: await options.command(pid),
         output,
         markerPath: options.pidPath,
       }),

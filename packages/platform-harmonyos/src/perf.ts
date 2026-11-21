@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { runHarmonyShell } from './hdc.ts';
+import type { HarmonyHdcRunner } from './hdc.ts';
 
 const HARMONYOS_MEMORY_SAMPLE_METHOD = 'hdc-shell-proc-status';
 
@@ -32,11 +32,12 @@ export function parseHarmonyProcStatusMemory(rawOutput: string):
 }
 
 export async function sampleHarmonyMemoryPerf(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   bundleName: string,
 ): Promise<HarmonyMemoryPerfSample> {
-  const pid = await resolveHarmonyProcessPid(device, bundleName);
-  const result = await runHarmonyShell(device, ['cat', `/proc/${pid}/status`], {
+  const pid = await resolveHarmonyProcessPid(hdc, device, bundleName);
+  const result = await hdc.runShell(device, ['cat', `/proc/${pid}/status`], {
     timeoutMs: 15_000,
   });
   const memory = parseHarmonyProcStatusMemory(result.stdout);
@@ -54,8 +55,12 @@ export async function sampleHarmonyMemoryPerf(
   };
 }
 
-async function resolveHarmonyProcessPid(device: DeviceInfo, bundleName: string): Promise<number> {
-  const result = await runHarmonyShell(device, ['pidof', bundleName], {
+async function resolveHarmonyProcessPid(
+  hdc: HarmonyHdcRunner,
+  device: DeviceInfo,
+  bundleName: string,
+): Promise<number> {
+  const result = await hdc.runShell(device, ['pidof', bundleName], {
     allowFailure: true,
     timeoutMs: 15_000,
   });

@@ -105,7 +105,14 @@ export type ProviderContribution<WebDriver extends WebDriverDescriptor = WebDriv
     ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
   }>;
 
-export type { PlatformContribution, PlatformHost, PlatformSetup } from './platform.ts';
+export type {
+  PlatformBackgroundCommand,
+  PlatformBackgroundProcess,
+  PlatformContribution,
+  PlatformHost,
+  PlatformOutputSink,
+  PlatformSetup,
+} from './platform.ts';
 
 /** One independently activated claim a plugin declares. New kinds need an explicit decision. */
 export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =

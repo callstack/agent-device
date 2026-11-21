@@ -1,18 +1,14 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createHarmonyHdcRunnerStub, type HarmonyHdcRunnerStub } from '../toolbox.fixtures.ts';
 
-const { readFile, runHarmonyHdc, runHarmonyShell } = vi.hoisted(() => ({
-  readFile: vi.fn(),
-  runHarmonyHdc: vi.fn(),
-  runHarmonyShell: vi.fn(),
-}));
+const { readFile } = vi.hoisted(() => ({ readFile: vi.fn() }));
 
 vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/host-file')>()),
   readHostBinaryFile: readFile,
 }));
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc, runHarmonyShell }));
 
 import { screenshotHarmony } from '../screenshot.ts';
 
@@ -25,33 +21,33 @@ const DEVICE: DeviceInfo = {
   booted: true,
 };
 
+let hdc: HarmonyHdcRunnerStub;
+
 beforeEach(() => {
+  hdc = createHarmonyHdcRunnerStub();
   readFile.mockReset();
-  runHarmonyHdc.mockReset();
-  runHarmonyShell.mockReset();
-  runHarmonyHdc.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-  runHarmonyShell.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   readFile.mockResolvedValue(Buffer.from([0xff, 0xd8, 0xff, 0x00]));
 });
 
 test('screenshotHarmony captures, retrieves, validates, and cleans a JPEG', async () => {
-  await screenshotHarmony(DEVICE, '/tmp/capture.jpg');
+  await screenshotHarmony(hdc, DEVICE, '/tmp/capture.jpg');
 
-  const shellCalls = runHarmonyShell.mock.calls.map(([, args]) => args);
-  const hdcCalls = runHarmonyHdc.mock.calls.map(([, args]) => args);
-  assert.deepEqual(shellCalls[0]?.slice(0, 2), ['snapshot_display', '-f']);
-  assert.match(String(shellCalls[0]?.[2]), /^\/data\/local\/tmp\/agent-device-screen-.+\.jpeg$/);
-  assert.deepEqual(hdcCalls[0]?.slice(0, 2), ['file', 'recv']);
-  assert.match(String(hdcCalls[0]?.[2]), /^\/data\/local\/tmp\/agent-device-screen-.+\.jpeg$/);
-  assert.equal(hdcCalls[0]?.[3], '/tmp/capture.jpg');
-  assert.deepEqual(shellCalls[1]?.slice(0, 2), ['rm', '-f']);
+  const shellWords = hdc.calls.filter((call) => call.kind === 'runShell').map((call) => call.args);
+  const pull = hdc.calls.find((call) => call.kind === 'run')!;
+  assert.deepEqual(shellWords[0]?.slice(0, 2), ['snapshot_display', '-f']);
+  assert.match(String(shellWords[0]?.[2]), /^\/data\/local\/tmp\/agent-device-screen-.+\.jpeg$/);
+  assert.deepEqual(pull.args.slice(0, 2), ['file', 'recv']);
+  assert.match(String(pull.args[2]), /^\/data\/local\/tmp\/agent-device-screen-.+\.jpeg$/);
+  assert.equal(pull.args[3], '/tmp/capture.jpg');
+  assert.deepEqual(shellWords[1]?.slice(0, 2), ['rm', '-f']);
   assert.deepEqual(readFile.mock.calls, [['/tmp/capture.jpg']]);
 });
 
 test('screenshotHarmony rejects a retrieved artifact that is not JPEG data', async () => {
   readFile.mockResolvedValue(Buffer.from('not-a-jpeg'));
 
-  await assert.rejects(() => screenshotHarmony(DEVICE, '/tmp/invalid.jpg'), /not a JPEG/);
-  assert.equal(runHarmonyShell.mock.calls.length, 2);
-  assert.equal(runHarmonyHdc.mock.calls.length, 1);
+  await assert.rejects(() => screenshotHarmony(hdc, DEVICE, '/tmp/invalid.jpg'), /not a JPEG/);
+  // The capture, the pull, and the cleanup all still happened.
+  assert.equal(hdc.calls.filter((call) => call.kind === 'runShell').length, 2);
+  assert.equal(hdc.calls.filter((call) => call.kind === 'run').length, 1);
 });

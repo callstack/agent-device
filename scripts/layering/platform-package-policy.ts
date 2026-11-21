@@ -53,7 +53,6 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
   'src/platform-runtime-operation-host.ts',
   'src/platform-runtime-perf-host.ts',
   'src/platform-runtime-resource-cleanup.ts',
-  'src/platform-runtime-screen-recording-harmony-host.ts',
   'src/platform-runtime-screen-recording-web-host.ts',
   'src/platform-runtime-toolchain-host.ts',
 ]);
@@ -107,14 +106,71 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/tool-provider',
   ],
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
-  harmonyos: ['@agent-device/platform-harmonyos/interactor'],
   linux: ['@agent-device/platform-linux/interactor'],
   web: ['@agent-device/platform-web/interactor'],
 };
 const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   web: '@agent-device/web',
   vega: '@agent-device/vega',
+  harmonyos: '@agent-device/harmonyos',
 };
+
+// The host-kit scopes a managed platform package must never reach at runtime. `command` reads the
+// daemon's ambient command scope and `diagnostics` reads its request diagnostic store, and a managed
+// plugin is bundled with its own copy of host-kit, so the daemon's scope never enters that copy: a
+// spawn or trace made through it runs with the daemon process environment, outside the request's
+// captured environment and exec trace. A managed plugin therefore binds to the `PlatformHost` its
+// `setup` receives. Type-only edges are allowed — they cost the bundle nothing.
+const MANAGED_HOST_KIT_SCOPES = [
+  '@agent-device/host-kit/command',
+  '@agent-device/host-kit/diagnostics',
+];
+
+// The web and Vega files that still import one of those scopes, as of the HarmonyOS plugin (#4317).
+// Each entry is that package's own migration slice, not an exception to this rule: no file joins the
+// list, and an entry leaves it when its file binds to the host its plugin was set up with. HarmonyOS
+// carries no entry: its plugin builds one HDC command runner from `host.runCommand` in `setup`, so
+// its packed bundle carries no separate host-kit command or diagnostics scope.
+const MANAGED_HOST_KIT_IMPORT_DEBT: Readonly<Record<string, readonly string[]>> = {
+  '@agent-device/web': [
+    'packages/platform-web/src/agent-browser-install.ts',
+    'packages/platform-web/src/agent-browser-lifecycle.ts',
+    'packages/platform-web/src/agent-browser-process-record.ts',
+    'packages/platform-web/src/agent-browser-provider.ts',
+    'packages/platform-web/src/agent-browser-tool.ts',
+    'packages/platform-web/src/interactor.ts',
+  ],
+  '@agent-device/vega': [
+    'packages/platform-vega/src/app-lifecycle.ts',
+    'packages/platform-vega/src/input-actions.ts',
+    'packages/platform-vega/src/inventory.ts',
+    'packages/platform-vega/src/tool-provider.ts',
+    'packages/platform-vega/src/vega-executable.ts',
+  ],
+  '@agent-device/harmonyos': [],
+};
+
+function isManagedHostKitScope(spec: string): boolean {
+  return MANAGED_HOST_KIT_SCOPES.some((scope) => spec === scope || spec.startsWith(`${scope}/`));
+}
+
+function managedHostKitScopeViolations(
+  file: string,
+  site: { spec: string; line: number; typeOnly: boolean },
+  managedName: string,
+): LayeringViolation[] {
+  if (site.typeOnly || !isManagedHostKitScope(site.spec)) return [];
+  if ((MANAGED_HOST_KIT_IMPORT_DEBT[managedName] ?? []).includes(file)) return [];
+  return [
+    violation(
+      file,
+      site.line,
+      `${managedName} may not import the host-kit '${site.spec}' scope at runtime: run the command ` +
+        'or emit the diagnostic through the PlatformHost given to setup, so the packed plugin stays ' +
+        'inside the request environment and exec trace',
+    ),
+  ];
+}
 
 const INTERACTOR_COMPOSITION_FILE = 'src/core/interactors/register-builtins.ts';
 
@@ -393,6 +449,10 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       );
     }
     if (!ownerFamily) continue;
+    const managedName = MANAGED_PLATFORMS[ownerFamily as PlatformFamily];
+    if (managedName && isProductionSourceFile(file)) {
+      violations.push(...managedHostKitScopeViolations(file, site, managedName));
+    }
     if (
       site.spec.startsWith('@agent-device/') &&
       !site.spec.startsWith('@agent-device/contracts/') &&
@@ -498,5 +558,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
+  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
 }

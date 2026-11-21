@@ -44,13 +44,8 @@ export type AndroidPerfHost = NativeCaptureHost &
     writeProfileReport(device: DeviceInfo, input: PerfProfileReportInput): Promise<PerfData>;
   }>;
 
-export type HarmonyPerfHost = Readonly<{
-  sampleMemory(device: DeviceInfo, appId: string): Promise<object>;
-}>;
-
 /** Family-specific native mechanics; platform packages own policy and operation construction. */
 export type PerfRuntimeHost = Readonly<{
   apple: ApplePerfHost;
   android: AndroidPerfHost;
-  harmony: HarmonyPerfHost;
 }>;

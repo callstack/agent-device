@@ -2,13 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-
-const { runHarmonyHdc, runHarmonyShell } = vi.hoisted(() => ({
-  runHarmonyHdc: vi.fn(),
-  runHarmonyShell: vi.fn(),
-}));
-
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc, runHarmonyShell }));
+import { createHarmonyHdcRunnerStub, type HarmonyHdcRunnerStub } from '../toolbox.fixtures.ts';
 
 import { invalidateHarmonyGestureViewport, readHarmonyGestureViewport } from '../snapshot.ts';
 
@@ -31,34 +25,42 @@ const WIDE_LAYOUT = {
   attributes: { type: 'root', bounds: '[0,0][2340,1080]' },
 };
 
+let hdc: HarmonyHdcRunnerStub;
+
 beforeEach(() => {
-  runHarmonyHdc.mockReset();
-  runHarmonyShell.mockReset();
-  runHarmonyShell.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-  scriptHarmonyLayoutDump(TALL_LAYOUT);
+  hdc = createHarmonyHdcRunnerStub();
+  layout = TALL_LAYOUT;
+  scriptHarmonyLayoutDump();
 });
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Scripts `uitest dumpLayout` + `file recv` so the pulled layout is `layout`. */
-function scriptHarmonyLayoutDump(layout: unknown): void {
-  runHarmonyHdc.mockImplementation(async (_device: unknown, args: string[]) => {
+/** The layout the device answers the next pull with; tests swap it to change what a dump reports. */
+let layout: unknown;
+
+/**
+ * Answers the layout pull so the file the transport receives at its local path is the current
+ * `layout`, which is what the viewport read parses.
+ */
+function scriptHarmonyLayoutDump(): void {
+  const pull = hdc.run;
+  hdc.run = async (device, args, options) => {
     if (args[0] === 'file' && args[1] === 'recv') {
-      fs.writeFileSync(args[3] as string, JSON.stringify(layout), 'utf8');
+      fs.writeFileSync(String(args[3]), JSON.stringify(layout), 'utf8');
     }
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
+    return await pull(device, args, options);
+  };
 }
 
 function dumpLayoutCallCount(): number {
-  return runHarmonyShell.mock.calls.filter(([, args]) => args.includes('dumpLayout')).length;
+  return hdc.calls.filter((call) => call.args.includes('dumpLayout')).length;
 }
 
 test('repeated viewport reads within the TTL trigger a single layout dump', async () => {
-  const first = await readHarmonyGestureViewport(DEVICE_A);
-  const second = await readHarmonyGestureViewport(DEVICE_A);
+  const first = await readHarmonyGestureViewport(hdc, DEVICE_A);
+  const second = await readHarmonyGestureViewport(hdc, DEVICE_A);
 
   assert.deepEqual(first, { x: 0, y: 0, width: 1080, height: 2340 });
   assert.deepEqual(second, first);
@@ -69,33 +71,33 @@ test('viewport cache expires after two seconds without explicit invalidation', a
   vi.useFakeTimers();
   vi.setSystemTime(0);
 
-  await readHarmonyGestureViewport(DEVICE_A);
+  await readHarmonyGestureViewport(hdc, DEVICE_A);
   assert.equal(dumpLayoutCallCount(), 1);
 
-  scriptHarmonyLayoutDump(WIDE_LAYOUT);
+  layout = WIDE_LAYOUT;
   await vi.advanceTimersByTimeAsync(2_000);
-  const refreshed = await readHarmonyGestureViewport(DEVICE_A);
+  const refreshed = await readHarmonyGestureViewport(hdc, DEVICE_A);
 
   assert.deepEqual(refreshed, { x: 0, y: 0, width: 2340, height: 1080 });
   assert.equal(dumpLayoutCallCount(), 2);
 });
 
 test('invalidating the viewport cache forces a fresh layout dump', async () => {
-  await readHarmonyGestureViewport(DEVICE_A);
+  await readHarmonyGestureViewport(hdc, DEVICE_A);
   assert.equal(dumpLayoutCallCount(), 1);
 
-  scriptHarmonyLayoutDump(WIDE_LAYOUT);
+  layout = WIDE_LAYOUT;
   invalidateHarmonyGestureViewport(DEVICE_A);
-  const refreshed = await readHarmonyGestureViewport(DEVICE_A);
+  const refreshed = await readHarmonyGestureViewport(hdc, DEVICE_A);
 
   assert.deepEqual(refreshed, { x: 0, y: 0, width: 2340, height: 1080 });
   assert.equal(dumpLayoutCallCount(), 2);
 });
 
 test('viewport cache entries are scoped per device id', async () => {
-  await readHarmonyGestureViewport(DEVICE_A);
+  await readHarmonyGestureViewport(hdc, DEVICE_A);
 
-  const otherDevice = await readHarmonyGestureViewport(DEVICE_B);
+  const otherDevice = await readHarmonyGestureViewport(hdc, DEVICE_B);
 
   assert.deepEqual(otherDevice, { x: 0, y: 0, width: 1080, height: 2340 });
   assert.equal(dumpLayoutCallCount(), 2);

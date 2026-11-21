@@ -243,7 +243,11 @@ describe('composed device inventory gateway', () => {
 
     const devices = await gateways.localOnly.discover({}, scope);
     expect(devices.map(({ platform }) => platform)).toEqual(['android', 'apple', 'vega', 'linux']);
-    expect(local.sourceLoads()).toEqual(['android', 'harmonyos', 'apple', 'vega', 'linux']);
+    // Every local family's source is loaded exactly once. The failed family is loaded too, and its
+    // failure is what makes it contribute no devices.
+    expect(sortedFamilies(local.sourceLoads())).toEqual(
+      sortedFamilies(['android', 'harmonyos', 'apple', 'vega', 'linux']),
+    );
   });
 
   test('an absent optional family is skipped by unfiltered discovery and refused with plugin-not-installed on explicit request', async () => {
@@ -274,7 +278,9 @@ describe('composed device inventory gateway', () => {
       'apple',
       'linux',
     ]);
-    expect(loaded).toEqual(['android', 'harmonyos', 'apple', 'linux']);
+    expect(sortedFamilies(loaded)).toEqual(
+      sortedFamilies(['android', 'harmonyos', 'apple', 'linux']),
+    );
 
     // An explicit request for the absent family fails with the typed plugin-not-installed
     // outcome and its install hint, before any source load or device binding.
@@ -350,6 +356,15 @@ describe('composed device inventory gateway', () => {
     expect([...calls].sort()).toEqual(['sim-a', 'sim-b']);
   });
 });
+
+/**
+ * The families whose sources were loaded, sorted. Unfiltered discovery loads the sources
+ * concurrently, and the HarmonyOS plugin needs no core inventory host, so which source resolves
+ * first is a scheduling fact rather than a contract. The contract is that each loads exactly once.
+ */
+function sortedFamilies(families: readonly Platform[]): string[] {
+  return [...families].sort();
+}
 
 function inventoryWorld(
   overrides: Partial<Record<Platform, () => Promise<DeviceInventorySource>>> = {},
