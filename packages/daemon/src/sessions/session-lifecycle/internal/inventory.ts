@@ -50,7 +50,7 @@ import {
   resolveCommandDevice,
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
-import { resolveSessionScope, sessionMatchesInventoryScope } from '../../session-routing.ts';
+import { sessionVisibleToRequest } from '../../session-routing.ts';
 import type {
   BoundDeviceRuntime,
   RuntimeFacts,
@@ -118,13 +118,12 @@ function sessionListInventoryResponse(
   req: DaemonRequest,
   sessionStore: SessionStore,
 ): DaemonResponse {
-  const scope = resolveSessionScope(req);
   return {
     ok: true,
     data: {
       sessions: sessionStore
         .listRefs()
-        .filter((ref) => sessionMatchesInventoryScope(ref.session, scope))
+        .filter((ref) => sessionVisibleToRequest(ref.session, req))
         .map((ref) => publicSessionInfo(ref, sessionStore)),
     },
   };

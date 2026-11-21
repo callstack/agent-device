@@ -17,6 +17,7 @@ import {
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
 } from '../core/session-selector.ts';
+import { resolveLeaseScope } from '../core/lease-context.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 const IMPLICIT_SESSION_KEY_PREFIX = 'cwd';
@@ -84,10 +85,19 @@ export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
   return scopeRoot ? { kind: 'cwd', id: hashScopeRoot(scopeRoot) } : { kind: 'global-default' };
 }
 
-export function sessionMatchesInventoryScope(
-  session: SessionState,
-  requestScope: SessionScope,
-): boolean {
+/**
+ * Whether a request may see this session at all, i.e. whether listing it or naming it to the caller
+ * leaks another client's activity. Ownership scope decides the first half; a session that holds a
+ * lease is revealed only to the request carrying that lease's id, because on a shared proxy token
+ * the tenant label is a label and any holder of the token can send it (#4908).
+ */
+export function sessionVisibleToRequest(session: SessionState, req: DaemonRequest): boolean {
+  if (!sessionMatchesInventoryScope(session, resolveSessionScope(req))) return false;
+  if (session.lease) return resolveLeaseScope(req).leaseId === session.lease.leaseId;
+  return true;
+}
+
+function sessionMatchesInventoryScope(session: SessionState, requestScope: SessionScope): boolean {
   const sessionScope = session.sessionScope;
   if (!sessionScope) return false;
   if (requestScope.kind === 'tenant') {

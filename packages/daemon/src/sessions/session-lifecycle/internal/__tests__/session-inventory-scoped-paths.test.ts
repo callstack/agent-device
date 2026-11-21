@@ -147,6 +147,84 @@ test('session list returns only sessions owned by the requesting tenant', async 
   ]);
 });
 
+// #4908: on a proxy shared by several clients under one token, the tenant label is something any
+// holder of that token can send, so it cannot be what keeps one client's session name out of
+// another client's `session list`. A session that holds a lease is listed only for the request that
+// sends that lease's id.
+
+function tenantSession(tenantId: string, leaseId?: string): SessionState {
+  const address = tenantScopedSessionName(tenantId, leaseId ? 'leased' : 'idle');
+  return {
+    name: address,
+    sessionScope: { kind: 'tenant', id: tenantId },
+    device: IOS_SIMULATOR,
+    createdAt: Date.now(),
+    actions: [],
+    ...(leaseId
+      ? { lease: { tenantId, runId: 'run-leased', leaseId, leaseProvider: 'proxy' } }
+      : {}),
+  };
+}
+
+async function runTenantSessionList(req: DaemonRequest) {
+  const sessionStore = makeSessionStore('agent-device-inventory-lease-');
+  for (const session of [
+    tenantSession('tenant-a'),
+    tenantSession('tenant-a', 'a'.repeat(32)),
+    tenantSession('tenant-b'),
+  ]) {
+    sessionStore.publish(session.name, session);
+  }
+  const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    sessionName: req.session,
+    sessionStore,
+  });
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return [];
+  const sessions = response.data?.sessions as { address: string }[];
+  return sessions.map((session) => session.address);
+}
+
+function tenantRequest(meta: DaemonRequest['meta']): DaemonRequest {
+  return {
+    token: 't',
+    session: tenantScopedSessionName('tenant-a', 'idle'),
+    command: 'session_list',
+    positionals: [],
+    flags: {},
+    meta: { tenantId: 'tenant-a', sessionIsolation: 'tenant', ...meta },
+  };
+}
+
+test('session list shows a tenant session that holds a lease only to the request sending that lease id', async () => {
+  const idleAddress = tenantScopedSessionName('tenant-a', 'idle');
+  const leasedAddress = tenantScopedSessionName('tenant-a', 'leased');
+
+  expect(await runTenantSessionList(tenantRequest(undefined))).toEqual([idleAddress]);
+  expect(await runTenantSessionList(tenantRequest({ leaseId: 'a'.repeat(32) }))).toEqual([
+    idleAddress,
+    leasedAddress,
+  ]);
+  expect(await runTenantSessionList(tenantRequest({ leaseId: 'b'.repeat(32) }))).toEqual([
+    idleAddress,
+  ]);
+});
+
+test('session list keeps a tenant session hidden from a request that sends its lease id without tenant isolation', async () => {
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'session_list',
+    positionals: [],
+    flags: {},
+    meta: { cwd: '/tmp/shop-app', leaseId: 'a'.repeat(32) },
+  };
+  expect(await runTenantSessionList(req)).toEqual([]);
+});
+
 test('session list resolves a cwd-scoped session directory from its store key', async () => {
   const response = await runSessionList();
 
