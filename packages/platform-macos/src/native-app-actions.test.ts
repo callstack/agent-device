@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
-import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
-import { macOsNativeAppInteractor } from './native-app-interactor.ts';
+import type { MacOsNativeAppActions } from '@agent-device/contracts/macos-platform-leaf';
+import { macOsNativeAppActions } from './native-app-actions.ts';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsToolbox } from './toolbox.ts';
 
 bindTestCommandHost();
 
@@ -18,7 +20,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The XCTest-backed interactor the native one draws from; any member it calls is recorded. */
+/** The Apple owner's interactor the native actions go back to; any member they call is recorded. */
 function runnerInteractor(reached: string[] = []): Interactor {
   return new Proxy({} as Interactor, {
     get: (_target, member) => async () => {
@@ -28,17 +30,21 @@ function runnerInteractor(reached: string[] = []): Interactor {
   });
 }
 
-function nativeInteractor(ctx: RunnerContext = context, reached: string[] = []): Interactor {
-  return macOsNativeAppInteractor(runnerInteractor(reached), ctx, process.env);
+function nativeInteractor(
+  ctx: RunnerContext = context,
+  reached: string[] = [],
+  box: MacOsToolbox = macOsToolboxFixture(),
+): MacOsNativeAppActions {
+  return macOsNativeAppActions(box, runnerInteractor(reached), ctx, process.env);
 }
 
 async function recordHelperCalls(
   data: Record<string, unknown>,
-  run: (interactor: Interactor) => Promise<unknown>,
+  run: (interactor: MacOsNativeAppActions) => Promise<unknown>,
 ): Promise<{ calls: string[][]; result: unknown }> {
   const calls: string[][] = [];
   const reachedRunner: string[] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         calls.push([...args]);
@@ -46,10 +52,7 @@ async function recordHelperCalls(
       },
     },
   });
-  const result = await withAppleToolProvider(
-    provider,
-    async () => await run(nativeInteractor(context, reachedRunner)),
-  );
+  const result = await run(nativeInteractor(context, reachedRunner, provider));
   // Served through the helper alone: the XCTest-backed interactor never ran.
   assert.deepEqual(reachedRunner, []);
   return { calls, result };
@@ -80,7 +83,7 @@ test('a native tap presses the app surface under the ghost cursor and reports th
 test('a native secondary click opens the context menu at the point through the helper', async () => {
   const { calls, result } = await recordHelperCalls(
     { x: 10, y: 20, mechanism: 'ax-show-menu', windowTitle: 'Untitled' },
-    async (interactor) => await interactor.pressPoint!({ x: 10, y: 20 }, secondaryClick),
+    async (interactor) => await interactor.pressPoint({ x: 10, y: 20 }, secondaryClick),
   );
   assert.deepEqual(calls, [
     ['show-menu', '--x', '10', '--y', '20', '--bundle-id', 'com.apple.TextEdit', '--ghost-cursor'],
@@ -159,7 +162,7 @@ test('AGENT_DEVICE_MACOS_GHOST_CURSOR=0 sends the action without a drawn cursor'
 
 test('only a drawn cursor extends the helper deadline', async () => {
   const deadlines: Array<number | undefined> = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (_args, options) => {
         deadlines.push(options?.timeoutMs);
@@ -167,9 +170,9 @@ test('only a drawn cursor extends the helper deadline', async () => {
       },
     },
   });
-  await withAppleToolProvider(provider, async () => await nativeInteractor().fill(1, 2, 'x'));
+  await nativeInteractor(context, [], provider).fill(1, 2, 'x');
   vi.stubEnv('AGENT_DEVICE_MACOS_GHOST_CURSOR', '0');
-  await withAppleToolProvider(provider, async () => await nativeInteractor().fill(1, 2, 'x'));
+  await nativeInteractor(context, [], provider).fill(1, 2, 'x');
   assert.equal(deadlines[0]! - deadlines[1]!, 1_000);
 });
 
@@ -179,15 +182,12 @@ test('runner-only members refuse with the backend reason instead of starting XCT
   for (const refused of [
     () => interactor.back(),
     () => interactor.setOrientation('portrait'),
-    () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, doubleTap: true }),
-    () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, holdMs: 500 }),
+    () => interactor.pressPoint({ x: 1, y: 2 }, { ...primaryClick, doubleTap: true }),
+    () => interactor.pressPoint({ x: 1, y: 2 }, { ...primaryClick, holdMs: 500 }),
     () => interactor.longPress(1, 2, 500),
   ]) {
     await assert.rejects(refused, isNativeBackendRefusal);
   }
-  assert.equal(interactor.gestureViewport, undefined);
-  assert.equal(interactor.doubleTap, undefined);
-  assert.equal(interactor.findText, undefined);
   assert.deepEqual(reached, []);
 });
 
@@ -201,7 +201,7 @@ test('an action without an app session refuses rather than falling back to the r
 
 test('a press on another surface stays with the helper press of that surface', async () => {
   const reached: string[] = [];
-  await nativeInteractor(context, reached).pressPoint!(
+  await nativeInteractor(context, reached).pressPoint(
     { x: 1, y: 2 },
     { ...primaryClick, surface: 'menubar' },
   );
@@ -209,7 +209,7 @@ test('a press on another surface stays with the helper press of that surface', a
 });
 
 test('a helper refusal surfaces as an unsupported operation that keeps the helper reason', async () => {
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async () => ({
         exitCode: 1,
@@ -225,8 +225,7 @@ test('a helper refusal surfaces as an unsupported operation that keeps the helpe
     },
   });
   await assert.rejects(
-    async () =>
-      await withAppleToolProvider(provider, async () => await nativeInteractor().tap(1, 2)),
+    async () => await nativeInteractor(context, [], provider).tap(1, 2),
     (error: unknown) =>
       isNativeBackendRefusal(error) &&
       (error as AppError).details?.helperReason === 'no-accessible-target',

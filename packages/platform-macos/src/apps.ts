@@ -9,9 +9,13 @@ import {
   createAppResolutionCache,
   type AppResolutionCacheScope,
 } from '@agent-device/provision-kit/app-resolution-cache';
+import type {
+  MacOsHostProvider,
+  MacOsInstalledApp,
+} from '@agent-device/contracts/macos-platform-leaf';
 import { quitMacOsApp } from './helper.ts';
-import { resolveAppleToolProvider, type AppleMacOsHostProvider } from '../../core/tool-provider.ts';
-import type { IosAppInfo } from '../../core/app-info.ts';
+import { createLocalMacOsHostProvider } from './host-provider.ts';
+import type { MacOsToolbox } from './toolbox.ts';
 
 const MACOS_APP_REASONS = {
   // The macOS app was still running after every termination attempt.
@@ -36,7 +40,7 @@ const MACOS_APP_RESOLUTION_CACHE_SCOPE = {
 } satisfies AppResolutionCacheScope;
 const macOsAppResolutionCache = createAppResolutionCache<string>();
 
-export async function resolveMacOsApp(app: string): Promise<string> {
+export async function resolveMacOsApp(box: MacOsToolbox, app: string): Promise<string> {
   const trimmed = app.trim();
 
   const alias = MACOS_ALIASES[trimmed.toLowerCase()];
@@ -51,7 +55,7 @@ export async function resolveMacOsApp(app: string): Promise<string> {
   // An installed app matches by name, or by a bundle id spelled in another case: LaunchServices
   // matches bundle ids without regard to case.
   const wanted = trimmed.toLowerCase();
-  const apps = await listMacApps('all');
+  const apps = await listMacApps(box, 'all');
   const matches = apps.filter(
     (entry) => entry.name.toLowerCase() === wanted || entry.bundleId.toLowerCase() === wanted,
   );
@@ -71,12 +75,13 @@ export async function resolveMacOsApp(app: string): Promise<string> {
  * another app is refused before anything launches.
  */
 export async function resolveMacOsAppDeviceOpenTarget(
+  box: MacOsToolbox,
   device: DeviceInfo,
   target: string | undefined,
 ): Promise<{ appBundleId: string; appName?: string }> {
   const app = requireHostApp(device);
   if (target && !isDeepLinkTarget(target)) {
-    assertAppDeviceBundle(device, await resolveMacOsApp(target));
+    assertAppDeviceBundle(device, await resolveMacOsApp(box, target));
   }
   return target ? { appBundleId: app.bundleId, appName: target } : { appBundleId: app.bundleId };
 }
@@ -86,6 +91,7 @@ export async function resolveMacOsAppDeviceOpenTarget(
  * where they are, and a link alone goes to the device's own app, not the default handler.
  */
 export async function openMacOsApp(
+  box: MacOsToolbox,
   device: DeviceInfo,
   app: string,
   options?: { appBundleId?: string; url?: string },
@@ -93,7 +99,7 @@ export async function openMacOsApp(
   const openOptions = { background: device.hostApp !== undefined };
   const target = app.trim();
   if (device.hostApp && isDeepLinkTarget(target)) {
-    await resolveMacOsHostProvider().openBundle(device.hostApp.bundleId, target, openOptions);
+    await hostProvider(box).openBundle(device.hostApp.bundleId, target, openOptions);
     return;
   }
   const explicitUrl = options?.url?.trim();
@@ -101,30 +107,31 @@ export async function openMacOsApp(
     if (!isDeepLinkTarget(explicitUrl)) {
       throw new AppError('INVALID_ARGS', 'open <app> <url> requires a valid URL target');
     }
-    const appId = options?.appBundleId ?? (await resolveMacOsApp(app));
+    const appId = options?.appBundleId ?? (await resolveMacOsApp(box, app));
     assertAppDeviceBundle(device, appId);
-    await resolveMacOsHostProvider().openBundle(appId, explicitUrl, openOptions);
+    await hostProvider(box).openBundle(appId, explicitUrl, openOptions);
     return;
   }
 
   if (isDeepLinkTarget(target)) {
-    await resolveMacOsHostProvider().openTarget(target, openOptions);
+    await hostProvider(box).openTarget(target, openOptions);
     return;
   }
 
-  const bundleId = options?.appBundleId ?? (await resolveMacOsApp(target));
+  const bundleId = options?.appBundleId ?? (await resolveMacOsApp(box, target));
   assertAppDeviceBundle(device, bundleId);
-  await resolveMacOsHostProvider().openBundle(bundleId, undefined, openOptions);
+  await hostProvider(box).openBundle(bundleId, undefined, openOptions);
 }
 
 export async function closeMacOsApp(
+  box: MacOsToolbox,
   device: DeviceInfo,
   app: string,
   env: Readonly<EnvMap>,
 ): Promise<void> {
-  const bundleId = await resolveMacOsApp(app);
+  const bundleId = await resolveMacOsApp(box, app);
   assertAppDeviceBundle(device, bundleId);
-  const request = await quitMacOsApp(bundleId, env);
+  const request = await quitMacOsApp(box, bundleId, env);
   if (!request.running) return;
   if (!request.terminated && !request.forceTerminated) {
     throw new AppError('COMMAND_FAILED', `Failed to close macOS app ${app}`, {
@@ -136,7 +143,7 @@ export async function closeMacOsApp(
   }
   for (let attempt = 1; attempt < MACOS_APP_TERMINATION_MAX_ATTEMPTS; attempt += 1) {
     await sleep(MACOS_APP_TERMINATION_POLL_MS);
-    if (!(await quitMacOsApp(bundleId, env)).running) return;
+    if (!(await quitMacOsApp(box, bundleId, env)).running) return;
   }
   throw new AppError('COMMAND_FAILED', `Timed out waiting for macOS app ${app} to close`, {
     reason: MACOS_APP_REASONS.terminationTimeout.reason,
@@ -165,32 +172,32 @@ function assertAppDeviceBundle(device: DeviceInfo, bundleId: string): void {
   );
 }
 
-export async function readMacOsClipboardText(): Promise<string> {
-  return await resolveMacOsHostProvider().readClipboard();
+export async function readMacOsClipboardText(box: MacOsToolbox): Promise<string> {
+  return await hostProvider(box).readClipboard();
 }
 
-export async function writeMacOsClipboardText(text: string): Promise<void> {
-  await resolveMacOsHostProvider().writeClipboard(text);
+export async function writeMacOsClipboardText(box: MacOsToolbox, text: string): Promise<void> {
+  await hostProvider(box).writeClipboard(text);
 }
 
-async function getMacOsDarkModeEnabled(): Promise<boolean> {
-  return await resolveMacOsHostProvider().readDarkMode();
+async function getMacOsDarkModeEnabled(box: MacOsToolbox): Promise<boolean> {
+  return await hostProvider(box).readDarkMode();
 }
 
-export async function setMacOsAppearance(state: string): Promise<void> {
+export async function setMacOsAppearance(box: MacOsToolbox, state: string): Promise<void> {
   const action = parseAppearanceAction(state);
-  const darkMode = action === 'toggle' ? !(await getMacOsDarkModeEnabled()) : action === 'dark';
-  await resolveMacOsHostProvider().setDarkMode(darkMode);
+  const darkMode = action === 'toggle' ? !(await getMacOsDarkModeEnabled(box)) : action === 'dark';
+  await hostProvider(box).setDarkMode(darkMode);
 }
 
-export async function listMacApps(filter: AppsFilter): Promise<IosAppInfo[]> {
-  return await resolveMacOsHostProvider().listApps(filter);
+export async function listMacApps(
+  box: MacOsToolbox,
+  filter: AppsFilter,
+): Promise<MacOsInstalledApp[]> {
+  return await hostProvider(box).listApps(filter);
 }
 
-function resolveMacOsHostProvider(): AppleMacOsHostProvider {
-  const host = resolveAppleToolProvider().macosHost;
-  if (!host) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'macOS host provider is not available');
-  }
-  return host;
+/** The host routes a scoped request supplied, or the local ones this host answers itself. */
+function hostProvider(box: MacOsToolbox): MacOsHostProvider {
+  return box.tools.host ?? createLocalMacOsHostProvider(box);
 }

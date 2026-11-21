@@ -1,28 +1,27 @@
 import { hostFileStat, hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import path from 'node:path';
 import type { AppsFilter } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { filterAppleAppsByBundlePrefix } from '../../core/app-filter.ts';
-import type { IosAppInfo } from '../../core/app-info.ts';
 import type {
-  AppleMacOsHostProvider,
-  AppleToolCommandExecutor,
+  MacOsHostProvider,
+  MacOsInstalledApp,
   MacOsOpenOptions,
-} from '../../core/tool-provider-types.ts';
+} from '@agent-device/contracts/macos-platform-leaf';
+import { AppError, requireCommandSuccess } from '@agent-device/kernel/errors';
+import type { MacOsRunCommand, MacOsToolbox } from './toolbox.ts';
 
-type ApplePlistJsonReader = (plistPath: string) => Promise<Record<string, unknown> | null>;
+type PlistJsonReader = (plistPath: string) => Promise<Record<string, unknown> | null>;
 
-export function createLocalAppleMacOsHostProvider(
-  runCommand: AppleToolCommandExecutor,
-  readPlistJson: ApplePlistJsonReader,
-): AppleMacOsHostProvider {
+/** The local host routes: `open`, the pasteboard tools, `osascript`, and the app directories. */
+export function createLocalMacOsHostProvider(box: MacOsToolbox): MacOsHostProvider {
+  const runCommand = box.tools.runCommand;
+  const readPlistJson: PlistJsonReader = async (plistPath) =>
+    await box.tools.readPlistJson(plistPath);
   return {
     openBundle: async (bundleId, url, options) => {
       // Loaded on the first bundle open, not when this provider is constructed: the probe's host-kit
       // reads stay off the Apple façades' eager closure (ADR 0019).
       const { resolveListedRunningBundle } = await import('./launch-services-registration.ts');
-      const runningBundle = await resolveListedRunningBundle(runCommand, bundleId);
+      const runningBundle = await resolveListedRunningBundle(box, bundleId);
       await runCommand('open', [
         ...openActivationArgs(options),
         ...(runningBundle
@@ -34,14 +33,14 @@ export function createLocalAppleMacOsHostProvider(
       await runCommand('open', [...openActivationArgs(options), target]);
     },
     readClipboard: async () => {
-      const result = requireExecSuccess(
+      const result = requireCommandSuccess(
         await runCommand('pbpaste', [], { allowFailure: true }),
         'Failed to read macOS clipboard',
       );
       return result.stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
     },
     writeClipboard: async (text) => {
-      requireExecSuccess(
+      requireCommandSuccess(
         await runCommand('pbcopy', [], {
           allowFailure: true,
           stdin: text,
@@ -52,7 +51,7 @@ export function createLocalAppleMacOsHostProvider(
     readDarkMode: async () => {
       const script =
         'tell application "System Events" to tell appearance preferences to get dark mode';
-      const result = requireExecSuccess(
+      const result = requireCommandSuccess(
         await runCommand('osascript', ['-e', script], { allowFailure: true }),
         'Failed to read macOS appearance',
       );
@@ -66,7 +65,7 @@ export function createLocalAppleMacOsHostProvider(
     },
     setDarkMode: async (enabled) => {
       const script = `tell application "System Events" to tell appearance preferences to set dark mode to ${enabled ? 'true' : 'false'}`;
-      requireExecSuccess(
+      requireCommandSuccess(
         await runCommand('osascript', ['-e', script], { allowFailure: true }),
         'Failed to set macOS appearance',
       );
@@ -92,10 +91,10 @@ function buildMacOpenPathArgs(bundlePath: string, url?: string): string[] {
 }
 
 async function listLocalMacApps(
-  runCommand: AppleToolCommandExecutor,
-  readPlistJson: ApplePlistJsonReader,
+  runCommand: MacOsRunCommand,
+  readPlistJson: PlistJsonReader,
   filter: AppsFilter,
-): Promise<IosAppInfo[]> {
+): Promise<MacOsInstalledApp[]> {
   const appRoots = [
     '/Applications',
     '/System/Applications',
@@ -134,21 +133,21 @@ async function listLocalMacApps(
       return {
         bundleId,
         name: bundleInfo.appName ?? path.basename(appPath, '.app'),
-      } satisfies IosAppInfo;
+      } satisfies MacOsInstalledApp;
     }),
   );
 
-  return filterAppleAppsByBundlePrefix(
-    apps
-      .filter((app): app is IosAppInfo => app !== null)
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    filter,
-  );
+  const listed = apps
+    .filter((app): app is MacOsInstalledApp => app !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return filter === 'user-installed'
+    ? listed.filter((app) => !app.bundleId.startsWith('com.apple.'))
+    : listed;
 }
 
 async function readMacOsBundleInfo(
   appBundlePath: string,
-  readPlistJson: ApplePlistJsonReader,
+  readPlistJson: PlistJsonReader,
 ): Promise<{ bundleId?: string; appName?: string }> {
   for (const infoPlistPath of [
     path.join(appBundlePath, 'Contents', 'Info.plist'),

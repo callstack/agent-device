@@ -1,11 +1,25 @@
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { listHostProcesses } from '@agent-device/host-kit/process';
-import { Deadline } from '@agent-device/host-kit/retry';
-import type { AppleToolCommandExecutor } from '../../core/tool-provider-types.ts';
+import type { MacOsCommandResult } from '@agent-device/contracts/macos-platform-leaf';
+import type { MacOsToolbox } from './toolbox.ts';
+
+/** The one budget every read of a probe shares. */
+type Deadline = Readonly<{ remainingMs(): number }>;
+
+function deadlineAfter(timeoutMs: number): Deadline {
+  const expiresAtMs = Date.now() + timeoutMs;
+  return { remainingMs: () => Math.max(0, expiresAtMs - Date.now()) };
+}
+
+/** A read the host killed at its own `timeoutMs`, classified by its typed details. */
+function isCommandTimeout(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    typeof error.details?.timeoutMs === 'number'
+  );
+}
 
 const LAUNCH_SERVICES_POLL_MS = 200;
 const LAUNCH_SERVICES_MAX_POLLS = 10;
@@ -56,20 +70,17 @@ const LSAPPINFO_ASN = /ASN:/;
  * delay a duplicate, never cause one, and never withhold the open.
  */
 export async function resolveListedRunningBundle(
-  runCommand: AppleToolCommandExecutor,
+  box: MacOsToolbox,
   bundleId: string,
 ): Promise<string | undefined> {
-  const deadline = Deadline.fromTimeoutMs(LAUNCH_SERVICES_PROBE_BUDGET_MS);
+  const deadline = deadlineAfter(LAUNCH_SERVICES_PROBE_BUDGET_MS);
   try {
-    const listed = await readsLaunchServicesInstance(runCommand, bundleId, deadline);
+    const listed = await readsLaunchServicesInstance(box, bundleId, deadline);
     // A read that cannot answer leaves this open the way it was before the check existed.
     if (listed === undefined) return undefined;
-    const running = await findRunningInstances(runCommand, bundleId, deadline);
+    const running = await findRunningInstances(box, bundleId, deadline);
     if (running.size === 0) return undefined;
-    if (
-      !listed &&
-      !(await waitForListing(runCommand, bundleId, [...running.values()].flat(), deadline))
-    ) {
+    if (!listed && !(await waitForListing(box, bundleId, [...running.values()].flat(), deadline))) {
       return undefined;
     }
     return running.size === 1 ? [...running.keys()][0] : undefined;
@@ -77,7 +88,7 @@ export async function resolveListedRunningBundle(
     // The probe is an extra read on someone else's app launch, so a host that cannot answer it at
     // all gets the open it would have had without the probe. The diagnostic is the only trace of
     // why a duplicate still happened.
-    emitDiagnostic({
+    box.host.emitDiagnostic({
       level: 'warn',
       phase: 'macos_launch_services_registration_probe_failed',
       data: {
@@ -90,7 +101,7 @@ export async function resolveListedRunningBundle(
 }
 
 async function waitForListing(
-  runCommand: AppleToolCommandExecutor,
+  box: MacOsToolbox,
   bundleId: string,
   pids: readonly number[],
   deadline: Deadline,
@@ -104,7 +115,7 @@ async function waitForListing(
       // rather than being read as a registration, which is what would hand the duplicate back. A
       // read that cannot run at all ends the probe, which opens the bundle the way an unreadable
       // host always did.
-      if ((await readsLaunchServicesInstance(runCommand, bundleId, deadline, pid)) === true) {
+      if ((await readsLaunchServicesInstance(box, bundleId, deadline, pid)) === true) {
         return true;
       }
     }
@@ -121,16 +132,16 @@ async function waitForListing(
  * the caller holds refuses to read it as one, because that wait ends on its own bound.
  */
 async function readsLaunchServicesInstance(
-  runCommand: AppleToolCommandExecutor,
+  box: MacOsToolbox,
   bundleId: string,
   deadline: Deadline,
   pid?: number,
 ): Promise<boolean | undefined> {
   const timeoutMs = probeBudgetMs(deadline, LAUNCH_SERVICES_READ_TIMEOUT_MS);
   if (timeoutMs === undefined) return undefined;
-  let result: ExecResult;
+  let result: MacOsCommandResult;
   try {
-    result = await runCommand(
+    result = await box.tools.runCommand(
       LAUNCH_SERVICES_TOOL,
       ['find', `bundleid=${bundleId}`, ...(pid === undefined ? [] : [`pid=${pid}`])],
       { allowFailure: true, timeoutMs },
@@ -138,7 +149,7 @@ async function readsLaunchServicesInstance(
   } catch (error) {
     // A read killed at its own budget answers nothing, the way a non-zero exit does. Only a tool that
     // cannot run at all is worth ending the whole probe for.
-    if (isCommandTimeoutError(error)) return undefined;
+    if (isCommandTimeout(error)) return undefined;
     throw error;
   }
   if (result.exitCode !== 0) return undefined;
@@ -147,7 +158,7 @@ async function readsLaunchServicesInstance(
 }
 
 async function findRunningInstances(
-  runCommand: AppleToolCommandExecutor,
+  box: MacOsToolbox,
   bundleId: string,
   deadline: Deadline,
 ): Promise<Map<string, number[]>> {
@@ -156,12 +167,12 @@ async function findRunningInstances(
   // The provider's own executor, so every read of this probe answers about the same host its
   // `lsappinfo`, `plutil` and `open` run on: a scoped Apple provider must never pair pids from one
   // host with tools on another.
-  const processes = await listHostProcesses({ runCommand, timeoutMs });
+  const processes = await box.tools.listProcesses({ timeoutMs });
   if (processes.length === 0) {
     // A macOS host always has a process table, so no rows at all is the read failing rather than a
     // host running nothing. The open proceeds without this probe knowing anything, so the reason is
     // worth leaving behind.
-    emitDiagnostic({
+    box.host.emitDiagnostic({
       level: 'warn',
       phase: 'macos_launch_services_process_table_unreadable',
       data: { bundleId },
@@ -179,7 +190,7 @@ async function findRunningInstances(
   if (pidsByBundle.size === 0) return pidsByBundle;
   const bundlePaths = Array.from(pidsByBundle.keys());
   const bundleIds = await readAppBundleIds(
-    runCommand,
+    box,
     bundlePaths.map((bundlePath) => path.join(bundlePath, APP_BUNDLE_INFO_PLIST)),
     deadline,
   );
@@ -219,13 +230,13 @@ function macAppBundlePath(command: string): string | undefined {
  * to.
  */
 async function readAppBundleIds(
-  runCommand: AppleToolCommandExecutor,
+  box: MacOsToolbox,
   plistPaths: readonly string[],
   deadline: Deadline,
 ): Promise<Map<string, string>> {
   const timeoutMs = probeBudgetMs(deadline, BUNDLE_ID_READ_TIMEOUT_MS);
   if (timeoutMs === undefined) return new Map();
-  const result = await runCommand(
+  const result = await box.tools.runCommand(
     BUNDLE_ID_TOOL,
     ['-extract', BUNDLE_ID_KEY, 'raw', ...plistPaths],
     { allowFailure: true, timeoutMs },

@@ -19,17 +19,19 @@ vi.mock('./platform-runtime-apple-tool-host.ts', () => ({
 vi.mock('./platform-runtime-toolchain-host.ts', () => ({
   createHostToolchainPreparer: () => capabilities.toolchains,
 }));
-vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple/macos')>()),
-  captureMacOsSurfaceSnapshot: vi.fn(async () => ({
+vi.mock('@agent-device/platform-apple/macos-desktop', () => {
+  const captureSurfaceSnapshot = vi.fn(async () => ({
     backend: 'macos-helper' as const,
     producer: 'macos-helper' as const,
     nodes: [],
     truncated: false,
-  })),
-}));
+  }));
+  return { macOsDesktop: async () => ({ captureSurfaceSnapshot }) };
+});
 
-import { captureMacOsSurfaceSnapshot } from '@agent-device/platform-apple/macos';
+import { macOsDesktop } from '@agent-device/platform-apple/macos-desktop';
+
+const captureMacOsSurfaceSnapshot = (await macOsDesktop()).captureSurfaceSnapshot;
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   createPlatformRuntimeHost,

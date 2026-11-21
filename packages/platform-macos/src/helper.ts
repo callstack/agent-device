@@ -15,28 +15,18 @@ import {
   renameHostPath,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
-import {
-  hostPlatform,
-  readCurrentOwnerIdentity,
-  writeHostStderr,
-} from '@agent-device/host-kit/process';
-import {
-  resolveExecutableOverridePath,
-  runCmdBackground,
-  type ExecBackgroundResult,
-} from '@agent-device/host-kit/command';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { MacOsHelperSurface, SessionSurface } from '@agent-device/contracts/session';
-import {
-  hasScopedAppleToolProvider,
-  resolveAppleToolProvider,
-  runAppleToolCommand,
-} from '../../core/tool-provider.ts';
-
-export type MacOsPermissionTarget = 'accessibility' | 'screen-recording' | 'input-monitoring';
+import type {
+  MacOsBackgroundProcess,
+  MacOsDeliveryMechanism,
+  MacOsPermissionTarget,
+} from '@agent-device/contracts/macos-platform-leaf';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import type { MacOsToolbox } from './toolbox.ts';
 
 // Keep this shape aligned with macOS helper SnapshotNodeResponse in
-// apple/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift.
+// macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift.
 export type MacOsSnapshotNode = {
   index: number;
   type?: string;
@@ -186,13 +176,20 @@ export const MACOS_DELIVERY_MECHANISMS = [
   'ax-show-menu',
   'key-events',
 ] as const;
-/** How an app-surface action reached the app, as the helper reports it. */
-export type MacOsDeliveryMechanism = (typeof MACOS_DELIVERY_MECHANISMS)[number];
+type AssertTrue<T extends true> = T;
+/** Compile-time pin: this table and the leaf contract name the same mechanisms. */
+export type MacOsDeliveryMechanismsMatchContract = AssertTrue<
+  [MacOsDeliveryMechanism] extends [(typeof MACOS_DELIVERY_MECHANISMS)[number]]
+    ? [(typeof MACOS_DELIVERY_MECHANISMS)[number]] extends [MacOsDeliveryMechanism]
+      ? true
+      : false
+    : false
+>;
 
 export function resolveMacOsHelperPackageRootFrom(modulePath: string): string {
   let currentDir = path.dirname(modulePath);
   while (true) {
-    const candidate = path.join(currentDir, 'apple', 'macos-helper');
+    const candidate = path.join(currentDir, 'macos-helper');
     if (hostFileExistsSync(path.join(candidate, 'Package.swift'))) {
       return candidate;
     }
@@ -236,7 +233,10 @@ async function listMacOsHelperSourceFiles(root: string): Promise<string[]> {
   return files.flat().sort();
 }
 
-async function computeMacOsHelperFingerprint(packageRoot: string): Promise<string> {
+async function computeMacOsHelperFingerprint(
+  box: MacOsToolbox,
+  packageRoot: string,
+): Promise<string> {
   const files = await listMacOsHelperSourceFiles(packageRoot);
   const hash = createHash('sha256');
   for (const filePath of files) {
@@ -245,7 +245,7 @@ async function computeMacOsHelperFingerprint(packageRoot: string): Promise<strin
     hash.update(await readHostBinaryFile(filePath));
     hash.update('\0');
   }
-  const swiftVersion = await runAppleToolCommand('swift', ['--version'], {
+  const swiftVersion = await box.tools.runCommand('swift', ['--version'], {
     allowFailure: true,
     cwd: packageRoot,
     timeoutMs: 10_000,
@@ -268,17 +268,36 @@ async function readInstalledMacOsHelperFingerprint(): Promise<string | null> {
   }
 }
 
-async function ensureMacOsHelperBinary(env: Readonly<EnvMap>): Promise<string> {
-  const configuredPath = await resolveExecutableOverridePath(
-    env[MACOS_HELPER_ENV_PATH],
-    MACOS_HELPER_ENV_PATH,
-  );
-  if (configuredPath) {
-    return configuredPath;
+/**
+ * The executable an override variable names. It must be an absolute path the host can execute:
+ * the host answers the probe, so it reads the same machine the spawn it authorizes runs on.
+ */
+async function resolveHelperOverridePath(
+  box: MacOsToolbox,
+  rawPath: string | undefined,
+): Promise<string | undefined> {
+  const candidate = rawPath?.trim();
+  if (!candidate) return undefined;
+  if (!path.isAbsolute(candidate) || candidate.includes('\0')) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${MACOS_HELPER_ENV_PATH} must be an absolute executable path, not ${JSON.stringify(rawPath)}`,
+      { envName: MACOS_HELPER_ENV_PATH, path: rawPath },
+    );
   }
+  if (!(await box.host.isFileExecutable(candidate))) {
+    throw new AppError(
+      'TOOL_MISSING',
+      `${MACOS_HELPER_ENV_PATH} points to a missing or non-executable file: ${candidate}`,
+      { envName: MACOS_HELPER_ENV_PATH, path: candidate },
+    );
+  }
+  return candidate;
+}
 
+async function ensureMacOsHelperBinary(box: MacOsToolbox): Promise<string> {
   const packageRoot = resolveMacOsHelperPackageRoot();
-  const sourceFingerprint = await computeMacOsHelperFingerprint(packageRoot);
+  const sourceFingerprint = await computeMacOsHelperFingerprint(box, packageRoot);
   const installedPath = resolveInstalledMacOsHelperPath();
   try {
     const installedFingerprint = await readInstalledMacOsHelperFingerprint();
@@ -291,8 +310,12 @@ async function ensureMacOsHelperBinary(env: Readonly<EnvMap>): Promise<string> {
   }
 
   const sourceBinary = resolveMacOsHelperSourceBinaryPath();
-  writeHostStderr('agent-device: building macOS helper (first run or helper update)\n');
-  await runAppleToolCommand('swift', ['build', '-c', 'release', '--package-path', packageRoot], {
+  box.host.emitDiagnostic({
+    level: 'info',
+    phase: 'macos_helper_build',
+    data: { packageRoot, reason: 'first run or helper update' },
+  });
+  await box.tools.runCommand('swift', ['build', '-c', 'release', '--package-path', packageRoot], {
     cwd: packageRoot,
     timeoutMs: 120_000,
   });
@@ -308,41 +331,40 @@ async function ensureMacOsHelperBinary(env: Readonly<EnvMap>): Promise<string> {
   return installedPath;
 }
 
-async function resolveMacOsHelperCommandPath(env: Readonly<EnvMap>): Promise<string> {
-  const configuredPath = env[MACOS_HELPER_ENV_PATH]?.trim();
-  if (configuredPath) {
-    const resolvedPath = await resolveExecutableOverridePath(configuredPath, MACOS_HELPER_ENV_PATH);
-    if (resolvedPath) return resolvedPath;
-  }
-  if (hasScopedAppleToolProvider()) {
+async function resolveMacOsHelperCommandPath(
+  box: MacOsToolbox,
+  env: Readonly<EnvMap>,
+): Promise<string> {
+  const configuredPath = await resolveHelperOverridePath(box, env[MACOS_HELPER_ENV_PATH]);
+  if (configuredPath) return configuredPath;
+  if (box.tools.scoped) {
     return MACOS_HELPER_PRODUCT_NAME;
   }
-  if (hostPlatform() !== 'darwin') {
+  if (box.host.hostOs !== 'darwin') {
     throw new AppError('UNSUPPORTED_PLATFORM', 'macOS helper is only available on macOS');
   }
-  return await ensureMacOsHelperBinary(env);
+  return await ensureMacOsHelperBinary(box);
 }
 
-export async function startMacOsAudioProbeProcess(options: {
-  durationMs: number;
-  bucketMs: number;
-  statusPath: string;
-  env: Readonly<EnvMap>;
-}): Promise<ExecBackgroundResult> {
-  const helperPath = await resolveMacOsHelperCommandPath(options.env);
-  return runCmdBackground(
-    helperPath,
-    [
-      'audio-probe',
-      '--duration-ms',
-      String(options.durationMs),
-      '--bucket-ms',
-      String(options.bucketMs),
-      '--out',
-      options.statusPath,
-    ],
-    { allowFailure: true, captureOutput: true },
-  );
+export async function startMacOsAudioProbeProcess(
+  box: MacOsToolbox,
+  options: {
+    durationMs: number;
+    bucketMs: number;
+    statusPath: string;
+    env: Readonly<EnvMap>;
+  },
+): Promise<MacOsBackgroundProcess> {
+  const helperPath = await resolveMacOsHelperCommandPath(box, options.env);
+  return await box.tools.startBackground(helperPath, [
+    'audio-probe',
+    '--duration-ms',
+    String(options.durationMs),
+    '--bucket-ms',
+    String(options.bucketMs),
+    '--out',
+    options.statusPath,
+  ]);
 }
 
 const MACOS_HELPER_TIMEOUT_MS = 30_000;
@@ -356,6 +378,7 @@ const MACOS_HELPER_TIMEOUT_MS = 30_000;
 const MACOS_HELPER_KILL_GRACE_MS = 1_000;
 
 async function runMacOsHelper<T extends Record<string, unknown>>(
+  box: MacOsToolbox,
   args: string[],
   options: { signal?: AbortSignal; timeoutMs?: number; env: Readonly<EnvMap> },
 ): Promise<T> {
@@ -365,13 +388,13 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
     signal: options.signal,
     kill: { signal: 'SIGTERM' as const, graceMs: MACOS_HELPER_KILL_GRACE_MS },
   };
-  const helperProvider = resolveAppleToolProvider().macosHelper;
+  const helperProvider = box.tools.helper;
   const helperPath = helperProvider
     ? MACOS_HELPER_PRODUCT_NAME
-    : await resolveMacOsHelperCommandPath(options.env);
+    : await resolveMacOsHelperCommandPath(box, options.env);
   const result = helperProvider
     ? await helperProvider.run(args, helperOptions)
-    : await runAppleToolCommand(helperPath, args, helperOptions);
+    : await box.tools.runCommand(helperPath, args, helperOptions);
   const stdout = result.stdout.trim();
   let parsed: HelperResult<T> | null = null;
   if (stdout) {
@@ -405,15 +428,19 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
   });
 }
 
-export async function resolveFrontmostMacOsApp(env: Readonly<EnvMap>): Promise<{
+export async function resolveFrontmostMacOsApp(
+  box: MacOsToolbox,
+  env: Readonly<EnvMap>,
+): Promise<{
   bundleId?: string;
   appName?: string;
   pid?: number;
 }> {
-  return await runMacOsHelper(['app', 'frontmost'], { env });
+  return await runMacOsHelper(box, ['app', 'frontmost'], { env });
 }
 
 export async function quitMacOsApp(
+  box: MacOsToolbox,
   bundleId: string,
   env: Readonly<EnvMap>,
 ): Promise<{
@@ -422,12 +449,13 @@ export async function quitMacOsApp(
   terminated: boolean;
   forceTerminated: boolean;
 }> {
-  return await runMacOsHelper(['app', 'quit', '--bundle-id', assertMacOsBundleId(bundleId)], {
+  return await runMacOsHelper(box, ['app', 'quit', '--bundle-id', assertMacOsBundleId(bundleId)], {
     env,
   });
 }
 
 export async function runMacOsPermissionAction(
+  box: MacOsToolbox,
   action: 'grant' | 'reset',
   target: MacOsPermissionTarget,
   env: Readonly<EnvMap>,
@@ -439,10 +467,11 @@ export async function runMacOsPermissionAction(
   action: 'grant' | 'reset';
   message?: string;
 }> {
-  return await runMacOsHelper(['permission', action, target], { env });
+  return await runMacOsHelper(box, ['permission', action, target], { env });
 }
 
 export async function runMacOsAlertAction(
+  box: MacOsToolbox,
   action: 'get' | 'accept' | 'dismiss',
   options: { bundleId?: string; surface?: SessionSurface; env: Readonly<EnvMap> },
 ): Promise<{
@@ -454,10 +483,11 @@ export async function runMacOsAlertAction(
 }> {
   const args = ['alert', action];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { env: options.env });
+  return await runMacOsHelper(box, args, { env: options.env });
 }
 
 export async function runMacOsSnapshotAction(
+  box: MacOsToolbox,
   surface: MacOsHelperSurface,
   options: { bundleId?: string; signal?: AbortSignal; env: Readonly<EnvMap> },
 ): Promise<{
@@ -470,10 +500,11 @@ export async function runMacOsSnapshotAction(
 }> {
   const args = ['snapshot', '--surface', surface];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal, env: options.env });
+  return await runMacOsHelper(box, args, { signal: options.signal, env: options.env });
 }
 
 export async function runMacOsReadTextAction(
+  box: MacOsToolbox,
   x: number,
   y: number,
   options: {
@@ -487,7 +518,7 @@ export async function runMacOsReadTextAction(
 }> {
   const args = ['read', '--x', String(x), '--y', String(y)];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal, env: options.env });
+  return await runMacOsHelper(box, args, { signal: options.signal, env: options.env });
 }
 
 // Mirrors the helper's own floors (`MouseClickSchedule.swift`): the schedule the helper runs
@@ -520,6 +551,7 @@ export function macOsClickScheduleMs(options: {
 }
 
 export async function runMacOsPressAction(
+  box: MacOsToolbox,
   x: number,
   y: number,
   options: {
@@ -563,7 +595,7 @@ export async function runMacOsPressAction(
   }
   appendMacOsHelperContextArgs(args, options);
   appendGhostCursorArg(args, options.surface, options.env);
-  return await runMacOsHelper(args, {
+  return await runMacOsHelper(box, args, {
     signal: options.signal,
     env: options.env,
     timeoutMs: macOsClickScheduleMs(options) + MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
@@ -572,6 +604,7 @@ export async function runMacOsPressAction(
 
 /** Inserts text at the app session's focused element without activating the app. */
 export async function runMacOsTypeAction(
+  box: MacOsToolbox,
   text: string,
   options: {
     bundleId: string;
@@ -584,7 +617,7 @@ export async function runMacOsTypeAction(
   if (options.delayMs && options.delayMs > 0) args.push('--delay-ms', String(options.delayMs));
   appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
   appendGhostCursorArg(args, 'app', options.env);
-  return await runMacOsHelper(args, {
+  return await runMacOsHelper(box, args, {
     signal: options.signal,
     env: options.env,
     timeoutMs:
@@ -594,12 +627,13 @@ export async function runMacOsTypeAction(
 
 /** Dispatches one prepared app-surface action with the ghost-cursor settle budget added. */
 function runMacOsAppSurfaceAction<T extends Record<string, unknown>>(
+  box: MacOsToolbox,
   args: string[],
   options: { bundleId: string; signal?: AbortSignal; env: Readonly<EnvMap> },
 ): Promise<T> {
   appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
   appendGhostCursorArg(args, 'app', options.env);
-  return runMacOsHelper<T>(args, {
+  return runMacOsHelper<T>(box, args, {
     signal: options.signal,
     env: options.env,
     timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
@@ -608,12 +642,14 @@ function runMacOsAppSurfaceAction<T extends Record<string, unknown>>(
 
 /** Replaces the value of the app session's text input at a point. */
 export async function runMacOsFillAction(
+  box: MacOsToolbox,
   x: number,
   y: number,
   text: string,
   options: { bundleId: string; signal?: AbortSignal; env: Readonly<EnvMap> },
 ): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
   return await runMacOsAppSurfaceAction(
+    box,
     ['fill', '--x', String(x), '--y', String(y), '--text', text],
     options,
   );
@@ -621,15 +657,21 @@ export async function runMacOsFillAction(
 
 /** Opens the context menu of the app session's element at a point, as a secondary click does. */
 export async function runMacOsShowMenuAction(
+  box: MacOsToolbox,
   x: number,
   y: number,
   options: { bundleId: string; signal?: AbortSignal; env: Readonly<EnvMap> },
 ): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
-  return await runMacOsAppSurfaceAction(['show-menu', '--x', String(x), '--y', String(y)], options);
+  return await runMacOsAppSurfaceAction(
+    box,
+    ['show-menu', '--x', String(x), '--y', String(y)],
+    options,
+  );
 }
 
 /** Scrolls the scroll area at the center of the app session's front window. */
 export async function runMacOsScrollAction(
+  box: MacOsToolbox,
   direction: 'up' | 'down' | 'left' | 'right',
   options: {
     bundleId: string;
@@ -642,10 +684,11 @@ export async function runMacOsScrollAction(
   const args = ['scroll', '--direction', direction];
   if (options.amount !== undefined) args.push('--amount', String(options.amount));
   if (options.pixels !== undefined) args.push('--pixels', String(options.pixels));
-  return await runMacOsAppSurfaceAction(args, options);
+  return await runMacOsAppSurfaceAction(box, args, options);
 }
 
 export async function runMacOsScreenshotAction(
+  box: MacOsToolbox,
   outPath: string,
   options: {
     surface: MacOsHelperSurface;
@@ -660,8 +703,9 @@ export async function runMacOsScreenshotAction(
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
   return await withMacOsScreenCaptureLock(
+    box,
     options,
-    async () => await runMacOsHelper(args, { signal: options.signal, env: options.env }),
+    async () => await runMacOsHelper(box, args, { signal: options.signal, env: options.env }),
   );
 }
 
@@ -669,27 +713,21 @@ export async function runMacOsScreenshotAction(
  * ScreenCaptureKit fails or hangs window captures that two processes start at the same time
  * (measured on macOS 27 with two helpers capturing two apps), so every helper capture on this Mac
  * runs alone, whichever daemon asks. The lock sits in the host-global device claims directory,
- * the store every daemon on the host already coordinates through.
+ * the store every daemon on the host already coordinates through. The host takes the claim, so
+ * the owner it records is the process that runs the capture.
  */
 async function withMacOsScreenCaptureLock<T>(
+  box: MacOsToolbox,
   options: { env: Readonly<EnvMap>; signal?: AbortSignal },
   task: () => Promise<T>,
 ): Promise<T> {
-  const { acquireProcessLock, withProcessLock, resolveDeviceClaimRoot } =
-    await import('@agent-device/host-kit/file');
   const lockRoot = resolveDeviceClaimRoot(options.env);
   await ensureHostDirectory(lockRoot);
-  return await withProcessLock({
-    acquire: async () => {
-      const owner = readCurrentOwnerIdentity();
-      return await acquireProcessLock({
-        lockDirPath: path.join(path.resolve(lockRoot), 'macos-screen-capture.lock'),
-        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
-        timeoutMs: MACOS_HELPER_TIMEOUT_MS + 5_000,
-        description: 'the macOS screen capture lock',
-        signal: options.signal,
-      });
-    },
+  return await box.host.processes.withLock({
+    lockDirPath: path.join(path.resolve(lockRoot), 'macos-screen-capture.lock'),
+    timeoutMs: MACOS_HELPER_TIMEOUT_MS + 5_000,
+    description: 'the macOS screen capture lock',
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
     task,
   });
 }

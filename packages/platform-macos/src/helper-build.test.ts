@@ -1,9 +1,9 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTest } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -28,10 +28,10 @@ vi.mock('node:url', async (importOriginal) => {
     ...actual,
     fileURLToPath: (url: Parameters<typeof actual.fileURLToPath>[0]) => {
       const href = (typeof url === 'string' ? url : url.href).replace(/\?.*$/, '');
-      if (/\/os\/macos\/helper\.(?:ts|js)$/.test(href)) {
-        // A packaged copy of the module below the repo root, which is how the published layout
-        // sits relative to `apple/macos-helper`.
-        return `${layout.repoRoot}/dist/packages/platform-apple/src/os/macos/helper.js`;
+      if (/\/platform-macos\/src\/helper\.(?:ts|js)$/.test(href)) {
+        // The bundled module below the package root, which is how the published layout sits
+        // relative to `macos-helper`.
+        return `${layout.repoRoot}/dist/agent-device.mjs`;
       }
       return actual.fileURLToPath(url);
     },
@@ -43,59 +43,47 @@ vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
   return { ...actual, hostHomeDirectory: () => layout.home };
 });
 
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
-  // The helper is a macOS-only build and the lane that scores this file runs on Linux.
-  return { ...actual, hostPlatform: () => 'darwin' };
-});
-
-vi.mock('../../core/tool-provider.ts', async (importOriginal) => {
-  const { default: fsPromises } = await import('node:fs/promises');
-  const { default: pathLib } = await import('node:path');
-  const actual = await importOriginal<typeof import('../../core/tool-provider.ts')>();
+/** The Swift toolchain and the installed helper, doubled at the one seam `helper.ts` runs them through. */
+const runCommand = async (cmd: string, args: string[]) => {
+  if (cmd === 'swift' && args[0] === '--version') {
+    return {
+      exitCode: 0,
+      stdout: 'Swift version 6.2 (swiftlang-6.2.0.192.12), target: arm64-apple-darwin\n',
+      stderr: '',
+    };
+  }
+  if (cmd === 'swift' && args[0] === 'build') {
+    layout.swiftBuildCalls.push([cmd, ...args].join(' '));
+    // A release build leaves its product exactly where the install step expects to find it.
+    const binaryPath = path.join(
+      layout.packageRoot,
+      '.build',
+      'release',
+      'agent-device-macos-helper',
+    );
+    await fs.mkdir(path.dirname(binaryPath), { recursive: true });
+    await fs.writeFile(binaryPath, `// helper build ${layout.swiftBuildCalls.length}\n`);
+    return { exitCode: 0, stdout: 'Build complete!', stderr: '' };
+  }
+  layout.helperCommands.push([cmd, ...args].join(' '));
   return {
-    ...actual,
-    runAppleToolCommand: async (cmd: string, args: string[]) => {
-      if (cmd === 'swift' && args[0] === '--version') {
-        return {
-          exitCode: 0,
-          stdout: 'Swift version 6.2 (swiftlang-6.2.0.192.12), target: arm64-apple-darwin\n',
-          stderr: '',
-        };
-      }
-      if (cmd === 'swift' && args[0] === 'build') {
-        layout.swiftBuildCalls.push([cmd, ...args].join(' '));
-        // A release build leaves its product exactly where the install step expects to find it.
-        const binaryPath = pathLib.join(
-          layout.packageRoot,
-          '.build',
-          'release',
-          'agent-device-macos-helper',
-        );
-        await fsPromises.mkdir(pathLib.dirname(binaryPath), { recursive: true });
-        await fsPromises.writeFile(
-          binaryPath,
-          `// helper build ${layout.swiftBuildCalls.length}\n`,
-        );
-        return { exitCode: 0, stdout: 'Build complete!', stderr: '' };
-      }
-      layout.helperCommands.push([cmd, ...args].join(' '));
-      return {
-        exitCode: 0,
-        stdout: JSON.stringify({
-          ok: true,
-          data: { bundleId: 'com.example.Finder', appName: 'Finder', pid: 4242 },
-        }),
-        stderr: '',
-      };
-    },
+    exitCode: 0,
+    stdout: JSON.stringify({
+      ok: true,
+      data: { bundleId: 'com.example.Finder', appName: 'Finder', pid: 4242 },
+    }),
+    stderr: '',
   };
-});
+};
+
+// The helper is a macOS-only build and the lane that scores this file runs on Linux, so the host
+// reports macOS. The toolbox is unscoped: a scoped request names its own helper binary instead.
+const box = macOsToolboxFixture({ runCommand, scoped: false, hostOs: 'darwin' });
 
 const scratchRoot = await mkdtempForTest('agent-device-macos-helper-build-');
 layout.home = path.join(scratchRoot, 'home');
 layout.repoRoot = path.join(scratchRoot, 'repo');
-layout.packageRoot = path.join(layout.repoRoot, 'apple', 'macos-helper');
+layout.packageRoot = path.join(layout.repoRoot, 'macos-helper');
 
 // Imported after the mocks above and once the scratch home is known, because the install root is a
 // module-level constant resolved against the home directory.
@@ -122,7 +110,7 @@ function sourcePath(...segments: string[]): string {
 
 /** A helper command is the freshness entry point: it cannot answer without fingerprinting the tree. */
 async function askTheHelperForTheFrontmostApp(): Promise<void> {
-  const frontmost = await resolveFrontmostMacOsApp(process.env);
+  const frontmost = await resolveFrontmostMacOsApp(box, process.env);
   assert.equal(frontmost.bundleId, 'com.example.Finder');
   // The command runs the binary the freshness check just settled on, not a rebuild.
   assert.equal(layout.helperCommands.at(-1), `${installedHelperPath} app frontmost`);

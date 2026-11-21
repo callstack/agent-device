@@ -19,6 +19,7 @@ import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+import { bindMacOsLeafFixture } from './__tests__/macos-leaf.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -269,8 +270,16 @@ test('a misspelled macOS app backend fails macOS bindings only', async () => {
   }
 });
 
-test('the native macOS app backend refuses recording and the runner before dispatch', async () => {
+test('the native macOS app backend refuses what the installed leaf names before dispatch', async () => {
   vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
+  const refused = { available: false, reason: 'unsupported-device-backend' } as const;
+  const leaf = bindMacOsLeafFixture({
+    nativeBackendFacts: async () => ({
+      screenRecordingStart: refused,
+      prepareAppleRunner: refused,
+      back: refused,
+    }),
+  });
   try {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
       device: leaves.macos,
@@ -289,6 +298,7 @@ test('the native macOS app backend refuses recording and the runner before dispa
       expect(binding.operations[operation]).toBeTypeOf('undefined');
     }
     expect(binding.facts.operations.tapPoint).toEqual({ available: true });
+    expect(leaf.calls.map(({ operation }) => operation)).toContain('nativeBackendFacts');
   } finally {
     vi.unstubAllEnvs();
   }

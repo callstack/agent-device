@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
-import type { AppleToolCommandExecutor } from '../../core/tool-provider-types.ts';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import { mkdtempForTest } from '@agent-device/test-kit';
+import type { MacOsCommandResult } from '@agent-device/contracts/macos-platform-leaf';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsRunCommand } from './toolbox.ts';
 
 // App discovery stats each candidate root through the host-file seam and asks that seam for the
 // home directory whose `Applications` folder is the third root. Only the two system roots are
@@ -30,7 +31,7 @@ vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
   };
 });
 
-import { createLocalAppleMacOsHostProvider } from './host-provider.ts';
+import { createLocalMacOsHostProvider } from './host-provider.ts';
 
 type PlistReader = (plistPath: string) => Promise<Record<string, unknown> | null>;
 
@@ -85,8 +86,8 @@ async function declareSystemRoot(
 function recordingRunCommand(params: {
   findLinesByRoot?: Record<string, string[]>;
   failingRoots?: readonly string[];
-}): AppleToolCommandExecutor {
-  return async (cmd, args): Promise<ExecResult> => {
+}): MacOsRunCommand {
+  return async (cmd, args): Promise<MacOsCommandResult> => {
     if (cmd === 'find' && args[1] === '-maxdepth') {
       const root = args[0]!;
       findCalls.push(root);
@@ -109,12 +110,14 @@ async function listApps(params: {
   failingRoots?: readonly string[];
   readPlistJson: PlistReader;
 }): Promise<{ bundleId: string; name: string }[]> {
-  const provider = createLocalAppleMacOsHostProvider(
-    recordingRunCommand({
-      findLinesByRoot: params.findLinesByRoot,
-      failingRoots: params.failingRoots,
+  const provider = createLocalMacOsHostProvider(
+    macOsToolboxFixture({
+      runCommand: recordingRunCommand({
+        findLinesByRoot: params.findLinesByRoot,
+        failingRoots: params.failingRoots,
+      }),
+      plist: { readJson: params.readPlistJson },
     }),
-    params.readPlistJson,
   );
   return await provider.listApps(params.filter);
 }
@@ -291,5 +294,60 @@ test('listApps hides Apple bundles for the user-installed filter and shows them 
   assert.deepEqual(all, [
     { bundleId: 'com.mytool.app', name: 'MyTool' },
     { bundleId: 'com.apple.systempreferences', name: 'System Settings' },
+  ]);
+});
+
+test('the local macOS host routes run their tools as semantic methods', async () => {
+  const calls: Array<[string, string[], string | undefined]> = [];
+  const host = createLocalMacOsHostProvider(
+    macOsToolboxFixture({
+      runCommand: async (cmd, args, options) => {
+        // The bundle open's LaunchServices registration probe is the seam's own read, asserted in
+        // launch-services-registration.test.ts; this routing test only reports it as listing the bundle.
+        if (cmd === '/usr/bin/lsappinfo') {
+          return { exitCode: 0, stdout: 'ASN:0x0-0x1234-"Demo":\n', stderr: '' };
+        }
+        if (cmd === 'ps') {
+          return { exitCode: 0, stdout: '    1     0 /sbin/launchd\n', stderr: '' };
+        }
+        calls.push([cmd, args, typeof options?.stdin === 'string' ? options.stdin : undefined]);
+        if (cmd === 'pbpaste') {
+          return { exitCode: 0, stdout: 'copied\r\n', stderr: '' };
+        }
+        if (cmd === 'osascript' && args.join(' ').includes('get dark mode')) {
+          return { exitCode: 0, stdout: 'false\n', stderr: '' };
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+    }),
+  );
+
+  await host.openBundle('com.example.demo', 'demo://open');
+  await host.openTarget('https://example.test');
+  await host.writeClipboard('secret');
+  const clipboard = await host.readClipboard();
+  const darkMode = await host.readDarkMode();
+  await host.setDarkMode(true);
+
+  assert.equal(clipboard, 'copied');
+  assert.equal(darkMode, false);
+  assert.deepEqual(calls, [
+    ['open', ['-b', 'com.example.demo', 'demo://open'], undefined],
+    ['open', ['https://example.test'], undefined],
+    ['pbcopy', [], 'secret'],
+    ['pbpaste', [], undefined],
+    [
+      'osascript',
+      ['-e', 'tell application "System Events" to tell appearance preferences to get dark mode'],
+      undefined,
+    ],
+    [
+      'osascript',
+      [
+        '-e',
+        'tell application "System Events" to tell appearance preferences to set dark mode to true',
+      ],
+      undefined,
+    ],
   ]);
 });

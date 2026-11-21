@@ -2,16 +2,33 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
-import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+import { runCmd } from '@agent-device/host-kit/command';
+import { mkdtempForTest } from '@agent-device/test-kit';
+import type { MacOsCommandResult } from '@agent-device/contracts/macos-platform-leaf';
 
 vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn(async () => undefined) }));
-vi.mock('@agent-device/host-kit/diagnostics', () => ({ emitDiagnostic: vi.fn() }));
 
 import { setTimeout as sleep } from 'node:timers/promises';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { createLocalAppleMacOsHostProvider } from './host-provider.ts';
-import type { AppleToolCommandExecutor } from '../../core/tool-provider-types.ts';
+import { createLocalMacOsHostProvider } from './host-provider.ts';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsRunCommand } from './toolbox.ts';
+
+/** Every diagnostic the probe records through the host it was bound to. */
+const mockEmitDiagnostic = vi.fn();
+
+/** The local host routes over one executor, bound the way the plugin binds them. */
+function localHostProvider(
+  runCommand: MacOsRunCommand,
+  readPlistJson: (plistPath: string) => Promise<Record<string, unknown> | null>,
+) {
+  return createLocalMacOsHostProvider(
+    macOsToolboxFixture({
+      runCommand,
+      plist: { readJson: readPlistJson },
+      emitDiagnostic: mockEmitDiagnostic,
+    }),
+  );
+}
 
 const BUNDLE_ID = 'com.example.demo';
 const DEMO_BUNDLE = '/Users/dev/DerivedData/Demo.app';
@@ -41,7 +58,7 @@ function psRows(rows: ReadonlyArray<readonly [pid: number, command: string]>): s
 
 type RecordedCall = Readonly<{ cmd: string; args: string[]; timeoutMs: number | undefined }>;
 
-type Stub = Partial<ExecResult> | Error;
+type Stub = Partial<MacOsCommandResult> | Error;
 
 /**
  * The host tools one bundle open reads — `lsappinfo`, `ps`, `plutil`, and `open` itself — answered
@@ -51,12 +68,12 @@ type Stub = Partial<ExecResult> | Error;
  * test can make the scan throw, fail, or time out like any other read.
  */
 function fakeMacHost(respond: (call: RecordedCall, index: number) => Stub = () => ({})): {
-  runCommand: AppleToolCommandExecutor;
+  runCommand: MacOsRunCommand;
   calls: RecordedCall[];
   transcript(): Array<{ cmd: string; args: string[] }>;
 } {
   const calls: RecordedCall[] = [];
-  const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
+  const runCommand: MacOsRunCommand = async (cmd, args, options) => {
     const call = { cmd, args, timeoutMs: options?.timeoutMs };
     const index = calls.push(call) - 1;
     const answer = respond(call, index);
@@ -103,8 +120,8 @@ function noRunningApps(): void {
   processTable.stdout = psRows([[1, '/sbin/launchd']]);
 }
 
-function openBundle(runCommand: AppleToolCommandExecutor): Promise<void> {
-  return createLocalAppleMacOsHostProvider(runCommand, async () => null).openBundle(BUNDLE_ID);
+function openBundle(runCommand: MacOsRunCommand): Promise<void> {
+  return localHostProvider(runCommand, async () => null).openBundle(BUNDLE_ID);
 }
 
 function registrationReads(calls: readonly RecordedCall[]): RecordedCall[] {
@@ -112,7 +129,6 @@ function registrationReads(calls: readonly RecordedCall[]): RecordedCall[] {
 }
 
 const mockSleep = vi.mocked(sleep);
-const mockEmitDiagnostic = vi.mocked(emitDiagnostic);
 
 beforeEach(() => {
   // The table resets with every test so a later test's `not.toHaveBeenCalled`-style expectation on
@@ -153,11 +169,9 @@ test('openBundle sends a link to the listed running copy by its own path', async
     return {};
   });
 
-  await createLocalAppleMacOsHostProvider(runCommand, async () => null).openBundle(
-    BUNDLE_ID,
-    'demo://item/1',
-    { background: true },
-  );
+  await localHostProvider(runCommand, async () => null).openBundle(BUNDLE_ID, 'demo://item/1', {
+    background: true,
+  });
 
   expect(calls.at(-1)).toEqual({ cmd: 'open', args: ['-g', '-a', DEMO_BUNDLE, 'demo://item/1'] });
 });
@@ -776,7 +790,7 @@ describe.skipIf(process.platform !== 'darwin')(
       // real bundle that is not actually running, and a real `open` would launch a real copy. Only
       // the target's own pid ever reports an ASN, so the wait ends only if pairing handed the probe
       // that pid.
-      const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
+      const runCommand: MacOsRunCommand = async (cmd, args, options) => {
         if (cmd === 'open') return { exitCode: 0, stdout: '', stderr: '' };
         if (cmd === PROCESS_TABLE_TOOL) {
           return { exitCode: 0, stdout: processTable.stdout, stderr: '' };

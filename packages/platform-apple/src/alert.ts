@@ -18,7 +18,7 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
-import { runMacOsAlertAction } from './os/macos/helper.ts';
+import { macOsDesktop } from './core/macos-desktop.ts';
 
 /**
  * Apple's four alert legs. R59 moved them here from the daemon: how long to look for a transient
@@ -56,7 +56,7 @@ function runAppleAlert(
         ? { surface: options.surface }
         : { bundleId: options?.appBundleId, surface: options?.surface };
     return async (action) =>
-      (await runMacOsAlertAction(action, { ...target, env })) as Record<string, unknown>;
+      (await macOsDesktop().runAlertAction(action, { ...target, env })) as Record<string, unknown>;
   }
   return async (action, timeoutMs) =>
     (await runAppleRunnerCommand(

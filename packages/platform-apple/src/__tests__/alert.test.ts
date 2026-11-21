@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 
 vi.mock('../core/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
-vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
+vi.mock('../core/macos-desktop.ts', () => {
+  const operations = { runAlertAction: vi.fn() };
+  return { macOsDesktop: () => operations };
+});
 
 import {
   ALERT_MIN_READ_BUDGET_MS,
@@ -17,11 +20,11 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
-import { runMacOsAlertAction } from '../os/macos/helper.ts';
+import { macOsDesktop } from '../core/macos-desktop.ts';
 import { actOnAppleAlert, alertIfPresent, awaitAppleAlert, readAppleAlert } from '../alert.ts';
 
 const mockRunner = vi.mocked(runAppleRunnerCommand);
-const mockHelper = vi.mocked(runMacOsAlertAction);
+const mockHelper = vi.mocked(macOsDesktop().runAlertAction);
 const runnerOptions = {};
 
 /**

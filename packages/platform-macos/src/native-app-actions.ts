@@ -3,11 +3,15 @@ import type {
   PressPointOptions,
   RunnerContext,
 } from '@agent-device/contracts/interactor-types';
+import type { MacOsNativeAppActions } from '@agent-device/contracts/macos-platform-leaf';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
-import { assertScrollGestureInput } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { normalizeAppleScrollResultWithResolvedFrame } from '../../core/scroll.ts';
+import {
+  assertScrollGestureInput,
+  normalizeAppleScrollResultWithResolvedFrame,
+} from '@agent-device/contracts/scroll-gesture';
+import type { MacOsToolbox } from './toolbox.ts';
 import {
   MACOS_HELPER_REFUSAL_REASONS,
   runMacOsFillAction,
@@ -23,17 +27,18 @@ const NATIVE_BACKEND_HINT =
   'The native macOS app backend acts through accessibility actions only. Unset AGENT_DEVICE_MACOS_APP_BACKEND to drive this app with XCTest.';
 
 /**
- * The macOS interactor of the native backend. It is assembled member by member so that nothing
- * reaches the XCTest runner: actions on the session app go through the macOS helper, and only
- * members whose macOS implementation uses local tooling or the helper are taken from `base`.
- * Runner-only commands are refused at admission by `macOsNativeBackendFacts`; the members the
+ * The actions of the native backend on the session app. Each goes through the macOS helper, so
+ * nothing here reaches the XCTest runner. The Apple owner assembles the session interactor from
+ * these and from its own members whose macOS implementation uses local tooling or the helper.
+ * Runner-only commands are refused at admission by `MACOS_NATIVE_BACKEND_FACTS`; the members the
  * interface requires for them refuse the same way.
  */
-export function macOsNativeAppInteractor(
-  base: Interactor,
+export function macOsNativeAppActions(
+  box: MacOsToolbox,
+  base: Pick<Interactor, 'pressPoint'>,
   ctx: RunnerContext,
   env: Readonly<EnvMap>,
-): Interactor {
+): MacOsNativeAppActions {
   const bundleId = (): string => {
     if (ctx.appBundleId) return ctx.appBundleId;
     throw nativeBackendRefusal('an action on a session that names no app');
@@ -43,7 +48,7 @@ export function macOsNativeAppInteractor(
     options: Partial<Pick<PressPointOptions, 'count' | 'intervalMs'>> = {},
   ) => {
     const result = await withHelperRefusals(
-      runMacOsPressAction(point.x, point.y, {
+      runMacOsPressAction(box, point.x, point.y, {
         surface: NATIVE_APP_SURFACE,
         bundleId: bundleId(),
         clicks: options.count,
@@ -55,19 +60,6 @@ export function macOsNativeAppInteractor(
     return actedOn(result);
   };
   return {
-    open: base.open,
-    openDevice: base.openDevice,
-    close: base.close,
-    screenshot: base.screenshot,
-    snapshot: base.snapshot,
-    readTextAtPoint: base.readTextAtPoint,
-    readClipboard: base.readClipboard,
-    writeClipboard: base.writeClipboard,
-    setSetting: base.setSetting,
-    readAlert: base.readAlert,
-    awaitAlert: base.awaitAlert,
-    acceptAlert: base.acceptAlert,
-    dismissAlert: base.dismissAlert,
     tap: async (x, y) => await press({ x, y }),
     pressPoint: async (point, options) => {
       // Another surface's press is the helper's own surface press, never the runner's.
@@ -76,7 +68,7 @@ export function macOsNativeAppInteractor(
       }
       if (options.button === 'secondary') {
         const result = await withHelperRefusals(
-          runMacOsShowMenuAction(point.x, point.y, {
+          runMacOsShowMenuAction(box, point.x, point.y, {
             bundleId: bundleId(),
             signal: ctx.signal,
             env,
@@ -95,19 +87,19 @@ export function macOsNativeAppInteractor(
     focus: async (x, y) => await press({ x, y }),
     type: async (text, delayMs) => {
       await withHelperRefusals(
-        runMacOsTypeAction(text, { bundleId: bundleId(), delayMs, signal: ctx.signal, env }),
+        runMacOsTypeAction(box, text, { bundleId: bundleId(), delayMs, signal: ctx.signal, env }),
       );
     },
     fill: async (x, y, text) => {
       const result = await withHelperRefusals(
-        runMacOsFillAction(x, y, text, { bundleId: bundleId(), signal: ctx.signal, env }),
+        runMacOsFillAction(box, x, y, text, { bundleId: bundleId(), signal: ctx.signal, env }),
       );
       return actedOn(result);
     },
     scroll: async (direction, options) => {
       assertScrollGestureInput(options ?? {});
       const result = await withHelperRefusals(
-        runMacOsScrollAction(direction, {
+        runMacOsScrollAction(box, direction, {
           bundleId: bundleId(),
           amount: options?.amount,
           pixels: options?.pixels,

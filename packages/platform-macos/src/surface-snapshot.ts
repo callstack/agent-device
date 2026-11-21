@@ -1,14 +1,11 @@
-import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
-import type { MacOsHelperSurface } from '@agent-device/contracts/session';
+import type { MacOsSurfaceSnapshotOptions } from '@agent-device/contracts/macos-platform-leaf';
+import type { MacOsToolbox } from './toolbox.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { shapeDesktopSurfaceSnapshot } from '@agent-device/capture-kit/snapshot-desktop-projection';
 
-type SnapshotSurfaceOptions = Omit<NonNullable<CaptureSnapshotInput['options']>, 'surface'> & {
-  surface: MacOsHelperSurface;
-};
-
 export async function captureMacOsSurfaceSnapshot(
-  options: SnapshotSurfaceOptions,
+  box: MacOsToolbox,
+  options: MacOsSurfaceSnapshotOptions,
   signal: AbortSignal | undefined,
   env: Readonly<EnvMap>,
 ) {
@@ -17,7 +14,7 @@ export async function captureMacOsSurfaceSnapshot(
     import('./helper.ts'),
     import('@agent-device/contracts/snapshot-producers'),
   ]);
-  const result = await runMacOsSnapshotAction(surface, {
+  const result = await runMacOsSnapshotAction(box, surface, {
     bundleId: surface === 'menubar' || surface === 'app' ? options.appBundleId : undefined,
     signal,
     env,

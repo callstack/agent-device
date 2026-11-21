@@ -5,5 +5,5 @@ export {
   invalidateIosAppResolutionCache,
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
+  resolveMacOsAppDeviceOpenTarget,
 } from './core/app-resolution.ts';
-export { resolveMacOsAppDeviceOpenTarget } from './os/macos/apps.ts';

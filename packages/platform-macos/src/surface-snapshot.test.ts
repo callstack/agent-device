@@ -1,12 +1,16 @@
 import { expect, test } from 'vitest';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
-import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsToolbox } from './toolbox.ts';
+
+const withToolbox = async <T>(box: MacOsToolbox, run: (box: MacOsToolbox) => Promise<T>) =>
+  await run(box);
 import { captureMacOsSurfaceSnapshot } from './surface-snapshot.ts';
 
 test('an app snapshot carries the helper warning that web content may be missing', async () => {
   const warning = "The app's Chromium accessibility tree did not populate.";
   const calls: string[][] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         calls.push([...args]);
@@ -27,10 +31,11 @@ test('an app snapshot carries the helper warning that web content may be missing
       },
     },
   });
-  const result = await withAppleToolProvider(
+  const result = await withToolbox(
     provider,
-    async () =>
+    async (box) =>
       await captureMacOsSurfaceSnapshot(
+        box,
         {
           surface: macOsHelperSurface('app', 'native')!,
           appBundleId: 'com.openai.codex',

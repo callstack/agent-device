@@ -9,20 +9,20 @@ import {
   type SessionSurface,
 } from '@agent-device/contracts/session';
 
-vi.mock('../os/macos/helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../os/macos/helper.ts')>();
-  return {
-    ...actual,
-    runMacOsScreenshotAction: vi.fn(async (outPath: string) => ({ path: outPath })),
-    runMacOsSnapshotAction: vi.fn(async (surface: SessionSurface) => ({
-      surface,
+// The installed macOS leaf, as the Apple owner reaches it: one recorded entry point per helper
+// operation the owner delegates.
+vi.mock('../core/macos-desktop.ts', () => {
+  const operations = {
+    screenshot: vi.fn(async (outPath: string) => ({ path: outPath })),
+    captureSurfaceSnapshot: vi.fn(async () => ({
       nodes: [],
       truncated: false,
       backend: 'macos-helper' as const,
     })),
-    runMacOsReadTextAction: vi.fn(async () => ({ text: 'helper' })),
-    runMacOsPressAction: vi.fn(async (x: number, y: number) => ({ x, y })),
+    readTextAtPoint: vi.fn(async () => ({ text: 'helper' })),
+    press: vi.fn(async (x: number, y: number) => ({ x, y })),
   };
+  return { macOsDesktop: () => operations };
 });
 
 vi.mock('../core/screenshot.ts', async (importOriginal) => {
@@ -43,16 +43,18 @@ vi.mock('../core/runner-client.ts', async (importOriginal) => {
 });
 
 import { createAppleInteractor } from '../interactor.ts';
-import {
-  runMacOsPressAction,
-  runMacOsReadTextAction,
-  runMacOsScreenshotAction,
-  runMacOsSnapshotAction,
-} from '../os/macos/helper.ts';
+import { macOsDesktop } from '../core/macos-desktop.ts';
 import { captureScreenshotViaRunner, screenshotIos } from '../core/screenshot.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 
 bindTestCommandHost();
+
+const {
+  screenshot: runMacOsScreenshotAction,
+  captureSurfaceSnapshot: runMacOsSnapshotAction,
+  readTextAtPoint: runMacOsReadTextAction,
+  press: runMacOsPressAction,
+} = macOsDesktop();
 
 const macOsDevice: DeviceInfo = {
   platform: 'apple',

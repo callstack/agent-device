@@ -41,8 +41,11 @@ let appResolutionModule:
 const loadAppResolution = () =>
   (appResolutionModule ??= import('@agent-device/platform-apple/app-resolution'));
 
-let macOsModule: Promise<typeof import('@agent-device/platform-apple/macos')> | undefined;
-const loadMacOs = () => (macOsModule ??= import('@agent-device/platform-apple/macos'));
+let macOsDesktopModule:
+  | Promise<typeof import('@agent-device/platform-apple/macos-desktop')>
+  | undefined;
+const loadMacOsDesktop = () =>
+  (macOsDesktopModule ??= import('@agent-device/platform-apple/macos-desktop'));
 
 let retryModule: Promise<typeof import('@agent-device/host-kit/retry')> | undefined;
 const loadRetry = () => (retryModule ??= import('@agent-device/host-kit/retry'));
@@ -172,8 +175,8 @@ async function resolveMacOsSurface(
   if (!isMacOs(device) || surface === 'app' || surface === 'desktop' || surface === 'menubar') {
     return {};
   }
-  const { resolveFrontmostMacOsApp } = await loadMacOs();
-  const frontmost = await resolveFrontmostMacOsApp(env);
+  const { macOsDesktop } = await loadMacOsDesktop();
+  const frontmost = await (await macOsDesktop()).frontmostApp(env);
   return { appBundleId: frontmost.bundleId, appName: frontmost.appName };
 }
 
@@ -197,12 +200,12 @@ async function dismissMacOsCloseAlerts(
   env: Readonly<EnvMap>,
 ): Promise<void> {
   if (!isMacOs(device)) return;
-  const { runMacOsAlertAction } = await loadMacOs();
+  const { macOsDesktop } = await loadMacOsDesktop();
   const dismissOptions =
     input.surface === 'frontmost-app'
       ? { surface: 'frontmost-app' as const }
       : input.appBundleId
         ? { bundleId: input.appBundleId }
         : {};
-  await runMacOsAlertAction('dismiss', { ...dismissOptions, env });
+  await (await macOsDesktop()).runAlertAction('dismiss', { ...dismissOptions, env });
 }

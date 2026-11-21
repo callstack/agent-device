@@ -10,9 +10,15 @@ import {
   openMacOsApp,
   resolveMacOsApp,
   resolveMacOsAppDeviceOpenTarget,
+  setMacOsAppearance,
 } from './apps.ts';
-import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
-import type { AppleMacOsHostProvider } from '../../core/tool-provider-types.ts';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsToolbox } from './toolbox.ts';
+
+const withToolbox = async <T>(box: MacOsToolbox, run: (box: MacOsToolbox) => Promise<T>) =>
+  await run(box);
+import type { MacOsHostProvider } from '@agent-device/contracts/macos-platform-leaf';
+import { createLocalMacOsHostProvider } from './host-provider.ts';
 
 const MACOS_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -25,6 +31,7 @@ const MACOS_DEVICE: DeviceInfo = {
 };
 
 const mockQuitMacOsApp = vi.mocked(quitMacOsApp);
+const box = macOsToolboxFixture();
 
 afterEach(() => {
   mockQuitMacOsApp.mockReset();
@@ -51,7 +58,7 @@ test('closeMacOsApp waits until an accepted termination has actually completed',
       forceTerminated: false,
     });
 
-  await closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences', process.env);
+  await closeMacOsApp(box, MACOS_DEVICE, 'com.apple.systempreferences', process.env);
 
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(3);
 });
@@ -65,7 +72,7 @@ test('closeMacOsApp fails immediately when neither termination request is accept
   });
 
   await expect(
-    closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences', process.env),
+    closeMacOsApp(box, MACOS_DEVICE, 'com.apple.systempreferences', process.env),
   ).rejects.toThrow('Failed to close macOS app com.apple.systempreferences');
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(1);
 });
@@ -79,7 +86,7 @@ test('closeMacOsApp bounds termination confirmation', async () => {
   });
 
   await expect(
-    closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences', process.env),
+    closeMacOsApp(box, MACOS_DEVICE, 'com.apple.systempreferences', process.env),
   ).rejects.toMatchObject({
     details: { reason: 'MACOS_APP_TERMINATION_TIMEOUT', attempts: 20 },
   });
@@ -89,16 +96,16 @@ test('closeMacOsApp bounds termination confirmation', async () => {
 test('an app device opens its own app in the background and the whole Mac opens in front', async () => {
   const opened = async (device: DeviceInfo) => {
     const calls: string[][] = [];
-    const provider = createLocalAppleToolProvider({
+    const provider = macOsToolboxFixture({
       runCommand: async (cmd, args) => {
         if (cmd === 'open') calls.push(args);
         return { exitCode: 0, stdout: '', stderr: '' };
       },
     });
-    await withAppleToolProvider(provider, async () => {
-      await openMacOsApp(device, 'com.example.demo');
-      await openMacOsApp(device, 'com.example.demo', { url: 'demo://open' });
-      await openMacOsApp(device, 'demo://open');
+    await withToolbox(provider, async (box) => {
+      await openMacOsApp(box, device, 'com.example.demo');
+      await openMacOsApp(box, device, 'com.example.demo', { url: 'demo://open' });
+      await openMacOsApp(box, device, 'demo://open');
     });
     return calls;
   };
@@ -118,10 +125,10 @@ test('an app device opens its own app in the background and the whole Mac opens 
 test('an app device refuses to open or close another app before anything runs', async () => {
   const runCommand = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
   const device = hostAppDevice(MACOS_DEVICE, 'com.example.demo');
-  await withAppleToolProvider(createLocalAppleToolProvider({ runCommand }), async () => {
+  await withToolbox(macOsToolboxFixture({ runCommand }), async (box) => {
     for (const attempt of [
-      openMacOsApp(device, 'com.example.other'),
-      closeMacOsApp(device, 'com.example.other', {}),
+      openMacOsApp(box, device, 'com.example.other'),
+      closeMacOsApp(box, device, 'com.example.other', {}),
     ]) {
       await expect(attempt).rejects.toMatchObject({
         code: 'INVALID_ARGS',
@@ -138,18 +145,12 @@ test('a bundle id in another case resolves to the installed app; a dotted name s
     { bundleId: 'com.apple.TextEdit', name: 'TextEdit' },
     { bundleId: 'com.example.foo', name: 'Foo.Bar' },
   ]);
-  const provider = createLocalAppleToolProvider({
-    runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+  await withToolbox(localHostWith({ listApps }), async (box) => {
+    expect(await resolveMacOsApp(box, 'com.apple.TextEdit')).toBe('com.apple.TextEdit');
+    expect(await resolveMacOsApp(box, 'COM.APPLE.TEXTEDIT')).toBe('com.apple.TextEdit');
+    expect(await resolveMacOsApp(box, 'Foo.Bar')).toBe('com.example.foo');
+    expect(await resolveMacOsApp(box, 'com.example.lowercase')).toBe('com.example.lowercase');
   });
-  await withAppleToolProvider(
-    { ...provider, macosHost: { ...provider.macosHost!, listApps } },
-    async () => {
-      expect(await resolveMacOsApp('com.apple.TextEdit')).toBe('com.apple.TextEdit');
-      expect(await resolveMacOsApp('COM.APPLE.TEXTEDIT')).toBe('com.apple.TextEdit');
-      expect(await resolveMacOsApp('Foo.Bar')).toBe('com.example.foo');
-      expect(await resolveMacOsApp('com.example.lowercase')).toBe('com.example.lowercase');
-    },
-  );
 });
 
 test('an app device resolves any name of its own app and refuses another app', async () => {
@@ -157,40 +158,41 @@ test('an app device resolves any name of its own app and refuses another app', a
     { bundleId: 'com.apple.TextEdit', name: 'TextEdit' },
     { bundleId: 'com.apple.calculator', name: 'Calculator' },
   ]);
-  const provider = createLocalAppleToolProvider({
-    runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-  });
   const device = hostAppDevice(MACOS_DEVICE, 'com.apple.TextEdit');
-  await withAppleToolProvider(
-    { ...provider, macosHost: { ...provider.macosHost!, listApps } },
-    async () => {
-      // Opened by bundle id, closed by name: one app.
-      await expect(resolveMacOsAppDeviceOpenTarget(device, 'TextEdit')).resolves.toMatchObject({
-        appBundleId: 'com.apple.TextEdit',
-      });
-      await expect(resolveMacOsAppDeviceOpenTarget(device, 'Calculator')).rejects.toMatchObject({
-        details: { reason: 'app-device-scope' },
-      });
-    },
-  );
+  await withToolbox(localHostWith({ listApps }), async (box) => {
+    // Opened by bundle id, closed by name: one app.
+    await expect(resolveMacOsAppDeviceOpenTarget(box, device, 'TextEdit')).resolves.toMatchObject({
+      appBundleId: 'com.apple.TextEdit',
+    });
+    await expect(resolveMacOsAppDeviceOpenTarget(box, device, 'Calculator')).rejects.toMatchObject({
+      details: { reason: 'app-device-scope' },
+    });
+  });
 });
 
+/** The local host routes with some of them replaced, as a scoped request supplies them. */
+function localHostWith(routes: Partial<MacOsHostProvider>) {
+  const runCommand = async () => ({ exitCode: 0, stdout: '', stderr: '' });
+  const local = createLocalMacOsHostProvider(macOsToolboxFixture({ runCommand }));
+  return macOsToolboxFixture({ runCommand, macosHost: { ...local, ...routes } });
+}
+
 function macOsHost(apps: Array<{ name: string; bundleId: string }>) {
-  const openBundle = vi.fn<AppleMacOsHostProvider['openBundle']>(async () => undefined);
+  const openBundle = vi.fn<MacOsHostProvider['openBundle']>(async () => undefined);
   const listApps = vi.fn(async () => apps);
-  const macosHost = { openBundle, listApps } as unknown as AppleMacOsHostProvider;
+  const macosHost = { openBundle, listApps } as unknown as MacOsHostProvider;
   return {
     openBundle,
     listApps,
-    run: <T>(fn: () => Promise<T>) =>
-      withAppleToolProvider(createLocalAppleToolProvider({ macosHost }), fn),
+    run: <T>(fn: (box: MacOsToolbox) => Promise<T>) =>
+      withToolbox(macOsToolboxFixture({ macosHost }), fn),
   };
 }
 
 test('openMacOsApp opens a mixed-case bundle id without display-name resolution', async () => {
   const host = macOsHost([{ name: 'TextEdit', bundleId: 'com.apple.TextEdit' }]);
 
-  await host.run(() => openMacOsApp(MACOS_DEVICE, 'com.apple.TextEdit'));
+  await host.run((box) => openMacOsApp(box, MACOS_DEVICE, 'com.apple.TextEdit'));
 
   expect(host.openBundle).toHaveBeenCalledWith('com.apple.TextEdit', undefined, {
     background: false,
@@ -201,7 +203,7 @@ test('openMacOsApp opens a mixed-case bundle id without display-name resolution'
 test('openMacOsApp resolves a display name to its canonical mixed-case bundle id', async () => {
   const host = macOsHost([{ name: 'TextEdit', bundleId: 'com.apple.TextEdit' }]);
 
-  await host.run(() => openMacOsApp(MACOS_DEVICE, 'TextEdit'));
+  await host.run((box) => openMacOsApp(box, MACOS_DEVICE, 'TextEdit'));
 
   expect(host.openBundle).toHaveBeenCalledWith('com.apple.TextEdit', undefined, {
     background: false,
@@ -211,7 +213,9 @@ test('openMacOsApp resolves a display name to its canonical mixed-case bundle id
 test('openMacOsApp keeps the typed error for an app that is not installed', async () => {
   const host = macOsHost([]);
 
-  await expect(host.run(() => openMacOsApp(MACOS_DEVICE, 'No Such App'))).rejects.toMatchObject({
+  await expect(
+    host.run((box) => openMacOsApp(box, MACOS_DEVICE, 'No Such App')),
+  ).rejects.toMatchObject({
     code: 'APP_NOT_INSTALLED',
   });
   expect(host.openBundle).not.toHaveBeenCalled();
@@ -221,10 +225,28 @@ test.each([
   ['com.apple.TextEdit', 'com.apple.TextEdit'],
   ['com.x.My_App', 'com.x.My_App'],
   ['Booking.com', 'com.booking.BookingApp'],
-])('resolveMacOsApp(%j) is %j', async (typed, expected) => {
+])('resolveMacOsApp(box, %j) is %j', async (typed, expected) => {
   const host = macOsHost([{ name: 'Booking.com', bundleId: 'com.booking.BookingApp' }]);
 
-  expect(await host.run(() => resolveMacOsApp(typed))).toBe(expected);
+  expect(await host.run((box) => resolveMacOsApp(box, typed))).toBe(expected);
   // Only a lowercase-first dotted id is taken as a bundle id as typed; Booking.com is a name.
   expect(host.listApps).toHaveBeenCalledTimes(typed === 'Booking.com' ? 1 : 0);
+});
+
+test('an appearance toggle reads the current osascript appearance and sets the other one', async () => {
+  const scripts: string[] = [];
+  const box = macOsToolboxFixture({
+    runCommand: async (cmd, args) => {
+      if (cmd !== 'osascript' || args[0] !== '-e') throw new Error(`unexpected ${cmd}`);
+      scripts.push(args[1] ?? '');
+      return { exitCode: 0, stdout: scripts.length === 1 ? 'true\n' : '', stderr: '' };
+    },
+  });
+
+  await setMacOsAppearance(box, 'toggle');
+
+  expect(scripts.map((script) => script.split('preferences to ')[1])).toEqual([
+    'get dark mode',
+    'set dark mode to false',
+  ]);
 });

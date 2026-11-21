@@ -29,10 +29,11 @@ private struct HelperOutcomesFixture: Decodable {
   let deliveryMechanisms: [String]
 }
 
-/// `#filePath` is `<repo>/apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/<file>`.
+/// `#filePath` is
+/// `<repo>/packages/platform-macos/macos-helper/Tests/AgentDeviceMacOSHelperTests/<file>`.
 private let repoRoot = URL(fileURLWithPath: #filePath)
   .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-  .deletingLastPathComponent().deletingLastPathComponent()
+  .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
 final class BackgroundInteractionTests: XCTestCase {
   /// The host keys refusals and mechanisms on these strings; the table is their one declaration.

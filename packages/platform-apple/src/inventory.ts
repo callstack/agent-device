@@ -7,6 +7,7 @@ import type {
 import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { isMacOsLeafInstalled, requireMacOsLeaf } from './macos-leaf.ts';
 import { listPhysicalAppleDevices } from './physical-inventory.ts';
 import { listAppleSimulators } from './simulator-inventory.ts';
 
@@ -24,6 +25,9 @@ async function discoverAppleDevices(
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo[]> {
   if (isMacOnlyRequest(request)) {
+    // A request that names macOS needs the leaf: an absent package answers `plugin-not-installed`
+    // with its install command, before any device is listed.
+    requireMacOsLeaf();
     return [hostMacDevice(host)];
   }
   if (host.hostOs !== 'darwin') {
@@ -38,7 +42,7 @@ async function discoverAppleDevices(
 
   if (request.iosSimulatorSetPath || request.udid) {
     const simulators = await simulatorDiscovery;
-    const withHost = [...simulators, hostMacDevice(host)];
+    const withHost = [...simulators, ...installedHostMacDevice(host)];
     if (request.iosSimulatorSetPath || simulators.some((device) => device.id === request.udid)) {
       return sortAppleDevicesForSelection(withHost);
     }
@@ -50,7 +54,7 @@ async function discoverAppleDevices(
     simulatorDiscovery,
     listPhysicalAppleDevices(host, scope),
   ]);
-  const withHost = [...simulators, hostMacDevice(host)];
+  const withHost = [...simulators, ...installedHostMacDevice(host)];
   return sortAppleDevicesForSelection(mergeAppleDevices(withHost, physical));
 }
 
@@ -85,6 +89,11 @@ function appleHostUnsupportedError(hostOs: HostOperatingSystem): AppError {
       'targets, then agent-device open <app.apk> --platform android. To use an iOS Simulator from this machine, ' +
       'run agent-device on a macOS host and pass --daemon-base-url <that daemon URL>.',
   });
+}
+
+/** Unfiltered discovery lists this Mac only when a package serves macOS desktop automation. */
+function installedHostMacDevice(host: DeviceInventoryHostFor<'apple'>): DeviceInfo[] {
+  return isMacOsLeafInstalled() ? [hostMacDevice(host)] : [];
 }
 
 function hostMacDevice(host: DeviceInventoryHostFor<'apple'>): DeviceInfo {

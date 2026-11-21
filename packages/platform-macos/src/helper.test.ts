@@ -3,7 +3,11 @@ import { test, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
 import { AppError } from '@agent-device/kernel/errors';
-import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsToolbox } from './toolbox.ts';
+
+const withToolbox = async <T>(box: MacOsToolbox, run: (box: MacOsToolbox) => Promise<T>) =>
+  await run(box);
 import { readFileSync } from 'node:fs';
 import {
   MACOS_DELIVERY_MECHANISMS,
@@ -14,6 +18,7 @@ import {
   runMacOsReadTextAction,
   runMacOsScreenshotAction,
   quitMacOsApp,
+  runMacOsPermissionAction,
   runMacOsSnapshotAction,
 } from './helper.ts';
 
@@ -33,7 +38,7 @@ const nativeApp = macOsHelperSurface('app', 'native')!;
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
   let receivedSignal: AbortSignal | undefined;
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (_args, options) => {
         receivedSignal = options?.signal;
@@ -54,10 +59,10 @@ test('macOS helper snapshot passes cancellation to the helper process', async ()
     },
   });
 
-  await withAppleToolProvider(
+  await withToolbox(
     provider,
-    async () =>
-      await runMacOsSnapshotAction(desktop, { env: captureEnv, signal: controller.signal }),
+    async (box) =>
+      await runMacOsSnapshotAction(box, desktop, { env: captureEnv, signal: controller.signal }),
   );
 
   assert.equal(receivedSignal, controller.signal);
@@ -73,7 +78,7 @@ function helperReturn(data: Record<string, unknown>) {
 
 test('macOS helper press carries the hold, repeat count, and interval to the click schedule', async () => {
   let receivedArgs: string[] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         receivedArgs = args;
@@ -82,10 +87,10 @@ test('macOS helper press carries the hold, repeat count, and interval to the cli
     },
   });
 
-  const result = await withAppleToolProvider(
+  const result = await withToolbox(
     provider,
-    async () =>
-      await runMacOsPressAction(12, 34, {
+    async (box) =>
+      await runMacOsPressAction(box, 12, 34, {
         env: captureEnv,
         surface: menubar,
         bundleId: 'com.example.Menu',
@@ -117,7 +122,7 @@ test('macOS helper press carries the hold, repeat count, and interval to the cli
 
 test('macOS helper press carries an explicit zero interval instead of dropping it', async () => {
   let receivedArgs: string[] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         receivedArgs = args;
@@ -126,10 +131,10 @@ test('macOS helper press carries an explicit zero interval instead of dropping i
     },
   });
 
-  await withAppleToolProvider(
+  await withToolbox(
     provider,
-    async () =>
-      await runMacOsPressAction(7, 8, {
+    async (box) =>
+      await runMacOsPressAction(box, 7, 8, {
         env: captureEnv,
         surface: desktop,
         clicks: 2,
@@ -149,7 +154,7 @@ test('macOS helper press carries an explicit zero interval instead of dropping i
 
 test('macOS helper press keeps repeats independent and names a double-click explicitly', async () => {
   let receivedArgs: string[] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         receivedArgs = args;
@@ -158,10 +163,10 @@ test('macOS helper press keeps repeats independent and names a double-click expl
     },
   });
 
-  await withAppleToolProvider(
+  await withToolbox(
     provider,
-    async () =>
-      await runMacOsPressAction(7, 8, {
+    async (box) =>
+      await runMacOsPressAction(box, 7, 8, {
         env: captureEnv,
         surface: frontmostApp,
         clicks: 3,
@@ -183,7 +188,7 @@ test('macOS helper press outlives its own click schedule and forwards cancellati
   let receivedSignal: AbortSignal | undefined;
   let receivedKill: { signal: string; graceMs: number } | undefined;
   const controller = new AbortController();
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (_args, options) => {
         receivedTimeoutMs = options?.timeoutMs;
@@ -194,10 +199,10 @@ test('macOS helper press outlives its own click schedule and forwards cancellati
     },
   });
 
-  await withAppleToolProvider(
+  await withToolbox(
     provider,
-    async () =>
-      await runMacOsPressAction(1, 2, {
+    async (box) =>
+      await runMacOsPressAction(box, 1, 2, {
         env: captureEnv,
         surface: desktop,
         holdMs: 10_000,
@@ -230,7 +235,7 @@ test('macOS click schedule mirrors the helper floors for the timeout it derives'
 
 test('macOS helper press stays a single held click when nothing is repeated', async () => {
   let receivedArgs: string[] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         receivedArgs = args;
@@ -239,9 +244,9 @@ test('macOS helper press stays a single held click when nothing is repeated', as
     },
   });
 
-  await withAppleToolProvider(
+  await withToolbox(
     provider,
-    async () => await runMacOsPressAction(5, 6, { env: captureEnv, surface: frontmostApp }),
+    async (box) => await runMacOsPressAction(box, 5, 6, { env: captureEnv, surface: frontmostApp }),
   );
 
   assert.equal(receivedArgs.includes('--clicks'), false);
@@ -251,7 +256,7 @@ test('macOS helper press stays a single held click when nothing is repeated', as
 
 test('macOS helper screenshot argv carries only --out and --surface', async () => {
   let receivedArgs: string[] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         receivedArgs = args;
@@ -260,10 +265,10 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
     },
   });
 
-  await withAppleToolProvider(
+  await withToolbox(
     provider,
-    async () =>
-      await runMacOsScreenshotAction('/tmp/out.png', { env: captureEnv, surface: desktop }),
+    async (box) =>
+      await runMacOsScreenshotAction(box, '/tmp/out.png', { env: captureEnv, surface: desktop }),
   );
 
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
@@ -274,7 +279,7 @@ for (const hint of [
   undefined,
 ]) {
   test(`a helper refusal carries its details and hint through untouched (${hint === undefined ? 'no hint' : 'with hint'})`, async () => {
-    const provider = createLocalAppleToolProvider({
+    const provider = macOsToolboxFixture({
       macosHelper: {
         run: async () => ({
           exitCode: 1,
@@ -296,8 +301,8 @@ for (const hint of [
       },
     });
 
-    const error = await withAppleToolProvider(provider, async () =>
-      runMacOsScreenshotAction('/tmp/out.png', {
+    const error = await withToolbox(provider, async (box) =>
+      runMacOsScreenshotAction(box, '/tmp/out.png', {
         surface: nativeApp,
         bundleId: 'com.apple.TextEdit',
         env: captureEnv,
@@ -318,7 +323,7 @@ for (const hint of [
 test('macOS helper screenshots never run two captures at once', async () => {
   let active = 0;
   let maxActive = 0;
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async () => {
         active += 1;
@@ -331,14 +336,14 @@ test('macOS helper screenshots never run two captures at once', async () => {
   });
   const app = macOsHelperSurface('app', 'native')!;
 
-  await withAppleToolProvider(provider, async () => {
+  await withToolbox(provider, async (box) => {
     await Promise.all([
-      runMacOsScreenshotAction('/tmp/one.png', {
+      runMacOsScreenshotAction(box, '/tmp/one.png', {
         env: captureEnv,
         surface: app,
         bundleId: 'com.example.one',
       }),
-      runMacOsScreenshotAction('/tmp/two.png', {
+      runMacOsScreenshotAction(box, '/tmp/two.png', {
         env: captureEnv,
         surface: app,
         bundleId: 'com.example.two',
@@ -354,15 +359,15 @@ test('helper entry points accept only an owner-routed surface', () => {
   // unbranded or optional surface.
   const widenedCalls = async (out: string) => {
     // @ts-expect-error a bare literal skips the routing owner
-    await runMacOsSnapshotAction('desktop');
+    await runMacOsSnapshotAction(box, 'desktop');
     // @ts-expect-error a bare literal skips the routing owner
-    await runMacOsScreenshotAction(out, { env: captureEnv, surface: 'menubar' });
+    await runMacOsScreenshotAction(box, out, { env: captureEnv, surface: 'menubar' });
     // @ts-expect-error the surface is required
-    await runMacOsReadTextAction(1, 2, { bundleId: 'com.example' });
+    await runMacOsReadTextAction(box, 1, 2, { bundleId: 'com.example' });
     // @ts-expect-error the surface is required
-    await runMacOsPressAction(1, 2, {});
+    await runMacOsPressAction(box, 1, 2, {});
     // @ts-expect-error the surface is required
-    await runMacOsScreenshotAction(out);
+    await runMacOsScreenshotAction(box, out);
   };
   assert.equal(typeof widenedCalls, 'function');
 });
@@ -370,10 +375,7 @@ test('helper entry points accept only an owner-routed surface', () => {
 test('the helper vocabulary matches the table the Swift helper is held to', () => {
   const fixture = JSON.parse(
     readFileSync(
-      new URL(
-        '../../../../../contracts/fixtures/macos-native-helper-outcomes.json',
-        import.meta.url,
-      ),
+      new URL('../../../contracts/fixtures/macos-native-helper-outcomes.json', import.meta.url),
       'utf8',
     ),
   ) as {
@@ -391,7 +393,7 @@ test('the helper vocabulary matches the table the Swift helper is held to', () =
 
 test('the helper accepts a bundle id with an uppercase first segment and refuses a bare name', async () => {
   const receivedArgs: string[][] = [];
-  const provider = createLocalAppleToolProvider({
+  const provider = macOsToolboxFixture({
     macosHelper: {
       run: async (args) => {
         receivedArgs.push(args);
@@ -405,10 +407,34 @@ test('the helper accepts a bundle id with an uppercase first segment and refuses
     },
   });
 
-  await withAppleToolProvider(provider, async () => {
-    await quitMacOsApp('Foo.Bar', captureEnv);
-    await assert.rejects(quitMacOsApp('TextEdit', captureEnv), { code: 'INVALID_ARGS' });
+  await withToolbox(provider, async (box) => {
+    await quitMacOsApp(box, 'Foo.Bar', captureEnv);
+    await assert.rejects(quitMacOsApp(box, 'TextEdit', captureEnv), { code: 'INVALID_ARGS' });
   });
 
   assert.deepEqual(receivedArgs, [['app', 'quit', '--bundle-id', 'Foo.Bar']]);
+});
+
+test('a permission grant names its action and target to the helper and returns its answer', async () => {
+  const granted = {
+    target: 'accessibility',
+    action: 'grant',
+    granted: true,
+    requested: true,
+    openedSettings: false,
+  };
+  let receivedArgs: string[] = [];
+  const box = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn(granted);
+      },
+    },
+  });
+
+  const result = await runMacOsPermissionAction(box, 'grant', 'accessibility', captureEnv);
+
+  assert.deepEqual(receivedArgs, ['permission', 'grant', 'accessibility']);
+  assert.deepEqual(result, granted);
 });
