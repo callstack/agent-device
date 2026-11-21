@@ -2,6 +2,10 @@ import { expect, test, vi } from 'vitest';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { ensureAndroidReady } from './runtime.ts';
 
 test('cancellation interrupts Android boot polling and terminates the emulator launched by the request', async () => {
@@ -243,15 +247,24 @@ test('without a deadline the default 120s boot wait applies', async () => {
 
 type ProbeResult = { stdout: string; stderr: string; exitCode: number };
 
-/** A host whose boot probe replays the given results in order, then keeps returning the last one. */
-function probeHost(sequence: readonly (ProbeResult | Error)[]) {
+/**
+ * A host whose boot probe replays the given results in order, then keeps returning the last one.
+ * With `launched`, the first inventory answer is a stopped AVD, so the flow launches one (pid 4242)
+ * and every later answer shows it running: that is when the probe results decide.
+ */
+function probeHost(
+  sequence: readonly (ProbeResult | Error)[],
+  options: Readonly<{ launched?: boolean }> = {},
+) {
   let now = 1_000;
+  let discoveries = 0;
   const queue = [...sequence];
   const run = vi.fn(async () => {
     const next = queue.length > 1 ? queue.shift() : queue[0];
     if (next instanceof Error) throw next;
     return next as ProbeResult;
   });
+  const terminate = vi.fn(async () => {});
   const host = {
     commands: { which: async () => 'tool', run },
     toolchains: { prepare: async () => {} },
@@ -263,13 +276,14 @@ function probeHost(sequence: readonly (ProbeResult | Error)[]) {
     },
     deviceReadiness: {
       androidEmulator: {
-        discover: async () => [runningEmulator()],
+        discover: async () =>
+          options.launched === true && ++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()],
         launch: async () => 4242,
-        terminate: async () => {},
+        terminate,
       },
     },
   } as unknown as PlatformRuntimeHost;
-  return { host, run, elapsed: () => now - 1_000 };
+  return { host, run, terminate, elapsed: () => now - 1_000 };
 }
 
 const BOOTED_PROBE: ProbeResult = { stdout: '1\n', stderr: '', exitCode: 0 };
@@ -521,6 +535,161 @@ test('a thrown offline wording without typed details does not retry, proving tex
     ),
   ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
   expect(run).toHaveBeenCalledTimes(1);
+});
+
+// Each case below decides what happens to an emulator this request launched (pid 4242) when its
+// boot fails: a failure with the startup budget still unspent stops it, a spent budget does not,
+// and an emulator that was already running is never this request's to stop.
+test('a launch the host could not record stops the emulator and keeps the recording failure', async () => {
+  let discoveries = 0;
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => (++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()]),
+  });
+  const bindFailure = new AppError('COMMAND_FAILED', 'host refused to record the launch');
+  Object.assign(host.deviceReadiness.androidEmulator, {
+    bindLaunchedEmulator: async () => {
+      throw bindFailure;
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, onAndroidEmulatorLaunch: vi.fn() },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(bindFailure);
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('a boot probe that fails inside the budget stops the launched emulator', async () => {
+  const { host, terminate, run } = probeHost(
+    [{ stdout: '', stderr: 'error: closed', exitCode: 1 }],
+    { launched: true },
+  );
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('discovery that goes wrong after the launch stops the launched emulator', async () => {
+  let discoveries = 0;
+  const discoveryFailure = new AppError('COMMAND_FAILED', 'adb devices failed');
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => {
+      discoveries += 1;
+      if (discoveries === 1) return [stoppedAvd()];
+      if (discoveries === 2) return [runningEmulator()];
+      throw discoveryFailure;
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(discoveryFailure);
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('a boot probe that spends the startup budget leaves the launched emulator booting', async () => {
+  const { host, terminate } = probeHost([], { launched: true });
+  // The probe uses the last of the budget before it fails: the clock passes the deadline.
+  Object.assign(host.commands, {
+    run: async () => {
+      await host.clock.sleep(10_000);
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 5_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    details: { reason: 'ANDROID_BOOT_TIMEOUT', bootBudgetSpent: true },
+  });
+  expect(terminate).not.toHaveBeenCalled();
+});
+
+test('a step that fails after the boot is done stops the launched emulator past the deadline', async () => {
+  let discoveries = 0;
+  const lateFailure = new AppError('COMMAND_FAILED', 'adb devices failed');
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => {
+      discoveries += 1;
+      if (discoveries === 1) return [stoppedAvd()];
+      // The boot is over; this refresh is the step after it, and it fails once the clock is past
+      // the startup deadline. A spent budget keeps an emulator that is still coming up, and this one
+      // is already up, so the launch is this request's to stop.
+      if (discoveries === 2) {
+        host.clock.sleep(60_000);
+        throw lateFailure;
+      }
+      return [runningEmulator()];
+    },
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(lateFailure);
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('an emulator that was already running is not stopped when its boot probe fails', async () => {
+  const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }]);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      runningEmulator(),
+      { headless: false, deadlineAtMs: 30_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+  expect(terminate).not.toHaveBeenCalled();
+});
+
+test('a host that refuses the stop still reports the boot failure and records the refusal', async () => {
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }], {
+      launched: true,
+    });
+    terminate.mockRejectedValue(new Error('pid 4242 is not this host'));
+
+    await expect(
+      ensureAndroidReady(
+        host,
+        stoppedAvd(),
+        { headless: true, deadlineAtMs: 30_000 },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+    expect(countDiagnosticEventsByPhase(['android_emulator_launch_terminate_failed'])).toBe(1);
+  });
 });
 
 function stoppedAvd(): DeviceInfo {

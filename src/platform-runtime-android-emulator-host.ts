@@ -33,10 +33,15 @@ function run(argv) {
 
 export function createAndroidEmulatorHost(
   hostPlatform: NodeJS.Platform = process.platform,
+  /** ADR 0029: the daemon policy's last line against a shutdown, whichever command asks. */
+  assertShutdownAllowed: () => void = () => {},
 ): DeviceReadinessRuntimeHost['androidEmulator'] {
   // What each launch recorded about its emulator, so terminate signals only that process.
   const launched = new Map<number, { avdName: string; startTime: Promise<string | null> }>();
   const terminate = async (pid: number): Promise<void> => {
+    // Asked of a launched emulator, a teardown is a shutdown: the policy is consulted before the
+    // process table is read, so a denied daemon leaves this launch running.
+    assertShutdownAllowed();
     const record = launched.get(pid);
     if (!record) {
       // Nothing names this pid as an emulator this host started, so nothing is signaled.
