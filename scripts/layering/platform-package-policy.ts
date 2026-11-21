@@ -106,13 +106,13 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/tool-provider',
   ],
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
-  linux: ['@agent-device/platform-linux/interactor'],
   web: ['@agent-device/platform-web/interactor'],
 };
 const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   web: '@agent-device/web',
   vega: '@agent-device/vega',
   harmonyos: '@agent-device/harmonyos',
+  linux: '@agent-device/linux',
 };
 
 // The host-kit scopes a managed platform package must never reach at runtime. `command` reads the
@@ -129,8 +129,8 @@ const MANAGED_HOST_KIT_SCOPES = [
 // The web and Vega files that still import one of those scopes, as of the HarmonyOS plugin (#4317).
 // Each entry is that package's own migration slice, not an exception to this rule: no file joins the
 // list, and an entry leaves it when its file binds to the host its plugin was set up with. HarmonyOS
-// carries no entry: its plugin builds one HDC command runner from `host.runCommand` in `setup`, so
-// its packed bundle carries no separate host-kit command or diagnostics scope.
+// and Linux carry no entry: each builds one command runner from `host.runCommand` in `setup`, so its
+// packed bundle carries no separate host-kit command or diagnostics scope.
 const MANAGED_HOST_KIT_IMPORT_DEBT: Readonly<Record<string, readonly string[]>> = {
   '@agent-device/web': [
     'packages/platform-web/src/agent-browser-install.ts',
@@ -148,6 +148,7 @@ const MANAGED_HOST_KIT_IMPORT_DEBT: Readonly<Record<string, readonly string[]>> 
     'packages/platform-vega/src/vega-executable.ts',
   ],
   '@agent-device/harmonyos': [],
+  '@agent-device/linux': [],
 };
 
 function isManagedHostKitScope(spec: string): boolean {
@@ -558,5 +559,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
+  return `R13 holds built-in and managed implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only Web interactor subpath imported by ${INTERACTOR_COMPOSITION_FILE}`;
 }
