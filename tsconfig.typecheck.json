@@ -29,6 +29,7 @@
     { "path": "packages/platform-apple" },
     { "path": "packages/platform-harmonyos" },
     { "path": "packages/platform-linux" },
+    { "path": "packages/platform-macos" },
     { "path": "packages/platform-vega" },
     { "path": "packages/platform-web" },
     { "path": "packages/plugins" },

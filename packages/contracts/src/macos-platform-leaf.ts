@@ -20,7 +20,7 @@ import type {
   RunnerContext,
   SnapshotResult,
 } from './interactor-types.ts';
-import type { RuntimeOperationUnavailability } from './platform-runtime.ts';
+import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { MacOsHelperSurface, SessionSurface } from './session-surface.ts';
@@ -91,8 +91,15 @@ export type MacOsLeafTools = Readonly<{
     args: string[],
     options?: MacOsCommandOptions,
   ): Promise<MacOsCommandResult>;
+  /**
+   * The process table of the host these tools run on. A scoped request answers it with its own
+   * executor, so a probe never pairs pids from one host with tools on another.
+   */
+  listProcesses(options: {
+    timeoutMs: number;
+  }): Promise<readonly Readonly<{ pid: number; command: string }>[]>;
   /** Starts a command the caller stops itself, with its output captured. */
-  startBackground(cmd: string, args: string[]): MacOsBackgroundProcess;
+  startBackground(cmd: string, args: string[]): Promise<MacOsBackgroundProcess>;
   /** The helper transport a scoped request supplies in place of the leaf's own binary. */
   helper?: Readonly<{
     run(args: string[], options?: MacOsCommandOptions): Promise<MacOsCommandResult>;
@@ -149,6 +156,25 @@ export type MacOsPressResult = {
   /** The window the helper acted in, for an app-surface press. */
   windowTitle?: string;
 };
+
+/**
+ * The interactor members the `native` app backend serves itself. The Apple owner assembles the
+ * session's interactor from these and from its own members that never reach the runner.
+ */
+export type MacOsNativeAppActions = Required<
+  Pick<
+    Interactor,
+    | 'tap'
+    | 'pressPoint'
+    | 'longPress'
+    | 'focus'
+    | 'type'
+    | 'fill'
+    | 'scroll'
+    | 'back'
+    | 'setOrientation'
+  >
+>;
 
 /** Every macOS operation the Apple owner delegates, bound to one request's tools. */
 export type MacOsLeafOperations = Readonly<{
@@ -227,14 +253,17 @@ export type MacOsLeafOperations = Readonly<{
     statusPath: string;
     env: Readonly<EnvMap>;
   }): Promise<MacOsBackgroundProcess>;
-  /** The interactor of the `native` app backend: helper actions, with no runner request. */
-  nativeAppInteractor(
-    base: Interactor,
+  /**
+   * The actions of the `native` app backend: helper actions, with no runner request. `base` is the
+   * Apple owner's interactor, which the press of another surface goes back to.
+   */
+  nativeAppActions(
+    base: Pick<Interactor, 'pressPoint'>,
     context: RunnerContext,
     env: Readonly<EnvMap>,
-  ): Promise<Interactor>;
+  ): Promise<MacOsNativeAppActions>;
   /** The operations the `native` app backend refuses at admission. */
-  nativeBackendFacts(): Promise<Readonly<Record<string, RuntimeOperationUnavailability>>>;
+  nativeBackendFacts(): Promise<Readonly<Record<string, RuntimeOperationFact>>>;
   /** The XCTest backend's desktop scroll, mapped to the runner's `desktopScroll` wire case. */
   desktopScroll(
     runner: MacOsRunner,

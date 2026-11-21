@@ -17,6 +17,7 @@ import type {
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { bindMacOsLeaf } from '@agent-device/platform-apple/macos-leaf';
 import type { PluginCandidate, ProviderRegistry } from '@agent-device/plugins/registry';
 import {
   getOptionalPlatformPluginDeclaration,
@@ -24,7 +25,10 @@ import {
 } from '@agent-device/contracts/plugin-installation';
 import { BUILTIN_PLATFORM_PLUGINS } from '../core/interactors/register-builtins.ts';
 import { registerPlatformPluginSet } from '../core/platform-plugin-registry.ts';
-import { missingMacOsPlatformPlugin, missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
+import {
+  missingMacOsPlatformPlugin,
+  missingPlatformPlugin,
+} from '../core/platform-plugin-absence.ts';
 
 type RuntimePlatformPlugin = PlatformPlugin & {
   web?: WebPlatformRegistration;
@@ -150,13 +154,18 @@ export function composePlatformPlugins(
     },
   };
 
+  // The bundled Apple owner reaches the leaf through its own port, because its entry points take a
+  // device rather than a composition. Binding here keeps every composition and its owner in step.
+  const macos = composeMacOsLeaf(platformLeaves, inventory, assertPluginSelectionCurrent);
+  bindMacOsLeaf(macos);
+
   return {
     interactors,
     web,
     vega,
     harmony,
     linux,
-    macos: composeMacOsLeaf(platformLeaves, inventory, assertPluginSelectionCurrent),
+    macos,
     inventoryModules: platforms.map((platform) => platform.inventoryModule),
     runtimeModules: platforms.map((platform) => platform.runtimeModule),
     reportAbsent,

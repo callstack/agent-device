@@ -245,6 +245,8 @@ export type PlatformHostProcesses = Readonly<{
     timeoutMs: number;
     /** Names this lock in a timeout or an unverified release, in the request's log. */
     description?: string;
+    /** Ends the wait for a claim the plugin cannot take when the request is cancelled. */
+    signal?: AbortSignal;
     task: () => Promise<T>;
   }): Promise<T>;
 }>;

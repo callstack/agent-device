@@ -1,0 +1,61 @@
+{
+  "name": "@agent-device/macos",
+  "version": "0.22.0-dev",
+  "private": true,
+  "type": "module",
+  "description": "Managed macOS desktop platform plugin for agent-device.",
+  "exports": {
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/build-config": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "dist",
+    "macos-helper",
+    "!macos-helper/**/.build",
+    "!macos-helper/Tests/**",
+    "macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift",
+    "macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift"
+  ],
+  "license": "MIT",
+  "agent-device": {
+    "apiVersion": 3,
+    "platform": "apple",
+    "appleOs": "macos"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types build.mjs",
+    "build:helper": "node --experimental-strip-types ../../scripts/swift-toolchain-tmpdir.ts swift build -c release --package-path macos-helper",
+    "test:helper": "node --experimental-strip-types ../../scripts/swift-toolchain-tmpdir.ts swift test --package-path macos-helper",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "exports": {
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/platform-macos"
+  },
+  "homepage": "https://agent-device.dev/docs/commands#macos-desktop-targets"
+}

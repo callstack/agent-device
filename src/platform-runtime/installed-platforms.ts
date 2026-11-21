@@ -43,8 +43,7 @@ export async function startInstalledPlatforms(
       packages.has(candidate.package) ||
       candidate.declaredClaims?.some(
         ({ kind, id, appleOs }) =>
-          kind === 'platform' &&
-          (family === undefined || (id === family && appleOs === undefined)),
+          kind === 'platform' && (family === undefined || (id === family && appleOs === undefined)),
       ),
   );
   const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
