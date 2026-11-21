@@ -35,7 +35,32 @@ if (command === 'sync') {
       );
     }
   }
+  checkInstallHints();
   packWorkspacePackages();
+}
+
+/**
+ * Fails when a plugin install hint the core prints names a package this release would not publish.
+ * Core's absence messages and help say `agent-device plugins add @agent-device/<name>` for every
+ * family and provider moved out of it (#4866), so a hint whose package stays `"private": true`
+ * ships a command that cannot resolve. `release-install-hints.ts` reads the hint catalogs from
+ * source; this compares them with the manifests the pack step below turns into tarballs.
+ */
+function checkInstallHints() {
+  const hints = execFileSync(
+    process.execPath,
+    ['--experimental-strip-types', path.join(root, 'scripts', 'release-install-hints.ts')],
+    { cwd: root, encoding: 'utf8' },
+  )
+    .split('\n')
+    .filter(Boolean);
+  const publishedNames = new Set(publicPackages.map((pkg) => pkg.manifest.name));
+  const unpublished = hints.filter((name) => !publishedNames.has(name));
+  if (unpublished.length > 0) {
+    throw new Error(
+      `Install hints name ${unpublished.join(', ')}, which this release does not publish. Remove "private": true from those packages before cutting a release.`,
+    );
+  }
 }
 
 function syncVersions() {
