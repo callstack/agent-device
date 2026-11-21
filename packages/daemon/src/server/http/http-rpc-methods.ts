@@ -215,6 +215,8 @@ function readLeaseLabelParams(params: Record<string, unknown>) {
     leaseProvider: readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
     deviceKey: readStringParam(params, 'deviceKey'),
     clientId: readStringParam(params, 'clientId'),
+    leaseBackend: (readStringParam(params, 'leaseBackend') ??
+      readStringParam(params, 'backend')) as LeaseBackend | undefined,
   };
 }
 

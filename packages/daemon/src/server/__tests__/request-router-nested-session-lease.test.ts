@@ -43,7 +43,8 @@ const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
 
 const OTHER_LEASE_ID = 'f'.repeat(32);
 
-function leasedRouter() {
+function leasedRouter(options: { leased?: boolean } = {}) {
+  const leased = options.leased ?? true;
   const sessionStore = makeSessionStore('agent-device-router-nested-lease-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
@@ -55,17 +56,22 @@ function leasedRouter() {
   });
   sessionStore.publish(
     'default',
-    makeIosAppSession('default', {
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseBackend: lease.backend,
-        leaseProvider: 'proxy',
-        clientId: 'client-a',
-        deviceKey: 'ios:SIM-001',
-      },
-    }),
+    makeIosAppSession(
+      'default',
+      leased
+        ? {
+            lease: {
+              leaseId: lease.leaseId,
+              tenantId: lease.tenantId,
+              runId: lease.runId,
+              leaseBackend: lease.backend,
+              leaseProvider: 'proxy',
+              clientId: 'client-a',
+              deviceKey: 'ios:SIM-001',
+            },
+          }
+        : {},
+    ),
   );
   gestureRuntimeSpies.captureSnapshot.mockResolvedValue({
     backend: 'xctest',
@@ -167,8 +173,36 @@ test('a batch step that names another lease id is refused when the batch sends t
   expect(JSON.stringify(response)).toContain('LEASE_SESSION_MISMATCH');
 });
 
-test('a batch step that names another tenant is refused', async () => {
+test('a batch step that names another tenant is refused on a leased session and keeps earlier results', async () => {
   const { handler, leaseId } = leasedRouter();
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'batch',
+    positionals: [],
+    flags: {
+      batchSteps: [
+        { command: 'snapshot', positionals: [], flags: {} },
+        { command: 'snapshot', positionals: [], flags: { tenant: 'tenant-b' } },
+      ],
+    },
+    meta: { leaseId, tenantId: 'tenant-a' },
+  });
+
+  expect(response.ok, JSON.stringify(response)).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('UNAUTHORIZED');
+  expect(response.error.details).toMatchObject({
+    reason: 'LEASE_SESSION_MISMATCH',
+    field: 'tenantId',
+    step: 2,
+  });
+  expect(JSON.stringify(response.error.details)).toContain('partialResults');
+});
+
+test('a batch step tenant flag does not refuse a step on an unleased session', async () => {
+  const { handler } = leasedRouter({ leased: false });
 
   const response = await handler({
     token: 'test-token',
@@ -178,10 +212,8 @@ test('a batch step that names another tenant is refused', async () => {
     flags: {
       batchSteps: [{ command: 'snapshot', positionals: [], flags: { tenant: 'tenant-b' } }],
     },
-    meta: { leaseId, tenantId: 'tenant-a' },
+    meta: { tenantId: 'tenant-a' },
   });
 
-  expect(response.ok, JSON.stringify(response)).toBe(false);
-  expect(JSON.stringify(response)).toContain('LEASE_SESSION_MISMATCH');
-  expect(JSON.stringify(response)).toContain('tenantId');
+  expect(response.ok, JSON.stringify(response)).toBe(true);
 });

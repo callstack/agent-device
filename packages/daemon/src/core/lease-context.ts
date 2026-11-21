@@ -168,7 +168,15 @@ export function assertRequestHoldsSessionLease(
   const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
   if (!sessionLease) return undefined;
   assertRequestPresentsLease(resolveLeaseScope(req), sessionLease);
+  // Meta wins the tenant (HTTP intake may attest it), so a tenant flag that names another tenant,
+  // such as a batch step's, is compared on its own.
+  assertMatchingTenant(readTenantFlag(req.flags), sessionLease.tenantId);
   return sessionLease;
+}
+
+function readTenantFlag(flags: DaemonRequest['flags']): string | undefined {
+  const tenant = (flags as Record<string, unknown> | undefined)?.tenant;
+  return typeof tenant === 'string' ? tenant : undefined;
 }
 
 /** Refuses a request that does not send `leaseId`, the credential of the lease it acts on. */
@@ -180,7 +188,15 @@ function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): v
       hint: 'Send the leaseId that the allocation returned (meta.leaseId or the leaseId param). From the CLI, open the session through connect proxy or connect --remote-config and keep the same --session; raw --tenant and --session flags do not send it.',
     });
   }
-  assertMatchingLeaseField('leaseId', requestScope.leaseId, leaseId);
+  const requested = canonicalLeaseId(requestScope.leaseId);
+  if (requested !== undefined && requested === canonicalLeaseId(leaseId)) return;
+  throw leaseFieldMismatchError('leaseId');
+}
+
+/** A lease id is 16 to 128 hex digits; case and surrounding space do not change it. */
+function canonicalLeaseId(raw: string | undefined): string | undefined {
+  const value = (raw ?? '').trim();
+  return /^[a-f0-9]{16,128}$/i.test(value) ? value.toLowerCase() : undefined;
 }
 
 /**
@@ -205,7 +221,7 @@ export function assertRequestPresentsLease(
  * Refuses a tenant that does not name the expected tenant once both are normalized. An empty or
  * malformed tenant names none, so it differs.
  */
-export function assertMatchingTenant(requestValue?: string, expectedValue?: string): void {
+function assertMatchingTenant(requestValue?: string, expectedValue?: string): void {
   if (requestValue === undefined) return;
   const requested = normalizeTenantId(requestValue);
   if (requested !== undefined && requested === normalizeTenantId(expectedValue)) return;

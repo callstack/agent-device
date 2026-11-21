@@ -198,6 +198,15 @@ test('install_from_source on a leased session needs the lease id in its params',
     }),
     'runId',
   );
+  expectLeaseFieldRefusal(
+    await world.rpc('agent_device.install_from_source', {
+      ...install,
+      ...OWNER_SCOPE,
+      leaseBackend: 'android-instance',
+      leaseId: world.leaseId,
+    }),
+    'leaseBackend',
+  );
 });
 
 test('an open of an existing leased session checks the lease id before the proxy metadata', async () => {

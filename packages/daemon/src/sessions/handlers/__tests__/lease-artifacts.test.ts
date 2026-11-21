@@ -131,7 +131,7 @@ test('artifacts by an active lease id checks its labels before provider dispatch
   assert.deepEqual(world.providerCalls, []);
 });
 
-test('artifacts with an active lease id checks the tenant before the tenant-filtered lookup', async () => {
+test('artifacts with an active lease id checks the tenant before the tenant-filtered lookup and accepts canonical spellings', async () => {
   const world = createWorld();
   const lease = await allocateLease(world, 'tenant-a', 'run-a');
 
@@ -153,9 +153,10 @@ test('artifacts with an active lease id checks the tenant before the tenant-filt
     tenantId: ' tenant-a ',
     runId: 'run-a',
     providerSessionId: 'session-tenant-a',
-    leaseId: lease.leaseId,
+    leaseId: ` ${lease.leaseId.toUpperCase()} `,
   });
   assert.equal(padded.ok, true);
+  assert.equal(world.providerCalls.at(-1)?.leaseId, lease.leaseId);
 });
 
 test('artifacts refuses a released provider session after the retention window', async () => {

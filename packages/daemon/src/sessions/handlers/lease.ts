@@ -552,13 +552,13 @@ async function listCloudArtifactsForRequest(
     );
   }
   // A presented active lease id is checked with its labels first, before any tenant-filtered lookup.
-  if (leaseScope.leaseId) {
-    assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, leaseScope.leaseId);
-  }
+  const activeLeaseId = leaseScope.leaseId
+    ? assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, leaseScope.leaseId)
+    : undefined;
   const providerSession = resolveProviderSession(leaseRegistry, leaseScope, providerSessionId);
   const result = await cloudArtifactProvider?.listCloudArtifacts?.({
     provider: leaseScope.leaseProvider,
-    leaseId: providerSession?.leaseId ?? leaseScope.leaseId,
+    leaseId: providerSession?.leaseId ?? activeLeaseId ?? leaseScope.leaseId,
     providerSessionId,
   });
   if (!result) {
@@ -593,16 +593,18 @@ function resolveProviderSession(
 /**
  * While its lease is active, a provider session belongs to the client that holds that lease: the
  * lookup needs the lease id and matching labels, as any request on the leased session does
- * (ADR 0007). A released provider session keeps its tenant-scoped retention lookup.
+ * (ADR 0007). A released provider session keeps its tenant-scoped retention lookup. Returns the
+ * active lease's canonical id.
  */
 function assertRequestHoldsActiveProviderLease(
   leaseRegistry: LeaseRegistry,
   leaseScope: ReturnType<typeof resolveLeaseScope>,
   leaseId: string,
-): void {
+): string | undefined {
   const lease = leaseRegistry.inspectActiveLease(leaseId);
-  if (!lease) return;
+  if (!lease) return undefined;
   assertRequestPresentsLease(leaseScope, { ...lease, leaseBackend: lease.backend });
+  return lease.leaseId;
 }
 
 function readFlagString(
