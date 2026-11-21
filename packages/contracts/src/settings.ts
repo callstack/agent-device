@@ -128,7 +128,7 @@ export function settingsAppScope(
  * The `settings` refusal family: a request is told what its input cannot do, paired with
  * `dispatched: no`, because the refusal runs before a device is touched.
  */
-export const SETTINGS_REFUSAL_REASONS = {
+const SETTINGS_REFUSAL_REASONS = {
   /**
    * The reason a request is told its app names nothing: what a caller does about it — drop the app
    * or move to a target whose mutation is app-scoped — is the reason's meaning, so a driver can

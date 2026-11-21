@@ -34,7 +34,7 @@ export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;
 
 /** Why a `gesture` input cannot be planned into an executable trajectory. */
-export const GESTURE_PLAN_REFUSAL_REASONS = {
+const GESTURE_PLAN_REFUSAL_REASONS = {
   // Two tap contacts share coordinates, so one contact would press where another already rests.
   tapDuplicatePoint: { reason: 'GESTURE_TAP_DUPLICATE_POINT' },
   // The gesture path has fewer usable samples than any recognizable motion needs.

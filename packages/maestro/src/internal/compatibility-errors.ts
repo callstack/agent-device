@@ -1,7 +1,7 @@
 import { AppError, type AppErrorDetails, type ReasonTable } from '@agent-device/kernel/errors';
 
 /** Why a Maestro-compatibility step ends its run. */
-export const MAESTRO_COMPATIBILITY_REASONS = {
+const MAESTRO_COMPATIBILITY_REASONS = {
   // A Maestro assertion or condition failed, so the replayed flow does not match the recording.
   testFailure: { reason: 'maestro-test-failure' },
 } as const satisfies ReasonTable<'replay'>;

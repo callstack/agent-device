@@ -19,7 +19,7 @@ const REPLAY_TEST_TIMEOUT_HINT =
   'Replay test timeouts are cooperative; the active command may take a short grace period to stop.';
 
 /** Why a `replay --test` attempt ends as an infrastructure failure on the timeout path. */
-export const REPLAY_TEST_TIMEOUT_REASONS = {
+const REPLAY_TEST_TIMEOUT_REASONS = {
   // The cooperative deadline ended the attempt while the abandoned replay may still run.
   timeout: { reason: 'timeout' },
   // Cleanup of an abandoned replay is still pending, so the suite stops instead of retrying.

@@ -18,7 +18,7 @@ import type { ScreenshotCaptureBackend } from './screenshot.ts';
 export type { ScreenshotCaptureFacts, ScreenshotOptions } from './interactor-types.ts';
 
 /** Why this capture seam refuses an option the selected capture owner cannot honour. */
-export const SCREENSHOT_CAPTURE_REFUSAL_REASONS = {
+const SCREENSHOT_CAPTURE_REFUSAL_REASONS = {
   // `--capture-backend` names a backend the selected capture owner does not declare.
   captureBackendUnsupported: { reason: 'screenshot-capture-backend-unsupported' },
   // `--screen-mask` was asked for on a device whose capture path cannot read the screen mask.

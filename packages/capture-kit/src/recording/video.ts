@@ -15,7 +15,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { hasPlayableWebmStructure } from './video-webm.ts';
 
 /** Why the MP4 playability validator cannot answer. */
-export const VIDEO_VALIDATOR_REFUSAL_REASONS = {
+const VIDEO_VALIDATOR_REFUSAL_REASONS = {
   // The Swift compile is still running past the caller's wait; try the stop again.
   compileTimeout: { reason: 'video_validator_compile_timeout' },
   // The validator could not be built or run at all, so playability stays unverified.

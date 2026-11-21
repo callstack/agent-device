@@ -65,7 +65,7 @@ import { DAEMON_PROGRESS_CHANNEL_ENV } from './daemon-startup-phases.ts';
  * is a fail-closed answer: the state dir, the startup, or the admission gate does not resolve to a
  * lifetime this host started.
  */
-export const DAEMON_OWNERSHIP_REFUSAL_REASONS = {
+const DAEMON_OWNERSHIP_REFUSAL_REASONS = {
   // Replay's admission gate is closed, so no new daemon startup is allowed.
   startupAdmissionClosed: { reason: 'daemon_startup_admission_closed' },
   // The private replay state dir does not resolve to the one this host sealed for that capability.

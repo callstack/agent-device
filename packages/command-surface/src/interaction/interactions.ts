@@ -162,7 +162,7 @@ export const interactionDaemonWriters = {
 } satisfies Record<string, DaemonWriter>;
 
 /** What `fill --text-stdin` refuses in the caller's arguments before it reads anything. */
-export const FILL_TEXT_STDIN_REFUSAL_REASONS = {
+const FILL_TEXT_STDIN_REFUSAL_REASONS = {
   // The stdin text mode's positional list does not decode to exactly one target.
   stdinTargetInvalid: { reason: 'fill_text_stdin_target_invalid' },
   // The stdin text mode was also given a text argument, so the two sources disagree.

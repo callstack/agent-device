@@ -17,7 +17,7 @@ import type { RuntimeOperationFact } from './platform-runtime.ts';
 export type { SnapshotRuntimeAcquiredResult, SnapshotResult } from './interactor-types.ts';
 
 /** Why this snapshot seam refuses before or after the interactor runs. */
-export const SNAPSHOT_RUNTIME_REFUSAL_REASONS = {
+const SNAPSHOT_RUNTIME_REFUSAL_REASONS = {
   // An acquired iOS snapshot reached a host with no presentation owner to publish it through.
   presenterMissing: { reason: 'ios-snapshot-presenter-missing' },
 } as const satisfies ReasonTable<'snapshot'>;

@@ -78,7 +78,7 @@ function normalizeHumanControlHold(value: unknown): HumanControlHold {
 }
 
 /** Why this client refuses a daemon answer it cannot turn into a lease. */
-export const LEASE_CLIENT_REFUSAL_REASONS = {
+const LEASE_CLIENT_REFUSAL_REASONS = {
   // The daemon's lease answer is missing an identity field the client must key on.
   invalidResponse: { reason: 'INVALID_LEASE_RESPONSE' },
 } as const satisfies ReasonTable<'leases'>;

@@ -22,7 +22,7 @@ import type {
 } from './application-lifecycle-runtime.ts';
 
 /** Why `open` refuses before it resolves an interactor for the chosen owner. */
-export const APPLICATION_LIFECYCLE_ADMISSION_REFUSAL_REASONS = {
+const APPLICATION_LIFECYCLE_ADMISSION_REFUSAL_REASONS = {
   // --launch-console was asked for on an app-launch owner that cannot stream a console.
   launchConsoleUnadmitted: { reason: 'launch-console-owner-unadmitted' },
 } as const satisfies ReasonTable<'open'>;

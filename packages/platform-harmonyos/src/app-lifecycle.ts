@@ -203,7 +203,7 @@ function combineHarmonySignals(
 const HARMONY_ABILITY_NAME = /^[A-Za-z][A-Za-z0-9_.]*$/;
 
 /** Why a HarmonyOS app-open argument is refused before any device is touched. */
-export const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
+const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
   // --activity is not an ability name the module.json5 format can carry.
   invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
 } as const satisfies ReasonTable<'open'>;

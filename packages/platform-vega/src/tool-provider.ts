@@ -54,7 +54,7 @@ export function createLocalVegaCliAdapter(host: HostEnvironment): VegaCliAdapter
  * an ambient environment (#3794).
  */
 /** Why this tool provider refuses when its CLI adapter was never bound to a host. */
-export const VEGA_TOOL_PROVIDER_REFUSAL_REASONS = {
+const VEGA_TOOL_PROVIDER_REFUSAL_REASONS = {
   // A Vega CLI call reached the scope default: no caller composed a host-bound adapter first.
   adapterHostUnbound: { reason: 'vega-adapter-host-unbound' },
 } as const satisfies ReasonTable<'Vega CLI adapter'>;

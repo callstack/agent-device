@@ -7,7 +7,7 @@ import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
  * provider, which is a composition bug, so every capability answers closed instead of borrowing a
  * host it was never given (#3794).
  */
-export const WEB_PROVIDER_COMPOSITION_REFUSAL_REASONS = {
+const WEB_PROVIDER_COMPOSITION_REFUSAL_REASONS = {
   // A web-device request arrived with no composed provider for it.
   providerMissing: { reason: 'web-provider-missing' },
 } as const satisfies ReasonTable<'web provider'>;
