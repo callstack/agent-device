@@ -444,7 +444,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     linux: linux.contract(
       'packages/platform-linux/src/__tests__/clipboard.test.ts',
-      'writeLinuxClipboard uses xclip with stdin on X11',
+      'writeLinuxClipboard pipes the text to xclip on X11',
       'Linux clipboard writes through the supported X11 host-tool seam',
     ),
   },
