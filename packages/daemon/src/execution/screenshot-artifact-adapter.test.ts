@@ -130,7 +130,7 @@ test('a capture without a destination lands on the stable session path and stays
   expect(second.cleanup).toBeUndefined();
 });
 
-test('crop staging runs inside the session dir and its cleanup spares the published destination', async () => {
+test('crop staging mints a per-request dir inside the session staging root and its cleanup spares the published destination', async () => {
   const sessionDir = mkdtempForTestSync('crop-staging-session-');
   const stagingDir = resolveSessionScreenshotStagingDir(sessionDir);
   const destination = path.join(sessionDir, 'crop.png');
@@ -139,16 +139,32 @@ test('crop staging runs inside the session dir and its cleanup spares the publis
   }).reserveOutput({ kind: 'path', path: destination }, outputOptions);
 
   expect(reserved.path.startsWith(stagingDir)).toBe(true);
+  const stagingUnit = path.dirname(reserved.path);
+  expect(stagingUnit).not.toBe(stagingDir);
   fs.writeFileSync(reserved.path, 'cropped image');
   await reserved.publish();
 
   expect(fs.readFileSync(destination, 'utf8')).toBe('cropped image');
   await reserved.cleanup?.();
-  expect(fs.existsSync(stagingDir)).toBe(false);
+  expect(fs.existsSync(stagingUnit)).toBe(false);
+  expect(fs.readdirSync(stagingDir)).toEqual([]);
   expect(fs.readFileSync(destination, 'utf8')).toBe('cropped image');
+
+  // The next request mints its own staging dir, so two publishes never share one path.
+  const next = await createDaemonScreenshotArtifactAdapter(true, undefined, {
+    stagingDir,
+  }).reserveOutput({ kind: 'path', path: destination }, outputOptions);
+  try {
+    expect(path.dirname(next.path).startsWith(stagingDir)).toBe(true);
+    expect(path.dirname(next.path)).not.toBe(stagingUnit);
+    expect(fs.existsSync(path.dirname(next.path))).toBe(true);
+  } finally {
+    await next.cleanup?.();
+  }
+  expect(fs.existsSync(path.dirname(next.path))).toBe(false);
 });
 
-test('a crop publish failure leaves the session staging dir removable and the destination absent', async () => {
+test('a crop publish failure leaves only the request staging dir removable and the destination absent', async () => {
   const sessionDir = mkdtempForTestSync('crop-staging-failure-');
   const stagingDir = resolveSessionScreenshotStagingDir(sessionDir);
   const destination = path.join(sessionDir, 'elsewhere.png');
@@ -169,5 +185,6 @@ test('a crop publish failure leaves the session staging dir removable and the de
     await reserved.cleanup?.();
   }
   expect(fs.existsSync(destination)).toBe(false);
-  expect(fs.existsSync(stagingDir)).toBe(false);
+  expect(fs.existsSync(path.dirname(reserved.path))).toBe(false);
+  expect(fs.readdirSync(stagingDir)).toEqual([]);
 });

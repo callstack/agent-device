@@ -14,7 +14,7 @@ import path from 'node:path';
 export type DaemonScreenshotArtifactDefaults = Readonly<{
   /** Stable destination for this surface's captures without an explicit destination. */
   defaultPath?: string;
-  /** Root the crop publish stages into and owns. */
+  /** Root the crop publish stages into; each request owns the minted dir beneath it. */
   stagingDir?: string;
 }>;
 
@@ -94,9 +94,11 @@ async function reserveCroppedOutput(
   stagingDir: string | undefined,
 ): Promise<ReservedOutputFile> {
   const destination = await resolveScreenshotDestination(outputPath);
-  const stagingRoot =
-    stagingDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-crop-')));
-  await fs.mkdir(stagingRoot, { recursive: true });
+  const stagingParent = stagingDir ?? os.tmpdir();
+  await fs.mkdir(stagingParent, { recursive: true });
+  // One minted dir per request: concurrent crop publishes stage side by side without
+  // a lock, and a cleanup never removes a sibling request's staging dir.
+  const stagingRoot = await fs.mkdtemp(path.join(stagingParent, 'agent-device-crop-'));
   const stagingPath = path.join(stagingRoot, `screenshot${path.extname(outputPath) || '.png'}`);
   const cleanup = async () => {
     await fs.rm(stagingRoot, { recursive: true, force: true }).catch((error: unknown) => {

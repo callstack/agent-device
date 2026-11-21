@@ -38,8 +38,10 @@ export function resolveSessionFallbackScreenshotPath(sessionDir: string): string
 }
 
 /**
- * Staging root for one crop publish into an explicit destination. The publish owns this
- * dir and removes it, so nothing else may store artifacts there.
+ * Staging root for the crop publishes this session stages into an explicit destination.
+ * The root stays for the session's lifetime; each publish mints and removes its own
+ * request dir inside it, so concurrent publishes never share one staging path and
+ * nothing else may store artifacts here.
  */
 export function resolveSessionScreenshotStagingDir(sessionDir: string): string {
   return path.join(resolveSessionScreenshotsDir(sessionDir), 'crop-staging');
