@@ -318,3 +318,37 @@ test.each([
     }
   },
 );
+
+// The cli_parse_failed diagnostic lands verbatim in the --debug transcript, and an
+// INVALID_ARGS message embeds the raw argv, so the message scrubs like the error views.
+test('a --debug parse failure scrubs the argv echo out of the cli_parse_failed diagnostic', async () => {
+  const restoreEnv = installIsolatedCliTestEnv();
+  const exitSpy = installTerminatingExitSpy();
+  const stdout = beginStdoutCapture();
+  const stderr = beginStderrCapture();
+  const sendToDaemon = async (): Promise<DaemonResponse> => {
+    throw new Error('sendToDaemon should not be called for a parse failure');
+  };
+
+  let exitCode: number;
+  try {
+    exitCode = await runCliExpectingExit(
+      ['fill', '--debug', '--platform', 'Sup3rSecretPass!2026'],
+      { sendToDaemon },
+    );
+  } finally {
+    stdout.restore();
+    stderr.restore();
+    exitSpy.restore();
+    restoreEnv();
+  }
+
+  assert.equal(exitCode, 1);
+  const diagnostic = stderr
+    .read()
+    .split('\n')
+    .find((line) => line.includes('cli_parse_failed'));
+  assert.ok(diagnostic, `expected a cli_parse_failed diagnostic, got:\n${stderr.read()}`);
+  assert.match(diagnostic, /Invalid platform: <redacted len=20>/);
+  assert.equal(diagnostic.includes('Sup3rSecretPass!2026'), false);
+});

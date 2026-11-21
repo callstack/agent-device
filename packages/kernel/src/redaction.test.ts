@@ -121,6 +121,16 @@ test.each([
     'Batch step 1: device "iPhone 16" conflicts with the device pin from project config file /private/tmp/agent-device-test-run-59442-ELNJ5D/agent-device-config-ArPrB8/project/agent-device.json.',
   ],
   [
+    'a standard base64 credential carries a slash and still redacts',
+    'received 3: aB3dEfGh1jKlMn/oPqRsTuVw+xYz==',
+    'received 3: <redacted len=30>',
+  ],
+  [
+    'a URL whose query carries a credential redacts',
+    'Invalid platform: https://api.example.com/v1/verify?key=aB3dEfGh1jKlMn',
+    'Invalid platform: <redacted len=52>',
+  ],
+  [
     'ordinary short arguments display unchanged',
     'press accepts at most 2 positional argument(s), received 3: @e1 hello world',
     'press accepts at most 2 positional argument(s), received 3: @e1 hello world',

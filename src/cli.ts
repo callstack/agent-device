@@ -80,6 +80,10 @@ const printHumanError = async (
   ...args: Parameters<typeof import('./cli/failure-output.ts').printHumanError>
 ): Promise<void> => (await import('./cli/failure-output.ts')).printHumanError(...args);
 
+const exitOnParseFailure = async (
+  ...args: Parameters<typeof import('./cli/failure-output.ts').exitOnParseFailure>
+): Promise<never> => (await import('./cli/failure-output.ts')).exitOnParseFailure(...args);
+
 const printJson = (
   result: { success: true; data?: unknown } | { success: false; error: NormalizedError },
 ): Promise<void> =>
@@ -324,30 +328,6 @@ async function parseCliInputOrExit(
   }
 
   return { parsed, command: parsed.command, positionals: parsed.positionals };
-}
-
-async function exitOnParseFailure(
-  error: unknown,
-  argv: string[],
-  options: { jsonRequested: boolean; debugEnabled: boolean },
-): Promise<never> {
-  emitDiagnostic({
-    level: 'error',
-    phase: 'cli_parse_failed',
-    data: {
-      error: error instanceof Error ? error.message : String(error),
-    },
-  });
-  const normalized = normalizeError(error, {
-    diagnosticId: getDiagnosticsMeta().diagnosticId,
-    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
-  });
-  if (options.jsonRequested) {
-    await printJson({ success: false, error: normalized });
-  } else {
-    await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
-  }
-  return await exitAfterFlush(1);
 }
 
 type CliRunContext = {

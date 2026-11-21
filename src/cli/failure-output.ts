@@ -2,12 +2,20 @@ import fs from 'node:fs';
 import { formatHumanError } from '@agent-device/command-output';
 import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  getDiagnosticsMeta,
+} from '@agent-device/host-kit/diagnostics';
+import {
   AppError,
+  normalizeError,
   type DiagnosticsRecordRef,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
+import { redactSecretLikeText } from '@agent-device/kernel/redaction';
+import { printJson } from '../commands/output/json.ts';
 import { commandSynopsis, parseRawArgs } from './parser/args.ts';
-import { writeStderr } from './process-exit.ts';
+import { exitAfterFlush, writeStderr } from './process-exit.ts';
 
 /** Where the `--debug` log tail printed after a failure comes from. */
 export type FailureLogSource = {
@@ -54,6 +62,40 @@ async function synopsisForNextStep(command: string): Promise<string | undefined>
   const synopsis = await commandSynopsis(command);
   if (!synopsis) return undefined;
   return synopsis.length <= SYNOPSIS_LIMIT ? synopsis : `see agent-device help ${command}`;
+}
+
+/**
+ * Exits a failed parse: the `cli_parse_failed` diagnostic, the `--json` envelope or the human
+ * block, then exit 1. The diagnostic lands verbatim in the `--debug` transcript, and an
+ * INVALID_ARGS message embeds the raw argv the parse refused, so its message gets the display
+ * scrub the error views apply. Every other code keeps the message as thrown.
+ */
+export async function exitOnParseFailure(
+  error: unknown,
+  argv: string[],
+  options: { jsonRequested: boolean; debugEnabled: boolean },
+): Promise<never> {
+  const message = error instanceof Error ? error.message : String(error);
+  emitDiagnostic({
+    level: 'error',
+    phase: 'cli_parse_failed',
+    data: {
+      error:
+        error instanceof AppError && error.code === 'INVALID_ARGS'
+          ? redactSecretLikeText(message)
+          : message,
+    },
+  });
+  const normalized = normalizeError(error, {
+    diagnosticId: getDiagnosticsMeta().diagnosticId,
+    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
+  });
+  if (options.jsonRequested) {
+    await printJson({ success: false, error: normalized });
+  } else {
+    await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
+  }
+  return await exitAfterFlush(1);
 }
 
 /**
