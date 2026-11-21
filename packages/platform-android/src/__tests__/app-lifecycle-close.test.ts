@@ -135,9 +135,9 @@ test('closeAndroidApp waits until package process exits after force-stop', async
   assert.deepEqual(calls, [
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'am', 'force-stop', 'com.example.app'],
+    ['shell', 'pidof', 'com.example.app'],
+    ['shell', 'pidof', 'com.example.app'],
     ['shell', 'dumpsys', 'window', 'windows'],
-    ['shell', 'pidof', 'com.example.app'],
-    ['shell', 'pidof', 'com.example.app'],
   ]);
 });
 
@@ -176,7 +176,7 @@ test('closeAndroidApp waits past 2s for a killed process that exits slowly', asy
 });
 
 test.each([
-  ['foreground', 2_000, 1],
+  ['foreground', 2_000, 2],
   ['exit', 10_000, 201],
 ] as const)(
   'closeAndroidApp refuses an exhausted %s fence',
@@ -188,9 +188,12 @@ test.each([
         {
           exec: async (args) => {
             calls.push(args);
+            const stopped = calls.some((call) => call[1] === 'am');
             const stdout =
               args[1] === 'pidof'
-                ? '12345\n'
+                ? phase === 'exit' || !stopped
+                  ? '12345\n'
+                  : ''
                 : args[1] === 'dumpsys'
                   ? `mCurrentFocus=Window{42 u0 ${phase === 'foreground' ? 'com.example.app/.MainActivity' : 'com.android.launcher/.Launcher'}}\n`
                   : '';
@@ -432,8 +435,48 @@ test('closeAndroidApp accepts a new process once the killed ones have exited', a
         ]);
       },
     );
-    assert.equal(calls.at(-1)?.[1], 'pidof', 'the exit fence ended on the last pid read');
+    assert.equal(calls.at(-1)?.[1], 'dumpsys', 'the foreground check ran last');
     assert.ok(Date.now() < 2_000, 'a new process is not waited out');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('closeAndroidApp refuses a new process that is foreground once the killed ones have exited', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          const focus =
+            Date.now() < 100 ? 'com.android.launcher/.Launcher' : 'com.example.app/.MainActivity';
+          return {
+            stdout:
+              args[1] === 'dumpsys'
+                ? `mCurrentFocus=Window{43 u0 ${focus}}\n`
+                : args[1] === 'pidof'
+                  ? Date.now() < 100
+                    ? '12345\n'
+                    : '67890\n'
+                  : '',
+            stderr: '',
+            exitCode: 0,
+          };
+        },
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        const rejection = assert.rejects(
+          closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+          (error: unknown) =>
+            error instanceof AppError &&
+            error.details?.reason === 'android-app-close-timeout' &&
+            error.details?.phase === 'foreground',
+        );
+        await Promise.all([rejection, vi.runAllTimersAsync()]);
+      },
+    );
   } finally {
     vi.useRealTimers();
   }
