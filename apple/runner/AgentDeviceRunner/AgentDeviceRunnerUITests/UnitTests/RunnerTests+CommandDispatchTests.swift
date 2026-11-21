@@ -180,6 +180,7 @@ extension RunnerTests {
     }
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     XCTAssertNil(context.observation)
+    XCTAssertFalse(context.servesSpringboard)
     XCTAssertEqual(pendingTargetActivation?.priorState, Int(XCUIApplication.State.runningBackground.rawValue))
     XCTAssertEqual(pendingTargetActivation?.reason, "stale_target")
   }
@@ -198,6 +199,7 @@ extension RunnerTests {
       return XCTFail("a tap over SpringBoard must prepare a context")
     }
     XCTAssertTrue(context.app === springboard)
+    XCTAssertTrue(context.servesSpringboard)
     XCTAssertEqual(app.state, .runningBackground)
     XCTAssertNil(pendingTargetActivation)
 
@@ -208,6 +210,7 @@ extension RunnerTests {
       return XCTFail("a tap the hit test does not answer must keep the foreground repair")
     }
     XCTAssertFalse(repaired.app === springboard)
+    XCTAssertFalse(repaired.servesSpringboard)
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     XCTAssertEqual(pendingTargetActivation?.reason, "stale_target")
   }

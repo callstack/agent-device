@@ -117,6 +117,8 @@ extension RunnerTests {
     /// Set when `app` is a system surface served in place over the still-bound session app (#2438).
     var systemSurface: SystemSurfaceHost? = nil
     var observation: SnapshotObservationPayload? = nil
+    /// Set when `app` is SpringBoard serving a coordinate tap in place (iOS only).
+    var servesSpringboard = false
   }
 
   enum ActiveCommandPreparation {
@@ -389,7 +391,7 @@ extension RunnerTests {
       return response
     case .context(let context):
       activeApp = context.app
-      activeAppBundleId = context.app === springboard
+      activeAppBundleId = context.servesSpringboard
         ? Self.springboardBundleId
         : context.systemSurface?.bundleId ?? mainOwned.bundleId
     }
@@ -532,7 +534,7 @@ extension RunnerTests {
 #endif
     }
     if routeToSpringboard {
-      return .context(ActiveCommandContext(app: springboard))
+      return .context(ActiveCommandContext(app: springboard, servesSpringboard: true))
     }
     switch command.traits.launchPolicy {
     case .noApp:
@@ -582,7 +584,7 @@ extension RunnerTests {
         return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
       }
       if coordinateTapLandsOnSpringboard(command) {
-        return .context(ActiveCommandContext(app: springboard))
+        return .context(ActiveCommandContext(app: springboard, servesSpringboard: true))
       }
       return prepareActivatedTarget(command: command)
     }
