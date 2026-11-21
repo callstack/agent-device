@@ -50,6 +50,7 @@ test('closeAndroidApp waits until package is no longer foreground', async () => 
     ['shell', 'am', 'force-stop', 'com.example.app'],
     ['shell', 'dumpsys', 'window', 'windows'],
     ['shell', 'dumpsys', 'window', 'windows'],
+    ['shell', 'dumpsys', 'window', 'windows'],
   ]);
 });
 
@@ -89,6 +90,7 @@ test('closeAndroidApp returns after force-stop when package is already not foreg
   assert.deepEqual(calls, [
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'am', 'force-stop', 'com.example.app'],
+    ['shell', 'dumpsys', 'window', 'windows'],
     ['shell', 'dumpsys', 'window', 'windows'],
   ]);
 });
@@ -135,6 +137,7 @@ test('closeAndroidApp waits until package process exits after force-stop', async
   assert.deepEqual(calls, [
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'am', 'force-stop', 'com.example.app'],
+    ['shell', 'dumpsys', 'window', 'windows'],
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'dumpsys', 'window', 'windows'],
@@ -176,7 +179,7 @@ test('closeAndroidApp waits past 2s for a killed process that exits slowly', asy
 });
 
 test.each([
-  ['foreground', 2_000, 2],
+  ['foreground', 2_000, 1],
   ['exit', 10_000, 201],
 ] as const)(
   'closeAndroidApp refuses an exhausted %s fence',

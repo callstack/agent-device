@@ -702,16 +702,17 @@ type AndroidStopFencePhase = 'foreground' | 'exit';
 /**
  * The fence that expired before the package stopped, or undefined once it stopped. `killed` holds
  * the pids that ran before `am force-stop`. The package has stopped once none of them runs and the
- * package is not foreground, checked last so a relaunch that is on screen still fails. A new pid
- * that is not foreground is a process Android started on its own, for a provider or broadcast
- * client (Settings on Android 17), not the app the close ended.
+ * package is not foreground. A new pid that is not foreground is a process Android started on its
+ * own, for a provider or broadcast client (Settings on Android 17), not the app the close ended.
  */
 async function waitForAndroidPackageStopped(
   device: DeviceInfo,
   packageName: string,
   killed: ReadonlySet<string>,
 ): Promise<AndroidStopFencePhase | undefined> {
+  if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
   if (!(await waitForAndroidKilledProcessesExit(device, packageName, killed))) return 'exit';
+  // Read again last: a relaunch that is on screen once the killed processes exit still fails.
   if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
   return undefined;
 }
