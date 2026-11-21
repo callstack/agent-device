@@ -136,7 +136,7 @@ async function probeRunningDevice(
   const [name, booted, target, description] = await Promise.all([
     resolveDeviceName(context, entry),
     isBooted(context, entry.serial),
-    resolveTarget(context, entry.serial),
+    resolveTargetOrUnknown(context, entry.serial),
     readDeviceDescription(context, entry.serial),
   ]);
   return {
@@ -216,6 +216,28 @@ async function isBooted(context: AndroidInventoryContext, serial: string): Promi
   } catch (error) {
     if (context.scope.signal.aborted) throw error;
     return false;
+  }
+}
+
+/**
+ * A busy device that times out a target probe stays listed with an unknown target, so it cannot
+ * fail a request that selects another device. Every other failure still fails discovery.
+ */
+async function resolveTargetOrUnknown(
+  context: AndroidInventoryContext,
+  serial: string,
+): Promise<'mobile' | 'tv' | undefined> {
+  try {
+    return await resolveTarget(context, serial);
+  } catch (error) {
+    const appError = asAppError(error);
+    if (context.scope.signal.aborted || appError.details?.adbFailure !== 'timeout') throw error;
+    context.scope.diagnostics.emit({
+      level: 'warn',
+      phase: 'android_inventory_target_probe_failed',
+      data: { serial, adbFailure: 'timeout' },
+    });
+    return undefined;
   }
 }
 

@@ -199,6 +199,67 @@ test('Android inventory classifies a device by has-feature amazon.hardware.fire_
   assert.deepEqual(featureListProbeCalls, []);
 });
 
+test('Android inventory keeps a device whose feature probe times out from failing discovery of another', async () => {
+  const diagnostics: unknown[] = [];
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l') {
+      return result(
+        'List of devices attached\nemulator-5554 device model:Busy\nemulator-5556 device model:Idle\n',
+      );
+    }
+    if (key.includes('emulator-5554') && key.includes('pm\0list\0features')) {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    }
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  const devices = await createAndroidInventory(host).discover(
+    { androidAvdSelection: 'running-only' },
+    { ...scope, diagnostics: { emit: (event) => diagnostics.push(event) } },
+  );
+
+  assert.deepEqual(
+    devices.map((device) => [device.id, device.target]),
+    [
+      ['emulator-5554', undefined],
+      ['emulator-5556', 'mobile'],
+    ],
+  );
+  assert.deepEqual(diagnostics, [
+    {
+      level: 'warn',
+      phase: 'android_inventory_target_probe_failed',
+      data: { serial: 'emulator-5554', adbFailure: 'timeout' },
+    },
+  ]);
+});
+
+test('Android inventory still aborts when the request is cancelled during the feature probe', async () => {
+  const controller = new AbortController();
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l') return result('List of devices attached\nemulator-5554 device\n');
+    if (key.includes('pm\0list\0features')) {
+      controller.abort();
+      throw new AppError('COMMAND_FAILED', 'aborted', { timeoutMs: 10_000 });
+    }
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  await assert.rejects(
+    createAndroidInventory(host).discover(
+      { androidAvdSelection: 'running-only' },
+      { ...scope, signal: controller.signal },
+    ),
+    (error: unknown) => error instanceof AppError,
+  );
+});
+
 test('Android inventory fails closed when adb is unavailable', async () => {
   const host = createHost(async () => result(''), { adb: undefined });
   await assert.rejects(
