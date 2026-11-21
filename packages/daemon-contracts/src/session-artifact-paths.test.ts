@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireManagedSessionArtifactPath, resolveSessionDir } from './session-artifact-paths.ts';
+import {
+  requireManagedSessionArtifactPath,
+  resolveSessionDir,
+  resolveSessionFallbackScreenshotPath,
+  resolveSessionScreenshotNamePrefix,
+  resolveSessionScreenshotStagingDir,
+  resolveSessionScreenshotsDir,
+} from './session-artifact-paths.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
@@ -27,6 +34,41 @@ test('resolveSessionDir keeps every session dir beneath the sessions dir', () =>
       `expected resolveSessionDir(${JSON.stringify(name)}) to reject`,
     );
   }
+});
+
+test('the session screenshot paths sit in one screenshots dir with distinct names', () => {
+  const sessionDir = path.join(
+    mkdtempForTestSync('agent-device-screenshot-paths-'),
+    'sessions',
+    'one',
+  );
+  const screenshotsDir = resolveSessionScreenshotsDir(sessionDir);
+
+  assert.equal(screenshotsDir, path.join(sessionDir, 'screenshots'));
+  // Re-resolving is pure: the same request id predicts the same name prefix every time.
+  assert.equal(
+    resolveSessionScreenshotNamePrefix('req-1'),
+    resolveSessionScreenshotNamePrefix('req-1'),
+  );
+  assert.equal(resolveSessionScreenshotNamePrefix('req-1'), 'req-1');
+  // A request id carries characters a file name must not (`req:<seed>:<pid>:…`), and a
+  // capture without a request id still owns a stable prefix.
+  assert.equal(resolveSessionScreenshotNamePrefix('req:abc:1:2:x'), 'req_abc_1_2_x');
+  assert.equal(resolveSessionScreenshotNamePrefix(undefined), 'screenshot');
+  assert.equal(resolveSessionScreenshotNamePrefix(''), 'screenshot');
+  assert.equal(
+    resolveSessionFallbackScreenshotPath(sessionDir),
+    path.join(screenshotsDir, 'snapshot-fallback.png'),
+  );
+  assert.equal(
+    resolveSessionScreenshotStagingDir(sessionDir),
+    path.join(screenshotsDir, 'crop-staging'),
+  );
+  // A fallback capture writes its own name, so it never lands on a minted capture file.
+  assert.notEqual(
+    path.basename(resolveSessionFallbackScreenshotPath(sessionDir)),
+    `${resolveSessionScreenshotNamePrefix(undefined)}.png`,
+  );
 });
 
 const roots: string[] = [];

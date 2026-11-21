@@ -14,6 +14,40 @@ export function resolveSessionTestArtifactsRoot(sessionDir: string): string {
   return path.join(sessionDir, 'test-artifacts');
 }
 
+/** Root for the screenshots this session's daemon mints itself, so one dir owns them all. */
+export function resolveSessionScreenshotsDir(sessionDir: string): string {
+  return path.join(sessionDir, 'screenshots');
+}
+
+/**
+ * The file-name prefix for the screenshots one request mints into the session's
+ * screenshots dir: the request's own safe name, the same name its request log carries
+ * under `requests/`. The capture adapter appends a per-capture suffix, so the captures
+ * of one request never overwrite each other and no request overwrites another's.
+ */
+export function resolveSessionScreenshotNamePrefix(requestId: string | undefined): string {
+  return safeSessionName(requestId && requestId.length > 0 ? requestId : 'screenshot');
+}
+
+/**
+ * The stable destination for the sparse-snapshot fallback screenshot. A fallback names
+ * its own file instead of minting one, so the fallback evidence stays at one address a
+ * caller can check after the snapshot response is gone.
+ */
+export function resolveSessionFallbackScreenshotPath(sessionDir: string): string {
+  return path.join(resolveSessionScreenshotsDir(sessionDir), 'snapshot-fallback.png');
+}
+
+/**
+ * Staging root for the crop publishes this session stages into an explicit destination.
+ * The root stays for the session's lifetime; each publish mints and removes its own
+ * request dir inside it, so concurrent publishes never share one staging path and
+ * nothing else may store artifacts here.
+ */
+export function resolveSessionScreenshotStagingDir(sessionDir: string): string {
+  return path.join(resolveSessionScreenshotsDir(sessionDir), 'crop-staging');
+}
+
 /** Path to request-scoped daemon diagnostics for this session. */
 export function resolveSessionRequestLogPath(
   sessionDir: string,

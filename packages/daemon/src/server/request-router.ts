@@ -676,6 +676,7 @@ async function dispatchGenericForLockedScope(params: {
     req: lockedScope.req,
     session,
     hostCwd: sessionStore.host.cwd,
+    sessionDir: sessionStore.resolveSessionDir(lockedScope.sessionName),
     // `scroll` parses its distance/timing flags during admission, so the resolved context is
     // needed before the dispatcher builds its own.
     context: lockedScope.contextFromFlags(

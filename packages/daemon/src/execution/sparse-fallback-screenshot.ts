@@ -1,4 +1,5 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import { resolveSessionFallbackScreenshotPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
@@ -41,6 +42,8 @@ export async function captureSparseFallbackScreenshot(
     session: SessionState | undefined;
     sessionName: string;
     logPath: string;
+    /** This session's artifact directory: the base of the fallback's stable destination. */
+    sessionDir?: string;
     verdict: SnapshotQualityVerdict | undefined;
   } & ScreenshotRuntimeBindings,
 ): Promise<SparseFallbackScreenshot | undefined> {
@@ -71,6 +74,7 @@ async function captureFallbackScreenshot(
     session: SessionState;
     sessionName: string;
     logPath: string;
+    sessionDir?: string;
   } & ScreenshotRuntimeBindings,
 ): Promise<Readonly<{ path: string; displayRotation?: DeviceRotation }> | undefined> {
   const { req, session } = params;
@@ -89,8 +93,12 @@ async function captureFallbackScreenshot(
       createCommandSurface: params.createCommandSurface,
       session,
       sessionName: params.sessionName,
-      // No caller-supplied destination: the screenshot artifact adapter mints a temp
-      // path, so the fallback never writes where an explicit `--out` would have.
+      sessionDir: params.sessionDir,
+      // No caller-supplied destination: the fallback lands on its stable session path when the
+      // session dir is known, so it never writes where an explicit `--out` would have.
+      ...(params.sessionDir
+        ? { defaultOutputPath: resolveSessionFallbackScreenshotPath(params.sessionDir) }
+        : {}),
       captureScreenshot: capture.runtime.captureScreenshot,
       dispatchContext: contextFromFlags(
         params.logPath,
