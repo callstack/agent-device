@@ -1993,7 +1993,7 @@ Exact behavior: `agent-device help close`.
 * iOS simulators: `open` prepares app accessibility before launching an app or URL. If an already-running app has an empty accessibility tree after an earlier XCTest session, run `open <app> --relaunch`, then `snapshot -i`. Preparation failures are logged and do not block launch. Runner cleanup also restores app accessibility after confirmed termination; a runner started by a release before this change is not restored, so relaunch the app with `open <app> --relaunch`.
 * Android React Native: `open --relaunch` needs an installed package name. Install or reinstall the APK first; `open <apk|aab> --relaunch` is rejected. For Metro-backed JS changes, run `metro reload` before reaching for `open <app> --relaunch`.
 * Android (adb): an intent target such as `open settings` records the package that opened as `appBundleId`. `open settings --relaunch` stops and restarts that app. If the intent matches more than one activity, `--relaunch` fails.
-* Android (ADB): `close` force-stops the app, then checks for 2 seconds that it has left the foreground, waits up to 10 seconds for the processes it killed to exit, and checks for 2 more that no new process started. If a check window ends first, `close` fails with `details.reason: android-app-close-timeout` and `details.phase` set to `foreground`, `exit`, or `process`; a process that survives the force-stop fails with `exit`, and apps Android restarts at once, such as the launcher, fail with `process`. `open --relaunch` runs the same checks but accepts a new process once the killed ones exit, because Android can restart an app at once for a background client, such as Settings on Android 17. When `pidof` cannot list the app’s processes, `close` fails with `details.reason: android-process-probe-unavailable`; if that happens before the force-stop, the app keeps running.
+* Android (ADB): `close` force-stops the app, then checks for 2 seconds that it has left the foreground and waits up to 10 seconds for the processes it killed to exit. If a check window ends first, `close` fails with `details.reason: android-app-close-timeout` and `details.phase` set to `foreground` or `exit`; a process that survives the force-stop fails with `exit`. A new process that Android starts after the stop does not fail `close` or `open --relaunch`, because Android can restart an app at once for a background client, such as Settings on Android 17. When `pidof` cannot list the app’s processes, `close` fails with `details.reason: android-process-probe-unavailable`; if that happens before the force-stop, the app keeps running.
 * When `close` cannot confirm its cleanup on a session that holds a device claim, it fails and keeps the session and its claim, so the device is not handed on unconfirmed. Run `close` again with the same options to retry the cleanup and release the device, leaving out `--save-script` once the first attempt has published the script. Only `close`, or a successful `open`, is supported on the kept session: other commands work, but the session stays marked, so an idle daemon can still shut it down. If nobody retries, the kept session does not keep the daemon alive: when the daemon has been idle for its idle timeout and shuts down, its shutdown retries the cleanup, and a claim it still cannot confirm goes stale instead of being released. Embedded runtimes and `AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS=0` never shut down for idleness, so there a retried `close` is the only release.
 * If `open --relaunch` leaves an existing session’s device effects unconfirmed, the session and claim remain available for `close`, but idle shutdown can retry cleanup and leave an unconfirmed claim stale; embedded runtimes and `AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS=0` do not shut down for idleness, so use `close` to release the claim.
 
@@ -2986,6 +2986,8 @@ When a command fails, read `error.details.dispatched` before you retry:
 For a failed `batch` or `replay`, inspect completed steps and `details.dispatchedSteps` first. A resource step refused with `details.reason: bounded_composite_resource_unsupported` has `details.dispatched: no` for that step. `details.standaloneCommandName` names a known public command; it is not a complete command. Run the original step separately with its original arguments and options, the same `--session` value, and the same private CLI context. Earlier steps may still have run.
 
 Read-only commands such as `get`, `snapshot`, and `wait` report `no`, and so do `record`, `trace`, and `perf`, whose controls the device refuses to repeat. On Android, dismissing a blocking system dialog or ANR prompt first does not count as a dispatched step. For other failures, once any step of a request reached the device, the failure is `unknown` and `error.details.dispatchedSteps` counts those steps. A bounded resource refusal reports `no` for its refused step even when earlier batch or replay steps changed the app; check `dispatchedSteps` before retrying.
+
+[Error reasons](/docs/error-reasons) lists the typed reasons by command and subsystem.
 
 These refusals carry `dispatched: no` and a typed `error.details.reason`, so branch on the reason, not the message:
 
@@ -4859,6 +4861,151 @@ eas simulator:exec npx agent-device@latest snapshot -i
 ```
 
 Expo Simulators is a limited-access preview. For session setup, see Expo’s [agent-device guide](https://docs.expo.dev/agents/agent-device/) and [Drive the device](https://docs.expo.dev/preview/simulators/how-to/drive-the-device/).
+
+# Error reasons
+
+> Every typed error.details.reason value that agent-device declares in a reason table, grouped by command and subsystem.
+
+A failed command can name why it failed in `error.details.reason`. Branch on the reason, not on the message: a message can change, and a published reason keeps its spelling.
+
+Treat a reason that this page does not list as unknown, not as an error in the response: a newer daemon or a provider plugin can add reasons. [Commands](/docs/commands) documents more reasons with the behavior of each command.
+
+## Commands
+
+### `fold`
+
+| Reason                            | Meaning                                                                                                           |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `single-panel-device`             | The device has one panel and no hinge, so there is no pose to set.                                                |
+| `fold-pose-unverified`            | The pose was sent, but the device still reports another pose.                                                     |
+| `fold-posture-unsupported`        | The emulator profile has no device state for the requested pose; `details.supportedPoses` lists the poses it has. |
+| `fold-keyframes-unsupported`      | Android poses fixed postures only, so fold keyframes are refused.                                                 |
+| `fold-posture-dispatch-failed`    | The Android emulator console refused the posture command.                                                         |
+| `fold-lock-screen-persists`       | The lock screen that folding raised on Android did not stay dismissed.                                            |
+| `fold-hinge-angle-unreadable`     | The Android emulator console returned no hinge angle.                                                             |
+| `fold-helper-build-failed`        | The iOS simulator fold helper could not be built with the selected Xcode.                                         |
+| `fold-hid-dispatch-failed`        | The fold helper could not send the hinge pose to the iOS simulator.                                               |
+| `fold-hinge-angle-no-sample`      | An iOS simulator hinge read returned no usable sample; `details` say why.                                         |
+| `fold-pose-dispatched-unverified` | The iOS simulator received the pose, but the first hinge read returned no sample to verify it.                    |
+| `fold-angle-unverified`           | The iOS simulator hinge did not reach the angle of the final keyframe.                                            |
+| `fold-pose-unsettled`             | The iOS simulator hinge reached the pose but never came to rest.                                                  |
+
+### `orientation`
+
+| Reason                     | Meaning                                                                   |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `fold-helper-build-failed` | The iOS simulator fold helper could not be built with the selected Xcode. |
+
+### `record`
+
+| Reason                                | Meaning                                                                                                    |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `android_screenrecord_startup_failed` | Android `screenrecord` exited before it began writing; its startup output says why.                        |
+| `recording_destination_not_requested` | A remote recording was saved to the current directory because the request named no destination; a warning. |
+
+### `replay`
+
+| Reason                            | Meaning                                                                                               |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
+
+### `screenshot`
+
+| Reason                                                   | Meaning                                                                                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `CROP_SELECTOR_INVALID`                                  | The `--crop-on` value is not a valid selector expression.                                                |
+| `CROP_TARGET_NOT_FOUND`                                  | No element matches the `--crop-on` selector.                                                             |
+| `CROP_TARGET_AMBIGUOUS`                                  | More than one element matches the `--crop-on` selector.                                                  |
+| `CROP_CAPTURE_UNREADABLE`                                | The snapshot taken for `--crop-on` was too sparse to read as the screen.                                 |
+| `CROP_CAPTURE_INCOMPLETE`                                | The snapshot taken for `--crop-on` was truncated, so a missing match is not proven.                      |
+| `CROP_EMPTY_INTERSECTION`                                | The target frame covers no pixel of the capture.                                                         |
+| `CROP_PARTIAL_INTERSECTION`                              | The target frame extends past the image, so the crop was clipped; a warning, not a failure.              |
+| `CROP_TARGET_NOT_ACCEPTED`                               | `--crop-on` is not supported on this device, surface, or snapshot backend.                               |
+| `CROP_FRAME_MISMATCH`                                    | `--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured frame.         |
+| `PENDING_PIXEL_IDENTITY_EVIDENCE`                        | The `details.rejectionReason` of a target whose crop is not yet verified against an independent capture. |
+| `SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME` | `--fullscreen` names a macOS helper surface, which always captures the main display.                     |
+
+### `scroll`
+
+| Reason                             | Meaning                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------- |
+| `scroll_no_progress`               | A directional scroll did not move a container that still hides content.   |
+| `scroll_keyboard_occludes_surface` | The on-screen keyboard leaves too little of the scroll surface to scroll. |
+| `scroll_refresh_not_at_top`        | `scroll refresh` started away from the top of the content.                |
+| `scroll_max_passes_requires_until` | `--max-passes` was given without `--until`.                               |
+| `scroll_max_passes_invalid`        | `--max-passes` is not an integer inside its range.                        |
+| `scroll_until_pass_limit`          | `--until` used all its passes before the selector was visible.            |
+| `scroll_until_edge_reached`        | `--until` reached the end of the content before the selector was visible. |
+| `scroll_until_no_progress`         | The `--until` gestures did not move the content.                          |
+| `scroll_until_capture_unreadable`  | `--until` could not read the screen between passes.                       |
+| `scroll_edge_pass_limit`           | `scroll top` or `scroll bottom` reached its pass limit before the edge.   |
+| `scroll_edge_no_progress`          | The `scroll top` or `scroll bottom` gestures did not move the content.    |
+| `scroll_edge_capture_unreadable`   | `scroll top` or `scroll bottom` could not read the screen between passes. |
+
+### `wait`
+
+| Reason                            | Meaning                                                                                                       |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `wait_capture_stalled`            | No readable capture arrived before the deadline, so a retry can succeed.                                      |
+| `wait_deadline_exceeded`          | A later capture used up the budget after an earlier readable capture.                                         |
+| `wait_runner_restart_exhausted`   | The deadline ended while the runner restarted to recover a lost response, so a retry can succeed.             |
+| `wait_readiness_exhausted`        | The deadline ended while the target was still being made observable; `details.readinessPhase` names the work. |
+| `wait_target_absent`              | A positive wait never found a match.                                                                          |
+| `wait_target_present`             | Strict `wait absent` reached its deadline while valid captures still contained matches.                       |
+| `wait_stable_timeout`             | `wait stable` reached its deadline before the UI settled.                                                     |
+| `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark.         |
+
+## Subsystems
+
+These reasons can come from more than one command.
+
+### Daemon lifecycle
+
+| Reason                     | Meaning                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `daemon-not-running`       | An attaching client found no daemon to connect to.                                                              |
+| `daemon-incompatible`      | The running daemon does not match the client; `details.daemon` and `details.client` hold both identities.       |
+| `daemon-drain-timeout`     | A daemon accepted the request to leave but was still running 60 s later and could not be retired.               |
+| `daemon_state_root_unsafe` | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it. |
+| `daemon-busy`              | The daemon still holds work, so it refused to leave; `details` counts that work.                                |
+| `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it.                                        |
+| `daemon-owner-embedded`    | A live host process owns this daemon and ends it through its own `close()`.                                     |
+
+### Interaction
+
+| Reason                  | Meaning                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `selector_not_found`    | No element matches the selector.                                                        |
+| `predicate_failed`      | The element does not satisfy the asserted state, or strict absence could not be proven. |
+| `ref_not_found`         | The `@ref` names no node of the stored snapshot; take a new snapshot.                   |
+| `ref_unlabeled`         | The `@ref` names a node with no label to wait on or scope by.                           |
+| `target_bounds_invalid` | The target has no usable center to touch.                                               |
+| `target_covered`        | Another visible element covers the target; `details.coveredBy` names it when known.     |
+| `target_not_hittable`   | The platform reports the target as not hittable, so nothing was pressed.                |
+| `target_disabled`       | `find focus` or `find type` resolved to a disabled text field.                          |
+| `target_still_moving`   | The target did not come to rest before the press; wait for the screen, then retry.      |
+
+### Leases
+
+| Reason                    | Meaning                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `LEASE_NOT_FOUND`         | The lease that the request names is not active.                                                        |
+| `LEASE_SCOPE_MISMATCH`    | The lease does not match the tenant, run, backend, provider, device, or client of the request.         |
+| `LEASE_SCOPE_REQUIRED`    | The lease was allocated with an owner scope that the request does not repeat.                          |
+| `LEASE_ID_IN_USE`         | The requested lease id already names a lease that this daemon issued.                                  |
+| `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released.                        |
+| `LEASE_SESSION_MISMATCH`  | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
+| `LEASE_LEDGER_OVERWRITE`  | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
+
+### Request admission
+
+| Reason                                | Meaning                                                                                   |
+| ------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `session_app_required`                | A per-app setting was requested, but the session binds no app and the request names none. |
+| `session_or_device_selector_required` | The request has neither an active session nor a device selector.                          |
+| `named_session_not_found`             | The request names a session that this daemon does not hold.                               |
+| `app_not_installed`                   | The named app resolves to no installed app on the target.                                 |
+| `malformed_request`                   | The transport refused the request envelope before any handler read it.                    |
 
 # Eve
 

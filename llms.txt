@@ -35,7 +35,7 @@ The capabilities page is generated from the runtime's own capability facts, so i
 
 ## Start here
 
-llms-small.txt leaves out these pages: Commands, Capabilities, Node.js API, Rewrite old gesture commands. Read them in llms-full.txt or on the site.
+llms-small.txt leaves out these pages: Commands, Capabilities, Node.js API, Error reasons, Rewrite old gesture commands. Read them in llms-full.txt or on the site.
 
 - [Installation](https://agent-device.dev/docs/installation): `npm install -g agent-device` (Node.js 22.12 or newer), then `agent-device doctor` to check the setup.
 - [Introduction](https://agent-device.dev/docs/introduction): Scope, supported workflows, and responsibility boundaries.
