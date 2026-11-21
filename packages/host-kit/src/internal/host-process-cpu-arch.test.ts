@@ -10,9 +10,9 @@ vi.mock('./exec.ts', async (importOriginal) => ({
 }));
 
 let withCommandExecutorOverride: typeof import('./exec.ts').withCommandExecutorOverride;
-let readHostCpuArch: typeof import('./host-cpu-arch.ts').readHostCpuArch;
-let readHostCpuArchSync: typeof import('./host-cpu-arch.ts').readHostCpuArchSync;
-let resolveHostCpuArch: typeof import('./host-cpu-arch.ts').resolveHostCpuArch;
+let readHostCpuArch: typeof import('./host-process.ts').readHostCpuArch;
+let readHostCpuArchSync: typeof import('./host-process.ts').readHostCpuArchSync;
+let resolveHostCpuArch: typeof import('./host-process.ts').resolveHostCpuArch;
 
 // The host CPU arch is resolved once per module instance, so each test gets a fresh one.
 beforeEach(async () => {
@@ -20,7 +20,7 @@ beforeEach(async () => {
   vi.resetModules();
   ({ withCommandExecutorOverride } = await import('./exec.ts'));
   ({ readHostCpuArch, readHostCpuArchSync, resolveHostCpuArch } =
-    await import('./host-cpu-arch.ts'));
+    await import('./host-process.ts'));
 });
 
 function sysctlAnswering(result: { stdout?: string; exitCode?: number } | Error) {
