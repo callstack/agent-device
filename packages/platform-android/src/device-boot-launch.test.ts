@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { LIFETIME_TOKEN, STALE_LIFETIME_TOKEN } from '@agent-device/test-kit';
 
 const mocks = vi.hoisted(() => ({
   readProcessIdentityFacts: vi.fn(),
@@ -25,7 +26,7 @@ import {
 } from './device-boot.ts';
 
 /** The identity `open` recorded for the emulator process it launched. */
-const IDENTITY = { pid: 4112, startTime: 'launch-start-time' } as const;
+const IDENTITY = { pid: 4112, startTime: LIFETIME_TOKEN } as const;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -89,7 +90,7 @@ test('a reused pid carrying a new start time is a changed launch', async () => {
   // Quick Boot keeps the serial and the guest clock, so only the lifetime tells the two emulator
   // processes apart.
   mocks.readProcessIdentityFacts.mockResolvedValueOnce({
-    startTime: 'replacement-start-time',
+    startTime: STALE_LIFETIME_TOKEN,
     zombie: false,
   });
   expect(await checkAndroidEmulatorLaunchProcess(IDENTITY)).toBe('changed');
