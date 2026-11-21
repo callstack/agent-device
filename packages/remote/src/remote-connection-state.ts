@@ -222,6 +222,12 @@ type RemoteConnectionDefaults = {
   connection?: RemoteConnectionRequestMetadata;
 };
 
+const REMOTE_CONNECTION_STATE_REASONS = {
+  // A command named one session and the saved connection it reached names another, so nothing about
+  // that connection was read, replaced, or removed.
+  sessionMismatch: { reason: 'connection_session_mismatch' },
+} as const satisfies ReasonTable<'remote connections'>;
+
 export function readRemoteConnectionState(options: {
   stateDir: string;
   session: string;
@@ -239,6 +245,11 @@ export function readRemoteConnectionState(options: {
     removeInvalidRemoteConnectionState(options);
     return null;
   }
+  if (parsed.session !== options.session) {
+    throw new AppError('COMMAND_FAILED', 'The saved connection belongs to a different session.', {
+      reason: REMOTE_CONNECTION_STATE_REASONS.sessionMismatch.reason,
+    });
+  }
   return parsed;
 }
 
@@ -252,10 +263,9 @@ export function writeRemoteConnectionState(options: {
    */
   onSessionRecordCommitted?: () => void;
 }): void {
-  const statePath = remoteConnectionStatePath({
-    stateDir: options.stateDir,
-    session: options.state.session,
-  });
+  const location = { stateDir: options.stateDir, session: options.state.session };
+  readRemoteConnectionState(location);
+  const statePath = remoteConnectionStatePath(location);
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   writeJsonFile(statePath, options.state);
   options.onSessionRecordCommitted?.();
@@ -276,6 +286,11 @@ export function buildRemoteConnectionDaemonState(
 }
 
 export function removeRemoteConnectionState(options: { stateDir: string; session: string }): void {
+  readRemoteConnectionState(options);
+  removeRemoteConnectionStateFile(options);
+}
+
+function removeRemoteConnectionStateFile(options: { stateDir: string; session: string }): void {
   fs.rmSync(remoteConnectionStatePath(options), { force: true });
   const activePath = activeConnectionStatePath(options.stateDir);
   const activeSession = readActiveConnectionSession(options.stateDir);
@@ -514,16 +529,57 @@ export function hashRemoteConfigFile(configPath: string): string {
   }
 }
 
+/** The pointer to the machine-wide active session. It is not a session record and never names one. */
+const ACTIVE_SESSION_FILE_NAME = '.active-session.json';
+
 function remoteConnectionStatePath(options: { stateDir: string; session: string }): string {
-  return path.join(
-    options.stateDir,
-    'remote-connections',
-    `${safeStateName(options.session)}.json`,
-  );
+  const dir = path.join(options.stateDir, 'remote-connections');
+  // A name that cannot be a filename on its own — anything starting with `.`, or holding a
+  // separator — is stored by hash, so it can never take the active-session pointer's file either.
+  if (/^[a-z0-9_-][a-z0-9._-]*$/.test(options.session)) {
+    return path.join(dir, `${options.session}.json`);
+  }
+
+  const canonical = path.join(dir, `~${connectionSessionIdentity(options.session)}.json`);
+  if (fs.existsSync(canonical)) return canonical;
+
+  // Older records were named by sanitizing the session, so two names that differ only in case could
+  // share one file on a case-insensitive filesystem. Trust such a file only when its contents prove
+  // they name this session; otherwise this session's record belongs to the hashed path.
+  const legacy = legacyRemoteConnectionStatePath({ recordsDir: dir, session: options.session });
+  if (!legacy) return canonical;
+  try {
+    const state: unknown = JSON.parse(fs.readFileSync(legacy, 'utf8'));
+    return isRemoteConnectionState(state) && state.session === options.session ? legacy : canonical;
+  } catch {
+    return canonical;
+  }
+}
+
+/**
+ * The SHA-256 of a session name, hex. It is the file identity for a session whose name cannot be a
+ * filename on its own, so two names that differ only in case never share one record.
+ */
+export function connectionSessionIdentity(session: string): string {
+  return crypto.createHash('sha256').update(session).digest('hex');
+}
+
+/** Where a record written before per-session paths lived, or `undefined` when it aliased the pointer. */
+function legacyRemoteConnectionStatePath(options: {
+  recordsDir: string;
+  session: string;
+}): string | undefined {
+  const safe = options.session.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
+  const name =
+    safe === options.session
+      ? safe
+      : `${safe}-${connectionSessionIdentity(options.session).slice(0, 8)}`;
+  if (!name || `${name}.json` === ACTIVE_SESSION_FILE_NAME) return undefined;
+  return path.join(options.recordsDir, `${name}.json`);
 }
 
 function activeConnectionStatePath(stateDir: string): string {
-  return path.join(stateDir, 'remote-connections', '.active-session.json');
+  return path.join(stateDir, 'remote-connections', ACTIVE_SESSION_FILE_NAME);
 }
 
 export function readActiveConnectionState(options: {
@@ -610,15 +666,7 @@ function removeInvalidRemoteConnectionState(
       cause: error instanceof Error ? error.message : error ? String(error) : undefined,
     },
   });
-  removeRemoteConnectionState(options);
-}
-
-function safeStateName(value: string): string {
-  const safe = value.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
-  if (!safe) return 'default';
-  if (safe === value) return safe;
-  const suffix = crypto.createHash('sha256').update(value).digest('hex').slice(0, 8);
-  return `${safe}-${suffix}`;
+  removeRemoteConnectionStateFile(options);
 }
 
 function isRemoteConnectionState(value: unknown): value is RemoteConnectionState {
