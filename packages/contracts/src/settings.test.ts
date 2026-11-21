@@ -12,7 +12,6 @@ import {
   settingsAppNotConsumedRefusal,
   settingsAppScope,
   settingsHelpLines,
-  SETTINGS_APP_NOT_CONSUMED_REASON,
   SETTINGS_INVALID_ARGS_MESSAGE,
   SETTINGS_USAGE_OVERRIDE,
   textSizeSettingPayload,
@@ -258,7 +257,7 @@ describe('settingsAppNotConsumedRefusal', () => {
     expect(refusal.code).toBe('INVALID_ARGS');
     expect(refusal.message).toContain('settings location on');
     expect(refusal.message).toContain('com.example.app');
-    expect(refusal.details.reason).toBe(SETTINGS_APP_NOT_CONSUMED_REASON);
+    expect(refusal.details.reason).toBe('setting_app_not_consumed');
     expect(refusal.details.dispatched).toBe('no');
     expect(refusal.details.app).toBe('com.example.app');
     expect(refusal.hint).toContain('settings permission grant location --app com.example.app');

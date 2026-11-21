@@ -138,8 +138,6 @@ const SETTINGS_REFUSAL_REASONS = {
   appNotConsumed: { reason: 'setting_app_not_consumed' },
 } as const satisfies ReasonTable<'settings'>;
 
-export const SETTINGS_APP_NOT_CONSUMED_REASON = SETTINGS_REFUSAL_REASONS.appNotConsumed.reason;
-
 /**
  * The refusal a mutation answers with when its target consumes no app: the code, sentence, typed
  * details, and hint as data, so the daemon can answer with it through its own response builder
