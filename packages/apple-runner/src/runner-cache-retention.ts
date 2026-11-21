@@ -3,6 +3,7 @@ import path from 'node:path';
 import { resolveRunnerDerivedOverride } from './apple-runner-platform.ts';
 import { hostEnvironment, emitDiagnostic } from './host.ts';
 import {
+  RUNNER_CACHE_READER_GRACE_MS,
   acquireRunnerXctestrunCacheLock,
   emitRunnerXctestrunDecision,
   resolveRunnerCacheMetadataPath,
@@ -10,10 +11,6 @@ import {
 import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
 
 const DEFAULT_RUNNER_CACHE_KEEP = 3;
-// CONSERVATIVE: A key used within a day is never evicted, so a runner that has passed the cache
-// decision but not yet written its lease cannot lose its products. Revisit if start no longer
-// leaves that gap.
-const MIN_IDLE_MS = 24 * 60 * 60_000;
 const CACHE_KEY_DIRECTORY = /^cache-[0-9a-f]{16}$/;
 
 /** How many runner cache keys per platform folder survive, the current one included; 0 keeps them all. */
@@ -46,7 +43,7 @@ export async function evictStaleRunnerCaches(
     .filter((entry) => entry.derived !== currentDerived)
     .sort((left, right) => right.lastUsedMs - left.lastUsedMs)
     .slice(keep - 1)
-    .filter((entry) => nowMs - entry.lastUsedMs >= MIN_IDLE_MS);
+    .filter((entry) => nowMs - entry.lastUsedMs >= RUNNER_CACHE_READER_GRACE_MS);
   const evicted: string[] = [];
   for (const { derived } of candidates) {
     try {
@@ -103,7 +100,7 @@ async function evictIfUnused(derived: string, nowMs: number): Promise<boolean> {
   try {
     // Re-read under the lock: a reuse that finished after the listing refreshed the key, and its
     // runner may not have written a lease yet.
-    if (nowMs - lastUsedMs(derived) < MIN_IDLE_MS) return false;
+    if (nowMs - lastUsedMs(derived) < RUNNER_CACHE_READER_GRACE_MS) return false;
     // Leases are read under the lock: a runner needs this lock to resolve the key before it writes one.
     const key = path.basename(derived);
     const leased = listActiveRunnerLeaseArtifacts().some(

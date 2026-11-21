@@ -252,8 +252,8 @@ test('a start queued behind a close starts fresh once that close has settled', a
   await vi.waitFor(() => assert.equal(runnerPrepProcessChildren(device.id).length, 0));
   builds[0]!.kill();
   const queuedStart = ensureRunnerSession(device, {}).catch((error: unknown) => error);
-  mockBuildForTesting.mockImplementationOnce(async () => {
-    await seedBuiltRunner();
+  mockBuildForTesting.mockImplementationOnce(async (_command: string, args: string[]) => {
+    await seedBuiltRunner(args);
     return { exitCode: 0, stdout: '', stderr: '' } satisfies ExecResult;
   });
 
@@ -284,8 +284,8 @@ test('a start after a settled teardown opens fresh and builds', async () => {
   await firstStart;
   assert.equal(mockBuildForTesting.mock.calls.length, 1);
 
-  mockBuildForTesting.mockImplementationOnce(async () => {
-    await seedBuiltRunner();
+  mockBuildForTesting.mockImplementationOnce(async (_command: string, args: string[]) => {
+    await seedBuiltRunner(args);
     return { exitCode: 0, stdout: '', stderr: '' } satisfies ExecResult;
   });
   const next = await ensureRunnerSession(device, {});
@@ -318,8 +318,8 @@ test('a queued requestId-only start survives the starting caller disconnecting',
   const queued = ensureRunnerSession(device, { requestId: 'queued-request' }).catch(
     (error: unknown) => error,
   );
-  mockBuildForTesting.mockImplementationOnce(async () => {
-    await seedBuiltRunner();
+  mockBuildForTesting.mockImplementationOnce(async (_command: string, args: string[]) => {
+    await seedBuiltRunner(args);
     return { exitCode: 0, stdout: '', stderr: '' } satisfies ExecResult;
   });
 
@@ -361,8 +361,8 @@ function hangBuildForTesting(options: {
 }
 
 /** Stands in for a successful `build-for-testing`: the products land under SYMROOT. */
-async function seedBuiltRunner(): Promise<void> {
-  const symroot = path.join(derived, 'Build', 'Products');
+async function seedBuiltRunner(args: readonly string[]): Promise<void> {
+  const symroot = args.find((arg) => arg.startsWith('SYMROOT='))!.slice('SYMROOT='.length);
   await seedRunnerProductBundle(
     path.join(symroot, 'Debug-iphonesimulator', 'AgentDeviceRunner.app'),
   );

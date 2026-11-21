@@ -29,6 +29,7 @@ import {
   withoutRunnerDerivedPathEnv,
   writeRunnerCacheMetadataWithArtifacts,
   writeXctestrunFixture,
+  seedBuiltRunner,
 } from './runner-xctestrun.fixtures.ts';
 
 /** Certifies a fixture tree the way the production writer would, and proves it worked. */
@@ -118,12 +119,11 @@ test('ensureXctestrunArtifact reuses matching manifest artifacts from another pr
 });
 
 test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not match', async () => {
-  const projectRoot = repoRoot;
   const tmpDir = await makeProjectScratchDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
   const productPath = path.join(derivedPath, 'Runner.app');
   const foreignXctestrunPath = path.join(derivedPath, 'foreign.xctestrun');
-  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
   await seedRunnerProductBundle(productPath);
   writeXctestrunFixture(foreignXctestrunPath, {
     projectRoot: '/tmp/other-agent-device-worktree',
@@ -145,19 +145,14 @@ test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not 
   fs.writeFileSync(metadataPath, JSON.stringify(staleMetadata, null, 2));
   withRunnerDerivedPathEnv(derivedPath);
 
-  mockRunCmdStreaming.mockImplementation(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  mockRunCmdStreaming.mockImplementation(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
-  assert.equal(fs.existsSync(foreignXctestrunPath), false);
 });
 
 test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root', async () => {
@@ -167,7 +162,7 @@ test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root'
   const externalDir = path.join(tmpDir, 'external');
   const externalProductPath = path.join(externalDir, 'Runner.app');
   const externalXctestrunPath = path.join(externalDir, 'external.xctestrun');
-  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
   await seedRunnerProductBundle(externalProductPath);
   writeXctestrunFixture(externalXctestrunPath, {
     projectRoot,
@@ -202,12 +197,8 @@ test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root'
   );
   withRunnerDerivedPathEnv(derivedPath);
 
-  mockRunCmdStreaming.mockImplementation(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  mockRunCmdStreaming.mockImplementation(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const result = await ensureXctestrunArtifact(macOsDevice, {});
@@ -249,7 +240,6 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   const cancellationError = createRequestCanceledError();
 
   mockRunCmdStreaming.mockImplementation(async (_cmd, args, options) => {
-    const derived = args[args.indexOf('-derivedDataPath') + 1];
     if (options?.signal === canceledController.signal) {
       canceledBuildStarted.resolve();
       await waitForAbort(options.signal);
@@ -257,11 +247,7 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
     }
     survivorBuildStarted.resolve();
     await releaseSurvivor.promise;
-    await seedRunnerProductBundle(path.join(derived, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(path.join(derived, 'rebuilt', 'rebuilt.xctestrun'), {
-      projectRoot: repoRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+    await seedBuiltRunner(args);
   });
 
   const canceledPromise = ensureXctestrunArtifact(canceledDevice, {
@@ -345,7 +331,7 @@ test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure'
     'AgentDeviceRunner.xcodeproj',
   );
 
-  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
 
   withRunnerDerivedPathEnv(derivedPath);
 
@@ -366,18 +352,13 @@ test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure'
     assert.ok(Array.isArray(args));
     assert.equal(args[args.indexOf('-project') + 1], projectPath);
     assert.equal(args[args.indexOf('-derivedDataPath') + 1], derivedPath);
-    await seedRunnerProductBundle(path.join(derivedPath, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
-  assert.equal(fs.existsSync(existingXctestrunPath), false);
   assert.deepEqual(repairedPaths, [existingXctestrunPath, rebuiltXctestrunPath]);
 });
 
@@ -466,7 +447,7 @@ test('ensureXctestrunArtifact discards and rebuilds a manifest whose bytes no lo
   const derivedPath = path.join(tmpDir, 'custom-derived');
   const productPath = path.join(derivedPath, 'Runner.app');
   const cachedXctestrunPath = path.join(derivedPath, 'cached.xctestrun');
-  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
   await seedRunnerProductBundle(productPath);
   writeXctestrunFixture(cachedXctestrunPath, {
     projectRoot: repoRoot,
@@ -489,12 +470,8 @@ test('ensureXctestrunArtifact discards and rebuilds a manifest whose bytes no lo
   fs.utimesSync(executablePath, stat.atime, stat.mtime);
   withRunnerDerivedPathEnv(derivedPath);
 
-  mockRunCmdStreaming.mockImplementation(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot: repoRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  mockRunCmdStreaming.mockImplementation(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const result = await ensureXctestrunArtifact(macOsDevice, {});
@@ -502,12 +479,10 @@ test('ensureXctestrunArtifact discards and rebuilds a manifest whose bytes no lo
   assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
   assert.equal(result.reason, 'artifact_content_mismatch');
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
-  assert.equal(fs.existsSync(cachedXctestrunPath), false);
 });
 
 test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mismatch', async () => {
-  const projectRoot = repoRoot;
-  const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun(macOsDevice);
+  const { derivedPath } = await makeCachedRunnerXctestrun(macOsDevice);
   const metadataPath = resolveRunnerCacheMetadataPath(derivedPath);
   const expectedMetadata = resolveExpectedRunnerCacheMetadata(macOsDevice, repoRoot);
   const staleMetadata = {
@@ -520,23 +495,18 @@ test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mism
   };
   fs.writeFileSync(metadataPath, JSON.stringify(staleMetadata, null, 2));
 
-  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
 
   withRunnerDerivedPathEnv(derivedPath);
 
-  mockRunCmdStreaming.mockImplementation(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  mockRunCmdStreaming.mockImplementation(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
-  assert.equal(fs.existsSync(existingXctestrunPath), false);
   const rebuiltMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
   assert.deepEqual(
     stripRunnerCacheArtifacts(rebuiltMetadata),
@@ -546,19 +516,14 @@ test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mism
 });
 
 test('ensureXctestrunArtifact passes sandbox-disabling settings to xcodebuild', async () => {
-  const projectRoot = repoRoot;
   const tmpDir = await makeProjectScratchDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
-  const rebuiltXctestrunPath = path.join(derivedPath, 'Build', 'Products', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
 
   withRunnerDerivedPathEnv(derivedPath);
 
-  mockRunCmdStreaming.mockImplementationOnce(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'Build', 'Products', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  mockRunCmdStreaming.mockImplementationOnce(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const result = await ensureXctestrunArtifact(iosSimulator, {
@@ -580,20 +545,15 @@ test('ensureXctestrunArtifact passes sandbox-disabling settings to xcodebuild', 
 });
 
 test('ensureXctestrunArtifact emits build progress on cache miss', async () => {
-  const projectRoot = repoRoot;
   const tmpDir = await makeProjectScratchDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
-  const rebuiltXctestrunPath = path.join(derivedPath, 'Build', 'Products', 'rebuilt.xctestrun');
+  let rebuiltXctestrunPath = '';
   const events: RequestProgressEvent[] = [];
 
   withRunnerDerivedPathEnv(derivedPath);
 
-  mockRunCmdStreaming.mockImplementationOnce(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'Build', 'Products', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  mockRunCmdStreaming.mockImplementationOnce(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   appleRunnerTestHost.update({ emitRequestProgress: (event) => events.push(event) });
@@ -640,15 +600,11 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
 
   await markRunnerXctestrunArtifactBadForRun(hit, 'stress health failed');
-  assert.equal(fs.existsSync(cachedXctestrunPath), false);
+  assert.equal(fs.existsSync(resolveRunnerCacheMetadataPath(derivedPath)), false);
 
-  const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
-  mockRunCmdStreaming.mockImplementationOnce(async () => {
-    await seedRunnerProductBundle(path.join(derivedPath, 'rebuilt', 'Runner.app'));
-    writeXctestrunFixture(rebuiltXctestrunPath, {
-      projectRoot,
-      productRelativePaths: ['Runner.app'],
-    });
+  let rebuiltXctestrunPath = '';
+  mockRunCmdStreaming.mockImplementationOnce(async (_command, args) => {
+    rebuiltXctestrunPath = await seedBuiltRunner(args);
   });
 
   const rebuilt = await ensureXctestrunArtifact(macOsDevice, {

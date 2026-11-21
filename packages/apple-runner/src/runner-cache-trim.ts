@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPathInsideDirectory } from './runner-artifact-manifest.ts';
+import { RUNNER_CACHE_READER_GRACE_MS } from './runner-cache.ts';
 import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
+import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
+
+// A build's products directory sits at `Build/<products>`, so a tree is never deeper than this.
+const RUNNER_TREE_MAX_DEPTH = 2;
 
 /**
  * Removes the build scratch from a keyed runner cache after a successful build: intermediates,
@@ -13,7 +18,8 @@ import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
  * Returns the removed entries relative to `derived`. Nothing is removed unless `derived` resolves,
  * by real path, to a real directory named like `expectedKeyPath` that is a direct child of the real
  * parent of `expectedKeyPath` (the key this build gets with no path override), or when a product
- * lies outside `derived`. A key entry that is itself a symlink is never trimmed.
+ * lies outside `derived`. A key entry that is itself a symlink is never trimmed. Trees another
+ * session may still read survive (see {@link listLiveRunnerTrees}).
  */
 export async function trimRunnerBuildScratch(
   derived: string,
@@ -23,7 +29,64 @@ export async function trimRunnerBuildScratch(
   if (!isExpectedKey(derived, expectedKeyPath)) return [];
   const kept = resolveKeptPaths(derived, protectedPaths);
   if (!kept) return [];
+  const live = listLiveRunnerTrees(derived);
+  if (live.includes('')) return [];
+  for (const tree of live) kept.add(keptUnit(tree));
   return await trimDirectory(derived, derived, kept);
+}
+
+/**
+ * Removes everything under `derived` except the `kept` entries (relative to `derived`) and the
+ * directories that hold them. A kept tree at the root keeps everything but the cache metadata.
+ */
+export async function removeRunnerCacheEntriesExcept(
+  derived: string,
+  kept: ReadonlySet<string>,
+): Promise<void> {
+  if (kept.has('')) {
+    await fs.promises.rm(path.join(derived, RUNNER_CACHE_METADATA_FILE), { force: true });
+    return;
+  }
+  await trimDirectory(derived, derived, kept);
+}
+
+/**
+ * The runner trees under `derived` (directories holding an `.xctestrun`, relative to `derived`)
+ * that a session may still read: one resolved within {@link RUNNER_CACHE_READER_GRACE_MS}, or one
+ * a live runner lease names. When the leases cannot be listed, every tree counts.
+ */
+export function listLiveRunnerTrees(derived: string, nowMs: number = Date.now()): string[] {
+  const trees = listRunnerTrees(derived, '');
+  let leasedTrees: Set<string>;
+  try {
+    leasedTrees = new Set(
+      listActiveRunnerLeaseArtifacts().map(({ xctestrunPath }) =>
+        path.resolve(path.dirname(xctestrunPath)),
+      ),
+    );
+  } catch {
+    return trees;
+  }
+  return trees.filter((tree) => {
+    const directory = path.resolve(derived, tree);
+    const resolvedAtMs = fs.statSync(directory, { throwIfNoEntry: false })?.mtimeMs ?? 0;
+    return nowMs - resolvedAtMs < RUNNER_CACHE_READER_GRACE_MS || leasedTrees.has(directory);
+  });
+}
+
+function listRunnerTrees(derived: string, relative: string): string[] {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(path.join(derived, relative), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  if (entries.some((entry) => entry.isFile() && entry.name.endsWith('.xctestrun')))
+    return [relative];
+  if (relative.split(path.sep).filter(Boolean).length >= RUNNER_TREE_MAX_DEPTH) return [];
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) => listRunnerTrees(derived, path.join(relative, entry.name)));
 }
 
 function isExpectedKey(derived: string, expectedKeyPath: string): boolean {

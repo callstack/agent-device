@@ -333,14 +333,14 @@ export function resolveRunnerArchBuildSettings(
 }
 
 /**
- * Pins the build roots to the default layout under `derived`. `-derivedDataPath` alone does not:
- * a custom or legacy build location in the user's Xcode settings still redirects products and
- * intermediates, so the `.xctestrun` would land outside the cache directory.
+ * Pins the build roots under `derived`, with the products in `productsDir`. `-derivedDataPath`
+ * alone does not: a custom or legacy build location in the user's Xcode settings still redirects
+ * products and intermediates, so the `.xctestrun` would land outside the cache directory.
  */
-export function resolveRunnerBuildLocationSettings(derived: string): string[] {
+export function resolveRunnerBuildLocationSettings(derived: string, productsDir: string): string[] {
   const intermediates = path.join(derived, 'Build', 'Intermediates.noindex');
   return [
-    `SYMROOT=${path.join(derived, 'Build', 'Products')}`,
+    `SYMROOT=${productsDir}`,
     `OBJROOT=${intermediates}`,
     `SHARED_PRECOMPS_DIR=${path.join(intermediates, 'PrecompiledHeaders')}`,
   ];

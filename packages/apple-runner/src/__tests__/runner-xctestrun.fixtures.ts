@@ -177,3 +177,19 @@ export async function makeCachedRunnerXctestrun(device: DeviceInfo): Promise<{
   );
   return { derivedPath, existingXctestrunPath };
 }
+
+/**
+ * Stands in for `xcodebuild build-for-testing`: seeds `Runner.app` and an `.xctestrun` naming it
+ * in the products directory the invocation pins with `SYMROOT=`. Returns that `.xctestrun`.
+ */
+export async function seedBuiltRunner(args: readonly string[]): Promise<string> {
+  const symroot = args.find((arg) => arg.startsWith('SYMROOT='))?.slice('SYMROOT='.length);
+  assert.ok(symroot, 'the build pins its products directory');
+  await seedRunnerProductBundle(path.join(symroot, 'Runner.app'));
+  const xctestrunPath = path.join(symroot, 'rebuilt.xctestrun');
+  writeXctestrunFixture(xctestrunPath, {
+    projectRoot: REPO_ROOT_FOR_TEST,
+    productRelativePaths: ['Runner.app'],
+  });
+  return xctestrunPath;
+}

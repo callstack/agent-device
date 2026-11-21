@@ -98,8 +98,8 @@ test('a start nobody retired still builds after a killed build', async () => {
   const admission = openRunnerStartAdmission(device.id);
   runCmdStreaming
     .mockResolvedValueOnce({ exitCode: 143, stdout: '', stderr: '' } satisfies ExecResult)
-    .mockImplementationOnce(async () => {
-      await seedBuiltRunner();
+    .mockImplementationOnce(async (_command: string, args: string[]) => {
+      await seedBuiltRunner(args);
       return { exitCode: 0, stdout: '', stderr: '' } satisfies ExecResult;
     });
 
@@ -165,8 +165,8 @@ test('a spawn still admitted by a remaining waiter builds', async () => {
   addRunnerStartWaiter(admission, new AbortController().signal);
   const leaving = new AbortController();
   addRunnerStartWaiter(admission, leaving.signal);
-  runCmdStreaming.mockImplementation(async () => {
-    await seedBuiltRunner();
+  runCmdStreaming.mockImplementation(async (_command: string, args: string[]) => {
+    await seedBuiltRunner(args);
     return { exitCode: 0, stdout: '', stderr: '' } satisfies ExecResult;
   });
 
@@ -178,8 +178,8 @@ test('a spawn still admitted by a remaining waiter builds', async () => {
 });
 
 /** Stands in for a successful `xcodebuild build-for-testing`: the products land under SYMROOT. */
-async function seedBuiltRunner(): Promise<void> {
-  const symroot = path.join(derived, 'Build', 'Products');
+async function seedBuiltRunner(args: readonly string[]): Promise<void> {
+  const symroot = args.find((arg) => arg.startsWith('SYMROOT='))!.slice('SYMROOT='.length);
   await seedRunnerProductBundle(
     path.join(symroot, 'Debug-iphonesimulator', 'AgentDeviceRunner.app'),
   );

@@ -44,7 +44,8 @@ test('a custom Xcode build location cannot move the built xctestrun out of the r
   const built = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
 
   assert.equal(built.artifact, 'rebuilt');
-  assert.equal(built.xctestrunPath, path.join(derived, 'Build', 'Products', XCTESTRUN_NAME));
+  assert.equal(path.dirname(path.dirname(built.xctestrunPath)), path.join(derived, 'Build'));
+  assert.equal(path.basename(built.xctestrunPath), XCTESTRUN_NAME);
   assert.deepEqual(fs.readdirSync(customBuildLocation), []);
 
   const reused = await ensureXctestrunArtifact(IOS_SIMULATOR, {});

@@ -215,7 +215,9 @@ test('a runner build trims its key, and the next start reuses the products witho
     '.agent-device-runner-cache.json',
     'Build',
   ]);
-  assert.deepEqual(fs.readdirSync(path.join(built.derived, 'Build')), ['Products']);
+  assert.deepEqual(fs.readdirSync(path.join(built.derived, 'Build')), [
+    path.basename(path.dirname(built.xctestrunPath)),
+  ]);
 
   const reused = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
 
