@@ -253,8 +253,8 @@ export function throwDaemonError(error: DaemonError): never {
 
 /**
  * One published `error.details.reason` value. `reason` is the wire spelling and never changes once
- * published. `summary` is one sentence for the error reasons page. `commands` names the CLI
- * commands that raise it.
+ * published. `summary` is one sentence for the error reasons page. `commands` names other CLI
+ * commands that also raise it, beyond the table owner.
  */
 export type ReasonRow = Readonly<{
   reason: string;
@@ -263,16 +263,14 @@ export type ReasonRow = Readonly<{
 }>;
 
 /**
- * A module's published reasons. Declare a table `as const satisfies ReasonTable` beside the code
+ * A module's published reasons, owned by one CLI command or subsystem: `ReasonTable<'fold'>`,
+ * `ReasonTable<'leases'>`. Declare a table `as const satisfies ReasonTable<Owner>` beside the code
  * that classifies those failures, and read `TABLE.member.reason` at each construction site, so an
- * undeclared reason does not compile. Every row names its commands, unless the table names the
- * `Subsystem` its reasons span, such as `ReasonTable<'leases'>`. `pnpm generate:reasons` collects
- * every table into the error reasons page. It refuses a reason value that two rows declare and a
- * command the CLI does not have.
+ * undeclared reason does not compile. `pnpm generate:reasons` collects every table into the error
+ * reasons page, under its owner. It refuses a reason value that two rows declare and a row command
+ * the CLI does not have.
  */
-export type ReasonTable<Subsystem extends string = never> = Readonly<
-  Record<string, [Subsystem] extends [never] ? Required<ReasonRow> : ReasonRow>
->;
+export type ReasonTable<_Owner extends string> = Readonly<Record<string, ReasonRow>>;
 
 /**
  * The `details.reason` values a pre-dispatch refusal answers with when the caller must know *why* a

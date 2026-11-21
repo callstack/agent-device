@@ -63,57 +63,47 @@ export const SCREENSHOT_CROP_REASONS = {
   selectorInvalid: {
     reason: 'CROP_SELECTOR_INVALID',
     summary: 'The `--crop-on` value is not a valid selector expression.',
-    commands: ['screenshot'],
   },
   targetNotFound: {
     reason: 'CROP_TARGET_NOT_FOUND',
     summary: 'No element matches the `--crop-on` selector.',
-    commands: ['screenshot'],
   },
   targetAmbiguous: {
     reason: 'CROP_TARGET_AMBIGUOUS',
     summary: 'More than one element matches the `--crop-on` selector.',
-    commands: ['screenshot'],
   },
   captureUnreadable: {
     reason: 'CROP_CAPTURE_UNREADABLE',
     summary: 'The snapshot taken for `--crop-on` was too sparse to read as the screen.',
-    commands: ['screenshot'],
   },
   captureIncomplete: {
     reason: 'CROP_CAPTURE_INCOMPLETE',
     summary: 'The snapshot taken for `--crop-on` was truncated, so a missing match is not proven.',
-    commands: ['screenshot'],
   },
   emptyIntersection: {
     reason: 'CROP_EMPTY_INTERSECTION',
     summary: 'The target frame covers no pixel of the capture.',
-    commands: ['screenshot'],
   },
   partialIntersection: {
     reason: 'CROP_PARTIAL_INTERSECTION',
     summary:
       'The target frame extends past the image, so the crop was clipped; a warning, not a failure.',
-    commands: ['screenshot'],
   },
   targetNotAccepted: {
     reason: 'CROP_TARGET_NOT_ACCEPTED',
     summary: '`--crop-on` is not supported on this device, surface, or snapshot backend.',
-    commands: ['screenshot'],
   },
   frameMismatch: {
     reason: 'CROP_FRAME_MISMATCH',
     summary:
       '`--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured frame.',
-    commands: ['screenshot'],
   },
   pendingPixelIdentityEvidence: {
     reason: 'PENDING_PIXEL_IDENTITY_EVIDENCE',
     summary:
       'The `details.rejectionReason` of a target whose crop is not yet verified against an independent capture.',
-    commands: ['screenshot'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'screenshot'>;
 
 export type ScreenshotCropReason =
   (typeof SCREENSHOT_CROP_REASONS)[keyof typeof SCREENSHOT_CROP_REASONS]['reason'];
@@ -128,9 +118,8 @@ export const SCREENSHOT_FULLSCREEN_REASONS = {
   macOsHelperSurfaceFixedFrame: {
     reason: 'SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME',
     summary: '`--fullscreen` names a macOS helper surface, which always captures the main display.',
-    commands: ['screenshot'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'screenshot'>;
 
 export type ScreenshotFullscreenReason =
   (typeof SCREENSHOT_FULLSCREEN_REASONS)[keyof typeof SCREENSHOT_FULLSCREEN_REASONS]['reason'];

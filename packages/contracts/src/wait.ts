@@ -8,48 +8,41 @@ export const WAIT_REASONS = {
   captureStalled: {
     reason: 'wait_capture_stalled',
     summary: 'No readable capture arrived before the deadline, so a retry can succeed.',
-    commands: ['wait'],
   },
   deadlineExceeded: {
     reason: 'wait_deadline_exceeded',
     summary: 'A later capture used up the budget after an earlier readable capture.',
-    commands: ['wait'],
   },
   runnerRestartExhausted: {
     reason: 'wait_runner_restart_exhausted',
     summary:
       'The deadline ended while the runner restarted to recover a lost response, so a retry can succeed.',
-    commands: ['wait'],
   },
   readinessExhausted: {
     reason: 'wait_readiness_exhausted',
     summary:
       'The deadline ended while the target was still being made observable; `details.readinessPhase` names the work.',
-    commands: ['wait'],
   },
   targetAbsent: {
     reason: 'wait_target_absent',
     summary: 'A positive wait never found a match.',
-    commands: ['wait'],
   },
   targetPresent: {
     reason: 'wait_target_present',
     summary:
       'Strict `wait absent` reached its deadline while valid captures still contained matches.',
-    commands: ['wait'],
   },
   stableTimeout: {
     reason: 'wait_stable_timeout',
     summary: '`wait stable` reached its deadline before the UI settled.',
-    commands: ['wait'],
   },
   landmarkIdentityMismatch: {
     reason: 'wait_landmark_identity_mismatch',
     summary:
       'A replay destination guard refused the match because its identity differs from the recorded landmark.',
-    commands: ['wait', 'replay'],
+    commands: ['replay'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'wait'>;
 
 export type WaitReason = (typeof WAIT_REASONS)[keyof typeof WAIT_REASONS]['reason'];
 

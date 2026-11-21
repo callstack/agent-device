@@ -15,14 +15,12 @@ export const FOLD_HELPER_REASONS = {
   hidDispatchFailed: {
     reason: 'fold-hid-dispatch-failed',
     summary: 'The fold helper could not send the hinge pose to the iOS simulator.',
-    commands: ['fold'],
   },
   hingeAngleNoSample: {
     reason: 'fold-hinge-angle-no-sample',
     summary: 'An iOS simulator hinge read returned no usable sample; `details` say why.',
-    commands: ['fold'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'fold'>;
 
 const HINGE_ANGLE_NO_SAMPLE_HINT =
   "The fold helper's hinge read returned no valid CoreMotion sample. The details name the cause: stderr such as a simulator runtime without CMAngleManager, or timeoutMs when the read did not finish.";

@@ -28,18 +28,22 @@ export function collectRepoReasonTables(repoRoot: string = REPO_ROOT): Collected
 }
 
 /**
- * The page: rows grouped under each command they name, or under their table's subsystem, then
- * ordered by table and declaration. A row that names two commands appears under both.
+ * The page: rows grouped under their table owner, as a command when the owner is a CLI command and
+ * as a subsystem otherwise, and also under each other command a row names; then ordered by table
+ * and declaration.
  */
-export function renderPage(tables: readonly CollectedReasonTable[]): string {
+export function renderPage(
+  tables: readonly CollectedReasonTable[],
+  cliCommands: ReadonlySet<string>,
+): string {
   const byCommand = new Map<string, CollectedReasonRow[]>();
   const bySubsystem = new Map<string, CollectedReasonRow[]>();
   const add = (groups: Map<string, CollectedReasonRow[]>, key: string, row: CollectedReasonRow) =>
     groups.set(key, [...(groups.get(key) ?? []), row]);
   for (const table of [...tables].sort(byTable)) {
     for (const row of table.rows) {
-      if (table.subsystem !== undefined) add(bySubsystem, table.subsystem, row);
-      else for (const command of row.commands) add(byCommand, command, row);
+      add(cliCommands.has(table.owner) ? byCommand : bySubsystem, table.owner, row);
+      for (const command of row.commands) if (command !== table.owner) add(byCommand, command, row);
     }
   }
   return [
@@ -89,12 +93,13 @@ function byTable(left: CollectedReasonTable, right: CollectedReasonTable): numbe
 
 function main(): number {
   const tables = collectRepoReasonTables();
-  const problems = reasonTableProblems(tables, new Set(listCliCommandNames()));
+  const cliCommands = new Set<string>(listCliCommandNames());
+  const problems = reasonTableProblems(tables, cliCommands);
   if (problems.length > 0) {
     process.stderr.write(`${problems.join('\n')}\n`);
     return 1;
   }
-  fs.writeFileSync(path.join(REPO_ROOT, PAGE_PATH), renderPage(tables));
+  fs.writeFileSync(path.join(REPO_ROOT, PAGE_PATH), renderPage(tables, cliCommands));
   process.stdout.write(`Wrote ${PAGE_PATH}.\n`);
   return 0;
 }

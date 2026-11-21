@@ -88,7 +88,7 @@ const DAEMON_STATE_ROOT_REASONS = {
     summary:
       'The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it.',
   },
-} as const satisfies ReasonTable<'daemon'>;
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
 const STATE_ROOT_PROBLEMS = {
@@ -334,7 +334,7 @@ export const DAEMON_LIFECYCLE_REASONS = {
     reason: 'daemon-owner-embedded',
     summary: 'A live host process owns this daemon and ends it through its own `close()`.',
   },
-} as const satisfies ReasonTable<'daemon'>;
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**
  * The refusal for a `daemon.json` whose owner field this build cannot place. No daemon answers it: a

@@ -7,14 +7,12 @@ export const FOLD_REASONS = {
   singlePanelDevice: {
     reason: 'single-panel-device',
     summary: 'The device has one panel and no hinge, so there is no pose to set.',
-    commands: ['fold'],
   },
   poseUnverified: {
     reason: 'fold-pose-unverified',
     summary: 'The pose was sent, but the device still reports another pose.',
-    commands: ['fold'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'fold'>;
 
 /**
  * The panel the device lights after the pose settled, in that panel's own native points: its pixel

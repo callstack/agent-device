@@ -25,9 +25,9 @@ const FOLD_HELPER_BUILD_REASONS = {
   buildFailed: {
     reason: 'fold-helper-build-failed',
     summary: 'The iOS simulator fold helper could not be built with the selected Xcode.',
-    commands: ['fold', 'orientation'],
+    commands: ['orientation'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'fold'>;
 const FOLD_HELPER_BUILD_HINT =
   'Select an Xcode with the iOS simulator SDK and foldable HID support using DEVELOPER_DIR.';
 

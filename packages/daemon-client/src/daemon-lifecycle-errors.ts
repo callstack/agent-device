@@ -33,7 +33,7 @@ const DAEMON_UNAVAILABLE_REASONS = {
     summary:
       'A daemon accepted the request to leave but was still running 60 s later and could not be retired.',
   },
-} as const satisfies ReasonTable<'daemon'>;
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
   return {

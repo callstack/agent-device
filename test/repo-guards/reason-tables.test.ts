@@ -18,7 +18,7 @@ test('the reason tables declare each reason once, name real commands, and match 
   assert.deepEqual(reasonTableProblems(tables, cliCommands), []);
   const committed = fs.readFileSync(path.join(REPO_ROOT, PAGE_PATH), 'utf8');
   assert.ok(
-    committed === renderPage(tables),
+    committed === renderPage(tables, cliCommands),
     `${PAGE_PATH} is stale. Run \`pnpm generate:reasons\`.`,
   );
 });
@@ -26,12 +26,12 @@ test('the reason tables declare each reason once, name real commands, and match 
 const collect = (files: Record<string, string>) =>
   collectReasonTables(new Map(Object.entries(files)));
 
-test('a marked table is collected exported or not, with its subsystem; an unmarked one is not', () => {
+test('a marked table is collected exported or not, with its owner; an unmarked one is not', () => {
   const tables = collect({
     'packages/a/src/a.ts': `
       const LOCAL = {
-        busy: { reason: 'a_busy', summary: 'Busy.', commands: ['open', 'close'] },
-      } as const satisfies ReasonTable;
+        busy: { reason: 'a_busy', summary: 'Busy.', commands: ['close'] },
+      } as const satisfies ReasonTable<'open'>;
       export const SHARED = {
         gone: { reason: 'A_GONE', summary: \`Gone.\` },
       } as const satisfies ReasonTable<'leases'>;
@@ -42,16 +42,16 @@ test('a marked table is collected exported or not, with its subsystem; an unmark
     `,
   });
   assert.deepEqual(
-    tables.map(({ name, subsystem, rows }) => ({ name, subsystem, rows })),
+    tables.map(({ name, owner, rows }) => ({ name, owner, rows })),
     [
       {
         name: 'LOCAL',
-        subsystem: undefined,
-        rows: [{ member: 'busy', reason: 'a_busy', summary: 'Busy.', commands: ['open', 'close'] }],
+        owner: 'open',
+        rows: [{ member: 'busy', reason: 'a_busy', summary: 'Busy.', commands: ['close'] }],
       },
       {
         name: 'SHARED',
-        subsystem: 'leases',
+        owner: 'leases',
         rows: [{ member: 'gone', reason: 'A_GONE', summary: 'Gone.', commands: [] }],
       },
     ],
@@ -59,14 +59,15 @@ test('a marked table is collected exported or not, with its subsystem; an unmark
 });
 
 test('a row the collector cannot read fails the scan instead of being dropped', () => {
-  const table = (rows: string, marker = 'as const satisfies ReasonTable') =>
+  const table = (rows: string, marker = 'as const satisfies ReasonTable<"open">') =>
     `const T = { ${rows} } ${marker};`;
   for (const [source, problem] of [
     [table(`a: { reason: R.a, summary: 'A.', commands: ['open'] }`), /`reason` and `summary`/],
     [table(`a: { reason: 'a', summary: 'A.', commands: [OPEN] }`), /`commands` as string literals/],
     [table(`a: ROW`), /named row object literal/],
     [table(`a: { reason: 'a', summary: 'A.' }`, 'satisfies ReasonTable<"s">'), /as const/],
-    [table(`a: { reason: 'a', summary: 'A.' }`, 'as const satisfies ReasonTable<S>'), /subsystem/],
+    [table(`a: { reason: 'a', summary: 'A.' }`, 'as const satisfies ReasonTable<S>'), /owner/],
+    [table(`a: { reason: 'a', summary: 'A.' }`, 'as const satisfies ReasonTable'), /owner/],
   ] as const) {
     assert.throws(() => collect({ 'src/t.ts': source }), problem);
   }
@@ -77,9 +78,9 @@ test('a duplicated reason value, a command the CLI lacks, and an empty table are
     'packages/a/src/a.ts': `const A = {
       one: { reason: 'dup', summary: 'One.', commands: ['open'] },
       two: { reason: 'unique', summary: 'Two.', commands: ['no-such-command'] },
-    } as const satisfies ReasonTable;`,
+    } as const satisfies ReasonTable<'open'>;`,
     'packages/b/src/b.ts': `const B = { one: { reason: 'dup', summary: 'One.' } } as const satisfies ReasonTable<'s'>;`,
-    'packages/c/src/c.ts': `const C = {} as const satisfies ReasonTable;`,
+    'packages/c/src/c.ts': `const C = {} as const satisfies ReasonTable<'s'>;`,
   });
   const problems = reasonTableProblems(tables, cliCommands);
   assert.equal(problems.length, 3);
@@ -89,14 +90,15 @@ test('a duplicated reason value, a command the CLI lacks, and an empty table are
   assert.deepEqual(reasonTableProblems([tables[1]!], cliCommands), []);
 });
 
-test('the page groups rows under each command they name, or under their subsystem', () => {
+test('the page groups rows under their owner command or subsystem, and each other command they name', () => {
   const page = renderPage(
     collect({
       'packages/a/src/a.ts': `const A = {
-        one: { reason: 'r_one', summary: 'One | two.', commands: ['open', 'close'] },
-      } as const satisfies ReasonTable;
+        one: { reason: 'r_one', summary: 'One | two.', commands: ['close'] },
+      } as const satisfies ReasonTable<'open'>;
       const B = { two: { reason: 'r_two', summary: 'Two.', commands: ['open'] } } as const satisfies ReasonTable<'leases'>;`,
     }),
+    cliCommands,
   );
   const section = (heading: string) => page.split(`### ${heading}\n`)[1]!.split('\n\n')[0]!.trim();
   assert.equal(
@@ -104,6 +106,6 @@ test('the page groups rows under each command they name, or under their subsyste
     '| Reason | Meaning |\n| --- | --- |\n| `r_one` | One \\| two. |',
   );
   assert.match(section('`open`'), /r_one/);
-  assert.doesNotMatch(section('`open`'), /r_two/);
+  assert.match(section('`open`'), /r_two/);
   assert.match(section('Leases'), /\| `r_two` \| Two\. \|/);
 });

@@ -31,19 +31,16 @@ const APPLE_FOLD_POSE_REASONS = {
     reason: 'fold-pose-dispatched-unverified',
     summary:
       'The iOS simulator received the pose, but the first hinge read returned no sample to verify it.',
-    commands: ['fold'],
   },
   angleUnverified: {
     reason: 'fold-angle-unverified',
     summary: 'The iOS simulator hinge did not reach the angle of the final keyframe.',
-    commands: ['fold'],
   },
   unsettled: {
     reason: 'fold-pose-unsettled',
     summary: 'The iOS simulator hinge reached the pose but never came to rest.',
-    commands: ['fold'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'fold'>;
 
 const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';

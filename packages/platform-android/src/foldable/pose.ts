@@ -30,29 +30,24 @@ const ANDROID_FOLD_REASONS = {
     reason: 'fold-posture-unsupported',
     summary:
       'The emulator profile has no device state for the requested pose; `details.supportedPoses` lists the poses it has.',
-    commands: ['fold'],
   },
   keyframesUnsupported: {
     reason: 'fold-keyframes-unsupported',
     summary: 'Android poses fixed postures only, so fold keyframes are refused.',
-    commands: ['fold'],
   },
   postureDispatchFailed: {
     reason: 'fold-posture-dispatch-failed',
     summary: 'The Android emulator console refused the posture command.',
-    commands: ['fold'],
   },
   lockScreenPersists: {
     reason: 'fold-lock-screen-persists',
     summary: 'The lock screen that folding raised on Android did not stay dismissed.',
-    commands: ['fold'],
   },
   hingeAngleUnreadable: {
     reason: 'fold-hinge-angle-unreadable',
     summary: 'The Android emulator console returned no hinge angle.',
-    commands: ['fold'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'fold'>;
 
 /** Reads until the guest commits the posture's device state; `attempts × poll` is the settle budget. */
 const ANDROID_FOLD_SETTLE_ATTEMPTS = 60;

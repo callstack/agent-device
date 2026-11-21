@@ -1,5 +1,5 @@
-// Collects every published reason table: a `const` declared `as const satisfies ReasonTable` (or
-// `ReasonTable<'subsystem'>`) in a tracked production source, exported or not. The table type lives
+// Collects every published reason table: a `const` declared `as const satisfies ReasonTable<'owner'>`
+// in a tracked production source, exported or not. The owner is a CLI command or a subsystem. The table type lives
 // in `packages/kernel/src/errors.ts`; each table stays beside the code that classifies its failures,
 // and this scan is what joins them into one vocabulary. It reads syntax only, so the scan needs no
 // build and evaluates no module.
@@ -19,7 +19,7 @@ export type CollectedReasonTable = Readonly<{
   file: string;
   line: number;
   name: string;
-  subsystem?: string;
+  owner: string;
   rows: readonly CollectedReasonRow[];
 }>;
 
@@ -47,7 +47,7 @@ export function collectReasonTables(sources: ReadonlyMap<string, string>): Colle
         file,
         line: lineOf(node),
         name,
-        ...(marked.subsystem === undefined ? {} : { subsystem: marked.subsystem }),
+        owner: marked.owner,
         rows: readRows(marked.object, where),
       });
     });
@@ -83,10 +83,10 @@ export function reasonTableProblems(
   return [...empty, ...unknownCommands, ...duplicates];
 }
 
-/** The table object and its subsystem, when `init` is `{…} as const satisfies ReasonTable<…>`. */
+/** The table object and its owner, when `init` is `{…} as const satisfies ReasonTable<'owner'>`. */
 function reasonTableMarker(
   init: unknown,
-): Readonly<{ object: AstNode; subsystem?: string }> | undefined {
+): Readonly<{ object: AstNode; owner: string }> | undefined {
   const node = init as AstNode | null | undefined;
   if (node?.type !== 'TSSatisfiesExpression') return undefined;
   const annotation = node.typeAnnotation as AstNode;
@@ -103,13 +103,12 @@ function reasonTableMarker(
     throw new TypeError(`${where} must be an object literal declared \`as const\`.`);
   }
   const parameters = ((annotation.typeArguments as AstNode | undefined)?.params ?? []) as AstNode[];
-  if (parameters.length === 0) return { object };
-  const literal = parameters[0]!.type === 'TSLiteralType' ? parameters[0]!.literal : undefined;
-  const subsystem = stringLiteral(literal);
-  if (parameters.length !== 1 || subsystem === undefined) {
-    throw new TypeError(`${where} must name its subsystem as one string literal.`);
+  const literal = parameters[0]?.type === 'TSLiteralType' ? parameters[0].literal : undefined;
+  const owner = stringLiteral(literal);
+  if (parameters.length !== 1 || owner === undefined) {
+    throw new TypeError(`${where} must name its owner command or subsystem as one string literal.`);
   }
-  return { object, subsystem };
+  return { object, owner };
 }
 
 function readRows(object: AstNode, where: string): CollectedReasonRow[] {

@@ -98,7 +98,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 These reasons can come from more than one command.
 
-### Daemon
+### Daemon lifecycle
 
 | Reason | Meaning |
 | --- | --- |

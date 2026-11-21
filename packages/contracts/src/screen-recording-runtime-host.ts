@@ -171,9 +171,8 @@ export const ANDROID_SCREEN_RECORDING_REASONS = {
   startupFailed: {
     reason: 'android_screenrecord_startup_failed',
     summary: 'Android `screenrecord` exited before it began writing; its startup output says why.',
-    commands: ['record'],
   },
-} as const satisfies ReasonTable;
+} as const satisfies ReasonTable<'record'>;
 
 export type AndroidScreenRecordingTransport = Readonly<{
   mode: 'local' | 'transport-composed';
