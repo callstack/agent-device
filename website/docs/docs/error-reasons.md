@@ -15,14 +15,16 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `cli_session_revoked` | The stored session was revoked, or the refresh answered with neither a token nor a rotation. |
+| `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
+| `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
 
 ### `connect`
 
 | Reason | Meaning |
 | --- | --- |
-| `cli_session_revoked` | The stored session was revoked, or the refresh answered with neither a token nor a rotation. |
+| `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
+| `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
 
 ### `fold`
