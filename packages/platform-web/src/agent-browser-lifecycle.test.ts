@@ -77,11 +77,37 @@ import {
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 import {
   createOwnedProcessRecordStore,
+  listHostProcesses,
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
+import { createWebToolbox, type WebToolbox } from './toolbox.ts';
 
 bindTestCommandHost();
 const testHost = createLiveTestHostEnvironment();
+
+/**
+ * The plugin's toolbox over an in-memory host: commands and process-table reads are recorded, and
+ * the reads go through the module-level `listHostProcesses` this suite fakes, so a scenario's
+ * `observeProcesses(...)` fixture still answers them.
+ */
+function createLifecycleToolbox(stateDir: string): WebToolbox {
+  const host = {
+    ...testHost,
+    stateDir,
+    runCommand: async (
+      executable: string,
+      args: string[],
+      options: { env?: NodeJS.ProcessEnv; timeoutMs?: number; stdin?: string },
+    ) => await runCmdMock(executable, args, options),
+    isFileExecutable: async () => false,
+    isExecutableOnPath: async () => false,
+    listHostProcesses: async (options: { timeoutMs: number }) => await listHostProcesses(options),
+    emitDiagnostic: () => {},
+    withDiagnosticTimer: async <T>(_phase: string, operation: () => Promise<T>): Promise<T> =>
+      await operation(),
+  };
+  return createWebToolbox(host as unknown as Parameters<typeof createWebToolbox>[0]);
+}
 
 const mockRunCmd = vi.mocked(runCmdMock);
 
@@ -205,6 +231,7 @@ test('cleanup skips reaping when the daemon reports open web sessions', async ()
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       openWebSessionNames: ['default-web'],
     });
 
@@ -250,6 +277,7 @@ test('cleanup skips reaping while the browser fleet holds an opening session', a
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       ownedProcessRecords,
     });
 
@@ -274,6 +302,7 @@ test('cleanup reaps when the only fleet session is the one whose open runs it', 
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       ownedProcessRecords,
       startingSession: 'fleet-web',
     });
@@ -300,6 +329,7 @@ test('cleanup evicts a launched session whose recorded browser exited, then reap
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       ownedProcessRecords,
     });
 
@@ -327,6 +357,7 @@ test('cleanup keeps a launched session when the process probe does not answer', 
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       ownedProcessRecords,
     });
 
@@ -354,6 +385,7 @@ test('cleanup skips reaping when managed browser socket activity is recent', asy
 
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
     });
 
     assert.equal(result.skipped?.reason, 'recent-browser-activity');
@@ -383,6 +415,7 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
 
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
     });
 
     assert.equal(result.skipped, undefined);
@@ -439,6 +472,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       ownedProcessRecords,
     });
 
@@ -561,9 +595,10 @@ test.each([
       });
       observeProcesses([{ pid: 101, command: `${binary} daemon`, executable: observed }]);
       const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-      expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual(
-        expected,
-      );
+      expect(
+        (await recordManagedAgentBrowserProcesses(status, store, createLifecycleToolbox(stateDir)))
+          .pids,
+      ).toEqual(expected);
     } finally {
       fs.rmSync(stateDir, { recursive: true, force: true });
     }
@@ -591,7 +626,10 @@ test('a managed binary symlink cannot confer ownership on an executable outside 
     ]);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
 
-    expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual([101]);
+    expect(
+      (await recordManagedAgentBrowserProcesses(status, store, createLifecycleToolbox(stateDir)))
+        .pids,
+    ).toEqual([101]);
     expect(store.replace.mock.calls[0]?.[1].map(({ pid }: { pid: number }) => pid)).toEqual([101]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -619,7 +657,11 @@ test('records verified current and retained native roots and stable descendants'
     ];
     observeProcesses(rows);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
+    const summary = await recordManagedAgentBrowserProcesses(
+      status,
+      store,
+      createLifecycleToolbox(stateDir),
+    );
     expect(summary.pids).toEqual([101, 102, 201, 301]);
     expect(summary.processes.map(({ reason }) => reason)).toEqual([
       'agent-browser-daemon',
@@ -698,7 +740,11 @@ test('browser home roots require executable containment and marker roots require
     ];
     observeProcesses(rows);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
+    const summary = await recordManagedAgentBrowserProcesses(
+      status,
+      store,
+      createLifecycleToolbox(stateDir),
+    );
     expect(summary.pids).toEqual([201, 202, 209, 210, 213]);
     expect(summary.processes.map(({ reason }) => reason)).toEqual([
       'launch-marker',
@@ -761,7 +807,11 @@ test('an unstable root or intermediate process cannot authorize its descendants'
         ),
     );
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    const summary = await recordManagedAgentBrowserProcesses(status, store, testHost);
+    const summary = await recordManagedAgentBrowserProcesses(
+      status,
+      store,
+      createLifecycleToolbox(stateDir),
+    );
     expect(summary.pids).toEqual([101]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -783,7 +833,10 @@ test('recording refuses a scanned command that differs from the bracketed identi
         new Map([[101, { startTime: 'start-101', command: 'different command', zombie: false }]]),
     );
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
-    expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual([]);
+    expect(
+      (await recordManagedAgentBrowserProcesses(status, store, createLifecycleToolbox(stateDir)))
+        .pids,
+    ).toEqual([]);
     expect(store.replace).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -828,7 +881,7 @@ test('recording and reaping require executable provenance and matching identity'
       sessionsDir: path.join(stateDir, 'sessions'),
       resolveSessionDir: (id) => path.join(stateDir, 'sessions', id),
     });
-    await recordManagedAgentBrowserProcesses(status, store, testHost);
+    await recordManagedAgentBrowserProcesses(status, store, createLifecycleToolbox(stateDir));
     const recordedPids = store.read()[0]?.records.map(({ pid }) => pid);
     const alive = new Set(rows.map(({ pid }) => pid));
     const signals: number[] = [];
@@ -894,6 +947,7 @@ test('cleanup retains legacy records without signaling or treating them as verif
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
+      emitDiagnostic: () => {},
       ownedProcessRecords: store,
     });
     expect(result.pids).toEqual([]);

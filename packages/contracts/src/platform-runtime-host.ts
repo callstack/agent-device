@@ -179,7 +179,8 @@ export type DeviceInventoryHostByFamily = Readonly<{
   android: Pick<DeviceInventoryHost, 'commands' | 'files' | 'homeDirectory' | 'toolchains'>;
   /** The HarmonyOS plugin carries its own host, so its inventory asks the core for nothing. */
   harmonyos: never;
-  vega: Pick<DeviceInventoryHost, 'commands' | 'files' | 'homeDirectory'>;
+  /** The Vega plugin carries its own host, so its inventory asks the core for nothing. */
+  vega: never;
   linux: Pick<DeviceInventoryHost, 'hostName' | 'hostOs'>;
   web: never;
 }>;

@@ -21,6 +21,7 @@ import { MANAGED_WEB_BROWSER_PROCESS_PURPOSE } from '../agent-browser-process-re
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import { agentBrowserJsonResult, mkdtempForTestSync } from './test-utils.ts';
+import { createWebHostStub } from '../toolbox.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -147,7 +148,7 @@ async function withFleetRecordStore(
   store.replace({ kind: 'daemon' }, [seed]);
   await runScenario({
     provider: createAgentBrowserWebProvider({
-      host: { env: process.env, cwd: process.cwd() },
+      toolbox: createWebHostStub({ stateDir, ownedProcessRecords: store }).toolbox,
       session: 'web-session',
       stateDir,
       openWebSessionNames: () => ['web-session'],

@@ -1,7 +1,5 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
-import type { PlatformHost } from 'agent-device/plugins';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   ensureHostDirectorySync,
@@ -13,6 +11,7 @@ import {
   hostNodeVersion,
   hostPlatform,
 } from '@agent-device/host-kit/process';
+import type { WebCommandRunner } from './command-host.ts';
 
 /**
  * How the managed backend gets onto disk. Kept apart from the tool module,
@@ -23,7 +22,8 @@ export async function installManagedAgentBrowserPackage(params: {
   packageSpec: string;
   timeoutMs: number;
   env: Readonly<EnvMap>;
-  runCommand?: PlatformHost['runCommand'];
+  /** The plugin's command route: npm is the host's to spawn, like every other command. */
+  commands: WebCommandRunner;
 }): Promise<void> {
   ensureHostDirectorySync(params.packageRoot);
   // `--no-global` keeps an ambient `npm_config_global` from redirecting the
@@ -38,7 +38,7 @@ export async function installManagedAgentBrowserPackage(params: {
     '--no-save',
     params.packageSpec,
   ]);
-  await (params.runCommand ?? runCmd)(npm.command, npm.args, {
+  await params.commands.run(npm.command, npm.args, {
     env: params.env,
     timeoutMs: params.timeoutMs,
   });

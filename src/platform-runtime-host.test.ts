@@ -77,8 +77,8 @@ test('vega inventory resolves the CLI from the host home, not the process home',
   // The rule: every Vega executable lookup in one runtime resolves from that runtime host's
   // PATH and home. This host's HOME differs from the process HOME and names a default-install
   // vega the process home does not have, so `devices --platform vega` must list the device
-  // instead of TOOL_MISSING (#3794). Reverting `homeDirectory` to `os.homedir()` in
-  // createDeviceInventoryHost makes the lookup miss and this test go red.
+  // instead of TOOL_MISSING (#3794). The plugin reads them through the PlatformHost its `setup`
+  // received, so the fixture hands the same environment to `setup` and nothing to `loadInventory`.
   const scratch = mkdtempForTestSync('vega-inventory-host-home-');
   const hostHome = path.join(scratch, 'host-home');
   mkdirSync(path.join(hostHome, 'vega', 'bin'), { recursive: true });
@@ -86,10 +86,6 @@ test('vega inventory resolves the CLI from the host home, not the process home',
   writeFileSync(vega, '#!/bin/sh\necho "VirtualDevice : running"\n');
   chmodSync(vega, 0o755);
 
-  const inventoryHost = createDeviceInventoryHost({
-    env: { PATH: path.join(scratch, 'empty-path'), HOME: hostHome },
-    cwd: scratch,
-  });
   const scope: PlatformRequestScope = Object.freeze({
     signal: new AbortController().signal,
     diagnostics: Object.freeze({ emit: () => {} }),
@@ -102,7 +98,7 @@ test('vega inventory resolves the CLI from the host home, not the process home',
     env: { PATH: path.join(scratch, 'empty-path'), HOME: hostHome },
     cwd: scratch,
   });
-  const inventory = await selection.active!.inventoryModule.loadInventory(inventoryHost);
+  const inventory = await selection.active!.inventoryModule.loadInventory();
   const devices = await inventory.discover({ platform: 'vega', target: 'tv' }, scope);
 
   expect(devices).toEqual([

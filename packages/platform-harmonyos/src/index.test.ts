@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HarmonyPlatformRegistration } from '@agent-device/contracts/platform-plugin';
 import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { isExecutablePath } from '@agent-device/host-kit/command';
+import { isExecutablePath, whichCmd } from '@agent-device/host-kit/command';
 import path from 'node:path';
 import harmonyPlatformPlugin from './index.ts';
 import { createHarmonyToolchainRoot } from './toolbox.fixtures.ts';
@@ -41,6 +41,8 @@ function createPluginHost(
     // The real host probe: a test that names a toolchain root proves the plugin resolves HDC from
     // a file on disk, not from a verdict this fixture hands it.
     isFileExecutable: isExecutablePath,
+    isExecutableOnPath: async (executable) => (await whichCmd(executable, env)) !== undefined,
+    listHostProcesses: async () => [],
     emitDiagnostic,
     withDiagnosticTimer,
   };

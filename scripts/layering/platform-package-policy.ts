@@ -126,30 +126,10 @@ const MANAGED_HOST_KIT_SCOPES = [
   '@agent-device/host-kit/diagnostics',
 ];
 
-// The web and Vega files that still import one of those scopes, as of the HarmonyOS plugin (#4317).
-// Each entry is that package's own migration slice, not an exception to this rule: no file joins the
-// list, and an entry leaves it when its file binds to the host its plugin was set up with. HarmonyOS
-// carries no entry: its plugin builds one HDC command runner from `host.runCommand` in `setup`, so
-// its packed bundle carries no separate host-kit command or diagnostics scope.
-const MANAGED_HOST_KIT_IMPORT_DEBT: Readonly<Record<string, readonly string[]>> = {
-  '@agent-device/web': [
-    'packages/platform-web/src/agent-browser-install.ts',
-    'packages/platform-web/src/agent-browser-lifecycle.ts',
-    'packages/platform-web/src/agent-browser-process-record.ts',
-    'packages/platform-web/src/agent-browser-provider.ts',
-    'packages/platform-web/src/agent-browser-tool.ts',
-    'packages/platform-web/src/interactor.ts',
-  ],
-  '@agent-device/vega': [
-    'packages/platform-vega/src/app-lifecycle.ts',
-    'packages/platform-vega/src/input-actions.ts',
-    'packages/platform-vega/src/inventory.ts',
-    'packages/platform-vega/src/tool-provider.ts',
-    'packages/platform-vega/src/vega-executable.ts',
-  ],
-  '@agent-device/harmonyos': [],
-};
-
+// Every managed platform package is on the host: the web and Vega plugins joined HarmonyOS, and no
+// file of any of them imports these scopes at runtime. A new managed family is therefore bound from
+// its first commit, and a file that wants a host-kit command or diagnostic helper is a bug to fix at
+// that file, not an entry to add here.
 function isManagedHostKitScope(spec: string): boolean {
   return MANAGED_HOST_KIT_SCOPES.some((scope) => spec === scope || spec.startsWith(`${scope}/`));
 }
@@ -160,7 +140,6 @@ function managedHostKitScopeViolations(
   managedName: string,
 ): LayeringViolation[] {
   if (site.typeOnly || !isManagedHostKitScope(site.spec)) return [];
-  if ((MANAGED_HOST_KIT_IMPORT_DEBT[managedName] ?? []).includes(file)) return [];
   return [
     violation(
       file,

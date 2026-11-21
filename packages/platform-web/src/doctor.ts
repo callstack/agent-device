@@ -1,13 +1,13 @@
 import type { DoctorCheck } from '@agent-device/contracts/observability';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { inspectManagedAgentBrowserProcesses } from './agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
+import type { WebToolbox } from './toolbox.ts';
 
 export async function webBrowserLifecycleCheck(
   stateDir: string,
-  host: HostEnvironment,
+  toolbox: WebToolbox,
 ): Promise<DoctorCheck> {
-  const status = getManagedAgentBrowserStatus({ stateDir, host });
+  const status = getManagedAgentBrowserStatus({ stateDir, host: toolbox.host });
   if (!status.installed) {
     return {
       id: 'web-agent-browser-processes',
@@ -18,7 +18,7 @@ export async function webBrowserLifecycleCheck(
     };
   }
   try {
-    const summary = await inspectManagedAgentBrowserProcesses(status);
+    const summary = await inspectManagedAgentBrowserProcesses(status, toolbox);
     return {
       id: 'web-agent-browser-processes',
       status: summary.count > 0 ? 'info' : 'pass',

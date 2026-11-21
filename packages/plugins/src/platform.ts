@@ -13,7 +13,7 @@ import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-run
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import type { HostProcessInfo, OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 /** Authority shared by web setup and daemon-owned web sessions. */
@@ -39,6 +39,18 @@ export type PlatformHost = HostEnvironment &
      * the probe uses the same host authority as the spawn it authorizes.
      */
     isFileExecutable(path: string): Promise<boolean>;
+    /**
+     * Whether the host resolves `executable` on its `PATH`, answered against the host environment
+     * the plugin was set up with. A plugin that prefers a tool from `PATH` asks this rather than
+     * searching `PATH` itself, so the lookup and the spawn it authorizes read one environment.
+     */
+    isExecutableOnPath(executable: string): Promise<boolean>;
+    /**
+     * The host's process table. A plugin that accounts for a fleet it started asks the host instead
+     * of running a process tool itself, so the read uses the host's own executable resolution and
+     * stays apart from whatever command override one request of this daemon carries.
+     */
+    listHostProcesses(options: { timeoutMs: number }): Promise<readonly HostProcessInfo[]>;
     emitDiagnostic(event: DiagnosticEventInput): void;
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;

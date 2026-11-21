@@ -28,6 +28,7 @@ import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import { createWebHostStub } from './toolbox.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -292,11 +293,21 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
 
   assert.deepEqual(events, ['provider-startup-cleanup', 'agent-browser open']);
   assert.equal(mockProviderStartupCleanup.mock.calls.length, 1);
-  assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
-    env: process.env,
-    openWebSessionNames: [],
-    startingSession: 'web-session',
-  });
+  const cleanupOptions = mockProviderStartupCleanup.mock.calls[0]?.[1] as Record<string, unknown>;
+  // The cleanup is reported through the host the plugin was set up with, so the stub shows it here.
+  assert.equal(typeof cleanupOptions.emitDiagnostic, 'function');
+  assert.deepEqual(
+    {
+      env: cleanupOptions.env,
+      openWebSessionNames: cleanupOptions.openWebSessionNames,
+      startingSession: cleanupOptions.startingSession,
+    },
+    {
+      env: process.env,
+      openWebSessionNames: [],
+      startingSession: 'web-session',
+    },
+  );
 });
 
 test('agent-browser provider ignores provider-startup cleanup failures', async () => {
@@ -556,7 +567,7 @@ test('agent-browser provider adds doctor guidance for missing binary and invalid
     const missingStateDir = mkdtempForTestSync('agent-device-web-provider-missing-');
     try {
       const provider = createAgentBrowserWebProvider({
-        host: { env: process.env, cwd: process.cwd() },
+        toolbox: createWebHostStub({ stateDir: missingStateDir }).toolbox,
         stateDir: missingStateDir,
       });
       await assert.rejects(
@@ -593,7 +604,7 @@ test('agent-browser provider preserves Node version guidance for missing managed
     const missingStateDir = mkdtempForTestSync('agent-device-web-provider-node-');
     try {
       const provider = createAgentBrowserWebProvider({
-        host: { env: process.env, cwd: process.cwd() },
+        toolbox: createWebHostStub({ stateDir: missingStateDir }).toolbox,
         stateDir: missingStateDir,
       });
       await assert.rejects(
