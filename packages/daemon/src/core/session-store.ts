@@ -1,5 +1,4 @@
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
-import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
 import {
   resolveSessionDir,
   resolveSessionAppLogPath,
@@ -17,7 +16,12 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
+import type {
+  CloseBootOwnership,
+  SessionRef,
+  SessionRuntimeHints,
+  SessionState,
+} from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
 import {
@@ -439,7 +443,12 @@ export class SessionStore {
     session.lastActivityAtMs = atMs;
   }
 
-  /** Keep boot ownership and its launch identity together for the same device identity. */
+  /**
+   * Keep boot ownership and its launch identity together for the same device identity. A `none`
+   * write — a re-open that proved nothing — keeps the recorded disproval: it establishes no ownership
+   * of its own, and a session that disproved a boot is still the same promise to report keeping that
+   * device running, whether this re-open then succeeds or fails partway.
+   */
   updateOpenDevice(
     ref: SessionRef,
     device: DeviceInfo,
@@ -448,19 +457,26 @@ export class SessionStore {
   ): void {
     const current = this.requireCurrent(ref);
     const retainsBoot = sameDeviceIdentity(deviceIdentity(current.device), deviceIdentity(device));
-    const ownsBoot = bootOwnership.ownsBoot || (retainsBoot && current.bootedByOpen === true);
+    const provesBoot = bootOwnership === 'proved' || bootOwnership === 'inferred';
+    const ownsBoot = provesBoot || (retainsBoot && current.bootedByOpen === true);
     this.update(ref, {
       device,
-      androidLaunchIdentity: bootOwnership.ownsBoot
+      androidLaunchIdentity: provesBoot
         ? androidLaunchIdentity
         : retainsBoot
           ? current.androidLaunchIdentity
           : undefined,
       bootedByOpen: ownsBoot ? true : undefined,
-      // #4791: the reason is reported only alongside the ownership it refused. A re-open that disproves
-      // its OWN boot cannot erase a boot an earlier open of this same device proved and #4162 keeps, so
-      // that close stops on the preserved proof and says nothing.
-      bootOwnerUnverified: !ownsBoot && bootOwnership.bootOwnerUnverified ? true : undefined,
+      // #4791: the reason rides the ownership it refused. A write that owns a stop — including a
+      // re-open that disproves its OWN boot while an earlier open of this same device proved one and
+      // #4162 keeps it — reports nothing, because close stops on the preserved proof.
+      bootOwnerUnverified: ownsBoot
+        ? undefined
+        : bootOwnership === 'disproved'
+          ? true
+          : retainsBoot
+            ? current.bootOwnerUnverified
+            : undefined,
     });
   }
 

@@ -55,6 +55,7 @@ const REASON_TABLES = [
     'CLOSE_BOOT_OWNER_UNVERIFIED_REASONS',
     'packages/contracts/src/device-boot.ts',
     'table',
+    [commandsDoc, cliHelpWorkflows],
   ),
 ];
 
