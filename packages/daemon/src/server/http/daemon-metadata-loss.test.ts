@@ -11,7 +11,8 @@ import {
 
 const OWN_PID = process.pid;
 const FOREIGN_PID = 999_999_999;
-const OWN = { pid: OWN_PID, startTime: 'own-start' } as const;
+// A provenanced POSIX birth token: the verified format, so a different token proves a recycle.
+const OWN = { pid: OWN_PID, startTime: 'posix:1763493000000' } as const;
 
 function scratch(): { stateDir: string; infoPath: string } {
   const stateDir = mkdtempForTestSync('agent-device-daemon-metadata-loss-');
@@ -25,7 +26,7 @@ function publish(stateDir: string, pid: number, startTime: string | null): void 
 describe('readDaemonMetadataLoss', () => {
   test('a registration naming this daemon is not a loss', () => {
     const { stateDir, infoPath } = scratch();
-    publish(stateDir, OWN_PID, 'own-start');
+    publish(stateDir, OWN_PID, OWN.startTime);
 
     assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
   });
@@ -42,7 +43,7 @@ describe('readDaemonMetadataLoss', () => {
 
   test('a record recycling this pid under a different start time is a loss', () => {
     const { stateDir, infoPath } = scratch();
-    publish(stateDir, OWN_PID, 'recycled-start');
+    publish(stateDir, OWN_PID, 'posix:1763493001000');
 
     assert.deepEqual(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), {
       state: 'replaced',
@@ -52,7 +53,7 @@ describe('readDaemonMetadataLoss', () => {
 
   test('a registration deleted while the state dir stands is an absent loss', () => {
     const { stateDir, infoPath } = scratch();
-    publish(stateDir, OWN_PID, 'own-start');
+    publish(stateDir, OWN_PID, OWN.startTime);
     fs.rmSync(infoPath);
 
     assert.deepEqual(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), {
@@ -63,7 +64,7 @@ describe('readDaemonMetadataLoss', () => {
   test('a state dir that was pruned away entirely is not a loss this daemon should report', () => {
     // Reporting one would write a `daemon.log` back into the directory the operator just removed.
     const { stateDir, infoPath } = scratch();
-    publish(stateDir, OWN_PID, 'own-start');
+    publish(stateDir, OWN_PID, OWN.startTime);
     fs.rmSync(stateDir, { recursive: true, force: true });
 
     assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
@@ -74,7 +75,7 @@ describe('readDaemonMetadataLoss', () => {
     () => {
       // A root-owned CI host reads mode 000 anyway, so the case only binds as a non-root process.
       const { stateDir, infoPath } = scratch();
-      publish(stateDir, OWN_PID, 'own-start');
+      publish(stateDir, OWN_PID, OWN.startTime);
       fs.chmodSync(infoPath, 0o000);
       try {
         assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
@@ -90,6 +91,15 @@ describe('readDaemonMetadataLoss', () => {
     // one verdict, and neither gets to default in its own direction.
     const { stateDir, infoPath } = scratch();
     publish(stateDir, OWN_PID, null);
+
+    assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
+  });
+
+  test('a legacy raw record under this pid is unverified, not a reported loss', () => {
+    // A record written before the provenance pin holds a raw `lstart` rendering, which cannot
+    // prove a different lifetime, so the daemon does not announce a takeover on it.
+    const { stateDir, infoPath } = scratch();
+    publish(stateDir, OWN_PID, 'Tue Nov 17 19:42:27 2026');
 
     assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
   });
@@ -123,7 +133,7 @@ describe('watchDaemonMetadataLoss', () => {
     vi.useFakeTimers();
     try {
       const { stateDir, infoPath } = scratch();
-      publish(stateDir, OWN_PID, 'own-start');
+      publish(stateDir, OWN_PID, OWN.startTime);
       const watch = startWatch(stateDir, infoPath);
       try {
         watch.advance();
@@ -145,7 +155,7 @@ describe('watchDaemonMetadataLoss', () => {
     vi.useFakeTimers();
     try {
       const { stateDir, infoPath } = scratch();
-      publish(stateDir, OWN_PID, 'own-start');
+      publish(stateDir, OWN_PID, OWN.startTime);
       const watch = startWatch(stateDir, infoPath);
 
       fs.rmSync(stateDir, { recursive: true, force: true });
@@ -167,7 +177,7 @@ describe('watchDaemonMetadataLoss', () => {
     vi.useFakeTimers();
     try {
       const { stateDir, infoPath } = scratch();
-      publish(stateDir, OWN_PID, 'own-start');
+      publish(stateDir, OWN_PID, OWN.startTime);
       const watch = startWatch(stateDir, infoPath);
       watch.cancel();
       watch.cancel();

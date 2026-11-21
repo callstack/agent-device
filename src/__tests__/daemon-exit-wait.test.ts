@@ -5,8 +5,8 @@ import {
 } from '@agent-device/daemon-contracts/daemon-process';
 
 const DAEMON_COMMAND = '/opt/checkout/dist/src/internal/daemon.js';
-const OURS = 'Mon Aug 24 10:00:00 2026';
-const RECYCLED = 'Mon Aug 24 10:00:07 2026';
+const OURS = 'posix:1000';
+const RECYCLED = 'posix:2000';
 const PID = 4242;
 const TIMEOUT_MS = 1_000;
 const POLL_MS = 5;
@@ -67,6 +67,29 @@ test.each([0, -1, 1.5, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
       exited: false,
       elapsedMs: 0,
     });
+  },
+);
+
+test.each([
+  'posix:corrupt',
+  'posix:1500',
+  'posix:02000',
+  'posix:9007199254740993000',
+  'posix:8640000000001000',
+  'posix:253402300800000',
+])(
+  'a malformed stored token %s proves no exit: stop retains the daemon and sends no signal',
+  async (startTime) => {
+    expect(await waitForDaemonExit({ pid: PID, startTime }, { timeoutMs: 0 })).toMatchObject({
+      exited: false,
+    });
+    expect(
+      await stopDaemonProcess(
+        { pid: PID, startTime },
+        { mode: 'graceful', termTimeoutMs: 20, killTimeoutMs: 20 },
+      ),
+    ).toEqual({ status: 'retained', signal: 'SIGTERM', reason: 'identity-unverified' });
+    expect(signals).toEqual([]);
   },
 );
 

@@ -69,6 +69,12 @@ export {
 } from './host-execution.ts';
 export { pinOwnProcessStartTime } from './host-process-mock.ts';
 export {
+  LIFETIME_TOKEN,
+  LEGACY_RAW_START_TIME,
+  STALE_LIFETIME_TOKEN,
+  staleBirthTokenLike,
+} from './process-lifetime.fixtures.ts';
+export {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
   INDEXED_PARITY_POLICY_NODES,

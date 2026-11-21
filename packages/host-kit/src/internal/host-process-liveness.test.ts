@@ -14,16 +14,24 @@ vi.mock('./exec.ts', async () => {
 
 import {
   isProcessZombie,
+  listHostProcesses,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
+  readProcessCommand,
   readProcessStartTime,
   readProcessIdentities,
   readProcessIdentityFacts,
+  processStartTimesDiffer,
 } from './host-process.ts';
 import { mockLinuxProcessStatAbsent } from './host-proc.fixtures.ts';
 
 function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
+}
+
+/** The canonical token a pinned C-form lstart parses to: the probe pins TZ=UTC, so parse as UTC. */
+function posixToken(y: number, mo: number, d: number, h: number, mi: number, s: number): string {
+  return `posix:${Date.UTC(y, mo, d, h, mi, s)}`;
 }
 
 /** Answers the two batched identity reads: state and start time, and the command line. */
@@ -82,11 +90,11 @@ test('reads many process identities from one ps snapshot', () => {
 
   assert.deepEqual(observations.get(4242), {
     state: 'Ss',
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
   });
   assert.deepEqual(observations.get(4343), {
     state: 'ZN',
-    startTime: 'Mon Aug 10 20:01:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 1, 0),
   });
   assert.equal(mockRunCmdSync.mock.calls.length, 1);
   assert.ok(PINNED_PS_COMMANDS.includes(mockRunCmdSync.mock.calls[0]?.[0]));
@@ -114,11 +122,11 @@ test('the async snapshot answers the same observations from one awaited ps run',
 
   assert.deepEqual(observations.get(4242), {
     state: 'Ss',
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
   });
   assert.deepEqual(observations.get(4343), {
     state: 'ZN',
-    startTime: 'Mon Aug 10 20:01:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 1, 0),
   });
   assert.equal(mockRunCmd.mock.calls.length, 1);
   assert.equal(mockRunCmdSync.mock.calls.length, 0, 'the async probe never blocks the loop');
@@ -147,7 +155,7 @@ test('the ownership read spends the budget its caller names on both batched read
   const facts = await readProcessIdentityFacts(4242, 5_000);
 
   assert.deepEqual(facts, {
-    startTime: 'Mon Aug 10 20:00:00 2026',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
     command: '/bin/simctl io recordVideo out.mp4',
     zombie: false,
   });
@@ -187,12 +195,19 @@ test('one identity read answers a whole fleet from two ps runs, on Linux and mac
       [
         101,
         {
-          startTime: 'Mon Nov  9 10:00:00 2026',
+          startTime: posixToken(2026, 10, 9, 10, 0, 0),
           command: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless',
           zombie: false,
         },
       ],
-      [202, { startTime: 'Tue Nov 10 08:30:00 2026', command: '[chrome] <defunct>', zombie: true }],
+      [
+        202,
+        {
+          startTime: posixToken(2026, 10, 10, 8, 30, 0),
+          command: '[chrome] <defunct>',
+          zombie: true,
+        },
+      ],
       [303, { startTime: null, command: null, zombie: null }],
     ],
   );
@@ -227,10 +242,10 @@ test('the ownership read leaves the zombie question open when only the state is 
 });
 
 test('the ownership read answers the zombie question from the state field', async () => {
-  psAnswersIdentity({ identity: '4242 ZN x\n', command: '4242 y\n' });
+  psAnswersIdentity({ identity: '4242 ZN Mon Aug 10 20:00:00 2026\n', command: '4242 y\n' });
 
   assert.deepEqual(await readProcessIdentityFacts(4242), {
-    startTime: 'x',
+    startTime: posixToken(2026, 7, 10, 20, 0, 0),
     command: 'y',
     zombie: true,
   });
@@ -241,13 +256,13 @@ test('the ownership read answers the zombie question from the state field', asyn
 test('a host without /bin/ps reads identity through the NixOS system profile procps', async () => {
   psInstalledAt(['/run/current-system/sw/bin/ps']);
   psReturns('4242 Ss   Mon Aug 10 20:00:00 2026\n');
-  psAnswersIdentity({ identity: '4242 Ss x\n', command: '4242 y\n' });
+  psAnswersIdentity({ identity: '4242 Ss Mon Aug 10 20:01:00 2026\n', command: '4242 y\n' });
 
   assert.equal(
     readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
-    'Mon Aug 10 20:00:00 2026',
+    posixToken(2026, 7, 10, 20, 0, 0),
   );
-  assert.equal((await readProcessIdentityFacts(4242)).startTime, 'x');
+  assert.equal((await readProcessIdentityFacts(4242)).startTime, posixToken(2026, 7, 10, 20, 1, 0));
   assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/run/current-system/sw/bin/ps');
   for (const call of mockRunCmd.mock.calls) {
     assert.equal(call[0], '/run/current-system/sw/bin/ps');
@@ -347,19 +362,188 @@ test.skipIf(process.platform !== 'linux')(
         if (stat === null) throw new Error('ENOENT');
         return stat;
       });
-      psReturns('original lstart');
-      assert.equal(readProcessStartTime(4242), 'original lstart');
-      psReturns('4242 Ss original lstart');
-      mockRunCmd.mockResolvedValue({ stdout: '4242 Ss original lstart', stderr: '', exitCode: 0 });
-      assert.equal(
-        readHostProcessIdentityObservations([4242]).get(4242)?.startTime,
-        'original lstart',
-      );
+      const lstart = 'Mon Aug 10 20:00:00 2026';
+      const expected = posixToken(2026, 7, 10, 20, 0, 0);
+      psReturns(lstart);
+      assert.equal(readProcessStartTime(4242), expected);
+      psReturns(`4242 Ss ${lstart}`);
+      mockRunCmd.mockResolvedValue({ stdout: `4242 Ss ${lstart}`, stderr: '', exitCode: 0 });
+      assert.equal(readHostProcessIdentityObservations([4242]).get(4242)?.startTime, expected);
       assert.equal(
         (await readHostProcessIdentityObservationsAsync([4242])).get(4242)?.startTime,
-        'original lstart',
+        expected,
       );
       vi.restoreAllMocks();
     }
   },
 );
+
+/** The `-o` value of a ps call: `lstart=`-bearing reads pin locale and clock, the others must not. */
+function psFieldOf(args: readonly string[]): string {
+  return args.find((arg) => arg.endsWith('=')) ?? '';
+}
+
+test('only lstart-bearing ps reads pin LC_ALL=C and TZ=UTC; command and state reads keep the caller env', async () => {
+  // BSD/macOS ps escapes non-ASCII argv bytes under LC_ALL=C, so a pinned command read would
+  // disagree byte-for-byte with the unpinned listHostProcesses scan and break managed-process
+  // ownership for non-ASCII paths. The rule: every read whose output carries lstart pins the C
+  // locale and the UTC clock (so the output never depends on the zone the ps child inherited),
+  // and no command-text read is pinned.
+  const utf8Command = '/Users/mich/é/ü/agent-device/dist/src/internal/daemon.js';
+  const escapeLikeCLocalePs = (text: string) =>
+    text.replaceAll(/[^\u0020-\u007E]/g, (ch) => `M-C${ch}`);
+  const commandFor = (options?: { envOverrides?: NodeJS.ProcessEnv }) =>
+    options?.envOverrides?.LC_ALL === 'C' ? escapeLikeCLocalePs(utf8Command) : utf8Command;
+  mockRunCmdSync.mockImplementation(
+    (_cmd: string, args: readonly string[], options?: { envOverrides?: NodeJS.ProcessEnv }) => {
+      const field = psFieldOf(args);
+      if (field === 'pid=,state=,lstart=')
+        return { stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
+      if (field === 'lstart=')
+        return { stdout: 'Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
+      if (field === 'command=')
+        return { stdout: `${commandFor(options)}\n`, stderr: '', exitCode: 0 };
+      return { stdout: 'Ss\n', stderr: '', exitCode: 0 };
+    },
+  );
+  mockRunCmd.mockImplementation(
+    async (
+      _cmd: string,
+      args: readonly string[],
+      options?: { envOverrides?: NodeJS.ProcessEnv },
+    ) => {
+      const field = psFieldOf(args);
+      if (field.includes('command='))
+        return { stdout: `4242 ${commandFor(options)}\n`, stderr: '', exitCode: 0 };
+      return { stdout: '4242 Ss   Mon Aug 10 20:00:00 2026\n', stderr: '', exitCode: 0 };
+    },
+  );
+
+  readHostProcessIdentityObservations([4242]);
+  await readHostProcessIdentityObservationsAsync([4242]);
+  await readProcessIdentityFacts(4242);
+  assert.equal(readProcessStartTime(4242), posixToken(2026, 7, 10, 20, 0, 0));
+  assert.equal(
+    readProcessCommand(4242),
+    utf8Command,
+    'command text must read as UTF-8, not as C-locale escapes',
+  );
+  isProcessZombie(4242);
+  await listHostProcesses({ timeoutMs: 1_000 });
+
+  const calls = [...mockRunCmdSync.mock.calls, ...mockRunCmd.mock.calls];
+  assert.ok(calls.length > 0);
+  let sawCommandRead = false;
+  for (const call of calls) {
+    const field = psFieldOf(call[1] ?? []);
+    if (field.includes('lstart=')) {
+      assert.deepEqual(
+        call[2]?.envOverrides,
+        { LC_ALL: 'C', TZ: 'UTC' },
+        `lstart-bearing read (${field}) must pin LC_ALL=C and TZ=UTC over the inherited env`,
+      );
+      assert.equal(call[2]?.env, undefined, 'the pin must be an override, not a whole env');
+    } else {
+      sawCommandRead ||= field.includes('command=');
+      assert.equal(
+        call[2]?.env,
+        undefined,
+        `non-lstart read (${field}) must carry no env, so command text keeps one encoding`,
+      );
+      assert.equal(
+        call[2]?.envOverrides,
+        undefined,
+        `non-lstart read (${field}) must carry no locale pin, so command text keeps one encoding`,
+      );
+    }
+  }
+  assert.ok(sawCommandRead, 'the pid=,command= batch read must have run');
+});
+
+test.runIf(process.platform !== 'win32')(
+  'a C-form lstart read canonicalizes on the UTC clock whatever zone the reader process runs in',
+  () => {
+    mockRunCmdSync.mockImplementation((_cmd: string, args: readonly string[]) => ({
+      stdout:
+        String(args[3]) === 'lstart='
+          ? 'Mon Aug 10 20:00:00 2026\n'
+          : '4242 Ss   Mon Aug 10 20:00:00 2026\n',
+      stderr: '',
+      exitCode: 0,
+    }));
+    const baseline = readHostProcessIdentityObservations([4242]).get(4242)?.startTime;
+    assert.equal(baseline, posixToken(2026, 7, 10, 20, 0, 0));
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'Pacific/Kiritimati';
+    try {
+      // The probe pins TZ=UTC for the ps child and the parser reads the fields as UTC, so the
+      // reader's own zone must not move the token.
+      assert.equal(readHostProcessIdentityObservations([4242]).get(4242)?.startTime, baseline);
+      assert.equal(readProcessStartTime(4242), baseline);
+    } finally {
+      if (originalTz === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTz;
+    }
+  },
+);
+
+test('a start time ps renders in a form this build cannot parse is unknown evidence', async () => {
+  // A raw rendering has no source, so it must never reach a comparison as a token.
+  mockRunCmdSync.mockImplementation((_cmd: string, args: readonly string[]) => ({
+    stdout:
+      psFieldOf(args) === 'lstart='
+        ? 'mar. 17 nov. 19:42:27 2026\n'
+        : '4242 Ss   mar. 17 nov. 19:42:27 2026\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+  psAnswersIdentity({ identity: '4242 Ss   17 nov. 2026\n', command: '4242 y\n' });
+
+  assert.equal(readProcessStartTime(4242), null);
+  assert.equal(readHostProcessIdentityObservations([4242]).has(4242), false);
+  assert.deepEqual(await readProcessIdentityFacts(4242), {
+    startTime: null,
+    command: 'y',
+    zombie: null,
+  });
+});
+
+test('only two start times in the same provenanced format prove different lifetimes', () => {
+  const cForm = 'Tue Nov 17 19:42:27 2026';
+  const french = 'mar. 17 nov. 19:42:27 2026'; // fr_FR rendering, with a clock
+  const frenchNoClock = '17 nov. 2026'; // locales that omit HH:mm:ss entirely
+  const norwegian = 'tir. 17. nov. 19:42:27 2026'; // nb_NO renders the clock with dots
+  // Raw historical renderings are unqualified: none proves a different lifetime, not even two
+  // raw C-form values one second apart.
+  assert.equal(processStartTimesDiffer(cForm, 'Tue Nov 17 19:42:28 2026'), false);
+  assert.equal(processStartTimesDiffer(french, cForm), false);
+  assert.equal(processStartTimesDiffer(cForm, frenchNoClock), false);
+  assert.equal(processStartTimesDiffer(french, norwegian), false);
+  assert.equal(processStartTimesDiffer(french, frenchNoClock), false);
+  // Two tokens in one provenanced format still prove a difference.
+  assert.equal(processStartTimesDiffer('posix:1763493000000', 'posix:1763493001000'), true);
+  assert.equal(processStartTimesDiffer('linux:boot:1', 'linux:boot:2'), true);
+  assert.equal(processStartTimesDiffer('202610081234567890129', '202701010000000000009'), true);
+  // Mixed formats and unreadable values prove nothing.
+  assert.equal(processStartTimesDiffer(cForm, 'posix:1763493000000'), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', cForm), false);
+  assert.equal(processStartTimesDiffer(cForm, 'linux:boot:1'), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', null), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', 'posix:1763493000000'), false);
+});
+
+test.each([
+  'posix:corrupt',
+  'posix:',
+  'posix:1763493000500', // not a whole second
+  'posix:01763493000000',
+  'posix:-1763493000000',
+  'posix:1763493000000.0',
+  'posix:1.763493e12',
+  'posix:9007199254740993000', // not a safe integer
+  ' posix:1763493001000',
+])('a stored %s is not a POSIX start token and proves no different lifetime', (stored) => {
+  assert.equal(processStartTimesDiffer(stored, 'posix:1763493000000'), false);
+  assert.equal(processStartTimesDiffer('posix:1763493000000', stored), false);
+  assert.equal(processStartTimesDiffer(stored, 'posix:corrupt-too'), false);
+});

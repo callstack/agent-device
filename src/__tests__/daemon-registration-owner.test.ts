@@ -23,7 +23,11 @@ import {
   readRegisteredDaemonOwnership,
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+  staleBirthTokenLike,
+} from '@agent-device/test-kit';
 import {
   launchDaemonProcess,
   spawnLegacyDaemonFixture,
@@ -186,15 +190,13 @@ test.for(['existing', 'missing'])(
   },
 );
 
+// A start time in the same provenanced format as the live owner's but a different value, so the
+// registration proves replacement; a raw legacy rendering would be unknown, not proof.
+const recycledStartTime = staleBirthTokenLike(ownIdentity.startTime);
+
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],
-  [
-    process.pid,
-    process.platform === 'linux'
-      ? 'linux:00000000-0000-0000-0000-000000000000:0'
-      : 'recycled-start',
-    'replaced',
-  ],
+  [process.pid, recycledStartTime, 'replaced'],
   [process.pid, undefined, 'unproven'],
   [null, undefined, 'ownerless'],
 ] as const) {
@@ -307,6 +309,12 @@ for (const scenario of [
     retired: false,
   },
   { name: 'live-unverified', observed: ownIdentity, published: ownIdentity, retired: false },
+  {
+    name: 'malformed-token',
+    observed: observedOf({ pid: process.pid, startTime: 'posix:corrupt' }),
+    published: { pid: process.pid, startTime: 'posix:corrupt' },
+    retired: false,
+  },
   { name: 'no-observation', observed: null, published: deadIdentity, retired: false },
   { name: 'replaced', observed: deadIdentity, published: ownIdentity, retired: false },
   { name: 'dead', observed: deadIdentity, published: deadIdentity, retired: true },

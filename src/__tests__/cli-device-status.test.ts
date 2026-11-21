@@ -14,6 +14,7 @@ import {
   mkdtempForTestSync,
   pinOwnProcessStartTime,
   publishDaemonRegistration,
+  staleBirthTokenLike,
 } from '@agent-device/test-kit';
 
 pinOwnProcessStartTime(hostProcess);
@@ -467,7 +468,9 @@ test('keeps corrupt claims visible and requires --stale for uncertain reclaimabl
         workspace: '/worktrees/pid-reused',
         stateDir: process.cwd(),
         ownerPid: owner.pid,
-        ownerStartTime: 'different-readable-start-time',
+        // Same verified format as the live read but a different value, so the pid proves reuse;
+        // a legacy-format token would be unverified rather than proof.
+        ownerStartTime: staleBirthTokenLike(owner.startTime),
         ownerToken: 'pid-reused-token',
         createdAtMs: 1,
         updatedAtMs: 1,

@@ -49,8 +49,15 @@ function driveHost(): void {
     }
     if (!processState.starts.has(pid)) return { stdout: '', stderr: 'timed out', exitCode: 1 };
     const state = processState.zombiePids.has(pid) ? 'Z' : 'S';
-    return { stdout: `${pid} ${state} ${processState.starts.get(pid)}\n`, stderr: '', exitCode: 0 };
+    const lstart = psLstart(processState.starts.get(pid)!);
+    return { stdout: `${pid} ${state} ${lstart}\n`, stderr: '', exitCode: 0 };
   });
+}
+
+/** What a pinned `ps -o lstart=` prints for a `posix:<epochMs>` token on the first epoch day. */
+function psLstart(token: string): string {
+  const clock = new Date(Number(token.slice('posix:'.length))).toISOString().slice(11, 19);
+  return `Thu Jan  1 ${clock} 1970`;
 }
 
 import { createOwnedProcessRecordStore } from './owned-process-record.ts';
@@ -146,7 +153,7 @@ function hostRuns(record: { pid: number; startTime: string; command: string }): 
 
 const BROWSER = {
   pid: 101,
-  startTime: 'Mon Nov  9 10:00:00 2026',
+  startTime: 'posix:1000',
   command: '/opt/chrome --user-data-dir=/tmp/agent-device-browser',
   purpose: 'managed-web-browser',
 };
@@ -174,7 +181,7 @@ test('startup interrupts an exact simctl recorder before clearing its record', a
   const { store, cleanup } = reapFixture('simctl-reap');
   const record = {
     pid: 111,
-    startTime: 'Mon Nov  9 10:00:00 2026',
+    startTime: 'posix:1000',
     command: 'xcrun simctl io simulator recordVideo /tmp/recording.mp4',
     purpose: 'simctl-screen-recording',
   };
@@ -211,7 +218,7 @@ test('startup treats a zombie identity as missing without signaling it', async (
 
 test('startup forgets a record whose pid the host shows in another lifetime, without signaling it', async () => {
   const { store, cleanup } = reapFixture('reuse');
-  hostRuns({ ...BROWSER, startTime: 'Tue Nov 10 08:00:00 2026', command: '/usr/bin/other' });
+  hostRuns({ ...BROWSER, startTime: 'posix:2000', command: '/usr/bin/other' });
   try {
     store.replace({ kind: 'daemon' }, [BROWSER]);
 
@@ -306,7 +313,7 @@ test('startup counts a pid reassigned after SIGTERM as missing, not terminated',
   const { store, cleanup } = reapFixture('reassigned-after-term');
   hostRuns(BROWSER);
   processState.exitsOnSignal = false;
-  processState.startAfterSignal = 'Tue Nov 10 09:00:00 2026';
+  processState.startAfterSignal = 'posix:3000';
   try {
     store.replace({ kind: 'daemon' }, [BROWSER]);
 
