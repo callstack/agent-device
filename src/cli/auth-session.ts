@@ -670,7 +670,12 @@ function storeRotatedCredential(options: {
   const held = file.holds;
   try {
     const stored = readCliSession({ stateDir: options.stateDir });
-    if (held && stored?.id === held.id && stored.refreshCredential === held.refreshCredential) {
+    if (
+      held &&
+      stored?.id === held.id &&
+      stored.cloudBaseUrl === held.cloudBaseUrl &&
+      stored.refreshCredential === held.refreshCredential
+    ) {
       const replaced: CliSessionRecord = { ...stored, ...rotation };
       writeCliSession({ stateDir: options.stateDir, session: replaced });
       file.holds = replaced;

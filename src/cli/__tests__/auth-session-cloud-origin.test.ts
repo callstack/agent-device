@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { resolveRemoteAuth, writeCliSession } from '../auth-session.ts';
+import { readCliSession, resolveRemoteAuth, writeCliSession } from '../auth-session.ts';
 
 const baseFlags = {
   json: false,
@@ -60,5 +60,36 @@ test('a stored CLI session is sent only to the cloud that issued it, without red
   assert.deepEqual(requests, [
     { url: 'https://cloud.example/api/control-plane/cli-session/refresh', redirect: 'error' },
   ]);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a rotation is not stored over a session that a login moved to another cloud', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-origin-rotate-');
+  const session = {
+    version: 1 as const,
+    id: 'session-moved',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_old',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  writeCliSession({ stateDir: tempRoot, session });
+  const moved = { ...session, cloudBaseUrl: 'https://other-cloud.example' };
+
+  await resolveRemoteAuth({
+    command: 'snapshot',
+    flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+    stateDir: tempRoot,
+    allowInteractiveLogin: false,
+    env: {},
+    io: {
+      fetch: async () => {
+        // Another process logs in to another cloud while this refresh is in flight.
+        writeCliSession({ stateDir: tempRoot, session: moved });
+        return jsonResponse({ accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_new' });
+      },
+    },
+  });
+
+  assert.deepEqual(readCliSession({ stateDir: tempRoot }), moved);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
