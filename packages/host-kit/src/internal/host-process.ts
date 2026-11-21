@@ -1,8 +1,35 @@
 import fs from 'node:fs';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
-import { sleep } from './retry.ts';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { sleep } from './sleep.ts';
+import {
+  isProcessAlive,
+  isWindowsHostPlatform,
+  processStartTimesDiffer,
+  uniquePositivePids,
+  type HostProcessIdentityObservation,
+  type HostProcessInfo,
+} from './host-process-facts.ts';
+// Everything this module reads with a process tool lives here; what a process knows about itself lives
+// in `host-process-facts.ts` and is forwarded so consumers of either module see one set of names.
+export {
+  captureHostEnvironment,
+  expandProcessTree,
+  hostNodeExecutablePath,
+  hostNodeVersion,
+  hostPlatform,
+  hostProcessId,
+  type HostEnvironmentSource,
+  type HostProcessIdentityObservation,
+  type HostProcessInfo,
+  isProcessAlive,
+  isProcessGroupAlive,
+  isWindowsHostPlatform,
+  processStartTimesDiffer,
+  signalPidsBestEffort,
+  uniquePositivePids,
+  writeHostStderr,
+} from './host-process-facts.ts';
 
 const PS_TIMEOUT_MS = 1_000;
 // Every POSIX probe runs the first of these that exists, never a PATH lookup, so a hostile PATH
@@ -13,17 +40,6 @@ const HOST_PS_COMMANDS = ['/bin/ps', '/run/current-system/sw/bin/ps'] as const;
 // Windows process-table read gets at least this budget instead of the `ps` one.
 const WINDOWS_PS_TIMEOUT_MS = 2_000;
 const WINDOWS_PROCESS_TOOL = 'powershell.exe';
-
-export type HostProcessInfo = {
-  pid: number;
-  ppid?: number;
-  command: string;
-};
-
-export type HostProcessIdentityObservation = Readonly<{
-  state: string;
-  startTime: string;
-}>;
 
 /**
  * What the host says about one pid when a caller is about to signal it. Each field is `null`
@@ -44,40 +60,6 @@ type HostProcessRunCommand = (
   options: ExecOptions,
 ) => Promise<ExecResult>;
 
-/** The process-shaped object an entry point captures: Node's `process` satisfies it. */
-export type HostEnvironmentSource = Readonly<{
-  env: EnvMap;
-  cwd(): string;
-}>;
-
-/**
- * Snapshots the environment and working directory of `source`, which an entry point passes as
- * `process`. The environment is copied, so later changes to the source never reach the capture.
- */
-export function captureHostEnvironment(source: HostEnvironmentSource): HostEnvironment {
-  return { env: { ...source.env }, cwd: source.cwd() };
-}
-
-export function writeHostStderr(value: string): void {
-  process.stderr.write(value);
-}
-
-export function hostNodeExecutablePath(): string {
-  return process.execPath;
-}
-
-export function hostNodeVersion(): string {
-  return process.version;
-}
-
-export function hostPlatform(): NodeJS.Platform {
-  return process.platform;
-}
-
-export function hostProcessId(): number {
-  return process.pid;
-}
-
 function hostPsCommand(): string {
   for (const candidate of HOST_PS_COMMANDS) {
     try {
@@ -92,26 +74,6 @@ export type ListHostProcessesOptions = {
   timeoutMs: number;
   runCommand?: HostProcessRunCommand;
 };
-
-export function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
-export function isProcessGroupAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
 
 /**
  * Reads who owns a pid, off the event loop, with a budget the caller names. Use this rather than
@@ -238,16 +200,6 @@ function readLinuxProcessStat(pid: number): { state: string; startTime: string }
   } catch {
     return null;
   }
-}
-
-/** Positive proof of different lifetimes; unreadable or mixed-format records prove nothing. */
-export function processStartTimesDiffer(
-  left: string | null | undefined,
-  right: string | null | undefined,
-): boolean {
-  if (!left || !right) return false;
-  if (left.startsWith('linux:') !== right.startsWith('linux:')) return false;
-  return left !== right;
 }
 
 export function readProcessStartTime(pid: number): string | null {
@@ -458,10 +410,6 @@ type WindowsProcessRow = Readonly<{
   command: string | null;
 }>;
 
-function isWindowsHostPlatform(): boolean {
-  return hostPlatform() === 'win32';
-}
-
 // Rows are `pid|ppid|creation|command`. The creation stamp is formatted with
 // the invariant culture, so the value recorded in daemon.json compares equal
 // on every read of the same process lifetime regardless of host locale. The
@@ -585,50 +533,6 @@ export async function listHostProcesses(
   );
   if (result.exitCode !== 0) return [];
   return parseHostProcessList(result.stdout);
-}
-
-export function expandProcessTree(
-  rootPids: readonly number[],
-  processes: readonly HostProcessInfo[],
-): HostProcessInfo[] {
-  const selected = new Set(uniquePositivePids(rootPids));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const processInfo of processes) {
-      if (processInfo.ppid === undefined || !selected.has(processInfo.ppid)) continue;
-      if (selected.has(processInfo.pid)) continue;
-      selected.add(processInfo.pid);
-      changed = true;
-    }
-  }
-  return processes.filter((processInfo) => selected.has(processInfo.pid));
-}
-
-export function uniquePositivePids(
-  values: Iterable<number>,
-  options: { excludePid?: number } = {},
-): number[] {
-  return [...new Set(values)].filter(
-    (pid) => Number.isInteger(pid) && pid > 0 && pid !== options.excludePid,
-  );
-}
-
-export function signalPidsBestEffort(
-  pidsToSignal: readonly number[],
-  signal: NodeJS.Signals,
-): number {
-  const pids = uniquePositivePids(pidsToSignal, { excludePid: process.pid });
-  let signaled = 0;
-  for (const pid of pids) {
-    try {
-      process.kill(pid, signal);
-      signaled += 1;
-    } catch {
-      // Process already exited or cannot be signaled; cleanup remains best-effort.
-    }
-  }
-  return signaled;
 }
 
 export async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {

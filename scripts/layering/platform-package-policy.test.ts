@@ -5,123 +5,27 @@ import {
   CANONICAL_PLATFORM_FAMILIES,
   checkPlatformPackagePolicy,
   checkRetiredPlatformsZone,
-  type PlatformPackageDeclaration,
 } from './platform-package-policy.ts';
+import {
+  MANAGED_FAMILIES,
+  composition,
+  declarations,
+  facade,
+  hostKitFindings,
+  isManagedFamily,
+  policyOptions,
+  validSources,
+} from './platform-package-policy.fixtures.ts';
 import { classifyZone } from './model.ts';
 
-const inventoryModuleNames = {
-  apple: 'appleInventoryModule',
-  android: 'androidInventoryModule',
-  harmonyos: 'harmonyosInventoryModule',
-  vega: 'vegaInventoryModule',
-  linux: 'linuxInventoryModule',
-  web: 'webInventoryModule',
-} as const;
-
-const MANAGED_FAMILIES = ['web', 'vega', 'harmonyos', 'linux'] as const;
-
-function isManagedFamily(family: string): boolean {
-  return (MANAGED_FAMILIES as readonly string[]).includes(family);
-}
-
-function managedPackageName(family: string): string {
-  return `@agent-device/${family}`;
-}
-
-function declarations(): PlatformPackageDeclaration[] {
-  return CANONICAL_PLATFORM_FAMILIES.map((family) => ({
-    dir: `packages/platform-${family}`,
-    family,
-    name: isManagedFamily(family) ? managedPackageName(family) : `@agent-device/platform-${family}`,
-    ...(isManagedFamily(family)
-      ? {
-          managedClaim: { platform: family, apiVersion: 3 },
-          publishedSubpaths: ['./agent-device'],
-        }
-      : {}),
-    private: true,
-    exportedSubpaths:
-      family === 'apple'
-        ? [
-            '@agent-device/platform-apple',
-            '@agent-device/platform-apple/app-lifecycle',
-            '@agent-device/platform-apple/app-resolution',
-            '@agent-device/platform-apple/debug-symbols',
-            '@agent-device/platform-apple/doctor',
-            '@agent-device/platform-apple/install-artifact',
-            '@agent-device/platform-apple/macos',
-            '@agent-device/platform-apple/perf',
-            '@agent-device/platform-apple/physical-device',
-            '@agent-device/platform-apple/runner/operations',
-            '@agent-device/platform-apple/runner-owner',
-            '@agent-device/platform-apple/session-observation',
-            '@agent-device/platform-apple/simctl',
-            '@agent-device/platform-apple/snapshot-source',
-            '@agent-device/platform-apple/simulator',
-            '@agent-device/platform-apple/simulator-boot',
-            '@agent-device/platform-apple/tool-provider',
-          ]
-        : family === 'android'
-          ? [
-              '@agent-device/platform-android',
-              '@agent-device/platform-android/adb-host',
-              '@agent-device/platform-android/device-boot',
-              '@agent-device/platform-android/mechanics',
-              '@agent-device/platform-android/snapshot-capture-fixtures',
-              '@agent-device/platform-android/ui-hierarchy-fixtures',
-            ]
-          : isManagedFamily(family)
-            ? [`${managedPackageName(family)}/agent-device`]
-            : family === 'linux'
-              ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
-              : [`@agent-device/platform-${family}`],
-  }));
-}
-
-function facade(family: (typeof CANONICAL_PLATFORM_FAMILIES)[number]): string {
-  return [
-    "import type { DeviceInventoryHost, InventoryPlatformModule, PlatformModuleMetadata } from '@agent-device/contracts/platform';",
-    'const metadata = Object.freeze({',
-    `  family: '${family}',`,
-    '} satisfies PlatformModuleMetadata);',
-    'export const inventoryModule = Object.freeze({',
-    '  ...metadata,',
-    '  loadInventory: async (host: DeviceInventoryHost) => {',
-    "    const { createInventory } = await import('./inventory.ts');",
-    '    return createInventory(host);',
-    '  },',
-    '} satisfies InventoryPlatformModule);',
-  ].join('\n');
-}
-
-function composition(families = CANONICAL_PLATFORM_FAMILIES): string {
-  return [
-    "import { createPlatformModuleRegistry } from '@agent-device/contracts/platform';",
-    ...families.map(
-      (family) =>
-        `import { inventoryModule as ${inventoryModuleNames[family]} } from '@agent-device/platform-${family}';`,
-    ),
-    'export const platformModuleRegistry = createPlatformModuleRegistry([',
-    ...families.map((family) => `  ${inventoryModuleNames[family]},`),
-    ']);',
-  ].join('\n');
-}
-
-function validSources(): Map<string, string> {
-  return new Map([
-    ['src/platform-runtime.ts', composition()],
-    ...CANONICAL_PLATFORM_FAMILIES.map(
-      (family) => [`packages/platform-${family}/src/index.ts`, facade(family)] as const,
-    ),
-  ]);
-}
-
 function messages(sources: ReadonlyMap<string, string>, packages = declarations()): string[] {
-  return checkPlatformPackagePolicy(sources, packages).map((violation) => violation.message);
+  return checkPlatformPackagePolicy(sources, packages, policyOptions()).map(
+    (violation) => violation.message,
+  );
 }
 
 test('the inventory substrate has six private lazy packages and one exact composition root', () => {
-  assert.deepEqual(checkPlatformPackagePolicy(validSources(), declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(validSources(), declarations(), policyOptions()), []);
 });
 
 test('retired platform family implementations are rejected from src/platforms', () => {
@@ -154,6 +58,7 @@ test('capture-kit and platform workspace packages are R11-owned unranked zones',
 
 test('untracked production TypeScript makes committed-state evidence fail closed', () => {
   const found = checkPlatformPackagePolicy(validSources(), declarations(), {
+    ...policyOptions(),
     untrackedProductionFiles: ['packages/platform-apple/src/mechanics.ts'],
   });
   assert.match(found.map(({ message }) => message).join('\n'), /untracked production source/);
@@ -190,7 +95,7 @@ test('composition policy does not pin local platform-module identifier spelling'
     'src/platform-runtime.ts',
     composition().replaceAll('appleInventoryModule', 'selectedAppleModule'),
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 });
 
 test('external consumers use root facades with static imports only at the interactor seam', () => {
@@ -279,7 +184,7 @@ test('external consumers use root facades with static imports only at the intera
     'src/platform-runtime/request-providers.ts',
     "void import('@agent-device/platform-web');",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(governed, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(governed, declarations(), policyOptions()), []);
 });
 
 test('only the canonical composition root may import the private provider composition submodule', () => {
@@ -289,7 +194,7 @@ test('only the canonical composition root may import the private provider compos
     composition() + "\nvoid import('./platform-runtime/request-providers.ts');",
   );
   sources.set('src/platform-runtime/request-providers.ts', 'export const providerScope = true;');
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 
   sources.set(
     'packages/daemon/src/server/request-router.ts',
@@ -321,7 +226,7 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
     'packages/daemon/src/execution/__tests__/selector-runtime.test.ts',
     "import { withAppleRunnerProvider } from '@agent-device/apple-runner';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 
   // Any other production file, or a named root consumer that evaluates it, is refused.
   const refused = validSources();
@@ -388,7 +293,7 @@ test('the Apple domain facades preserve synchronous helpers without widening the
     '@agent-device/platform-apple/tool-provider',
   ]) {
     sources.set('src/platform-runtime-domain-facade.ts', `import '${specifier}';`);
-    assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+    assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
     sources.delete('src/platform-runtime-domain-facade.ts');
   }
 
@@ -413,7 +318,7 @@ test('the runner mechanics facet is exempt from ambient-host and raw-process rul
       '\n',
     ),
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 
   // ...but spawning stays banned: process execution goes through the host port.
   sources.set(
@@ -432,7 +337,7 @@ test('the runner mechanics facet is exempt from ambient-host and raw-process rul
     'packages/apple-runner/src/__tests__/runner-xctestrun.test.ts',
     "import { execFileSync } from 'node:child_process';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations(), policyOptions()), []);
 });
 
 test('platform packages may import the xml vocabulary package', () => {
@@ -441,7 +346,7 @@ test('platform packages may import the xml vocabulary package', () => {
     'packages/apple-runner/src/runner-usbmux.ts',
     "import { parseXml } from '@agent-device/xml';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 });
 
 test('the Android mechanics facet is the named consumer seam and adb host wiring is limited to the root binding and daemon composition', () => {
@@ -560,7 +465,7 @@ test('platform packages may use capture-kit but no unrelated workspace implement
     'packages/platform-apple/src/probe.test.ts',
     "import { createAppLogLiveHandle } from '@agent-device/capture-kit';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations(), policyOptions()), []);
 
   for (const specifier of [
     '@agent-device/selectors',
@@ -585,7 +490,7 @@ test('platform-web production source may use only the canonical positional-ref s
     'packages/platform-web/src/interactor.ts',
     "import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations(), policyOptions()), []);
 
   for (const [file, specifier] of [
     ['packages/platform-web/src/interactor.ts', '@agent-device/selectors'],
@@ -623,7 +528,7 @@ test('the web interactor subpath is loaded only by the builtin registry, dynamic
     'src/core/interactors/register-builtins.ts',
     `const load = () => import('@agent-device/platform-${family}/interactor');`,
   );
-  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), [], family);
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations(), policyOptions()), [], family);
 
   for (const [file, source] of [
     [
@@ -679,7 +584,7 @@ test('platform package tests may import test-kit, production source may not', ()
     'packages/platform-apple/src/probe.spec.ts',
     "import { mkdtempForTest } from '@agent-device/test-kit';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(tests, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(tests, declarations(), policyOptions()), []);
 
   const production = validSources();
   production.set(
@@ -698,7 +603,7 @@ test('package-owned tests may import their own public facade', () => {
     'packages/platform-apple/src/index.test.ts',
     "import { inventoryModule } from '@agent-device/platform-apple';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 });
 
 test('platform facades cannot evaluate mechanics eagerly', () => {
@@ -717,7 +622,7 @@ test('platform facades cannot evaluate mechanics eagerly', () => {
     'packages/platform-apple/src/index.ts',
     `${facade('apple')}\nexport const loadApple = () => import('./implementation.ts');`,
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 });
 
 test('composition policy does not infer host authority from function or class names', () => {
@@ -726,7 +631,7 @@ test('composition policy does not infer host authority from function or class na
     'src/platform-runtime.ts',
     `${composition()}\nclass AppleHelperManager {}\nnew AppleHelperManager();\nprobeAndroidSdk();`,
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 });
 
 test('composition keeps platform implementation loaders behind selected use', () => {
@@ -888,7 +793,7 @@ test('platform packages may import the provision-kit substrate', () => {
     'packages/platform-apple/src/install.ts',
     "import { resolveInstallSource } from '@agent-device/provision-kit/install-source';",
   );
-  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+  assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
 });
 
 test('a provision-kit import of a concrete platform package fails closed', () => {
@@ -898,7 +803,7 @@ test('a provision-kit import of a concrete platform package fails closed', () =>
     "import { runtimeModule } from '@agent-device/platform-android';",
   );
   assert.match(
-    checkPlatformPackagePolicy(sources, declarations())
+    checkPlatformPackagePolicy(sources, declarations(), policyOptions())
       .map(({ message }) => message)
       .join('\n'),
     /may import '@agent-device\/platform-android'/,
@@ -960,19 +865,93 @@ test('a type-only host-kit import stays legal in a managed platform package', ()
     ],
   ]);
   assert.deepEqual(
-    checkPlatformPackagePolicy(sources, declarations()).filter((violation) =>
+    checkPlatformPackagePolicy(sources, declarations(), policyOptions()).filter((violation) =>
       violation.message.includes('host-kit'),
     ),
     [],
   );
 });
 
-/** The host-kit findings one managed family's new file earns, as one string to match against. */
-function hostKitFindings(family: string, source: string): string {
-  const file = `packages/platform-${family}/src/new-surface.ts`;
-  const found = messages(new Map([...validSources(), [file, source]]));
-  return found.filter((message) => message.includes('host-kit')).join('\n');
+// The same rule covers the scopes the hand-kept list never enumerated, with no second list: the file
+// scope's lock mechanics are refused for the same reason the process scope's probes are, because the
+// host-kit graph shows they reach `internal/exec.ts` through the bundled copy.
+for (const family of ['web', 'vega', 'harmonyos'] as const) {
+  test(`a managed platform package may not take the process lock through its own host-kit copy (${family})`, () => {
+    const found = hostKitFindings(
+      family,
+      "import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';\nvoid acquireProcessLock; void withProcessLock;",
+    );
+    assert.match(
+      found,
+      new RegExp(
+        String.raw`@agent-device/${family} may not import the host-kit '@agent-device/host-kit/file' scope at runtime \(acquireProcessLock, withProcessLock\): .*PlatformHost given to setup`,
+      ),
+    );
+  });
 }
+
+// One name's verdict follows its own declaration: the liveness classifier reaches the exec layer and
+// is refused, while the pid arithmetic declared beside it in the same module graph does not.
+test('the host-kit process scope is judged name by name, not per subpath', () => {
+  const refused = hostKitFindings(
+    'web',
+    "import { classifyOwnerLivenessFromObservation } from '@agent-device/host-kit/process';\nvoid classifyOwnerLivenessFromObservation;",
+  );
+  assert.match(
+    refused,
+    /host-kit\/process' scope at runtime \(classifyOwnerLivenessFromObservation\)/,
+  );
+  const allowed = hostKitFindings(
+    'web',
+    "import { uniquePositivePids } from '@agent-device/host-kit/process';\nvoid uniquePositivePids;",
+  );
+  assert.equal(allowed, '');
+});
+
+// Nothing about an export's name is consulted, so a new export that starts loading the exec layer is
+// caught without anyone editing a list: the same import turns from allowed to refused on the edit.
+test('the exec reachability of a host-kit export is derived, not declared', () => {
+  const entryPath = 'packages/host-kit/src/alpha.ts';
+  const helperPath = 'packages/host-kit/src/internal/alpha-helper.ts';
+  const execPath = 'packages/host-kit/src/internal/exec.ts';
+  const importSource = "import { pureProbe } from '@agent-device/host-kit/alpha';\nvoid pureProbe;";
+  const scan = (helperSource: string) => {
+    const sources = new Map([
+      [entryPath, "export { pureProbe } from './internal/alpha-helper.ts';"],
+      [helperPath, helperSource],
+      [execPath, 'export function runCmd(): void {}\n'],
+      ['packages/platform-web/src/new-surface.ts', importSource],
+    ]);
+    return checkPlatformPackagePolicy(sources, declarations(), { hostKitSources: sources }).filter(
+      (violation) => violation.message.includes('may not import the host-kit'),
+    );
+  };
+
+  assert.deepEqual(scan('export function pureProbe(): number {\n  return 1;\n}\n'), []);
+
+  // The same export name, now declared by a module that loads the exec layer.
+  const flagged = scan(
+    "import { runCmd } from './exec.ts';\nexport function pureProbe(): void {\n  runCmd();\n}\n",
+  );
+  assert.equal(flagged.length, 1);
+  assert.match(
+    flagged[0]!.message,
+    /host-kit\/alpha' scope at runtime \(pureProbe\): .*PlatformHost given to setup/,
+  );
+});
+
+// A root the derivation walks has to be in the scan: a move of either would otherwise answer
+// "no export reaches the exec layer" for every managed plugin at once.
+test('a missing exec-root source makes the derivation fail closed', () => {
+  const sources = new Map([
+    ['packages/host-kit/src/alpha.ts', 'export function pureProbe(): number {\n  return 1;\n}\n'],
+  ]);
+  const found = checkPlatformPackagePolicy(sources, declarations(), { hostKitSources: sources });
+  assert.match(
+    found.map(({ message }) => message).join('\n'),
+    /stale module: packages\/host-kit\/src\/internal\/exec\.ts is not a tracked source/,
+  );
+});
 
 // `host-kit/process` is policed export by export: an export that spawns a process tool escapes the
 // request's exec trace from a bundled plugin, and one that reads only this process's globals cannot.
