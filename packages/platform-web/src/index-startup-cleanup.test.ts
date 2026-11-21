@@ -18,13 +18,14 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => ({
 
 import webPlatformPlugin from './index.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { runCmd } from '@agent-device/host-kit/command';
+import { runCmd, isExecutablePath } from '@agent-device/host-kit/command';
 
 function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
   const host = {
     ...createLiveTestHostEnvironment(),
     stateDir,
     runCommand: runCmd,
+    isFileExecutable: isExecutablePath,
     emitDiagnostic,
     withDiagnosticTimer,
   };

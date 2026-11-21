@@ -1,4 +1,6 @@
 import type {
+  HarmonyPlatformRegistration,
+  HarmonyPlatformSelection,
   PlatformModuleSelection,
   PlatformPlugin,
   VegaPlatformRegistration,
@@ -18,6 +20,7 @@ import { missingPlatformPlugin } from '../core/platform-plugin-absence.ts';
 type RuntimePlatformPlugin = PlatformPlugin & {
   web?: WebPlatformRegistration;
   vega?: VegaPlatformRegistration;
+  harmony?: HarmonyPlatformRegistration;
 };
 
 export function builtinPlatformCandidates(): readonly PluginCandidate[] {
@@ -82,6 +85,7 @@ export function composePlatformPlugins(
         createInteractor: platform.createInteractor.bind(platform),
         ...(platform.family === 'web' ? { web: platform } : {}),
         ...(platform.family === 'vega' ? { vega: platform } : {}),
+        ...(platform.family === 'harmonyos' ? { harmony: platform } : {}),
       })),
     ],
     reportAbsent,
@@ -106,10 +110,25 @@ export function composePlatformPlugins(
     },
   };
 
+  // The HarmonyOS selection's `get()` is the one authority on the family's absence: an uninstalled
+  // plugin raises `plugin-not-installed` with its install command, and one that failed to load
+  // raises its own error. Doctor's toolchain row reports that outcome instead of probing a
+  // toolchain no plugin is there to drive.
+  const harmony: HarmonyPlatformSelection = {
+    active: interactors.tryGet('harmonyos')?.plugin.harmony,
+    get() {
+      const { harmony } = interactors.get('harmonyos').plugin;
+      if (!harmony)
+        throw new TypeError('HarmonyOS platform registration is missing its operations');
+      return harmony;
+    },
+  };
+
   return {
     interactors,
     web,
     vega,
+    harmony,
     inventoryModules: platforms.map((platform) => platform.inventoryModule),
     runtimeModules: platforms.map((platform) => platform.runtimeModule),
     reportAbsent,

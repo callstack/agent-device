@@ -1,131 +1,92 @@
+import type { PlatformContribution, PlatformHost } from 'agent-device/plugins';
+import type { HarmonyToolbox } from './toolbox.ts';
 import type {
   InventoryPlatformModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform-module';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
-import type { HarmonyInventoryConfig } from './inventory-config.ts';
-
-// fallow-ignore-next-line code-duplication
-type DeferredFunction = (...args: never[]) => unknown;
-type Deferred<Fn extends DeferredFunction> = (
-  ...args: Parameters<Fn>
-) => Promise<Awaited<ReturnType<Fn>>>;
-
-function deferred<Fn extends DeferredFunction>(load: () => Promise<Fn>): Deferred<Fn> {
-  return (async (...args: Parameters<Fn>) =>
-    await (
-      await load()
-    )(...args)) as unknown as Deferred<Fn>;
-}
+import type {
+  HarmonyPlatformOperations,
+  HarmonyPlatformRegistration,
+} from '@agent-device/contracts/platform-plugin';
 
 const metadata = Object.freeze({
   family: 'harmonyos',
 } satisfies PlatformModuleMetadata);
 
-export const runtimeModule = Object.freeze({
-  ...metadata,
-  loadRuntime: async (host) => {
-    const { createHarmonyPlatformRuntime } = await import('./runtime.ts');
-    return createHarmonyPlatformRuntime(host);
-  },
-} satisfies PlatformRuntimeModule);
+/**
+ * The toolbox module, resolved exactly once per process. The façade must stay metadata-eager
+ * (ADR-0019), so the module that binds a host's command port enters with the first operation that
+ * needs it rather than above it. Only the module is memoized: each `setup` call binds its own host.
+ */
+let toolboxModule: Promise<typeof import('./toolbox.ts')> | undefined;
 
-export type { HarmonyInventoryConfig } from './inventory-config.ts';
-
-export const openHarmonyApp = deferred<(typeof import('./app-lifecycle.ts'))['openHarmonyApp']>(
-  async () => (await import('./app-lifecycle.ts')).openHarmonyApp,
-);
-export const closeHarmonyApp = deferred<(typeof import('./app-lifecycle.ts'))['closeHarmonyApp']>(
-  async () => (await import('./app-lifecycle.ts')).closeHarmonyApp,
-);
-export const verifyHarmonyOpenForeground = deferred<
-  (typeof import('./app-lifecycle.ts'))['verifyHarmonyOpenForeground']
->(async () => (await import('./app-lifecycle.ts')).verifyHarmonyOpenForeground);
-
-export const runHarmonyHdc = deferred<(typeof import('./hdc.ts'))['runHarmonyHdc']>(
-  async () => (await import('./hdc.ts')).runHarmonyHdc,
-);
-export const runHarmonyShell = deferred<(typeof import('./hdc.ts'))['runHarmonyShell']>(
-  async () => (await import('./hdc.ts')).runHarmonyShell,
-);
-export const ensureHarmonyToolchainPathConfigured = deferred<
-  (typeof import('./hdc.ts'))['ensureHarmonyToolchainPathConfigured']
->(async () => (await import('./hdc.ts')).ensureHarmonyToolchainPathConfigured);
-
-export const pressHarmony = deferred<(typeof import('./input-actions.ts'))['pressHarmony']>(
-  async () => (await import('./input-actions.ts')).pressHarmony,
-);
-export const doubleClickHarmony = deferred<
-  (typeof import('./input-actions.ts'))['doubleClickHarmony']
->(async () => (await import('./input-actions.ts')).doubleClickHarmony);
-export const longPressHarmony = deferred<(typeof import('./input-actions.ts'))['longPressHarmony']>(
-  async () => (await import('./input-actions.ts')).longPressHarmony,
-);
-export const typeHarmony = deferred<(typeof import('./input-actions.ts'))['typeHarmony']>(
-  async () => (await import('./input-actions.ts')).typeHarmony,
-);
-export const fillHarmony = deferred<(typeof import('./input-actions.ts'))['fillHarmony']>(
-  async () => (await import('./input-actions.ts')).fillHarmony,
-);
-export const scrollHarmony = deferred<(typeof import('./input-actions.ts'))['scrollHarmony']>(
-  async () => (await import('./input-actions.ts')).scrollHarmony,
-);
-export const performHarmonyGesture = deferred<
-  (typeof import('./input-actions.ts'))['performHarmonyGesture']
->(async () => (await import('./input-actions.ts')).performHarmonyGesture);
-export const backHarmony = deferred<(typeof import('./input-actions.ts'))['backHarmony']>(
-  async () => (await import('./input-actions.ts')).backHarmony,
-);
-export const homeHarmony = deferred<(typeof import('./input-actions.ts'))['homeHarmony']>(
-  async () => (await import('./input-actions.ts')).homeHarmony,
-);
-export const appSwitcherHarmony = deferred<
-  (typeof import('./input-actions.ts'))['appSwitcherHarmony']
->(async () => (await import('./input-actions.ts')).appSwitcherHarmony);
-export const pressHarmonyKeyboardKey = deferred<
-  (typeof import('./input-actions.ts'))['pressHarmonyKeyboardKey']
->(async () => (await import('./input-actions.ts')).pressHarmonyKeyboardKey);
-export const setHarmonyOrientation = deferred<
-  (typeof import('./input-actions.ts'))['setHarmonyOrientation']
->(async () => (await import('./input-actions.ts')).setHarmonyOrientation);
-
-export const screenshotHarmony = deferred<(typeof import('./screenshot.ts'))['screenshotHarmony']>(
-  async () => (await import('./screenshot.ts')).screenshotHarmony,
-);
-export const setHarmonySetting = deferred<(typeof import('./settings.ts'))['setHarmonySetting']>(
-  async () => (await import('./settings.ts')).setHarmonySetting,
-);
-export const snapshotHarmony = deferred<(typeof import('./snapshot.ts'))['snapshotHarmony']>(
-  async () => (await import('./snapshot.ts')).snapshotHarmony,
-);
-export const readHarmonyGestureViewport = deferred<
-  (typeof import('./snapshot.ts'))['readHarmonyGestureViewport']
->(async () => (await import('./snapshot.ts')).readHarmonyGestureViewport);
-export const sampleHarmonyMemoryPerf = deferred<
-  (typeof import('./perf.ts'))['sampleHarmonyMemoryPerf']
->(async () => (await import('./perf.ts')).sampleHarmonyMemoryPerf);
-export const harmonyToolchainCheck = deferred<
-  (typeof import('./doctor.ts'))['harmonyToolchainCheck']
->(async () => (await import('./doctor.ts')).harmonyToolchainCheck);
-
-export function createHarmonyInventoryModule(
-  config: HarmonyInventoryConfig,
-): InventoryPlatformModule<'harmonyos'> {
-  const capturedConfig = Object.freeze({
-    hdcSdkPath: normalizedRoot(config.hdcSdkPath),
-    devecoSdkHome: normalizedRoot(config.devecoSdkHome),
-    commandLineToolsHome: normalizedRoot(config.commandLineToolsHome),
-  });
-  return Object.freeze({
-    ...metadata,
-    loadInventory: async (host) => {
-      const { createHarmonyInventory } = await import('./inventory.ts');
-      return createHarmonyInventory(host, capturedConfig);
-    },
-  });
+/**
+ * A bound toolbox, made on first use and then reused: a `setup` that never runs a command imports
+ * and builds nothing, and the operations of one setup share the one toolbox it binds its host to.
+ */
+function harmonyToolbox(host: PlatformHost) {
+  let toolbox: Promise<HarmonyToolbox> | undefined;
+  return async () =>
+    (toolbox ??= (toolboxModule ??= import('./toolbox.ts')).then(({ createHarmonyToolbox }) =>
+      createHarmonyToolbox(host),
+    ));
 }
 
-function normalizedRoot(root: string | undefined): string | undefined {
-  const trimmed = root?.trim();
-  return trimmed ? trimmed : undefined;
+function harmonyPlatformPlugin() {
+  return {
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'platform',
+        family: 'harmonyos',
+        // Importing this package evaluates nothing but itself, and the host is bound to a toolbox
+        // only when an operation first needs one. Every operation below asks the same lazy
+        // resolution, so one setup builds exactly one toolbox for the whole family.
+        setup(host: PlatformHost): HarmonyPlatformRegistration {
+          const toolbox = harmonyToolbox(host);
+          const inventoryModule: InventoryPlatformModule<'harmonyos'> = Object.freeze({
+            ...metadata,
+            // The family's inventory asks the core for no host: the documented HarmonyOS toolchain
+            // roots come from the host `setup` received, so the plugin neither reads `process.env`
+            // itself (ADR 0019) nor has the core name its configuration.
+            loadInventory: async () => {
+              const { createHarmonyInventory } = await import('./inventory.ts');
+              return createHarmonyInventory(await toolbox());
+            },
+          });
+          const runtimeModule = Object.freeze({
+            ...metadata,
+            loadRuntime: async (host) => {
+              const { createHarmonyPlatformRuntime } = await import('./runtime.ts');
+              return createHarmonyPlatformRuntime(host, await toolbox());
+            },
+          } satisfies PlatformRuntimeModule & { readonly family: 'harmonyos' });
+          return {
+            family: 'harmonyos',
+            inventoryModule,
+            runtimeModule,
+            createInteractor: async (device, runnerContext) => {
+              const { createHarmonyInteractor } = await import('./interactor.ts');
+              return createHarmonyInteractor(await toolbox(), device, runnerContext);
+            },
+            operations: {
+              toolchainCheck: async () => {
+                const [{ harmonyToolchainCheck }, { commands }] = await Promise.all([
+                  import('./doctor.ts'),
+                  toolbox(),
+                ]);
+                return await harmonyToolchainCheck(commands);
+              },
+            } satisfies HarmonyPlatformOperations,
+          };
+        },
+      },
+    ],
+  } satisfies {
+    apiVersion: 3;
+    contributes: [Extract<PlatformContribution, { family: 'harmonyos' }>];
+  };
 }
+
+export { harmonyPlatformPlugin as default };

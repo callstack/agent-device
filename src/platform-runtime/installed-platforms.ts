@@ -47,16 +47,16 @@ export async function startInstalledPlatforms(
   );
   const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
   const assertSelectionCurrent = createPluginSelectionGuard(installed, host.env);
+  const daemonPaths = resolveDaemonPaths(stateDir, { env: host.env, cwd: host.cwd });
   const registry = await startProviderRegistry(
     resolved,
     host,
     {
       ...PROVIDER_PLUGIN_POLICY,
       assertSelectionCurrent,
-      platformHost: createPlatformPluginHost(
-        host,
-        resolveDaemonPaths(stateDir, { env: host.env, cwd: host.cwd }).baseDir,
-      ),
+      platformHost: createPlatformPluginHost(host, daemonPaths.baseDir, {
+        sessionsDir: daemonPaths.sessionsDir,
+      }),
     },
     'platforms',
   );

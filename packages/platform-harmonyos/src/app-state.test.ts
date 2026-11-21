@@ -1,10 +1,11 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
-vi.mock('./hdc.ts', () => ({ runHarmonyShell: vi.fn() }));
-
-import { runHarmonyShell } from './hdc.ts';
+import type { HarmonyHdcRunner } from './hdc.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseHarmonyForegroundRead, probeHarmonyForegroundBundle } from './app-state.ts';
+
+const runHarmonyShell = vi.fn<HarmonyHdcRunner['runShell']>();
+const hdcRunner = { runShell: runHarmonyShell };
 
 const DEVICE: DeviceInfo = {
   platform: 'harmonyos',
@@ -68,7 +69,7 @@ test('the open-time probe names the foreground bundle', async () => {
     stderr: '',
   });
 
-  await expect(probeHarmonyForegroundBundle(DEVICE, new AbortController().signal)).resolves.toBe(
+  await expect(probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal)).resolves.toBe(
     'com.example.application',
   );
 });
@@ -82,7 +83,7 @@ test('the open-time probe claims nothing when no mission is foreground', async (
   });
 
   await expect(
-    probeHarmonyForegroundBundle(DEVICE, new AbortController().signal),
+    probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal),
   ).resolves.toBeUndefined();
 });
 
@@ -91,14 +92,14 @@ test('the open-time probe claims nothing when the device read fails', async () =
   hdc.mockRejectedValue(new Error('device offline'));
 
   await expect(
-    probeHarmonyForegroundBundle(DEVICE, new AbortController().signal),
+    probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal),
   ).resolves.toBeUndefined();
 });
 
 test('the open-time probe keeps its 15s read when no request deadline bounds it', async () => {
   vi.mocked(runHarmonyShell).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-  await probeHarmonyForegroundBundle(DEVICE, new AbortController().signal);
+  await probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal);
 
   expect(vi.mocked(runHarmonyShell).mock.calls[0]?.[2]?.timeoutMs).toBe(15_000);
 });
@@ -106,7 +107,7 @@ test('the open-time probe keeps its 15s read when no request deadline bounds it'
 test('the open-time probe keeps its 15s read under a far request deadline', async () => {
   vi.mocked(runHarmonyShell).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-  await probeHarmonyForegroundBundle(DEVICE, new AbortController().signal, {
+  await probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal, {
     deadlineAtMs: Date.now() + 60_000,
   });
 
@@ -118,7 +119,7 @@ test('the open-time probe clamps its read to the request deadline room left', as
 
   // A deadline with 2s left bounds the probe below its 15s default, so a hung
   // `aa dump -l` cannot hold the dispatch past the request budget (#4860).
-  await probeHarmonyForegroundBundle(DEVICE, new AbortController().signal, {
+  await probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal, {
     deadlineAtMs: Date.now() + 2_000,
   });
 
@@ -133,7 +134,7 @@ test('the open-time probe reads nothing when the request deadline has no room le
   // A spent deadline arms no read at all: the probe claims nothing without
   // touching the device, the same no-room rule the post-open poll runs under.
   await expect(
-    probeHarmonyForegroundBundle(DEVICE, new AbortController().signal, {
+    probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal, {
       deadlineAtMs: Date.now() - 1_000,
     }),
   ).resolves.toBeUndefined();
@@ -150,7 +151,7 @@ test('a read bounded by the clamped deadline gives up in time instead of holding
     });
   });
 
-  const pending = probeHarmonyForegroundBundle(DEVICE, new AbortController().signal, {
+  const pending = probeHarmonyForegroundBundle(hdcRunner, DEVICE, new AbortController().signal, {
     deadlineAtMs: Date.now() + 2_000,
   });
   await vi.advanceTimersByTimeAsync(3_000);
@@ -162,9 +163,7 @@ test('a read bounded by the clamped deadline gives up in time instead of holding
 
 test('the open-time probe claims nothing when the request aborts mid-read', async () => {
   const controller = new AbortController();
-  // The mock carries the real hdc run's abort contract, including a signal
-  // that aborted before the read was even entered (the probe's dynamic hdc
-  // import can lose the race against the abort).
+  // The mock carries the real hdc run's abort contract.
   vi.mocked(runHarmonyShell).mockImplementation(async (_device, _words, options) => {
     return await new Promise((_resolve, reject) => {
       const onAbort = (): void => reject(new Error('read canceled'));
@@ -176,7 +175,7 @@ test('the open-time probe claims nothing when the request aborts mid-read', asyn
     });
   });
 
-  const pending = probeHarmonyForegroundBundle(DEVICE, controller.signal, {
+  const pending = probeHarmonyForegroundBundle(hdcRunner, DEVICE, controller.signal, {
     deadlineAtMs: Date.now() + 60_000,
   });
   controller.abort(new Error('request canceled'));

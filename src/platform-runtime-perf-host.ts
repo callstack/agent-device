@@ -18,7 +18,6 @@ const loadAndroidNativePerf = loadAndroidMechanics;
 const loadApplePerf = async () => await import('@agent-device/platform-apple/perf');
 const loadApplePerfMechanics = async () => await import('@agent-device/platform-apple/perf');
 const loadAppleXctrace = async () => await import('@agent-device/platform-apple/perf');
-const loadHarmonyPerf = async () => await import('@agent-device/platform-harmonyos');
 
 /** Lazy host-only mechanics. Platform packages own facts, policy, and operation construction. */
 export function createPerfRuntimeHost(): PerfRuntimeHost {
@@ -68,11 +67,7 @@ export function createPerfRuntimeHost(): PerfRuntimeHost {
         input.outPath,
       ),
   });
-  const harmony: PerfRuntimeHost['harmony'] = Object.freeze({
-    sampleMemory: async (device, appId) =>
-      await (await loadHarmonyPerf()).sampleHarmonyMemoryPerf(device, appId),
-  });
-  return Object.freeze({ apple, android, harmony });
+  return Object.freeze({ apple, android });
 }
 
 // Durable data is untrusted at this boundary; keep every required discriminator explicit.

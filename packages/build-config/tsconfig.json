@@ -10,5 +10,5 @@
     "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
   "include": ["src"],
-  "references": []
+  "references": [{ "path": "../test-kit" }]
 }

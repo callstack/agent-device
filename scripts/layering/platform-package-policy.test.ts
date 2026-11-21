@@ -18,7 +18,7 @@ const inventoryModuleNames = {
   web: 'webInventoryModule',
 } as const;
 
-const MANAGED_FAMILIES = ['web', 'vega'] as const;
+const MANAGED_FAMILIES = ['web', 'vega', 'harmonyos'] as const;
 
 function isManagedFamily(family: string): boolean {
   return (MANAGED_FAMILIES as readonly string[]).includes(family);
@@ -72,7 +72,7 @@ function declarations(): PlatformPackageDeclaration[] {
             ]
           : isManagedFamily(family)
             ? [`${managedPackageName(family)}/agent-device`]
-            : family === 'harmonyos' || family === 'linux'
+            : family === 'linux'
               ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
               : [`@agent-device/platform-${family}`],
   }));
@@ -163,16 +163,21 @@ test('family packages are exact, private, and expose only their root facade', ()
   const packages = declarations();
   packages[0] = { ...packages[0]!, private: false };
   packages[1] = { ...packages[1]!, name: '@agent-device/not-android' };
-  packages[2] = {
-    ...packages[2]!,
-    exportedSubpaths: [packages[2]!.name, `${packages[2]!.name}/internal`],
+  packages[2] = { ...packages[2]!, managedClaim: { platform: 'linux', apiVersion: 3 } };
+  packages[4] = {
+    ...packages[4]!,
+    exportedSubpaths: [packages[4]!.name, `${packages[4]!.name}/internal`],
   };
   packages.pop();
 
   const found = messages(validSources(), packages).join('\n');
   assert.match(found, /platform-apple must be private/);
   assert.match(found, /platform-android must be named '@agent-device\/platform-android'/);
-  assert.match(found, /platform-harmonyos must export exactly its root façade/);
+  assert.match(
+    found,
+    /Managed platform must declare its family and export only @agent-device\/harmonyos\/agent-device/,
+  );
+  assert.match(found, /platform-linux must export exactly its root façade/);
   assert.match(found, /missing canonical platform package.*platform-web/);
 });
 
@@ -609,7 +614,7 @@ test('platform-web production source may use only the canonical positional-ref s
 });
 
 test('interactor subpaths are loaded only by the builtin registry, dynamically', () => {
-  for (const family of ['harmonyos', 'linux', 'web']) {
+  for (const family of ['linux', 'web']) {
     const allowed = validSources();
     allowed.set(
       'src/core/interactors/register-builtins.ts',
@@ -809,6 +814,21 @@ test('only the plugin scope resolves the managed Vega entry', () => {
   assert.throws(() => resolveVega.resolve('@agent-device/vega'), /No "exports" main/);
 });
 
+test('only the plugin scope resolves the managed HarmonyOS entry', () => {
+  assert.throws(
+    () => import.meta.resolve('@agent-device/harmonyos/agent-device'),
+    /Cannot find package/,
+  );
+  const resolveHarmony = createRequire(
+    new URL('../../packages/platform-harmonyos/package.json', import.meta.url),
+  );
+  assert.match(
+    resolveHarmony.resolve('@agent-device/harmonyos/agent-device'),
+    /platform-harmonyos[/\\]src[/\\]index\.ts$/,
+  );
+  assert.throws(() => resolveHarmony.resolve('@agent-device/harmonyos'), /No "exports" main/);
+});
+
 test('the retired src/platforms zone rejects every production, test, and fixture file', () => {
   const planted = [
     'src/platforms/__tests__/install-source.test.ts',
@@ -892,5 +912,49 @@ test('managed platform code enters core only through the registry', () => {
       (finding) =>
         finding.file === file && finding.message.includes('only through the plugin registry'),
     ),
+  );
+});
+
+// A managed plugin ships its own copy of host-kit, so the daemon's command scope and request
+// diagnostic store never enter it: a runtime import of either runs outside the request the plugin was
+// asked to serve. The plugin binds to the host its `setup` receives instead.
+for (const family of ['web', 'vega', 'harmonyos'] as const) {
+  test(`a managed platform package reaches the host-kit command or diagnostics scope only in its listed migration files (${family})`, () => {
+    const file = `packages/platform-${family}/src/new-surface.ts`;
+    for (const specifier of [
+      '@agent-device/host-kit/command',
+      '@agent-device/host-kit/diagnostics',
+    ]) {
+      const found = messages(
+        new Map([
+          ...validSources(),
+          [file, `import { runCmd } from '${specifier}';\nvoid runCmd;`],
+        ]),
+      );
+      assert.ok(
+        found.some(
+          (message) =>
+            message.includes(`@agent-device/${family} may not import the host-kit`) &&
+            message.includes('PlatformHost given to setup'),
+        ),
+        `${family} must not spawn or trace through its own host-kit copy: ${specifier}`,
+      );
+    }
+  });
+}
+
+test('a type-only host-kit import stays legal in a managed platform package', () => {
+  const sources = new Map([
+    ...validSources(),
+    [
+      'packages/platform-harmonyos/src/new-surface.ts',
+      "import type { HostCommandResult } from '@agent-device/host-kit/command';\nexport type R = HostCommandResult;",
+    ],
+  ]);
+  assert.deepEqual(
+    checkPlatformPackagePolicy(sources, declarations()).filter((violation) =>
+      violation.message.includes('host-kit'),
+    ),
+    [],
   );
 });

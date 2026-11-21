@@ -11,7 +11,7 @@ import {
   harmonyRecordingHost as harmonyHost,
   harmonyRecordingInput as input,
 } from './runtime.fixtures.ts';
-import { mkdtempForTestSync } from '../__tests__/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('runs whole-screen capture and finalizes through the closed Harmony host', async () => {
   const operations = createHarmonyScreenRecordingOperations({
