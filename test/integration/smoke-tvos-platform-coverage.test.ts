@@ -88,6 +88,7 @@ test('tvOS gesture contract preserves the typed multi-touch denial', async () =>
       outputPath: '/sessions/tvos/app.log',
       pidPath: '/sessions/tvos/app-log.pid',
     }),
+    stateDir: '/state',
     sessionsDir: '/sessions',
   }).inspectFacts(TVOS_SIMULATOR);
   const multiTouch = facts.operations.performMultiTouchGesturePlan;

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AndroidHelperInstallDecision, AndroidImeHelperArtifact } from './helper-artifacts.ts';
+import type { AndroidTestImeFlushRecord } from './ime-flush-record.ts';
 import type {
   AndroidAdbInvocation,
   AndroidAdbExecutor,
@@ -80,6 +81,12 @@ export type AndroidAdbHost = Readonly<{
     write(stateDir: string, serial: string): Promise<boolean>;
     clear(stateDir: string, serial: string): Promise<void>;
     read(stateDir: string): Promise<string[]>;
+  }>;
+  /** Durable per-state-dir test-IME flush deadlines (host-side files). */
+  imeFlushRecords: Readonly<{
+    write(stateDir: string, serial: string, record: AndroidTestImeFlushRecord): Promise<void>;
+    clear(stateDir: string, serial: string): Promise<void>;
+    read(stateDir: string, serial: string): Promise<AndroidTestImeFlushRecord | undefined>;
   }>;
   /** Resolves an npm-bundled helper artifact from the packaged install tree. */
   resolveHelperArtifact<Manifest extends { assetName: string }>(options: {

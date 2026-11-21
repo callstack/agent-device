@@ -81,7 +81,7 @@ export const androidObservation = createPackageAndroidObservationAdapter(
 const shutdownLoaders = Object.freeze({
   apple: async (dependencies: Pick<DeviceShutdownRuntimeDependencies, 'appleTools'>) =>
     await loadAppleShutdownRuntime(dependencies),
-  android: async (dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands'>) =>
+  android: async (dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands' | 'stateDir'>) =>
     await loadAndroidShutdownRuntime(dependencies),
 });
 
@@ -147,6 +147,7 @@ export function createPlatformRuntimeGateway(
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
+    stateDir: string;
     sessionsDir: string;
     ownedProcesses?: OwnedProcessRecordWriter;
     assertShutdownAllowed?: () => void;
@@ -159,6 +160,7 @@ export function createPlatformRuntimeGateway(
         await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         host: options.host,
+        stateDir: options.stateDir,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,

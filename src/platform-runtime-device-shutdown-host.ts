@@ -24,7 +24,10 @@ export function createDeviceShutdownRuntimeHost(
     return await appleRuntime;
   };
   const loadAndroid = async () => {
-    androidRuntime ??= loaders.android({ commands: dependencies.commands });
+    androidRuntime ??= loaders.android({
+      commands: dependencies.commands,
+      stateDir: dependencies.stateDir,
+    });
     return await androidRuntime;
   };
 

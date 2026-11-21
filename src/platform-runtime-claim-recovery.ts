@@ -26,6 +26,7 @@ export const createClaimRecoveryGatewayFor =
   (input) =>
     createPlatformRuntimeGateway({
       host,
+      stateDir: input.stateDir,
       sessionsDir: input.sessionsDir,
       ownedProcesses: input.ownedProcesses,
       resolveSessionArtifacts: input.resolveSessionArtifacts,

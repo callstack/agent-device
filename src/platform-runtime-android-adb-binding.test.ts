@@ -29,6 +29,7 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const sessionArtifacts = {
+  stateDir: '/state',
   sessionsDir: '/sessions',
   resolveSessionArtifacts: () => ({
     outputPath: '/sessions/one/app.log',
