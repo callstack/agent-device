@@ -2326,7 +2326,7 @@ agent-device screenshot [path] [--out <path>] [--overlay-refs] [--crop-on <selec
 | --- | --- |
 | `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
 | `--crop-on <selector-expression>` | Screenshot: crop the capture to the frame of the selector resolved on the same screen |
-| `--pixel-density <n>` | Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators) |
+| `--pixel-density <n>` | Screenshot: output PNG pixel density in pixels per logical point; iOS-family simulators only, other targets refuse it |
 | `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
 | `--fullscreen, --full, -f` | Screenshot: on web capture the full page; on macOS app sessions capture the full desktop instead of the app window |
 | `--scale <0.01-1>` | Screenshot: resize both dimensions by this factor (or use AGENT_DEVICE_SCREENSHOT_SCALE) |
