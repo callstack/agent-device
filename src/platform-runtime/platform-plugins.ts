@@ -1,6 +1,8 @@
 import type {
   HarmonyPlatformRegistration,
   HarmonyPlatformSelection,
+  LinuxPlatformRegistration,
+  LinuxPlatformSelection,
   PlatformModuleSelection,
   PlatformPlugin,
   VegaPlatformRegistration,
@@ -21,6 +23,7 @@ type RuntimePlatformPlugin = PlatformPlugin & {
   web?: WebPlatformRegistration;
   vega?: VegaPlatformRegistration;
   harmony?: HarmonyPlatformRegistration;
+  linux?: LinuxPlatformRegistration;
 };
 
 export function builtinPlatformCandidates(): readonly PluginCandidate[] {
@@ -86,6 +89,7 @@ export function composePlatformPlugins(
         ...(platform.family === 'web' ? { web: platform } : {}),
         ...(platform.family === 'vega' ? { vega: platform } : {}),
         ...(platform.family === 'harmonyos' ? { harmony: platform } : {}),
+        ...(platform.family === 'linux' ? { linux: platform } : {}),
       })),
     ],
     reportAbsent,
@@ -124,11 +128,25 @@ export function composePlatformPlugins(
     },
   };
 
+  // The Linux selection's `get()` is the one authority on the family's absence, as HarmonyOS's is:
+  // an uninstalled plugin raises `plugin-not-installed` with its install command, and one that failed
+  // to load raises its own error. Doctor's toolchain row reports that outcome instead of probing
+  // desktop tools no plugin is there to drive.
+  const linux: LinuxPlatformSelection = {
+    active: interactors.tryGet('linux')?.plugin.linux,
+    get() {
+      const { linux } = interactors.get('linux').plugin;
+      if (!linux) throw new TypeError('Linux platform registration is missing its operations');
+      return linux;
+    },
+  };
+
   return {
     interactors,
     web,
     vega,
     harmony,
+    linux,
     inventoryModules: platforms.map((platform) => platform.inventoryModule),
     runtimeModules: platforms.map((platform) => platform.runtimeModule),
     reportAbsent,

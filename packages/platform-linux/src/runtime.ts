@@ -13,6 +13,7 @@ import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
@@ -41,7 +42,10 @@ import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import { captureLinuxSurfaceSnapshot } from './surface-snapshot.ts';
+import { resolveLinuxToolProvider } from './tool-provider.ts';
+import type { LinuxToolbox } from './toolbox.ts';
 
 const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
@@ -127,7 +131,16 @@ const linuxAudioProbeUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
-export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
+
+/**
+ * The Linux runtime owner. It captures its own surface: the AT-SPI read is this family's mechanics,
+ * so the binding runs it through the plugin's host rather than asking the core for a desktop capture.
+ */
+export function createLinuxPlatformRuntime(
+  host: PlatformRuntimeHost,
+  toolbox: LinuxToolbox,
+  provider: LinuxToolProvider,
+): PlatformRuntimeOwner {
   return Object.freeze({
     owner: linuxOwner,
     ownsDevice: (device) => device.platform === 'linux',
@@ -157,7 +170,7 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
         operations: Object.freeze({
           ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
           ...(facts.operations.captureSnapshot.available
-            ? linuxSnapshotOperations(host, request)
+            ? linuxSnapshotOperations(toolbox, provider, request)
             : {}),
           ...linuxInteractionOperations(host, request, facts),
         }),
@@ -309,14 +322,22 @@ function linuxTouchFacts(device: DeviceInfo) {
 }
 
 function linuxSnapshotOperations(
-  host: PlatformRuntimeHost,
+  toolbox: LinuxToolbox,
+  provider: LinuxToolProvider,
   request: Parameters<PlatformRuntimeOwner['bind']>[0],
 ) {
   const captureSnapshot = async (input: CaptureSnapshotInput) =>
-    await host.snapshot.captureSurface(
-      request.device,
-      input.options,
-      captureSnapshotSignal(request.scope.signal, input),
+    await toolbox.withDiagnosticTimer(
+      'snapshot_capture',
+      async () =>
+        await captureLinuxSurfaceSnapshot(
+          toolbox,
+          // The provider the request scoped, when it scoped one; otherwise this runtime's own.
+          resolveLinuxToolProvider(provider),
+          input.options,
+          captureSnapshotSignal(request.scope.signal, input),
+        ),
+      { backend: 'linux-atspi' },
     );
   return Object.freeze({
     captureSnapshot,

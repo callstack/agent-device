@@ -1,9 +1,12 @@
-import { resolveLinuxToolProvider } from './tool-provider.ts';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 
-export async function readLinuxClipboard(): Promise<string> {
-  return await resolveLinuxToolProvider().clipboard!.readText();
+export async function readLinuxClipboard(provider: LinuxToolProvider): Promise<string> {
+  return await provider.clipboard!.readText();
 }
 
-export async function writeLinuxClipboard(text: string): Promise<void> {
-  await resolveLinuxToolProvider().clipboard!.writeText(text);
+export async function writeLinuxClipboard(
+  provider: LinuxToolProvider,
+  text: string,
+): Promise<void> {
+  await provider.clipboard!.writeText(text);
 }

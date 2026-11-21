@@ -2,11 +2,9 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createDeviceInventoryHost } from '../../../src/platform-runtime-host.ts';
-import {
-  createLocalLinuxToolProvider,
-  inventoryModule as linuxInventoryModule,
-} from '@agent-device/platform-linux';
+import { linuxSelectionFixture } from '../../../src/platform-runtime-linux-provider.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_LINUX } from './fixtures.ts';
 import {
@@ -25,12 +23,22 @@ export type LinuxDesktopWorld = {
   close: () => Promise<void>;
 };
 
+/**
+ * The Linux family served by the installed plugin, with one scripted desktop in front of it.
+ *
+ * The scenario hands the daemon a Linux tool provider, so every request runs against the provider it
+ * scoped rather than against a desktop. The provider is the contract's vocabulary, so this file names
+ * no Linux implementation: the plugin resolves it through its own selection, which is what registers
+ * the family's runtime and interactor here.
+ */
 export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   const previousSessionType = process.env.XDG_SESSION_TYPE;
   const previousWaylandDisplay = process.env.WAYLAND_DISPLAY;
   const previousAuthHook = process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
   const previousPlatform = process.platform;
 
+  // The plugin's inventory reports the local desktop only for a Linux host, so the scenario proves
+  // both answers by naming the host it runs on.
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   assert.deepEqual(await discoverLocalLinuxInventory(), []);
   Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
@@ -44,20 +52,22 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   const semanticCalls: FlatToolCall[] = [];
   let clipboardText = '';
 
-  const linuxToolProvider = await createLocalLinuxToolProvider({
-    // The harness names the display env on the process before this line; snapshot it as this
-    // scenario's host (#3794).
-    host: { env: { ...process.env }, cwd: process.cwd() },
-    whichCommand: async (cmd) =>
-      cmd === 'gnome-calculator' || cmd === 'xdotool' || cmd === 'wmctrl',
+  const linuxToolProvider: LinuxToolProvider = {
+    // The display decision the scripted desktop stands for; the family selects its tools by it.
+    display: { detectDisplayServer: () => 'x11' },
     runCommand: async (cmd, args) => {
-      toolCalls.push([cmd, args]);
+      toolCalls.push([cmd, [...args]]);
       return { stdout: '', stderr: '', exitCode: 0 };
     },
-    // The scripted desktop below owns app launches, so the detached launcher is never reached.
+    whichCommand: async (cmd) =>
+      cmd === 'gnome-calculator' || cmd === 'xdotool' || cmd === 'wmctrl',
+    // The scripted desktop owns app launches, so the detached launcher is never reached.
     launchDetached: (cmd) => {
       throw new Error(`the Linux world launches apps through its desktop: ${cmd}`);
     },
+    // Interaction pacing belongs to the scripted desktop too: the scenario asserts the intent, not
+    // the wall clock.
+    sleep: async () => {},
     desktop: {
       openTarget: async (target) => {
         desktopCalls.push(['open', target]);
@@ -135,7 +145,7 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
         semanticCalls.push(['input', 'key', combo]);
       },
     },
-  });
+  };
 
   const daemon = await createProviderScenarioHarness({
     linuxToolProvider: () => linuxToolProvider,
@@ -167,9 +177,11 @@ const inventoryScope: PlatformRequestScope = Object.freeze({
   progress: Object.freeze({ report: () => {} }),
 });
 
+/** Discovery through the installed plugin: the family reports its desktop from the host facts it is given. */
 async function discoverLocalLinuxInventory(): Promise<DeviceInfo[]> {
-  const source = await linuxInventoryModule.loadInventory(
-    createDeviceInventoryHost({ env: process.env, cwd: process.cwd() }),
+  const registration = linuxSelectionFixture({ env: { ...process.env }, cwd: process.cwd() }).get();
+  const source = await registration.inventoryModule.loadInventory(
+    createDeviceInventoryHost({ env: { ...process.env }, cwd: process.cwd() }),
   );
   return [...(await source.discover({ platform: 'linux' }, inventoryScope))];
 }

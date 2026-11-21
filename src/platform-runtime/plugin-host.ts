@@ -21,5 +21,12 @@ export function createPlatformPluginHost(
       const { isExecutablePath } = await import('@agent-device/host-kit/command');
       return await isExecutablePath(path);
     },
+    launchDetached: async (executable, args, options) => {
+      // The host owns the detached spawn: a plugin that starts a process outliving its request must
+      // not carry its own copy of the exec substrate, which would spawn outside the request's
+      // captured environment and exec trace.
+      const { runCmdDetachedMonitored } = await import('@agent-device/host-kit/command');
+      return runCmdDetachedMonitored(executable, args, { env: options.env });
+    },
   } satisfies PlatformHost);
 }

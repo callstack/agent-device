@@ -13,8 +13,9 @@
 // does not resolve relative imports inside `packages/`. The repo's *enforced* platform partition
 // can: `CANONICAL_PLATFORM_FAMILIES` names the families, layering R13 pins each family's runtime
 // to `packages/platform-<family>/`, and the remaining family-owned
-// trees are named by a family or Apple-leaf directory segment (`android/`, `linux/`,
-// `test/integration/replays/<leaf>/`, `packages/capture-kit/src/ios-snapshot-engine/`) or, under
+// trees are named by a family or Apple-leaf directory segment (`android/`, `apple/`,
+// `packages/platform-<family>/<asset>/`, `test/integration/replays/<leaf>/`,
+// `packages/capture-kit/src/ios-snapshot-engine/`) or, under
 // `test/integration/`, by the lane prefix of the smoke file. A path tagged with exactly one
 // family owns that family's lanes; a path tagged with none — or with two — is shared runtime
 // surface and owns every lane. Unit tests (`*.test.ts`, `__tests__/`) under `src/` and
@@ -137,7 +138,8 @@ const RUNTIME_SURFACE: ReadonlyArray<{ root: string; owns: (file: string) => boo
   // Native runner and helper sources — build inputs of the lanes that boot them.
   { root: 'apple/', owns: () => true },
   { root: 'android/', owns: () => true },
-  { root: 'linux/', owns: () => true },
+  // The Linux plugin's AT-SPI helper: a runtime asset the Linux lanes execute through the plugin.
+  { root: 'packages/platform-linux/linux/', owns: () => true },
   // macOS host Swift helpers that recording post-processing compiles on the daemon host.
   { root: 'packages/host-swift/swift/', owns: () => true },
   // TS/Swift golden tables (own:golden-table in model.ts): the parity XCTest runs on the lane.

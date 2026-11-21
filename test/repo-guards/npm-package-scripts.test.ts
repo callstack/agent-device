@@ -99,7 +99,7 @@ test('publishing cannot skip the package gate', () => {
   // The minimum-Node job runs the script directly — the repo's pinned pnpm needs a newer Node than
   // the floor that job covers — so it must still name the same entry point the script does.
   assert.deepEqual(script('check:package').split(' && '), [
-    'node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test packages/maestro/test/package-artifact.test.mjs packages/maestro/test/package-smoke.mjs packages/replay/test/package-smoke.mjs packages/platform-web/test/package-smoke.mjs packages/platform-vega/test/package-smoke.mjs packages/platform-harmonyos/test/package-smoke.mjs',
+    'node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test packages/maestro/test/package-artifact.test.mjs packages/maestro/test/package-smoke.mjs packages/replay/test/package-smoke.mjs packages/platform-web/test/package-smoke.mjs packages/platform-vega/test/package-smoke.mjs packages/platform-harmonyos/test/package-smoke.mjs packages/platform-linux/test/package-smoke.mjs',
     'node --experimental-strip-types scripts/check-package.ts',
   ]);
   assert.match(packagedCliWorkflow, /with: \{ gate: package \}/);

@@ -6,11 +6,13 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "rootDir": "./src",
+    "rootDir": ".",
+    "paths": { "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"] },
     "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
   "include": ["src"],
   "references": [
+    { "path": "../build-config" },
     { "path": "../capture-kit" },
     { "path": "../contracts" },
     { "path": "../gestures" },
