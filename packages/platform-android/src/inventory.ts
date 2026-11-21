@@ -43,6 +43,8 @@ type AndroidInventoryContext = Readonly<{
   host: DeviceInventoryHostFor<'android'>;
   adb: string;
   emulator?: string;
+  /** The serial the request names; its probe failures fail discovery. */
+  selectedSerial?: string;
   scope: PlatformRequestScope;
 }>;
 
@@ -75,6 +77,7 @@ async function discoverAndroidDevices(
     host,
     adb,
     emulator,
+    selectedSerial: request.serial?.trim() || undefined,
     scope,
   };
   const allowlist = resolveSerialAllowlist(request);
@@ -136,7 +139,7 @@ async function probeRunningDevice(
   const [name, booted, target, description] = await Promise.all([
     resolveDeviceName(context, entry),
     isBooted(context, entry.serial),
-    resolveTarget(context, entry.serial),
+    resolveTargetOrUnknown(context, entry.serial),
     readDeviceDescription(context, entry.serial),
   ]);
   return {
@@ -216,6 +219,35 @@ async function isBooted(context: AndroidInventoryContext, serial: string): Promi
   } catch (error) {
     if (context.scope.signal.aborted) throw error;
     return false;
+  }
+}
+
+/**
+ * A busy device that times out a target probe stays listed with an unknown target, so it cannot
+ * fail a request that selects another device. The selected serial and every other failure still
+ * fail discovery, so a selected device never runs with a demoted target.
+ */
+async function resolveTargetOrUnknown(
+  context: AndroidInventoryContext,
+  serial: string,
+): Promise<'mobile' | 'tv' | undefined> {
+  try {
+    return await resolveTarget(context, serial);
+  } catch (error) {
+    const appError = asAppError(error);
+    if (
+      context.scope.signal.aborted ||
+      serial === context.selectedSerial ||
+      appError.details?.adbFailure !== 'timeout'
+    ) {
+      throw error;
+    }
+    context.scope.diagnostics.emit({
+      level: 'warn',
+      phase: 'android_inventory_target_probe_failed',
+      data: { serial, adbFailure: 'timeout' },
+    });
+    return undefined;
   }
 }
 
