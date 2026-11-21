@@ -20,18 +20,19 @@ export function resolveSessionScreenshotsDir(sessionDir: string): string {
 }
 
 /**
- * The stable default screenshot destination for one session. A capture that names no
- * destination lands here every time, so a caller reads the file from this path without
- * parsing a minted temp path out of the output.
+ * The file-name prefix for the screenshots one request mints into the session's
+ * screenshots dir: the request's own safe name, the same name its request log carries
+ * under `requests/`. The capture adapter appends a per-capture suffix, so the captures
+ * of one request never overwrite each other and no request overwrites another's.
  */
-export function resolveSessionScreenshotPath(sessionDir: string): string {
-  return path.join(resolveSessionScreenshotsDir(sessionDir), 'screenshot.png');
+export function resolveSessionScreenshotNamePrefix(requestId: string | undefined): string {
+  return safeSessionName(requestId && requestId.length > 0 ? requestId : 'screenshot');
 }
 
 /**
- * The stable destination for the sparse-snapshot fallback screenshot, distinct from
- * {@link resolveSessionScreenshotPath} so a fallback never overwrites the capture a
- * caller asked for earlier in the same session.
+ * The stable destination for the sparse-snapshot fallback screenshot. A fallback names
+ * its own file instead of minting one, so the fallback evidence stays at one address a
+ * caller can check after the snapshot response is gone.
  */
 export function resolveSessionFallbackScreenshotPath(sessionDir: string): string {
   return path.join(resolveSessionScreenshotsDir(sessionDir), 'snapshot-fallback.png');

@@ -7,7 +7,7 @@ import {
   requireManagedSessionArtifactPath,
   resolveSessionDir,
   resolveSessionFallbackScreenshotPath,
-  resolveSessionScreenshotPath,
+  resolveSessionScreenshotNamePrefix,
   resolveSessionScreenshotStagingDir,
   resolveSessionScreenshotsDir,
 } from './session-artifact-paths.ts';
@@ -36,7 +36,7 @@ test('resolveSessionDir keeps every session dir beneath the sessions dir', () =>
   }
 });
 
-test('the session screenshot paths sit in one screenshots dir with distinct stable names', () => {
+test('the session screenshot paths sit in one screenshots dir with distinct names', () => {
   const sessionDir = path.join(
     mkdtempForTestSync('agent-device-screenshot-paths-'),
     'sessions',
@@ -45,10 +45,17 @@ test('the session screenshot paths sit in one screenshots dir with distinct stab
   const screenshotsDir = resolveSessionScreenshotsDir(sessionDir);
 
   assert.equal(screenshotsDir, path.join(sessionDir, 'screenshots'));
+  // Re-resolving is pure: the same request id predicts the same name prefix every time.
   assert.equal(
-    resolveSessionScreenshotPath(sessionDir),
-    path.join(screenshotsDir, 'screenshot.png'),
+    resolveSessionScreenshotNamePrefix('req-1'),
+    resolveSessionScreenshotNamePrefix('req-1'),
   );
+  assert.equal(resolveSessionScreenshotNamePrefix('req-1'), 'req-1');
+  // A request id carries characters a file name must not (`req:<seed>:<pid>:…`), and a
+  // capture without a request id still owns a stable prefix.
+  assert.equal(resolveSessionScreenshotNamePrefix('req:abc:1:2:x'), 'req_abc_1_2_x');
+  assert.equal(resolveSessionScreenshotNamePrefix(undefined), 'screenshot');
+  assert.equal(resolveSessionScreenshotNamePrefix(''), 'screenshot');
   assert.equal(
     resolveSessionFallbackScreenshotPath(sessionDir),
     path.join(screenshotsDir, 'snapshot-fallback.png'),
@@ -57,12 +64,10 @@ test('the session screenshot paths sit in one screenshots dir with distinct stab
     resolveSessionScreenshotStagingDir(sessionDir),
     path.join(screenshotsDir, 'crop-staging'),
   );
-  // Re-resolving is pure: the same session dir predicts the same destination every time.
-  assert.equal(resolveSessionScreenshotPath(sessionDir), resolveSessionScreenshotPath(sessionDir));
-  // A fallback capture never overwrites the capture the `screenshot` command owns.
+  // A fallback capture writes its own name, so it never lands on a minted capture file.
   assert.notEqual(
-    resolveSessionFallbackScreenshotPath(sessionDir),
-    resolveSessionScreenshotPath(sessionDir),
+    path.basename(resolveSessionFallbackScreenshotPath(sessionDir)),
+    `${resolveSessionScreenshotNamePrefix(undefined)}.png`,
   );
 });
 

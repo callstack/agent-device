@@ -1,8 +1,9 @@
 import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import {
-  resolveSessionScreenshotPath,
+  resolveSessionScreenshotNamePrefix,
   resolveSessionScreenshotStagingDir,
+  resolveSessionScreenshotsDir,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
@@ -61,7 +62,7 @@ export async function resolveScreenshotGenericExecution(
     hostCwd: string;
     /**
      * This session's artifact directory: the base a capture without an explicit destination
-     * resolves its stable default path against, instead of minting a temp dir.
+     * mints its own request-named file under, instead of minting a temp dir.
      */
     sessionDir?: string;
   }> &
@@ -134,9 +135,16 @@ export async function captureScreenshotArtifact(
     outPath?: string;
     /**
      * The stable destination a capture without an explicit one lands on, resolved from the
-     * session dir by the session-artifact-paths owner. Absent: the adapter mints a temp dir.
+     * session dir by the session-artifact-paths owner. One shared file, so only a caller
+     * that owns that sharing passes it (the sparse fallback). Absent: see `mintedDefaultDir`.
      */
     defaultOutputPath?: string;
+    /**
+     * The directory a capture without an explicit one mints its own request-named file
+     * into, so each capture owns a distinct path. Takes precedence over
+     * `defaultOutputPath`; both absent, the adapter mints a legacy temp dir.
+     */
+    mintedDefaultDir?: string;
     /** This session's artifact directory; the crop staging root resolves against it. */
     sessionDir?: string;
     dispatchContext: DaemonCommandContext;
@@ -151,7 +159,15 @@ export async function captureScreenshotArtifact(
       params.crop !== undefined,
       dispatchContext.signal,
       {
-        defaultPath: params.defaultOutputPath,
+        ...(params.mintedDefaultDir
+          ? {
+              mintDir: params.mintedDefaultDir,
+              requestNamePrefix: resolveSessionScreenshotNamePrefix(dispatchContext.requestId),
+            }
+          : {}),
+        ...(params.mintedDefaultDir === undefined && params.defaultOutputPath !== undefined
+          ? { defaultPath: params.defaultOutputPath }
+          : {}),
         stagingDir: params.sessionDir
           ? resolveSessionScreenshotStagingDir(params.sessionDir)
           : undefined,
@@ -236,7 +252,7 @@ async function executeScreenshot(
     sessionName: params.sessionName,
     outPath: params.outPath,
     ...(!params.outPath && params.sessionDir
-      ? { defaultOutputPath: resolveSessionScreenshotPath(params.sessionDir) }
+      ? { mintedDefaultDir: resolveSessionScreenshotsDir(params.sessionDir) }
       : {}),
     sessionDir: params.sessionDir,
     dispatchContext: params.dispatchContext,

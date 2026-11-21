@@ -29,7 +29,8 @@ import type { SessionState } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
-import { resolveSessionScreenshotPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import { resolveSessionScreenshotsDir } from '@agent-device/daemon-contracts/session-artifact-paths';
+import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import {
@@ -153,7 +154,7 @@ test('screenshot resolves --out flag path against request cwd', async () => {
   expect(path.isAbsolute(capturedPath(runtime)!)).toBe(true);
 });
 
-test('screenshot runtime supplies the stable session path when none is requested', async () => {
+test('screenshot runtime mints a request-named destination when none is requested', async () => {
   const { handler, runtime, sessionStore } = screenshotRouter(makeSession('default'));
 
   const response = await handler({
@@ -164,32 +165,77 @@ test('screenshot runtime supplies the stable session path when none is requested
     meta: { requestId: 'req-default-screenshot' },
   });
 
-  const stablePath = resolveSessionScreenshotPath(sessionStore.resolveSessionDir('default'));
+  const mintDir = resolveSessionScreenshotsDir(sessionStore.resolveSessionDir('default'));
   expect(response.ok).toBe(true);
-  expect(capturedPath(runtime)).toBe(stablePath);
-  expect(fs.existsSync(stablePath)).toBe(true);
+  const minted = capturedPath(runtime)!;
+  expect(path.dirname(minted)).toBe(mintDir);
+  expect(path.basename(minted)).toMatch(/^req-default-screenshot-.+\.png$/);
+  expect(fs.readFileSync(minted)).toBeTruthy();
   if (response.ok) {
-    expect(response.data?.path).toBe(capturedPath(runtime));
+    expect(response.data?.path).toBe(minted);
   }
 });
 
-test('captures without a destination land on the same predictable session path', async () => {
-  const { handler, runtime, sessionStore } = screenshotRouter(makeSession('default'));
+test('captures without a destination mint distinct files even under one shared request id', async () => {
+  const { handler, sessionStore } = screenshotRouter(makeSession('default'));
+  const mintDir = resolveSessionScreenshotsDir(sessionStore.resolveSessionDir('default'));
 
-  for (const requestId of ['req-stable-1', 'req-stable-2']) {
+  // Nested flow steps dispatch under the flow's own request id, so the captures of one
+  // id must still own distinct files.
+  const paths: string[] = [];
+  for (const _ of [1, 2]) {
     const response = await handler({
       token: 'test-token',
       session: 'default',
       command: 'screenshot',
       positionals: [],
-      meta: { requestId },
+      meta: { requestId: 'req-flow-shared' },
     });
     expect(response.ok).toBe(true);
-    expect(capturedPath(runtime)).toBe(
-      resolveSessionScreenshotPath(sessionStore.resolveSessionDir('default')),
-    );
+    if (response.ok && typeof response.data?.path === 'string') paths.push(response.data.path);
   }
-  expect(runtime.captureScreenshot.mock.calls).toHaveLength(2);
+  expect(paths[0]).not.toBe(paths[1]);
+  expect(path.dirname(paths[0]!)).toBe(mintDir);
+  expect(fs.readFileSync(paths[0]!)).toBeTruthy();
+  expect(fs.readFileSync(paths[1]!)).toBeTruthy();
+  expect(fs.readdirSync(mintDir)).toHaveLength(2);
+});
+
+test('a failing crop with no destination leaves the earlier minted capture intact', async () => {
+  const { handler, sessionStore } = screenshotRouter(makeSession('default'));
+  const mintDir = resolveSessionScreenshotsDir(sessionStore.resolveSessionDir('default'));
+
+  const first = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    meta: { requestId: 'req-before-crop' },
+  });
+  expect(first.ok).toBe(true);
+  const earlierPath = first.ok ? (first.data?.path as string) : undefined;
+  const earlierBytes = fs.readFileSync(earlierPath!);
+
+  const failed = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    flags: { screenshotCropOn: 'label="No such crop target"' },
+    meta: { requestId: 'req-crop-failure' },
+  });
+  expect(failed.ok).toBe(false);
+  if (!failed.ok) {
+    expect(failed.error.code).toBe('COMMAND_FAILED');
+    expect(failed.error.details?.reason).toBe(SCREENSHOT_CROP_REASONS.targetNotFound);
+  }
+
+  // The earlier capture keeps its bytes, and the failed request left no new file behind.
+  expect(fs.readFileSync(earlierPath!).equals(earlierBytes)).toBe(true);
+  expect(fs.readdirSync(mintDir).filter((entry) => entry !== 'crop-staging')).toEqual([
+    path.basename(earlierPath!),
+  ]);
+  expect(fs.readdirSync(path.join(mintDir, 'crop-staging'))).toEqual([]);
 });
 
 test('screenshot forwards macOS session surface to the bound capture', async () => {
