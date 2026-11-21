@@ -212,6 +212,19 @@ const LOCAL_SCREENSHOT_TOOLS = {
     'scrot, import (ImageMagick), or gnome-screenshot is required for screenshots on X11. Install via your package manager.',
 } satisfies LocalLinuxToolConfig<LocalLinuxScreenshotTool>;
 
+/**
+ * The commands each desktop slot accepts, in the order the provider tries them. `doctor` reads the
+ * same tables, so a host the provider can drive is never reported as missing a tool.
+ */
+export function linuxToolSlotCommands(
+  display: 'wayland' | 'x11',
+): Readonly<{ clipboard: readonly string[]; screenshot: readonly string[] }> {
+  return {
+    clipboard: LOCAL_CLIPBOARD_TOOLS[display].map((candidate) => candidate.command),
+    screenshot: LOCAL_SCREENSHOT_TOOLS[display].map((candidate) => candidate.command),
+  };
+}
+
 const LOCAL_CLIPBOARD_READ_COMMANDS: Record<LocalLinuxClipboardTool, LocalLinuxToolCommand> = {
   'wl-clipboard': {
     cmd: 'wl-paste',

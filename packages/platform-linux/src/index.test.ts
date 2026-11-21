@@ -167,7 +167,25 @@ test('the toolchain check reports the tools the host is missing', async () => {
   assert.deepEqual(check.evidence, {
     display: 'x11',
     tools: ['python3'],
-    missingTools: ['xdotool', 'xclip', 'scrot'],
+    missingTools: ['xdotool', 'xclip or xsel', 'scrot or import or gnome-screenshot'],
+  });
+});
+
+test('the toolchain check accepts every fallback tool the provider drives', async () => {
+  const registration = setupLinuxPlatform(
+    createPluginHost({
+      env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+      tools: ['xdotool', 'xsel', 'import', 'python3'],
+    }),
+  );
+
+  const check = await registration.operations.toolchainCheck();
+
+  assert.equal(check.status, 'pass');
+  assert.deepEqual(check.evidence, {
+    display: 'x11',
+    tools: ['xdotool', 'xsel', 'import', 'python3'],
+    missingTools: [],
   });
 });
 

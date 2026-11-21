@@ -1,5 +1,6 @@
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import { linuxToolSlotCommands } from './tool-provider.ts';
 
 /**
  * The toolchain row `doctor --platform linux` reports. The plugin answers it over the host command
@@ -14,9 +15,16 @@ export async function linuxToolchainCheck(provider: LinuxToolProvider): Promise<
   const display = provider.display.detectDisplayServer();
   const found: string[] = [];
   const missing: string[] = [];
-  for (const tool of requiredLinuxTools(display)) {
-    if (await provider.whichCommand(tool)) found.push(tool);
-    else missing.push(tool);
+  for (const slot of requiredLinuxToolSlots(display)) {
+    let present: string | undefined;
+    for (const tool of slot) {
+      if (await provider.whichCommand(tool)) {
+        present = tool;
+        break;
+      }
+    }
+    if (present) found.push(present);
+    else missing.push(slot.join(' or '));
   }
   const evidence = {
     display,
@@ -46,10 +54,10 @@ function inputToolFor(display: 'wayland' | 'x11'): string {
   return display === 'wayland' ? 'ydotool' : 'xdotool';
 }
 
-function requiredLinuxTools(display: 'wayland' | 'x11'): readonly string[] {
-  return display === 'wayland'
-    ? ['ydotool', 'wl-paste', 'wl-copy', 'grim', 'python3']
-    : ['xdotool', 'xclip', 'scrot', 'python3'];
+/** One entry per slot the family needs; a slot is satisfied by any of its commands. */
+function requiredLinuxToolSlots(display: 'wayland' | 'x11'): readonly (readonly string[])[] {
+  const { clipboard, screenshot } = linuxToolSlotCommands(display);
+  return [[inputToolFor(display)], clipboard, screenshot, ['python3']];
 }
 
 function linuxInstallHint(display: 'wayland' | 'x11'): string {
