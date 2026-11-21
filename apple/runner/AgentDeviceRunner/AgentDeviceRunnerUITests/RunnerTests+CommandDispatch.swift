@@ -783,18 +783,28 @@ extension RunnerTests {
 #endif
   }
 
-  /// A coordinate tap targets the screen. When the session app is not in front and SpringBoard owns
-  /// the point (a notification banner, the Home Screen, Control Center), the tap is dispatched there:
-  /// activating the session app first would change what is under the point (#4655). The owner is the
-  /// pid of the accessibility hit test at the point, so a point over another app, or a point the hit
-  /// test does not answer, keeps the activation.
+  /// A coordinate tap targets the screen. When the session app runs in the background and SpringBoard
+  /// owns the point (a notification banner, the Home Screen, Control Center), the tap is dispatched
+  /// there: activating the session app first would change what is under the point (#4655). The owner
+  /// is the pid of the accessibility hit test at the point, so a point over another app, a point off
+  /// the screen, or a point the hit test does not answer keeps the activation. A session app that is
+  /// not running keeps the launch.
   @MainActor
   private func coordinateTapLandsOnSpringboard(_ command: Command) -> Bool {
 #if os(iOS)
     guard isCoordinateOnlyTap(command), let x = command.x, let y = command.y else { return false }
-    guard resolveAppWithoutActivation(command: command).state != .runningForeground else { return false }
+    let targetState = resolveAppWithoutActivation(command: command).state
+    guard targetState == .runningBackground || targetState == .runningBackgroundSuspended else {
+      return false
+    }
+    // The hit test waits on the main thread, so a point it cannot answer is not sent to it.
+    guard let screen = soleDisplayPortraitSize() else { return false }
+    let point = CGPoint(x: x, y: y)
+    guard CGRect(origin: .zero, size: screen).contains(point)
+      || CGRect(x: 0, y: 0, width: screen.height, height: screen.width).contains(point)
+    else { return false }
     guard let springboardPid = Self.processIdentifier(of: springboard) else { return false }
-    return RunnerAXSnapshotBridge.processIdentifierOfElement(at: CGPoint(x: x, y: y)) == springboardPid
+    return RunnerAXSnapshotBridge.processIdentifierOfElement(at: point) == springboardPid
 #else
     return false
 #endif

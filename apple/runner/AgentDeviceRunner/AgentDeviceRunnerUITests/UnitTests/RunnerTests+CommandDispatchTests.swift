@@ -215,6 +215,25 @@ extension RunnerTests {
     XCTAssertEqual(pendingTargetActivation?.reason, "stale_target")
   }
 
+  /// The in-place route is for a session app in the background only: a stopped session app keeps the
+  /// launch a coordinate tap has always performed, even over the Home Screen.
+  @MainActor
+  func testCoordinateTapOverSpringboardStillLaunchesAStoppedSessionApp() throws {
+    app.terminate()
+    XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))
+    invalidateCachedTarget(reason: "unit_test_setup")
+    pendingTargetActivation = nil
+    defer { unbindRunnerHostApp() }
+    let tap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-stopped","appBundleId":"com.callstack.agentdevice.runner","x":200,"y":400}"#
+    )
+    guard case .context(let context) = prepareActiveCommandContext(command: tap) else {
+      return XCTFail("a tap for a stopped session app must prepare a context")
+    }
+    XCTAssertFalse(context.servesSpringboard)
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+  }
+
   @MainActor
   func testMissingBundleCommandInvalidatesCompleteCachedTargetState() throws {
     app.launch()
