@@ -7,12 +7,16 @@ import {
 import { rectArea } from '@agent-device/kernel/rect';
 import {
   isReactNativeCollapsedWarningBanner,
+  isReactNativeCollapsedWarningCountBadgeBanner,
   isReactNativeCollapsedWarningEvidenceLabel,
   isReactNativeCollapsedWarningLabel,
   isReactNativeOverlayDismissLabel,
   isReactNativeOverlayMinimizeLabel,
 } from '@agent-device/contracts/react-native-overlay';
-import type { ReactNativeOverlayNode } from '@agent-device/contracts/react-native-overlay';
+import type {
+  ReactNativeOverlayNode,
+  ReactNativeOverlaySurface,
+} from '@agent-device/contracts/react-native-overlay';
 
 export type ReactNativeOverlayState = {
   detected: boolean;
@@ -32,6 +36,7 @@ export type ReactNativeOverlayDismissTarget = {
 };
 
 type ReactNativeOverlayFacts = {
+  surface: ReactNativeOverlaySurface | undefined;
   dismissNodes: SnapshotNode[];
   minimizeNodes: SnapshotNode[];
   collapsedNodes: SnapshotNode[];
@@ -46,8 +51,11 @@ const REACT_NATIVE_STACK_FRAME_PATTERNS = [
 ] as const;
 const CLOSE_ICON_LABELS = new Set(['x', '×', '✕', '✖', '⨯']);
 
-export function formatReactNativeOverlayWarning(nodes: SnapshotNode[]): string | undefined {
-  const overlay = analyzeReactNativeOverlay(nodes);
+export function formatReactNativeOverlayWarning(
+  nodes: SnapshotNode[],
+  surface?: ReactNativeOverlaySurface,
+): string | undefined {
+  const overlay = analyzeReactNativeOverlay(nodes, surface);
   if (!overlay.detected) return undefined;
   return [
     'Hint: React Native warning/error overlay detected. It overlays part of the app and should be handled before interacting.',
@@ -56,8 +64,11 @@ export function formatReactNativeOverlayWarning(nodes: SnapshotNode[]): string |
   ].join('\n');
 }
 
-export function analyzeReactNativeOverlay(nodes: SnapshotNode[]): ReactNativeOverlayState {
-  const facts = collectReactNativeOverlayFacts(nodes);
+export function analyzeReactNativeOverlay(
+  nodes: SnapshotNode[],
+  surface?: ReactNativeOverlaySurface,
+): ReactNativeOverlayState {
+  const facts = collectReactNativeOverlayFacts(nodes, surface);
   const primaryAction = facts.detected ? resolveSafeDismissAction(facts) : null;
 
   return {
@@ -69,15 +80,14 @@ export function analyzeReactNativeOverlay(nodes: SnapshotNode[]): ReactNativeOve
   };
 }
 
-function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverlayFacts {
+function collectReactNativeOverlayFacts(
+  nodes: SnapshotNode[],
+  surface: ReactNativeOverlaySurface | undefined,
+): ReactNativeOverlayFacts {
   const text = nodes.map(formatNodeSearchText).join('\n').toLowerCase();
   const dismissNodes = collectOverlayNodes(nodes, isDismissControlLabel);
   const minimizeNodes = collectOverlayNodes(nodes, isReactNativeOverlayMinimizeLabel);
-  const collapsedNodes = collectOverlayNodes(
-    nodes,
-    isReactNativeCollapsedWarningLabel,
-    isLikelyCollapsedWarningControl,
-  );
+  const collapsedNodes = nodes.filter((node) => node.ref && isCollapsedWarningNode(node, surface));
   const openDebuggerWarningNodes = collectOverlayNodes(
     nodes,
     isReactNativeOpenDebuggerWarningLabel,
@@ -85,7 +95,11 @@ function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverl
   const hasReactNativeStackFrame = isReactNativeStackFrame(text);
   const hasControllessRedBoxText = hasUnableToDownloadAssetRedBox(text);
   const hasOverlayControl = hasReactNativeOverlayControlText(text, dismissNodes, minimizeNodes);
+  const collapsedCountBadgeNodes = collapsedNodes.filter((node) =>
+    isReactNativeCollapsedWarningCountBadgeBanner(node, surface),
+  );
   return {
+    surface,
     dismissNodes,
     minimizeNodes,
     collapsedNodes,
@@ -95,13 +109,29 @@ function collectReactNativeOverlayFacts(nodes: SnapshotNode[]): ReactNativeOverl
       hasOverlayControl,
       hasControllessRedBoxText,
       collapsedNodes,
-      collapsedEvidenceNodes: collectOverlayNodes(
-        collapsedNodes,
-        isReactNativeCollapsedWarningEvidenceLabel,
+      collapsedEvidenceNodes: collapsedNodes.filter((node) =>
+        nodeLabelFacts(node, isReactNativeCollapsedWarningEvidenceLabel),
       ),
+      collapsedCountBadgeNodes,
       openDebuggerWarningNodes,
     }),
   };
+}
+
+/**
+ * A banner candidate: either its label names a collapsed warning and its shape allows one, or it
+ * carries LogBox's entry-count badge in a LogBox banner's place. A count label alone reads like an
+ * ordinary row, so only the placement — measured in the capture's own box — says banner.
+ */
+function isCollapsedWarningNode(
+  node: SnapshotNode,
+  surface: ReactNativeOverlaySurface | undefined,
+): boolean {
+  if (isReactNativeCollapsedWarningCountBadgeBanner(node, surface)) return true;
+  return (
+    isLikelyCollapsedWarningControl(node) &&
+    nodeLabelFacts(node, isReactNativeCollapsedWarningLabel)
+  );
 }
 
 function resolveSafeDismissAction(
@@ -111,7 +141,7 @@ function resolveSafeDismissAction(
   if (dismiss) return targetFromNode(dismiss, actionFromDismissNode(dismiss));
 
   const collapsed = chooseCollapsedWarningNode(
-    facts.collapsedNodes.filter(isSafeCollapsedWarningCoordinateFallback),
+    facts.collapsedNodes.filter((node) => isSafeCollapsedWarningCoordinateFallback(node, facts)),
   );
   if (!collapsed?.rect) return null;
   return {
@@ -156,12 +186,14 @@ function isReactNativeOverlayDetected(params: {
   hasControllessRedBoxText: boolean;
   collapsedNodes: SnapshotNode[];
   collapsedEvidenceNodes: SnapshotNode[];
+  collapsedCountBadgeNodes: SnapshotNode[];
   openDebuggerWarningNodes: SnapshotNode[];
 }): boolean {
   const hasOverlayContext =
     params.hasReactNativeStackFrame || hasKnownReactNativeOverlayText(params.text);
   return (
     params.collapsedEvidenceNodes.length > 0 ||
+    params.collapsedCountBadgeNodes.length > 0 ||
     (params.collapsedNodes.length > 0 && hasOverlayContext) ||
     params.openDebuggerWarningNodes.length > 0 ||
     params.hasControllessRedBoxText ||
@@ -194,30 +226,35 @@ function isLikelyCollapsedWarningControl(node: SnapshotNode): boolean {
   return !node.rect || node.rect.height <= 180;
 }
 
-function isSafeCollapsedWarningCoordinateFallback(node: SnapshotNode): boolean {
+function isSafeCollapsedWarningCoordinateFallback(
+  node: SnapshotNode,
+  facts: ReactNativeOverlayFacts,
+): boolean {
+  if (!isReactNativeCollapsedWarningBanner(node)) return false;
   const label = readNodeLabel(node)?.trim().toLowerCase() ?? '';
   return (
-    (isReactNativeOpenDebuggerWarningLabel(label) || isCollapsedWarningSummaryLabel(label)) &&
-    isReactNativeCollapsedWarningBanner(node)
+    isReactNativeOpenDebuggerWarningLabel(label) ||
+    isCollapsedWarningSummaryLabel(label) ||
+    isReactNativeCollapsedWarningCountBadgeBanner(node, facts.surface)
   );
+}
+
+/** Reads every text a node carries, lowercased, against a label classifier. */
+function nodeLabelFacts(
+  node: ReactNativeOverlayNode,
+  matches: (label: string) => boolean,
+): boolean {
+  return [node.label, node.value, node.identifier]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value))
+    .some((value) => matches(value));
 }
 
 function collectOverlayNodes(
   nodes: SnapshotNode[],
   matches: (label: string) => boolean,
-  includeNode: (node: SnapshotNode) => boolean = () => true,
 ): SnapshotNode[] {
-  const matchedNodes: SnapshotNode[] = [];
-  for (const node of nodes) {
-    if (!node.ref) continue;
-    if (!includeNode(node)) continue;
-    const labels = [node.label, node.value, node.identifier]
-      .map((value) => value?.trim().toLowerCase())
-      .filter((value): value is string => Boolean(value));
-    if (!labels.some((label) => matches(label))) continue;
-    matchedNodes.push(node);
-  }
-  return matchedNodes;
+  return nodes.filter((node) => node.ref && nodeLabelFacts(node, matches));
 }
 
 function firstControlNodeWithRect(nodes: SnapshotNode[]): SnapshotNode | null {

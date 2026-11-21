@@ -343,7 +343,10 @@ function buildSnapshotWarnings(params: {
     warnings.push(...buildMergedAccessibilityLeafWarnings(params.snapshot.nodes));
   }
 
-  const reactNativeOverlayWarning = formatReactNativeOverlayWarning(params.snapshot.nodes);
+  const reactNativeOverlayWarning = formatReactNativeOverlayWarning(
+    params.snapshot.nodes,
+    params.snapshot.viewport,
+  );
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 
   const systemSurfaceWarning = formatAndroidSystemSurfaceWarning(params.annotations);

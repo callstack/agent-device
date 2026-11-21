@@ -5,6 +5,7 @@ import { captureSnapshot } from '../../../core/snapshot-capture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -148,6 +149,69 @@ test('react-native dismiss-overlay prefers non-trailing collapsed warning close 
     ref: 'e91',
     x: 27,
     y: 820,
+  });
+});
+
+test('react-native dismiss-overlay taps a collapsed banner whose badge shows the entry count', async () => {
+  const sessionName = 'rn-count-badge-session';
+  const sessionStore = makeSessionStore();
+  sessionStore.publish(sessionName, makeSession(sessionName));
+  mockCaptureSnapshot
+    .mockResolvedValueOnce({
+      snapshot: {
+        nodes: [
+          {
+            index: 0,
+            ref: 'e90',
+            label: '20, Failed to fetch',
+            rect: { x: 10, y: 787, width: 382, height: 48 },
+            hittable: true,
+          },
+        ],
+        viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 402, height: 874 }),
+        createdAt: Date.now(),
+      },
+    })
+    .mockResolvedValueOnce({
+      snapshot: {
+        nodes: [
+          {
+            index: 0,
+            ref: 'e1',
+            label: 'Submit order',
+            rect: { x: 24, y: 600, width: 180, height: 52 },
+          },
+        ],
+        createdAt: Date.now(),
+      },
+    });
+
+  const response = await handleReactNativeCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'react-native',
+      positionals: ['dismiss-overlay'],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    contextFromFlags: () => ({}),
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDismissTap).toHaveBeenCalledWith(
+    expect.objectContaining({ point: { x: 370, y: 811 } }),
+  );
+  expect(response?.ok && response.data).toMatchObject({
+    action: 'dismiss-overlay',
+    overlayAction: 'close-collapsed-banner',
+    verified: true,
+    x: 370,
+    y: 811,
   });
 });
 
