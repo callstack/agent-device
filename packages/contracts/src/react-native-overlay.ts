@@ -91,9 +91,7 @@ export function isReactNativeCollapsedWarningEvidenceLabel(rawLabel: string | un
 }
 
 /** The `<count>, <message>` shape a collapsed banner carries from two entries up. */
-function isReactNativeCollapsedWarningCountBadgeLabel(
-  rawLabel: string | undefined,
-): boolean {
+function isReactNativeCollapsedWarningCountBadgeLabel(rawLabel: string | undefined): boolean {
   const label = rawLabel?.trim().toLowerCase();
   if (!label) return false;
   return COLLAPSED_COUNT_BADGE_PREFIX_PATTERN.test(label);
