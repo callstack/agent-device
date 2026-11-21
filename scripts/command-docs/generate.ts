@@ -154,10 +154,12 @@ function capabilityRows(command: string): CommandFacts['capabilityRows'] {
  * A shared option the command reads on every action leaves its table, and the command names it in
  * one `Also accepts` line. An option the command overrides keeps its row, with the override text,
  * and is left out of that line. A command that declares `flagsByAction` gets one table per action:
- * an option only some actions read would otherwise read as available to all of them. An option no
- * action names is read by all of them, so it is a shared row and the line covers it; an option the
- * shared table owns for one action only keeps its row there, because which action reads it is the
- * fact the placement carries.
+ * an option only some actions read would otherwise read as available to all of them. So every
+ * option of such a command must be named by the action that reads it: a schema that leaves one
+ * unnamed says nothing about who reads it, and the block refuses to guess. Only an option the shared
+ * table owns may stay unnamed, and it leaves for the `Also accepts` line; one the shared table owns
+ * for a single action keeps its row there, because which action reads it is the fact the placement
+ * carries.
  */
 export function buildCommandFacts(
   command: string,
@@ -189,10 +191,14 @@ export function buildCommandFacts(
     };
   }
 
-  // A key no action names is read by all of them, so it reaches every table; a shared one of those
-  // leaves them all for the command's `Also accepts` line instead.
   const actionScoped = new Set(Object.values(flagsByAction).flat());
-  const readByEveryAction = allowedFlags.filter((key) => !actionScoped.has(key) && !shared(key));
+  const unnamed = allowedFlags.filter((key) => !actionScoped.has(key) && !shared(key));
+  if (unnamed.length > 0) {
+    throw new Error(
+      `${command} declares flagsByAction but names no action for: ${unnamed.join(', ')}. ` +
+        'Name the action that reads each option in the command schema, or document the command by hand.',
+    );
+  }
   const tableFor = (keys: Iterable<FlagKey>): OptionRow[] =>
     helpFlags({ ...schema, allowedFlags: [...keys] } as CommandSchema).map((row) => ({
       label: row.label,
@@ -203,7 +209,7 @@ export function buildCommandFacts(
     flags: [],
     actions: Object.entries(flagsByAction).map(([action, keys]) => ({
       label: `${command} ${action}`,
-      options: tableFor([...keys, ...readByEveryAction]),
+      options: tableFor(keys),
     })),
     commonOptions: sharedLabels(
       allowedFlags.filter((key) => shared(key) && !actionScoped.has(key)),
@@ -255,6 +261,19 @@ function commonOptionsLine(labels: readonly string[]): string[] {
   ];
 }
 
+/**
+ * The command forms of a synopsis, one per line. A multi-line synopsis is written for the terminal:
+ * its later lines carry their own `agent-device` prefix and indentation, and a paragraph after a
+ * blank line is help prose. The fence takes the forms only.
+ */
+function usageLines(usage: string): string[] {
+  const forms = usage.split('\n\n')[0]!.split('\n');
+  return forms.map((form) => {
+    const line = form.trim();
+    return line.startsWith('agent-device ') ? line : `agent-device ${line}`;
+  });
+}
+
 export function renderBlock(facts: CommandFacts): string {
   const lines = [
     `<!-- generated:command ${facts.name} -->`,
@@ -262,7 +281,7 @@ export function renderBlock(facts: CommandFacts): string {
     `${facts.summary}.`,
     '',
     '```bash',
-    `agent-device ${facts.usage}`,
+    ...usageLines(facts.usage),
     '```',
     '',
   ];
