@@ -60,6 +60,8 @@ type DeviceAuthPollResponse = {
 
 type CliSessionRefreshResponse = {
   accessToken?: string;
+  /** A replacement for the stored credential, when the cloud rotates it on refresh. */
+  refreshCredential?: string;
   expiresAt?: string;
   status?: string;
   error?: string;
@@ -230,7 +232,10 @@ export async function loginWithDeviceAuth(options: {
     ? start.verificationUriComplete
     : start.verificationUri;
   if (authMode === 'local-browser') {
-    writeStderr(options.io, `Opening ${start.verificationUri}...\n`);
+    writeStderr(
+      options.io,
+      `Opening ${start.verificationUri}...\n${describeUserCode(start.userCode)}`,
+    );
     await openBrowser(verificationUrl, options.io);
   } else {
     const printableUrl = appendUserCode(start.verificationUri, start.userCode);
@@ -359,10 +364,53 @@ async function resolveCliSessionAccess(options: {
     env: options.env,
     io: options.io,
   });
+  if (refreshed.refreshCredential) {
+    storeRotatedCredential({
+      stateDir: options.stateDir,
+      sent: session,
+      refreshCredential: refreshed.refreshCredential,
+      io: options.io,
+    });
+  }
   return {
     accessToken: refreshed.accessToken,
     cloudBaseUrl: resolveCloudBaseUrl(options.env, session.cloudBaseUrl),
   };
+}
+
+/**
+ * Stores the credential that replaced the one this command sent. The session file is read
+ * again first: a change that is visible on that read (another command's store, a login, a
+ * logout) wins, and nothing is written. The read and the write are not one atomic step. They
+ * need not be: under the rotation contract (see the refresh request) at most one replacement
+ * exists for a credential, so two commands never hold different replacements to store.
+ * A failed write keeps the command's access token and warns, because the cloud refuses the
+ * old credential after its grace period.
+ */
+function storeRotatedCredential(options: {
+  stateDir: string;
+  sent: CliSessionRecord;
+  refreshCredential: string;
+  io?: AuthIo;
+}): void {
+  const { sent, refreshCredential } = options;
+  const stored = readCliSession({ stateDir: options.stateDir });
+  if (
+    stored?.id !== sent.id ||
+    stored.refreshCredential !== sent.refreshCredential ||
+    refreshCredential === sent.refreshCredential
+  ) {
+    return;
+  }
+  try {
+    writeCliSession({ stateDir: options.stateDir, session: { ...stored, refreshCredential } });
+  } catch {
+    writeStderr(
+      options.io,
+      'Warning: the renewed CLI session could not be saved. ' +
+        'If the next command is not authenticated, run agent-device auth login.\n',
+    );
+  }
 }
 
 async function refreshAgentToken(options: {
@@ -370,13 +418,19 @@ async function refreshAgentToken(options: {
   flags: CliFlags;
   env: EnvMap;
   io?: AuthIo;
-}): Promise<{ accessToken: string; expiresAt?: string }> {
+}): Promise<{ accessToken: string; expiresAt?: string; refreshCredential?: string }> {
   const cloudBaseUrl = resolveCloudBaseUrl(options.env, options.session.cloudBaseUrl);
   const response = await postJson<CliSessionRefreshResponse>({
     baseUrl: cloudBaseUrl,
     pathName: CLI_SESSION_REFRESH_PATH,
     body: {
       refreshCredential: options.session.refreshCredential,
+      // This CLI stores a replacement credential from the response, so the cloud may rotate it.
+      // Commands run in parallel and each refreshes, so a cloud that rotates must: issue at most
+      // one replacement for a credential; answer a request that still presents the replaced
+      // credential with an access token and no further replacement; and keep the replaced
+      // credential valid for a grace period that covers commands already in flight.
+      acceptsRotatedRefreshCredential: true,
       tenant: options.flags.tenant,
       runId: options.flags.runId,
       daemonBaseUrl: options.flags.daemonBaseUrl,
@@ -385,7 +439,13 @@ async function refreshAgentToken(options: {
     fetchImpl: options.io?.fetch,
   });
   if (hasToken(response.accessToken)) {
-    return { accessToken: response.accessToken, expiresAt: response.expiresAt };
+    return {
+      accessToken: response.accessToken,
+      expiresAt: response.expiresAt,
+      ...(hasToken(response.refreshCredential)
+        ? { refreshCredential: response.refreshCredential }
+        : {}),
+    };
   }
   if (response.status === 'revoked' || response.error === 'revoked') {
     throw new AppError('UNAUTHORIZED', 'Stored cloud CLI session was revoked.', {
@@ -562,6 +622,16 @@ function shouldUseCloudAuth(daemonBaseUrl: string, env: EnvMap): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * The line that lets the user compare the code in the browser with the terminal. A code with
+ * characters outside letters, digits and dashes is not printed.
+ */
+function describeUserCode(userCode: string): string {
+  return /^[A-Za-z0-9-]{4,32}$/.test(userCode)
+    ? `Confirm that the browser shows this code: ${userCode}\n`
+    : '';
 }
 
 function appendUserCode(verificationUri: string, userCode: string): string {
