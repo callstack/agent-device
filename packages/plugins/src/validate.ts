@@ -313,10 +313,7 @@ export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
   });
 }
 
-function namedContributionClaims(
-  contributions: unknown,
-  kind: ClaimKind,
-): readonly PluggedClaim[] {
+function namedContributionClaims(contributions: unknown, kind: ClaimKind): readonly PluggedClaim[] {
   if (!Array.isArray(contributions)) return [];
   const { contributionIdField, leafField, readNamedId = namedId, readLeaf } = CLAIM_KINDS[kind];
   return contributions.flatMap((contribution) => {

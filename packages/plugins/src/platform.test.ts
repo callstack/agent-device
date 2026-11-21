@@ -2,11 +2,7 @@ import { expect, test } from 'vitest';
 import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { storePluginCandidates } from './store.ts';
-import {
-  resolveProviderPlugins,
-  startProviderRegistry,
-  type PluginCandidate,
-} from './registry.ts';
+import { resolveProviderPlugins, startProviderRegistry, type PluginCandidate } from './registry.ts';
 
 const WEB_PACKAGE = '@agent-device/web';
 const stateDir = '/fixture-state';
@@ -217,7 +213,13 @@ test('a macOS leaf claim coexists with the bundled apple family claim and regist
   selectMacOsLeaf(home);
   const registry = await startStore(env, [builtinApple]);
   expect(registry.inventory).toMatchObject([
-    { source: 'store', package: MACOS_PACKAGE, platform: 'apple', appleOs: 'macos', state: 'active' },
+    {
+      source: 'store',
+      package: MACOS_PACKAGE,
+      platform: 'apple',
+      appleOs: 'macos',
+      state: 'active',
+    },
   ]);
   expect(registry.platforms).toEqual([]);
   expect(registry.platformLeaves.map(({ family, appleOs }) => `${family}:${appleOs}`)).toEqual([
