@@ -8,7 +8,6 @@
     "apiVersion": 3,
     "provider": "limrun"
   },
-  "private": true,
   "type": "module",
   "description": "Limrun Android instance and iOS simulator plugin for agent-device.",
   "files": [
