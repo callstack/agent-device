@@ -29,12 +29,20 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
   module: PlatformRuntimeProviderModule;
 }>;
+
+// Why the gateway refuses a request it will not route at all. A refusal the routing decision reaches
+// (an unsupported mode, an owner that is gone) is the runtime contract's own vocabulary, declared in
+// `@agent-device/contracts/platform-runtime` next to the facts that carry it.
+const PLATFORM_RUNTIME_GATEWAY_REASONS = {
+  // The gateway is closed, so the command reached no runtime owner.
+  shutDown: { reason: 'runtime-gateway-shut-down' },
+} as const satisfies ReasonTable<'platform runtime'>;
 
 export function createComposedPlatformRuntimeGateway(options: {
   modules: ReadonlyMap<Platform, PlatformRuntimeModule>;
@@ -66,7 +74,7 @@ export function createComposedPlatformRuntimeGateway(options: {
   const ensureOpen = () => {
     if (closing) {
       throw new AppError('COMMAND_FAILED', 'Platform runtime gateway is shut down', {
-        reason: 'runtime-gateway-shut-down',
+        reason: PLATFORM_RUNTIME_GATEWAY_REASONS.shutDown.reason,
       });
     }
   };

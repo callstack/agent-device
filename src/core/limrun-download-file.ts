@@ -3,10 +3,25 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { LimrunFileDownload } from '@agent-device/provider-limrun';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
+
+// Why a Limrun file download did not land. The destination is removed on every failure, so each row
+// means "retry from the same URL", and `limrun_download_failed` adds that the transport itself broke.
+const LIMRUN_DOWNLOAD_REASONS = {
+  // The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply.
+  httpError: { reason: 'limrun_download_http_error' },
+  // The download passed its deadline; `details.timeoutMs` is that deadline.
+  timeout: { reason: 'limrun_download_timeout' },
+  // The transfer broke for a reason the service never answered with, kept in `details.cause`.
+  failed: { reason: 'limrun_download_failed' },
+} as const satisfies ReasonTable<'limrun'>;
 
 /**
  * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
@@ -44,7 +59,7 @@ async function httpFailure(response: Response, options: LimrunFileDownload): Pro
   return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${response.status}`, {
     url: options.url,
     statusCode: response.status,
-    reason: 'limrun_download_http_error',
+    reason: LIMRUN_DOWNLOAD_REASONS.httpError.reason,
     body: await readBodyPreview(response),
   });
 }
@@ -87,7 +102,7 @@ function downloadFailure(
       'Limrun download deadline expired',
       {
         url: options.url,
-        reason: 'limrun_download_timeout',
+        reason: LIMRUN_DOWNLOAD_REASONS.timeout.reason,
         timeoutMs: options.timeoutMs,
       },
       reason,
@@ -97,12 +112,12 @@ function downloadFailure(
     return new AppError('COMMAND_FAILED', 'Limrun download timed out', {
       url: options.url,
       timeoutMs: options.timeoutMs,
-      reason: 'limrun_download_timeout',
+      reason: LIMRUN_DOWNLOAD_REASONS.timeout.reason,
     });
   }
   return new AppError('COMMAND_FAILED', 'Limrun download failed', {
     url: options.url,
-    reason: 'limrun_download_failed',
+    reason: LIMRUN_DOWNLOAD_REASONS.failed.reason,
     cause: error instanceof Error ? error.message : String(error),
   });
 }

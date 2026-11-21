@@ -7,6 +7,7 @@ import type http from 'node:http';
 import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
+import { DAEMON_TRANSPORT_REASONS } from '@agent-device/contracts/daemon-http';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,
@@ -29,7 +30,7 @@ function createInvalidDaemonResponseError(
     'Invalid daemon response',
     {
       requestId: req.meta?.requestId,
-      reason: 'daemon_response_invalid',
+      reason: DAEMON_TRANSPORT_REASONS.replyInvalid.reason,
       line,
     },
     cause instanceof Error ? cause : undefined,
@@ -201,7 +202,7 @@ export function readDaemonHttpProgressResponse(
         'Failed to read daemon response',
         {
           requestId: req.meta?.requestId,
-          reason: 'daemon_response_read_failure',
+          reason: DAEMON_TRANSPORT_REASONS.replyUnreadable.reason,
         },
         error instanceof Error ? error : undefined,
       ),

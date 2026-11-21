@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
 // proxy, and every client that talks to them: the base path, the tenant, lease
@@ -133,6 +134,24 @@ export const DAEMON_RPC_PROTOCOL_VERSION = 3;
  * worst-case escaping. It also bounds the memory one unauthenticated connection can hold.
  */
 export const DAEMON_REQUEST_MAX_BYTES = 64 * 1024 * 1024;
+
+// Why a daemon call stopped at the transport boundary, so no command ran and no result is implied.
+// A daemon that answers names its own refusal in the reply instead. The client writes these; the
+// vocabulary sits here because client, proxy and daemon all read the same boundary.
+export const DAEMON_TRANSPORT_REASONS = {
+  // The daemon's socket or HTTP endpoint is unreachable; `details.transport` names the one tried.
+  endpointUnavailable: { reason: 'daemon_endpoint_unavailable' },
+  // The connection to the daemon broke; `details.daemonRequestSent` says whether the request was written.
+  failure: { reason: 'daemon_transport_failure' },
+  // The daemon did not answer within the request's budget; `details.timeoutMs` is that budget.
+  timeout: { reason: 'daemon_transport_timeout' },
+  // A message the daemon sent is not a daemon response envelope; `details.line` carries what arrived.
+  replyInvalid: { reason: 'daemon_response_invalid' },
+  // The response body could not be read before the connection ended.
+  replyUnreadable: { reason: 'daemon_response_read_failure' },
+  // The serialized request passes `DAEMON_REQUEST_MAX_BYTES`, so it was refused before being sent.
+  requestTooLarge: { reason: 'daemon_request_too_large' },
+} as const satisfies ReasonTable<'daemon transport'>;
 
 export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
 export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';

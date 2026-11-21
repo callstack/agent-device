@@ -1,7 +1,19 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 /** Most UTF-8 input `fill --text-stdin` accepts, trailing newline included. */
 export const FILL_TEXT_STDIN_MAX_BYTES = 64 * 1024;
+
+// Why `fill --text-stdin` refused to read its value. No row echoes a byte of that value.
+const FILL_TEXT_STDIN_REASONS = {
+  // stdin is a terminal, so the command would wait for input no one is piping.
+  tty: { reason: 'fill_text_stdin_tty' },
+  // The piped input passed the byte limit of 64 KiB.
+  tooLarge: { reason: 'fill_text_stdin_too_large' },
+  // The piped input decoded to an empty string.
+  empty: { reason: 'fill_text_stdin_empty' },
+  // The piped input is not valid UTF-8, a lone surrogate included.
+  invalidUtf8: { reason: 'fill_text_stdin_invalid_utf8' },
+} as const satisfies ReasonTable<'fill'>;
 
 type StdinSource = AsyncIterable<StdinPiece> & { isTTY?: boolean };
 
@@ -17,7 +29,7 @@ export async function readFillTextFromStdin(stdin: StdinSource): Promise<string>
       'INVALID_ARGS',
       'fill --text-stdin reads piped input, but stdin is a terminal.',
       {
-        reason: 'fill_text_stdin_tty',
+        reason: FILL_TEXT_STDIN_REASONS.tty.reason,
         hint: 'Pipe the text in, for example: printf %s "$PASSWORD" | agent-device fill @e3 --text-stdin',
       },
     );
@@ -33,7 +45,7 @@ export async function readFillTextFromStdin(stdin: StdinSource): Promise<string>
       throw new AppError(
         'INVALID_ARGS',
         `fill --text-stdin accepts at most ${FILL_TEXT_STDIN_MAX_BYTES} bytes of input.`,
-        { reason: 'fill_text_stdin_too_large', maxBytes: FILL_TEXT_STDIN_MAX_BYTES },
+        { reason: FILL_TEXT_STDIN_REASONS.tooLarge.reason, maxBytes: FILL_TEXT_STDIN_MAX_BYTES },
       );
     }
     chunks.push(encodeWellFormed(next.piece));
@@ -42,7 +54,7 @@ export async function readFillTextFromStdin(stdin: StdinSource): Promise<string>
   const text = stripOneTrailingNewline(decodeUtf8(Buffer.concat(chunks)));
   if (text === '') {
     throw new AppError('INVALID_ARGS', 'fill --text-stdin received no text.', {
-      reason: 'fill_text_stdin_empty',
+      reason: FILL_TEXT_STDIN_REASONS.empty.reason,
       hint: 'Check that the piped value is set. To clear a field, pass an empty text argument instead: fill @e3 ""',
     });
   }
@@ -94,7 +106,7 @@ function decodeUtf8(bytes: Uint8Array): string {
 
 function invalidUtf8Error(): AppError {
   return new AppError('INVALID_ARGS', 'fill --text-stdin input is not valid UTF-8.', {
-    reason: 'fill_text_stdin_invalid_utf8',
+    reason: FILL_TEXT_STDIN_REASONS.invalidUtf8.reason,
   });
 }
 

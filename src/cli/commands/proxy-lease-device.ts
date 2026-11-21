@@ -11,7 +11,7 @@ import {
   type ConnectionDeviceScope,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
   LEASE_DEVICE_SPEC_KEYS,
@@ -40,6 +40,15 @@ export type ResolvedLeaseState = {
   /** The allocation names no device; the device comes from the lease the daemon returns. */
   allocateBySpec?: boolean;
 };
+
+// Why the connection a live session already holds refuses the device or platform this request
+// names. `connect --force` replaces the whole connection, the one recovery every row shares.
+export const CONNECTION_SCOPE_REASONS = {
+  // The lease behind the connection was allocated by another device spec; `details.keys` names the keys that disagree.
+  deviceSpec: { reason: 'CONNECTION_DEVICE_CONFLICT' },
+  // The connection is bound to another platform, or the request names one its lease backend does not rent.
+  platform: { reason: 'CONNECTION_PLATFORM_CONFLICT' },
+} as const satisfies ReasonTable<'remote connection'>;
 
 /**
  * Decides which device a proxy lease is for. A request with an exact identity and no device spec
@@ -231,7 +240,7 @@ function assertLeaseSpecMatchesRequest(
       keys: conflicting,
       deviceSpec: bound,
       requestedDeviceSpec: requested,
-      reason: 'CONNECTION_DEVICE_CONFLICT',
+      reason: CONNECTION_SCOPE_REASONS.deviceSpec.reason,
     },
   );
 }
@@ -254,7 +263,7 @@ function leasedIdentityConflict(
       session: state.session,
       deviceKey: buildConnectionDeviceKey(leased),
       requestedDevice: requested,
-      reason: 'CONNECTION_DEVICE_CONFLICT',
+      reason: CONNECTION_SCOPE_REASONS.deviceSpec.reason,
     },
   );
 }
@@ -316,7 +325,7 @@ async function assertLeasedDeviceMatchesRequest(
       session: state.session,
       deviceKey: buildConnectionDeviceKey(leased),
       requestedDevice: deviceName,
-      reason: 'CONNECTION_DEVICE_CONFLICT',
+      reason: CONNECTION_SCOPE_REASONS.deviceSpec.reason,
     },
   );
 }

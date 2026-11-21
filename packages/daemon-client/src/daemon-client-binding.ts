@@ -2,7 +2,7 @@ import type { DaemonBinding } from '@agent-device/contracts/client';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import { daemonIdentityOf } from './daemon-lifecycle-errors.ts';
+import { DAEMON_UNAVAILABLE_REASONS, daemonIdentityOf } from './daemon-lifecycle-errors.ts';
 
 /** Refuses a pin without exposing either instance's credential. */
 export function daemonBindingMismatchError(
@@ -14,7 +14,7 @@ export function daemonBindingMismatchError(
     'COMMAND_FAILED',
     'The registered daemon does not match this client instance.',
     {
-      reason: 'daemon-binding-mismatch',
+      reason: DAEMON_UNAVAILABLE_REASONS.bindingMismatch.reason,
       stateDir,
       bound: { pid: binding.pid, processStartTime: binding.processStartTime },
       ...(registered ? { registered: daemonIdentityOf(registered) } : {}),

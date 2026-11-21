@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
+import { SCREEN_RECORDING_OUTPUT_REASONS } from '@agent-device/contracts/screen-recording-runtime';
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
@@ -443,7 +443,7 @@ test('a refused simulator finish is re-driven by the next record stop', async ()
     finalizeCalls += 1;
     if (finalizeCalls === 1) {
       throw new AppError('COMMAND_FAILED', 'recording was not finalized into a playable video', {
-        reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
+        reason: SCREEN_RECORDING_OUTPUT_REASONS.unplayable.reason,
         retriable: true,
       });
     }
@@ -490,7 +490,7 @@ test('an unreadable recording names the exit that made it permanent and the way 
       },
       complete: async () => {
         throw new AppError('COMMAND_FAILED', 'recording was not finalized into a playable video', {
-          reason: 'recording-output-unplayable',
+          reason: SCREEN_RECORDING_OUTPUT_REASONS.unplayable.reason,
           retriable: true,
         });
       },
@@ -506,7 +506,7 @@ test('an unreadable recording names the exit that made it permanent and the way 
     message:
       'recording was not finalized into a playable video; simctl recordVideo was killed by SIGKILL',
     details: {
-      reason: 'recording-output-unplayable',
+      reason: SCREEN_RECORDING_OUTPUT_REASONS.unplayable.reason,
       exitCode: null,
       signal: 'SIGKILL',
       stderr: 'error: the recorder died mid-write',

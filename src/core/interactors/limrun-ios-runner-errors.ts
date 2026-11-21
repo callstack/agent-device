@@ -1,6 +1,31 @@
-import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  type AppErrorCode,
+  type AppErrorDetails,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 
-const hints = {
+// Why a Limrun-hosted iOS runner could not be prepared, launched, or used. Every row's recovery is
+// what a caller can still do from outside the remote instance, spelled out in `DEFAULT_HINTS`.
+export const LIMRUN_RUNNER_REASONS = {
+  // Another XCTest run holds the simulator's one run slot.
+  xctestSlotOccupied: { reason: 'limrun_xctest_slot_occupied' },
+  // The remote XCTest run could not be started, or its run stream never arrived.
+  launchFailed: { reason: 'limrun_runner_launch_failed' },
+  // The runner app or its manifest does not match the instance this client rented.
+  productsInvalid: { reason: 'limrun_runner_products_invalid' },
+  // The runner app could not be staged on the instance.
+  uploadFailed: { reason: 'limrun_runner_upload_failed' },
+  // The simulator never reported the address its HTTP forward listens on.
+  bindAddressMissing: { reason: 'limrun_runner_bind_address_missing' },
+  // The runner's snapshot capture came back too sparse to act on after a failed or unbudgeted capture.
+  snapshotUnavailable: { reason: 'limrun_runner_snapshot_unavailable' },
+} as const satisfies ReasonTable<'limrun'>;
+
+/** How each {@link LIMRUN_RUNNER_REASONS} reason is recovered; a caller may replace it per error. */
+const DEFAULT_HINTS: Readonly<
+  Record<(typeof LIMRUN_RUNNER_REASONS)[keyof typeof LIMRUN_RUNNER_REASONS]['reason'], string>
+> = {
   limrun_xctest_slot_occupied:
     'Another XCTest run owns this simulator. Stop its agent-device or Appium session, wait for its run stream to close, then retry. If the previous client died and the slot stays occupied, recreate the Limrun instance.',
   limrun_runner_launch_failed:
@@ -11,15 +36,25 @@ const hints = {
     'Check the Limrun instance connection and retry preparing the runner.',
   limrun_runner_bind_address_missing:
     'The simulator must expose USE_IP for HTTP forwarding. Check the instance connection and simulator configuration.',
-} as const;
+  limrun_runner_snapshot_unavailable:
+    'Close and reopen the agent-device session to restart its XCTest runner. If snapshots still fail on this reused simulator, recreate the Limrun instance. Use a screenshot and coordinate actions to inspect its current screen; do not reuse snapshot refs.',
+};
+
+/** The published reasons of {@link LIMRUN_RUNNER_REASONS}, which is what a call site names. */
+export type LimrunRunnerFailure =
+  (typeof LIMRUN_RUNNER_REASONS)[keyof typeof LIMRUN_RUNNER_REASONS]['reason'];
 
 export function limrunRunnerError(
-  reason: keyof typeof hints,
+  reason: LimrunRunnerFailure,
   message: string,
   details: AppErrorDetails = {},
   code: AppErrorCode = 'COMMAND_FAILED',
 ): AppError {
-  return new AppError(code, message, { ...details, reason, hint: details.hint ?? hints[reason] });
+  return new AppError(code, message, {
+    ...details,
+    reason,
+    hint: details.hint ?? DEFAULT_HINTS[reason],
+  });
 }
 
 /** Preserve the shared capture failure while naming the remote recovery action. */
@@ -34,7 +69,7 @@ export async function withLimrunRunnerErrors<T>(task: () => Promise<T>): Promise
         error.message,
         {
           ...error.details,
-          hint: hints.limrun_runner_launch_failed,
+          hint: DEFAULT_HINTS[LIMRUN_RUNNER_REASONS.launchFailed.reason],
         },
         error,
       );
@@ -54,8 +89,8 @@ export async function withLimrunRunnerErrors<T>(task: () => Promise<T>): Promise
         'The Limrun XCTest runner could not capture the simulator screen',
         {
           ...error.details,
-          reason: 'limrun_runner_snapshot_unavailable',
-          hint: 'Close and reopen the agent-device session to restart its XCTest runner. If snapshots still fail on this reused simulator, recreate the Limrun instance. Use a screenshot and coordinate actions to inspect its current screen; do not reuse snapshot refs.',
+          reason: LIMRUN_RUNNER_REASONS.snapshotUnavailable.reason,
+          hint: DEFAULT_HINTS[LIMRUN_RUNNER_REASONS.snapshotUnavailable.reason],
         },
         error,
       );

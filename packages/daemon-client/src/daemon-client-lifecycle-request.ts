@@ -8,6 +8,7 @@ import {
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
+import { DAEMON_TRANSPORT_REASONS } from '@agent-device/contracts/daemon-http';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { isDaemonTransportUnavailableError, sendRequest } from './daemon-client-transport.ts';
 import { daemonBusyError, daemonNotRetirableError } from './daemon-lifecycle-errors.ts';
@@ -26,7 +27,9 @@ export type DaemonLifecycleTarget = Readonly<{
 // A refused or reset connection: the daemon left, is leaving, or was never there. Nothing was
 // accepted, so judging again is safe.
 function isConnectionFailure(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'daemon_transport_failure';
+  return (
+    error instanceof AppError && error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason
+  );
 }
 
 type DaemonLifecycleOutcome = Readonly<{ outcome: 'draining' | 'gone' }>;

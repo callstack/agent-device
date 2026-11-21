@@ -23,7 +23,7 @@ import {
   connectionLeasePolicyForState,
   type ConnectionLeasePolicy,
 } from './connection-lease-policy.ts';
-import { bindLeaseNamedDevice } from './proxy-lease-device.ts';
+import { bindLeaseNamedDevice, CONNECTION_SCOPE_REASONS } from './proxy-lease-device.ts';
 
 type LeaseRelease = () => Promise<{ released: boolean }>;
 
@@ -435,7 +435,7 @@ export function connectionPlatformConflict(
       leaseBackend: options.leaseBackend,
       platform: options.boundPlatform,
       requestedPlatform: options.requestedPlatform,
-      reason: 'CONNECTION_PLATFORM_CONFLICT',
+      reason: CONNECTION_SCOPE_REASONS.platform.reason,
     },
   );
 }

@@ -23,6 +23,22 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
 
+### `connect`
+
+| Reason | Meaning |
+| --- | --- |
+| `plugin-unavailable` | The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
+| `plugin-not-installed` | No plugin declares this provider; `details.installCommand` is the command that adds it. |
+
+### `fill`
+
+| Reason | Meaning |
+| --- | --- |
+| `fill_text_stdin_tty` | stdin is a terminal, so the command would wait for input no one is piping. |
+| `fill_text_stdin_too_large` | The piped input passed the byte limit of 64 KiB. |
+| `fill_text_stdin_empty` | The piped input decoded to an empty string. |
+| `fill_text_stdin_invalid_utf8` | The piped input is not valid UTF-8, a lone surrogate included. |
+
 ### `fold`
 
 | Reason | Meaning |
@@ -46,6 +62,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `simulator-log-stream-launch-timeout` | The simulator log stream did not start in time. |
+| `app_log_redact_pattern_invalid` | A redaction pattern in `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` does not compile; `details.patternIndex` names the field and the pattern text is not echoed. |
 
 ### `open`
 
@@ -55,6 +72,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
 | `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
+| `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
+| `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text. |
+| `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 
 ### `orientation`
 
@@ -71,7 +91,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `android_screenrecord_startup_failed` | Android `screenrecord` exited before it began writing; its startup output says why. |
+| `recording-output-unplayable` | The recording's file is not a playable video, which only a recorder still finalizing it can undo. |
 | `recording_destination_not_requested` | A remote recording was saved to the current directory because the request named no destination; a warning. |
+| `apple_simulator_recording_busy` | Another recorder holds the CoreSimulator host lock; `details.exitCode` is the `simctl` verdict. |
 
 ### `replay`
 
@@ -162,10 +184,33 @@ These reasons can come from more than one command.
 | `daemon-not-running` | An attaching client found no daemon to connect to. |
 | `daemon-incompatible` | The running daemon does not match the client; `details.daemon` and `details.client` hold both identities. |
 | `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be retired. |
+| `daemon-contended` | Another process started a daemon while this one was starting, and this caller may not retire a daemon it never started. |
+| `daemon-lifecycle-contended` | The daemon kept being started or replaced while `ensureDaemon` was judging the state directory. |
+| `daemon_registration_unproven` | A daemon this client started did not prove through its registration that it owns the process. |
+| `daemon-record-unreadable` | The `daemon.json` of the state directory cannot identify a usable daemon, so nothing was started, replaced, or signaled. |
+| `remote_daemon_unavailable` | The health probe that gates a remote send found no daemon to hand the request to, so `details.dispatched` is `no` and a resend is safe. |
+| `daemon-binding-mismatch` | A client pinned to one daemon instance reached a state directory registering another one, or none it can read as an address; `details.bound` and `details.registered` hold both. |
+| `DAEMON_POLICY_MISMATCH` | The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names. |
+| `startup-exited` | The daemon process ended before it registered a reachable endpoint. |
+| `startup-stalled` | The daemon stayed registered and reachable but never reported the startup phase that follows. |
+| `startup-ceiling` | Startup passed the ceiling its own startup budget allows, so this client stopped waiting. |
+| `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer "which daemon" two different ways. |
 | `daemon_state_root_unsafe` | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it. |
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
+| `daemon-clean-not-detached` | The record does not prove the process is a daemon of its own, so its process tree may be someone else's work. |
+
+### Daemon transport
+
+| Reason | Meaning |
+| --- | --- |
+| `daemon_endpoint_unavailable` | The daemon's socket or HTTP endpoint is unreachable; `details.transport` names the one tried. |
+| `daemon_transport_failure` | The connection to the daemon broke; `details.daemonRequestSent` says whether the request was written. |
+| `daemon_transport_timeout` | The daemon did not answer within the request's budget; `details.timeoutMs` is that budget. |
+| `daemon_response_invalid` | A message the daemon sent is not a daemon response envelope; `details.line` carries what arrived. |
+| `daemon_response_read_failure` | The response body could not be read before the connection ended. |
+| `daemon_request_too_large` | The serialized request passes `DAEMON_REQUEST_MAX_BYTES`, so it was refused before being sent. |
 
 ### Foldable panels
 
@@ -175,6 +220,12 @@ These reasons can come from more than one command.
 | `fold-helper-panels-unreadable` | The fold helper returned no panel table for the iOS simulator. |
 | `panel-table-unreadable` | The foldable's lit panel could not be named from its panel table, so nothing was sent. |
 | `panel-probe-budget-exhausted` | Reading the panel table spent the request's time budget, so nothing was sent. |
+
+### Host runtime
+
+| Reason | Meaning |
+| --- | --- |
+| `host_instance_unreadable` | The host could not prove its own process start time, so it cannot issue a daemon pin. |
 
 ### Interaction
 
@@ -202,6 +253,20 @@ These reasons can come from more than one command.
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
 
+### Limrun
+
+| Reason | Meaning |
+| --- | --- |
+| `limrun_xctest_slot_occupied` | Another XCTest run holds the simulator's one run slot. |
+| `limrun_runner_launch_failed` | The remote XCTest run could not be started, or its run stream never arrived. |
+| `limrun_runner_products_invalid` | The runner app or its manifest does not match the instance this client rented. |
+| `limrun_runner_upload_failed` | The runner app could not be staged on the instance. |
+| `limrun_runner_bind_address_missing` | The simulator never reported the address its HTTP forward listens on. |
+| `limrun_runner_snapshot_unavailable` | The runner's snapshot capture came back too sparse to act on after a failed or unbudgeted capture. |
+| `limrun_download_http_error` | The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply. |
+| `limrun_download_timeout` | The download passed its deadline; `details.timeoutMs` is that deadline. |
+| `limrun_download_failed` | The transfer broke for a reason the service never answered with, kept in `details.cause`. |
+
 ### Macos helper
 
 | Reason | Meaning |
@@ -218,6 +283,20 @@ These reasons can come from more than one command.
 | `window-list-unreadable` | The app's on-screen window list could not be read. |
 | `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
 | `missing_button` | No button on the alert fits the requested accept or dismiss. |
+
+### Platform runtime
+
+| Reason | Meaning |
+| --- | --- |
+| `runtime-gateway-shut-down` | The gateway is closed, so the command reached no runtime owner. |
+| `platform-owner-shutdown-failed` | One or more runtime owners failed to shut down; `details.failures` keeps each owner's error and cleanup stays unconfirmed. |
+
+### Remote connection
+
+| Reason | Meaning |
+| --- | --- |
+| `CONNECTION_DEVICE_CONFLICT` | The lease behind the connection was allocated by another device spec; `details.keys` names the keys that disagree. |
+| `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
 
 ### Request admission
 

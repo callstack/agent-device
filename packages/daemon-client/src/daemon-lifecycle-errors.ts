@@ -18,7 +18,7 @@ import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 
 // The ways an explicit lifecycle stops short of a usable daemon, as this client judges it. A busy
 // daemon answers with its own `DAEMON_LIFECYCLE_REASONS.busy`, which this client carries through.
-const DAEMON_UNAVAILABLE_REASONS = {
+export const DAEMON_UNAVAILABLE_REASONS = {
   // An attaching client found no daemon to connect to.
   notRunning: { reason: 'daemon-not-running' },
   // The running daemon does not match the client; `details.daemon` and `details.client` hold both
@@ -27,6 +27,37 @@ const DAEMON_UNAVAILABLE_REASONS = {
   // A daemon accepted the request to leave but was still running 60 s later and could not be
   // retired.
   drainTimeout: { reason: 'daemon-drain-timeout' },
+  // Another process started a daemon while this one was starting, and this caller may not retire a
+  // daemon it never started.
+  contended: { reason: 'daemon-contended' },
+  // The daemon kept being started or replaced while `ensureDaemon` was judging the state directory.
+  lifecycleContended: { reason: 'daemon-lifecycle-contended' },
+  // A daemon this client started did not prove through its registration that it owns the process.
+  registrationUnproven: { reason: 'daemon_registration_unproven' },
+  // The `daemon.json` of the state directory cannot identify a usable daemon, so nothing was
+  // started, replaced, or signaled.
+  recordUnreadable: { reason: 'daemon-record-unreadable' },
+  // The health probe that gates a remote send found no daemon to hand the request to, so
+  // `details.dispatched` is `no` and a resend is safe.
+  remoteUnavailable: { reason: 'remote_daemon_unavailable' },
+  // A client pinned to one daemon instance reached a state directory registering another one, or
+  // none it can read as an address; `details.bound` and `details.registered` hold both.
+  bindingMismatch: { reason: 'daemon-binding-mismatch' },
+  // The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names.
+  policyMismatch: { reason: 'DAEMON_POLICY_MISMATCH' },
+  // The daemon process ended before it registered a reachable endpoint.
+  startupExited: { reason: 'startup-exited' },
+  // The daemon stayed registered and reachable but never reported the startup phase that follows.
+  startupStalled: { reason: 'startup-stalled' },
+  // Startup passed the ceiling its own startup budget allows, so this client stopped waiting.
+  startupCeiling: { reason: 'startup-ceiling' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
+// What a client configuration can refuse before it ever reaches a daemon.
+export const DAEMON_CLIENT_CONFIG_REASONS = {
+  // The client named both a pinned daemon instance and a daemon base URL, which answer "which
+  // daemon" two different ways.
+  bindingWithBaseUrl: { reason: 'daemon_binding_with_remote_base_url' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
@@ -54,13 +85,6 @@ export function daemonStopCommand(stateDir: string): string {
 }
 
 /**
- * The reason a remote connection answers when the `GET /health` probe that gates its send found no
- * daemon to hand the request to. Recovery is what the reason's meaning is: make the daemon at
- * `daemonBaseUrl` reachable, or return to the local daemon, then resend.
- */
-export const REMOTE_DAEMON_UNAVAILABLE_REASON = 'remote_daemon_unavailable';
-
-/**
  * The refusal both remote-send gates answer with: the probe before the first send
  * (`ensureRemoteDaemon`) and the probe a restart retry runs after the daemon instance changed under
  * the request. Before the first send, the request never leaves the client. On the restart retry, the
@@ -79,7 +103,7 @@ export function remoteDaemonUnavailableError(params: {
 }): AppError {
   const { daemonBaseUrl, attempts, healthRecoveryBudgetMs, hint } = params;
   return new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
-    reason: REMOTE_DAEMON_UNAVAILABLE_REASON,
+    reason: DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason,
     dispatched: 'no',
     daemonBaseUrl,
     attempts,
@@ -89,14 +113,12 @@ export function remoteDaemonUnavailableError(params: {
 }
 
 /** A daemon won a startup race that this caller may not settle by retiring it. */
-export const DAEMON_CONTENDED_REASON = 'daemon-contended';
-
 export function daemonContendedError(): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'Another process started a daemon while this one was starting.',
     {
-      reason: DAEMON_CONTENDED_REASON,
+      reason: DAEMON_UNAVAILABLE_REASONS.contended.reason,
     },
   );
 }
@@ -261,7 +283,7 @@ export function daemonRegistrationUnprovenError(
   inspection?: ProcessLockInspection,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon registration ownership could not be verified.', {
-    reason: 'daemon_registration_unproven',
+    reason: DAEMON_UNAVAILABLE_REASONS.registrationUnproven.reason,
     inspection,
     stateDir: paths.baseDir,
     hint: resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
@@ -273,7 +295,7 @@ export function daemonRecordUnreadableError(paths: DaemonPaths): AppError {
     'COMMAND_FAILED',
     `The daemon record on ${paths.baseDir} cannot identify a usable daemon.`,
     {
-      reason: 'daemon-record-unreadable',
+      reason: DAEMON_UNAVAILABLE_REASONS.recordUnreadable.reason,
       stateDir: paths.baseDir,
       hint: 'No daemon was started, replaced or signaled. Inspect the retained record and its ownership before retrying.',
     },
