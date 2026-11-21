@@ -65,7 +65,7 @@ describe('snapshotRefMinting', () => {
   });
 
   // The mode keys on the producer, never on the platform channel: several producers can feed one
-  // channel (`xctest` alone has four) and only some of them mint refs of their own. A web adapter
+  // channel (`xctest` alone has five) and only some of them mint refs of their own. A web adapter
   // added later — a webdriver- or CDP-backed one — would arrive on the `web` channel minting
   // nothing, and would need dense numbering to keep every node addressable as it does today.
   test.each([
@@ -73,6 +73,7 @@ describe('snapshotRefMinting', () => {
     { backend: 'xctest', producer: 'simulator-ax-bridge' },
     { backend: 'xctest', producer: 'appium-source' },
     { backend: 'xctest', producer: 'revyl-ios-tree' },
+    { backend: 'xctest', producer: 'vphone-ios-tree' },
     { backend: 'android', producer: 'android-uiautomator' },
     { backend: 'android', producer: 'appium-source' },
     { backend: 'harmonyos-arkui', producer: 'harmonyos-uitest' },

@@ -14,6 +14,7 @@ test('truncation evidence is declared for every iOS producer', () => {
     'simulator-ax-bridge': 'available',
     'appium-source': 'unavailable',
     'revyl-ios-tree': 'unavailable',
+    'vphone-ios-tree': 'unavailable',
   } as const satisfies Record<IosSnapshotProducer, 'available' | 'unavailable'>;
 
   for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {

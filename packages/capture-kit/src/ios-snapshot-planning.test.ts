@@ -68,7 +68,7 @@ test('normalization makes raw, scope, and absent values explicit', () => {
 });
 
 test('acquisition derives unavailable provider facts from the registry', () => {
-  for (const producer of ['appium-source', 'revyl-ios-tree'] as const) {
+  for (const producer of ['appium-source', 'revyl-ios-tree', 'vphone-ios-tree'] as const) {
     assert.deepEqual(
       createIosSnapshotAcquisition({
         producer,

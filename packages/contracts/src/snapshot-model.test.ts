@@ -31,6 +31,10 @@ test('snapshotStateProvenance extracts exactly the pair', () => {
     backend: 'xctest',
     producer: 'revyl-ios-tree',
   });
+  expect(snapshotStateProvenance({ backend: 'xctest', producer: 'vphone-ios-tree' })).toEqual({
+    backend: 'xctest',
+    producer: 'vphone-ios-tree',
+  });
 });
 
 test('readPostGestureOutcome reads every outcome kind off the wire and drops malformed values', () => {

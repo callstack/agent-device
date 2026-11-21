@@ -775,8 +775,9 @@ test('the real tree parses, declares, and passes R11', () => {
   // `./node-touch-point`, `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
   // execution surface the core selector pipeline moved into this package —
   // one subpath per module so consumers pull only the stage they run. The `-fixtures`
-  // entries are R83 burn-down, deleted with the export. Any other subpath, or the AST leaking
-  // into `.`, fails here.
+  // entries are R83 burn-down, deleted with the export. `./normalize-match-text`
+  // is the shared comparison normalization used by provider backends. Any other
+  // subpath, or the AST leaking into `.`, fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
     '@agent-device/selectors/absence-observation',
@@ -791,6 +792,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/interaction-touch-point',
     '@agent-device/selectors/keyboard-occlusion',
     '@agent-device/selectors/node-touch-point',
+    '@agent-device/selectors/normalize-match-text',
     '@agent-device/selectors/parameterized-recorded-fill',
     '@agent-device/selectors/press-retarget',
     '@agent-device/selectors/selector-pipeline',

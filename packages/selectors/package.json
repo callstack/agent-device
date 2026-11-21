@@ -24,6 +24,10 @@
       "types": "./src/engine.ts",
       "default": "./src/engine.ts"
     },
+    "./normalize-match-text": {
+      "types": "./src/normalize-match-text.ts",
+      "default": "./src/normalize-match-text.ts"
+    },
     "./parameterized-recorded-fill": {
       "types": "./src/parameterized-recorded-fill.ts",
       "default": "./src/parameterized-recorded-fill.ts"

@@ -1,0 +1,30 @@
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
+
+export const VPHONE_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: 'vphone',
+  label: 'vphone',
+  fields: {
+    providerApp: 'refused',
+    providerOsVersion: 'refused',
+    providerDeviceType: 'refused',
+    providerProject: 'refused',
+    providerBuild: 'refused',
+    providerSessionName: 'refused',
+    providerDeviceOrientation: 'refused',
+    providerGeoLocation: 'refused',
+    providerTimezone: 'refused',
+    providerAppiumVersion: 'refused',
+    providerLanguage: 'refused',
+    providerLocale: 'refused',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    providerNetworkLogs: 'refused',
+    providerNetworkHosts: 'refused',
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
+  },
+};
