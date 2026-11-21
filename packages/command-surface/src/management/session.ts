@@ -12,7 +12,7 @@ const sessionCommandMetadata = defineFieldCommandMetadata(
   {
     action: enumField(
       ['list', 'state-dir', 'save-script'],
-      'list shows active sessions; state-dir prints the daemon state directory; save-script publishes an armed recording without teardown.',
+      'list shows the sessions visible to the request scope; a leased session appears only when the request sends its lease id; state-dir prints the daemon state directory; save-script publishes an armed recording without teardown.',
     ),
     path: stringField('Optional .ad output path for save-script.'),
     force: booleanField('Atomically replace an existing save-script target.'),

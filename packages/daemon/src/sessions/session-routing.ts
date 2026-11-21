@@ -305,6 +305,7 @@ function buildAmbiguousWorkspaceSessionError(candidates: SessionRef[]): AppError
       platforms,
       hint:
         `Run agent-device session list to inspect them. ` +
+        `A leased session is listed only through the connection that owns it, or with its lease id. ` +
         `Add ${platformSelectors} to run in that platform's session, ` +
         `or pass --session <address> copied from that list.`,
     },
