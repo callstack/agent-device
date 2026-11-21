@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test } from 'vitest';
+import { attachRefs } from '@agent-device/kernel/snapshot';
+import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { createHarmonyHdcRunnerStub, type HarmonyHdcRunnerStub } from '../toolbox.fixtures.ts';
+import { harmonyDeveloperOptionsLayout } from './arkui-settings-layout.fixture.ts';
 
 import {
   collectArkUiNodes,
@@ -136,4 +139,62 @@ test('snapshotHarmony pulls a uitest layout and reports its analysis', async () 
       ['runShell', 'harmony-1', 'hidumper'],
     ],
   );
+});
+
+/** The interactive-only capture `snapshot -i` publishes, from the real-device fixture. */
+function interactiveFixtureNodes() {
+  const { nodes } = collectArkUiNodes(harmonyDeveloperOptionsLayout(), {
+    ...UNBOUNDED,
+    maxNodes: 5_000,
+    interactiveOnly: true,
+  });
+  return attachRefs(nodes);
+}
+
+test('collectArkUiNodes labels a control with the words its row renders', () => {
+  const toggle = interactiveFixtureNodes().find(
+    (node) => node.identifier === 'entry_toggle_usb_debug',
+  );
+
+  // ArkUI reports only the resource id on the `Toggle`; "USB debugging" is a sibling `Text` of the
+  // row. The aggregated screen-reader string ("USB debugging, USB debugging summary.") is not used.
+  assert.equal(toggle?.label, 'USB debugging');
+  assert.equal(toggle?.identifier, 'entry_toggle_usb_debug');
+});
+
+test('collectArkUiNodes labels an icon-only control with the title beside it', () => {
+  const backButton = interactiveFixtureNodes().find((node) => node.type === 'Button');
+
+  assert.equal(backButton?.label, 'Developer options');
+  assert.equal(backButton?.identifier, undefined);
+});
+
+test('collectArkUiNodes leaves a control whose row renders no words unlabeled', () => {
+  const toggle = interactiveFixtureNodes().find(
+    (node) => node.identifier === 'entry_toggle_unlabelled',
+  );
+
+  assert.equal(toggle?.label, undefined);
+  assert.equal(toggle?.identifier, 'entry_toggle_unlabelled');
+});
+
+test('collectArkUiNodes does not label a control that contains another control', () => {
+  // Both nodes of a row answering with the row's own words would make every selector on the screen
+  // ambiguous, and ArkUI names every such container `SwitchMenuComponent`.
+  const rows = interactiveFixtureNodes().filter((node) => node.type === 'Flex');
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(
+    rows.map((node) => node.label),
+    [undefined, undefined],
+  );
+});
+
+test('resolveRefLabel answers a HarmonyOS ref with its own row words', () => {
+  const nodes = interactiveFixtureNodes();
+  const backButton = nodes.find((node) => node.type === 'Button')!;
+
+  // Without a label of its own, the nearest labelled node in the merged capture was the status-bar
+  // window's bridge view, 136 px above the back button (#4907).
+  assert.equal(resolveRefLabel(backButton, nodes), 'Developer options');
 });
