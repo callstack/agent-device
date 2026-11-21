@@ -182,6 +182,46 @@ test('terminate signals nothing for a pid this host did not launch', async () =>
   expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
 });
 
+test('a denied device-shutdown policy keeps the launched emulator and signals nothing', async () => {
+  const denied = Object.assign(new Error('DAEMON_POLICY_DENIED'), {
+    details: { reason: 'DAEMON_POLICY_DENIED' },
+  });
+  const assertShutdownAllowed = vi.fn(() => {
+    throw denied;
+  });
+  const host = createAndroidEmulatorHost('linux', assertShutdownAllowed);
+  await host.launch('Pixel_9', true, 90_000);
+
+  // The policy is the first thing asked, so a denied daemon never reaches the process table or a
+  // signal: the emulator this host launched keeps running (#4863 review).
+  await expect(host.terminate(4242)).rejects.toBe(denied);
+  expect(assertShutdownAllowed).toHaveBeenCalledOnce();
+  expect(stopProcessAndConfirmExit).not.toHaveBeenCalled();
+});
+
+test('a denied device-shutdown policy is asked before the pid is looked up', async () => {
+  const assertShutdownAllowed = vi.fn(() => {
+    throw new Error('DAEMON_POLICY_DENIED');
+  });
+  const host = createAndroidEmulatorHost('linux', assertShutdownAllowed);
+
+  await expect(host.terminate(5151)).rejects.toThrow('DAEMON_POLICY_DENIED');
+  expect(emitDiagnostic).not.toHaveBeenCalledWith(
+    expect.objectContaining({ phase: 'android_emulator_terminate_unrecorded_pid' }),
+  );
+});
+
+test('an allowed daemon stops the emulator with the gate asked first', async () => {
+  const assertShutdownAllowed = vi.fn();
+  const host = createAndroidEmulatorHost('linux', assertShutdownAllowed);
+  await host.launch('Pixel_9', true, 90_000);
+
+  await host.terminate(4242);
+
+  expect(assertShutdownAllowed).toHaveBeenCalledOnce();
+  expect(stopProcessAndConfirmExit).toHaveBeenCalledOnce();
+});
+
 test('a terminate that could not prove the exit keeps the launch for a retry', async () => {
   const host = createAndroidEmulatorHost('linux');
   await host.launch('Pixel_9', true, 90_000);
