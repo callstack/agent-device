@@ -4,6 +4,16 @@ import type { BatchCommandName } from './batch/projection.ts';
 
 const host = { env: {}, cwd: '/workspace' };
 
+test('type projects a structured ref through the minted-ref gate', async () => {
+  // The typed Node client skips the metadata reader, so the projection itself must refuse a
+  // non-minted ref instead of typing it into the focused field (#4870 review).
+  await expect(
+    prepareDaemonCommandRequest('type', { ref: 'Email', text: 'x' }, host),
+  ).rejects.toThrow('is not a snapshot ref');
+  const request = await prepareDaemonCommandRequest('type', { ref: 'e12', text: 'x' }, host);
+  expect(request.positionals).toEqual(['@e12', 'x']);
+});
+
 test('projection preserves declared command names and rejects an unknown writer', async () => {
   expect(await prepareDaemonCommandRequest('snapshot', {}, host)).toMatchObject({
     command: 'snapshot',

@@ -114,24 +114,24 @@ test('type declares the optional snapshot-ref target beside the required text', 
   expect(typeMetadata.readInput({ text: 'more' })).not.toHaveProperty('ref');
 });
 
-test('type validates the ref field as a minted snapshot ref', () => {
+test('type gates the ref at the shared daemon projection', () => {
   const typeMetadata = interactionCommandMetadata.find((metadata) => metadata.name === 'type');
   if (!typeMetadata) throw new Error('expected type metadata');
 
-  // A bare minted id names the same target the snapshot minted, so it normalizes to the
-  // @-prefixed token the daemon decodes (#4870 review).
-  expect(typeMetadata.readInput({ ref: 'e12', text: 'more' })).toMatchObject({
-    ref: '@e12',
+  // The reader passes the field through: the gate lives once at the shared projection
+  // (typePositionals), so the typed Node client route refuses the same values (#4870 review).
+  expect(typeMetadata.readInput({ ref: 'Email', text: 'more' })).toMatchObject({
+    ref: 'Email',
     text: 'more',
   });
-  // A lookalike word is not a ref: refusing here keeps it from typing into the focused field.
-  expect(() => typeMetadata.readInput({ ref: 'Email', text: 'more' })).toThrow(AppError);
-  try {
-    typeMetadata.readInput({ ref: 'Email', text: 'more' });
-  } catch (error) {
-    expect((error as AppError).code).toBe('INVALID_ARGS');
-    expect((error as AppError).details?.hint).toMatch(/snapshot output/i);
-  }
+  // A bare minted id names the same target the snapshot minted: it normalizes to the
+  // @-prefixed token the daemon decodes.
+  expect(interactionDaemonWriters.type({ ref: 'e12', text: 'more' }).positionals).toEqual([
+    '@e12',
+    'more',
+  ]);
+  // A lookalike word is not a ref: the projection refuses it before any dispatch.
+  expect(() => interactionDaemonWriters.type({ ref: 'Email', text: 'more' })).toThrow(AppError);
 });
 
 test('type keeps a ref label out of the projected text positionals', () => {

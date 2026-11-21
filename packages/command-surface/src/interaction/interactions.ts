@@ -14,6 +14,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
+  readTypeTargetRef,
   readTypeTextFromPositionals,
 } from '@agent-device/selectors/interaction-positionals';
 import {
@@ -216,11 +217,14 @@ function longPressPositionals(input: LongPressOptions): string[] {
 
 /**
  * The validated options own the target decision, so the projection is exactly the daemon
- * grammar: one optional minted ref, then the text as one positional. `label` never projects —
- * it names the ref for humans, and letting it through would type it (#4870 review).
+ * grammar: one optional minted ref, then the text as one positional. Every structured route
+ * projects here — the typed Node client skips the metadata reader — so the minted-ref gate
+ * lives once on this projection: a non-minted `ref` refuses instead of typing as text, and
+ * a bare minted id normalizes to `@e12` (#4870 review). `label` never projects — it names
+ * the ref for humans, and letting it through would type it.
  */
 function typePositionals(input: TypeTextOptions): string[] {
-  return input.ref === undefined ? [input.text] : [input.ref, input.text];
+  return input.ref === undefined ? [input.text] : [readTypeTargetRef(input.ref), input.text];
 }
 
 function fillPositionals(input: FillOptions): string[] {

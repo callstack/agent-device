@@ -15,7 +15,6 @@ import {
   SCROLL_UNTIL_MAX_PASSES,
 } from '@agent-device/contracts/scroll-command';
 import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
-import { readTypeTargetRef } from '@agent-device/selectors/interaction-positionals';
 import {
   SCROLL_DIRECTIONS,
   SCROLL_INPUT_DIRECTIONS,
@@ -331,6 +330,8 @@ function readGestureCommandInput(input: unknown): GestureCommandInput {
  * snapshot ref only. Without this check the projected positionals would re-split structured
  * input into a leading target and lose the rest as text, and `label` could leak into the typed
  * value (#4870 review), so any selector or point key is refused where the caller can see it.
+ * The `ref` value itself is gated once at the shared projection (`typePositionals`), which the
+ * typed Node client route also flows through.
  */
 function readTypeCommandInput(input: unknown): TypeTextOptions {
   const record = readInputRecord(input);
@@ -345,20 +346,9 @@ function readTypeCommandInput(input: unknown): TypeTextOptions {
       hint: 'Pass label together with ref, for example {"ref":"@e12","label":"Sign in"}.',
     });
   }
-  if (ref !== undefined && typeof ref !== 'string') {
-    throw new AppError('INVALID_ARGS', 'type ref must be a string.', {
-      hint: 'Pass the snapshot ref as text, for example {"ref":"@e12"}.',
-    });
-  }
-  // The ref field names a target, not text: it reaches the daemon only as a token
-  // readTypeTextFromPositionals decodes (#4870 review). A bare minted id normalizes to
-  // "@e12"; any other value refuses here instead of typing literally into the focused field.
-  const targetRef = ref === undefined ? undefined : readTypeTargetRef(ref);
   return {
     ...rest,
-    ...(targetRef === undefined
-      ? {}
-      : { ref: targetRef, ...(label === undefined ? {} : { label }) }),
+    ...(ref === undefined ? {} : { ref, ...(label === undefined ? {} : { label }) }),
   } as TypeTextOptions;
 }
 
