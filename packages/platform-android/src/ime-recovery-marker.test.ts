@@ -8,7 +8,7 @@ import {
   clearAndroidTestImeFlushRecord,
   readAndroidTestImeFlushRecord,
   writeAndroidTestImeFlushRecord,
-} from './ime-flush-record.ts';
+} from './ime-recovery-marker.ts';
 
 const SERIAL = 'emulator-5554';
 const RECORD = { deadlineMs: 1234.5, confirmed: true, writer: 'daemon-a' } as const;

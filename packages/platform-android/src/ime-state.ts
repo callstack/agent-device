@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sleep } from '@agent-device/host-kit/retry';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import { getAndroidImeHelperDeviceKey } from './ime-helper.ts';
-import type { AndroidTestImeFlushRecord } from './ime-flush-record.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 
 // Process-lived test-IME ownership state, shared by activation, restore, startup recovery, and
 // the emulator kill path.
@@ -26,7 +26,7 @@ export type AndroidTestImeOwnership = {
 export const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
 // Each device's newest restore write is a durable flush record in the daemon state dir
-// (ime-flush-record.ts), so a daemon restart inside the window still holds the kill (#3346).
+// (ime-recovery-marker.ts), so a daemon restart inside the window still holds the kill (#3346).
 // Deadlines use the HOST MONOTONIC CLOCK: libuv's hrtime reads CLOCK_MONOTONIC,
 // mach_absolute_time or QueryPerformanceCounter, which every process on one host boot shares,
 // which no wall-clock step moves, and which sleep() also runs on. Skew rule: a wall-clock
@@ -62,8 +62,7 @@ function withTestImeFlushRecordLock<T>(
 // non-emulator restore closes without a record (no flush hazard there). A wait that returned
 // just before a write opens cannot be caught by in-process state at all; closing that residue
 // needs a lock spanning kill and restore.
-// @internal exported for the registrar and for tests.
-export const testImePendingRestoreWrites = new Map<string, Set<Promise<void>>>();
+const testImePendingRestoreWrites = new Map<string, Set<Promise<void>>>();
 
 /** Opens in-flight tracking for one issued `ime set`; returns the closing function. */
 export function beginTestImeRestoreWrite(serial: string): () => void {

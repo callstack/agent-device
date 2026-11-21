@@ -172,12 +172,10 @@ export {
 } from './ime-lifecycle.ts';
 export {
   clearAndroidTestImeFlushRecord,
-  readAndroidTestImeFlushRecord,
-  writeAndroidTestImeFlushRecord,
-} from './ime-flush-record.ts';
-export {
   clearAndroidTestImeRecoveryMarker,
+  readAndroidTestImeFlushRecord,
   readAndroidTestImeRecoveryMarkers,
+  writeAndroidTestImeFlushRecord,
   writeAndroidTestImeRecoveryMarker,
 } from './ime-recovery-marker.ts';
 export {

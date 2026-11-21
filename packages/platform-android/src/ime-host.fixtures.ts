@@ -1,5 +1,5 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
-import type { AndroidTestImeFlushRecord } from './ime-flush-record.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 
 export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
   const markers = new Map<string, Set<string>>();

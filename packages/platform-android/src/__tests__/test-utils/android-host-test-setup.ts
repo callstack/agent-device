@@ -56,15 +56,15 @@ export function bindAndroidAdbTestHost() {
     },
     imeFlushRecords: {
       write: async (stateDir, serial, record) => {
-        const { writeAndroidTestImeFlushRecord } = await import('../../ime-flush-record.ts');
+        const { writeAndroidTestImeFlushRecord } = await import('../../ime-recovery-marker.ts');
         await writeAndroidTestImeFlushRecord(stateDir, serial, record);
       },
       clear: async (stateDir, serial) => {
-        const { clearAndroidTestImeFlushRecord } = await import('../../ime-flush-record.ts');
+        const { clearAndroidTestImeFlushRecord } = await import('../../ime-recovery-marker.ts');
         await clearAndroidTestImeFlushRecord(stateDir, serial);
       },
       read: async (stateDir, serial) => {
-        const { readAndroidTestImeFlushRecord } = await import('../../ime-flush-record.ts');
+        const { readAndroidTestImeFlushRecord } = await import('../../ime-recovery-marker.ts');
         return await readAndroidTestImeFlushRecord(stateDir, serial);
       },
     },
