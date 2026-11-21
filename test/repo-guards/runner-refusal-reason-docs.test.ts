@@ -99,6 +99,13 @@ test('the extractors read every member and reject unsupported ones instead of dr
     /unsupported reason in RUNNER_ERROR_CODES row RUNNER_BUSY/,
   );
   expectRead(
+    `export const R = { busy: { reason: 'runner_busy' } } as const satisfies ReasonTable<'r'>;
+    export const RUNNER_ERROR_CODES = { RUNNER_BUSY: { dispatched: 'no', reason: R.busy.reason } } as const satisfies Record<string, RunnerErrorCodeRow>;`,
+    'RUNNER_ERROR_CODES',
+    'rows',
+    ['runner_busy'],
+  );
+  expectRead(
     `export const WAIT_REASONS = { captureStalled: 'wait_capture_stalled', deadlineExceeded: "wait_deadline_exceeded" } as const;`,
     'WAIT_REASONS',
     'object',
@@ -141,8 +148,9 @@ function readReasons(
   name: string,
   kind: 'rows' | 'object' | 'union',
 ): string[] {
-  if (kind === 'union') return readUnionReasons(parseTs(filename, source), filename, name);
-  return readTableReasons(exportedConstObject(parseTs(filename, source), name), name, kind);
+  const parsed = parseTs(filename, source);
+  if (kind === 'union') return readUnionReasons(parsed, filename, name);
+  return readTableReasons(parsed, name, kind);
 }
 
 /** The string members of an exported `type Name = 'a' | 'b'` union. */
@@ -174,12 +182,16 @@ function readUnionReasons(
   });
 }
 
-/** The reasons of an exported const table: each row's `reason`, or each member's literal. */
+/**
+ * The reasons of an exported const table: each row's `reason`, or each member's literal. A row may
+ * read its reason from a reason table in the same file as `TABLE.member.reason`.
+ */
 function readTableReasons(
-  table: ReturnType<typeof exportedConstObject>,
+  parsed: ReturnType<typeof parseTs>,
   name: string,
   kind: 'rows' | 'object',
 ): string[] {
+  const table = exportedConstObject(parsed, name);
   const members: string[] = [];
   for (const property of table.properties) {
     assert.ok(
@@ -206,12 +218,32 @@ function readTableReasons(
         member.key.name !== 'reason'
       )
         continue;
+      const reason =
+        member.value.type === 'Literal' && typeof member.value.value === 'string'
+          ? member.value.value
+          : readReferencedReason(parsed, member.value);
       assert.ok(
-        member.value.type === 'Literal' && typeof member.value.value === 'string',
+        reason !== undefined,
         `unsupported reason in ${name} row ${property.key.name}: ${member.value.type}`,
       );
-      members.push(member.value.value);
+      members.push(reason);
     }
   }
   return members;
+}
+
+/** The reason `TABLE.member.reason` names, read from the row of an exported table in `parsed`. */
+function readReferencedReason(parsed: ReturnType<typeof parseTs>, node: any): string | undefined {
+  const row = node?.type === 'MemberExpression' && !node.computed ? node.object : undefined;
+  const table = row?.type === 'MemberExpression' && !row.computed ? row.object : undefined;
+  if (node?.property?.name !== 'reason' || table?.type !== 'Identifier') return undefined;
+  const named = exportedConstObject(parsed, table.name).properties.find(
+    (property: any) => property.key?.name === row.property.name,
+  );
+  const field = unwrapAssertion(named?.value)?.properties?.find(
+    (property: any) => property.key?.name === 'reason',
+  );
+  return field?.value?.type === 'Literal' && typeof field.value.value === 'string'
+    ? field.value.value
+    : undefined;
 }

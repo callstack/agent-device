@@ -3,13 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { parseSync } from 'oxc-parser';
+import { collectReasonTables } from '../../scripts/reasons/collect.ts';
 
 /**
  * `error.details.reason` is a published vocabulary: a client that branches on it treats an
  * undocumented member as an unknown value. Nothing but this file connects the union to the two
  * surfaces that enumerate it, so a new reason added to the classifier has to be documented in the
- * same change. The reason union is the source of truth; the docs are read as text because they carry
+ * same change. The reason table is the source of truth; the docs are read as text because they carry
  * the prose a reader follows, not a machine-readable list.
  */
 
@@ -39,70 +39,15 @@ test('the runner startup reason union is documented in full at both prose surfac
   }
 });
 
-test('startup reason extraction includes alternate quotes, digits, hyphens and readiness spreads', () => {
-  assert.deepEqual(
-    startupFailureReasons(`
-      export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = ["ready-3"] as const;
-      export const RUNNER_STARTUP_FAILURE_REASONS = [
-        "phase-2", ...RUNNER_DEVICE_READINESS_FAILURE_REASONS,
-      ] as const;
-    `),
-    ['phase-2', 'ready-3'],
-  );
-});
-
-test('startup reason extraction rejects every unsupported member instead of dropping it', () => {
-  for (const member of ['...UNKNOWN_REASONS', 'computeReason()', '42', ',']) {
-    assert.throws(
-      () =>
-        startupFailureReasons(
-          `export const RUNNER_STARTUP_FAILURE_REASONS = [${member}] as const;`,
-        ),
-      /unsupported member in RUNNER_STARTUP_FAILURE_REASONS/,
-    );
-  }
-  assert.throws(
-    () =>
-      startupFailureReasons(`
-      export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [...UNKNOWN_REASONS] as const;
-      export const RUNNER_STARTUP_FAILURE_REASONS = [...RUNNER_DEVICE_READINESS_FAILURE_REASONS] as const;
-    `),
-    /unsupported member in RUNNER_DEVICE_READINESS_FAILURE_REASONS/,
-  );
-});
-
+/** The rows of the RUNNER_STARTUP_FAILURE_REASONS reason table, read as the reasons page reads them. */
 function startupFailureReasons(source: string): string[] {
-  const parsed = parseSync(classificationPath, source);
-  assert.deepEqual(parsed.errors, [], 'startup reason source must parse');
-  const declarations = parsed.program.body.flatMap((statement) =>
-    statement.type === 'ExportNamedDeclaration' &&
-    statement.declaration?.type === 'VariableDeclaration'
-      ? statement.declaration.declarations
-      : [],
+  const file = path.relative(repoRoot, classificationPath);
+  const table = collectReasonTables(new Map([[file, source]])).find(
+    ({ name }) => name === 'RUNNER_STARTUP_FAILURE_REASONS',
   );
-  const startup = 'RUNNER_STARTUP_FAILURE_REASONS';
-  const readiness = 'RUNNER_DEVICE_READINESS_FAILURE_REASONS';
-  function members(name: string): string[] {
-    const declaration = declarations.find(({ id }) => id.type === 'Identifier' && id.name === name);
-    assert.ok(declaration, `missing exported declaration ${name}`);
-    const initializer =
-      declaration.init?.type === 'TSAsExpression' ? declaration.init.expression : declaration.init;
-    assert.ok(initializer?.type === 'ArrayExpression', `${name} must be an array literal`);
-    return initializer.elements.flatMap((member) => {
-      if (member?.type === 'Literal' && typeof member.value === 'string') return [member.value];
-      if (
-        name === startup &&
-        member?.type === 'SpreadElement' &&
-        member.argument.type === 'Identifier' &&
-        member.argument.name === readiness
-      )
-        return members(readiness);
-      assert.fail(`unsupported member in ${name}: ${member?.type ?? 'array hole'}`);
-    });
-  }
-  const reasons = members(startup);
-  assert.ok(reasons.length > 0, 'the startup reason union must not be empty');
-  return reasons;
+  assert.ok(table, `${file} must declare the RUNNER_STARTUP_FAILURE_REASONS reason table`);
+  assert.ok(table.rows.length > 0, 'the startup reason table must not be empty');
+  return table.rows.map(({ reason }) => reason);
 }
 
 /** The sentence that enumerates the startup reasons, found on the same line at both surfaces. */
