@@ -1,4 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppError } from '@agent-device/kernel/errors';
+import type { CommandReasonRow } from './command-reasons.ts';
 import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type {
   HostCommandResult,
@@ -161,12 +163,31 @@ export type AndroidScreenRecordingStopOutcome =
   | 'ownership-lost'
   | 'uncertain';
 
+/**
+ * Every `details.reason` the Android screen recording host publishes, each with the command that
+ * raises it. A recorder that exits before it produces frames is the device refusing the recording,
+ * not a lost request, so the refusal names itself here rather than as an untyped `UNKNOWN`.
+ */
+export const ANDROID_SCREEN_RECORDING_REASONS = {
+  // `screenrecord` exited before it began writing, and its own startup output says why.
+  startupFailed: { reason: 'android_screenrecord_startup_failed', command: 'record' },
+} as const satisfies Record<string, CommandReasonRow>;
+
 export type AndroidScreenRecordingTransport = Readonly<{
   mode: 'local' | 'transport-composed';
   start(
     input: Readonly<{ remotePath: string; quality?: RecordingExportQuality }>,
     signal?: AbortSignal,
   ): Promise<Readonly<{ process: AndroidScreenRecordingProcessIdentity }>>;
+  /**
+   * Reads back the recorder's bounded startup capture, removing it, and reports a
+   * {@link ANDROID_SCREEN_RECORDING_REASONS.startupFailed} refusal when it holds a message. A
+   * recorder still starting may have written nothing yet, so an empty capture is not a refusal and
+   * answers `undefined`. The launch keeps the capture until readiness settles the chunk.
+   */
+  readStartupFailure(remotePath: string, signal?: AbortSignal): Promise<AppError | undefined>;
+  /** Drops the startup capture of a launch whose recording is confirmed, or already reported. */
+  discardStartupCapture(remotePath: string, signal?: AbortSignal): Promise<void>;
   inspect(
     process: AndroidScreenRecordingProcessIdentity,
     signal?: AbortSignal,

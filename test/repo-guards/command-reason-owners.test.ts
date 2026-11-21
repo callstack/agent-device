@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { SCROLL_REASONS } from '@agent-device/contracts/scroll-reasons';
+import { ANDROID_SCREEN_RECORDING_REASONS } from '@agent-device/contracts/screen-recording-runtime-host';
 
 /** Every command reason table. A family registers its table here when it declares one. */
-const COMMAND_REASON_TABLES = { SCROLL_REASONS };
+const COMMAND_REASON_TABLES = { SCROLL_REASONS, ANDROID_SCREEN_RECORDING_REASONS };
 
 /**
  * A reason has one declaration and one owner. Two rows with the same value would give the reason

@@ -1,4 +1,6 @@
 import { expect, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
+import { ANDROID_SCREEN_RECORDING_REASONS } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { AndroidScreenRecordingTransport } from '@agent-device/contracts/screen-recording-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import {
@@ -134,7 +136,6 @@ test('cleans a failed candidate before authorizing fallback and aborts if that c
   ]);
   expect(live).toEqual(new Set(['/data/local/tmp/agent-device-recording-active.json']));
   await started.pendingHandle.transfer().forceCleanup();
-
   const noFallback = await start({
     start: async () => {
       starts += 1;
@@ -148,6 +149,28 @@ test('cleans a failed candidate before authorizing fallback and aborts if that c
     'Android screenrecord launch rollback could not be confirmed',
   );
   expect(starts).toBe(3);
+});
+
+test('reports the recorder startup refusal when every candidate fails', async () => {
+  // A refusal may be about one candidate's directory, so the loop still tries the next one; but when
+  // none records, the recorder's own verdict outranks the last candidate's neutral wrap.
+  const refusal = new AppError(
+    'COMMAND_FAILED',
+    'Android screenrecord exited before it started recording: Permission denied',
+    { reason: ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason, processExitError: true },
+  );
+  const starts: string[] = [];
+  const runtime = await start({
+    start: async ({ remotePath }: Parameters<AndroidScreenRecordingTransport['start']>[0]) => {
+      starts.push(remotePath);
+      throw remotePath.startsWith('/sdcard/') ? refusal : new Error('/data/local/tmp unavailable');
+    },
+  });
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toBe(refusal);
+  expect(starts).toEqual([
+    expect.stringContaining('/sdcard/'),
+    expect.stringContaining('/data/local/tmp/'),
+  ]);
 });
 
 test('rejects an invalid process identity before committing active evidence', async () => {

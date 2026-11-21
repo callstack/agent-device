@@ -1,9 +1,12 @@
 import path from 'node:path';
-import type {
-  AndroidScreenRecordingProcessIdentity,
-  AndroidScreenRecordingProcessOwnership,
-  AndroidScreenRecordingTransport,
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import {
+  ANDROID_SCREEN_RECORDING_REASONS,
+  type AndroidScreenRecordingProcessIdentity,
+  type AndroidScreenRecordingProcessOwnership,
+  type AndroidScreenRecordingTransport,
 } from '@agent-device/contracts/screen-recording-runtime-host';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { type ShellWord, shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
@@ -38,26 +41,46 @@ export async function createAndroidScreenRecordingTransport(
   return Object.freeze({
     mode: scoped.mode,
     start: async ({ remotePath, quality = 'medium' }, signal) => {
-      const result = await shell(
-        [
-          shellFragment(
-            `screenrecord --bit-rate ${BIT_RATE[quality]} ${shellQuote(remotePath)} >/dev/null 2>&1 & echo $!`,
-          ),
-        ],
+      const launch = await shell(
+        [shellFragment(buildScreenrecordStartCommand(remotePath, BIT_RATE[quality]))],
         signal,
       );
-      const remotePid = result.stdout.split(/\s+/).find((value) => /^\d+$/.test(value));
-      if (!remotePid) throw new Error('Android screenrecord did not return a process id');
+      const remotePid = parseScreenrecordLaunchPid(launch.stdout);
+      if (!remotePid) {
+        // The launch answered no pid: the device shell itself failed, or a pty stream merged the
+        // recorder's output past the marker. The capture still holds the recorder's verdict when the
+        // recorder ran at all, so it answers here too.
+        throw await screenrecordStartFailure(
+          shell,
+          remotePath,
+          'Android screenrecord did not return a process id',
+          signal,
+        );
+      }
       const inspected = await inspectAndroidScreenRecordingProcess(
         shell,
         { pid: remotePid, remotePath, startTime: '' },
         signal,
       );
       if (inspected.status !== 'owned-alive' || !inspected.process) {
-        throw new Error('Android screenrecord did not expose a complete process identity');
+        // A recorder the device refuses is gone within a few hundred milliseconds, so this probe is
+        // already the common refusal path. The capture answers with the recorder's own verdict when
+        // it holds one; when it holds nothing, the neutral error stands.
+        throw await screenrecordStartFailure(
+          shell,
+          remotePath,
+          'Android screenrecord did not expose a complete process identity',
+          signal,
+        );
       }
+      // The capture stays: readiness in `startChunkAt` decides whether this recorder produced frames,
+      // and a recorder that died between this probe and that answer is refused the same way.
       return Object.freeze({ process: inspected.process });
     },
+    readStartupFailure: (remotePath, signal) =>
+      readScreenrecordStartupFailure(shell, remotePath, signal),
+    discardStartupCapture: (remotePath, signal) =>
+      discardScreenrecordStartupCapture(shell, remotePath, signal),
     inspect: async (process, signal) =>
       (await inspectAndroidScreenRecordingProcess(shell, process, signal)).status,
     stop: async (process, options, signal) => {
@@ -156,6 +179,148 @@ type AndroidShell = (
 ) => Promise<
   Readonly<{ stdout: string; stderr: string; exitCode: number | null; signal?: string }>
 >;
+
+/** What the bounded read-back of the capture file answers. */
+type ScreenrecordStartupCapture = Readonly<{ stdout: string; stderr: string }>;
+
+/**
+ * The launch command's own answer line, prefix-tagged so nothing else on stdout can read as a pid.
+ * A transport that runs the device shell on a pty merges the device's stderr into stdout, so the
+ * recorder's refusal text, the device shell's own complaints, and the pid share one stream.
+ */
+const STARTUP_PID_MARKER = 'agent-device-screenrecord-pid';
+
+/** The pid from the marker line, or nothing when the launch never answered with one. */
+function parseScreenrecordLaunchPid(stdout: string): string | undefined {
+  for (const line of stdout.split('\n')) {
+    const pid = /^agent-device-screenrecord-pid:(\d+)$/.exec(line.trim())?.[1];
+    if (pid) return pid;
+  }
+  return undefined;
+}
+
+/**
+ * The most of the recorder's startup output a refusal reads back. A recorder the device keeps
+ * restarting would otherwise write until the partition is full, and the report needs only the
+ * recorder's first verdict.
+ */
+const STARTUP_OUTPUT_LIMIT_BYTES = 1_000;
+
+/**
+ * The capture file for one artifact: a sibling of it, so the redirect opens wherever the recording
+ * itself is allowed. The launch writes the manifest into that directory before it dispatches this
+ * command, so the capture directory is never a new place the start can fail.
+ */
+function screenrecordStartupLogPath(remotePath: string): string {
+  return `${remotePath}.err`;
+}
+
+/**
+ * The device-shell command that starts one recorder and reports its pid. It answers as fast as the
+ * device shell forks the job: no liveness wait, because a recorder the device refuses is reported by
+ * the identity probe's own presence check and by readiness. What the launch adds is the redirect —
+ * a `screenrecord` that cannot open its artifact writes its reason to the capture file and exits, so
+ * a dead recorder still has its explanation to carry.
+ * The reported pid is the recorder's own, because a job of one simple command with redirections runs
+ * without a subshell, so the probe keeps reading `screenrecord` in that pid's command line. The
+ * capture outlives the launch: the chunk owner discards it once readiness proves frames, and reads
+ * it back once when the recorder is gone.
+ */
+function buildScreenrecordStartCommand(remotePath: string, bitRate: number): string {
+  const startupLog = shellQuote(screenrecordStartupLogPath(remotePath));
+  return `screenrecord --bit-rate ${bitRate} ${shellQuote(remotePath)} >/dev/null 2>${startupLog} & echo ${STARTUP_PID_MARKER}:$!`;
+}
+
+/**
+ * Reads the recorder's bounded startup capture back and removes it. A message there means the
+ * recorder wrote its own verdict before it exited, so `execFailureDetails` keeps it in details and
+ * `normalizeError` surfaces it beside this message with `details.reason` naming the class of
+ * failure. A recorder that is merely slow, or a capture the device never let us open, holds no
+ * message: that is not a refusal, so it answers nothing and the caller keeps its neutral error.
+ * A transport failure reads as no message, never as a second failure.
+ */
+async function readScreenrecordStartupFailure(
+  shell: AndroidShell,
+  remotePath: string,
+  signal?: AbortSignal,
+): Promise<AppError | undefined> {
+  const startupLog = shellQuote(screenrecordStartupLogPath(remotePath));
+  let stderr = '';
+  try {
+    const captured = await shell(
+      [
+        shellFragment(
+          `head -c ${STARTUP_OUTPUT_LIMIT_BYTES} ${startupLog} 2>/dev/null; rm -f ${startupLog}`,
+        ),
+      ],
+      signal,
+    );
+    // The command's own exit is rm's, so it answers 0 whenever the device ran it. A nonzero exit is
+    // the call failing — adb could not reach the device, the shell was killed — and says nothing.
+    if (captured.exitCode !== 0) return undefined;
+    stderr = recorderStartupOutput(captured).trim();
+  } catch {
+    return undefined;
+  }
+  if (stderr.length === 0) return undefined;
+  return new AppError(
+    'COMMAND_FAILED',
+    'Android screenrecord exited before it started recording',
+    execFailureDetails(
+      {
+        stdout: '',
+        stderr,
+        // The recorder's own exit code was never observed, only its absence. Its message, not an
+        // exit code, is the evidence here.
+        exitCode: null,
+      },
+      {
+        reason: ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason,
+        remotePath,
+        hint: 'Android refused the recorder at startup and its own message is in the details. Report that message to the device manufacturer; agent-device has no alternative Android recording backend.',
+      },
+    ),
+  );
+}
+
+/**
+ * The error for a launch that failed, with the recorder's own verdict preferred over the host's
+ * wrap. Every failed start asks the capture once: a message there is the device's explanation and
+ * earns the typed reason; no message keeps this host's neutral error. The read removes the capture;
+ * the fallback discards it, so no failed launch leaves the file behind.
+ */
+async function screenrecordStartFailure(
+  shell: AndroidShell,
+  remotePath: string,
+  neutralMessage: string,
+  signal?: AbortSignal,
+): Promise<Error> {
+  const refusal = await readScreenrecordStartupFailure(shell, remotePath, signal);
+  if (refusal) return refusal;
+  await discardScreenrecordStartupCapture(shell, remotePath, signal);
+  return new Error(neutralMessage);
+}
+
+/** Best-effort drop of a settled launch's capture, so a discard can never mask another error. */
+async function discardScreenrecordStartupCapture(
+  shell: AndroidShell,
+  remotePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    await shell(['rm', '-f', screenrecordStartupLogPath(remotePath)], signal);
+  } catch {
+    // The capture is diagnostics only; a device that will not remove it holds a few bytes.
+  }
+}
+
+/**
+ * What the read-back of the capture file answered. A transport that runs the device shell on a pty
+ * merges the device's stderr into stdout, so the message can arrive on either stream.
+ */
+function recorderStartupOutput(captured: ScreenrecordStartupCapture): string {
+  return captured.stdout.trim().length > 0 ? captured.stdout : captured.stderr;
+}
 
 async function inspectAndroidScreenRecordingProcess(
   shell: AndroidShell,
