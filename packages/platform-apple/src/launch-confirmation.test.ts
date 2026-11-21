@@ -19,7 +19,7 @@ import {
   answerLaunchConfirmation,
   answerSimulatorLaunchConfirmation,
   createLaunchConfirmationPort,
-  LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
+  LAUNCH_CONFIRMATION_REASONS,
   type LaunchConfirmationPort,
   type LaunchConfirmationAttempt,
   URL_OWNER_LOOKUP_TIMEOUT_MS,
@@ -106,7 +106,7 @@ test('a confirmation for a URL another app owns is never accepted, whatever name
   expect(failure).toBeInstanceOf(AppError);
   expect((failure as AppError).code).toBe('COMMAND_FAILED');
   expect((failure as AppError).details).toMatchObject({
-    reason: LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
+    reason: LAUNCH_CONFIRMATION_REASONS.foreignApp.reason,
     foreignAppBundleId: 'com.example.other',
     sessionAppBundleId: 'com.example.app',
   });

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError, execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ensureHostDirectory, writeHostTextFile } from '@agent-device/host-kit/host-file';
@@ -41,8 +41,12 @@ const IOS_SIMULATOR_CONSOLE_CAPTURE_MS = 25_000;
 const IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE =
   '--launch-args is not supported with iOS simulator URL opens (simctl openurl ignores launch args). Launch the app first with --launch-args, then issue the URL open in a separate call.';
 
-/** Why an open failed because CoreSimulator never answered its `simctl openurl` within the bound. */
-export const IOS_SIMULATOR_OPENURL_TIMEOUT_REASON = 'ios-simulator-openurl-timeout';
+export const APP_LAUNCH_REASONS = {
+  // CoreSimulator did not answer `simctl openurl` in time, so the URL open failed.
+  simulatorOpenUrlTimeout: { reason: 'ios-simulator-openurl-timeout' },
+  // The bundle hosts an iOS system surface, which `open` refuses to launch as an app.
+  systemSurfaceHostNotOpenable: { reason: 'system-surface-host-not-openable' },
+} as const satisfies ReasonTable<'open'>;
 
 /**
  * A killed child answers nothing, so the bound cannot report whether the hand-off landed; the hint is
@@ -185,7 +189,7 @@ async function openIosSimulatorUrl(
       `xcrun simctl openurl did not answer within ${IOS_SIMULATOR_OPENURL_TIMEOUT_MS}ms.`,
       {
         ...error.details,
-        reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
+        reason: APP_LAUNCH_REASONS.simulatorOpenUrlTimeout.reason,
         timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
         deviceId: device.id,
         hint: IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
@@ -239,7 +243,7 @@ async function assertNotSystemSurfaceHost(bundleId: string): Promise<void> {
     await import('@agent-device/contracts/ios-system-surface');
   if (!iosSystemSurfaceHost(bundleId)) return;
   throw new AppError('UNSUPPORTED_OPERATION', iosSystemSurfaceOpenRefusal(bundleId), {
-    reason: 'system-surface-host-not-openable',
+    reason: APP_LAUNCH_REASONS.systemSurfaceHostNotOpenable.reason,
     appBundleId: bundleId,
   });
 }

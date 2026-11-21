@@ -22,8 +22,6 @@ const NATIVE_APP_SURFACE = macOsHelperSurface('app', 'native')!;
 const NATIVE_BACKEND_HINT =
   'The native macOS app backend acts through accessibility actions only. Unset AGENT_DEVICE_MACOS_APP_BACKEND to drive this app with XCTest.';
 
-const REFUSAL_REASONS: ReadonlySet<string> = new Set(MACOS_HELPER_REFUSAL_REASONS);
-
 /**
  * The macOS interactor of the native backend. It is assembled member by member so that nothing
  * reaches the XCTest runner: actions on the session app go through the macOS helper, and only
@@ -155,7 +153,7 @@ async function withHelperRefusals<T>(action: Promise<T>): Promise<T> {
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     const reason = error.details?.reason;
-    if (typeof reason !== 'string' || !REFUSAL_REASONS.has(reason)) throw error;
+    if (typeof reason !== 'string' || !MACOS_HELPER_REFUSAL_REASONS.has(reason)) throw error;
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       error.message,

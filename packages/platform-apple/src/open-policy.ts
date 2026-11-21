@@ -8,7 +8,7 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { resolveAppleSimulatorRunnerDemand } from './runner-demand.ts';
 import {
   hasSimulatorBridge,
@@ -18,8 +18,10 @@ import {
 } from './snapshot-observability.ts';
 import type { LaunchConfirmationAttempt } from './launch-confirmation.ts';
 
-/** Why an open failed because its launch URL has not completed for the app it names. */
-const LAUNCH_CONFIRMATION_UNANSWERED_REASON = 'launch_confirmation_unanswered';
+const OPEN_POLICY_REASONS = {
+  // The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting.
+  launchConfirmationUnanswered: { reason: 'launch_confirmation_unanswered' },
+} as const satisfies ReasonTable<'open'>;
 
 const POST_OPEN_SETTLE_MS = 300;
 
@@ -165,7 +167,7 @@ export async function settleAppleOpen(
         'COMMAND_FAILED',
         `The Simulator has not completed the launch URL for ${input.appBundleId}.`,
         {
-          reason: LAUNCH_CONFIRMATION_UNANSWERED_REASON,
+          reason: OPEN_POLICY_REASONS.launchConfirmationUnanswered.reason,
           appBundleId: input.appBundleId,
           hint: 'iOS may still be holding an "Open in" prompt, or the answer died with the runner session that raised it. Inspect the current alert before deciding on another action.',
         },

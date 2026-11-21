@@ -20,7 +20,7 @@ enum BackgroundDeliveryMechanism: String, Encodable, CaseIterable {
   case keyEvents = "key-events"
 }
 
-/// Typed refusals the host maps to `UNSUPPORTED_OPERATION`. Both vocabularies are pinned by
+/// Typed refusals the host maps to `UNSUPPORTED_OPERATION`. Every vocabulary here is pinned by
 /// `contracts/fixtures/macos-native-helper-outcomes.json`.
 enum BackgroundRefusal: String, CaseIterable {
   case pointerGesture = "background-pointer-gesture"
@@ -28,6 +28,17 @@ enum BackgroundRefusal: String, CaseIterable {
   case noTextInput = "no-settable-text-input"
   case noScrollBar = "no-scroll-bar"
   case noContextMenu = "no-context-menu"
+}
+
+/// Failure reasons the host publishes as the helper wrote them.
+enum HelperFailureReason: String, CaseIterable {
+  case windowNotFound = "window-not-found"
+  case frontWindowCaptureExcluded = "front-window-capture-excluded"
+  case frontWindowNotShareable = "front-window-not-shareable"
+  case contextMenuNotObserved = "context-menu-not-observed"
+  case windowListUnreadable = "window-list-unreadable"
+  case eventCreationFailed = "event_creation_failed"
+  case missingButton = "missing_button"
 }
 
 struct BackgroundPressResponse: Encodable {
@@ -260,7 +271,7 @@ func showMenuInBackground(
     throw HelperError.commandFailed(
       "the element offered a context menu, but no menu opened",
       details: [
-        "reason": "context-menu-not-observed",
+        "reason": HelperFailureReason.contextMenuNotObserved.rawValue,
         "axError": String(reply.rawValue),
         "bundleId": app.bundleIdentifier ?? "",
         "hint": "No menu window appeared. Take a snapshot to check the app before you retry.",
@@ -355,7 +366,10 @@ func scrollInBackground(
   guard let frame = try frontWindowFrame(pid: app.processIdentifier) else {
     throw HelperError.commandFailed(
       "scroll could not resolve an on-screen window",
-      details: ["reason": "window-not-found", "bundleId": app.bundleIdentifier ?? ""]
+      details: [
+        "reason": HelperFailureReason.windowNotFound.rawValue,
+        "bundleId": app.bundleIdentifier ?? "",
+      ]
     )
   }
   let travel = scrollTravelPixels(
@@ -709,7 +723,7 @@ func requireWindowInfo(_ windowInfo: [[String: Any]]? = appWindowInfo()) throws 
     throw HelperError.commandFailed(
       "the app's on-screen windows could not be read",
       details: [
-        "reason": "window-list-unreadable",
+        "reason": HelperFailureReason.windowListUnreadable.rawValue,
         "hint": "The app's on-screen window list could not be read. Retry the command.",
       ]
     )
@@ -767,7 +781,9 @@ private func postKey(virtualKey: CGKeyCode, pid: pid_t) throws {
   guard let down = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: true),
     let up = CGEvent(keyboardEventSource: nil, virtualKey: virtualKey, keyDown: false)
   else {
-    throw HelperError.commandFailed("key event creation failed", details: ["reason": "event_creation_failed"])
+    throw HelperError.commandFailed(
+      "key event creation failed",
+      details: ["reason": HelperFailureReason.eventCreationFailed.rawValue])
   }
   down.postToPid(pid)
   up.postToPid(pid)
@@ -785,7 +801,8 @@ private func postText(_ text: String, delayMs: Int, pid: pid_t) throws {
         let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
       else {
         throw HelperError.commandFailed(
-          "key event creation failed", details: ["reason": "event_creation_failed"])
+          "key event creation failed",
+          details: ["reason": HelperFailureReason.eventCreationFailed.rawValue])
       }
       let units = Array(String(character).utf16)
       down.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)

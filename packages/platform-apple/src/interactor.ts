@@ -31,7 +31,7 @@ import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producers';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type {
@@ -54,6 +54,13 @@ import {
 } from './snapshot-presentation.ts';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+
+const SNAPSHOT_RESPONSE_REASONS = {
+  // The runner answered an observe-only snapshot request without an observe-only snapshot.
+  observationUnavailable: { reason: 'observation-unavailable' },
+  // XCTest returned a snapshot with no nodes on an iOS simulator.
+  emptySnapshot: { reason: 'empty-snapshot' },
+} as const satisfies ReasonTable<'snapshot'>;
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -378,7 +385,7 @@ function assertSnapshotObservationResponse(
   if (options?.observeOnly !== true) return;
   if (result.observation && !result.targetActivation) return;
   throw new AppError('COMMAND_FAILED', 'Runner did not return an observe-only snapshot.', {
-    reason: 'observation-unavailable',
+    reason: SNAPSHOT_RESPONSE_REASONS.observationUnavailable.reason,
   });
 }
 
@@ -395,7 +402,7 @@ function assertReportedRunnerSnapshotNodes(
   if (acceptsEmptyScopedSnapshot(options, result)) return;
   if (device.kind !== 'simulator') return;
   throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.', {
-    reason: 'empty-snapshot',
+    reason: SNAPSHOT_RESPONSE_REASONS.emptySnapshot.reason,
     ...(result.quality ? { snapshotQuality: result.quality } : {}),
   });
 }

@@ -25,6 +25,7 @@ private struct ScrollGestureFixture: Decodable {
 
 private struct HelperOutcomesFixture: Decodable {
   let refusalReasons: [String]
+  let failureReasons: [String]
   let deliveryMechanisms: [String]
 }
 
@@ -42,6 +43,7 @@ final class BackgroundInteractionTests: XCTestCase {
         contentsOf: repoRoot.appendingPathComponent("contracts/fixtures/macos-native-helper-outcomes.json"))
     )
     XCTAssertEqual(BackgroundRefusal.allCases.map(\.rawValue), fixture.refusalReasons)
+    XCTAssertEqual(HelperFailureReason.allCases.map(\.rawValue), fixture.failureReasons)
     XCTAssertEqual(BackgroundDeliveryMechanism.allCases.map(\.rawValue), fixture.deliveryMechanisms)
   }
 

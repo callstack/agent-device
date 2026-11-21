@@ -14,7 +14,7 @@ import {
   createLocalAppleToolProvider,
   runXcrun,
   withAppleToolProvider,
-  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+  SIMCTL_REASONS,
 } from '../tool-provider.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import {
@@ -98,7 +98,7 @@ test('the local adapter stamps the screenshot protocol timeout as a typed reason
   assert.equal(result, undefined);
   const appError = failedCommandError(error);
   assert.equal(appError.code, 'COMMAND_FAILED');
-  assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.equal(details(error).reason, SIMCTL_REASONS.screenshotTimeout.reason);
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 
   assert.equal(calls.length, 1);
@@ -118,7 +118,7 @@ test('the typed reason survives a changed human message and an unrelated exit co
     ),
   );
 
-  assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.equal(details(error).reason, SIMCTL_REASONS.screenshotTimeout.reason);
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 });
 
@@ -132,7 +132,7 @@ test.each(['\n', '\r\n'])(
     const { error } = await captureScreenshot(() => commandFailed(stderr, 60));
 
     assert.equal(details(error).stderr, stderr);
-    assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+    assert.equal(details(error).reason, SIMCTL_REASONS.screenshotTimeout.reason);
     assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
   },
 );
@@ -182,7 +182,7 @@ test('the adapter accepts a leading protocol header with CRLF line endings', asy
     commandFailed(protocolTimeout().replaceAll('\n', '\r\n'), 60),
   );
 
-  assert.equal(details(error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.equal(details(error).reason, SIMCTL_REASONS.screenshotTimeout.reason);
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 });
 
@@ -224,7 +224,7 @@ test('the adapter reads the protocol header for a set-scoped screenshot call', a
   );
 
   assert.ok('error' in outcome, 'the scoped screenshot command must fail');
-  assert.equal(details(outcome.error).reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.equal(details(outcome.error).reason, SIMCTL_REASONS.screenshotTimeout.reason);
 });
 
 test('the same screenshot text without the protocol header stays unattributed', async () => {

@@ -1,10 +1,17 @@
 import type { RunnerCommand } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS } from '../core/config.ts';
 import { appleLitPanel } from '../core/display-inventory.ts';
 import { readFoldablePanelTable } from './orientation.ts';
+
+const RUNNER_PANEL_REASONS = {
+  // The foldable's lit panel could not be named from its panel table, so nothing was sent.
+  panelTableUnreadable: { reason: 'panel-table-unreadable' },
+  // Reading the panel table spent the request's time budget, so nothing was sent.
+  probeBudgetExhausted: { reason: 'panel-probe-budget-exhausted' },
+} as const satisfies ReasonTable<'foldable panels'>;
 
 const PANEL_TABLE_UNREADABLE_HINT =
   'The panel table is unreadable, so no lit panel can be named and nothing was sent. Retry; if it persists, run xcrun devicectl device info displays --device <udid>.';
@@ -13,7 +20,7 @@ const PANEL_TABLE_UNREADABLE_HINT =
 function panelTableRefusal(device: DeviceInfo, message: string): AppError {
   return new AppError('COMMAND_FAILED', message, {
     deviceId: device.id,
-    reason: 'panel-table-unreadable',
+    reason: RUNNER_PANEL_REASONS.panelTableUnreadable.reason,
     runnerErrorCode: 'APP_SCREEN_UNRESOLVED',
     dispatched: 'no',
     hint: PANEL_TABLE_UNREADABLE_HINT,
@@ -70,7 +77,7 @@ export async function nameRunnerRequestLitPanel(
       `Reading the panel table of ${device.name} spent the request's ${command.timeoutMs} ms, so nothing was sent`,
       {
         deviceId: device.id,
-        reason: 'panel-probe-budget-exhausted',
+        reason: RUNNER_PANEL_REASONS.probeBudgetExhausted.reason,
         dispatched: 'no',
         hint: 'Increase the request timeout to leave time for the command after reading the panel table.',
       },

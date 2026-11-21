@@ -1,6 +1,6 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
@@ -20,6 +20,15 @@ import {
 import { simulatorAddressFor } from '../core/simctl.ts';
 import { createFoldHelper, type FoldHelper, type FoldableRotation } from './fold-helper.ts';
 import { appleFoldableFacts } from './runtime.ts';
+
+const ORIENTATION_REASONS = {
+  // A foldable iOS simulator cannot rotate to portrait-upside-down.
+  unsupportedFoldableOrientation: { reason: 'unsupported-foldable-orientation' },
+  // The orientation was sent, but the panel table does not report it afterwards.
+  orientationUnverified: { reason: 'orientation-unverified' },
+  // The foldable's guest panel table could not be read.
+  panelTableUnavailable: { reason: 'orientation-panel-table-unavailable' },
+} as const satisfies ReasonTable<'orientation'>;
 
 const UPSIDE_DOWN_UNSUPPORTED_HINT =
   'A foldable simulator accepts portrait, landscape-left, and landscape-right as rotation targets.';
@@ -124,7 +133,7 @@ export async function setAppleFoldableOrientation(
     throw new AppError('UNSUPPORTED_OPERATION', `${device.name} cannot rotate to ${rotation}`, {
       deviceId: device.id,
       requestedOrientation: rotation,
-      reason: 'unsupported-foldable-orientation',
+      reason: ORIENTATION_REASONS.unsupportedFoldableOrientation.reason,
       hint: UPSIDE_DOWN_UNSUPPORTED_HINT,
     });
   }
@@ -183,7 +192,7 @@ function unverifiedError(
             rawPanelOrientation: reading.panel.currentOrientation,
           }
         : {}),
-      reason: 'orientation-unverified',
+      reason: ORIENTATION_REASONS.orientationUnverified.reason,
       hint: ORIENTATION_UNVERIFIED_HINT,
     },
   );
@@ -211,7 +220,7 @@ async function readLitPanel(
   if (inventory.unresolved && options.requireTable) {
     throw new AppError('COMMAND_FAILED', 'The guest panel table could not be read', {
       deviceId: device.id,
-      reason: 'orientation-panel-table-unavailable',
+      reason: ORIENTATION_REASONS.panelTableUnavailable.reason,
       hint: 'The fold helper could not provide a usable display table. Check the apple_display_inventory_unresolved diagnostic for the helper or display-table failure, then retry.',
     });
   }

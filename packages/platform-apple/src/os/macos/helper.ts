@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   accessHostFile,
   chmodHostFile,
@@ -138,16 +138,44 @@ function ghostCursorBudgetMs(args: readonly string[]): number {
 }
 
 /**
- * The helper's app-surface vocabulary, pinned with its Swift enums by
- * `contracts/fixtures/macos-native-helper-outcomes.json`.
+ * The reasons the helper writes, which {@link runMacOsHelper} passes through in its error details.
+ * `contracts/fixtures/macos-native-helper-outcomes.json` pins them with the Swift
+ * `BackgroundRefusal` (the first five rows) and `HelperFailureReason` enums.
  */
-export const MACOS_HELPER_REFUSAL_REASONS = [
-  'background-pointer-gesture',
-  'no-accessible-target',
-  'no-settable-text-input',
-  'no-scroll-bar',
-  'no-context-menu',
-] as const;
+export const MACOS_HELPER_REASONS = {
+  // A double-click or press-and-hold has no accessibility equivalent in a background macOS app.
+  pointerGesture: { reason: 'background-pointer-gesture' },
+  // No accessibility element the action can use is at the point.
+  noAccessibleTarget: { reason: 'no-accessible-target' },
+  // No settable text input is at the point, or the input refused the new value.
+  noTextInput: { reason: 'no-settable-text-input' },
+  // No scroll area with a settable scroll bar is under the front window's center.
+  noScrollBar: { reason: 'no-scroll-bar' },
+  // No element at the point offers a context menu.
+  noContextMenu: { reason: 'no-context-menu' },
+  // The app has no on-screen window on the current Space.
+  windowNotFound: { reason: 'window-not-found' },
+  // The app excludes its front window from screen capture; use `snapshot` to read it.
+  frontWindowCaptureExcluded: { reason: 'front-window-capture-excluded' },
+  // ScreenCaptureKit does not offer the front window, for example while it opens or closes.
+  frontWindowNotShareable: { reason: 'front-window-not-shareable' },
+  // The element offered a context menu, but no menu window appeared.
+  contextMenuNotObserved: { reason: 'context-menu-not-observed' },
+  // The app's on-screen window list could not be read.
+  windowListUnreadable: { reason: 'window-list-unreadable' },
+  // macOS could not create the keyboard or mouse event to post.
+  eventCreationFailed: { reason: 'event_creation_failed' },
+  // No button on the alert fits the requested accept or dismiss.
+  missingButton: { reason: 'missing_button' },
+} as const satisfies ReasonTable<'macos helper'>;
+/** The helper's app-surface refusals, which the native macOS app backend answers as unsupported. */
+export const MACOS_HELPER_REFUSAL_REASONS: ReadonlySet<string> = new Set([
+  MACOS_HELPER_REASONS.pointerGesture.reason,
+  MACOS_HELPER_REASONS.noAccessibleTarget.reason,
+  MACOS_HELPER_REASONS.noTextInput.reason,
+  MACOS_HELPER_REASONS.noScrollBar.reason,
+  MACOS_HELPER_REASONS.noContextMenu.reason,
+]);
 export const MACOS_DELIVERY_MECHANISMS = [
   'ax-press',
   'ax-focus',

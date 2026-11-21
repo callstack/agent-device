@@ -6,7 +6,7 @@ import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
 import {
   createLocalAppleToolProvider,
   withAppleToolProvider,
-  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+  SIMCTL_REASONS,
 } from '../tool-provider.ts';
 
 // `setIosSetting` boots through this owner; the capture route under test skips it, so the settings
@@ -97,7 +97,7 @@ function captureDeps(captureWithRetry: (device: DeviceInfo) => Promise<void>) {
 function screenshotFailure(): AppError {
   return new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
     exitCode: 60,
-    reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+    reason: SIMCTL_REASONS.screenshotTimeout.reason,
   });
 }
 

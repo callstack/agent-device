@@ -26,7 +26,7 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 );
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
-import { IOS_NO_DATA_CONTAINER_REASON, setIosSetting } from '../app-settings.ts';
+import { APP_SETTINGS_REASONS, setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
 import {
@@ -407,7 +407,7 @@ test('setIosSetting clear-app-state refuses a system app whose simctl answer is 
       assert.ok(thrown instanceof AppError);
       assert.equal(thrown.code, 'UNSUPPORTED_OPERATION');
       // The refusal is keyed on the typed reason, not on prose a driver must not match.
-      assert.equal(thrown.details?.reason, IOS_NO_DATA_CONTAINER_REASON);
+      assert.equal(thrown.details?.reason, APP_SETTINGS_REASONS.noDataContainer.reason);
       assert.equal(thrown.details?.appBundleId, 'com.apple.Preferences');
       assert.equal(thrown.details?.deviceId, 'sim-1');
       // Normalization keeps the reason, hint, and typed details intact through the wire shape.
@@ -415,7 +415,7 @@ test('setIosSetting clear-app-state refuses a system app whose simctl answer is 
       assert.equal(normalized.code, 'UNSUPPORTED_OPERATION');
       assert.match(normalized.message, /com\.apple\.Preferences has no data container to clear/);
       assert.match(normalized.hint ?? '', /Clear the app under test instead/);
-      assert.equal(normalized.details?.reason, IOS_NO_DATA_CONTAINER_REASON);
+      assert.equal(normalized.details?.reason, APP_SETTINGS_REASONS.noDataContainer.reason);
       assert.equal(normalized.details?.appBundleId, 'com.apple.Preferences');
 
       const flat = calls.map((args) => args.join(' '));
@@ -457,7 +457,7 @@ test('setIosSetting clear-app-state refuses an empty container answer with the s
           ),
         {
           code: 'UNSUPPORTED_OPERATION',
-          reason: IOS_NO_DATA_CONTAINER_REASON,
+          reason: APP_SETTINGS_REASONS.noDataContainer.reason,
         },
       );
     },

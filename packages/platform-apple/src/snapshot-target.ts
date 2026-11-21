@@ -1,5 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { ReadinessPhase } from '@agent-device/contracts/wait';
 import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
 import {
@@ -21,10 +25,23 @@ const TARGET_IDENTITY_TIMEOUT_MS = 3_000;
 const TARGET_DISCOVERY_WAIT_MS = 1_500;
 /** Overall deadline of one discovery (both simctl probes and the `ps` identity read). */
 const TARGET_DISCOVERY_TIMEOUT_MS = 15_000;
-/** A caller's wait slice ran out while the discovery it joined is still running. */
-const TARGET_DISCOVERY_PENDING = 'simulator-target-discovery-pending';
-/** The discovery answered: the app has no running process on the Simulator. */
-const TARGET_NOT_RUNNING = 'simulator-target-unavailable';
+const SIMULATOR_TARGET_REASONS = {
+  // The wait ran out while the discovery of the app's simulator process was still running.
+  discoveryPending: { reason: 'simulator-target-discovery-pending' },
+  // The app has no running process on the simulator.
+  notRunning: { reason: 'simulator-target-unavailable' },
+  // The simulator could not be asked for its running apps.
+  probeFailed: { reason: 'simulator-target-probe-failed' },
+  // The app's simulator process was found, but its identity could not be read.
+  identityUnavailable: { reason: 'simulator-target-identity-unavailable' },
+  // The simulator could not be asked for its runtime.
+  runtimeProbeFailed: { reason: 'simulator-runtime-probe-failed' },
+  // The simulator reported no runtime.
+  runtimeUnavailable: { reason: 'simulator-runtime-unavailable' },
+} as const satisfies ReasonTable<'snapshot capture'>;
+
+type SimulatorTargetReason =
+  (typeof SIMULATOR_TARGET_REASONS)[keyof typeof SIMULATOR_TARGET_REASONS]['reason'];
 
 export type SimulatorSnapshotTarget = Readonly<{
   simulator: SimulatorAddress;
@@ -74,7 +91,8 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
           stop,
           cancelled: () => discoveryCancelled(signal),
         }),
-      pending: () => targetError(TARGET_DISCOVERY_PENDING, device, appBundleId),
+      pending: () =>
+        targetError(SIMULATOR_TARGET_REASONS.discoveryPending.reason, device, appBundleId),
     });
   };
   const resolveTarget: ResolveSimulatorSnapshotTarget = async (device, appBundleId, signal) => {
@@ -106,12 +124,18 @@ function discoveryCancelled(signal: AbortSignal): AppError {
  * under its own deadline, so asking again joins it rather than starting another.
  */
 export function isSimulatorTargetDiscoveryPending(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === TARGET_DISCOVERY_PENDING;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === SIMULATOR_TARGET_REASONS.discoveryPending.reason
+  );
 }
 
 /** Whether a resolver failure says the app has no running process, not that discovery failed. */
 export function isSimulatorTargetNotRunning(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === TARGET_NOT_RUNNING;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === SIMULATOR_TARGET_REASONS.notRunning.reason
+  );
 }
 
 async function resolveSimulatorSnapshotTarget(
@@ -135,17 +159,17 @@ async function resolveSimulatorSnapshotTarget(
   const jobs = jobsProbe.value;
   const runtime = runtimeProbe.value;
   if (jobs.exitCode !== 0) {
-    throw targetError('simulator-target-probe-failed', device, appBundleId);
+    throw targetError(SIMULATOR_TARGET_REASONS.probeFailed.reason, device, appBundleId);
   }
   const job = readApplicationJob(jobs.stdout, appBundleId);
   if (!job) {
-    throw targetError(TARGET_NOT_RUNNING, device, appBundleId);
+    throw targetError(SIMULATOR_TARGET_REASONS.notRunning.reason, device, appBundleId);
   }
   const processStartTime = await readSnapshotTargetProcessStartTime(job.pid, {
     timeoutMs: Math.min(TARGET_IDENTITY_TIMEOUT_MS, remainingMs(deadline)),
   });
   if (!processStartTime) {
-    throw targetError('simulator-target-identity-unavailable', device, appBundleId);
+    throw targetError(SIMULATOR_TARGET_REASONS.identityUnavailable.reason, device, appBundleId);
   }
   return Object.freeze({
     simulator: simulatorAddressFor(device),
@@ -168,11 +192,12 @@ async function readSimulatorRuntime(
     allowFailure: true,
     timeoutMs: remainingMs(deadline),
   }).then((result) => {
-    if (result.exitCode !== 0) throw targetError('simulator-runtime-probe-failed', device, '');
+    if (result.exitCode !== 0)
+      throw targetError(SIMULATOR_TARGET_REASONS.runtimeProbeFailed.reason, device, '');
     const runtime = Object.entries(readSimctlDevicesByRuntime(result.stdout)).find(([, devices]) =>
       devices.some((candidate) => candidate.udid === device.id),
     )?.[0];
-    if (!runtime) throw targetError('simulator-runtime-unavailable', device, '');
+    if (!runtime) throw targetError(SIMULATOR_TARGET_REASONS.runtimeUnavailable.reason, device, '');
     return runtime;
   });
   runtimeByDevice.set(device.id, pending);
@@ -201,7 +226,11 @@ function remainingMs(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
-function targetError(reason: string, device: DeviceInfo, appBundleId: string): AppError {
+function targetError(
+  reason: SimulatorTargetReason,
+  device: DeviceInfo,
+  appBundleId: string,
+): AppError {
   return new AppError(
     'COMMAND_FAILED',
     `Unable to resolve the running iOS Simulator app (${reason}).`,

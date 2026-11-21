@@ -7,6 +7,7 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/
 import { readFileSync } from 'node:fs';
 import {
   MACOS_DELIVERY_MECHANISMS,
+  MACOS_HELPER_REASONS,
   MACOS_HELPER_REFUSAL_REASONS,
   macOsClickScheduleMs,
   runMacOsPressAction,
@@ -377,8 +378,13 @@ test('the helper vocabulary matches the table the Swift helper is held to', () =
     ),
   ) as {
     refusalReasons: string[];
+    failureReasons: string[];
     deliveryMechanisms: string[];
   };
+  assert.deepEqual(
+    Object.values(MACOS_HELPER_REASONS).map((row) => row.reason),
+    [...fixture.refusalReasons, ...fixture.failureReasons],
+  );
   assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
   assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
 });

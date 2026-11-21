@@ -3,7 +3,7 @@ import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { parseAppearanceAction } from '@agent-device/contracts/settings';
 import { isMacOsBundleId, type DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   createAppResolutionCache,
@@ -12,6 +12,11 @@ import {
 import { quitMacOsApp } from './helper.ts';
 import { resolveAppleToolProvider, type AppleMacOsHostProvider } from '../../core/tool-provider.ts';
 import type { IosAppInfo } from '../../core/app-info.ts';
+
+const MACOS_APP_REASONS = {
+  // The macOS app was still running after every termination attempt.
+  terminationTimeout: { reason: 'MACOS_APP_TERMINATION_TIMEOUT' },
+} as const satisfies ReasonTable<'close'>;
 
 const MACOS_ALIASES: Record<string, string> = {
   settings: 'com.apple.systempreferences',
@@ -134,7 +139,7 @@ export async function closeMacOsApp(
     if (!(await quitMacOsApp(bundleId, env)).running) return;
   }
   throw new AppError('COMMAND_FAILED', `Timed out waiting for macOS app ${app} to close`, {
-    reason: 'MACOS_APP_TERMINATION_TIMEOUT',
+    reason: MACOS_APP_REASONS.terminationTimeout.reason,
     bundleId,
     attempts: MACOS_APP_TERMINATION_MAX_ATTEMPTS,
   });
