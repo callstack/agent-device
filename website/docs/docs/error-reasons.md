@@ -253,7 +253,13 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `invalid_provider_app` | Revyl installs the app from a URL, so `--provider-app` cannot name a local file. |
+| `unsupported_platform` | Revyl rents an iOS simulator or an Android emulator, and the request names neither. |
 | `missing_provider_credentials` | No Revyl API key is set, so the provider cannot authenticate the request. |
+| `unsupported_app_artifact` | Revyl installs an iOS simulator build or an Android .apk, and the build is neither. |
+| `provider-app-not-launched` | The session runs no app, so a close or setting that names one has nothing to act on. |
+| `provider-viewport-unavailable` | The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by. |
+| `provider-invalid-response` | Revyl answered a worker action with a value outside the field's own range. |
 | `provider-refused` | Revyl refused the request or the action it carries. |
 | `provider-unreachable` | Revyl never answered the request, or the connection to its backend failed. |
 | `provider-response-invalid` | Revyl answered in a way agent-device cannot read, such as a body that is not JSON. |
@@ -264,20 +270,14 @@ These reasons can come from more than one command.
 | `provider-request-failed` | Revyl refused a request it never routed, with a status that settles the failure. |
 | `request_timeout` | Revyl gave no response before the request's own deadline passed. |
 | `invalid_provider_url` | `REVYL_API_URL` is not an origin Revyl's API can be addressed at. |
-| `invalid_provider_app` | Revyl installs the app from a URL, so `--provider-app` cannot name a local file. |
-| `unsupported_platform` | Revyl rents an iOS simulator or an Android emulator, and the request names neither. |
-| `unsupported_app_artifact` | Revyl installs an iOS simulator build or an Android .apk, and the build is neither. |
-| `provider-app-not-launched` | The session runs no app, so a close or setting that names one has nothing to act on. |
-| `provider-viewport-unavailable` | The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by. |
-| `provider-invalid-response` | Revyl answered a worker action with a value outside the field's own range. |
 | `provider-session-identity-mismatch` | Revyl started a session under an identity agent-device did not issue for the lease. |
 | `provider-start-refused` | Revyl refused to start the device and named why in its start answer. |
 | `provider-start-failed` | Revyl's worker connection ended in a state that never serves the device. |
 | `provider-not-ready` | Revyl never reported a ready device within the wait the caller could spend. |
 | `provider-cleanup-pending` | Revyl did not confirm it released the session, which stays rented and billed until it does. |
 | `provider-lease-releasing` | The lease is being released, so it cannot serve another allocation. |
-| `provider-lease-request-mismatch` | An allocation joins a lease whose device was started for another app or device. |
 | `runtime-shutting-down` | The provider runtime is ending the sessions it holds, so it takes no new work. |
+| `provider-lease-request-mismatch` | An allocation joins a lease whose device was started for another app or device. |
 
 ### Snapshot capture
 
@@ -297,7 +297,7 @@ These reasons can come from more than one command.
 | --- | --- |
 | `provider_session_create_timeout` | The provider did not create the WebDriver session within the session-creation budget. |
 | `provider_session_released_during_allocation` | The provider ended the session an allocation was waiting on by releasing its lease. |
-| `provider_session_shutdown_during_allocation` | The provider ended the session an allocation was waiting on while shutting down. |
+| `provider_session_shutdown_during_allocation` | The WebDriver runtime could not finish the allocation: shutdown was in progress or done. |
 | `provider_session_release_in_progress` | The lease is still releasing its previous session, so a new allocation gets no session. |
 | `provider_session_cleanup_incomplete` | Shutdown left WebDriver sessions running, so they may still be billed. |
 | `text_entry_clear_target_unavailable` | `fill` has no focused element reference to clear before it types the replacement text. |

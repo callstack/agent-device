@@ -29,11 +29,21 @@ import {
   AppError,
   discloseDispatch,
   discloseDispatchAfterSteps,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { REVYL_PROVIDER_REASONS } from './revyl-client.ts';
 import type { RevylSession } from './revyl-session.ts';
 import { captureRevylSnapshot, createRevylSnapshotReader } from './snapshot.ts';
+
+/** Why a Revyl interaction cannot run or be trusted. */
+const REVYL_INTERACTOR_REASONS = {
+  // The session runs no app, so a close or setting that names one has nothing to act on.
+  appNotLaunched: { reason: 'provider-app-not-launched' },
+  // The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by.
+  viewportUnavailable: { reason: 'provider-viewport-unavailable' },
+  // Revyl answered a worker action with a value outside the field's own range.
+  invalidResponse: { reason: 'provider-invalid-response' },
+} as const satisfies ReasonTable<'revyl provider'>;
 
 /** Revyl's worker holds the touch this long when the caller names no hold. */
 const DEFAULT_LONG_PRESS_DURATION_MS = 1_500;
@@ -156,7 +166,7 @@ class RevylInteractor implements Interactor {
         'UNSUPPORTED_OPERATION',
         `This Revyl session has not launched ${target}, so it has no app to end.`,
         {
-          reason: REVYL_PROVIDER_REASONS.appNotLaunched.reason,
+          reason: REVYL_INTERACTOR_REASONS.appNotLaunched.reason,
           command: 'close',
           requestedApp: target,
           hint: 'Close without an app name to end the app this session runs, or open the app first.',
@@ -285,7 +295,7 @@ class RevylInteractor implements Interactor {
         'COMMAND_FAILED',
         'Revyl reported no screen size for this session, so the scroll distance cannot be planned.',
         {
-          reason: REVYL_PROVIDER_REASONS.viewportUnavailable.reason,
+          reason: REVYL_INTERACTOR_REASONS.viewportUnavailable.reason,
           runId: this.session.runId,
         },
       );
@@ -455,7 +465,7 @@ class RevylInteractor implements Interactor {
       const current = await this.workerAction('appearance');
       if (current.appearance !== 'light' && current.appearance !== 'dark') {
         throw new AppError('COMMAND_FAILED', 'Revyl did not report the current appearance.', {
-          reason: REVYL_PROVIDER_REASONS.invalidResponse.reason,
+          reason: REVYL_INTERACTOR_REASONS.invalidResponse.reason,
           runId: this.session.runId,
         });
       }
@@ -522,7 +532,7 @@ class RevylInteractor implements Interactor {
     const app = appId?.trim() || this.session.launchedApp.bundleId;
     if (app) return app;
     throw new AppError('INVALID_ARGS', `The ${setting} setting needs an app.`, {
-      reason: REVYL_PROVIDER_REASONS.appNotLaunched.reason,
+      reason: REVYL_INTERACTOR_REASONS.appNotLaunched.reason,
       command: 'settings',
       hint: 'Pass --app, or open the app first.',
     });
@@ -573,7 +583,7 @@ async function normalizeRevylIosDensity(
     throw new AppError(
       'COMMAND_FAILED',
       'Revyl reported no screen size for this session, so the screenshot density cannot be known.',
-      { reason: REVYL_PROVIDER_REASONS.viewportUnavailable.reason },
+      { reason: REVYL_INTERACTOR_REASONS.viewportUnavailable.reason },
     );
   }
   const [{ readPngSize }, { resizePngFile }, { computeDensityScaledScreenshotSize }] =

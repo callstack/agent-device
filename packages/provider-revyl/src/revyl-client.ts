@@ -72,34 +72,6 @@ export const REVYL_PROVIDER_REASONS = {
   requestTimeout: { reason: 'request_timeout' },
   // `REVYL_API_URL` is not an origin Revyl's API can be addressed at.
   invalidProviderUrl: { reason: 'invalid_provider_url' },
-  // Revyl installs the app from a URL, so `--provider-app` cannot name a local file.
-  invalidApp: { reason: 'invalid_provider_app' },
-  // Revyl rents an iOS simulator or an Android emulator, and the request names neither.
-  unsupportedPlatform: { reason: 'unsupported_platform' },
-  // Revyl installs an iOS simulator build or an Android .apk, and the build is neither.
-  unsupportedAppArtifact: { reason: 'unsupported_app_artifact' },
-  // The session runs no app, so a close or setting that names one has nothing to act on.
-  appNotLaunched: { reason: 'provider-app-not-launched' },
-  // The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by.
-  viewportUnavailable: { reason: 'provider-viewport-unavailable' },
-  // Revyl answered a worker action with a value outside the field's own range.
-  invalidResponse: { reason: 'provider-invalid-response' },
-  // Revyl started a session under an identity agent-device did not issue for the lease.
-  sessionIdentityMismatch: { reason: 'provider-session-identity-mismatch' },
-  // Revyl refused to start the device and named why in its start answer.
-  startRefused: { reason: 'provider-start-refused' },
-  // Revyl's worker connection ended in a state that never serves the device.
-  startFailed: { reason: 'provider-start-failed' },
-  // Revyl never reported a ready device within the wait the caller could spend.
-  notReady: { reason: 'provider-not-ready' },
-  // Revyl did not confirm it released the session, which stays rented and billed until it does.
-  cleanupPending: { reason: 'provider-cleanup-pending' },
-  // The lease is being released, so it cannot serve another allocation.
-  leaseReleasing: { reason: 'provider-lease-releasing' },
-  // An allocation joins a lease whose device was started for another app or device.
-  leaseRequestMismatch: { reason: 'provider-lease-request-mismatch' },
-  // The provider runtime is ending the sessions it holds, so it takes no new work.
-  runtimeShuttingDown: { reason: 'runtime-shutting-down' },
 } as const satisfies ReasonTable<'revyl provider'>;
 
 /** The `details.reason` spellings {@link REVYL_PROVIDER_REASONS} declares. */

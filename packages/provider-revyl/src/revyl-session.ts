@@ -1,10 +1,9 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildRevylDevice, revylSessionIdForLease, type RevylPlatform } from './device.ts';
 import {
-  REVYL_PROVIDER_REASONS,
   REVYL_START_DEVICE_TIMEOUT_MS,
   isRevylSessionGone,
   revylFailureRefusedTheRequest,
@@ -16,6 +15,20 @@ import type {
   RevylWorkerConnection,
   RevylWorkerHealth,
 } from './revyl-types.ts';
+
+/** Why a Revyl session could not start, be confirmed, or be cleaned up. */
+const REVYL_SESSION_REASONS = {
+  // Revyl started a session under an identity agent-device did not issue for the lease.
+  sessionIdentityMismatch: { reason: 'provider-session-identity-mismatch' },
+  // Revyl refused to start the device and named why in its start answer.
+  startRefused: { reason: 'provider-start-refused' },
+  // Revyl's worker connection ended in a state that never serves the device.
+  startFailed: { reason: 'provider-start-failed' },
+  // Revyl never reported a ready device within the wait the caller could spend.
+  notReady: { reason: 'provider-not-ready' },
+  // Revyl did not confirm it released the session, which stays rented and billed until it does.
+  cleanupPending: { reason: 'provider-cleanup-pending' },
+} as const satisfies ReasonTable<'revyl provider'>;
 
 /** How long Revyl may take to assign a worker and connect the device before the start is given up on. */
 const READY_TIMEOUT_MS = 240_000;
@@ -149,7 +162,7 @@ export async function startRevylSession(
         'COMMAND_FAILED',
         `Revyl started the device as session ${echoed} instead of ${sessionId}.`,
         {
-          reason: REVYL_PROVIDER_REASONS.sessionIdentityMismatch.reason,
+          reason: REVYL_SESSION_REASONS.sessionIdentityMismatch.reason,
           runId,
           providerSessionId: echoed,
           hint: 'Retry the command; agent-device ends a Revyl session by the identity it issued.',
@@ -167,7 +180,7 @@ export async function startRevylSession(
         'COMMAND_FAILED',
         `Revyl did not start a ${input.platform} device: ${started.error ?? started.message ?? 'no workflow run was returned'}`,
         {
-          reason: REVYL_PROVIDER_REASONS.startRefused.reason,
+          reason: REVYL_SESSION_REASONS.startRefused.reason,
           platform: input.platform,
           ...(started.trace_id === undefined ? {} : { traceId: started.trace_id }),
         },
@@ -268,7 +281,7 @@ export function revylCallerGaveUp(
     'COMMAND_FAILED',
     `Revyl did not report a ready device within ${budgetMs} ms.`,
     {
-      reason: REVYL_PROVIDER_REASONS.notReady.reason,
+      reason: REVYL_SESSION_REASONS.notReady.reason,
       timeoutMs: budgetMs,
       providerSessionId,
       ...(budget.deadline === undefined ? {} : { deadline: budget.deadline }),
@@ -306,7 +319,7 @@ export function revylCleanupPending(
     'COMMAND_FAILED',
     `Revyl did not release session${one ? '' : 's'} ${ids}.`,
     {
-      reason: REVYL_PROVIDER_REASONS.cleanupPending.reason,
+      reason: REVYL_SESSION_REASONS.cleanupPending.reason,
       ...details,
       providerSessionIds: unconfirmed.map((stop) => stop.sessionId),
       causes: unconfirmed.map((stop) => stop.failure),
@@ -433,7 +446,7 @@ async function untilRevylWorkerReady(
             : ` (${connection.message})`
         }`,
         {
-          reason: REVYL_PROVIDER_REASONS.startFailed.reason,
+          reason: REVYL_SESSION_REASONS.startFailed.reason,
           runId,
           status: connection.status,
         },

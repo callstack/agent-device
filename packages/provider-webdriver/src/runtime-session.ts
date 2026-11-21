@@ -29,7 +29,7 @@ const WEBDRIVER_SESSION_REASONS = {
   sessionCreateTimeout: { reason: 'provider_session_create_timeout' },
   // The provider ended the session an allocation was waiting on by releasing its lease.
   sessionReleasedDuringAllocation: { reason: 'provider_session_released_during_allocation' },
-  // The provider ended the session an allocation was waiting on while shutting down.
+  // The WebDriver runtime could not finish the allocation: shutdown was in progress or done.
   sessionShutdownDuringAllocation: { reason: 'provider_session_shutdown_during_allocation' },
   // The lease is still releasing its previous session, so a new allocation gets no session.
   sessionReleaseInProgress: { reason: 'provider_session_release_in_progress' },

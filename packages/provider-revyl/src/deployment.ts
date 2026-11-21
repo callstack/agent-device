@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/app-deployment-runtime';
 import { packGzipTar } from '@agent-device/host-kit/gzip-tar';
 import { Deadline, type DeadlineClock, pollUntilSettled } from '@agent-device/host-kit/retry';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   REVYL_PROVIDER_REASONS,
@@ -13,6 +13,12 @@ import {
   type RevylProviderReason,
 } from './revyl-client.ts';
 import type { RevylWorkerActionResponse } from './revyl-types.ts';
+
+/** Why a Revyl app deployment is refused. */
+const REVYL_DEPLOYMENT_REASONS = {
+  // Revyl installs an iOS simulator build or an Android .apk, and the build is neither.
+  unsupportedAppArtifact: { reason: 'unsupported_app_artifact' },
+} as const satisfies ReasonTable<'revyl provider'>;
 
 /**
  * The whole install's budget: packing, upload, and Revyl's install. It stays inside the daemon's
@@ -159,13 +165,13 @@ function unsupportedBuild(platform: 'ios' | 'android', appPath: string): AppErro
         'INVALID_ARGS',
         'Revyl installs an iOS simulator build: a .app directory, or a .zip, .tar.gz, or .tgz of one.',
         {
-          reason: REVYL_PROVIDER_REASONS.unsupportedAppArtifact.reason,
+          reason: REVYL_DEPLOYMENT_REASONS.unsupportedAppArtifact.reason,
           appPath,
           hint: 'Build for the iOS simulator; a device .ipa does not run on a simulator.',
         },
       )
     : new AppError('INVALID_ARGS', 'Revyl installs an Android build from an .apk file.', {
-        reason: REVYL_PROVIDER_REASONS.unsupportedAppArtifact.reason,
+        reason: REVYL_DEPLOYMENT_REASONS.unsupportedAppArtifact.reason,
         appPath,
         hint: 'Pass the .apk the build produced.',
       });

@@ -14,7 +14,7 @@ import type {
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { matchesPlatformSelector } from '@agent-device/kernel/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   parseRevylDeviceId,
   platformForRevylLeaseBackend,
@@ -22,12 +22,7 @@ import {
   revylSessionIdForLease,
   type RevylPlatform,
 } from './device.ts';
-import {
-  createRevylClient,
-  isRevylSessionGone,
-  REVYL_PROVIDER_REASONS,
-  type RevylClient,
-} from './revyl-client.ts';
+import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
 import {
   keepRevylSessionAlive,
   REVYL_ALLOCATION_TIMEOUT_MS,
@@ -50,6 +45,14 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
 import type { RevylStartRequest } from './session-allocation.ts';
 import type { RevylDeploymentSession } from './deployment.ts';
+
+/** Why the Revyl runtime refuses a lease request. */
+const REVYL_RUNTIME_REASONS = {
+  // The lease is being released, so it cannot serve another allocation.
+  leaseReleasing: { reason: 'provider-lease-releasing' },
+  // The provider runtime is ending the sessions it holds, so it takes no new work.
+  runtimeShuttingDown: { reason: 'runtime-shutting-down' },
+} as const satisfies ReasonTable<'revyl provider'>;
 
 /** What one lease's start asks Revyl for, with the platform the lease was admitted for. */
 type RevylLeaseRequest = RevylStartRequest & Readonly<{ platform: RevylPlatform }>;
@@ -273,7 +276,7 @@ function createRevylLeaseDriver(
     shuttingDown: (lease) => shuttingDownDuring(lease.leaseId, 'allocate'),
     releasing: (lease) =>
       new AppError('COMMAND_FAILED', `Revyl lease ${lease.leaseId} is being released.`, {
-        reason: REVYL_PROVIDER_REASONS.leaseReleasing.reason,
+        reason: REVYL_RUNTIME_REASONS.leaseReleasing.reason,
         leaseId: lease.leaseId,
         hint: 'Run open again; it allocates a new lease and rents a fresh device.',
       }),
@@ -345,7 +348,7 @@ function requireRevylLease(lease: DeviceLease, operation: 'recover' | 'release')
 
 function shuttingDownDuring(leaseId: string, operation: string): AppError {
   return new AppError('COMMAND_FAILED', `The Revyl runtime is shutting down.`, {
-    reason: REVYL_PROVIDER_REASONS.runtimeShuttingDown.reason,
+    reason: REVYL_RUNTIME_REASONS.runtimeShuttingDown.reason,
     operation,
     leaseId,
     hint: 'Retry the command; the daemon is ending the sessions it holds.',
