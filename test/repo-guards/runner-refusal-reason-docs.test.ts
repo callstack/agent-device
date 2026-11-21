@@ -191,33 +191,41 @@ function readTableReasons(
   name: string,
   kind: 'rows' | 'object',
 ): string[] {
-  const table = exportedConstObject(parsed, name);
-  const members: string[] = [];
-  for (const property of table.properties) {
+  return exportedConstObject(parsed, name).properties.flatMap((property: any) => {
     assert.ok(
       property.type === 'Property' && property.key.type === 'Identifier',
       `unsupported member in ${name}: ${property.type}`,
     );
-    if (kind === 'object') {
-      assert.ok(
-        property.value.type === 'Literal' && typeof property.value.value === 'string',
-        `unsupported member in ${name}: ${property.value.type}`,
-      );
-      members.push(property.value.value);
-      continue;
-    }
-    const row = unwrapAssertion(property.value);
-    assert.ok(
-      row?.type === 'ObjectExpression',
-      `unsupported row in ${name} for ${property.key.name}: ${row?.type ?? 'none'}`,
-    );
-    for (const member of row.properties) {
-      if (
-        member.type !== 'Property' ||
-        member.key.type !== 'Identifier' ||
-        member.key.name !== 'reason'
-      )
-        continue;
+    return kind === 'object'
+      ? [objectMemberReason(property, name)]
+      : rowReasons(parsed, property, name);
+  });
+}
+
+/** A member whose value is the reason literal itself. */
+function objectMemberReason(property: any, name: string): string {
+  assert.ok(
+    property.value.type === 'Literal' && typeof property.value.value === 'string',
+    `unsupported member in ${name}: ${property.value.type}`,
+  );
+  return property.value.value;
+}
+
+/** The `reason` of a row object: a literal, or `TABLE.member.reason` from a table in the same file. */
+function rowReasons(parsed: ReturnType<typeof parseTs>, property: any, name: string): string[] {
+  const row = unwrapAssertion(property.value);
+  assert.ok(
+    row?.type === 'ObjectExpression',
+    `unsupported row in ${name} for ${property.key.name}: ${row?.type ?? 'none'}`,
+  );
+  return row.properties
+    .filter(
+      (member: any) =>
+        member.type === 'Property' &&
+        member.key.type === 'Identifier' &&
+        member.key.name === 'reason',
+    )
+    .map((member: any) => {
       const reason =
         member.value.type === 'Literal' && typeof member.value.value === 'string'
           ? member.value.value
@@ -226,10 +234,8 @@ function readTableReasons(
         reason !== undefined,
         `unsupported reason in ${name} row ${property.key.name}: ${member.value.type}`,
       );
-      members.push(reason);
-    }
-  }
-  return members;
+      return reason;
+    });
 }
 
 /** The reason `TABLE.member.reason` names, read from the row of an exported table in `parsed`. */
