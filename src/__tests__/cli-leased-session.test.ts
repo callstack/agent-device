@@ -2,7 +2,7 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { installFakeManagedAgentBrowser, makeTempWorkspace } from '@agent-device/test-kit';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type { DaemonResponse } from '@agent-device/daemon-client';
@@ -399,7 +399,6 @@ test('a command that takes no session runs while a leased connection is active',
   // The active leased connection still makes a connection command name its session...
   assertSessionRequired(await runAgentCommand(solo, ['snapshot']));
   // ...but `auth` and `web` run on no connection, and `--session` is not one of their flags.
-  const install = await installFakeManagedAgentBrowser(solo.stateDir);
   const environments: Record<string, string>[] = [{}, { AGENT_DEVICE_SESSION: 'demo' }];
   for (const env of environments) {
     const auth = await runAgentCommand(solo, ['auth', 'status'], env);
@@ -411,9 +410,13 @@ test('a command that takes no session runs while a leased connection is active',
       async () => ({ stdout: 'ok', stderr: '', exitCode: 0 }),
       async () => await runAgentCommand(solo, ['web', 'doctor'], env),
     );
-    // `web` ends through process.exit, which the capture throws, so the report is the first document.
-    assert.match(doctor.stdout, /^\{\n {2}"success": true,/, doctor.stdout);
-    assert.ok(doctor.stdout.includes(JSON.stringify(install.binaryPath)), doctor.stdout);
+    // On 0.22 `web` lives in the @agent-device/web plugin: the command gets past the session rule and
+    // stops at the plugin check, not at a session requirement.
+    assert.equal(
+      JSON.parse(doctor.stdout).error?.details?.reason,
+      'plugin-not-installed',
+      doctor.stdout,
+    );
     assert.deepEqual(doctor.calls, []);
   }
 
