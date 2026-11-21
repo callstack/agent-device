@@ -713,14 +713,21 @@ async function openBrowser(url: string, io?: AuthIo): Promise<void> {
   }
 }
 
+/** Streams that already carry the listener that absorbs a late write error. */
+const errorAbsorbingStreams = new WeakSet<object>();
+
 /**
  * Writes a warning that must not change the result of a change that already took effect. A
  * closed stderr fails the write synchronously, or later with an EPIPE `error` event; both are
- * dropped. The one-shot listener stays until that event, because it fires after the write callback.
+ * dropped. Each stream gets one absorbing listener, because the event fires after the write callback.
  */
 function warnBestEffort(io: AuthIo | undefined, text: string): void {
   const stream = io?.stderr ?? process.stderr;
-  (stream as Partial<NodeJS.WriteStream>).once?.('error', () => {});
+  const emitter = stream as Partial<NodeJS.WriteStream>;
+  if (emitter.on && !errorAbsorbingStreams.has(stream)) {
+    emitter.on('error', () => {});
+    errorAbsorbingStreams.add(stream);
+  }
   try {
     stream.write(text);
   } catch {
