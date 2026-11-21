@@ -5,7 +5,7 @@ import {
   type RuntimeHintsApplicationInput,
   hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   type DaemonFailureResponse,
   errorResponse,
@@ -16,6 +16,12 @@ import type { SessionRuntimeHints, SessionState } from '../core/session-state.ts
 import { SessionStore } from '../core/session-store.ts';
 import { trimRuntimeValue } from '@agent-device/host-kit/runtime-transport-hints';
 import { isAndroidEmulator, isIosSimulator } from './device/device-targets.ts';
+
+export const RUNTIME_HINTS_REASONS = {
+  // Runtime hints were requested, but the device runtime admitted no operation to apply or clear
+  // them.
+  operationMissing: { reason: 'runtime-hints-operation-missing' },
+} as const satisfies ReasonTable<'open'>;
 
 type SessionRuntimeHintsStore = Readonly<{
   getRuntimeHints: SessionStore['getRuntimeHints'];
@@ -71,7 +77,7 @@ export function openApplicationRuntimeHints(
     throw new AppError(
       'COMMAND_FAILED',
       'Transport runtime hints were requested without the fact-admitted apply operation; pair the hints with the operation or drop them.',
-      { reason: 'runtime-hints-operation-missing', dispatched: 'no' },
+      { reason: RUNTIME_HINTS_REASONS.operationMissing.reason, dispatched: 'no' },
     );
   }
   return { values: runtimeHintValues(runtime), apply };

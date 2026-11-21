@@ -11,6 +11,7 @@ import type { DaemonPlatformServices } from '../../../core/platform-services.ts'
 import {
   hasRuntimeTransportHints,
   maybeClearRemovedRuntimeTransportHints,
+  RUNTIME_HINTS_REASONS,
   shouldClearRemovedRuntimeTransportHints,
   tryResolveOpenRuntimeHints,
 } from '../../session-runtime.ts';
@@ -193,7 +194,7 @@ export async function prepareOpenCommandDetails(params: {
         'COMMAND_FAILED',
         'Runtime hint clear operation was not admitted for this open.',
         {
-          reason: 'runtime-hints-operation-missing',
+          reason: RUNTIME_HINTS_REASONS.operationMissing.reason,
           dispatched: 'unknown',
         },
       );

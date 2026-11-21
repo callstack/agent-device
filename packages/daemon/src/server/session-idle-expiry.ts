@@ -1,7 +1,13 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DeviceClaimClearOutcome } from '@agent-device/daemon-contracts/device-claims';
 import type { SessionState } from '../core/session-state.ts';
 import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
+
+const SESSION_IDLE_REASONS = {
+  // The session expired after its idle window (`details.idleExpiryMs`); run `open` to start a new
+  // one.
+  expired: { reason: 'SESSION_IDLE_EXPIRED' },
+} as const satisfies ReasonTable<'sessions'>;
 
 /**
  * #2833: an opt-in inactivity deadline for a session holding a local device claim, off by default.
@@ -29,9 +35,6 @@ import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
  * tears down a live session, and on a shared host "idle" and "thinking" are indistinguishable.
  */
 export const SESSION_IDLE_EXPIRY_ENV = 'AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS';
-
-/** The typed reason naming why an absent session is absent. Keyed behavior, never message text. */
-const SESSION_IDLE_EXPIRED_REASON = 'SESSION_IDLE_EXPIRED';
 
 /** A marker lives long enough for the command that comes next, not for an unrelated future session. */
 const IDLE_EXPIRY_TOMBSTONE_TTL_MS = 60 * 60_000;
@@ -163,7 +166,7 @@ export function sessionIdleExpiredError(
     'SESSION_NOT_FOUND',
     `Session "${tombstone.owner}" expired ${formatIdle(sinceExpiredMs)} ago for idleness (window ${formatIdle(tombstone.idleExpiryMs)}). Run open again to start a new session.`,
     {
-      reason: SESSION_IDLE_EXPIRED_REASON,
+      reason: SESSION_IDLE_REASONS.expired.reason,
       session: sessionName,
       idleExpiryMs: tombstone.idleExpiryMs,
       ...(tombstone.deviceKey ? { deviceKey: tombstone.deviceKey } : {}),

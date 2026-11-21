@@ -1,4 +1,5 @@
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import {
   expiredRefFrame,
   issuedRefFrame,
@@ -37,11 +38,19 @@ const outdatedObservations = new WeakSet<SnapshotState>();
  * Typed admission-failure reasons, evaluated in this order so the caller can
  * distinguish "capture a complete snapshot" from "use the emitted pinned ref".
  */
+export const REF_FRAME_REASONS = {
+  // A device action since the snapshot expired the ref frame, so none of its refs resolve.
+  frameExpired: { reason: 'ref_frame_expired' },
+  // The pinned ref was minted from a snapshot generation that a newer one superseded.
+  generationMismatch: { reason: 'ref_generation_mismatch' },
+  // A plain ref needs a complete frame; retry with the pinned ref in `details.suggestedRef`.
+  plainRefRequiresCompleteFrame: { reason: 'plain_ref_requires_complete_frame' },
+  // The current ref frame did not issue this ref, so it no longer names a node.
+  notIssued: { reason: 'ref_not_issued' },
+} as const satisfies ReasonTable<'ref frames'>;
+
 export type RefFrameRejectReason =
-  | 'ref_frame_expired'
-  | 'ref_generation_mismatch'
-  | 'plain_ref_requires_complete_frame'
-  | 'ref_not_issued';
+  (typeof REF_FRAME_REASONS)[keyof typeof REF_FRAME_REASONS]['reason'];
 
 export type RefFrameAdmission =
   | { admitted: true }
@@ -225,20 +234,20 @@ export function admitRefMutation(params: {
   const { session, refBody, mintedGeneration } = params;
 
   if (refFrameState(session) === 'expired') {
-    return { admitted: false, reason: 'ref_frame_expired' };
+    return { admitted: false, reason: REF_FRAME_REASONS.frameExpired.reason };
   }
 
   if (mintedGeneration !== undefined && mintedGeneration !== refFrameEpoch(session)) {
-    return { admitted: false, reason: 'ref_generation_mismatch' };
+    return { admitted: false, reason: REF_FRAME_REASONS.generationMismatch.reason };
   }
 
   const scope = refFrameScope(session);
   if (scope !== 'all') {
     if (mintedGeneration === undefined) {
-      return { admitted: false, reason: 'plain_ref_requires_complete_frame' };
+      return { admitted: false, reason: REF_FRAME_REASONS.plainRefRequiresCompleteFrame.reason };
     }
     if (!scope.has(refBody)) {
-      return { admitted: false, reason: 'ref_not_issued' };
+      return { admitted: false, reason: REF_FRAME_REASONS.notIssued.reason };
     }
   }
 
@@ -253,6 +262,8 @@ export function admitRefMutation(params: {
  */
 export function admitRefRead(session: SessionState, refBody: string): RefFrameAdmission {
   const scope = refFrameScope(session);
-  if (scope !== 'all' && !scope.has(refBody)) return { admitted: false, reason: 'ref_not_issued' };
+  if (scope !== 'all' && !scope.has(refBody)) {
+    return { admitted: false, reason: REF_FRAME_REASONS.notIssued.reason };
+  }
   return { admitted: true };
 }

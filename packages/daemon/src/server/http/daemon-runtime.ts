@@ -6,7 +6,12 @@ import {
   createRecoveryPlatformScope,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
-import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
+import {
+  asAppError,
+  AppError,
+  normalizeError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
@@ -23,6 +28,7 @@ import {
 } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAllowsCapability } from '../../core/daemon-policy.ts';
 import { installInteractorResolution } from '../../core/interactor-resolution.ts';
+import { RUNTIME_GATEWAY_REASONS } from '../../core/runtime-admission.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   createExpiredProviderLeaseReleaser,
@@ -93,6 +99,12 @@ import type { DaemonStartupProgress } from '@agent-device/daemon-contracts/daemo
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
+
+const DAEMON_REGISTRATION_REASONS = {
+  // Another daemon holds this state directory, or its registration could not be proven free, so
+  // this daemon did not start; `details.status` says which.
+  refused: { reason: 'daemon_registration_refused' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
@@ -258,7 +270,7 @@ async function startDaemonRuntimeOnHost(
   const applicationLifecycle = deviceRuntimeGateway.applicationLifecycle;
   if (!applicationLifecycle) {
     throw new AppError('COMMAND_FAILED', 'Platform lifecycle gateway is not configured.', {
-      reason: 'runtime-gateway-missing',
+      reason: RUNTIME_GATEWAY_REASONS.missing.reason,
     });
   }
   installProviderDeviceAdmission(deps.providerDeviceAdmission);
@@ -540,7 +552,7 @@ async function startDaemonRuntimeOnHost(
   const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
   if (acquisition.status !== 'acquired') {
     throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
-      reason: 'daemon_registration_refused',
+      reason: DAEMON_REGISTRATION_REASONS.refused.reason,
       status: acquisition.status,
       exitCode: DAEMON_STARTUP_EXIT_CODES[acquisition.status],
     });

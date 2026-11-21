@@ -1,7 +1,13 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { SessionRef, SessionState } from './session-state.ts';
 import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
+
+const WORKSPACE_SESSION_REASONS = {
+  // A session in another workspace already uses the device; `details.session` names it.
+  scopeConflict: { reason: 'WORKSPACE_SESSION_SCOPE_CONFLICT' },
+} as const satisfies ReasonTable<'sessions'>;
 
 export type SessionRecoveryContext = 'device-in-use' | 'selector-conflict';
 
@@ -78,7 +84,7 @@ export function buildForeignWorkspaceSessionConflict(
     'DEVICE_IN_USE',
     `Device is already in use by workspace session "${inUse.address}".`,
     {
-      reason: 'WORKSPACE_SESSION_SCOPE_CONFLICT',
+      reason: WORKSPACE_SESSION_REASONS.scopeConflict.reason,
       session: inUse.address,
       deviceId: device.id,
       deviceName: device.name,

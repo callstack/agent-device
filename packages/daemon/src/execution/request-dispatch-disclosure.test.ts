@@ -36,7 +36,7 @@ vi.mock('../core/device/device-ready.ts', () => ({
 
 import {
   AppError,
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  BOUNDED_COMPOSITE_REASONS,
   PRE_DISPATCH_REFUSAL_REASONS,
 } from '@agent-device/kernel/errors';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
@@ -373,7 +373,7 @@ async function batchReadThenRefusedStep(): Promise<unknown> {
 async function batchMutationThenResourceRefusal(): Promise<unknown> {
   gestureRuntimeSpies.captureSnapshot.mockRejectedValueOnce(
     new AppError('UNSUPPORTED_OPERATION', 'resource shape unsupported', {
-      reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+      reason: BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason,
       dispatched: 'no',
     }),
   );
@@ -390,7 +390,7 @@ async function batchMutationThenResourceRefusal(): Promise<unknown> {
   assert.ok(failure instanceof AppError);
   assert.equal(routeOperationSpies.tapPoint.mock.calls.length, 1);
   assert.equal(failure.details?.dispatchedSteps, 1);
-  assert.equal(failure.details?.reason, BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON);
+  assert.equal(failure.details?.reason, BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason);
   throw failure;
 }
 
@@ -480,7 +480,7 @@ test('a typed refusal discloses no dispatch for its step after an earlier dispat
         code: 'UNSUPPORTED_OPERATION' as const,
         message: 'resource shape unsupported',
         details: {
-          reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+          reason: BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason,
           dispatched: 'no' as const,
         },
       },

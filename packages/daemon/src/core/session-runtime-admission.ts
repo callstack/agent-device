@@ -12,7 +12,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest } from './daemon-request.ts';
-import { unsupportedOperationResponse } from './runtime-admission.ts';
+import { RUNTIME_GATEWAY_REASONS, unsupportedOperationResponse } from './runtime-admission.ts';
 
 export type RuntimeCommandHandlerParams = Readonly<{
   host: HostEnvironment;
@@ -41,7 +41,7 @@ export function requireRuntimeFacts(
 ): InspectDeviceRuntimeFacts {
   if (inspectFacts) return inspectFacts;
   throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
-    reason: 'runtime-gateway-missing',
+    reason: RUNTIME_GATEWAY_REASONS.missing.reason,
   });
 }
 
@@ -156,6 +156,6 @@ export function requireRuntimeBinding(
 ): BindDeviceRuntime {
   if (bindDevice) return bindDevice;
   throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
-    reason: 'runtime-gateway-missing',
+    reason: RUNTIME_GATEWAY_REASONS.missing.reason,
   });
 }

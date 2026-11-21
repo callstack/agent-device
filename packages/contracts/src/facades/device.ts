@@ -3,6 +3,7 @@ export { assertResolvedAppsFilter, resolveAppsFilter } from '../app-inventory.ts
 export type { AppsFilter } from '../app-inventory.ts';
 export type { AppStateCommandResult } from '../app-state.ts';
 export {
+  DEVICE_CLAIM_CONFLICT_REASONS,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,

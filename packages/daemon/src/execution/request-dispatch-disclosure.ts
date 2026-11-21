@@ -5,7 +5,7 @@ import {
   detailsAfterDispatchedSteps,
   discloseDispatch,
   type ErrorWireDetails,
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  BOUNDED_COMPOSITE_REASONS,
 } from '@agent-device/kernel/errors';
 import { resolveCommandDispatchDisclosure } from '@agent-device/command-registry/registry';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -51,7 +51,7 @@ function disclosedDetails(
 ): ErrorWireDetails | undefined {
   if (ledger.dispatchedSteps > 0) {
     const disclosed = detailsAfterDispatchedSteps(details, ledger.dispatchedSteps);
-    return details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON &&
+    return details?.reason === BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason &&
       details.dispatched === 'no'
       ? { ...disclosed, dispatched: 'no' }
       : disclosed;

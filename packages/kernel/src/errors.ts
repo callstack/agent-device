@@ -324,9 +324,16 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
   malformedRequest: { reason: 'malformed_request' },
 } as const satisfies ReasonTable<'request admission'>;
 
-/** The refused composite step did not dispatch; earlier steps may already have dispatched. */
-export const BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON =
-  'bounded_composite_resource_unsupported' as const;
+/** Why a bounded composite (`batch`, a replay, or a `test` script) refuses one of its steps. */
+export const BOUNDED_COMPOSITE_REASONS = {
+  /** The refused composite step did not dispatch; earlier steps may already have dispatched. */
+  // The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must
+  // run as its own command; `details.standaloneCommandName` names that command.
+  resourceUnsupported: {
+    reason: 'bounded_composite_resource_unsupported',
+    commands: ['replay', 'test'],
+  },
+} as const satisfies ReasonTable<'batch'>;
 
 export type PreDispatchRefusalReason =
   (typeof PRE_DISPATCH_REFUSAL_REASONS)[keyof typeof PRE_DISPATCH_REFUSAL_REASONS]['reason'];

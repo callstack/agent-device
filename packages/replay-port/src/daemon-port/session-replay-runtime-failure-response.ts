@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
-import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
+import { BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -170,7 +170,7 @@ function pickSafeCauseDetails(
       scrubReplayVarValues(step, scrubVars),
     );
   }
-  if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
+  if (details.reason === BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason) {
     if (details.dispatched === 'no') safe.dispatched = 'no';
     const shape = readStringDetail(details, 'shape');
     if (shape !== undefined) safe.shape = shape;

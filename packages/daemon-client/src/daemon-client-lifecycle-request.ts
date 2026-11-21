@@ -1,6 +1,5 @@
 import {
   DAEMON_LIFECYCLE_REASONS,
-  DAEMON_SHUTTING_DOWN_REASON,
   buildDaemonLifecycleRequest,
   readDaemonLifecycleCensus,
   type DaemonPaths,
@@ -95,7 +94,7 @@ function judgeRefusedAnswer(
   }
   if (
     refusal.reason === DAEMON_LIFECYCLE_REASONS.instanceMismatch.reason ||
-    refusal.reason === DAEMON_SHUTTING_DOWN_REASON
+    refusal.reason === DAEMON_LIFECYCLE_REASONS.shuttingDown.reason
   ) {
     return { outcome: 'gone' };
   }

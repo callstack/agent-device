@@ -5,7 +5,7 @@ import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/gestures/gesture-normalization';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { recordedSelectorExpression } from '@agent-device/selectors';
 import {
   inferFillText,
@@ -39,6 +39,12 @@ import {
   toActivePublicationFailure,
   validateActivePublicationActions,
 } from './session-script-active-publication.ts';
+
+const SCRIPT_WRITE_REASONS = {
+  // Writing the session script failed; check the target path and its permissions, then record
+  // again.
+  writeFailed: { reason: 'script_write_failed' },
+} as const satisfies ReasonTable<'script recording'>;
 
 /**
  * `{ written: true; path }` — committed. `{ written: false }` (no `error`) — intentionally not
@@ -252,7 +258,7 @@ function toOrdinaryWriteFailure(error: unknown, scriptPath: string | undefined):
     'COMMAND_FAILED',
     `Failed to write the session script${scriptPath ? ` to ${scriptPath}` : ''}: ${detail}`,
     {
-      reason: 'script_write_failed',
+      reason: SCRIPT_WRITE_REASONS.writeFailed.reason,
       ...(scriptPath ? { path: scriptPath } : {}),
       hint: 'Check the target path and its permissions, then re-record with open --save-script.',
     },

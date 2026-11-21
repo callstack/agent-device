@@ -34,7 +34,10 @@ test('daemon startup configures the Apple runner owner after acquiring the lock,
   const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
   const runnerOwnerConfigured = source.indexOf('await deps.ownerLifecycle.configureForDaemonLock(');
-  const lockFailureExit = source.indexOf("reason: 'daemon_registration_refused'", acquiredLock);
+  const lockFailureExit = source.indexOf(
+    'reason: DAEMON_REGISTRATION_REASONS.refused.reason',
+    acquiredLock,
+  );
 
   expect(acquiredLock).toBeGreaterThanOrEqual(0);
   expect(lockFailureExit).toBeGreaterThan(acquiredLock);

@@ -11,17 +11,42 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ## Commands
 
+### `alert`
+
+| Reason | Meaning |
+| --- | --- |
+| `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; `details.maxWaitWindowMs` names the limit. |
+
 ### `audit`
 
 | Reason | Meaning |
 | --- | --- |
 | `native-audit-invalid-result` | The runner answered the native audit with a missing or malformed result. |
 
+### `batch`
+
+| Reason | Meaning |
+| --- | --- |
+| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must run as its own command; `details.standaloneCommandName` names that command. |
+
 ### `close`
 
 | Reason | Meaning |
 | --- | --- |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
+
+### `fill`
+
+| Reason | Meaning |
+| --- | --- |
+| `fill_record_as_requires_armed_recording` | `fill --record-as` needs an armed script recording; open a session with `--save-script` first. |
+| `fill_text_stdin_unparameterized_recording` | `fill --text-stdin` needs `--record-as` or `--no-record` while a recording is armed, so the stdin text stays out of the script. |
+
+### `find`
+
+| Reason | Meaning |
+| --- | --- |
+| `find_snapshot_unreadable` | The capture came back sparse, so no selector could be resolved against it. |
 
 ### `fold`
 
@@ -51,6 +76,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `claim-lost-during-open` | The device lost the claim this open was made with; close the session and open the device again. |
+| `runtime-hints-operation-missing` | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them. |
 | `ios-simulator-openurl-timeout` | CoreSimulator did not answer `simctl openurl` in time, so the URL open failed. |
 | `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
@@ -66,6 +93,19 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `orientation-unverified` | The orientation was sent, but the panel table does not report it afterwards. |
 | `orientation-panel-table-unavailable` | The foldable's guest panel table could not be read. |
 
+### `press`
+
+| Reason | Meaning |
+| --- | --- |
+| `sequence-recording-unsupported` | A multi-ref press sequence cannot be recorded; record one press per key, or pass `--no-record`. |
+| `sequence-replay-guard-unsupported` | A multi-ref press sequence cannot carry a replay target guard; re-record one press per key. |
+
+### `react-native`
+
+| Reason | Meaning |
+| --- | --- |
+| `overlay_snapshot_unreadable` | `react-native dismiss-overlay` got a sparse capture, so it cannot tell whether an overlay is showing. |
+
 ### `record`
 
 | Reason | Meaning |
@@ -78,6 +118,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
+| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must run as its own command; `details.standaloneCommandName` names that command. |
 
 ### `screenshot`
 
@@ -94,6 +135,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `CROP_FRAME_MISMATCH` | `--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured frame. |
 | `PENDING_PIXEL_IDENTITY_EVIDENCE` | The `details.rejectionReason` of a target whose crop is not yet verified against an independent capture. |
 | `SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME` | `--fullscreen` names a macOS helper surface, which always captures the main display. |
+| `screenshot_publication_failed` | Writing the screenshot to its output path failed; `details.filesystemCode` names the error. |
+| `screenshot_destination_dangling_symlink` | The output path is a symbolic link to a file that does not exist. |
+| `screenshot_destination_not_file` | The output path exists and is not a regular file. |
 | `simulator-screenshot-timeout` | `simctl io screenshot` timed out (ETIMEDOUT) on the simulator. |
 
 ### `scroll`
@@ -113,11 +157,23 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `scroll_edge_no_progress` | The `scroll top` or `scroll bottom` gestures did not move the content. |
 | `scroll_edge_capture_unreadable` | `scroll top` or `scroll bottom` could not read the screen between passes. |
 
+### `session`
+
+| Reason | Meaning |
+| --- | --- |
+| `remote_script_publication_unsupported` | A remote recording is delivered to its `--save-script` path, so `session save-script` cannot publish it. |
+
 ### `settings`
 
 | Reason | Meaning |
 | --- | --- |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+
+### `shutdown`
+
+| Reason | Meaning |
+| --- | --- |
+| `TARGET_SHUTDOWN_LEASE_MISMATCH` | The selected target does not own the lease this request names, so it will not release it. |
 
 ### `snapshot`
 
@@ -125,6 +181,12 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `observation-unavailable` | The runner answered an observe-only snapshot request without an observe-only snapshot. |
 | `empty-snapshot` | XCTest returned a snapshot with no nodes on an iOS simulator. |
+
+### `test`
+
+| Reason | Meaning |
+| --- | --- |
+| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must run as its own command; `details.standaloneCommandName` names that command. |
 
 ### `wait`
 
@@ -155,6 +217,12 @@ These reasons can come from more than one command.
 | --- | --- |
 | `apple_runner_host_unbound` | The Apple runner was asked for its host before the daemon bound one. |
 
+### Artifact downloads
+
+| Reason | Meaning |
+| --- | --- |
+| `artifact_size_mismatch` | The artifact stream ended at a different size than the daemon recorded; `details` gives both sizes. |
+
 ### Daemon lifecycle
 
 | Reason | Meaning |
@@ -166,6 +234,37 @@ These reasons can come from more than one command.
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
+| `daemon_shutting_down` | The daemon has begun to leave, so it refuses every new request; retry against a new daemon. |
+| `daemon_registration_refused` | Another daemon holds this state directory, or its registration could not be proven free, so this daemon did not start; `details.status` says which. |
+
+### Daemon policy
+
+| Reason | Meaning |
+| --- | --- |
+| `DAEMON_POLICY_DENIED` | The daemon operator's policy denies this command, device, capability, or lease; `details.rule` names which. |
+
+### Daemon resources
+
+| Reason | Meaning |
+| --- | --- |
+| `RESOURCE_EXPIRED` | The artifact, upload, or path id expired or never existed; the daemon cannot tell which. |
+
+### Daemon runtime
+
+| Reason | Meaning |
+| --- | --- |
+| `interactor-resolution-missing` | This process never composed interactor resolution, so it cannot reach a device. |
+| `runtime-gateway-missing` | The daemon was composed without the runtime gateway, admission ledger, or diagnostics service this command needs. |
+| `request_web_session_missing` | A request reached device resolution without the web session its request scope derives; this is a daemon bug. |
+| `generic-route-runtime-missing` | The command reached the generic route, which has no runtime execution for it. |
+
+### Device claims
+
+| Reason | Meaning |
+| --- | --- |
+| `DEVICE_CLAIM_LIVE_OWNER` | A live session in another workspace or daemon owns the device. |
+| `DEVICE_CLAIM_RECOVERY_PENDING` | The recorded owner is gone and its resources still need settling before the claim is released. |
+| `DEVICE_CLAIM_OWNER_UNCERTAIN` | A claim exists, but its owner cannot be verified as live or gone. |
 
 ### Foldable panels
 
@@ -175,6 +274,12 @@ These reasons can come from more than one command.
 | `fold-helper-panels-unreadable` | The fold helper returned no panel table for the iOS simulator. |
 | `panel-table-unreadable` | The foldable's lit panel could not be named from its panel table, so nothing was sent. |
 | `panel-probe-budget-exhausted` | Reading the panel table spent the request's time budget, so nothing was sent. |
+
+### Human control
+
+| Reason | Meaning |
+| --- | --- |
+| `human_control_active` | A human holds the device, so agent interactions wait until the hold is released. |
 
 ### Interaction
 
@@ -197,8 +302,15 @@ These reasons can come from more than one command.
 | `LEASE_NOT_FOUND` | The lease that the request names is not active. |
 | `LEASE_SCOPE_MISMATCH` | The lease does not match the tenant, run, backend, provider, device, or client of the request. |
 | `LEASE_SCOPE_REQUIRED` | The lease was allocated with an owner scope that the request does not repeat. |
+| `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |
+| `MACOS_APP_LEASE_DENIED` | A `macos-app` lease does not cover this request; `details.rule` names the limit. |
+| `provider-not-registered` | The lease names a provider this daemon has not registered; `details.failedPlugins` lists plugins that failed to load. |
+| `provider-credentials-changed` | The running daemon holds different provider credentials than this shell; stop the daemon and rerun. |
+| `PROVIDER_SESSION_NOT_OWNED` | The provider session belongs to another tenant. |
+| `MACOS_APP_LEASE_HOST_OWNED` | Only the host administrator releases a `macos-app` lease. |
+| `MACOS_APP_LEASE_HOST_ALLOCATED` | Only the host administrator allocates a `macos-app` lease. |
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
 
@@ -219,6 +331,21 @@ These reasons can come from more than one command.
 | `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
 | `missing_button` | No button on the alert fits the requested accept or dismiss. |
 
+### Ref frames
+
+| Reason | Meaning |
+| --- | --- |
+| `ref_frame_expired` | A device action since the snapshot expired the ref frame, so none of its refs resolve. |
+| `ref_generation_mismatch` | The pinned ref was minted from a snapshot generation that a newer one superseded. |
+| `plain_ref_requires_complete_frame` | A plain ref needs a complete frame; retry with the pinned ref in `details.suggestedRef`. |
+| `ref_not_issued` | The current ref frame did not issue this ref, so it no longer names a node. |
+
+### Remote daemon
+
+| Reason | Meaning |
+| --- | --- |
+| `REMOTE_HOST_INPUT_DENIED` | A remote request supplied a host path or other host input (`details.field`), which a remote daemon refuses. |
+
 ### Request admission
 
 | Reason | Meaning |
@@ -229,10 +356,33 @@ These reasons can come from more than one command.
 | `app_not_installed` | The named app resolves to no installed app on the target. |
 | `malformed_request` | The transport refused the request envelope before any handler read it. |
 
+### Request execution
+
+| Reason | Meaning |
+| --- | --- |
+| `DEVICE_EXECUTION_LOCK_BUSY` | Another request is using the device while this request holds another device of the same host; run the step as its own request. |
+
+### Script recording
+
+| Reason | Meaning |
+| --- | --- |
+| `script_write_failed` | Writing the session script failed; check the target path and its permissions, then record again. |
+
+### Sessions
+
+| Reason | Meaning |
+| --- | --- |
+| `WORKSPACE_SESSION_SCOPE_CONFLICT` | A session in another workspace already uses the device; `details.session` names it. |
+| `session_address_occupied` | Another live session already holds this session address. |
+| `session_lifetime_ended` | The session the command ran in ended first; open a new session before retrying. |
+| `SESSION_IDLE_EXPIRED` | The session expired after its idle window (`details.idleExpiryMs`); run `open` to start a new one. |
+| `session_cleanup_incomplete` | The session was retired, but some of its resources did not release; `details.failedSteps` names them. |
+
 ### Snapshot capture
 
 | Reason | Meaning |
 | --- | --- |
+| `ios_app_session_required` | The iOS command needs an active app session on the target device; run `open` first. |
 | `runner-snapshot-bridge-target-unavailable` | The runner could not name the app's foreground process; `details.bridgeFailureCode` says why. |
 | `simulator-target-discovery-pending` | The wait ran out while the discovery of the app's simulator process was still running. |
 | `simulator-target-unavailable` | The app has no running process on the simulator. |
@@ -240,3 +390,13 @@ These reasons can come from more than one command.
 | `simulator-target-identity-unavailable` | The app's simulator process was found, but its identity could not be read. |
 | `simulator-runtime-probe-failed` | The simulator could not be asked for its runtime. |
 | `simulator-runtime-unavailable` | The simulator reported no runtime. |
+
+### Uploads
+
+| Reason | Meaning |
+| --- | --- |
+| `UPLOAD_STATE_CORRUPT` | The staged upload holds more bytes than it declared, so it cannot resume; start a new upload. |
+| `UPLOAD_ROLLBACK_FAILED` | A failed chunk could not be rolled back, so the upload ticket was invalidated; start a new upload. |
+| `UPLOAD_FINALIZE_CLEANUP_FAILED` | Finalizing the upload failed, and removing its staged files failed too; `details.originalError` holds the first failure. |
+| `transfer_ingress_deadline_exceeded` | The upload body did not finish within the request's aggregate deadline (`details.timeoutMs`). |
+| `upload_canceled` | The client disconnected or canceled before the upload finished. |

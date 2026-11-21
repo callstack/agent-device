@@ -1,3 +1,4 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { SnapshotQualityState, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
 
@@ -92,6 +93,15 @@ function readCustomActionCoverage(
     blocked: raw.blocked === true,
   };
 }
+
+/**
+ * Why `find` refuses a capture whose verdict is sparse. The daemon and command-runtime `find`
+ * paths both raise it; the runner's own wording moves to `details.verdictReason`.
+ */
+export const FIND_READ_REASONS = {
+  // The capture came back sparse, so no selector could be resolved against it.
+  snapshotUnreadable: { reason: 'find_snapshot_unreadable' },
+} as const satisfies ReasonTable<'find'>;
 
 export function isSparseSnapshotQualityVerdict(
   verdict: SnapshotQualityVerdict | undefined,
