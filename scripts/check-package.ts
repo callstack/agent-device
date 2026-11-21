@@ -72,7 +72,6 @@ const EXCLUDED_IMPLEMENTATIONS = [
     owner: 'linux platform',
     paths: [/(?:^|\/)platform-linux\//],
     markers: [
-      'linux-provider-host-unbound',
       'AT-SPI2 bridge is only available on Linux',
       'is required for input synthesis on Wayland',
     ],
