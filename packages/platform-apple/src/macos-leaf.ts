@@ -16,7 +16,10 @@ import { readVersion } from '@agent-device/host-kit/version';
  */
 let boundSelection: MacOsPlatformLeafSelection | undefined;
 
-/** Binds the composition's macOS leaf selection. The last composition of a process wins. */
+/**
+ * Binds the macOS leaf selection of the process. The composition root calls this for the selection
+ * that is the process's whole platform selection, never for one narrowed to a single family.
+ */
 export function bindMacOsLeaf(selection: MacOsPlatformLeafSelection): void {
   boundSelection = selection;
 }

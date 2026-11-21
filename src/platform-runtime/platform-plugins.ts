@@ -154,10 +154,7 @@ export function composePlatformPlugins(
     },
   };
 
-  // The bundled Apple owner reaches the leaf through its own port, because its entry points take a
-  // device rather than a composition. Binding here keeps every composition and its owner in step.
   const macos = composeMacOsLeaf(platformLeaves, inventory, assertPluginSelectionCurrent);
-  bindMacOsLeaf(macos);
 
   return {
     interactors,
@@ -171,6 +168,16 @@ export function composePlatformPlugins(
     reportAbsent,
     assertSelectionCurrent,
   };
+}
+
+/**
+ * Binds a process's platform selection to the bundled owners that delegate to a leaf. The Apple
+ * owner reaches the macOS leaf through its own port, because its entry points take a device rather
+ * than a composition. Only the composition that is the process's whole selection calls this: a
+ * composition narrowed to one family names no leaf, and must not unbind the one a process has.
+ */
+export function bindPlatformLeaves(platforms: PlatformModuleSelection): void {
+  bindMacOsLeaf(platforms.macos);
 }
 
 /**

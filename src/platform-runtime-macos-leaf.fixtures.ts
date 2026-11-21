@@ -8,7 +8,7 @@ import type {
 import type { PlatformModuleSelection } from '@agent-device/contracts/platform-plugin';
 import type { PlatformHost } from '@agent-device/plugins/contract';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
-import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
+import { bindPlatformLeaves, composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import { createPlatformPluginHost } from './platform-runtime/plugin-host.ts';
 
 const pluginRequire = createRequire(
@@ -38,10 +38,14 @@ export function macOsLeafSelectionFixture(
 
 /**
  * The platform selection of a process with the macOS package installed and no other platform
- * plugin. Composing it binds the leaf to the bundled Apple owner, as the daemon's composition does.
+ * plugin. It binds the leaf to the bundled Apple owner, as the daemon's composition does.
  */
 export function macOsPlatformCompositionFixture(
   ...args: Parameters<typeof macOsLeafSelectionFixture>
 ): PlatformModuleSelection {
-  return composePlatformPlugins([], [], undefined, [macOsLeafSelectionFixture(...args).get()]);
+  const platforms = composePlatformPlugins([], [], undefined, [
+    macOsLeafSelectionFixture(...args).get(),
+  ]);
+  bindPlatformLeaves(platforms);
+  return platforms;
 }

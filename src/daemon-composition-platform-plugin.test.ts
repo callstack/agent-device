@@ -358,7 +358,7 @@ test('an installed macOS plugin serves the leaf the bundled apple owner delegate
   const { home, env } = pluginHome();
   const stateDir = path.join(home, 'state');
   selectMacOsLeaf(home);
-  await withDaemonComposition(env, stateDir, async (deps) => {
+  await withDaemonComposition(env, stateDir, async (deps, host) => {
     expect(deps.pluginInventory).toContainEqual(
       expect.objectContaining({
         package: macOsPackage,
@@ -379,6 +379,12 @@ test('an installed macOS plugin serves the leaf the bundled apple owner delegate
     // The owner's macOS branch reaches the installed leaf, with the host the leaf was set up with
     // and the Apple tools of the calling request.
     const mac = await deps.interactorResolution.resolve(devices[0]!, {});
+    await expect(mac.readClipboard!()).resolves.toBe(`${stateDir}|function|false`);
+    // A selection narrowed to one family names no leaf, so it must not unbind this one: the web
+    // backend composes only the web family, and the owner still reaches the macOS leaf afterwards.
+    await expect(createManagedWebBackend(host).doctor({ stateDir })).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'plugin-not-installed', family: 'web' }),
+    });
     await expect(mac.readClipboard!()).resolves.toBe(`${stateDir}|function|false`);
   });
 });

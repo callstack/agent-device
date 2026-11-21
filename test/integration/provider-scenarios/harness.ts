@@ -2,7 +2,10 @@ import { webSelectionFixture } from '../../../src/platform-runtime-web-provider.
 import { vegaSelectionFixture } from '../../../src/platform-runtime-vega-provider.fixtures.ts';
 import { linuxSelectionFixture } from '../../../src/platform-runtime-linux-provider.fixtures.ts';
 import { macOsLeafSelectionFixture } from '../../../src/platform-runtime-macos-leaf.fixtures.ts';
-import { composePlatformPlugins } from '../../../src/platform-runtime/platform-plugins.ts';
+import {
+  bindPlatformLeaves,
+  composePlatformPlugins,
+} from '../../../src/platform-runtime/platform-plugins.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -193,10 +196,11 @@ export async function createProviderScenarioHarness(
       ],
       [],
       undefined,
-      // macOS desktop automation is the managed macOS package's. Composing its leaf binds it to
-      // the bundled Apple owner, so a macOS scenario runs the plugin's own implementation.
+      // macOS desktop automation is the managed macOS package's, so a macOS scenario runs the
+      // plugin's own implementation.
       [macOsLeafSelectionFixture(input.host, input.baseDir).get()],
     );
+    bindPlatformLeaves(platforms);
     const { web, vega, linux } = platforms;
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
       platforms,
