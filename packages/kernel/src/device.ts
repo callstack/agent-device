@@ -655,7 +655,9 @@ function assertSelectorFlagMatchesPlatform(selector: DeviceSelector): void {
 function resolveAppleDeviceByUdid(candidates: DeviceInfo[], udid: string): DeviceInfo {
   const match = candidates.find((device) => device.id === udid && isApplePlatform(device.platform));
   if (!match) {
+    const hint = deviceNotFoundHint(candidates, udid, 'udid');
     throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`, {
+      ...(hint === undefined ? {} : { hint }),
       dispatched: 'no',
     });
   }
@@ -667,7 +669,9 @@ function resolveDeviceBySerial(candidates: DeviceInfo[], selector: DeviceSelecto
     (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
   );
   if (!match) {
+    const hint = deviceNotFoundHint(candidates, selector.serial ?? '', 'serial');
     throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector), {
+      ...(hint === undefined ? {} : { hint }),
       dispatched: 'no',
     });
   }
@@ -681,7 +685,7 @@ function resolveDeviceByName(
   if (!deviceName) return undefined;
   const match = candidates.find((device) => matchesDeviceNameSelector(device, deviceName));
   if (!match) {
-    const hint = deviceIdentityMistakenForNameHint(candidates, deviceName);
+    const hint = deviceNotFoundHint(candidates, deviceName);
     throw new AppError(
       'DEVICE_NOT_FOUND',
       `No device named ${deviceName}`,
@@ -691,30 +695,24 @@ function resolveDeviceByName(
   return match;
 }
 
-/**
- * `--device` takes a device NAME, and `--udid`/`--serial` take a device IDENTITY. Passing an
- * identity to `--device` reached name resolution and answered "No device named
- * 204BFFD9-9644-4830-B2C1-1B946597A07C" (#2064) — literally true, and unactionable: it names
- * neither the flag that does take that value nor the fact that one exists. It is the same class of
- * mistake `assertSelectorFlagMatchesPlatform` already answers for a mismatched identity flag, so
- * answer it the same way: name the flag the value belongs to. Only an observed identity earns the
- * hint — the candidates' own ids, with the flag derived from that device's platform; guessing from
- * the value's shape would have to reimplement every platform's identity syntax here. A platform
- * with no identity flag at all (web, linux) earns no hint either: `--udid` resolves only Apple
- * devices, so naming it would send the user to a flag that provably cannot work.
- */
-function deviceIdentityMistakenForNameHint(
-  candidates: DeviceInfo[],
-  deviceName: string,
-): string | undefined {
-  const identityMatch = candidates.find((device) => device.id === deviceName);
-  if (!identityMatch) return undefined;
-  const flag = deviceIdentityFlag(identityMatch.platform);
-  if (!flag) return undefined;
-  return (
-    `${deviceName} is the id of ${JSON.stringify(identityMatch.name)}, not its name. ` +
-    `Did you mean --${flag} ${deviceName}?`
-  );
+/** The one not-found answer for all three selector sites: the flag an observed device carries the value under, or for `--device` the one candidate name a quote fold away (#2064). */
+function deviceNotFoundHint(candidates: DeviceInfo[], value: string, flag?: DeviceIdentityFlag) {
+  const identity = candidates.find((device) => device.id === value);
+  const identityFlag = identity && deviceIdentityFlag(identity.platform);
+  if (identity && identityFlag && identityFlag !== flag) {
+    return flag === undefined
+      ? `${value} is the id of ${JSON.stringify(identity.name)}, not its name. Did you mean --${identityFlag} ${value}?`
+      : `${value} identifies ${JSON.stringify(identity.name)} here. Did you mean --${identityFlag} ${value}?`;
+  }
+  const requested = quoteFoldDeviceName(value);
+  const close = candidates.filter((device) => quoteFoldDeviceName(device.name) === requested);
+  const only = flag === undefined && close.length === 1 ? close[0] : undefined;
+  if (!only) return undefined;
+  return `A device is named ${JSON.stringify(only.name)}, which differs only in punctuation. Did you mean --device ${JSON.stringify(only.name)}?`;
+}
+
+function quoteFoldDeviceName(value: string): string {
+  return normalizeDeviceName(value.replaceAll(/[‘’‚‛]/g, "'").replaceAll(/[“”„‟]/g, '"'));
 }
 
 export type DeviceIdentityFlag = 'udid' | 'serial';
