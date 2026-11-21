@@ -15,13 +15,3 @@ export function parseJsonOutputs(stdout: string): unknown[] {
   }
   return outputs;
 }
-
-/** The objects that reported success. */
-export function successfulOutputs(outputs: unknown[]): unknown[] {
-  return outputs.filter(
-    (output) =>
-      typeof output === 'object' &&
-      output !== null &&
-      (output as { success?: unknown }).success === true,
-  );
-}
