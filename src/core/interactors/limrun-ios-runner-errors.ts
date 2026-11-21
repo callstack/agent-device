@@ -7,7 +7,7 @@ import {
 
 // Why a Limrun-hosted iOS runner could not be prepared, launched, or used. Every row's recovery is
 // what a caller can still do from outside the remote instance, spelled out in `DEFAULT_HINTS`.
-export const LIMRUN_RUNNER_REASONS = {
+const LIMRUN_RUNNER_REASONS = {
   // Another XCTest run holds the simulator's one run slot.
   xctestSlotOccupied: { reason: 'limrun_xctest_slot_occupied' },
   // The remote XCTest run could not be started, or its run stream never arrived.
