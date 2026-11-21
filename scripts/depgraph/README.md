@@ -38,11 +38,6 @@ Two fields keep an empty or short list from reading as "nothing else is affected
 Use these lists as lower bounds when you plan a change. They do not identify removable imports,
 prove test coverage, or name the missing commands. `gates` comes from the value dependents only.
 
-Each query reads and parses the whole production tree to rebuild the graph, so it costs seconds even
-for one file. Asking about several files one CLI call at a time pays that scan per file. When you
-need a whole area, generate the graph once with `pnpm depgraph` and read `nodes[].in` from the JSON
-instead.
-
 ## When to reach for this
 
 It pays for itself on three questions, and misleads on a fourth.
