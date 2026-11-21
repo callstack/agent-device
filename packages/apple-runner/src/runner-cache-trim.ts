@@ -7,9 +7,8 @@ import { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 
 /**
  * How long a runner tree outlives its last resolution without a runner lease naming it. A session
- * writes its lease only once its runner answers, so this window covers the launch alone: a tree a
- * running runner still uses is kept by its lease. A launch with an explicit startup timeout longer
- * than this can outlive the window.
+ * writes its lease right after it spawns `xcodebuild`, so this window only has to cover resolution
+ * to spawn; from then on the lease keeps the tree its runner uses.
  */
 const RUNNER_TREE_LAUNCH_GRACE_MS = 4 * RUNNER_STARTUP_TIMEOUT_MS;
 
