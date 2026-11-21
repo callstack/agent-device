@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import {
   analyzeReactNativeOverlay,
   formatReactNativeOverlayWarning,
@@ -150,5 +151,199 @@ describe('React Native overlay evidence', () => {
       node({ index: 0, ref: 'e1', label: '!, Warning: x', rect: collapsedBannerRect }),
     ];
     expect(analyzeReactNativeOverlay(nodes).detected).toBe(true);
+  });
+});
+
+/**
+ * From two entries up, LogBox's badge renders the entry count instead of `!`
+ * (`LogBoxNotificationCountBadge`), so the banner's joined label starts with a number. App rows
+ * open the same way, which is why the count form arms only on LogBox's own banner placement.
+ */
+describe('React Native collapsed banner with the entry-count badge', () => {
+  const iosViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 402, height: 874 });
+  const androidViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 });
+  /** LogBox's frame on a 402x874 surface: `left: 10; right: 10; bottom: 20`, notification 48 high. */
+  const iosCountBannerRect = { x: 10, y: 806, width: 382, height: 48 };
+
+  test('a banner whose badge shows the entry count is an overlay and a dismiss target', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '20, Failed to fetch',
+          rect: iosCountBannerRect,
+          hittable: true,
+        }),
+      ],
+      iosViewport,
+    );
+
+    expect(state.detected).toBe(true);
+    expect(state.primaryAction).toMatchObject({
+      action: 'close-collapsed-banner',
+      ref: 'e1',
+      label: '20, Failed to fetch',
+    });
+  });
+
+  test('a device-pixel count banner floating off the bottom edge is an overlay', () => {
+    // Android rects are physical pixels, so LogBox's 10 dp inset reads as 10 x density there: 26.25
+    // px on this 420 dpi capture, and the 20 dp bottom gap as 52.5 px.
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '8, Network request failed',
+          rect: { x: 26.25, y: 2213.25, width: 1027.5, height: 126 },
+          hittable: true,
+        }),
+      ],
+      { width: 1080, height: 2400, rectUnitsPerDp: 2.625 },
+    );
+
+    expect(state.detected).toBe(true);
+  });
+
+  test('a device-pixel count banner is not an overlay when the capture published no density', () => {
+    // Without the density, 26 px cannot be read as LogBox's 10 dp, and guessing one would arm on any
+    // inset card whose gap happens to measure ten pixels.
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '8, Network request failed',
+          rect: { x: 26.25, y: 2213.25, width: 1027.5, height: 126 },
+          hittable: true,
+        }),
+      ],
+      androidViewport,
+    );
+
+    expect(state.detected).toBe(false);
+  });
+
+  test('an ordinary row whose label starts with a number is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '2, Morning',
+        rect: { x: 0, y: 320, width: 402, height: 52 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a tab bar row whose label starts with a number is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '3, Cart',
+        rect: { x: 202, y: 811, width: 200, height: 63 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a full-width footer row flush with the bottom edge is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '2, Continue shopping',
+        rect: { x: 0, y: 822, width: 402, height: 52 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a tablet-width count banner keeps the fixed LogBox side gap', () => {
+    // LogBox pins the banner 10 units from both edges whatever the surface: a 13" iPad Pro portrait
+    // window, an iPad in landscape, an unfolded foldable.
+    const iPadViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 1032, height: 1376 });
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '7, Unable to load image',
+          rect: { x: 10, y: 1308, width: 1012, height: 48 },
+          hittable: true,
+        }),
+      ],
+      iPadViewport,
+    );
+
+    expect(state.detected).toBe(true);
+  });
+
+  test('an inset card above the tab bar is not an overlay', () => {
+    // The card keeps 16pt side gaps, wider than LogBox's fixed 10, so only the banner's own gap
+    // width separates it from a count banner.
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '3, New messages',
+        rect: { x: 16, y: 719, width: 370, height: 72 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('an inset card on a landscape tablet is not an overlay', () => {
+    // The same 16pt card on a 1366x1024 surface: the gap stays 16 while the surface grows, and
+    // LogBox's own gap stays 10, so a card cannot reach the banner's placement by being wide.
+    const landscape = snapshotViewportSizeFrom({ x: 0, y: 0, width: 1366, height: 1024 });
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '4, 3 messages failed to send',
+        rect: { x: 16, y: 900, width: 1334, height: 72 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, landscape).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, landscape)).toBe(undefined);
+  });
+
+  test('a price label is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '20,000원',
+        rect: iosCountBannerRect,
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a count banner is not an overlay when the capture published no box', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '20, Failed to fetch',
+        rect: iosCountBannerRect,
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(false);
   });
 });

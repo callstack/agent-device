@@ -13,6 +13,7 @@ import {
   resolveSnapshotBounds,
 } from './snapshot-rect-projection.ts';
 import { analyzeReactNativeOverlay } from './react-native-overlay.ts';
+import { reactNativeOverlaySurfaceFromCapture } from '@agent-device/contracts/react-native-overlay';
 import {
   buildSnapshotNodeMap,
   findSnapshotAncestor,
@@ -134,7 +135,10 @@ function addReactNativeOverlayActionCandidates(
   screenshotWidth: number,
   screenshotHeight: number,
 ): void {
-  const overlay = analyzeReactNativeOverlay(snapshot.nodes);
+  const overlay = analyzeReactNativeOverlay(
+    snapshot.nodes,
+    reactNativeOverlaySurfaceFromCapture(snapshot),
+  );
   const action = overlay.primaryAction;
   if (!action?.ref || !action.rect || !hasPositiveRect(action.rect)) return;
 
