@@ -1,7 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { withMockedPlatform } from '@agent-device/test-kit';
 import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
 import { createLinuxToolProvider } from '../tool-provider.ts';
 import { resolveLinuxAtspiScriptPath } from '../atspi-script.ts';
@@ -52,7 +51,7 @@ const TREE = JSON.stringify({
 test('the AT-SPI capture runs the helper shipped with the plugin', async () => {
   const stub = stubPython(TREE);
 
-  await withMockedPlatform('linux', () => captureAtspi(stub));
+  await captureAtspi(stub);
 
   const command = stub.commands[0]!;
   assert.equal(command.executable, 'python3');
@@ -65,9 +64,7 @@ test('the AT-SPI capture runs the helper shipped with the plugin', async () => {
 test('the AT-SPI capture passes the surface and traversal limits', async () => {
   const stub = stubPython(TREE);
 
-  await withMockedPlatform('linux', () =>
-    captureAtspi(stub, 'frontmost-app', { maxNodes: 10, maxDepth: 3, maxApps: 2 }),
-  );
+  await captureAtspi(stub, 'frontmost-app', { maxNodes: 10, maxDepth: 3, maxApps: 2 });
 
   assert.deepEqual(stub.commands[0]!.args.slice(1), [
     '--surface',
@@ -84,7 +81,7 @@ test('the AT-SPI capture passes the surface and traversal limits', async () => {
 test('the AT-SPI capture falls back to the helper defaults and tolerates a non-zero probe answer', async () => {
   const stub = stubPython(TREE);
 
-  await withMockedPlatform('linux', () => captureAtspi(stub));
+  await captureAtspi(stub);
 
   const command = stub.commands[0]!;
   assert.deepEqual(command.args.slice(3), [
@@ -102,7 +99,7 @@ test('the AT-SPI capture falls back to the helper defaults and tolerates a non-z
 test('the AT-SPI capture maps helper roles through the family role map', async () => {
   const stub = stubPython(TREE);
 
-  const result = await withMockedPlatform('linux', () => captureAtspi(stub));
+  const result = await captureAtspi(stub);
 
   assert.deepEqual(result.nodes, [
     {
@@ -133,7 +130,7 @@ test('the AT-SPI capture reports the missing PyGObject bindings as a missing too
   });
 
   await assert.rejects(
-    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    () => captureAtspi(stub),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'TOOL_MISSING');
@@ -147,7 +144,7 @@ test('the AT-SPI capture reports a helper that failed for another reason', async
   const stub = stubPython('', { exitCode: 2, stderr: 'Display :0 not found' });
 
   await assert.rejects(
-    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    () => captureAtspi(stub),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -161,7 +158,7 @@ test('the AT-SPI capture reports output it cannot parse', async () => {
   const stub = stubPython('not json');
 
   await assert.rejects(
-    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    () => captureAtspi(stub),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -177,7 +174,7 @@ test('the AT-SPI capture reports the helper own error answer', async () => {
   );
 
   await assert.rejects(
-    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    () => captureAtspi(stub),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -194,7 +191,7 @@ test('the AT-SPI capture asks before spawning when the host has no python3', asy
   });
 
   await assert.rejects(
-    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    () => captureAtspi(stub),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'TOOL_MISSING');
@@ -206,12 +203,10 @@ test('the AT-SPI capture asks before spawning when the host has no python3', asy
 });
 
 test('the AT-SPI capture refuses off a Linux host without touching it', async () => {
-  const stub = stubPython(TREE);
-
-  // The check is the host's own platform, so the run has to mock it: the Linux lanes this suite also
-  // runs on would otherwise be on a Linux host and the capture would go on to spawn.
+  // The check is the operating system the setup host reports, not the machine running the test.
+  const stub = createLinuxHostStub({ hostOs: 'darwin', tools: ['python3'] });
   await assert.rejects(
-    () => withMockedPlatform('darwin', () => captureAtspi(stub)),
+    () => captureAtspi(stub),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_PLATFORM');

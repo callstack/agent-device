@@ -29,6 +29,29 @@ function createPluginHost(
     env: input.env ?? { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
     cwd: '/host-cwd',
     stateDir: '/host-state',
+    // What the host says about the machine its commands run on. This family reads none of it: the
+    // desktop tools it drives are probed and spawned through the host.
+    hostOs: 'linux',
+    nodeExecutablePath: '/usr/bin/node',
+    nodeVersion: 'v24.0.0',
+    temporaryDirectory: '/tmp',
+    processId: 4242,
+    isExecutableOnPath: async (executable) => (tools === undefined ? false : tools.has(executable)),
+    // The family tracks no host process records: `close` ends an app through the desktop tools.
+    processes: {
+      list: async () => [],
+      readIdentities: async () => new Map(),
+      expandTree: (rootPids, processes) =>
+        [...processes].filter((processInfo) => [...rootPids].includes(processInfo.pid)),
+      judgeRecordedLiveness: async (records) => [...records].map(() => 'unobserved' as const),
+      readExecutablePaths: async () => new Map(),
+      reapOwnedRecords: async () => {
+        throw new Error('the Linux family never reaps host processes');
+      },
+      withLock: async () => {
+        throw new Error('the Linux family takes no host lock');
+      },
+    } satisfies PlatformHost['processes'],
     runCommand: async (executable, args, options) => {
       commands.push({ executable, args, env: options.env });
       return { stdout: '', stderr: '', exitCode: 0 };

@@ -1,31 +1,49 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import type {
-  HostProcessIdentityObservation,
-  OwnedProcessRecordStore,
-} from '@agent-device/host-kit/process';
+  OwnedProcessRecord,
+  RecordedProcessLiveness,
+} from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformHost } from 'agent-device/plugins';
+import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import {
   MANAGED_WEB_BROWSER_PROCESS_PURPOSE,
   managedWebBrowserProcessRecordIsDead,
   managedWebBrowserProcessRecordIsLive,
 } from '../agent-browser-process-record.ts';
 
-const { observationsMock, isProcessAliveMock } = vi.hoisted(() => ({
-  isProcessAliveMock: vi.fn((_pid: number) => false),
-  observationsMock: vi.fn(
-    async (_pids: Iterable<number>) => new Map<number, HostProcessIdentityObservation>(),
+// Whether a recorded process is still the one the record names is the host's rule, not this family's:
+// the start-time format, the zombie state and the signal probe all belong to the process that owns
+// process reads. So the probes below are asked of the `processes` port and nothing else — the plugin
+// carries a host-kit copy of its own, and reading a record with that copy would judge a machine it does
+// not run its commands on (R13).
+const { judgeMock } = vi.hoisted(() => ({
+  judgeMock: vi.fn(
+    async (_records: readonly OwnedProcessRecord[]) => [] as readonly RecordedProcessLiveness[],
   ),
 }));
 
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
-  readHostProcessIdentityObservationsAsync: observationsMock,
-  isProcessAlive: isProcessAliveMock,
-}));
+const mockJudge = vi.mocked(judgeMock);
 
-const mockObservations = vi.mocked(observationsMock);
-const mockIsProcessAlive = vi.mocked(isProcessAliveMock);
+/** The process facet the two record probes are asked to use. Only the judgement is reached. */
+function createProcessPort(): PlatformHost['processes'] {
+  return {
+    list: async () => [],
+    readIdentities: async () => new Map(),
+    expandTree: (rootPids, processes) =>
+      [...processes].filter((processInfo) => [...rootPids].includes(processInfo.pid)),
+    judgeRecordedLiveness: (records) => mockJudge(records),
+    readExecutablePaths: async () => new Map(),
+    reapOwnedRecords: async () => {
+      throw new Error('the record probe never reaps');
+    },
+    withLock: async () => {
+      throw new Error('the record probe takes no host lock');
+    },
+  };
+}
+
+const processes = createProcessPort();
 
 function record(pid: number, startTime = `start-${pid}`): OwnedProcessRecord {
   return {
@@ -74,186 +92,120 @@ function undecodableDaemonEntry() {
   };
 }
 
-/** The host names every requested pid, alive under the start time the record carries. */
-function hostNamesEveryRequestedPid(): void {
-  mockObservations.mockImplementation(async (pidsArg: Iterable<number>) => {
-    const observations = new Map<number, HostProcessIdentityObservation>();
-    for (const pid of pidsArg) observations.set(pid, { state: 'Ss', startTime: `start-${pid}` });
-    return observations;
-  });
-}
-
-function hostAnswers(observations: Map<number, HostProcessIdentityObservation>): void {
-  mockObservations.mockResolvedValue(observations);
+/** The host answers each record it was handed with `state`, in the order it received them. */
+function hostJudges(state: RecordedProcessLiveness): void {
+  mockJudge.mockImplementation(async (records) => records.map(() => state));
 }
 
 beforeEach(() => {
-  mockObservations.mockReset();
-  mockObservations.mockResolvedValue(new Map());
-  mockIsProcessAlive.mockReset();
-  mockIsProcessAlive.mockReturnValue(false);
+  mockJudge.mockReset();
+  mockJudge.mockResolvedValue([]);
 });
 
-test('a record whose every managed process is alive under its recorded identity is live', async () => {
-  hostNamesEveryRequestedPid();
+test('a record whose every managed process the host vouches for is live', async () => {
+  hostJudges('alive');
   assert.equal(
     await managedWebBrowserProcessRecordIsLive(
       storeReturning([daemonEntry([record(11), record(12)])]),
+      processes,
     ),
     true,
   );
-  // The probe is one batched same-pid snapshot, not a scan of every host process.
-  assert.equal(mockObservations.mock.calls.length, 1);
-  assert.deepEqual([...mockObservations.mock.calls[0]![0]], [11, 12]);
+  // One judgement for the whole record, handed the recorded pids and their start times together.
+  assert.equal(mockJudge.mock.calls.length, 1);
+  assert.deepEqual(
+    mockJudge.mock.calls[0]![0].map(({ pid, startTime }) => [pid, startTime]),
+    [
+      [11, 'start-11'],
+      [12, 'start-12'],
+    ],
+  );
 });
 
-test('a process the host cannot name makes the record not-live', async () => {
-  hostAnswers(
-    new Map([
-      [11, { state: 'Ss', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
-    ]),
-  );
+test('a record the host judges partly alive is neither live nor dead', async () => {
+  mockJudge.mockResolvedValue(['alive', 'not-alive']);
+  const store = storeReturning([daemonEntry([record(11), record(12)])]);
+  assert.equal(await managedWebBrowserProcessRecordIsLive(store, processes), false);
+  assert.equal(await managedWebBrowserProcessRecordIsDead(store, processes), false);
+});
+
+test('a process under a reused pid makes the record not-live', async () => {
+  mockJudge.mockResolvedValue(['not-alive']);
   assert.equal(
     await managedWebBrowserProcessRecordIsLive(
-      storeReturning([daemonEntry([record(11), record(12)])]),
+      storeReturning([daemonEntry([record(11)])]),
+      processes,
     ),
     false,
   );
 });
 
-test('a pid answering under a different start time is pid reuse, not the recorded fleet', async () => {
-  hostAnswers(
-    new Map([
-      [11, { state: 'Ss', startTime: 'a-later-boot' } satisfies HostProcessIdentityObservation],
-    ]),
-  );
-  assert.equal(
-    await managedWebBrowserProcessRecordIsLive(storeReturning([daemonEntry([record(11)])])),
-    false,
-  );
+test('a host that observed nothing keeps the record from reading as live or dead', async () => {
+  // Unknown evidence is what the host answers for a process table that failed, or for a start time
+  // recorded in another machine's format: the caller rescans rather than acting on either verdict.
+  hostJudges('unobserved');
+  const store = storeReturning([daemonEntry([record(11)])]);
+  assert.equal(await managedWebBrowserProcessRecordIsLive(store, processes), false);
+  assert.equal(await managedWebBrowserProcessRecordIsDead(store, processes), false);
 });
 
-test('a recorded zombie is not a live fleet even with its start time intact', async () => {
-  hostAnswers(
-    new Map([
-      [11, { state: 'ZN', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
-    ]),
-  );
+test('an empty record is neither live nor dead and needs no judgement', async () => {
+  assert.equal(await managedWebBrowserProcessRecordIsLive(storeReturning([]), processes), false);
   assert.equal(
-    await managedWebBrowserProcessRecordIsLive(storeReturning([daemonEntry([record(11)])])),
+    await managedWebBrowserProcessRecordIsLive(storeReturning([daemonEntry([])]), processes),
     false,
   );
-});
-
-test('a probe that answers nothing is unknown evidence, which reads as not-live', async () => {
-  hostAnswers(new Map());
-  assert.equal(
-    await managedWebBrowserProcessRecordIsLive(storeReturning([daemonEntry([record(11)])])),
-    false,
-  );
-});
-
-test('an empty record is not a live fleet and needs no probe', async () => {
-  assert.equal(await managedWebBrowserProcessRecordIsLive(storeReturning([])), false);
-  assert.equal(
-    await managedWebBrowserProcessRecordIsLive(storeReturning([daemonEntry([])])),
-    false,
-  );
-  assert.equal(mockObservations.mock.calls.length, 0);
+  assert.equal(await managedWebBrowserProcessRecordIsDead(storeReturning([]), processes), false);
+  assert.equal(mockJudge.mock.calls.length, 0);
 });
 
 test('a session-scoped record is not the daemon-scoped managed fleet', async () => {
+  hostJudges('alive');
   assert.equal(
-    await managedWebBrowserProcessRecordIsLive(storeReturning([sessionEntry([record(11)])])),
+    await managedWebBrowserProcessRecordIsLive(
+      storeReturning([sessionEntry([record(11)])]),
+      processes,
+    ),
     false,
   );
-  assert.equal(mockObservations.mock.calls.length, 0);
+  assert.equal(mockJudge.mock.calls.length, 0);
 });
 
 test('a record of another purpose is not the managed fleet', async () => {
+  hostJudges('alive');
   const store = storeReturning([
     daemonEntry([
       { pid: 11, startTime: 'start-11', command: 'command-11', purpose: 'simctl-screen-recording' },
     ]),
   ]);
-  assert.equal(await managedWebBrowserProcessRecordIsLive(store), false);
-  assert.equal(mockObservations.mock.calls.length, 0);
+  assert.equal(await managedWebBrowserProcessRecordIsLive(store, processes), false);
+  assert.equal(mockJudge.mock.calls.length, 0);
 });
 
-test('an undecodable record is not a live fleet and needs no probe', async () => {
-  assert.equal(
-    await managedWebBrowserProcessRecordIsLive(storeReturning([undecodableDaemonEntry()])),
-    false,
-  );
-  assert.equal(mockObservations.mock.calls.length, 0);
+test('an undecodable record is neither live nor dead and needs no judgement', async () => {
+  hostJudges('alive');
+  const store = storeReturning([undecodableDaemonEntry()]);
+  assert.equal(await managedWebBrowserProcessRecordIsLive(store, processes), false);
+  assert.equal(await managedWebBrowserProcessRecordIsDead(store, processes), false);
+  assert.equal(mockJudge.mock.calls.length, 0);
 });
 
 test('a store that cannot answer reads as not-live, which sends the caller back to the scan', async () => {
+  hostJudges('alive');
   const store = storeReturning(() => {
     throw new Error('record file unreadable');
   });
-  assert.equal(await managedWebBrowserProcessRecordIsLive(store), false);
-  assert.equal(mockObservations.mock.calls.length, 0);
+  assert.equal(await managedWebBrowserProcessRecordIsLive(store, processes), false);
+  assert.equal(mockJudge.mock.calls.length, 0);
 });
 
-test('a record is dead only when every recorded process was observed not alive', async () => {
-  hostAnswers(
-    new Map([
-      [11, { state: 'ZN', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
-      [12, { state: 'Ss', startTime: 'a-later-boot' } satisfies HostProcessIdentityObservation],
-    ]),
-  );
+test('a record is dead only when the host judges every recorded process gone', async () => {
+  hostJudges('not-alive');
   assert.equal(
     await managedWebBrowserProcessRecordIsDead(
       storeReturning([daemonEntry([record(11), record(12), record(13)])]),
+      processes,
     ),
     true,
   );
 });
-
-test('a recorded process still answering alive keeps the record from being dead', async () => {
-  hostAnswers(
-    new Map([
-      [11, { state: 'ZN', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
-      [12, { state: 'Ss', startTime: 'start-12' } satisfies HostProcessIdentityObservation],
-    ]),
-  );
-  assert.equal(
-    await managedWebBrowserProcessRecordIsDead(
-      storeReturning([daemonEntry([record(11), record(12)])]),
-    ),
-    false,
-  );
-});
-
-test('an unanswered probe is unknown evidence, not a dead record', async () => {
-  hostAnswers(new Map());
-  mockIsProcessAlive.mockReturnValue(true);
-  assert.equal(
-    await managedWebBrowserProcessRecordIsDead(storeReturning([daemonEntry([record(11)])])),
-    false,
-  );
-});
-
-test('an empty or undecodable record is not dead and needs no probe', async () => {
-  assert.equal(await managedWebBrowserProcessRecordIsDead(storeReturning([])), false);
-  assert.equal(
-    await managedWebBrowserProcessRecordIsDead(storeReturning([undecodableDaemonEntry()])),
-    false,
-  );
-  assert.equal(mockObservations.mock.calls.length, 0);
-});
-
-test.each([
-  ['Mon Aug 10 20:00:00 2026', 'linux:11111111-1111-4111-8111-111111111111:12345'],
-  ['linux:11111111-1111-4111-8111-111111111111:12345', 'Mon Aug 10 20:00:00 2026'],
-])(
-  'incomparable process lifetimes (recorded %s, observed %s) prove neither a live nor a dead browser fleet',
-  async (recorded, observed) => {
-    mockIsProcessAlive.mockReturnValue(true);
-    mockObservations.mockResolvedValue(new Map([[11, { state: 'Ss', startTime: observed }]]));
-    const store = storeReturning([daemonEntry([record(11, recorded)])]);
-    assert.equal(await managedWebBrowserProcessRecordIsLive(store), false);
-    assert.equal(await managedWebBrowserProcessRecordIsDead(store), false);
-  },
-);

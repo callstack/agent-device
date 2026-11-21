@@ -453,6 +453,56 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * What a process answered, which is what an exec failure has to report: the two streams and how the
+ * process exited. `exitCode` is null for a process ended by a signal, mirroring `child_process`.
+ */
+export type CommandFailureAnswer = Readonly<{
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}>;
+
+/**
+ * Details for a command that ran and exited badly, so `normalizeError` can surface the stderr
+ * excerpt. Build every wrap of a real process exit from here (or from `requireCommandSuccess`)
+ * rather than by spreading the trio, which is how a wrap ends up reporting only an exit code.
+ *
+ * `@agent-device/host-kit/command`'s `execFailureDetails` and `requireExecSuccess` add the host's own
+ * toolchain reading on top of these details. A caller that holds only a command result and no host —
+ * a platform plugin whose commands answer through its `PlatformHost` — uses this, since the trio and
+ * its flag belong to the error, not to the module that ran the process.
+ */
+export function commandFailureDetails(
+  answer: CommandFailureAnswer,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    stdout: answer.stdout,
+    stderr: answer.stderr,
+    exitCode: answer.exitCode,
+    processExitError: true,
+    ...extra,
+  };
+}
+
+/**
+ * Raises `COMMAND_FAILED` for a non-zero answer, keeping the streams for `normalizeError`, and
+ * passes a zero answer through unchanged. A functional `extra` is evaluated only on failure.
+ */
+export function requireCommandSuccess<R extends CommandFailureAnswer>(
+  answer: R,
+  message: string,
+  extra?: Record<string, unknown> | ((answer: R) => Record<string, unknown>),
+): R {
+  if (answer.exitCode === 0) return answer;
+  throw new AppError(
+    'COMMAND_FAILED',
+    message,
+    commandFailureDetails(answer, typeof extra === 'function' ? extra(answer) : extra),
+  );
+}
+
 /** One command a retry loop ran and could not make succeed, kept in the tool's own terms. */
 export type CommandAttemptFailure = {
   args: readonly string[];

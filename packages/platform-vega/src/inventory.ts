@@ -1,20 +1,20 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { AppError } from '@agent-device/kernel/errors';
-import { resolveVegaExecutable } from './vega-executable.ts';
-import type {
-  DeviceInventoryHostFor,
-  HostCommandResult,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform-runtime-host';
+import { AppError, requireCommandSuccess } from '@agent-device/kernel/errors';
+import type { VegaCommandRunner } from './command-host.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInventorySource } from '@agent-device/contracts/platform-module';
 
 const DISCOVERY_TIMEOUT_MS = 10_000;
 const VVD_SERIAL = 'VirtualDevice';
 
-export function createVegaInventory(host: DeviceInventoryHostFor<'vega'>): DeviceInventorySource {
+/**
+ * Vega's inventory, answering from the plugin's own command route. The family asks the core for no
+ * host: the CLI it resolves comes from the `PlatformHost` its `setup` received (#4862), so discovery
+ * and every later command of a request agree on one executable and one environment.
+ */
+export function createVegaInventory(commands: VegaCommandRunner): DeviceInventorySource {
   return {
-    discover: async (_request, scope) => await discoverVegaDevices(host, scope),
+    discover: async (_request, scope) => await discoverVegaDevices(commands, scope),
   };
 }
 
@@ -33,25 +33,21 @@ function parseVegaDeviceList(rawOutput: string): DeviceInfo[] {
 }
 
 async function discoverVegaDevices(
-  host: DeviceInventoryHostFor<'vega'>,
+  commands: VegaCommandRunner,
   scope: PlatformRequestScope,
 ): Promise<readonly DeviceInfo[]> {
-  const executable = await resolveVegaExecutableForInventory(host);
+  const executable = await commands.resolveExecutable();
   if (!executable) {
     throw new AppError('TOOL_MISSING', 'Vega CLI not found in PATH', {
       hint: 'Install Vega Developer Tools, source ~/vega/env, and retry devices.',
     });
   }
-  const result = await host.commands.run(
-    {
-      executable,
-      args: ['device', 'list'],
-      allowFailure: true,
-      timeoutMs: DISCOVERY_TIMEOUT_MS,
-    },
-    scope.signal,
-  );
-  assertCommandSuccess(result);
+  const result = await commands.run(['device', 'list'], {
+    allowFailure: true,
+    timeoutMs: DISCOVERY_TIMEOUT_MS,
+    signal: scope.signal,
+  });
+  requireCommandSuccess(result, 'Failed to list Vega devices');
   const devices = parseVegaDeviceList(result.stdout);
   const listedSerials = parseListedVegaSerials(result.stdout);
   if (devices.length === 0 && listedSerials.length > 0) {
@@ -65,22 +61,6 @@ async function discoverVegaDevices(
     );
   }
   return devices;
-}
-
-async function resolveVegaExecutableForInventory(
-  host: DeviceInventoryHostFor<'vega'>,
-): Promise<string | undefined> {
-  // The one Vega lookup shared with the CLI adapter and doctor: PATH, then the runtime host's
-  // home default install (#3794).
-  return await resolveVegaExecutable({
-    which: (executable) => host.commands.which(executable),
-    isExecutableFile: (candidate) => host.files.isExecutable(candidate),
-    homeDirectory: host.homeDirectory,
-  });
-}
-
-function assertCommandSuccess(result: HostCommandResult): void {
-  requireExecSuccess(result, 'Failed to list Vega devices');
 }
 
 function isVegaVirtualDevice(serial: string): boolean {
