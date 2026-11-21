@@ -36,10 +36,10 @@ export type ReactNativeOverlayDismissTarget = {
 };
 
 type ReactNativeOverlayFacts = {
-  surface: ReactNativeOverlaySurface | undefined;
   dismissNodes: SnapshotNode[];
   minimizeNodes: SnapshotNode[];
   collapsedNodes: SnapshotNode[];
+  collapsedCountBadgeNodes: SnapshotNode[];
   detected: boolean;
 };
 
@@ -99,10 +99,10 @@ function collectReactNativeOverlayFacts(
     isReactNativeCollapsedWarningCountBadgeBanner(node, surface),
   );
   return {
-    surface,
     dismissNodes,
     minimizeNodes,
     collapsedNodes,
+    collapsedCountBadgeNodes,
     detected: isReactNativeOverlayDetected({
       text,
       hasReactNativeStackFrame,
@@ -110,7 +110,7 @@ function collectReactNativeOverlayFacts(
       hasControllessRedBoxText,
       collapsedNodes,
       collapsedEvidenceNodes: collapsedNodes.filter((node) =>
-        nodeLabelFacts(node, isReactNativeCollapsedWarningEvidenceLabel),
+        nodeHasMatchingLabel(node, isReactNativeCollapsedWarningEvidenceLabel),
       ),
       collapsedCountBadgeNodes,
       openDebuggerWarningNodes,
@@ -130,7 +130,7 @@ function isCollapsedWarningNode(
   if (isReactNativeCollapsedWarningCountBadgeBanner(node, surface)) return true;
   return (
     isLikelyCollapsedWarningControl(node) &&
-    nodeLabelFacts(node, isReactNativeCollapsedWarningLabel)
+    nodeHasMatchingLabel(node, isReactNativeCollapsedWarningLabel)
   );
 }
 
@@ -230,17 +230,14 @@ function isSafeCollapsedWarningCoordinateFallback(
   node: SnapshotNode,
   facts: ReactNativeOverlayFacts,
 ): boolean {
+  if (facts.collapsedCountBadgeNodes.includes(node)) return true;
   if (!isReactNativeCollapsedWarningBanner(node)) return false;
   const label = readNodeLabel(node)?.trim().toLowerCase() ?? '';
-  return (
-    isReactNativeOpenDebuggerWarningLabel(label) ||
-    isCollapsedWarningSummaryLabel(label) ||
-    isReactNativeCollapsedWarningCountBadgeBanner(node, facts.surface)
-  );
+  return isReactNativeOpenDebuggerWarningLabel(label) || isCollapsedWarningSummaryLabel(label);
 }
 
 /** Reads every text a node carries, lowercased, against a label classifier. */
-function nodeLabelFacts(
+function nodeHasMatchingLabel(
   node: ReactNativeOverlayNode,
   matches: (label: string) => boolean,
 ): boolean {
@@ -254,7 +251,7 @@ function collectOverlayNodes(
   nodes: SnapshotNode[],
   matches: (label: string) => boolean,
 ): SnapshotNode[] {
-  return nodes.filter((node) => node.ref && nodeLabelFacts(node, matches));
+  return nodes.filter((node) => node.ref && nodeHasMatchingLabel(node, matches));
 }
 
 function firstControlNodeWithRect(nodes: SnapshotNode[]): SnapshotNode | null {

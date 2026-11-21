@@ -246,6 +246,43 @@ describe('React Native collapsed banner with the entry-count badge', () => {
     expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
   });
 
+  test('a tablet-width count banner keeps the fixed LogBox side gap', () => {
+    // LogBox's side gap is a fixed 10 units, so a 1% floor would reject the real banner once the
+    // surface passes 1000 units: a 13" iPad Pro portrait window, every iPad in landscape, an
+    // unfolded foldable.
+    const iPadViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 1032, height: 1376 });
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '7, Unable to load image',
+          rect: { x: 10, y: 1308, width: 1012, height: 48 },
+          hittable: true,
+        }),
+      ],
+      iPadViewport,
+    );
+
+    expect(state.detected).toBe(true);
+  });
+
+  test('an inset card above the tab bar is not an overlay', () => {
+    // The card keeps 16pt side gaps, wider than LogBox's fixed 10, so only the banner's own gap
+    // width separates it from a count banner.
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '3, New messages',
+        rect: { x: 16, y: 719, width: 370, height: 72 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
   test('a price label is not an overlay', () => {
     const nodes = [
       node({
