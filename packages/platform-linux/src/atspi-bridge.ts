@@ -10,7 +10,6 @@
 
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { hostPlatform } from '@agent-device/host-kit/process';
 import type { LinuxAccessibilityProvider } from '@agent-device/contracts/linux-tool-provider';
 import { normalizeAtspiRole } from './role-map.ts';
 import type { LinuxCommandRunner } from './command-runner.ts';
@@ -50,7 +49,7 @@ export function createLinuxAccessibilityProvider(
 ): LinuxAccessibilityProvider {
   return {
     async captureTree(surface, options = {}) {
-      if (hostPlatform() !== 'linux') {
+      if (commands.hostOs !== 'linux') {
         throw new AppError('UNSUPPORTED_PLATFORM', 'AT-SPI2 bridge is only available on Linux');
       }
 

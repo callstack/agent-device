@@ -64,6 +64,8 @@ const NO_ANSWER: LinuxCommandResult = Object.freeze({
 export function createLinuxHostStub(
   input: Readonly<{
     env?: Readonly<Record<string, string | undefined>>;
+    /** The operating system the host reports; Linux unless a test needs another. */
+    hostOs?: 'darwin' | 'linux' | 'win32' | 'other';
     /** Tools the host can execute. When set, `isFileExecutable` answers from it alone. */
     tools?: Iterable<string>;
     /** Answers one command. Takes precedence over the queued answers. */
@@ -112,6 +114,7 @@ export function createLinuxHostStub(
   }
   const host = Object.freeze({
     env,
+    hostOs: input.hostOs ?? 'linux',
     cwd: '/host-cwd',
     stateDir: '/host-state',
     emitDiagnostic: (event: LinuxHostDiagnostic) => {

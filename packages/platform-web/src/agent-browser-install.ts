@@ -1,18 +1,13 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
-import type { PlatformHost } from 'agent-device/plugins';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   ensureHostDirectorySync,
   hostFileStatSync,
   writeHostTextFileSync,
 } from '@agent-device/host-kit/host-file';
-import {
-  hostNodeExecutablePath,
-  hostNodeVersion,
-  hostPlatform,
-} from '@agent-device/host-kit/process';
+import type { WebCommandRunner } from './command-host.ts';
+import type { WebMachine } from './toolbox.ts';
 
 /**
  * How the managed backend gets onto disk. Kept apart from the tool module,
@@ -23,12 +18,15 @@ export async function installManagedAgentBrowserPackage(params: {
   packageSpec: string;
   timeoutMs: number;
   env: Readonly<EnvMap>;
-  runCommand?: PlatformHost['runCommand'];
+  /** The host's Node and operating system: the runtime npm has to install for. */
+  machine: WebMachine;
+  /** The plugin's command route: npm is the host's to spawn, like every other command. */
+  commands: WebCommandRunner;
 }): Promise<void> {
   ensureHostDirectorySync(params.packageRoot);
   // `--no-global` keeps an ambient `npm_config_global` from redirecting the
   // install out of the managed prefix, where the backend entry would be missed.
-  const npm = npmCommand(params.env, [
+  const npm = npmCommand(params.env, params.machine, [
     'install',
     '--prefix',
     params.packageRoot,
@@ -38,7 +36,7 @@ export async function installManagedAgentBrowserPackage(params: {
     '--no-save',
     params.packageSpec,
   ]);
-  await (params.runCommand ?? runCmd)(npm.command, npm.args, {
+  await params.commands.run(npm.command, npm.args, {
     env: params.env,
     timeoutMs: params.timeoutMs,
   });
@@ -48,6 +46,8 @@ export function writeManagedAgentBrowserManifest(params: {
   installDir: string;
   packageName: string;
   version: string;
+  /** The Node the manifest records this install as built for. */
+  machine: WebMachine;
 }): void {
   writeHostTextFileSync(
     path.join(params.installDir, 'manifest.json'),
@@ -55,7 +55,7 @@ export function writeManagedAgentBrowserManifest(params: {
       {
         package: params.packageName,
         version: params.version,
-        node: hostNodeVersion(),
+        node: params.machine.nodeVersion,
         installedAt: new Date().toISOString(),
       },
       null,
@@ -70,19 +70,26 @@ export function writeManagedAgentBrowserManifest(params: {
  * without a shell since the CVE-2024-27980 fix, so its JS entry runs under the
  * current Node runtime instead (#2022).
  */
-function npmCommand(env: Readonly<EnvMap>, args: string[]): { command: string; args: string[] } {
-  if (hostPlatform() !== 'win32') return { command: 'npm', args };
-  const npmCliScript = resolveWindowsNpmCliScript(env);
+function npmCommand(
+  env: Readonly<EnvMap>,
+  machine: WebMachine,
+  args: string[],
+): { command: string; args: string[] } {
+  if (machine.hostOs !== 'win32') return { command: 'npm', args };
+  const npmCliScript = resolveWindowsNpmCliScript(env, machine);
   if (!npmCliScript) {
     throw new AppError('TOOL_MISSING', 'npm not found in PATH', {
-      nodeExecPath: hostNodeExecutablePath(),
+      nodeExecPath: machine.nodeExecutablePath,
       hint: 'Install Node.js with npm, or add npm to PATH, and run `agent-device web setup` again.',
     });
   }
-  return { command: hostNodeExecutablePath(), args: [npmCliScript, ...args] };
+  return { command: machine.nodeExecutablePath, args: [npmCliScript, ...args] };
 }
 
-function resolveWindowsNpmCliScript(env: NodeJS.ProcessEnv): string | undefined {
+function resolveWindowsNpmCliScript(
+  env: NodeJS.ProcessEnv,
+  machine: WebMachine,
+): string | undefined {
   const advertised = env.npm_execpath?.trim();
   if (advertised) {
     const scriptPath = path.resolve(advertised);
@@ -90,7 +97,7 @@ function resolveWindowsNpmCliScript(env: NodeJS.ProcessEnv): string | undefined 
     if (path.basename(scriptPath) === 'npm-cli.js' && isFile(scriptPath)) return scriptPath;
   }
   const bundled = path.join(
-    path.dirname(hostNodeExecutablePath()),
+    path.dirname(machine.nodeExecutablePath),
     'node_modules',
     'npm',
     'bin',

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
 import type { AgentBrowserProcessSummary } from '../agent-browser-lifecycle.ts';
 import { mkdtempForTestSync } from './test-utils.ts';
+import { createWebHostStub } from '../toolbox.fixtures.ts';
 
 vi.mock('../agent-browser-lifecycle.ts', async () => {
   const actual = await vi.importActual<typeof import('../agent-browser-lifecycle.ts')>(
@@ -43,10 +44,7 @@ test('web doctor lifecycle check reports live managed Chrome process count', asy
       ],
     } satisfies AgentBrowserProcessSummary);
 
-    const check = await webBrowserLifecycleCheck(stateDir, {
-      env: process.env,
-      cwd: process.cwd(),
-    });
+    const check = await webBrowserLifecycleCheck(stateDir, createWebHostStub({ stateDir }).toolbox);
 
     assert.equal(check.id, 'web-agent-browser-processes');
     assert.equal(check.status, 'info');
@@ -61,10 +59,7 @@ test('web doctor lifecycle check reports live managed Chrome process count', asy
 test('web doctor lifecycle check stays informational when managed backend is missing', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-doctor-missing-');
   try {
-    const check = await webBrowserLifecycleCheck(stateDir, {
-      env: process.env,
-      cwd: process.cwd(),
-    });
+    const check = await webBrowserLifecycleCheck(stateDir, createWebHostStub({ stateDir }).toolbox);
 
     assert.equal(check.status, 'info');
     assert.match(check.summary ?? '', /not installed/);
