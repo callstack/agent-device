@@ -7,9 +7,11 @@ export type VegaCommandResult = Readonly<{
   exitCode: number;
 }>;
 
-/** How one Vega CLI call runs. */
+/**
+ * How one Vega CLI call runs. The environment and the working directory are not among them: the host
+ * the plugin was set up with owns both, so a Vega call never inherits a directory no host named.
+ */
 export type VegaCommandOptions = Readonly<{
-  cwd?: string;
   allowFailure?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;

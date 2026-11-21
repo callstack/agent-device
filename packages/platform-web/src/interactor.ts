@@ -3,19 +3,18 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { createUnsupportedInteractor } from '@agent-device/contracts/unsupported-interactor';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';
-import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { resolveWebProviderForHost } from './resolve-provider.ts';
+import { resolveWebProviderForToolbox } from './resolve-provider.ts';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
-import type { ManagedBrowserHost } from './agent-browser-tool.ts';
+import type { WebToolbox } from './toolbox.ts';
 
 export async function createWebInteractor(
-  host: ManagedBrowserHost,
+  toolbox: WebToolbox,
   provider?: WebProvider,
   stateDir?: string,
 ): Promise<Interactor> {
-  // A request's scoped provider wins; an out-of-request local path binds the composing root's
-  // host into its own default provider instead of reading an ambient one (#3794).
-  const resolvedProvider = await resolveWebProviderForHost(host, provider, stateDir);
+  // A request's scoped provider wins; an out-of-request local path binds the plugin's own host
+  // into its default provider instead of reading an ambient one (#3794).
+  const resolvedProvider = await resolveWebProviderForToolbox(toolbox, provider, stateDir);
   const clickRef = resolvedProvider.clickRef;
   const hover = resolvedProvider.hover;
   const hoverRef = resolvedProvider.hoverRef;
@@ -58,7 +57,7 @@ export async function createWebInteractor(
     screenshot: (outPath, options) => resolvedProvider.screenshot(outPath, options),
     setViewport: (width, height) => resolvedProvider.setViewport(width, height),
     snapshot: async (options) => {
-      const result = await (host.withDiagnosticTimer ?? withDiagnosticTimer)(
+      const result = await toolbox.withDiagnosticTimer(
         'snapshot_capture',
         async () => await resolvedProvider.snapshot(options),
         { backend: 'web' },

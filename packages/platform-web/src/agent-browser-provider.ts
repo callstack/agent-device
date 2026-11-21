@@ -1,10 +1,9 @@
 import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/contracts/managed-web-backend';
-import { execFailureDetails } from '@agent-device/host-kit/command';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import {
   AppError,
+  commandFailureDetails,
   type DispatchDisclosure,
   discloseDispatchAfterSteps,
 } from '@agent-device/kernel/errors';
@@ -27,6 +26,7 @@ import {
   readStringProperty,
   type JsonObject,
 } from './json-utils.ts';
+import type { WebToolbox } from './toolbox.ts';
 import type {
   WebProvider,
   WebSnapshotOptions,
@@ -36,7 +36,6 @@ import {
   getManagedAgentBrowserStatus,
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
-  type ManagedBrowserHost,
 } from './agent-browser-tool.ts';
 import { agentBrowserFleetOf, type AgentBrowserFleet } from './agent-browser-fleet.ts';
 import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
@@ -52,8 +51,8 @@ const AGENT_BROWSER_DOCTOR_HINT =
   'Run `agent-device web setup` to install the managed web backend.';
 
 type AgentBrowserProviderOptions = {
-  /** The composing runtime's host; every backend spawn and status read uses it. */
-  host: ManagedBrowserHost;
+  /** The plugin's toolbox; every backend spawn, process read and diagnostic uses its host. */
+  toolbox: WebToolbox;
   /** The backend session key, read from the session device id; omitted for no session. */
   session?: string;
   stateDir?: string;
@@ -614,7 +613,8 @@ async function runAgentBrowserCommand(
   let exitCode = 0;
   let commandCompleted = false;
   let semanticSuccess = false;
-  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
+  const { host } = options.toolbox;
+  const status = getManagedAgentBrowserStatus({ host, stateDir: options.stateDir });
   try {
     const startingSession = cliArgs[0] === 'open' ? fleetSessionOf(options) : undefined;
     if (options.ownedProcessRecords && startingSession !== undefined) {
@@ -622,7 +622,7 @@ async function runAgentBrowserCommand(
     }
     await cleanupProviderStartupOrphans(options, startingSession);
     const result = await runManagedAgentBrowser(cliArgs, {
-      host: options.host,
+      toolbox: options.toolbox,
       stateDir: options.stateDir,
       allowFailure: true,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
@@ -687,10 +687,10 @@ async function finalizeAgentBrowserProcessRecord(params: {
         return;
       }
       if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
-        await recordManagedAgentBrowserProcesses(params.status, store, params.options.host);
+        await recordManagedAgentBrowserProcesses(params.status, store, params.options.toolbox);
       }
     } catch (error) {
-      (params.options.host.emitDiagnostic ?? emitDiagnostic)({
+      params.options.toolbox.host.emitDiagnostic({
         level: 'warn',
         phase: 'web_agent_browser_process_record_failed',
         data: { error: error instanceof Error ? error.message : String(error) },
@@ -735,31 +735,29 @@ const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Whether the process-table scan that rewrites the owned-process record has to run for one
- * agent-browser call.
+ * Whether the process-table scan that rewrites the owned-process record has to run for one call.
  *
- * Any failure may be the first command that finds the fleet died or restarted between calls, so
- * it refreshes; so do the {@link AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS} members, which launch,
- * end, and extend the fleet. A plain successful call
- * acts on a fleet the record already describes, and re-deriving that fleet means a process-tool
- * snapshot of every host process, which is the cost this seam exists to avoid.
- * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid
- * probe instead. It is fail-closed: an empty, undecodable, or unanswered probe falls back to the
- * scan, so a live fleet this daemon adopted from a predecessor becomes owned through the record
- * again, and a fleet that died or restarted outside a lifecycle boundary is caught by the next
- * command that can no longer name every process the record still claims is alive.
+ * Any failure may be the first command that finds the fleet died or restarted, so it refreshes; so
+ * do the {@link AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS} members, which launch, end, and extend the
+ * fleet. A plain successful call acts on the fleet the record already describes, and re-deriving it
+ * costs a process-tool snapshot of every host process: the cost this seam avoids.
+ * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid probe,
+ * asked of the host. It is fail-closed: an empty, undecodable, or unanswered probe falls back to the
+ * scan, so a fleet this daemon adopted from a predecessor is owned again, and one that died or
+ * restarted outside a lifecycle boundary is caught by the next command.
  */
 async function shouldRefreshAgentBrowserProcessRecord(
   params: Pick<
     Parameters<typeof finalizeAgentBrowserProcessRecord>[0],
-    'cliArgs' | 'commandCompleted' | 'semanticSuccess'
+    'cliArgs' | 'commandCompleted' | 'semanticSuccess' | 'options'
   >,
   store: OwnedProcessRecordStore,
 ): Promise<boolean> {
   if (!params.commandCompleted || !params.semanticSuccess) return true;
   const command = params.cliArgs[0];
   if (command !== undefined && AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS.has(command)) return true;
-  return !(await managedWebBrowserProcessRecordIsLive(store));
+  const { host } = params.options.toolbox;
+  return !(await managedWebBrowserProcessRecordIsLive(store, host.processes));
 }
 
 function canClearAgentBrowserRecord(
@@ -783,12 +781,14 @@ async function cleanupProviderStartupOrphans(
   startingSession: string | undefined,
 ): Promise<void> {
   if (!options.openWebSessionNames) return;
-  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
+  const { host } = options.toolbox;
+  const status = getManagedAgentBrowserStatus({ host, stateDir: options.stateDir });
   if (!status.installed) return;
   try {
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
-      env: options.host.env,
-      ...(options.host.emitDiagnostic ? { emitDiagnostic: options.host.emitDiagnostic } : {}),
+      env: host.env,
+      emitDiagnostic: host.emitDiagnostic,
+      processes: host.processes,
       openWebSessionNames: options.openWebSessionNames(),
       ...(startingSession === undefined ? {} : { startingSession }),
       ...(options.ownedProcessRecords === undefined
@@ -796,7 +796,7 @@ async function cleanupProviderStartupOrphans(
         : { ownedProcessRecords: options.ownedProcessRecords }),
     });
   } catch (error) {
-    (options.host.emitDiagnostic ?? emitDiagnostic)({
+    host.emitDiagnostic({
       level: 'warn',
       phase: 'web_agent_browser_provider_orphan_cleanup_failed',
       data: { error: error instanceof Error ? error.message : String(error) },
@@ -825,7 +825,7 @@ function unwrapAgentBrowserJson(
     throw new AppError(
       'COMMAND_FAILED',
       'agent-browser command failed',
-      execFailureDetails(result, {
+      commandFailureDetails(result, {
         cmd: AGENT_BROWSER,
         args: cliArgs,
         stdout: result.stdout.slice(0, 500),

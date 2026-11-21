@@ -1,4 +1,5 @@
-import type { PlatformContribution, PlatformSetup } from 'agent-device/plugins';
+import type { PlatformContribution, PlatformHost, PlatformSetup } from 'agent-device/plugins';
+import type { WebToolbox } from './toolbox.ts';
 import type {
   InventoryPlatformModule,
   PlatformModuleMetadata,
@@ -8,6 +9,25 @@ import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-run
 const metadata = Object.freeze({
   family: 'web',
 } satisfies PlatformModuleMetadata);
+
+/**
+ * The toolbox module, resolved exactly once per process. The façade must stay metadata-eager
+ * (ADR-0019), so the module that binds a host's command port enters with the first operation that
+ * needs it rather than above it. Only the module is memoized: each `setup` call binds its own host.
+ */
+let toolboxModule: Promise<typeof import('./toolbox.ts')> | undefined;
+
+/**
+ * A bound toolbox, made on first use and then reused: a `setup` that never runs a command imports
+ * and builds nothing, and the operations of one setup share the one toolbox it binds its host to.
+ */
+function webToolbox(host: PlatformHost) {
+  let toolbox: Promise<WebToolbox> | undefined;
+  return async () =>
+    (toolbox ??= (toolboxModule ??= import('./toolbox.ts')).then(({ createWebToolbox }) =>
+      createWebToolbox(host),
+    ));
+}
 
 const runtimeModule = Object.freeze({
   ...metadata,
@@ -32,15 +52,22 @@ function webPlatformPlugin() {
       {
         kind: 'platform',
         family: 'web',
-        setup(host): PlatformSetup<'web'> {
-          const { stateDir, openWebSessionNames, ownedProcessRecords } = host;
+        // Importing this package evaluates nothing but itself, and the host is bound to a toolbox
+        // only when an operation first needs one. Every operation below asks the same lazy
+        // resolution, so one setup builds exactly one toolbox for the whole family.
+        setup(host: PlatformHost): PlatformSetup<'web'> {
+          const { stateDir } = host;
+          const toolbox = webToolbox(host);
           return {
             family: 'web',
             inventoryModule,
             runtimeModule,
             createInteractor: async () => {
-              const { createWebInteractor } = await import('./interactor.ts');
-              return await createWebInteractor(host, undefined, stateDir);
+              const [{ createWebInteractor }, bound] = await Promise.all([
+                import('./interactor.ts'),
+                toolbox(),
+              ]);
+              return await createWebInteractor(bound, undefined, stateDir);
             },
             withRequestProvider: async (provider, task) => {
               const { withWebProvider } = await import('./provider.ts');
@@ -51,42 +78,50 @@ function webPlatformPlugin() {
                 const { setupManagedAgentBrowser } = await import('./agent-browser-tool.ts');
                 return await setupManagedAgentBrowser({
                   stateDir: options.stateDir ?? stateDir,
-                  host,
+                  toolbox: await toolbox(),
                 });
               },
               doctor: async (options) => {
                 const { doctorManagedAgentBrowser } = await import('./agent-browser-tool.ts');
                 return await doctorManagedAgentBrowser({
                   stateDir: options.stateDir ?? stateDir,
-                  host,
+                  toolbox: await toolbox(),
                 });
               },
               browserLifecycleCheck: async (dir) => {
-                const { webBrowserLifecycleCheck } = await import('./doctor.ts');
-                return await webBrowserLifecycleCheck(dir, host);
+                const [{ webBrowserLifecycleCheck }, bound] = await Promise.all([
+                  import('./doctor.ts'),
+                  toolbox(),
+                ]);
+                return await webBrowserLifecycleCheck(dir, bound);
               },
               cleanupOrphans: async (openSessions) => {
-                const { getManagedAgentBrowserStatus } = await import('./agent-browser-tool.ts');
-                const status = getManagedAgentBrowserStatus({ stateDir, host });
+                const [{ getManagedAgentBrowserStatus }, bound] = await Promise.all([
+                  import('./agent-browser-tool.ts'),
+                  toolbox(),
+                ]);
+                const status = getManagedAgentBrowserStatus({ stateDir, host: bound.host });
                 if (!status.installed) return;
                 const { cleanupManagedAgentBrowserOrphans } =
                   await import('./agent-browser-lifecycle.ts');
                 await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
-                  env: host.env,
+                  env: bound.host.env,
+                  emitDiagnostic: bound.host.emitDiagnostic,
+                  processes: bound.host.processes,
                   openWebSessionNames: openSessions,
-                  ownedProcessRecords,
-                  emitDiagnostic: host.emitDiagnostic,
+                  ownedProcessRecords: bound.host.ownedProcessRecords,
                 });
               },
               createProvider: async (session) => {
                 const { createAgentBrowserWebProvider } =
                   await import('./agent-browser-provider.ts');
+                const bound = await toolbox();
                 return await createAgentBrowserWebProvider({
-                  host,
+                  toolbox: bound,
                   stateDir,
                   session,
-                  openWebSessionNames,
-                  ownedProcessRecords,
+                  openWebSessionNames: bound.host.openWebSessionNames,
+                  ownedProcessRecords: bound.host.ownedProcessRecords,
                 });
               },
               resolveRequestProvider: async () => {

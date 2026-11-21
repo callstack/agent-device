@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HarmonyPlatformRegistration } from '@agent-device/contracts/platform-plugin';
 import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { isExecutablePath } from '@agent-device/host-kit/command';
+import { isExecutablePath, whichCmd } from '@agent-device/host-kit/command';
 import path from 'node:path';
 import harmonyPlatformPlugin from './index.ts';
 import { createHarmonyToolchainRoot } from './toolbox.fixtures.ts';
@@ -38,9 +38,20 @@ function createPluginHost(
       commands.push({ executable, args, env: options.env });
       return { stdout: '', stderr: '', exitCode: 0 };
     },
-    // The real host probe: a test that names a toolchain root proves the plugin resolves HDC from
-    // a file on disk, not from a verdict this fixture hands it.
+    // The host probe the real one is: a test that names a toolchain root proves the plugin resolves
+    // HDC from a file on disk, not from a verdict this fixture hands it.
     isFileExecutable: isExecutablePath,
+    isExecutableOnPath: async (executable) => await whichCmd(executable, env),
+    // Neither this family nor its devices are host processes: everything goes through HDC.
+    processes: {
+      list: async () => [],
+      readIdentities: async () => new Map(),
+      readIdentityObservations: async () => new Map(),
+      readExecutablePaths: async () => new Map(),
+      reapOwnedRecords: async () => {
+        throw new Error('the HarmonyOS family never reaps host processes');
+      },
+    } satisfies PlatformHost['processes'],
     emitDiagnostic,
     withDiagnosticTimer,
   };

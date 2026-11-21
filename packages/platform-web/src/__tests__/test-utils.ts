@@ -11,6 +11,7 @@ import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { installFakeManagedAgentBrowser } from '@agent-device/test-kit';
 import { vi } from 'vitest';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
+import { createWebHostStub, type WebHostStub } from '../toolbox.fixtures.ts';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 
 export function mkdtempForTestSync(prefix: string): string {
@@ -60,16 +61,18 @@ export async function withManagedAgentBrowserProvider(
     openWebSessionNames?: () => readonly string[];
     ownedProcessRecords?: OwnedProcessRecordStore;
   },
-  testFn: (provider: WebProvider) => void | Promise<void>,
+  testFn: (provider: WebProvider, toolbox: WebHostStub) => void | Promise<void>,
 ): Promise<void> {
   const stateDir = mkdtempForTestSync('agent device web provider ');
   installFakeManagedAgentBrowser(stateDir);
+  const stub = createWebHostStub({ stateDir, ...options });
   await testFn(
     createAgentBrowserWebProvider({
-      host: { env: process.env, cwd: process.cwd() },
+      toolbox: stub.toolbox,
       ...options,
       stateDir,
     }),
+    stub,
   );
 }
 

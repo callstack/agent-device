@@ -17,8 +17,9 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => ({
 }));
 
 import webPlatformPlugin from './index.ts';
+import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { runCmd, isExecutablePath } from '@agent-device/host-kit/command';
+import { runCmd, isExecutablePath, whichCmd } from '@agent-device/host-kit/command';
 
 function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
   const host = {
@@ -26,6 +27,18 @@ function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
     stateDir,
     runCommand: runCmd,
     isFileExecutable: isExecutablePath,
+    isExecutableOnPath: async (executable: string) => await whichCmd(executable, process.env),
+    // The reaper and the record probe are the only host process reads this family makes, and both are
+    // stood in for below, so the port itself has nothing to answer.
+    processes: {
+      list: async () => [],
+      readIdentities: async () => new Map(),
+      readIdentityObservations: async () => new Map(),
+      readExecutablePaths: async () => new Map(),
+      reapOwnedRecords: async () => {
+        throw new Error('this suite stands the reap in for');
+      },
+    } satisfies PlatformHost['processes'],
     emitDiagnostic,
     withDiagnosticTimer,
   };
@@ -50,6 +63,7 @@ test('daemon-startup web cleanup passes open web sessions to the reaper', async 
       env: process.env,
       ownedProcessRecords: undefined,
       emitDiagnostic: expect.any(Function),
+      processes: expect.any(Object),
       openWebSessionNames: ['web-session'],
     });
   } finally {
