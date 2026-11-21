@@ -150,7 +150,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     min: 1,
     usageLabel: '--pixel-density <n>',
     usageDescription:
-      'Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators)',
+      'Screenshot: output PNG pixel density in pixels per logical point; iOS simulators only, other targets refuse it',
     projectConfig: true,
     recorded: true,
   },
