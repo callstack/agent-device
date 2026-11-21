@@ -28,6 +28,7 @@ static NSString *const RunnerAXCustomActionsAttribute = @"XC_kAXXCAttributeCusto
 // Bounds one read. It exists for the unresponsive case: without it one wedged element would
 // swallow the whole capture's budget and starve every remaining candidate.
 static const NSTimeInterval RunnerAXCustomActionReadTimeout = 1.0;
+static const NSTimeInterval RunnerAXElementAtPointTimeout = 1.0;
 
 // The AX call is a synchronous XPC round trip that cannot be cancelled once issued, so the
 // timeout above only frees the caller — the call keeps running. Containment needs both parts:
@@ -711,6 +712,40 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }
   }
   return processIdentifiers;
+}
+
++ (NSInteger)processIdentifierOfElementAtPoint:(CGPoint)point
+{
+  // The AX client's own hit test is macOS-only; on iOS the runner daemon session asks testmanagerd.
+  Class sessionClass = NSClassFromString(@"XCTRunnerDaemonSession");
+  id session = [self objectFrom:sessionClass selectorName:@"sharedSession"];
+  SEL selector = NSSelectorFromString(@"requestElementAtPoint:reply:");
+  if (nil == session || ![session respondsToSelector:selector]) {
+    return 0;
+  }
+  // The reply is asynchronous, so the wait is bounded. On timeout the box is never read, so a late
+  // reply cannot race this thread.
+  NSMutableArray *box = [NSMutableArray array];
+  dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+  typedef void (*RunnerAXElementAtPointMsgSend)(id, SEL, CGPoint, void (^)(id, NSError *));
+  RunnerAXElementAtPointMsgSend send = (RunnerAXElementAtPointMsgSend)objc_msgSend;
+  @try {
+    send(session, selector, point, ^(id element, NSError *error) {
+      if (nil != element) {
+        [box addObject:element];
+      }
+      dispatch_semaphore_signal(finished);
+    });
+  } @catch (NSException *exception) {
+    return 0;
+  }
+  long waited = dispatch_semaphore_wait(
+    finished,
+    dispatch_time(DISPATCH_TIME_NOW, (int64_t)(RunnerAXElementAtPointTimeout * NSEC_PER_SEC)));
+  if (waited != 0 || nil == box.firstObject) {
+    return 0;
+  }
+  return [self integerFrom:box.firstObject selectorName:@"processIdentifier"];
 }
 
 + (id)accessibilityApplicationForApplication:(XCUIApplication *)application axClient:(id)axClient
