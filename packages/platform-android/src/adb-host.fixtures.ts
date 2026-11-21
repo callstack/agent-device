@@ -1,10 +1,17 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
 import { createHash } from 'node:crypto';
+import type { AndroidTestImeFlushRecord } from './ime-flush-record.ts';
 
 export type AndroidAdbHostStub = AndroidAdbHost & {
   diagnostics: Array<{ phase: string; level?: string }>;
   markerStore: Map<string, Set<string>>;
+  /** Durable flush records keyed by flushRecordKey; survives an in-process cache reset. */
+  flushRecordStore: Map<string, AndroidTestImeFlushRecord>;
 };
+
+export function flushRecordKey(stateDir: string, serial: string): string {
+  return `${stateDir}\u0000${serial}`;
+}
 
 /**
  * Binds a minimal in-memory host port for colocated unit tests: no processes, no files. Every
@@ -16,6 +23,7 @@ export function bindAndroidAdbHostStub(
 ): AndroidAdbHostStub {
   const diagnostics: AndroidAdbHostStub['diagnostics'] = [];
   const markerStore: AndroidAdbHostStub['markerStore'] = new Map();
+  const flushRecordStore: AndroidAdbHostStub['flushRecordStore'] = new Map();
   const markersFor = (stateDir: string): Set<string> => {
     const existing = markerStore.get(stateDir) ?? new Set<string>();
     markerStore.set(stateDir, existing);
@@ -86,6 +94,15 @@ export function bindAndroidAdbHostStub(
       },
       read: async (stateDir) => [...markersFor(stateDir)],
     },
+    imeFlushRecords: {
+      write: async (stateDir, serial, record) => {
+        flushRecordStore.set(flushRecordKey(stateDir, serial), record);
+      },
+      clear: async (stateDir, serial) => {
+        flushRecordStore.delete(flushRecordKey(stateDir, serial));
+      },
+      read: async (stateDir, serial) => flushRecordStore.get(flushRecordKey(stateDir, serial)),
+    },
     resolveHelperArtifact: async () => {
       throw new Error('adb-host stub: resolveHelperArtifact not stubbed');
     },
@@ -95,6 +112,7 @@ export function bindAndroidAdbHostStub(
     ...overrides,
     diagnostics,
     markerStore,
+    flushRecordStore,
   };
   bindAndroidAdbHost(host);
   return host;

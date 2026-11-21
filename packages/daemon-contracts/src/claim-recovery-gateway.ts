@@ -10,6 +10,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
  * foreign claim's recovery clear a same-named live session's records (#2168).
  */
 export type ClaimRecoveryGatewayInput = Readonly<{
+  stateDir: string;
   sessionsDir: string;
   ownedProcesses?: OwnedProcessRecordWriter;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;

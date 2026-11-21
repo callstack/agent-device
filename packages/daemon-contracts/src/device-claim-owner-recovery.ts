@@ -113,6 +113,7 @@ function composeOwnerScopedClaimRecovery(
 ): OwnerScopedClaimRecovery {
   const daemonPaths = resolveDaemonPaths(stateDir);
   const gateway = composeGateway({
+    stateDir: daemonPaths.baseDir,
     sessionsDir: daemonPaths.sessionsDir,
     ownedProcesses: createOwnedProcessRecordStore({
       stateDir: daemonPaths.baseDir,

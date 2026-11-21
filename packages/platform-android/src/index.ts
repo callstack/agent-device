@@ -89,7 +89,7 @@ export function createAndroidInventoryModule(
 
 /** Loads Android shutdown mechanics only when the neutral shutdown capability is exercised. */
 export async function loadShutdownRuntime(
-  dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands'>,
+  dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands' | 'stateDir'>,
 ) {
   const { createAndroidShutdownRuntime } = await import('./shutdown/runtime.ts');
   return createAndroidShutdownRuntime(dependencies);

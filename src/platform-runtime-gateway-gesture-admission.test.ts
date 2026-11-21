@@ -11,6 +11,7 @@ const gateway = createPlatformRuntimeGateway({
     outputPath: '/sessions/gesture-admission/app.log',
     pidPath: '/sessions/gesture-admission/app-log.pid',
   }),
+  stateDir: '/state',
   sessionsDir: '/sessions',
 });
 

@@ -12,11 +12,11 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 import {
   beginTestImeRestoreWrite,
   registerTestImeRestore,
+  resetAndroidTestImeActivationCacheForTests,
   SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
-  testImePendingRestoreWrites,
-  testImeRestoreMarks,
 } from '../ime-state.ts';
-import { seedRestoreMark } from '../ime-device.fixtures.ts';
+import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from '../adb-host.fixtures.ts';
+import { flushRecordSerials, seedRestoreRecord } from '../ime-device.fixtures.ts';
 
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 const commands: DeviceShutdownRuntimeDependencies['commands'] = {
@@ -35,16 +35,20 @@ const nearlyFullWindowFloorMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - WINDOW_TOLER
 const seededElapsedMs = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.4);
 const seededRemainderMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - seededElapsedMs;
 
+const STATE_DIR = '/state';
+const PREVIOUS_DAEMON = 'previous-daemon';
+let host: AndroidAdbHostStub;
+
 beforeEach(() => {
   run.mockReset();
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
   sleep.mockReset();
-  testImeRestoreMarks.clear();
-  testImePendingRestoreWrites.clear();
+  resetAndroidTestImeActivationCacheForTests();
+  host = bindAndroidAdbHostStub();
 });
 
 test('an already-stopped emulator succeeds without adb', async () => {
-  const runtime = createAndroidShutdownRuntime({ commands });
+  const runtime = createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR });
 
   await expect(runtime.shutdownTarget(androidDevice({ booted: false }), signal())).resolves.toEqual(
     success(),
@@ -54,7 +58,7 @@ test('an already-stopped emulator succeeds without adb', async () => {
 
 test('an active emulator shuts down through the owning adb command', async () => {
   const device = androidDevice();
-  const runtime = createAndroidShutdownRuntime({ commands });
+  const runtime = createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR });
 
   await expect(runtime.shutdownTarget(device, signal())).resolves.toEqual(success());
   expect(run).toHaveBeenCalledWith(
@@ -79,21 +83,24 @@ test('only Android emulators are available', () => {
 // caller) inherits it without knowing about the test IME.
 test('a kill waits out a registered test-IME flush window before running adb emu kill', async () => {
   const device = androidDevice();
-  seedRestoreMark(device.id, 0);
+  await seedRestoreRecord(host, device.id, 0);
   // A deferred sleep, not an instantly-resolving one: the point of this hold is that `adb emu
   // kill` does not run WHILE the wait is pending, so the test has to observe the middle of
   // the wait, not just its endpoints.
   const settling = deferred();
   sleep.mockImplementationOnce(() => settling.promise);
 
-  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+  const pendingKill = createAndroidShutdownRuntime({
+    commands,
+    stateDir: STATE_DIR,
+  }).shutdownTarget(device, signal());
 
   // One macrotask boundary: the wait drains (async) in-flight writes before its first sleep.
   await drainMicrotasks();
 
   // The runtime suspends inside the flush wait before touching adb.
   expect(sleep).toHaveBeenCalledTimes(1);
-  // The wait must cover the registered window, not merely be positive: the timestamp was set
+  // The wait must cover the registered window, not merely be positive: the record was written
   // milliseconds before the kill, so the remaining settle is the whole budget minus that gap.
   // A regression sleeping a fixed unrelated amount would fail here.
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
@@ -107,10 +114,10 @@ test('a kill waits out a registered test-IME flush window before running adb emu
     expect.objectContaining({ args: ['-s', device.id, 'emu', 'kill'] }),
     expect.any(AbortSignal),
   );
-  expect([...testImeRestoreMarks.keys()]).toEqual([]);
+  expect(flushRecordSerials(host)).toEqual([]);
 });
 
-// The mark only exists after `ime set` returns and the readback confirms it, but the
+// The record only exists after `ime set` returns and the readback confirms it, but the
 // provider's window opens when the device ACCEPTS the write. A kill reading the map
 // mid-write sees nothing registered and must not treat that as 'idle'.
 test('a kill started while a restore write is in flight waits for it to register', async () => {
@@ -120,12 +127,15 @@ test('a kill started while a restore write is in flight waits for it to register
   const settling = deferred();
   sleep.mockImplementationOnce(() => settling.promise);
 
-  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+  const pendingKill = createAndroidShutdownRuntime({
+    commands,
+    stateDir: STATE_DIR,
+  }).shutdownTarget(device, signal());
 
   // Advance one event-loop turn so the kill REALLY reaches the wait: asserting synchronously
   // after starting the call would pass even if the wait took 'idle' straight through, because
   // the kill would still be suspended at its first microtask. With a full turn drained and the
-  // write still in flight and unregistered, a mark-only implementation has already taken
+  // write still in flight and unregistered, a record-only implementation has already taken
   // 'idle' and called adb — that is the #3318 mid-write kill this test names.
   await drainMicrotasks();
 
@@ -135,7 +145,7 @@ test('a kill started while a restore write is in flight waits for it to register
 
   // The write lands and registers its window, closing the in-flight entry exactly as the
   // registrar's finally block does.
-  registerTestImeRestore(device.id, true);
+  await registerTestImeRestore(STATE_DIR, device.id, true);
   closeInFlightWrite();
   await drainMicrotasks();
 
@@ -146,18 +156,21 @@ test('a kill started while a restore write is in flight waits for it to register
   settling.resolve();
   await expect(pendingKill).resolves.toEqual(success());
   expect(run).toHaveBeenCalledTimes(1);
-  expect([...testImeRestoreMarks.keys()]).toEqual([]);
+  expect(flushRecordSerials(host)).toEqual([]);
 });
 
-test('a pending write that closes with no registered mark releases the kill as idle', async () => {
+test('a pending write that closes with no registered record releases the kill as idle', async () => {
   // The registrar opens the pending entry for every restore but registers a window only for
   // emulators (the flush hazard is the emulator's SettingsProvider), so a physical-device
   // restore is the production shape of "closed, never registered". The drained wait must fall
-  // through to 'idle' — never strand the kill on an entry that will never gain a mark.
+  // through to 'idle' — never strand the kill on an entry that will never gain a record.
   const device = androidDevice();
   const closeInFlightWrite = beginTestImeRestoreWrite(device.id);
 
-  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+  const pendingKill = createAndroidShutdownRuntime({
+    commands,
+    stateDir: STATE_DIR,
+  }).shutdownTarget(device, signal());
   expect(run).not.toHaveBeenCalled();
 
   closeInFlightWrite();
@@ -168,20 +181,23 @@ test('a pending write that closes with no registered mark releases the kill as i
 });
 
 // A restore landing mid-wait must EXTEND this very kill's wait, not just survive for some
-// hypothetical next caller — reporting 'covered' on the older mark would fire adb inside the
+// hypothetical next caller — reporting 'covered' on the older record would fire adb inside the
 // newer restore's window, which is #3318 again.
 test('a restore landing mid-wait extends the pending kill instead of releasing it', async () => {
   const device = androidDevice();
-  // Known elapsed: the original mark is 40% of the window old, so the first wait must derive
+  // Known elapsed: the original record is 40% of the window old, so the first wait must derive
   // the remaining 60% — proportional to the constant, not a fixed number.
-  seedRestoreMark(device.id, seededElapsedMs);
+  await seedRestoreRecord(host, device.id, seededElapsedMs);
   const firstSettling = deferred();
   const secondSettling = deferred();
   sleep
     .mockImplementationOnce(() => firstSettling.promise)
     .mockImplementationOnce(() => secondSettling.promise);
 
-  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+  const pendingKill = createAndroidShutdownRuntime({
+    commands,
+    stateDir: STATE_DIR,
+  }).shutdownTarget(device, signal());
 
   // One macrotask boundary: the wait drains (async) in-flight writes before its first sleep.
   await drainMicrotasks();
@@ -190,11 +206,11 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
   expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(seededRemainderMs);
 
   // A second confirmed restore lands while this kill sleeps — a newer write, a newer deadline.
-  registerTestImeRestore(device.id, true);
+  await registerTestImeRestore(STATE_DIR, device.id, true);
   firstSettling.resolve();
   await drainMicrotasks();
 
-  // The wait re-reads the mark and takes a SECOND sleep covering the newer window, still
+  // The wait re-reads the record and takes a SECOND sleep covering the newer window, still
   // refusing adb. A one-read-one-sleep implementation returns 'covered' here and kills early.
   expect(sleep).toHaveBeenCalledTimes(2);
   expect(sleep.mock.calls[1]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
@@ -205,19 +221,22 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
   await expect(pendingKill).resolves.toEqual(success());
 
   expect(run).toHaveBeenCalledTimes(1);
-  expect([...testImeRestoreMarks.keys()]).toEqual([]);
+  expect(flushRecordSerials(host)).toEqual([]);
 });
 
 test('a forward host wall-clock jump cannot shorten a registered flush window', async () => {
-  // The window is timed on the process monotonic clock, so an NTP/VM-resume step of the wall
+  // The window is timed on the host monotonic clock, so an NTP/VM-resume step of the wall
   // clock must leave the kill-side remaining wait at the full budget.
   const device = androidDevice();
-  seedRestoreMark(device.id, 0);
+  await seedRestoreRecord(host, device.id, 0);
   const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
 
   try {
     await expect(
-      createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
+      createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR }).shutdownTarget(
+        device,
+        signal(),
+      ),
     ).resolves.toEqual(success());
   } finally {
     nowSpy.mockRestore();
@@ -227,11 +246,78 @@ test('a forward host wall-clock jump cannot shorten a registered flush window', 
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
 });
 
+// #3346: a daemon that restarts inside the window starts with no in-process state, yet the
+// record the previous process left in the state dir must still hold the kill.
+test('a kill after a daemon restart waits out the window the previous daemon recorded', async () => {
+  const device = androidDevice();
+  await seedRestoreRecord(host, device.id, seededElapsedMs, { writer: PREVIOUS_DAEMON });
+  const settling = deferred();
+  sleep.mockImplementationOnce(() => settling.promise);
+
+  const pendingKill = createAndroidShutdownRuntime({
+    commands,
+    stateDir: STATE_DIR,
+  }).shutdownTarget(device, signal());
+  await drainMicrotasks();
+
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(seededRemainderMs - WINDOW_TOLERANCE_MS);
+  expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(seededRemainderMs);
+  expect(run).not.toHaveBeenCalled();
+
+  settling.resolve();
+  await expect(pendingKill).resolves.toEqual(success());
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(flushRecordSerials(host)).toEqual([]);
+});
+
+test('an expired flush record costs no wait and is retired by the kill', async () => {
+  const device = androidDevice();
+  await seedRestoreRecord(host, device.id, SETTINGS_PROVIDER_FLUSH_SETTLE_MS + 1, {
+    writer: PREVIOUS_DAEMON,
+  });
+
+  await expect(
+    createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR }).shutdownTarget(
+      device,
+      signal(),
+    ),
+  ).resolves.toEqual(success());
+
+  expect(sleep).not.toHaveBeenCalled();
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(flushRecordSerials(host)).toEqual([]);
+});
+
+test('a record whose deadline reads far ahead over-waits by at most one window', async () => {
+  // A host reboot resets the monotonic clock, so a record from an earlier boot can read as far
+  // in the future. The cap keeps that skew bounded: one window, then the record is retired.
+  const device = androidDevice();
+  await seedRestoreRecord(host, device.id, -SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 1_000, {
+    writer: PREVIOUS_DAEMON,
+  });
+
+  await expect(
+    createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR }).shutdownTarget(
+      device,
+      signal(),
+    ),
+  ).resolves.toEqual(success());
+
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBe(SETTINGS_PROVIDER_FLUSH_SETTLE_MS);
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(flushRecordSerials(host)).toEqual([]);
+});
+
 test('a kill skips the wait entirely when no flush window is open', async () => {
   const device = androidDevice();
 
   await expect(
-    createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
+    createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR }).shutdownTarget(
+      device,
+      signal(),
+    ),
   ).resolves.toEqual(success());
 
   expect(sleep).not.toHaveBeenCalled();
@@ -240,10 +326,10 @@ test('a kill skips the wait entirely when no flush window is open', async () => 
 
 test('a kill cancelled inside the flush window never reaches adb emu kill', async () => {
   const device = androidDevice();
-  // Known elapsed: the mark is 40% of the window old, so the derived remainder must be the
+  // Known elapsed: the record is 40% of the window old, so the derived remainder must be the
   // known 60% — not the full budget, not a fixed constant. That makes both waits provably a
-  // function of the mark.
-  seedRestoreMark(device.id, seededElapsedMs);
+  // function of the record.
+  await seedRestoreRecord(host, device.id, seededElapsedMs);
   const controller = new AbortController();
   sleep.mockImplementationOnce((_ms, waitSignal) => {
     controller.abort();
@@ -254,7 +340,7 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
   // 'aborted' and shutdownAndroidTarget cancels via signal.throwIfAborted(), which throws the
   // signal's exact reason object. An unrelated rejection (a throw inside the flush wait, a
   // normalization bug) must fail this test, not stand in for cancellation.
-  const failure = await createAndroidShutdownRuntime({ commands })
+  const failure = await createAndroidShutdownRuntime({ commands, stateDir: STATE_DIR })
     .shutdownTarget(device, controller.signal)
     .catch((error: unknown) => error);
   expect(failure).toBe(controller.signal.reason);
@@ -265,11 +351,14 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
   expect(firstRemainingMs).toBeGreaterThan(seededRemainderMs - WINDOW_TOLERANCE_MS);
   expect(firstRemainingMs).toBeLessThanOrEqual(seededRemainderMs);
   // The window stays registered so a retry still waits out the remainder — and the retry
-  // re-derives the SAME remainder from the surviving mark: the monotonic-mark property the
+  // re-derives the SAME remainder from the surviving record: the durable-record property the
   // abort design rests on, pinned by number, not by shape.
-  expect([...testImeRestoreMarks.keys()]).toEqual([device.id]);
+  expect(flushRecordSerials(host)).toEqual([device.id]);
 
-  const retry = await createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+  const retry = await createAndroidShutdownRuntime({
+    commands,
+    stateDir: STATE_DIR,
+  }).shutdownTarget(device, signal());
 
   expect(retry).toEqual(success());
   expect(sleep).toHaveBeenCalledTimes(2);

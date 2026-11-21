@@ -50,6 +50,7 @@ test('the composed close awaits the real runner release before dismissing alerts
   };
   const gateway = createPlatformRuntimeGateway({
     host,
+    stateDir: root,
     sessionsDir: root,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: `${root}/${sessionId}/app.log`,
