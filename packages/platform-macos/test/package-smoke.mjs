@@ -157,6 +157,8 @@ test('packed core serves macOS desktop automation only after the managed platfor
     runCli(0, 'daemon', 'stop');
 
     runCli(0, 'plugins', 'add', './macos.tgz');
+    // The listing names the leaf the package holds, not the whole Apple family.
+    assert.match(cliText('plugins', 'list'), /@agent-device\/macos@\S+ \(apple macos\)/);
     // A daemon started before the store changed cannot see the new entry.
     runCli(0, 'daemon', 'stop');
 
