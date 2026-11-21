@@ -9,8 +9,38 @@ export type ReactNativeOverlayNode = Pick<
  * The box a banner rect is measured in: the capture's published viewport, or the full-screen
  * container a banner sits inside. Absent means the reader holds no box, so a placement rule cannot
  * run.
+ *
+ * `rectUnitsPerDp` says how many of the box's rect units make one density-independent pixel: 1 for a
+ * tree published in points (Apple), the display's density for one published in physical pixels
+ * (Android). Absent means 1, so a capture whose rects are already layout units needs no extra fact;
+ * a producer that publishes a bigger number is the only one that can shift a dp-written constant.
  */
-export type ReactNativeOverlaySurface = Readonly<{ width: number; height: number }>;
+export type ReactNativeOverlaySurface = Readonly<{
+  width: number;
+  height: number;
+  rectUnitsPerDp?: number;
+}>;
+
+/** The capture facts a placement rule measures against: the published box and the units it carries. */
+export type ReactNativeOverlayCaptureSurface = Readonly<{
+  viewport?: Readonly<{ width: number; height: number }>;
+  rectUnitsPerDp?: number;
+}>;
+
+/**
+ * The surface a capture offers a placement rule, or nothing when it published no box. Callers hand
+ * over the state they already hold, so the box and the units it is measured in travel together.
+ */
+export function reactNativeOverlaySurfaceFromCapture(
+  capture: ReactNativeOverlayCaptureSurface,
+): ReactNativeOverlaySurface | undefined {
+  if (!capture.viewport) return undefined;
+  return {
+    width: capture.viewport.width,
+    height: capture.viewport.height,
+    ...(capture.rectUnitsPerDp === undefined ? {} : { rectUnitsPerDp: capture.rectUnitsPerDp }),
+  };
+}
 
 /** App text such as "Error: invalid email" also starts this way, so it is not overlay evidence alone. */
 const GENERIC_SEVERITY_PREFIX_PATTERN = /^(warn|warning|error):\s+/;
@@ -28,22 +58,18 @@ const COLLAPSED_WARNING_PREFIX_PATTERNS = [
   /\b(?:possible\s+)?unhandled (?:promise )?rejection\b/,
 ] as const;
 /**
- * LogBox floats the banner with `left: 10; right: 10; bottom: 20` inside its own
- * `LogBoxNotificationContainer`, so it keeps a visible gap on both sides and above the bottom edge.
- * A gap of one unit or less is flush app chrome — a tab bar, a footer, or a bottom-sheet row —
- * however it opens. LogBox's gap is a fixed 10 units, so the floor stays absolute and reads the same
- * in points, dp and device pixels.
+ * LogBox pins its banner stack with `left: 10; right: 10; bottom: 20` inside its own
+ * `LogBoxNotificationContainer`, and the notification row is 48 high. Those are dp constants, so the
+ * side gap reads as 10 rect units only where a unit is a dp; on a device-pixel capture it reads as
+ * 10 times the display's density. A banner's two side gaps are its own width, so they match each
+ * other; an inset app card sits further in, and a flush row — a tab bar, a footer, a bottom sheet —
+ * sits at 0 and is app chrome however it opens. The tolerance absorbs sub-pixel rounding in the tree.
  */
-const COLLAPSED_BANNER_MIN_FLOAT = 1;
-/**
- * The widest side gap still read as LogBox's own. The ratio is what carries the cap to device-pixel
- * captures, where the same 10 units measure tens; the floor keeps a narrow phone's surface from
- * capping below the gap LogBox actually renders.
- */
-const COLLAPSED_BANNER_MAX_SIDE_FLOAT_SURFACE_RATIO = 0.035;
-const COLLAPSED_BANNER_MAX_SIDE_FLOAT = 12;
-/** LogBox anchors the banner stack 20 units above the bottom edge; a safe area can widen that gap. */
-const COLLAPSED_BANNER_MAX_BOTTOM_FLOAT_SURFACE_RATIO = 0.15;
+const COLLAPSED_BANNER_SIDE_INSET_DP = 10;
+const COLLAPSED_BANNER_SIDE_INSET_TOLERANCE = 1;
+/** LogBox anchors the stack 20 dp above the bottom edge, and the row is 48 dp, in any unit scale. */
+const COLLAPSED_BANNER_BOTTOM_FLOAT_MIN_DP = 12;
+const COLLAPSED_BANNER_BOTTOM_FLOAT_MAX_DP = 160;
 const COLLAPSED_WARNING_TEXT_MARKERS = [
   'open debugger to view warnings',
   'getsnapshot should be cached to avoid an infinite loop',
@@ -162,31 +188,22 @@ function isCollapsedBannerAtLogBoxPlacement(
   if (!surface) return false;
   const { width, height } = surface;
   if (!(width > 0) || !(height > 0)) return false;
+  const unitsPerDp = surface.rectUnitsPerDp ?? 1;
+  const sideInset = COLLAPSED_BANNER_SIDE_INSET_DP * unitsPerDp;
+  const leftInset = rect.x;
+  const rightInset = width - (rect.x + rect.width);
+  const bottomFloat = (height - (rect.y + rect.height)) / unitsPerDp;
   return (
-    isWithinSideFloatBand(rect.x, width) &&
-    isWithinSideFloatBand(width - (rect.x + rect.width), width) &&
-    isWithinBottomFloatBand(height - (rect.y + rect.height), height)
+    isCloseTo(leftInset, sideInset) &&
+    isCloseTo(rightInset, sideInset) &&
+    bottomFloat >= COLLAPSED_BANNER_BOTTOM_FLOAT_MIN_DP &&
+    bottomFloat <= COLLAPSED_BANNER_BOTTOM_FLOAT_MAX_DP
   );
 }
 
-/** True when a floated box keeps a visible side gap, no wider than LogBox's own. */
-function isWithinSideFloatBand(gap: number, surfaceWidth: number): boolean {
-  return (
-    gap >= COLLAPSED_BANNER_MIN_FLOAT &&
-    gap <=
-      Math.max(
-        COLLAPSED_BANNER_MAX_SIDE_FLOAT,
-        surfaceWidth * COLLAPSED_BANNER_MAX_SIDE_FLOAT_SURFACE_RATIO,
-      )
-  );
-}
-
-/** True when a floated box clears the surface's bottom edge by at most a safe area's worth. */
-function isWithinBottomFloatBand(gap: number, surfaceHeight: number): boolean {
-  return (
-    gap >= COLLAPSED_BANNER_MIN_FLOAT &&
-    gap <= surfaceHeight * COLLAPSED_BANNER_MAX_BOTTOM_FLOAT_SURFACE_RATIO
-  );
+/** True when a measured gap is the one LogBox renders, allow for sub-pixel rounding in the tree. */
+function isCloseTo(measured: number, expected: number): boolean {
+  return Math.abs(measured - expected) <= COLLAPSED_BANNER_SIDE_INSET_TOLERANCE;
 }
 
 function isFullScreenOverlayRect(rect: RawSnapshotNode['rect']): boolean {

@@ -39,6 +39,7 @@ import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '@agent-device/capture-kit/react-native-overlay';
+import { reactNativeOverlaySurfaceFromCapture } from '@agent-device/contracts/react-native-overlay';
 import { now } from '../../runtime-common.ts';
 import type {
   AuditSnapshotCommandOptions,
@@ -345,7 +346,7 @@ function buildSnapshotWarnings(params: {
 
   const reactNativeOverlayWarning = formatReactNativeOverlayWarning(
     params.snapshot.nodes,
-    params.snapshot.viewport,
+    reactNativeOverlaySurfaceFromCapture(params.snapshot),
   );
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 

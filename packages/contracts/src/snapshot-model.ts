@@ -144,6 +144,14 @@ export type SnapshotState = {
    */
   captureScale?: SnapshotCaptureScale;
   /**
+   * Rect units per density-independent pixel of the surface these rects are measured in: 1 where the
+   * producer publishes points (Apple), the display's density where it publishes physical pixels
+   * (Android). A consumer that reads a layout constant written in dp — LogBox's 10-unit banner inset
+   * — can only check it on a device-pixel tree with this fact, so the state carries it beside
+   * `viewport`. Absent means the producer published nothing, which reads as 1.
+   */
+  rectUnitsPerDp?: number;
+  /**
    * iOS: this capture's own command found the session app out of foreground and the runner
    * activated it before answering, so an earlier observation in the session described whatever held
    * the foreground instead (#2682). Consumers that surface this tree disclose the repair.

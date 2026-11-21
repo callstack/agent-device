@@ -6,6 +6,7 @@ import {
   attachSnapshotTextInputGeometry,
   snapshotCaptureAnnotationsFrom,
   publicSnapshotCaptureAnnotations,
+  type AndroidSnapshotBackendMetadata,
 } from '@agent-device/contracts/capture';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
@@ -135,7 +136,7 @@ export function buildSnapshotState(
     ...(data.presentedSurface ? { presentedSurface: data.presentedSurface } : {}),
     ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
     ...(data.keyboard ? { keyboard: data.keyboard } : {}),
-    ...snapshotStateGeometry(data),
+    ...snapshotStateGeometry(data, annotations),
     presentationKey: buildSnapshotPresentationKey(presentation),
     presentation,
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
@@ -147,11 +148,20 @@ export function buildSnapshotState(
 
 function snapshotStateGeometry(
   data: Readonly<{ viewport?: SnapshotViewportSize; captureScale?: SnapshotCaptureScale }>,
-): Pick<SnapshotState, 'viewport' | 'captureScale'> {
+  annotations: Readonly<{ androidSnapshot?: AndroidSnapshotBackendMetadata }>,
+): Pick<SnapshotState, 'viewport' | 'captureScale' | 'rectUnitsPerDp'> {
   return {
     ...(data.viewport ? { viewport: data.viewport } : {}),
     ...(data.captureScale ? { captureScale: data.captureScale } : {}),
+    ...(isUsableUnitScale(annotations.androidSnapshot?.pixelDensity)
+      ? { rectUnitsPerDp: annotations.androidSnapshot?.pixelDensity }
+      : {}),
   };
+}
+
+/** Only a real density read converts a dp constant; anything else leaves the rects in their own units. */
+function isUsableUnitScale(value: number | undefined): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
 /**
