@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import {
   summarizeCliSession,
   writeCliSession,
 } from '../auth-session.ts';
+import * as hostKitFile from '@agent-device/host-kit/file';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
@@ -389,6 +390,58 @@ test('logout without a stored session takes no lock and writes nothing', async (
   assert.equal(await removeCliSession({ stateDir: tempRoot }), false);
   assert.equal(fs.existsSync(path.dirname(resolveCliSessionPath(tempRoot))), false);
   fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a stored rotation is kept when the lock release fails, and the warning is best effort', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-release-');
+  const session = {
+    version: 1 as const,
+    id: 'session-release',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_old',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  const failingRelease = async () => {
+    throw new Error('lock standing under a spent claim');
+  };
+  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
+  const refresh = (stderr: { write: (chunk: string) => boolean }) =>
+    resolveRemoteAuth({
+      command: 'snapshot',
+      flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+      stateDir: tempRoot,
+      allowInteractiveLogin: false,
+      env: {},
+      io: {
+        stderr,
+        fetch: async () =>
+          jsonResponse({ accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_new' }),
+      },
+    });
+
+  try {
+    writeCliSession({ stateDir: tempRoot, session });
+    acquire.mockResolvedValueOnce(failingRelease);
+    const warnings: string[] = [];
+    const result = await refresh({ write: (chunk) => warnings.push(chunk) > 0 });
+    assert.equal(result.flags.daemonAuthToken, 'adc_agent_1');
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+    assert.match(warnings.join(''), /lock could not be released cleanly/);
+
+    // A stderr that throws does not fail the change either.
+    writeCliSession({ stateDir: tempRoot, session });
+    acquire.mockResolvedValueOnce(failingRelease);
+    const thrown = await refresh({
+      write: () => {
+        throw new Error('EPIPE');
+      },
+    });
+    assert.equal(thrown.flags.daemonAuthToken, 'adc_agent_1');
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+  } finally {
+    acquire.mockRestore();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test('device login does not print a user code that carries control characters', async () => {
