@@ -66,6 +66,15 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     return await this.implementation.installApp?.(device, app, appPath, options);
   }
 
+  // Public Limrun SDK member (`agent-device/limrun`); no longer part of ProviderDeviceRuntime.
+  async installInstallablePath(
+    device: DeviceInfo,
+    installablePath: string,
+    options?: ProviderDeviceInstallOptions,
+  ): Promise<ProviderDeviceInstallResult | undefined> {
+    return await this.implementation.installInstallablePath(device, installablePath, options);
+  }
+
   async configurePortReverse(
     options: ProviderPortReverseOptions,
   ): Promise<Record<string, unknown> | undefined> {
