@@ -395,7 +395,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--shutdown',
     usageDescription:
-      'close, disconnect: shutdown associated simulator/emulator after ending session',
+      'close, disconnect: after ending the session, also shutdown the session simulator or emulator, or delete or release its cloud instance',
     projectConfig: true,
     recorded: false,
   },
