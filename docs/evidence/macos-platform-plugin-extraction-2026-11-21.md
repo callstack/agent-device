@@ -32,7 +32,7 @@ the repository `.tmp/`, with `AGENT_DEVICE_HOME` and `AGENT_DEVICE_STATE_DIR` in
 | Step | Result |
 | --- | --- |
 | `devices --platform macos`, no plugin | `UNSUPPORTED_PLATFORM`, `plugin-not-installed`, install hint |
-| `plugins add ./macos.tgz` | installed, listed as `(apple)` |
+| `plugins add ./macos.tgz` | installed and listed |
 | `devices --platform macos` | the host Mac, `target=desktop` |
 | `open TextEdit --platform macos` | opened |
 | `snapshot -i`, default XCTest backend | blocked: see below |
