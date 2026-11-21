@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
 import { publishFileSync } from '@agent-device/host-kit/file';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -78,10 +79,46 @@ type AuthIo = {
 };
 
 /**
- * A login of one `connect` run, held between its approval and the admission of the provider that run
- * discovers.
+ * The one guard over one state directory's auth state, shared by every write of it: an explicit
+ * `auth login`, an `auth logout`, and the deferred save of a `connect` login this run holds while the
+ * cloud names its provider. The guard is a revision record beside the session it governs, republished by
+ * every write of that session. An explicit auth command writes what it approves and republishes the
+ * revision. A held login reads the revision before its device authorization and saves only while that
+ * revision still stands, so the newest auth command wins: an explicit login or logout that completed
+ * while a connect held its login approved is never overwritten by that connect's later save. A counter is
+ * used rather than the stored session itself, because a logout leaves the state directory holding no
+ * session, which is what a first login finds too, and the two cannot tell a newer write from no write.
+ *
+ * The compare and the publish of a held login are separate filesystem calls, so an auth write landing
+ * between them is still overwritten. What this guard rules out is the reported shape: a write that
+ * finished before a held login read the revision is always seen by that read.
  */
-type PendingLogin = { stateDir: string; session: CliSessionRecord };
+const AUTH_REVISION_FILE_NAME = 'cli-session.revision.json';
+/** The shape of a revision record. A record of another version is unreadable, not absent. */
+const AUTH_REVISION_RECORD_VERSION = 1;
+
+type AuthRevisionRecord = Readonly<{ version: 1; generation: number }>;
+
+/**
+ * The auth revision of one state directory, as the guard answers it: no auth write recorded yet, a
+ * recorded generation, or a record the reader cannot parse. An unreadable record is unknown evidence,
+ * so a held login is not saved on it rather than concluding nothing changed.
+ */
+type AuthRevision =
+  | Readonly<{ state: 'absent' }>
+  | Readonly<{ state: 'recorded'; generation: number }>
+  | Readonly<{ state: 'unreadable' }>;
+
+/**
+ * A login of one `connect` run, held between its approval and the admission of the provider that run
+ * discovers. `revision` is the auth revision this state directory carried when the cloud approved the
+ * login, and the held session is saved only while that revision still stands.
+ */
+type PendingLogin = {
+  stateDir: string;
+  session: CliSessionRecord;
+  revision: AuthRevision;
+};
 
 const pendingLoginScope = new AsyncLocalStorage<{ pending?: PendingLogin }>();
 
@@ -93,7 +130,9 @@ const pendingLoginScope = new AsyncLocalStorage<{ pending?: PendingLogin }>();
  * admitted, or drops it with {@link discardPendingLoginAtRefusal} when the provider's plugin is
  * refused. A run that ends with its login still pending, because discovery failed before any provider
  * was named, saves it, so a failure unrelated to a provider does not cost the login. Every other
- * route, including explicit `auth login`, saves a login as soon as it is approved.
+ * route, including explicit `auth login`, saves a login as soon as it is approved. A held login is
+ * published only while the auth revision it captured still stands, so it never overwrites auth state
+ * an explicit `auth login` or `auth logout` wrote meanwhile: see {@link publishHeldLogin}.
  */
 export async function withDeferredLogin<T>(
   options: { defersLogin: boolean },
@@ -104,21 +143,23 @@ export async function withDeferredLogin<T>(
   try {
     return await pendingLoginScope.run(scope, run);
   } finally {
-    // Only a run that ended before it named a provider gets here with a pending login.
-    if (scope.pending) writeCliSession(scope.pending);
+    // Only a run that ended before it names a provider gets here with a pending login.
+    if (scope.pending) publishHeldLogin(scope.pending);
   }
 }
 
 /**
  * Saves the login this run holds because its provider was just admitted. A route saves before it
- * generates or publishes connection state, so a login it cannot save stops the command there.
+ * generates or publishes connection state, so a login it cannot save stops the command there. A login
+ * an explicit `auth login` or `auth logout` superseded while it was held is not saved and is not an
+ * error: the state directory already holds the auth state its caller asked for last.
  */
 export function savePendingLoginAtAdmission(): void {
   const scope = pendingLoginScope.getStore();
   const pending = scope?.pending;
   if (scope === undefined) return;
   scope.pending = undefined;
-  if (pending) writeCliSession(pending);
+  if (pending) publishHeldLogin(pending);
 }
 
 /** Drops the login this run holds: its provider plugin was refused, so the route keeps no auth state. */
@@ -262,6 +303,9 @@ export async function loginWithDeviceAuth(options: {
   if (authMode === 'non-interactive') {
     throw buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);
   }
+  // The revision is read before the control plane is asked, so it is the answer this state directory
+  // gave when this login started, which is what a held login is compared with when it is saved.
+  const revisionAtStart = readAuthRevision(options.stateDir);
   const cloudBaseUrl = resolveCloudBaseUrl(env);
   const start = await postJson<DeviceAuthStartResponse>({
     baseUrl: cloudBaseUrl,
@@ -317,7 +361,7 @@ export async function loginWithDeviceAuth(options: {
     expiresAt: approved.cliSession?.expiresAt,
   };
   const scope = pendingLoginScope.getStore();
-  if (scope) scope.pending = { stateDir: options.stateDir, session };
+  if (scope) scope.pending = { stateDir: options.stateDir, session, revision: revisionAtStart };
   else writeCliSession({ stateDir: options.stateDir, session });
   return {
     accessToken: approved.accessToken,
@@ -346,7 +390,55 @@ export function readCliSession(options: { stateDir: string }): CliSessionRecord 
   }
 }
 
+/**
+ * Saves the session an explicit auth command approved. The write is unconditional: an explicit login is
+ * the newest answer for this state directory, and recording its revision is what makes a login another
+ * run still holds stand down.
+ */
 export function writeCliSession(options: { stateDir: string; session: CliSessionRecord }): void {
+  writeCliSessionRecord(options);
+  recordAuthRevision(options.stateDir);
+}
+
+/**
+ * Removes the stored session on an explicit `auth logout`, and records that revision so a login another
+ * run holds stands down instead of signing this state directory back in. Nothing is removed and nothing
+ * is recorded when no session was stored, since that command changed nothing here.
+ */
+export function removeCliSession(options: { stateDir: string }): boolean {
+  const filePath = resolveCliSessionPath(options.stateDir);
+  if (!fs.existsSync(filePath)) return false;
+  fs.rmSync(filePath, { force: true });
+  recordAuthRevision(options.stateDir);
+  return true;
+}
+
+/**
+ * Saves a login this run held, only while the auth revision it read before its device authorization
+ * still stands. A login that no longer stands is not saved, and is not a failure of this command: the
+ * state directory holds the auth state its caller asked for last, which is why the stand-down is logged
+ * rather than thrown. The revision is recorded after the session is written, so a reader that finds the
+ * newer session always finds its revision too.
+ */
+function publishHeldLogin(pending: PendingLogin): void {
+  const current = readAuthRevision(pending.stateDir);
+  if (!sameAuthRevision(pending.revision, current)) {
+    emitDiagnostic({
+      level: 'info',
+      phase: 'cli_deferred_login_superseded',
+      data: {
+        reason: current.state === 'unreadable' ? 'auth-revision-unreadable' : 'newer-auth-revision',
+        held: pending.revision,
+        current,
+      },
+    });
+    return;
+  }
+  writeCliSessionRecord({ stateDir: pending.stateDir, session: pending.session });
+  recordAuthRevision(pending.stateDir);
+}
+
+function writeCliSessionRecord(options: { stateDir: string; session: CliSessionRecord }): void {
   const filePath = resolveCliSessionPath(options.stateDir);
   fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
   publishFileSync({
@@ -357,11 +449,67 @@ export function writeCliSession(options: { stateDir: string; session: CliSession
   });
 }
 
-export function removeCliSession(options: { stateDir: string }): boolean {
-  const filePath = resolveCliSessionPath(options.stateDir);
-  if (!fs.existsSync(filePath)) return false;
-  fs.rmSync(filePath, { force: true });
-  return true;
+/**
+ * The auth revision this state directory's guard holds: the number of auth writes it has recorded. A
+ * record that cannot be read is its own answer, so a caller never mistakes unknown for unchanged.
+ */
+function readAuthRevision(stateDir: string): AuthRevision {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(resolveAuthRevisionPath(stateDir), 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    return code === 'ENOENT' || code === 'ENOTDIR' ? { state: 'absent' } : { state: 'unreadable' };
+  }
+  const generation = parseAuthRevisionGeneration(contents);
+  return generation === undefined ? { state: 'unreadable' } : { state: 'recorded', generation };
+}
+
+/** Publishes the revision that follows the one held, so the newest auth write of this directory owns it. */
+function recordAuthRevision(stateDir: string): void {
+  const current = readAuthRevision(stateDir);
+  const marker: AuthRevisionRecord = {
+    version: AUTH_REVISION_RECORD_VERSION,
+    generation: current.state === 'recorded' ? current.generation + 1 : 1,
+  };
+  publishFileSync({
+    destination: resolveAuthRevisionPath(stateDir),
+    contents: `${JSON.stringify(marker, null, 2)}\n`,
+    mode: 0o600,
+    exactMode: true,
+  });
+}
+
+/**
+ * Whether a held login's reading is still the reading the guard holds. An unreadable reading on either
+ * side answers no: a record that cannot be read says nothing about what was written since, which is not
+ * proof that nothing was, so a held login is not saved on it.
+ */
+function sameAuthRevision(left: AuthRevision, right: AuthRevision): boolean {
+  if (left.state === 'absent') return right.state === 'absent';
+  return (
+    left.state === 'recorded' && right.state === 'recorded' && right.generation === left.generation
+  );
+}
+
+function parseAuthRevisionGeneration(contents: string): number | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    return undefined;
+  }
+  const marker = parsed as Record<string, unknown> | null;
+  if (marker === null || typeof marker !== 'object') return undefined;
+  if (marker.version !== AUTH_REVISION_RECORD_VERSION) return undefined;
+  const generation = marker.generation;
+  return typeof generation === 'number' && Number.isSafeInteger(generation) && generation > 0
+    ? generation
+    : undefined;
+}
+
+function resolveAuthRevisionPath(stateDir: string): string {
+  return path.join(stateDir, 'auth', AUTH_REVISION_FILE_NAME);
 }
 
 export function resolveCliSessionPath(stateDir: string): string {
