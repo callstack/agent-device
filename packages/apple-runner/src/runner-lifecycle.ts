@@ -81,7 +81,7 @@ export async function prepareLocalIosRunner(
   // runner the loop's killed child was building meets a closed gate instead (#3220).
   const startAdmission = openRunnerStartLoopAdmission(device.id);
   let recoveryReason: string | undefined;
-  let cachedArtifactSuspect = false;
+  let suspect: SuspectCachedArtifact | undefined;
   try {
     for (let attempt = 1; attempt <= PREPARE_RUNNER_HEALTH_MAX_SESSION_ATTEMPTS; attempt += 1) {
       const result = await runPrepareAttempt({
@@ -91,11 +91,11 @@ export async function prepareLocalIosRunner(
         signal,
         attempt,
         recoveryReason,
-        cachedArtifactSuspect,
+        suspect,
       });
       if (result.kind === 'prepared') return result.result;
       recoveryReason = result.recoveryReason;
-      cachedArtifactSuspect = result.cachedArtifactSuspect;
+      suspect = result.suspect;
     }
   } finally {
     finishRunnerStartAdmission(startAdmission);
@@ -105,14 +105,19 @@ export async function prepareLocalIosRunner(
   throw new AppError('COMMAND_FAILED', 'iOS runner prepare failed');
 }
 
+type RestoredRunnerSession = RunnerSession & {
+  xctestrunArtifact: NonNullable<RunnerSession['xctestrunArtifact']>;
+};
+
+/** A restored artifact that a failed attempt indicted, and the failure that indicted it. */
+type SuspectCachedArtifact = Readonly<{
+  artifact: RestoredRunnerSession['xctestrunArtifact'];
+  reason: string;
+}>;
+
 type PrepareAttemptResult =
   | { kind: 'prepared'; result: PrepareIosRunnerResult }
-  | {
-      kind: 'retry';
-      recoveryReason: string;
-      /** The failed attempt ran a restored artifact and its failure indicts that artifact. */
-      cachedArtifactSuspect: boolean;
-    };
+  | { kind: 'retry'; recoveryReason: string; suspect: SuspectCachedArtifact | undefined };
 
 async function runPrepareAttempt(params: {
   device: DeviceInfo;
@@ -121,15 +126,24 @@ async function runPrepareAttempt(params: {
   signal: AbortSignal | undefined;
   attempt: number;
   recoveryReason: string | undefined;
-  cachedArtifactSuspect: boolean;
+  suspect: SuspectCachedArtifact | undefined;
 }): Promise<PrepareAttemptResult> {
-  const { device, command, options, signal, attempt, recoveryReason } = params;
+  const { device, command, options, signal, attempt, recoveryReason, suspect } = params;
   const connectStartedAt = Date.now();
   assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
+  let sessionPhaseTimeouts: PrepareDeadlinePhaseTimeouts;
+  try {
+    sessionPhaseTimeouts = readPrepareDeadlinePhaseTimeouts(options, 'runner_session');
+  } catch (error) {
+    // The indicted attempt spent the deadline, so no rebuild fits in this prepare. Cleaning the
+    // artifact makes the next prepare build a fresh one.
+    if (suspect) await markRunnerXctestrunArtifactBadForRun(suspect.artifact, suspect.reason);
+    throw error;
+  }
   const session = await ensureRunnerSession(device, {
     ...options,
     cleanStaleBundles: attempt > 1 ? true : options.cleanStaleBundles,
-    ...readPrepareDeadlinePhaseTimeouts(options, 'runner_session'),
+    ...sessionPhaseTimeouts,
   });
   assertExpectedRunnerSession(session, options.expectedRunnerSessionId);
   const connectMs = Date.now() - connectStartedAt;
@@ -155,7 +169,7 @@ async function runPrepareAttempt(params: {
       signal,
       attempt,
       error,
-      cachedArtifactSuspect: params.cachedArtifactSuspect,
+      suspect,
     });
   }
 }
@@ -168,7 +182,7 @@ async function handlePrepareHealthFailure(params: {
   signal: AbortSignal | undefined;
   attempt: number;
   error: unknown;
-  cachedArtifactSuspect: boolean;
+  suspect: SuspectCachedArtifact | undefined;
 }): Promise<PrepareAttemptResult> {
   const { device, session, command, options, signal, attempt, error } = params;
   assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
@@ -180,8 +194,9 @@ async function handlePrepareHealthFailure(params: {
   }
   if (shouldRetainRunnerSession(appErr)) throw error;
   // A slow boot on a loaded host fails the same way as a corrupt artifact, and the rebuild cleans
-  // a cache that concurrent sessions read. Only a failure that repeats on the retry rebuilds (#4689).
-  if (params.cachedArtifactSuspect && shouldRecoverBadCachedRunnerArtifact(appErr, session)) {
+  // a cache that concurrent sessions read. The first indictment retries on the cache; a retry that
+  // also fails, in any way, rebuilds it (#4689).
+  if (params.suspect && hasRestoredRunnerArtifact(session)) {
     return {
       kind: 'prepared',
       result: await recoverBadCachedRunnerArtifact({
@@ -190,7 +205,7 @@ async function handlePrepareHealthFailure(params: {
         command,
         options,
         signal,
-        error: appErr,
+        reason: params.suspect.reason,
       }),
     };
   }
@@ -220,22 +235,21 @@ async function handlePrepareHealthFailure(params: {
   return {
     kind: 'retry',
     recoveryReason: reason,
-    cachedArtifactSuspect: shouldRecoverBadCachedRunnerArtifact(appErr, session),
+    suspect: shouldRecoverBadCachedRunnerArtifact(appErr, session)
+      ? { artifact: session.xctestrunArtifact, reason }
+      : undefined,
   };
 }
 
 async function recoverBadCachedRunnerArtifact(params: {
   device: DeviceInfo;
-  session: RunnerSession & {
-    xctestrunArtifact: NonNullable<RunnerSession['xctestrunArtifact']>;
-  };
+  session: RestoredRunnerSession;
   command: RunnerCommand;
   options: PrepareIosRunnerOptions;
   signal: AbortSignal | undefined;
-  error: AppError;
+  reason: string;
 }): Promise<PrepareIosRunnerResult> {
-  const { device, session, command, options, signal, error } = params;
-  const reason = error.message || 'runner_health_failed';
+  const { device, session, command, options, signal, reason } = params;
   await invalidateRunnerSession(session, 'prepare_cached_runner_health_failed');
   await markRunnerXctestrunArtifactBadForRun(session.xctestrunArtifact, reason);
   const connectStartedAt = Date.now();
@@ -628,12 +642,15 @@ function readPreparePhaseTimeoutMs(
 function shouldRecoverBadCachedRunnerArtifact(
   error: AppError,
   session: RunnerSession,
-): session is RunnerSession & {
-  xctestrunArtifact: NonNullable<RunnerSession['xctestrunArtifact']>;
-} {
+): session is RestoredRunnerSession {
+  return hasRestoredRunnerArtifact(session) && shouldRebuildCachedRunnerArtifact(error);
+}
+
+/** A freshly built artifact is never rebuilt: the build that just made it would not differ. */
+function hasRestoredRunnerArtifact(session: RunnerSession): session is RestoredRunnerSession {
   const artifact = session.xctestrunArtifact;
-  if (!artifact || artifact.cache === 'miss') return false;
-  return shouldRebuildCachedRunnerArtifact(error);
+  if (!artifact) return false;
+  return artifact.cache !== 'miss';
 }
 
 function wrapPrepareHealthFailure(

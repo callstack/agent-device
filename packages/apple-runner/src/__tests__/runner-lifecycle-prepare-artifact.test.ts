@@ -72,7 +72,7 @@ beforeEach(() => {
 // `readPreparePhaseTimeoutMs` raises when the boot ate the budget: "prepare ios-runner timed out"
 // with reason `prepare_deadline_expired`. That indicts the boot, not the derived data it was
 // launched from, so the artifact stays and prepare retries with a fresh session. The artifact is
-// only wiped by the rules that indict it, such as a runner that refused the connection twice.
+// only wiped after a rule indicts it, such as a refused connection, and the retry fails too.
 
 test('a prepare deadline spent during boot keeps the restored artifact and retries', async () => {
   vi.useFakeTimers();
@@ -141,8 +141,43 @@ test('a startup deadline on a restored artifact retries without rebuilding the s
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], fixtures.retrySession);
 });
 
-// The bad-cache recovery decision: a restored artifact whose runner refuses the connection again
-// on the retry is indicted, wiped for the run, and replaced by one forced rebuild — under one
+// The connect loop of the first attempt can spend the whole prepare deadline, so the retry fails
+// before it starts. The refusal still indicts the restored artifact: it is cleaned for the next
+// prepare, because no budget is left to rebuild it in this one.
+
+test('a refused restored artifact whose retry runs out of prepare deadline is cleaned', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1_000);
+    const fixtures = makeBadCacheRecoveryFixtures();
+    const prepareDeadline = Deadline.fromTimeoutMs(45_000);
+
+    mockEnsureRunnerSession.mockResolvedValueOnce(fixtures.restoredSession);
+    mockExecuteRunnerCommandWithSession.mockImplementationOnce(async () => {
+      vi.setSystemTime(46_000);
+      throw runnerConnectFailure('runner_connect_refused');
+    });
+
+    await assert.rejects(
+      () => prepareIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 90_000, prepareDeadline }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'prepare_deadline_expired');
+        return true;
+      },
+    );
+
+    assert.deepEqual(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls, [
+      [fixtures.restoredArtifact, 'Runner did not accept connection'],
+    ]);
+    assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The bad-cache recovery decision: a restored artifact whose runner refuses the connection, and
+// whose retry fails too, is indicted, wiped for the run, and replaced by one forced rebuild — under one
 // admission token owned by the prepare loop, so the rebuild is the retry a fence governs rather
 // than a fresh start that slips past it (#3220).
 
@@ -201,7 +236,8 @@ test('prepareIosRunner invalidates rebuilt sessions when bad-cache recovery heal
     .mockResolvedValueOnce(rebuiltSession);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(runnerConnectFailure('runner_endpoint_probe_exhausted'))
-    .mockRejectedValueOnce(runnerConnectFailure('runner_endpoint_probe_exhausted'))
+    // The retry fails differently; the first failure already indicted the restored artifact.
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner health timed out'))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner health timed out'));
 
   await assert.rejects(
