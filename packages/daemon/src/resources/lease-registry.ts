@@ -44,14 +44,10 @@ import {
 } from './human-control-contract.ts';
 
 const LEASE_REGISTRY_REASONS = {
-  idInUse: {
-    reason: 'LEASE_ID_IN_USE',
-    summary: 'The requested lease id already names a lease that this daemon issued.',
-  },
-  capacityExceeded: {
-    reason: 'LEASE_CAPACITY_EXCEEDED',
-    summary: 'Every iOS simulator lease slot is taken; retry after another lease is released.',
-  },
+  // The requested lease id already names a lease that this daemon issued.
+  idInUse: { reason: 'LEASE_ID_IN_USE' },
+  // Every iOS simulator lease slot is taken; retry after another lease is released.
+  capacityExceeded: { reason: 'LEASE_CAPACITY_EXCEEDED' },
 } as const satisfies ReasonTable<'leases'>;
 
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };

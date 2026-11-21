@@ -25,11 +25,9 @@ import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 
 /** Names the session a request runs in. */
 const LEASE_ADMISSION_REASONS = {
-  sessionMismatch: {
-    reason: 'LEASE_SESSION_MISMATCH',
-    summary:
-      'The lease scope of the request differs from the lease of its session; `details.field` names the field.',
-  },
+  // The lease scope of the request differs from the lease of its session; `details.field` names the
+  // field.
+  sessionMismatch: { reason: 'LEASE_SESSION_MISMATCH' },
 } as const satisfies ReasonTable<'leases'>;
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {

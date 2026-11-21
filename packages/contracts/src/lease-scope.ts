@@ -510,19 +510,12 @@ export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
 
 /** The lease reasons that more than one package raises or reads. */
 export const LEASE_REASONS = {
-  notFound: {
-    reason: 'LEASE_NOT_FOUND',
-    summary: 'The lease that the request names is not active.',
-  },
-  scopeMismatch: {
-    reason: 'LEASE_SCOPE_MISMATCH',
-    summary:
-      'The lease does not match the tenant, run, backend, provider, device, or client of the request.',
-  },
-  scopeRequired: {
-    reason: 'LEASE_SCOPE_REQUIRED',
-    summary: 'The lease was allocated with an owner scope that the request does not repeat.',
-  },
+  // The lease that the request names is not active.
+  notFound: { reason: 'LEASE_NOT_FOUND' },
+  // The lease does not match the tenant, run, backend, provider, device, or client of the request.
+  scopeMismatch: { reason: 'LEASE_SCOPE_MISMATCH' },
+  // The lease was allocated with an owner scope that the request does not repeat.
+  scopeRequired: { reason: 'LEASE_SCOPE_REQUIRED' },
 } as const satisfies ReasonTable<'leases'>;
 
 /**

@@ -30,15 +30,19 @@ test('a marked table is collected exported or not, with its owner; an unmarked o
   const tables = collect({
     'packages/a/src/a.ts': `
       const LOCAL = {
-        busy: { reason: 'a_busy', summary: 'Busy.', commands: ['close'] },
+        // Busy.
+        busy: { reason: 'a_busy', commands: ['close'] },
       } as const satisfies ReasonTable<'open'>;
       export const SHARED = {
-        gone: { reason: 'A_GONE', summary: \`Gone.\` },
+        /** Maintainer docs, not the summary. */
+        // Gone,
+        // across two lines.
+        gone: { reason: \`A_GONE\` },
       } as const satisfies ReasonTable<'leases'>;
-      const UNMARKED = { other: { reason: 'a_other', summary: 'Other.' } } as const;
+      const UNMARKED = { other: { reason: 'a_other' } } as const;
     `,
     'packages/a/src/__tests__/fixture.ts': `
-      const TEST_ONLY = { x: { reason: 'x', summary: 'X.' } } as const satisfies ReasonTable<'t'>;
+      const TEST_ONLY = { x: { reason: 'x' } } as const satisfies ReasonTable<'t'>;
     `,
   });
   assert.deepEqual(
@@ -52,7 +56,9 @@ test('a marked table is collected exported or not, with its owner; an unmarked o
       {
         name: 'SHARED',
         owner: 'leases',
-        rows: [{ member: 'gone', reason: 'A_GONE', summary: 'Gone.', commands: [] }],
+        rows: [
+          { member: 'gone', reason: 'A_GONE', summary: 'Gone, across two lines.', commands: [] },
+        ],
       },
     ],
   );
@@ -60,14 +66,18 @@ test('a marked table is collected exported or not, with its owner; an unmarked o
 
 test('a row the collector cannot read fails the scan instead of being dropped', () => {
   const table = (rows: string, marker = 'as const satisfies ReasonTable<"open">') =>
-    `const T = { ${rows} } ${marker};`;
+    `const T = {\n// A.\n${rows} } ${marker};`;
   for (const [source, problem] of [
-    [table(`a: { reason: R.a, summary: 'A.', commands: ['open'] }`), /`reason` and `summary`/],
-    [table(`a: { reason: 'a', summary: 'A.', commands: [OPEN] }`), /`commands` as string literals/],
+    [table(`a: { reason: R.a }`), /`reason` as a literal/],
+    [table(`a: { reason: 'a', commands: [OPEN] }`), /`commands` as string literals/],
     [table(`a: ROW`), /named row object literal/],
-    [table(`a: { reason: 'a', summary: 'A.' }`, 'satisfies ReasonTable<"s">'), /as const/],
-    [table(`a: { reason: 'a', summary: 'A.' }`, 'as const satisfies ReasonTable<S>'), /owner/],
-    [table(`a: { reason: 'a', summary: 'A.' }`, 'as const satisfies ReasonTable'), /owner/],
+    [table(`a: { reason: 'a' }`, 'satisfies ReasonTable<"s">'), /as const/],
+    [table(`a: { reason: 'a' }`, 'as const satisfies ReasonTable<S>'), /owner/],
+    [table(`a: { reason: 'a' }`, 'as const satisfies ReasonTable'), /owner/],
+    [
+      `const T = { /** Docs only. */ a: { reason: 'a' } } as const satisfies ReasonTable<"open">;`,
+      /needs a comment/,
+    ],
   ] as const) {
     assert.throws(() => collect({ 'src/t.ts': source }), problem);
   }
@@ -76,10 +86,13 @@ test('a row the collector cannot read fails the scan instead of being dropped', 
 test('a duplicated reason value, a command the CLI lacks, and an empty table are problems', () => {
   const tables = collect({
     'packages/a/src/a.ts': `const A = {
-      one: { reason: 'dup', summary: 'One.', commands: ['open'] },
-      two: { reason: 'unique', summary: 'Two.', commands: ['no-such-command'] },
+      // One.
+      one: { reason: 'dup', commands: ['open'] },
+      // Two.
+      two: { reason: 'unique', commands: ['no-such-command'] },
     } as const satisfies ReasonTable<'open'>;`,
-    'packages/b/src/b.ts': `const B = { one: { reason: 'dup', summary: 'One.' } } as const satisfies ReasonTable<'s'>;`,
+    'packages/b/src/b.ts': `const B = { // One.
+      one: { reason: 'dup' } } as const satisfies ReasonTable<'s'>;`,
     'packages/c/src/c.ts': `const C = {} as const satisfies ReasonTable<'s'>;`,
   });
   const problems = reasonTableProblems(tables, cliCommands);
@@ -94,9 +107,11 @@ test('the page groups rows under their owner command or subsystem, and each othe
   const page = renderPage(
     collect({
       'packages/a/src/a.ts': `const A = {
-        one: { reason: 'r_one', summary: 'One | two.', commands: ['close'] },
+        // One | two.
+      one: { reason: 'r_one', commands: ['close'] },
       } as const satisfies ReasonTable<'open'>;
-      const B = { two: { reason: 'r_two', summary: 'Two.', commands: ['open'] } } as const satisfies ReasonTable<'leases'>;`,
+      const B = { // Two.
+      two: { reason: 'r_two', commands: ['open'] } } as const satisfies ReasonTable<'leases'>;`,
     }),
     cliCommands,
   );

@@ -30,11 +30,9 @@ type LeaseRelease = () => Promise<{ released: boolean }>;
 const LEASE_ROLLBACK_RELEASE_FAILED_REASON = 'LEASE_RELEASE_FAILED';
 
 const CONNECTION_LEASE_REASONS = {
-  ledgerOverwrite: {
-    reason: 'LEASE_LEDGER_OVERWRITE',
-    summary:
-      'The CLI already tracks an allocated lease and must release or transfer it before it allocates another.',
-  },
+  // The CLI already tracks an allocated lease and must release or transfer it before it allocates
+  // another.
+  ledgerOverwrite: { reason: 'LEASE_LEDGER_OVERWRITE' },
 } as const satisfies ReasonTable<'leases'>;
 
 type TrackedLease = {

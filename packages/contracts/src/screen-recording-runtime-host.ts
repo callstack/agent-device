@@ -168,10 +168,8 @@ export type AndroidScreenRecordingStopOutcome =
  * itself here rather than as an untyped `UNKNOWN`.
  */
 export const ANDROID_SCREEN_RECORDING_REASONS = {
-  startupFailed: {
-    reason: 'android_screenrecord_startup_failed',
-    summary: 'Android `screenrecord` exited before it began writing; its startup output says why.',
-  },
+  // Android `screenrecord` exited before it began writing; its startup output says why.
+  startupFailed: { reason: 'android_screenrecord_startup_failed' },
 } as const satisfies ReasonTable<'record'>;
 
 export type AndroidScreenRecordingTransport = Readonly<{

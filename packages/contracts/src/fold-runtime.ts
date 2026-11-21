@@ -4,14 +4,10 @@ import type { RuntimeOperationFact } from './platform-runtime.ts';
 
 /** The `fold` reasons that both the Android and the Apple owner raise. */
 export const FOLD_REASONS = {
-  singlePanelDevice: {
-    reason: 'single-panel-device',
-    summary: 'The device has one panel and no hinge, so there is no pose to set.',
-  },
-  poseUnverified: {
-    reason: 'fold-pose-unverified',
-    summary: 'The pose was sent, but the device still reports another pose.',
-  },
+  // The device has one panel and no hinge, so there is no pose to set.
+  singlePanelDevice: { reason: 'single-panel-device' },
+  // The pose was sent, but the device still reports another pose.
+  poseUnverified: { reason: 'fold-pose-unverified' },
 } as const satisfies ReasonTable<'fold'>;
 
 /**

@@ -83,11 +83,9 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
 const MOVE_STATE_DIR_FIX =
   'Point AGENT_DEVICE_STATE_DIR (or --state-dir) at a real private directory you own, such as "$HOME/.agent-device".';
 const DAEMON_STATE_ROOT_REASONS = {
-  unsafe: {
-    reason: 'daemon_state_root_unsafe',
-    summary:
-      'The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it.',
-  },
+  // The state directory, or a directory above it, is not private to your account; `details.fix`
+  // says how to fix it.
+  unsafe: { reason: 'daemon_state_root_unsafe' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
@@ -322,18 +320,12 @@ export const DAEMON_SHUTTING_DOWN_REASON = 'daemon_shutting_down';
 
 /** Why a daemon refuses a lifecycle request: one entry per rule the admission seam enforces. */
 export const DAEMON_LIFECYCLE_REASONS = {
-  busy: {
-    reason: 'daemon-busy',
-    summary: 'The daemon still holds work, so it refused to leave; `details` counts that work.',
-  },
-  instanceMismatch: {
-    reason: 'daemon-instance-mismatch',
-    summary: 'The request names a different daemon instance than the one answering it.',
-  },
-  ownerEmbedded: {
-    reason: 'daemon-owner-embedded',
-    summary: 'A live host process owns this daemon and ends it through its own `close()`.',
-  },
+  // The daemon still holds work, so it refused to leave; `details` counts that work.
+  busy: { reason: 'daemon-busy' },
+  // The request names a different daemon instance than the one answering it.
+  instanceMismatch: { reason: 'daemon-instance-mismatch' },
+  // A live host process owns this daemon and ends it through its own `close()`.
+  ownerEmbedded: { reason: 'daemon-owner-embedded' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**

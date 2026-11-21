@@ -12,14 +12,10 @@ import { runSimctlForDevice } from '../core/simctl-execution.ts';
 import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cache.ts';
 
 export const FOLD_HELPER_REASONS = {
-  hidDispatchFailed: {
-    reason: 'fold-hid-dispatch-failed',
-    summary: 'The fold helper could not send the hinge pose to the iOS simulator.',
-  },
-  hingeAngleNoSample: {
-    reason: 'fold-hinge-angle-no-sample',
-    summary: 'An iOS simulator hinge read returned no usable sample; `details` say why.',
-  },
+  // The fold helper could not send the hinge pose to the iOS simulator.
+  hidDispatchFailed: { reason: 'fold-hid-dispatch-failed' },
+  // An iOS simulator hinge read returned no usable sample; `details` say why.
+  hingeAngleNoSample: { reason: 'fold-hinge-angle-no-sample' },
 } as const satisfies ReasonTable<'fold'>;
 
 const HINGE_ANGLE_NO_SAMPLE_HINT =

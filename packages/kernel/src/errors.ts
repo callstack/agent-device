@@ -253,12 +253,12 @@ export function throwDaemonError(error: DaemonError): never {
 
 /**
  * One published `error.details.reason` value. `reason` is the wire spelling and never changes once
- * published. `summary` is one sentence for the error reasons page. `commands` names other CLI
- * commands that also raise it, beyond the table owner.
+ * published. `commands` names other CLI commands that also raise it, beyond the table owner. The
+ * `//` line comment above the row is its one-sentence summary on the error reasons page; as a
+ * comment it costs the shipped package nothing. A JSDoc block above it stays maintainer docs.
  */
 export type ReasonRow = Readonly<{
   reason: string;
-  summary: string;
   commands?: readonly [string, ...string[]];
 }>;
 
@@ -288,21 +288,16 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    * the Apple, Android, and HarmonyOS owners all answer with this one reason for every per-app
    * setting, because the recovery is the same whichever setting asked.
    */
-  sessionAppRequired: {
-    reason: 'session_app_required',
-    summary:
-      'A per-app setting was requested, but the session binds no app and the request names none.',
-  },
+  // A per-app setting was requested, but the session binds no app and the request names none.
+  sessionAppRequired: { reason: 'session_app_required' },
   /**
    * A device-bound command was asked for with neither an active session nor an explicit device
    * selector, so there was no target to route to. Recovery: `open` a session or pass `--platform`
    * or another device selector, then retry. One reason covers every command that asks the daemon to
    * find a device for it; the command it asks for stays in the message.
    */
-  sessionOrDeviceSelectorRequired: {
-    reason: 'session_or_device_selector_required',
-    summary: 'The request has neither an active session nor a device selector.',
-  },
+  // The request has neither an active session nor a device selector.
+  sessionOrDeviceSelectorRequired: { reason: 'session_or_device_selector_required' },
   /**
    * The caller named a session by hand and this daemon holds no session under that address, so the
    * command stopped before its device was chosen. Recovery: `open` that session again, or drop
@@ -311,28 +306,22 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    * is that address which is gone, which is what a caller retries on after its daemon was replaced
    * or restarted mid-run (#3674).
    */
-  namedSessionNotFound: {
-    reason: 'named_session_not_found',
-    summary: 'The request names a session that this daemon does not hold.',
-  },
+  // The request names a session that this daemon does not hold.
+  namedSessionNotFound: { reason: 'named_session_not_found' },
   /**
    * An app-scoped setting named an app that resolves to no installed app on the target, so nothing
    * was granted, revoked, or cleared under that name. Recovery: run `apps` for the exact bundle id
    * or package, or install the app, then retry.
    */
-  appNotInstalled: {
-    reason: 'app_not_installed',
-    summary: 'The named app resolves to no installed app on the target.',
-  },
+  // The named app resolves to no installed app on the target.
+  appNotInstalled: { reason: 'app_not_installed' },
   /**
    * The request envelope itself was malformed (for example a positional that is not a string), so
    * the transport refused it before any handler read it. Recovery: fix the client that built the
    * request; resending it unchanged fails the same way.
    */
-  malformedRequest: {
-    reason: 'malformed_request',
-    summary: 'The transport refused the request envelope before any handler read it.',
-  },
+  // The transport refused the request envelope before any handler read it.
+  malformedRequest: { reason: 'malformed_request' },
 } as const satisfies ReasonTable<'request admission'>;
 
 /** The refused composite step did not dispatch; earlier steps may already have dispatched. */

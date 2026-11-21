@@ -27,19 +27,12 @@ import { requireSimulatorDevice } from '../core/simulator.ts';
 import { FOLD_HELPER_REASONS, createFoldHelper, type FoldHelper } from './fold-helper.ts';
 
 const APPLE_FOLD_POSE_REASONS = {
-  dispatchedUnverified: {
-    reason: 'fold-pose-dispatched-unverified',
-    summary:
-      'The iOS simulator received the pose, but the first hinge read returned no sample to verify it.',
-  },
-  angleUnverified: {
-    reason: 'fold-angle-unverified',
-    summary: 'The iOS simulator hinge did not reach the angle of the final keyframe.',
-  },
-  unsettled: {
-    reason: 'fold-pose-unsettled',
-    summary: 'The iOS simulator hinge reached the pose but never came to rest.',
-  },
+  // The iOS simulator received the pose, but the first hinge read returned no sample to verify it.
+  dispatchedUnverified: { reason: 'fold-pose-dispatched-unverified' },
+  // The iOS simulator hinge did not reach the angle of the final keyframe.
+  angleUnverified: { reason: 'fold-angle-unverified' },
+  // The iOS simulator hinge reached the pose but never came to rest.
+  unsettled: { reason: 'fold-pose-unsettled' },
 } as const satisfies ReasonTable<'fold'>;
 
 const FOLDABLE_REQUIRED_HINT =

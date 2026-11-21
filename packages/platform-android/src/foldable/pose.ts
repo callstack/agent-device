@@ -26,27 +26,17 @@ const EMULATOR_POSTURES = Object.freeze({
   open: { id: '3', state: 'OPENED' },
 } as const);
 const ANDROID_FOLD_REASONS = {
-  postureUnsupported: {
-    reason: 'fold-posture-unsupported',
-    summary:
-      'The emulator profile has no device state for the requested pose; `details.supportedPoses` lists the poses it has.',
-  },
-  keyframesUnsupported: {
-    reason: 'fold-keyframes-unsupported',
-    summary: 'Android poses fixed postures only, so fold keyframes are refused.',
-  },
-  postureDispatchFailed: {
-    reason: 'fold-posture-dispatch-failed',
-    summary: 'The Android emulator console refused the posture command.',
-  },
-  lockScreenPersists: {
-    reason: 'fold-lock-screen-persists',
-    summary: 'The lock screen that folding raised on Android did not stay dismissed.',
-  },
-  hingeAngleUnreadable: {
-    reason: 'fold-hinge-angle-unreadable',
-    summary: 'The Android emulator console returned no hinge angle.',
-  },
+  // The emulator profile has no device state for the requested pose; `details.supportedPoses` lists
+  // the poses it has.
+  postureUnsupported: { reason: 'fold-posture-unsupported' },
+  // Android poses fixed postures only, so fold keyframes are refused.
+  keyframesUnsupported: { reason: 'fold-keyframes-unsupported' },
+  // The Android emulator console refused the posture command.
+  postureDispatchFailed: { reason: 'fold-posture-dispatch-failed' },
+  // The lock screen that folding raised on Android did not stay dismissed.
+  lockScreenPersists: { reason: 'fold-lock-screen-persists' },
+  // The Android emulator console returned no hinge angle.
+  hingeAngleUnreadable: { reason: 'fold-hinge-angle-unreadable' },
 } as const satisfies ReasonTable<'fold'>;
 
 /** Reads until the guest commits the posture's device state; `attempts × poll` is the settle budget. */

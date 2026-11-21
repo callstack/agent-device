@@ -60,49 +60,28 @@ export function validateNoRetiredScreenshotMaxSize(
  * reason, not a runtime failure.
  */
 export const SCREENSHOT_CROP_REASONS = {
-  selectorInvalid: {
-    reason: 'CROP_SELECTOR_INVALID',
-    summary: 'The `--crop-on` value is not a valid selector expression.',
-  },
-  targetNotFound: {
-    reason: 'CROP_TARGET_NOT_FOUND',
-    summary: 'No element matches the `--crop-on` selector.',
-  },
-  targetAmbiguous: {
-    reason: 'CROP_TARGET_AMBIGUOUS',
-    summary: 'More than one element matches the `--crop-on` selector.',
-  },
-  captureUnreadable: {
-    reason: 'CROP_CAPTURE_UNREADABLE',
-    summary: 'The snapshot taken for `--crop-on` was too sparse to read as the screen.',
-  },
-  captureIncomplete: {
-    reason: 'CROP_CAPTURE_INCOMPLETE',
-    summary: 'The snapshot taken for `--crop-on` was truncated, so a missing match is not proven.',
-  },
-  emptyIntersection: {
-    reason: 'CROP_EMPTY_INTERSECTION',
-    summary: 'The target frame covers no pixel of the capture.',
-  },
-  partialIntersection: {
-    reason: 'CROP_PARTIAL_INTERSECTION',
-    summary:
-      'The target frame extends past the image, so the crop was clipped; a warning, not a failure.',
-  },
-  targetNotAccepted: {
-    reason: 'CROP_TARGET_NOT_ACCEPTED',
-    summary: '`--crop-on` is not supported on this device, surface, or snapshot backend.',
-  },
-  frameMismatch: {
-    reason: 'CROP_FRAME_MISMATCH',
-    summary:
-      '`--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured frame.',
-  },
-  pendingPixelIdentityEvidence: {
-    reason: 'PENDING_PIXEL_IDENTITY_EVIDENCE',
-    summary:
-      'The `details.rejectionReason` of a target whose crop is not yet verified against an independent capture.',
-  },
+  // The `--crop-on` value is not a valid selector expression.
+  selectorInvalid: { reason: 'CROP_SELECTOR_INVALID' },
+  // No element matches the `--crop-on` selector.
+  targetNotFound: { reason: 'CROP_TARGET_NOT_FOUND' },
+  // More than one element matches the `--crop-on` selector.
+  targetAmbiguous: { reason: 'CROP_TARGET_AMBIGUOUS' },
+  // The snapshot taken for `--crop-on` was too sparse to read as the screen.
+  captureUnreadable: { reason: 'CROP_CAPTURE_UNREADABLE' },
+  // The snapshot taken for `--crop-on` was truncated, so a missing match is not proven.
+  captureIncomplete: { reason: 'CROP_CAPTURE_INCOMPLETE' },
+  // The target frame covers no pixel of the capture.
+  emptyIntersection: { reason: 'CROP_EMPTY_INTERSECTION' },
+  // The target frame extends past the image, so the crop was clipped; a warning, not a failure.
+  partialIntersection: { reason: 'CROP_PARTIAL_INTERSECTION' },
+  // `--crop-on` is not supported on this device, surface, or snapshot backend.
+  targetNotAccepted: { reason: 'CROP_TARGET_NOT_ACCEPTED' },
+  // `--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured
+  // frame.
+  frameMismatch: { reason: 'CROP_FRAME_MISMATCH' },
+  // The `details.rejectionReason` of a target whose crop is not yet verified against an independent
+  // capture.
+  pendingPixelIdentityEvidence: { reason: 'PENDING_PIXEL_IDENTITY_EVIDENCE' },
 } as const satisfies ReasonTable<'screenshot'>;
 
 export type ScreenshotCropReason =
@@ -115,9 +94,9 @@ export type ScreenshotCropReason =
  * reason in `error.details.reason` rather than silently ignored.
  */
 export const SCREENSHOT_FULLSCREEN_REASONS = {
+  // `--fullscreen` names a macOS helper surface, which always captures the main display.
   macOsHelperSurfaceFixedFrame: {
     reason: 'SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME',
-    summary: '`--fullscreen` names a macOS helper surface, which always captures the main display.',
   },
 } as const satisfies ReasonTable<'screenshot'>;
 

@@ -4,7 +4,7 @@
 // and this scan is what joins them into one vocabulary. It reads syntax only, so the scan needs no
 // build and evaluates no module.
 
-import { parseSync } from 'oxc-parser';
+import { parseSync, type Comment } from 'oxc-parser';
 import { propertyName, visitAst, type AstNode } from '../layering/layering-ast.ts';
 import { isProductionSourceFile } from '../layering/tracked-sources.ts';
 
@@ -36,6 +36,7 @@ export function collectReasonTables(sources: ReadonlyMap<string, string>): Colle
     if (result.errors.length > 0) {
       throw new SyntaxError(`Cannot scan ${file} for reason tables: ${result.errors[0]!.message}`);
     }
+    const comments = result.comments;
     const lineOf = (node: AstNode) => source.slice(0, node.start as number).split('\n').length;
     visitAst(result.program, (node) => {
       if (node.type !== 'VariableDeclarator') return;
@@ -48,7 +49,7 @@ export function collectReasonTables(sources: ReadonlyMap<string, string>): Colle
         line: lineOf(node),
         name,
         owner: marked.owner,
-        rows: readRows(marked.object, where),
+        rows: readRows(marked.object, comments, where),
       });
     });
   }
@@ -111,8 +112,24 @@ function reasonTableMarker(
   return { object, owner };
 }
 
-function readRows(object: AstNode, where: string): CollectedReasonRow[] {
+function readRows(
+  object: AstNode,
+  comments: readonly Comment[],
+  where: string,
+): CollectedReasonRow[] {
+  let previousEnd = object.start as number;
   return (object.properties as AstNode[]).map((property) => {
+    const summary = comments
+      .filter(
+        (comment) =>
+          comment.type === 'Line' &&
+          comment.start >= previousEnd &&
+          comment.end <= (property.start as number),
+      )
+      .map((comment) => comment.value.trim())
+      .join(' ')
+      .trim();
+    previousEnd = property.end as number;
     const member = property.type === 'Property' ? propertyName(property.key) : undefined;
     const row = property.value as AstNode | undefined;
     if (member === undefined || property.computed === true || row?.type !== 'ObjectExpression') {
@@ -125,9 +142,13 @@ function readRows(object: AstNode, where: string): CollectedReasonRow[] {
       fields.set(key, field.value as AstNode);
     }
     const reason = stringLiteral(fields.get('reason'));
-    const summary = stringLiteral(fields.get('summary'));
-    if (reason === undefined || summary === undefined) {
-      throw new TypeError(`${where}.${member} must write \`reason\` and \`summary\` as literals.`);
+    if (reason === undefined) {
+      throw new TypeError(`${where}.${member} must write \`reason\` as a literal.`);
+    }
+    if (summary === '') {
+      throw new TypeError(
+        `${where}.${member} needs a comment above it: the summary the page shows.`,
+      );
     }
     return {
       member,

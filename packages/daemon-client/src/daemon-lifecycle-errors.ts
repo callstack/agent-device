@@ -19,20 +19,14 @@ import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 // The ways an explicit lifecycle stops short of a usable daemon, as this client judges it. A busy
 // daemon answers with its own `DAEMON_LIFECYCLE_REASONS.busy`, which this client carries through.
 const DAEMON_UNAVAILABLE_REASONS = {
-  notRunning: {
-    reason: 'daemon-not-running',
-    summary: 'An attaching client found no daemon to connect to.',
-  },
-  incompatible: {
-    reason: 'daemon-incompatible',
-    summary:
-      'The running daemon does not match the client; `details.daemon` and `details.client` hold both identities.',
-  },
-  drainTimeout: {
-    reason: 'daemon-drain-timeout',
-    summary:
-      'A daemon accepted the request to leave but was still running 60 s later and could not be retired.',
-  },
+  // An attaching client found no daemon to connect to.
+  notRunning: { reason: 'daemon-not-running' },
+  // The running daemon does not match the client; `details.daemon` and `details.client` hold both
+  // identities.
+  incompatible: { reason: 'daemon-incompatible' },
+  // A daemon accepted the request to leave but was still running 60 s later and could not be
+  // retired.
+  drainTimeout: { reason: 'daemon-drain-timeout' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {

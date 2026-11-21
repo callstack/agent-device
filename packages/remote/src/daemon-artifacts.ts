@@ -575,11 +575,9 @@ async function downloadResponseArtifacts(
 }
 
 const RECORDING_DESTINATION_REASONS = {
-  notRequested: {
-    reason: 'recording_destination_not_requested',
-    summary:
-      'A remote recording was saved to the current directory because the request named no destination; a warning.',
-  },
+  // A remote recording was saved to the current directory because the request named no destination;
+  // a warning.
+  notRequested: { reason: 'recording_destination_not_requested' },
 } as const satisfies ReasonTable<'record'>;
 
 type RecordingDestinationWarning = {

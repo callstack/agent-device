@@ -22,9 +22,9 @@ const FOLD_HELPER_BINARY_FILENAME = 'fold-helper';
 const FOLD_HELPER_SCHEMA_VERSION = 1 as const;
 const FOLD_HELPER_LOCK_DESCRIPTION = 'iOS Simulator fold helper cache';
 const FOLD_HELPER_BUILD_REASONS = {
+  // The iOS simulator fold helper could not be built with the selected Xcode.
   buildFailed: {
     reason: 'fold-helper-build-failed',
-    summary: 'The iOS simulator fold helper could not be built with the selected Xcode.',
     commands: ['orientation'],
   },
 } as const satisfies ReasonTable<'fold'>;
