@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import {
   androidAdbResultError,
@@ -21,6 +21,22 @@ import type {
 // Shared install/version-check/checksum lifecycle for the three Android helper APKs.
 
 export type { AndroidHelperInstallDecision, InstalledAndroidHelperState };
+
+/**
+ * Why the helper APK already on the device is not the bundled one. The install that follows the
+ * refusal publishes the state as `error.details.reason` when the push fails, and the same values
+ * answer the install-success decisions in `InstalledAndroidHelperState`.
+ */
+const ANDROID_HELPER_INSTALL_STATE_REASONS = {
+  // The device has no package installed under the helper's name.
+  missing: { reason: 'missing' },
+  // The installed helper's versionCode is below the bundled artifact's.
+  outdated: { reason: 'outdated' },
+  // The installed helper matches the artifact's versionCode but not its APK checksum.
+  mismatched: { reason: 'mismatched' },
+  // The installed helper's APK checksum could not be read, so its currency stays unproven.
+  unverifiable: { reason: 'unverifiable' },
+} as const satisfies ReasonTable<'android helper install'>;
 
 const ANDROID_HELPER_IDENTITY_TIMEOUT_MS = 10_000;
 
@@ -134,8 +150,13 @@ export async function inspectInstalledAndroidHelper(options: {
     packageName,
     signal,
   );
-  if (installedVersionCode === undefined) return { reason: 'missing' };
-  if (installedVersionCode < versionCode) return { installedVersionCode, reason: 'outdated' };
+  if (installedVersionCode === undefined)
+    return { reason: ANDROID_HELPER_INSTALL_STATE_REASONS.missing.reason };
+  if (installedVersionCode < versionCode)
+    return {
+      installedVersionCode,
+      reason: ANDROID_HELPER_INSTALL_STATE_REASONS.outdated.reason,
+    };
   if (installedVersionCode > versionCode) return { installedVersionCode, reason: 'current' };
 
   try {
@@ -148,11 +169,17 @@ export async function inspectInstalledAndroidHelper(options: {
     return {
       installedVersionCode,
       installedSha256,
-      reason: installedSha256 === sha256 ? 'current' : 'mismatched',
+      reason:
+        installedSha256 === sha256
+          ? 'current'
+          : ANDROID_HELPER_INSTALL_STATE_REASONS.mismatched.reason,
     };
   } catch {
     signal?.throwIfAborted();
-    return { installedVersionCode, reason: 'unverifiable' };
+    return {
+      installedVersionCode,
+      reason: ANDROID_HELPER_INSTALL_STATE_REASONS.unverifiable.reason,
+    };
   }
 }
 
