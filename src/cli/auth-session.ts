@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { publishFileSync } from '@agent-device/host-kit/file';
+import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -15,6 +16,7 @@ const DEVICE_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const HTTP_TIMEOUT_MS = 15_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
+const CLI_SESSION_LOCK_TIMEOUT_MS = 10_000;
 
 export type CliSessionRecord = {
   version: 1;
@@ -270,7 +272,9 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
-  writeCliSession({ stateDir: options.stateDir, session });
+  await withCliSessionLock(options.stateDir, () =>
+    writeCliSession({ stateDir: options.stateDir, session }),
+  );
   return {
     accessToken: approved.accessToken,
     expiresAt: approved.expiresAt,
@@ -309,11 +313,33 @@ export function writeCliSession(options: { stateDir: string; session: CliSession
   });
 }
 
-export function removeCliSession(options: { stateDir: string }): boolean {
+export async function removeCliSession(options: { stateDir: string }): Promise<boolean> {
   const filePath = resolveCliSessionPath(options.stateDir);
-  if (!fs.existsSync(filePath)) return false;
-  fs.rmSync(filePath, { force: true });
-  return true;
+  return await withCliSessionLock(options.stateDir, () => {
+    if (!fs.existsSync(filePath)) return false;
+    fs.rmSync(filePath, { force: true });
+    return true;
+  });
+}
+
+/**
+ * Serializes the changes to the session file: a login's write, a logout's removal, and the
+ * re-read and write that store a rotated credential. Device approval polling stays outside.
+ */
+async function withCliSessionLock<Result>(stateDir: string, task: () => Result): Promise<Result> {
+  const sessionPath = resolveCliSessionPath(stateDir);
+  fs.mkdirSync(path.dirname(sessionPath), { recursive: true, mode: 0o700 });
+  const owner = readCurrentOwnerIdentity();
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: `${sessionPath}.lock`,
+        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+        timeoutMs: CLI_SESSION_LOCK_TIMEOUT_MS,
+        description: 'cloud CLI session file',
+      }),
+    task: async () => task(),
+  });
 }
 
 export function resolveCliSessionPath(stateDir: string): string {
@@ -365,7 +391,7 @@ async function resolveCliSessionAccess(options: {
     io: options.io,
   });
   if (refreshed.refreshCredential) {
-    storeRotatedCredential({
+    await storeRotatedCredential({
       stateDir: options.stateDir,
       sent: session,
       refreshCredential: refreshed.refreshCredential,
@@ -379,31 +405,25 @@ async function resolveCliSessionAccess(options: {
 }
 
 /**
- * Stores the credential that replaced the one this command sent. The session file is read
- * again first: a change that is visible on that read (another command's store, a login, a
- * logout) wins, and nothing is written. The read and the write are not one atomic step. They
- * need not be: under the rotation contract (see the refresh request) at most one replacement
- * exists for a credential, so two commands never hold different replacements to store.
- * A failed write keeps the command's access token and warns, because the cloud refuses the
- * old credential after its grace period.
+ * Stores the credential that replaced the one this command sent. Under the session file lock,
+ * the file is read again first: a change that is visible on that read (another command's store,
+ * a login, a logout) wins, and nothing is written. A failed lock or write keeps the command's
+ * access token and warns, because the cloud refuses the old credential after its grace period.
  */
-function storeRotatedCredential(options: {
+async function storeRotatedCredential(options: {
   stateDir: string;
   sent: CliSessionRecord;
   refreshCredential: string;
   io?: AuthIo;
-}): void {
+}): Promise<void> {
   const { sent, refreshCredential } = options;
-  const stored = readCliSession({ stateDir: options.stateDir });
-  if (
-    stored?.id !== sent.id ||
-    stored.refreshCredential !== sent.refreshCredential ||
-    refreshCredential === sent.refreshCredential
-  ) {
-    return;
-  }
+  if (refreshCredential === sent.refreshCredential) return;
   try {
-    writeCliSession({ stateDir: options.stateDir, session: { ...stored, refreshCredential } });
+    await withCliSessionLock(options.stateDir, () => {
+      const stored = readCliSession({ stateDir: options.stateDir });
+      if (stored?.id !== sent.id || stored.refreshCredential !== sent.refreshCredential) return;
+      writeCliSession({ stateDir: options.stateDir, session: { ...stored, refreshCredential } });
+    });
   } catch {
     writeStderr(
       options.io,
