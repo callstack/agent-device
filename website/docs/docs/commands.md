@@ -366,7 +366,7 @@ Exact behavior: `agent-device help hardware-button`.
 - `orientation` works on iOS and Android mobile targets only. On Android, it turns auto-rotate off, and the lock stays after the session ends. `orientation auto` gives rotation back to the sensor on ADB-backed Android only. An iPhone Duo refuses `portrait-upside-down`.
 - `action-button` reports that the press was sent, not what it triggered. A model without the button fails with `hardware_control_unavailable` and nothing is pressed. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone.
 - `shake` works on iOS simulators and local Android emulators, not on Android TV or remote providers. On iOS, the app gets a motion-shake event but no accelerometer data, so an app that detects shakes through CoreMotion does not see it. Take a snapshot to see what the app did.
-- On Android, `shake-console-refused` after a swing means the emulator's accelerometer may not be back at rest. Check with `adb emu sensor get acceleration`.
+- On Android, `shake-rest-acceleration-unreadable` means the emulator console returned no accelerometer reading, so nothing was sent. `shake-console-refused` after a swing means the accelerometer may not be back at rest. Check with `adb emu sensor get acceleration`.
 - `hardware-button` presses a key once and reports the press, not what the OS did with it. Android presses every key. A physical iPhone or iPad presses volume only, iOS simulators refuse volume, and TV targets point you to `tv-remote`.
 - On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`.
 
