@@ -111,17 +111,28 @@ export function assertRequestLeaseAdmission(
   ) {
     return undefined;
   }
-  if (req.command === 'human_control' && !sessionLease && !requestLeaseScope.leaseId) {
+  if (runsWithoutLease(req, sessionLease, requestLeaseScope)) return undefined;
+  return admitLease(req, leaseRegistry, session, options.env);
+}
+
+/**
+ * A request outside a leased session and outside tenant isolation runs without a lease unless it
+ * names a scoped lease. Takeover always needs one.
+ */
+function runsWithoutLease(
+  req: DaemonRequest,
+  sessionLease: SessionState['lease'],
+  requestLeaseScope: ReturnType<typeof resolveLeaseScope>,
+): boolean {
+  if (req.command === 'human_control') {
+    if (sessionLease || requestLeaseScope.leaseId) return false;
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'Takeover requires an active remote device lease. Local takeover is not supported.',
     );
   }
-  if (req.command !== 'human_control' && !sessionLease && req.meta?.sessionIsolation !== 'tenant') {
-    if (!requestLeaseScope.leaseId) return undefined;
-    if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
-  }
-  return admitLease(req, leaseRegistry, session, options.env);
+  if (sessionLease || req.meta?.sessionIsolation === 'tenant') return false;
+  return !requestLeaseScope.leaseId || (!requestLeaseScope.tenantId && !requestLeaseScope.runId);
 }
 
 function admitLease(
