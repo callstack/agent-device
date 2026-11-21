@@ -1,26 +1,15 @@
+import crypto from 'node:crypto';
 import { AppError } from './errors.ts';
-import { HOST_SCOPED_DEVICE_ID_INFIXES } from './device-identity.ts';
 import type { DeviceIdentity } from './device-identity.ts';
 import type { EnvMap } from './source-value.ts';
 
-// The host-scoped id grammar (app devices, web sessions) lives beside the canonical identity
-// shape in device-identity.ts. This module owns selection and resolution, so the re-export keeps
-// `@agent-device/kernel/device` the one import path every consumer of these helpers already uses.
 export {
-  canonicalDeviceId,
   deviceIdentity,
   deviceIdentityKey,
-  hostAppDevice,
-  hostDeviceIdOf,
-  isMacOsBundleId,
-  webBackendKeyOf,
-  webSessionBackendKey,
-  webSessionDevice,
   deviceShape,
   sameDeviceIdentity,
   sameDeviceShape,
   type DeviceIdentity,
-  type WebSessionIdentity,
 } from './device-identity.ts';
 
 // Legacy Apple leaf platforms. Retained ONLY as accepted `--platform` / read-path
@@ -76,11 +65,131 @@ export type DeviceInfo = {
   iosPhysicalDeviceBackend?: 'coredevice' | 'xctest';
   /**
    * Set when this device is one app of a host device rather than the host itself (ADR 0035). Its
-   * id is `hostAppDeviceId` of the two, so every per-device lock, claim, and session check
+   * id is {@link hostAppDeviceId} of the two, so every per-device lock, claim, and session check
    * treats the app as a device of its own; only {@link devicesOverlap} relates it to its host.
    */
   hostApp?: { hostDeviceId: string; bundleId: string };
 };
+
+const HOST_APP_DEVICE_ID_INFIX = ':app:';
+const WEB_SESSION_DEVICE_ID_INFIX = ':session:';
+const HOST_SCOPED_DEVICE_ID_INFIXES = [HOST_APP_DEVICE_ID_INFIX, WEB_SESSION_DEVICE_ID_INFIX];
+
+const MACOS_BUNDLE_ID_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/;
+
+/** A macOS bundle id in reverse-DNS form such as com.apple.TextEdit; any segment may be mixed-case. */
+export function isMacOsBundleId(value: string): boolean {
+  return MACOS_BUNDLE_ID_PATTERN.test(value);
+}
+
+/** Bundle ids match without regard to case, as LaunchServices matches them. */
+export function hostAppDeviceId(hostDeviceId: string, bundleId: string): string {
+  return `${hostDeviceIdPrefix(hostDeviceId)}${bundleId.toLowerCase()}`;
+}
+
+/** The host of an app or web session device id, or the id itself for any other device. */
+export function hostDeviceIdOf(deviceId: string): string {
+  const infixes = HOST_SCOPED_DEVICE_ID_INFIXES.map((infix) => deviceId.indexOf(infix)).filter(
+    (index) => index >= 0,
+  );
+  return infixes.length === 0 ? deviceId : deviceId.slice(0, Math.min(...infixes));
+}
+
+/** A device id as devices carry it: the bundle part of an app device id is lowercase. */
+export function canonicalDeviceId(deviceId: string): string {
+  const hostDeviceId = hostDeviceIdOf(deviceId);
+  const prefix = hostDeviceIdPrefix(hostDeviceId);
+  return deviceId.startsWith(prefix)
+    ? hostAppDeviceId(hostDeviceId, deviceId.slice(prefix.length))
+    : deviceId;
+}
+
+/** The id prefix every app device of `hostDeviceId` shares. */
+export function hostDeviceIdPrefix(hostDeviceId: string): string {
+  return `${hostDeviceId}${HOST_APP_DEVICE_ID_INFIX}`;
+}
+
+/** One app of `host`, held as a device of its own. */
+export function hostAppDevice(host: DeviceInfo, bundleId: string): DeviceInfo {
+  return {
+    ...host,
+    id: hostAppDeviceId(host.id, bundleId),
+    hostApp: { hostDeviceId: host.id, bundleId },
+  };
+}
+
+const WEB_BACKEND_KEY_PREFIX = 'p_';
+const WEB_TENANT_KEY_HASH_LENGTH = 12;
+
+const WEB_SESSION_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+// agent-browser binds its control socket at `<tmpdir>/adw/<12 hex>/<key>.sock` and refuses a path
+// over 103 bytes. The macOS per-user tmpdir is 48 bytes, the longest of the supported hosts.
+const SOCKET_PATH_MAX_BYTES = 103;
+const SOCKET_DIR_BYTES = 48 + '/adw/'.length + 12;
+const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
+
+/** The most characters a web backend session key can hold. */
+const WEB_BACKEND_KEY_MAX_LENGTH =
+  SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
+
+/** A named session with an optional tenant, or an implicit workspace session without a name. */
+export type WebSessionIdentity =
+  | Readonly<{ name: string; namespace?: { kind: 'tenant'; id: string } }>
+  | Readonly<{ kind: 'workspace'; id: string }>;
+
+function webBackendKeyPrefix(tenantId: string | undefined): string {
+  if (tenantId === undefined) return WEB_BACKEND_KEY_PREFIX;
+  const hash = crypto.createHash('sha256').update(tenantId).digest('hex');
+  return `t_${hash.slice(0, WEB_TENANT_KEY_HASH_LENGTH)}_`;
+}
+
+/** Validate the backend's name and socket limits. Its charset excludes `:` from device-id infixes. */
+function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
+  const name = sessionName.toLowerCase();
+  const maxLength = WEB_BACKEND_KEY_MAX_LENGTH - keyPrefixLength;
+  if (!WEB_SESSION_NAME_PATTERN.test(sessionName) || name.length > maxLength) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `A web session name must be 1 to ${maxLength} characters of letters, digits, "_" and "-".`,
+      {
+        reason: 'web_session_name_invalid',
+        sessionName,
+        maxLength,
+        hint: 'Pass --session with a name such as "checkout-1".',
+      },
+    );
+  }
+  return name;
+}
+
+/**
+ * The key agent-browser isolates a browser on, derived once from the session: `p_<name>`, or
+ * `t_<hash12 of the tenant>_<name>` under tenant isolation, or `w_<scope id>` for an implicit
+ * workspace session.
+ */
+export function webSessionBackendKey(session: WebSessionIdentity): string {
+  if ('kind' in session) return `w_${session.id}`;
+  const prefix = webBackendKeyPrefix(session.namespace?.id);
+  return `${prefix}${requireWebSessionName(session.name, prefix.length)}`;
+}
+
+/**
+ * One web session of `host`, held as a device of its own. Its id carries the backend key, so two
+ * names that drive one browser are one device and every reader takes the same key from it.
+ */
+export function webSessionDevice(host: DeviceInfo, session: WebSessionIdentity): DeviceInfo {
+  const id = `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${webSessionBackendKey(session)}`;
+  return { ...host, id };
+}
+
+/** The backend key a web session device id carries, or `undefined` for any other device id. */
+export function webBackendKeyOf(deviceId: string): string | undefined {
+  const rest = deviceId.slice(hostDeviceIdOf(deviceId).length);
+  return rest.startsWith(WEB_SESSION_DEVICE_ID_INFIX)
+    ? rest.slice(WEB_SESSION_DEVICE_ID_INFIX.length)
+    : undefined;
+}
 
 /** The host of an app device, then the device itself; any other device alone. */
 export function hostAndDeviceIds(device: DeviceInfo): string[] {
@@ -522,9 +631,7 @@ function resolveExplicitDevice(
  * `--udid` addresses Apple devices and `--serial` addresses serial-addressable ones (Android,
  * HarmonyOS). Passing the wrong pair used to reach resolution and fail as "No Apple device with
  * UDID emulator-5580" on an explicitly `--platform android` request — an answer about the wrong
- * platform, which reads as a missing device rather than a mistyped flag. With no explicit platform
- * there is nothing to reject; resolution answers a cross-side value with
- * `deviceIdentityWrongFlagHint` instead.
+ * platform, which reads as a missing device rather than a mistyped flag.
  */
 function assertSelectorFlagMatchesPlatform(selector: DeviceSelector): void {
   const platform = selector.platform;
@@ -548,7 +655,7 @@ function assertSelectorFlagMatchesPlatform(selector: DeviceSelector): void {
 function resolveAppleDeviceByUdid(candidates: DeviceInfo[], udid: string): DeviceInfo {
   const match = candidates.find((device) => device.id === udid && isApplePlatform(device.platform));
   if (!match) {
-    const hint = deviceIdentityWrongFlagHint(candidates, udid, 'udid');
+    const hint = deviceNotFoundHint(candidates, udid, 'udid');
     throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`, {
       ...(hint === undefined ? {} : { hint }),
       dispatched: 'no',
@@ -562,7 +669,7 @@ function resolveDeviceBySerial(candidates: DeviceInfo[], selector: DeviceSelecto
     (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
   );
   if (!match) {
-    const hint = deviceIdentityWrongFlagHint(candidates, selector.serial, 'serial');
+    const hint = deviceNotFoundHint(candidates, selector.serial, 'serial');
     throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector), {
       ...(hint === undefined ? {} : { hint }),
       dispatched: 'no',
@@ -578,9 +685,7 @@ function resolveDeviceByName(
   if (!deviceName) return undefined;
   const match = candidates.find((device) => matchesDeviceNameSelector(device, deviceName));
   if (!match) {
-    const hint =
-      deviceIdentityMistakenForNameHint(candidates, deviceName) ??
-      closestDeviceNameHint(candidates, deviceName);
+    const hint = deviceNotFoundHint(candidates, deviceName);
     throw new AppError(
       'DEVICE_NOT_FOUND',
       `No device named ${deviceName}`,
@@ -591,94 +696,40 @@ function resolveDeviceByName(
 }
 
 /**
- * `--device` takes a device NAME, and `--udid`/`--serial` take a device IDENTITY. Passing an
- * identity to `--device` reached name resolution and answered "No device named
- * 204BFFD9-9644-4830-B2C1-1B946597A07C" (#2064) — literally true, and unactionable: it names
- * neither the flag that does take that value nor the fact that one exists. It is the same class of
- * mistake `assertSelectorFlagMatchesPlatform` already answers for a mismatched identity flag, so
- * answer it the same way: name the flag the value belongs to. Only an observed identity earns the
- * hint — the candidates' own ids, with the flag derived from that device's platform; guessing from
- * the value's shape would have to reimplement every platform's identity syntax here. A platform
- * with no identity flag at all (web, linux) earns no hint either: `--udid` resolves only Apple
- * devices, so naming it would send the user to a flag that provably cannot work.
+ * The one not-found answer for all three selector sites: the flag an observed device carries the
+ * value under, or for `--device` the one candidate name a quote fold away, else none (#2064).
  */
-function deviceIdentityMistakenForNameHint(
+function deviceNotFoundHint(
   candidates: DeviceInfo[],
-  deviceName: string,
-): string | undefined {
-  const identityMatch = candidates.find((device) => device.id === deviceName);
-  if (!identityMatch) return undefined;
-  const flag = deviceIdentityFlag(identityMatch.platform);
-  if (!flag) return undefined;
-  return (
-    `${deviceName} is the id of ${JSON.stringify(identityMatch.name)}, not its name. ` +
-    `Did you mean --${flag} ${deviceName}?`
-  );
+  value: string | undefined,
+  flag?: DeviceIdentityFlag,
+) {
+  const identity = candidates.find((device) => device.id === value);
+  const identityFlag = identity && deviceIdentityFlag(identity.platform);
+  if (identity && identityFlag && identityFlag !== flag) {
+    return flag === undefined
+      ? `${value} is the id of ${JSON.stringify(identity.name)}, not its name. Did you mean --${identityFlag} ${value}?`
+      : `${value} identifies ${JSON.stringify(identity.name)} here. Did you mean --${identityFlag} ${value}?`;
+  }
+  const requested = quoteFoldDeviceName(value ?? '');
+  const close = candidates.filter((device) => quoteFoldDeviceName(device.name) === requested);
+  const only = flag === undefined && close.length === 1 ? close[0] : undefined;
+  if (!only) return undefined;
+  return `A device is named ${JSON.stringify(only.name)}, which differs only in punctuation. Did you mean --device ${JSON.stringify(only.name)}?`;
+}
+
+function quoteFoldDeviceName(value: string): string {
+  return normalizeDeviceName(value.replaceAll(/[‘’‚‛]/g, "'").replaceAll(/[“”„‟]/g, '"'));
 }
 
 export type DeviceIdentityFlag = 'udid' | 'serial';
 
 /**
- * An identity flag that resolves nothing, while the same value identifies an observed device
- * through the OTHER flag, is the same class of mistake `assertSelectorFlagMatchesPlatform` answers
- * for an explicit `--platform` — but with no explicit platform there is nothing to reject: the
- * value is simply on the wrong flag ("No Apple device with UDID emulator-5580" when
- * emulator-5580 is an attached Android serial). Answer with the flag the value belongs to, read
- * through `deviceIdentityFlag` rather than spelled out inline. Only an observed identity earns the
- * hint; a platform with no identity flag at all (web, linux) earns no hint either, because the
- * flag it would name provably cannot take the value.
- */
-function deviceIdentityWrongFlagHint(
-  candidates: DeviceInfo[],
-  id: string | undefined,
-  requestedFlag: DeviceIdentityFlag,
-): string | undefined {
-  const identityMatch =
-    id === undefined
-      ? undefined
-      : candidates.find(
-          (device) => device.id === id && deviceIdentityFlag(device.platform) !== requestedFlag,
-        );
-  const flag = identityMatch && deviceIdentityFlag(identityMatch.platform);
-  if (!identityMatch || !flag) return undefined;
-  return `${id} identifies ${JSON.stringify(identityMatch.name)} here. Did you mean --${flag} ${id}?`;
-}
-
-/**
- * A name that survives no normalization still often sits one punctuation character away from a
- * candidate — renamed simulators carry curly quotes (“iPhone 16”) that a typed request spells
- * straight. `matchesDeviceNameSelector` already folds case, underscores, and whitespace, so the
- * one fold it lacks is quote style; when that fold matches exactly one candidate, its name IS the
- * closest candidate and the answer is that name. More than one candidate under the fold means the
- * request cannot tell them apart, so no hint pretends otherwise.
- */
-function closestDeviceNameHint(candidates: DeviceInfo[], deviceName: string): string | undefined {
-  const requested = looselyNormalizeDeviceName(deviceName);
-  const close = candidates.filter(
-    (device) => looselyNormalizeDeviceName(device.name) === requested,
-  );
-  const only = close.length === 1 ? close[0] : undefined;
-  if (!only) return undefined;
-  return (
-    `A device is named ${JSON.stringify(only.name)}, which differs only in punctuation. ` +
-    `Did you mean --device ${JSON.stringify(only.name)}?`
-  );
-}
-
-function looselyNormalizeDeviceName(value: string): string {
-  return normalizeDeviceName(value)
-    .replaceAll(/[‘’‚‛]/g, "'")
-    .replaceAll(/[“”„‟]/g, '"');
-}
-
-/**
  * Which flag carries a device identity on a platform: `udid` addresses Apple devices, `serial`
  * addresses the serial-addressable ones. Resolution rejects the wrong pairing
- * (`assertSelectorFlagMatchesPlatform`), selector errors name the flag a value belongs to
- * (`deviceIdentityWrongFlagHint`, `deviceIdentityMistakenForNameHint`), and a caller that resolved
- * a device and has to re-issue it as flags — a remote lease request that must bind the device it
- * just picked — has to name the same flag, or the two drift and the request binds a selector that
- * resolves a DIFFERENT device.
+ * (`assertSelectorFlagMatchesPlatform`), and a caller that resolved a device and has to re-issue it
+ * as flags — a remote lease request that must bind the device it just picked — has to name the same
+ * flag, or the two drift and the request binds a selector that resolves a DIFFERENT device.
  *
  * Two sites still spell the pairing out inline; each differs from this rule in a way that is its own
  * decision, so they are tracked as follow-ups rather than folded in here.

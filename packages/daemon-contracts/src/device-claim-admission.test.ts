@@ -13,8 +13,7 @@ import { inspectNewSessionAdmission } from './device-claim-admission.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
 import { deviceClaimRefusalReason, type DeviceClaim } from './device-claims.ts';
-import { hostAppDeviceId } from '@agent-device/kernel/device-identity';
-import { type DeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDeviceId, type DeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 
 pinOwnProcessStartTime(hostProcess);
 
