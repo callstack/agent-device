@@ -6,6 +6,7 @@ import type { ExecResult } from '@agent-device/host-kit/command';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { ensureXctestrunArtifact } from '../runner-artifact.ts';
 import { markRunnerXctestrunArtifactBadForRun } from '../runner-cache.ts';
+import { writeRunnerLease } from '../runner-lease.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import {
   REPO_ROOT_FOR_TEST,
@@ -71,6 +72,54 @@ test('two sessions rebuilding one entry keep each other’s fresh tree', async (
 
   assert.equal(secondRebuilt.artifact, 'rebuilt');
   assert.deepEqual(readTree(path.dirname(firstRebuilt.xctestrunPath)), firstRebuiltTree);
+});
+
+test('rebuilds that nobody launches from leave only the current tree', async () => {
+  withoutRunnerDerivedPathEnv();
+  let artifact = removeCacheEntryAfterTest(await ensureXctestrunArtifact(IOS_SIMULATOR, {}));
+  const productsRoot = path.join(artifact.derived, 'Build');
+
+  for (let rebuild = 0; rebuild < 3; rebuild += 1) {
+    // No lease names these trees, and their launches ended an hour ago.
+    const anHourAgo = new Date(Date.now() - 60 * 60_000);
+    for (const tree of fs.readdirSync(productsRoot)) {
+      fs.utimesSync(path.join(productsRoot, tree), anHourAgo, anHourAgo);
+    }
+    await markRunnerXctestrunArtifactBadForRun(artifact, 'runner health failed twice');
+    artifact = await ensureXctestrunArtifact(IOS_SIMULATOR, { forceRunnerXctestrunRebuild: true });
+  }
+
+  assert.equal(builds, 4);
+  assert.deepEqual(fs.readdirSync(productsRoot), [
+    path.basename(path.dirname(artifact.xctestrunPath)),
+  ]);
+});
+
+test('a rebuild keeps a tree a live runner lease names after its launch window', async () => {
+  withoutRunnerDerivedPathEnv();
+  const running = removeCacheEntryAfterTest(await ensureXctestrunArtifact(IOS_SIMULATOR, {}));
+  const runningTree = path.dirname(running.xctestrunPath);
+  writeRunnerLease({
+    schemaVersion: 1,
+    deviceId: IOS_SIMULATOR.id,
+    ownerToken: 'owner-1',
+    ownerPid: process.pid,
+    ownerStartTime: 'test-process-start',
+    sessionId: 'session-1',
+    runnerPid: null,
+    runnerStartTime: null,
+    port: 8100,
+    xctestrunPath: path.join(runningTree, 'AgentDeviceRunner.env.session-1.xctestrun'),
+    jsonPath: path.join(runningTree, 'AgentDeviceRunner.env.session-1.json'),
+    createdAtMs: Date.now(),
+  });
+  const anHourAgo = new Date(Date.now() - 60 * 60_000);
+  fs.utimesSync(runningTree, anHourAgo, anHourAgo);
+
+  await markRunnerXctestrunArtifactBadForRun(running, 'runner health failed twice');
+  await ensureXctestrunArtifact(IOS_SIMULATOR, { forceRunnerXctestrunRebuild: true });
+
+  assert.equal(fs.existsSync(running.xctestrunPath), true);
 });
 
 function removeCacheEntryAfterTest<T extends { derived: string }>(artifact: T): T {

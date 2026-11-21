@@ -3,15 +3,15 @@ import path from 'node:path';
 import { isPathInsideDirectory } from './runner-artifact-manifest.ts';
 import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
 import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
+import { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 
 /**
- * How long a cache key or a runner tree outlives its last resolution without a runner lease naming
- * it. A session writes its lease only once its runner answers, so through the whole launch this
- * window is all that marks the files in use.
+ * How long a runner tree outlives its last resolution without a runner lease naming it. A session
+ * writes its lease only once its runner answers, so this window covers the launch alone: a tree a
+ * running runner still uses is kept by its lease. A launch with an explicit startup timeout longer
+ * than this can outlive the window.
  */
-// CONSERVATIVE: a day, so a launch that resolved its runner but has not written its lease cannot
-// lose its products. Revisit if start no longer leaves that gap.
-export const RUNNER_CACHE_READER_GRACE_MS = 24 * 60 * 60_000;
+const RUNNER_TREE_LAUNCH_GRACE_MS = 4 * RUNNER_STARTUP_TIMEOUT_MS;
 
 // A build's products directory sits at `Build/<products>`, so a tree is never deeper than this.
 const RUNNER_TREE_MAX_DEPTH = 2;
@@ -60,7 +60,7 @@ export async function removeRunnerCacheEntriesExcept(
 
 /**
  * The runner trees under `derived` (directories holding an `.xctestrun`, relative to `derived`)
- * that a session may still read: one resolved within {@link RUNNER_CACHE_READER_GRACE_MS}, or one
+ * that a session may still read: one resolved within {@link RUNNER_TREE_LAUNCH_GRACE_MS}, or one
  * a live runner lease names. When the leases cannot be listed, every tree counts.
  */
 export function listLiveRunnerTrees(derived: string, nowMs: number = Date.now()): string[] {
@@ -78,7 +78,7 @@ export function listLiveRunnerTrees(derived: string, nowMs: number = Date.now())
   return trees.filter((tree) => {
     const directory = path.resolve(derived, tree);
     const resolvedAtMs = fs.statSync(directory, { throwIfNoEntry: false })?.mtimeMs ?? 0;
-    return nowMs - resolvedAtMs < RUNNER_CACHE_READER_GRACE_MS || leasedTrees.has(directory);
+    return nowMs - resolvedAtMs < RUNNER_TREE_LAUNCH_GRACE_MS || leasedTrees.has(directory);
   });
 }
 

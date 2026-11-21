@@ -165,7 +165,7 @@ export async function cleanRunnerDerivedBeforeEvaluation(
 
 /**
  * Stamps the tree that holds the artifact's `.xctestrun` as resolved now. Runs under the cache lock,
- * so a clean that follows sees the stamp and keeps the tree for `RUNNER_CACHE_READER_GRACE_MS`.
+ * so a clean that follows sees the stamp and keeps the tree through its launch.
  */
 export function markRunnerTreeResolved<T extends { xctestrunPath: string }>(artifact: T): T {
   const now = new Date();
