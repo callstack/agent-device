@@ -14,6 +14,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
+  readTypeTextFromPositionals,
 } from '@agent-device/selectors/interaction-positionals';
 import {
   commonInputFromFlags,
@@ -80,11 +81,18 @@ export const interactionCliReaders = {
     x: Number(positionals[0]),
     y: Number(positionals[1]),
   }),
-  type: (positionals, flags) => ({
-    ...commonInputFromFlags(flags),
-    text: positionals.join(' '),
-    delayMs: flags.delayMs,
-  }),
+  type: (positionals, flags) => {
+    // The optional leading target splits off the text (`type @e12 "more"`); every input that
+    // decodes without a target keeps the focused-input text exactly as `positionals.join(' ')`.
+    const decoded = readTypeTextFromPositionals(positionals);
+    return {
+      ...commonInputFromFlags(flags),
+      ...selectorSnapshotInputFromFlags(flags),
+      ...(decoded.target ?? {}),
+      text: decoded.textPositionals.join(' '),
+      delayMs: flags.delayMs,
+    };
+  },
   fill: (positionals, flags) => {
     const decoded = flags.textStdin
       ? readStdinFillTarget(positionals)
@@ -206,7 +214,24 @@ function longPressPositionals(input: LongPressOptions): string[] {
 }
 
 function typePositionals(input: TypeTextOptions): string[] {
-  return [input.text];
+  return [...typeTargetPositionals(input), input.text];
+}
+
+/**
+ * The leading target positionals of a targeted `type`, or `[]` when the options carry no target,
+ * so the daemon keeps the focused-input semantics for a plain `type "text"`.
+ */
+function typeTargetPositionals(input: TypeTextOptions): string[] {
+  const candidate = input as Partial<InteractionTarget>;
+  if (
+    candidate.ref !== undefined ||
+    candidate.selector !== undefined ||
+    candidate.x !== undefined ||
+    candidate.y !== undefined
+  ) {
+    return interactionTargetPositionals(input as InteractionTarget);
+  }
+  return [];
 }
 
 function fillPositionals(input: FillOptions): string[] {

@@ -121,7 +121,7 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
       },
       {
         id: 'type',
-        label: 'Type into the focused field',
+        label: 'Type into a target or the focused field',
         commands: ['type'],
         link: docs('commands', 'interactions'),
         note: 'Revyl enters text only at a point, so it refuses `type`; use `fill` on the field instead.',

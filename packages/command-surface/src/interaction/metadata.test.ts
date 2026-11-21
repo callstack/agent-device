@@ -91,3 +91,20 @@ test('type keeps refusing an empty text: appending nothing is not a clear', () =
     expect((error as AppError).code).toBe('INVALID_ARGS');
   }
 });
+
+// The target is optional on `type`: the schema exposes fill's target keys, while `text` stays
+// the only required input, so a targetless `type "text"` keeps validating exactly as before.
+test('type declares the optional UI target keys beside the required text', () => {
+  const typeMetadata = interactionCommandMetadata.find((metadata) => metadata.name === 'type');
+  if (!typeMetadata) throw new Error('expected type metadata');
+
+  expect(typeMetadata.inputSchema.properties?.ref).toBeDefined();
+  expect(typeMetadata.inputSchema.properties?.selector).toBeDefined();
+  expect(typeMetadata.inputSchema.properties?.x).toBeDefined();
+  expect(typeMetadata.inputSchema.properties?.y).toBeDefined();
+  expect(typeMetadata.inputSchema.required).toEqual(['text']);
+  expect(typeMetadata.readInput({ ref: '@e12', text: 'more' })).toMatchObject({
+    ref: '@e12',
+    text: 'more',
+  });
+});

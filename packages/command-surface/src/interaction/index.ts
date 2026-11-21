@@ -439,9 +439,11 @@ const interactionCliSchemas = {
     positionalArgs: ['x', 'y'],
   },
   type: {
-    positionalArgs: ['text'],
+    usageOverride: 'type [<x y|@ref|selector>] <text>',
+    usageFlags: [],
+    positionalArgs: ['target?', 'text'],
     allowsExtraPositionals: true,
-    allowedFlags: ['delayMs'],
+    allowedFlags: ['delayMs', ...SELECTOR_SNAPSHOT_FLAGS],
   },
   fill: {
     usageOverride:
@@ -588,7 +590,7 @@ const typeCommandFacet = defineCommandFacet({
   name: 'type',
   effect: 'destructive',
   text: {
-    summary: 'Append text to the focused input',
+    summary: 'Append text to a target or the focused input',
     searchHint: 'keys keyboard',
   },
   metadata: metadata('type'),

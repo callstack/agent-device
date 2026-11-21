@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
+  readTypeTextFromPositionals,
 } from './interaction-positionals.ts';
 
 function assertInvalidArgs(fn: () => unknown, messageFragment: string) {
@@ -105,5 +106,72 @@ test('readFillTargetFromPositionals treats every token after a ref as text', () 
     kind: 'ref',
     target: { ref: '@e29~s317228' },
     text: 'good morning',
+  });
+});
+
+// `type <target> <text>` splits an optional leading target off the text, and every input that
+// does not decode as target + text keeps typing as pure text, exactly as it did before the
+// targeted form existed.
+
+test('readTypeTextFromPositionals leads with a real snapshot ref and keeps lookalike words as text', () => {
+  assert.deepEqual(readTypeTextFromPositionals(['@e12', 'more']), {
+    target: { kind: 'ref', ref: '@e12' },
+    targetPositionals: ['@e12'],
+    textPositionals: ['more'],
+  });
+  // #4360: only real refs (`@e<digits>`) are targets; a word that merely starts with @ types.
+  assert.deepEqual(readTypeTextFromPositionals(['@elena', 'hi']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['@elena', 'hi'],
+  });
+});
+
+test('readTypeTextFromPositionals keeps a ref with no text out of the text slot', () => {
+  // The caller refuses this as the mistargeted `fill` it usually is, so it must not
+  // silently become the text "@e12".
+  const decoded = readTypeTextFromPositionals(['@e12']);
+  assert.deepEqual(decoded.target, { kind: 'ref', ref: '@e12' });
+  assert.deepEqual(decoded.textPositionals, []);
+});
+
+test('readTypeTextFromPositionals reads a selector target only when text follows it', () => {
+  assert.deepEqual(readTypeTextFromPositionals(['text="Sign in"', 'hello']), {
+    target: { kind: 'selector', selector: 'text="Sign in"' },
+    targetPositionals: ['text="Sign in"'],
+    textPositionals: ['hello'],
+  });
+  // A lone selector-shaped token was pure text before the targeted form existed, so it stays one.
+  assert.deepEqual(readTypeTextFromPositionals(['text=hello']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['text=hello'],
+  });
+});
+
+test('readTypeTextFromPositionals reads a point target only when a third positional follows', () => {
+  assert.deepEqual(readTypeTextFromPositionals(['100', '200', 'hello']), {
+    target: { kind: 'point', x: 100, y: 200 },
+    targetPositionals: ['100', '200'],
+    textPositionals: ['hello'],
+  });
+  // `type 100 200` typed "100 200" before the targeted form existed, so it still does.
+  assert.deepEqual(readTypeTextFromPositionals(['100', '200']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['100', '200'],
+  });
+});
+
+test('readTypeTextFromPositionals keeps plain words as pure text', () => {
+  assert.deepEqual(readTypeTextFromPositionals(['hello', 'world']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['hello', 'world'],
+  });
+  assert.deepEqual(readTypeTextFromPositionals(['text', 'hello']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['text', 'hello'],
   });
 });

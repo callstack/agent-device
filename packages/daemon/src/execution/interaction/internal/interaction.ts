@@ -26,6 +26,7 @@ import {
   resolveBoundTypeTextRuntime,
   type TypeTextRequest,
 } from '../../type-text-runtime.ts';
+import { readTypeTextFromPositionals } from '@agent-device/selectors/interaction-positionals';
 import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export async function handleInteractionCommands(
@@ -90,7 +91,7 @@ async function dispatchNonTouchInteractionCommand(
   }
 }
 
-async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<DaemonResponse> {
+async function dispatchTypeViaRuntime(params: RoutedInteractionInput): Promise<DaemonResponse> {
   const { sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return noActiveSessionError();
@@ -99,15 +100,40 @@ async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<Da
     session.appBundleId,
     session.trace?.outPath,
   );
+  // The optional leading target splits off before any validation, so a targeted request refuses
+  // its text problems before the focus tap crosses to the device. `readTypeTextFromPositionals`
+  // keeps lookalike words such as `@elena` as text (#4360); a real ref with no text is the
+  // mistargeted `fill` it usually is and is refused below, still before any dispatch.
+  const decoded = readTypeTextFromPositionals(params.req.positionals ?? []);
+  if (decoded.target?.kind === 'ref' && decoded.textPositionals.length === 0) {
+    return missingTypeTextResponse(decoded.target.ref);
+  }
   // An invalid request is refused before binding, dialog recovery, and ref-frame expiry, so the
   // `fill @eN` hint of a mistargeted ref still names a live ref.
   let request: TypeTextRequest;
   try {
-    request = parseTypeTextRequest(params.req.positionals ?? [], context, {
-      rejectRefTarget: true,
+    request = parseTypeTextRequest(decoded.textPositionals, context, {
+      rejectRefTarget: decoded.target === undefined,
     });
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
+  }
+  // A targeted `type` is one command with two device effects: the press admission stack
+  // (resolution, AMBIGUOUS_MATCH, motion and keyboard guards) focuses the target first, then the
+  // bound text-entry operation appends. The leg dispatches and records as `press` — the command
+  // it performs — so the recorded script replays one tap and then the append, and the recorded
+  // type step carries the text-only positionals and never the target again.
+  let focusedTarget: Record<string, unknown> | undefined;
+  if (decoded.target) {
+    const focusResponse = await dispatchTargetedTouchViaRuntime(
+      {
+        ...params,
+        req: { ...params.req, command: 'press', positionals: decoded.targetPositionals },
+      },
+      'press',
+    );
+    if (!focusResponse.ok) return focusResponse;
+    focusedTarget = focusResponse.data;
   }
   // R41: exact-owner facts admission replaces the capability bucket, and the one binding made
   // here is the only way this request's text can reach a device.
@@ -127,7 +153,29 @@ async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<Da
   return await runTypeTextViaRuntime(params, session, {
     typeText: () => bound.typeText(request, context),
     recordingRecoveryWarning: recordingRecovery.warning,
+    focusedTarget,
+    positionals: decoded.textPositionals,
   });
+}
+
+/** #4360: a leading snapshot ref with no text is a mistargeted `fill`, not a targetless type. */
+function missingTypeTextResponse(ref: string): DaemonResponse {
+  return errorResponse('INVALID_ARGS', `type ${ref} requires text to append`, undefined, {
+    hint: `Pass the text: type ${ref} "text". Use fill ${ref} "text" to replace the field content.`,
+  });
+}
+
+/** The target identity the focus tap resolved, reported beside the text it typed into. */
+function typeTargetResponseFields(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!data) return {};
+  const fields: Record<string, unknown> = {};
+  if (typeof data.targetKind === 'string') fields.targetKind = data.targetKind;
+  if (typeof data.ref === 'string') fields.ref = data.ref;
+  if (typeof data.refLabel === 'string') fields.refLabel = data.refLabel;
+  if (typeof data.selector === 'string') fields.selector = data.selector;
+  return fields;
 }
 
 type AndroidRecordingDialogRecovery = {
@@ -167,7 +215,16 @@ async function runTypeTextViaRuntime(
   {
     typeText,
     recordingRecoveryWarning,
-  }: { typeText: () => Promise<Record<string, unknown>>; recordingRecoveryWarning?: string },
+    focusedTarget,
+    positionals,
+  }: {
+    typeText: () => Promise<Record<string, unknown>>;
+    recordingRecoveryWarning?: string;
+    /** Target identity from the focus tap of a targeted `type`, reported with the text. */
+    focusedTarget?: Record<string, unknown>;
+    /** The text-only positionals, so the recorded step replays without the focus tap. */
+    positionals?: string[];
+  },
 ): Promise<DaemonResponse> {
   const { req, sessionStore } = params;
   const actionStartedAt = Date.now();
@@ -189,13 +246,16 @@ async function runTypeTextViaRuntime(
       observation: params.androidObservation,
     });
     const actionFinishedAt = Date.now();
-    const responseData: Record<string, unknown> = { ...result };
+    const responseData: Record<string, unknown> = {
+      ...result,
+      ...typeTargetResponseFields(focusedTarget),
+    };
     appendTypeReadinessWarnings(responseData, recordingRecoveryWarning, readiness);
     return finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore,
       command: req.command,
-      positionals: req.positionals ?? [],
+      positionals: positionals ?? req.positionals ?? [],
       flags: req.flags,
       result: responseData,
       responseData,
