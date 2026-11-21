@@ -246,7 +246,9 @@ test('appstate with explicit missing session returns SESSION_NOT_FOUND', async (
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
     expect(response.error.message).toMatch(/no active session "sim"/i);
     expect(response.error.message).not.toMatch(/omit --session/i);
-    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.reason).toBe(
+      PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+    );
     expect(response.error.details?.session).toBe('sim');
     expect(response.error.details?.dispatched).toBe('no');
     expect(mockResolveTargetDevice).not.toHaveBeenCalled();

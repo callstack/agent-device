@@ -1,5 +1,5 @@
 import type { DaemonResponse, LeaseBackend } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
@@ -508,6 +508,23 @@ export const MIN_LEASE_WINDOW_MS = 5_000;
 /** The idle window of every remote device lease: proxy, cloud device and cloud WebDriver. */
 export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
 
+/** The lease reasons that more than one package raises or reads. */
+export const LEASE_REASONS = {
+  notFound: {
+    reason: 'LEASE_NOT_FOUND',
+    summary: 'The lease that the request names is not active.',
+  },
+  scopeMismatch: {
+    reason: 'LEASE_SCOPE_MISMATCH',
+    summary:
+      'The lease does not match the tenant, run, backend, provider, device, or client of the request.',
+  },
+  scopeRequired: {
+    reason: 'LEASE_SCOPE_REQUIRED',
+    summary: 'The lease was allocated with an owner scope that the request does not repeat.',
+  },
+} as const satisfies ReasonTable<'leases'>;
+
 /**
  * Why a lease stopped being ours: it is gone, spent, or taken back.
  *
@@ -517,7 +534,7 @@ export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
  * a request and a lease is not in here: that says something about the request, not the lease.
  */
 const INACTIVE_LEASE_REASONS: ReadonlySet<unknown> = new Set([
-  'LEASE_NOT_FOUND',
+  LEASE_REASONS.notFound.reason,
   'LEASE_EXPIRED',
   'LEASE_REVOKED',
 ]);

@@ -1,9 +1,9 @@
 import type { FoldPose, SetFoldPoseInput } from '@agent-device/contracts/device';
-import type { SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
+import { FOLD_REASONS, type SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 import { runAndroidShell } from '../adb.ts';
 import { runEmulatorConsole } from '../emulator-console.ts';
@@ -25,6 +25,35 @@ const EMULATOR_POSTURES = Object.freeze({
   'half-open': { id: '2', state: 'HALF_OPENED' },
   open: { id: '3', state: 'OPENED' },
 } as const);
+const ANDROID_FOLD_REASONS = {
+  postureUnsupported: {
+    reason: 'fold-posture-unsupported',
+    summary:
+      'The emulator profile has no device state for the requested pose; `details.supportedPoses` lists the poses it has.',
+    commands: ['fold'],
+  },
+  keyframesUnsupported: {
+    reason: 'fold-keyframes-unsupported',
+    summary: 'Android poses fixed postures only, so fold keyframes are refused.',
+    commands: ['fold'],
+  },
+  postureDispatchFailed: {
+    reason: 'fold-posture-dispatch-failed',
+    summary: 'The Android emulator console refused the posture command.',
+    commands: ['fold'],
+  },
+  lockScreenPersists: {
+    reason: 'fold-lock-screen-persists',
+    summary: 'The lock screen that folding raised on Android did not stay dismissed.',
+    commands: ['fold'],
+  },
+  hingeAngleUnreadable: {
+    reason: 'fold-hinge-angle-unreadable',
+    summary: 'The Android emulator console returned no hinge angle.',
+    commands: ['fold'],
+  },
+} as const satisfies ReasonTable;
+
 /** Reads until the guest commits the posture's device state; `attempts × poll` is the settle budget. */
 const ANDROID_FOLD_SETTLE_ATTEMPTS = 60;
 const ANDROID_FOLD_SETTLE_POLL_MS = 250;
@@ -97,7 +126,11 @@ function requirePostureState(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `${device.name} is not a foldable emulator: it lists no CLOSED, HALF_OPENED, or OPENED device state`,
-      { deviceId: device.id, reason: 'single-panel-device', hint: FOLDABLE_REQUIRED_HINT },
+      {
+        deviceId: device.id,
+        reason: FOLD_REASONS.singlePanelDevice.reason,
+        hint: FOLDABLE_REQUIRED_HINT,
+      },
     );
   }
   throw new AppError(
@@ -105,7 +138,7 @@ function requirePostureState(
     `${device.name} has no ${posture.state} device state to commit for the ${pose} pose; it lists ${listed.join(', ')}`,
     {
       deviceId: device.id,
-      reason: 'fold-posture-unsupported',
+      reason: ANDROID_FOLD_REASONS.postureUnsupported.reason,
       requestedPose: pose,
       supportedPoses,
       deviceStates: listed,
@@ -119,7 +152,7 @@ function requirePosePreset(device: DeviceInfo, input: SetFoldPoseInput): FoldPos
   if (input.pose === undefined) {
     throw new AppError('UNSUPPORTED_OPERATION', 'fold keyframes are not supported on Android', {
       deviceId: device.id,
-      reason: 'fold-keyframes-unsupported',
+      reason: ANDROID_FOLD_REASONS.keyframesUnsupported.reason,
       hint: KEYFRAMES_HINT,
     });
   }
@@ -149,7 +182,7 @@ async function sendEmulatorPosture(
   if (sent.refusal !== undefined) {
     throw new AppError('COMMAND_FAILED', `Unable to set the emulator posture for ${pose}`, {
       deviceId: device.id,
-      reason: 'fold-posture-dispatch-failed',
+      reason: ANDROID_FOLD_REASONS.postureDispatchFailed.reason,
       stdout: sent.stdout.trim(),
       hint: POSTURE_DISPATCH_HINT,
     });
@@ -185,7 +218,7 @@ async function awaitDeviceState(
       deviceId: device.id,
       requestedPose: pose,
       observedDeviceState: observedName ?? observed,
-      reason: 'fold-pose-unverified',
+      reason: FOLD_REASONS.poseUnverified.reason,
       hint: POSE_UNVERIFIED_HINT,
     },
   );
@@ -228,7 +261,7 @@ async function dismissFoldLockScreen(
   if (clearReads < LOCK_SCREEN_CLEAR_READS) {
     throw new AppError('COMMAND_FAILED', `${device.name} stays locked after the fold`, {
       deviceId: device.id,
-      reason: 'fold-lock-screen-persists',
+      reason: ANDROID_FOLD_REASONS.lockScreenPersists.reason,
       hint: LOCK_SCREEN_HINT,
     });
   }
@@ -259,7 +292,7 @@ async function readHingeAngle(
   if (!match) {
     throw new AppError('COMMAND_FAILED', `${device.name} reports no hinge angle`, {
       deviceId: device.id,
-      reason: 'fold-hinge-angle-unreadable',
+      reason: ANDROID_FOLD_REASONS.hingeAngleUnreadable.reason,
       stdout: stdout.trim(),
       hint: HINGE_ANGLE_HINT,
     });

@@ -130,7 +130,7 @@ test(scenario('occlusion'), async () => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /covered by another visible element/);
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetCovered);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetCovered.reason);
       assert.equal(details?.dispatched, 'no');
       return true;
     },
@@ -273,7 +273,7 @@ test(
           /label=Continue had no confirmed resting position when the transition window ran out/,
         );
         const details = data.details as Record<string, unknown>;
-        assert.equal(details.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+        assert.equal(details.reason, INTERACTION_ERROR_REASONS.targetStillMoving.reason);
         assert.equal(details.dispatched, 'no');
         assert.deepEqual(details.rect, { x: 100, y: 360, width: 200, height: 44 });
         assert.deepEqual(details.movedToRect, { x: 100, y: 480, width: 200, height: 44 });

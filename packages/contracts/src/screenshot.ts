@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export const SCREENSHOT_SCREEN_MASKS = ['black'] as const;
 export type ScreenshotScreenMask = (typeof SCREENSHOT_SCREEN_MASKS)[number];
@@ -60,20 +60,63 @@ export function validateNoRetiredScreenshotMaxSize(
  * reason, not a runtime failure.
  */
 export const SCREENSHOT_CROP_REASONS = {
-  selectorInvalid: 'CROP_SELECTOR_INVALID',
-  targetNotFound: 'CROP_TARGET_NOT_FOUND',
-  targetAmbiguous: 'CROP_TARGET_AMBIGUOUS',
-  captureUnreadable: 'CROP_CAPTURE_UNREADABLE',
-  captureIncomplete: 'CROP_CAPTURE_INCOMPLETE',
-  emptyIntersection: 'CROP_EMPTY_INTERSECTION',
-  partialIntersection: 'CROP_PARTIAL_INTERSECTION',
-  targetNotAccepted: 'CROP_TARGET_NOT_ACCEPTED',
-  frameMismatch: 'CROP_FRAME_MISMATCH',
-  pendingPixelIdentityEvidence: 'PENDING_PIXEL_IDENTITY_EVIDENCE',
-} as const;
+  selectorInvalid: {
+    reason: 'CROP_SELECTOR_INVALID',
+    summary: 'The `--crop-on` value is not a valid selector expression.',
+    commands: ['screenshot'],
+  },
+  targetNotFound: {
+    reason: 'CROP_TARGET_NOT_FOUND',
+    summary: 'No element matches the `--crop-on` selector.',
+    commands: ['screenshot'],
+  },
+  targetAmbiguous: {
+    reason: 'CROP_TARGET_AMBIGUOUS',
+    summary: 'More than one element matches the `--crop-on` selector.',
+    commands: ['screenshot'],
+  },
+  captureUnreadable: {
+    reason: 'CROP_CAPTURE_UNREADABLE',
+    summary: 'The snapshot taken for `--crop-on` was too sparse to read as the screen.',
+    commands: ['screenshot'],
+  },
+  captureIncomplete: {
+    reason: 'CROP_CAPTURE_INCOMPLETE',
+    summary: 'The snapshot taken for `--crop-on` was truncated, so a missing match is not proven.',
+    commands: ['screenshot'],
+  },
+  emptyIntersection: {
+    reason: 'CROP_EMPTY_INTERSECTION',
+    summary: 'The target frame covers no pixel of the capture.',
+    commands: ['screenshot'],
+  },
+  partialIntersection: {
+    reason: 'CROP_PARTIAL_INTERSECTION',
+    summary:
+      'The target frame extends past the image, so the crop was clipped; a warning, not a failure.',
+    commands: ['screenshot'],
+  },
+  targetNotAccepted: {
+    reason: 'CROP_TARGET_NOT_ACCEPTED',
+    summary: '`--crop-on` is not supported on this device, surface, or snapshot backend.',
+    commands: ['screenshot'],
+  },
+  frameMismatch: {
+    reason: 'CROP_FRAME_MISMATCH',
+    summary:
+      '`--crop-on` was combined with `--overlay-refs` or `--fullscreen`, which move the captured frame.',
+    commands: ['screenshot'],
+  },
+  pendingPixelIdentityEvidence: {
+    reason: 'PENDING_PIXEL_IDENTITY_EVIDENCE',
+    summary:
+      'The `details.rejectionReason` of a target whose crop is not yet verified against an independent capture.',
+    commands: ['screenshot'],
+  },
+} as const satisfies ReasonTable;
 
 export type ScreenshotCropReason =
-  (typeof SCREENSHOT_CROP_REASONS)[keyof typeof SCREENSHOT_CROP_REASONS];
+  (typeof SCREENSHOT_CROP_REASONS)[keyof typeof SCREENSHOT_CROP_REASONS]['reason'];
 
 /**
  * Machine-readable `screenshot --fullscreen` refusal reason. Every macOS surface captured through
@@ -82,11 +125,15 @@ export type ScreenshotCropReason =
  * reason in `error.details.reason` rather than silently ignored.
  */
 export const SCREENSHOT_FULLSCREEN_REASONS = {
-  macOsHelperSurfaceFixedFrame: 'SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME',
-} as const;
+  macOsHelperSurfaceFixedFrame: {
+    reason: 'SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME',
+    summary: '`--fullscreen` names a macOS helper surface, which always captures the main display.',
+    commands: ['screenshot'],
+  },
+} as const satisfies ReasonTable;
 
 export type ScreenshotFullscreenReason =
-  (typeof SCREENSHOT_FULLSCREEN_REASONS)[keyof typeof SCREENSHOT_FULLSCREEN_REASONS];
+  (typeof SCREENSHOT_FULLSCREEN_REASONS)[keyof typeof SCREENSHOT_FULLSCREEN_REASONS]['reason'];
 
 /** The capture paths a screenshot can name instead of the platform default. */
 export const SCREENSHOT_CAPTURE_BACKENDS = ['runner'] as const;

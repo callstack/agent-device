@@ -154,6 +154,6 @@ function sessionAlreadyClean(step: string, result: CliJsonResult): boolean {
   return (
     step === MICROPHONE_PERMISSION_RESET_STEP &&
     result.json?.error?.code === 'INVALID_ARGS' &&
-    result.json?.error?.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired
+    result.json?.error?.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason
   );
 }

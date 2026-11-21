@@ -76,7 +76,7 @@ type RefusedDaemonAnswer = Readonly<{ reason: unknown; details: unknown }>;
 function readOwnerRefusal(error: unknown): RefusedDaemonAnswer | undefined {
   if (!(error instanceof AppError)) return undefined;
   const reason = error.details?.reason;
-  return reason === DAEMON_LIFECYCLE_REASONS.ownerEmbedded
+  return reason === DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason
     ? { reason, details: error.details }
     : undefined;
 }
@@ -87,14 +87,14 @@ function judgeRefusedAnswer(
   target: DaemonLifecycleTarget,
 ): DaemonLifecycleOutcome | undefined {
   const stateDir = target.paths.baseDir;
-  if (refusal.reason === DAEMON_LIFECYCLE_REASONS.busy) {
+  if (refusal.reason === DAEMON_LIFECYCLE_REASONS.busy.reason) {
     throw daemonBusyError(info, stateDir, readDaemonLifecycleCensus(refusal.details));
   }
-  if (refusal.reason === DAEMON_LIFECYCLE_REASONS.ownerEmbedded) {
+  if (refusal.reason === DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason) {
     throw daemonNotRetirableError({ info, stateDir });
   }
   if (
-    refusal.reason === DAEMON_LIFECYCLE_REASONS.instanceMismatch ||
+    refusal.reason === DAEMON_LIFECYCLE_REASONS.instanceMismatch.reason ||
     refusal.reason === DAEMON_SHUTTING_DOWN_REASON
   ) {
     return { outcome: 'gone' };

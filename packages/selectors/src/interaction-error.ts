@@ -3,6 +3,7 @@ import type {
   SnapshotAddressableNode,
   SnapshotCoveringNode,
 } from '@agent-device/kernel/snapshot';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
 /**
  * Machine-readable `error.details.reason` values shared by interaction producers and adapters.
@@ -13,20 +14,39 @@ import type {
  * from a heavier package makes every façade that reads a reason evaluate that package.
  */
 export const INTERACTION_ERROR_REASONS = {
-  selectorNotFound: 'selector_not_found',
-  predicateFailed: 'predicate_failed',
+  selectorNotFound: {
+    reason: 'selector_not_found',
+    summary: 'No element matches the selector.',
+  },
+  predicateFailed: {
+    reason: 'predicate_failed',
+    summary:
+      'The element does not satisfy the asserted state, or strict absence could not be proven.',
+  },
   /**
    * An `@ref` names no node of the stored tree: stale, or never issued. `details.ref` carries the
    * bare ref body (`e12`), as `offscreen_ref` does. A consumer re-observes on this reason instead
    * of matching the message.
    */
-  refNotFound: 'ref_not_found',
+  refNotFound: {
+    reason: 'ref_not_found',
+    summary: 'The `@ref` names no node of the stored snapshot; take a new snapshot.',
+  },
   /** An `@ref` names a listed node with no label to wait on or scope by; the tree is fresh. */
-  refUnlabeled: 'ref_unlabeled',
+  refUnlabeled: {
+    reason: 'ref_unlabeled',
+    summary: 'The `@ref` names a node with no label to wait on or scope by.',
+  },
   /** The target names a node with no usable centre to touch: a missing, non-finite, or negative rect. */
-  targetBoundsInvalid: 'target_bounds_invalid',
+  targetBoundsInvalid: {
+    reason: 'target_bounds_invalid',
+    summary: 'The target has no usable center to touch.',
+  },
   /** The target resolved, but another visible element covers it. */
-  targetCovered: 'target_covered',
+  targetCovered: {
+    reason: 'target_covered',
+    summary: 'Another visible element covers the target; `details.coveredBy` names it when known.',
+  },
   /**
    * A press or click refused before dispatch because the platform reports the resolved control as
    * not hittable: a tap at its centre would land on another element. Distinct from
@@ -35,9 +55,15 @@ export const INTERACTION_ERROR_REASONS = {
    * the command resolved it. The owner is
    * `packages/command-runtime/src/commands/interaction/runtime/pre-dispatch-admission.ts`.
    */
-  targetNotHittable: 'target_not_hittable',
+  targetNotHittable: {
+    reason: 'target_not_hittable',
+    summary: 'The platform reports the target as not hittable, so nothing was pressed.',
+  },
   /** `find focus` or `find type` resolved to a disabled text field, which `details.ref` names. */
-  targetDisabled: 'target_disabled',
+  targetDisabled: {
+    reason: 'target_disabled',
+    summary: '`find focus` or `find type` resolved to a disabled text field.',
+  },
   /**
    * A press or click refused because it could not confirm a resting position for its target: the
    * target's rect was still changing when the transition window after the session's last mutating
@@ -49,8 +75,11 @@ export const INTERACTION_ERROR_REASONS = {
    * `packages/command-runtime/src/commands/interaction/runtime/moving-target-gate.ts`, which raises the reason beside the
    * hint that names that recovery.
    */
-  targetStillMoving: 'target_still_moving',
-} as const;
+  targetStillMoving: {
+    reason: 'target_still_moving',
+    summary: 'The target did not come to rest before the press; wait for the screen, then retry.',
+  },
+} as const satisfies ReasonTable<'interaction'>;
 
 /** The part of a covered node a refusal reports. */
 type CoveredNodeFacts = Pick<SnapshotAddressableNode, 'ref' | 'interactionBlocked' | 'coveredBy'>;
@@ -68,7 +97,7 @@ export function coveredInteractionDetails(
 ): Record<string, unknown> {
   const coveredBy = node.coveredBy;
   return {
-    reason: INTERACTION_ERROR_REASONS.targetCovered,
+    reason: INTERACTION_ERROR_REASONS.targetCovered.reason,
     hint: coveredInteractionHint(coveredBy),
     ...(subject.selector ? { selector: subject.selector } : {}),
     ref: `@${node.ref}`,

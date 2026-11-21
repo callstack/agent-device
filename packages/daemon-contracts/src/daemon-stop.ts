@@ -111,7 +111,7 @@ export function ownerRefusal(
 ): Readonly<{ reason: string; hint: string }> {
   return reason === 'embedded-owner'
     ? {
-        reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
+        reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason,
         hint: embeddedCloseHint(pid),
       }
     : {

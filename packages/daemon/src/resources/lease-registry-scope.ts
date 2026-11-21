@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { providerInstanceUnallocatedError, type DeviceLease } from '@agent-device/contracts/device';
 import {
+  LEASE_REASONS,
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
   leaseProviderRequiringRuntime,
@@ -249,7 +250,7 @@ export function assertLeaseScopeMatch(
     (normalized.clientId && lease.clientId !== normalized.clientId)
   ) {
     throw new AppError('UNAUTHORIZED', 'Lease does not match tenant/run scope', {
-      reason: 'LEASE_SCOPE_MISMATCH',
+      reason: LEASE_REASONS.scopeMismatch.reason,
     });
   }
 }
@@ -310,7 +311,7 @@ function normalizeOptionalLeaseScope(
 export function assertLeaseOwnerScope(lease: DeviceLease, request: HeartbeatLeaseRequest): void {
   if (leaseRequiresOwnerScope(lease) && !hasRequiredOwnerScope(lease, request)) {
     throw new AppError('UNAUTHORIZED', 'Lease owner scope is required', {
-      reason: 'LEASE_SCOPE_REQUIRED',
+      reason: LEASE_REASONS.scopeRequired.reason,
     });
   }
 }

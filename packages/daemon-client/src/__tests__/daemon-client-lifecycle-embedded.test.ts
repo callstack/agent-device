@@ -140,7 +140,7 @@ async function crashedStaleRegistration(ownership: 'embedded' | 'unrecognized' |
 for (const [ownership, reason, message, hint] of [
   [
     'embedded',
-    DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
+    DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason,
     'A host process owns this runtime, so it was not retired.',
     /owned by host process \d+\. Close it there/,
   ],
@@ -191,7 +191,7 @@ test('takeover refuses an embedded registration without a recorded host start ti
 
   const refusal = await refusalFrom(startup.retireDaemonForTakeover(info, paths));
 
-  assert.equal(refusal.details?.reason, DAEMON_LIFECYCLE_REASONS.ownerEmbedded);
+  assert.equal(refusal.details?.reason, DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason);
   assert.match(String(refusal.details?.hint), /owned by host process \d+\. Close it there/);
   assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), before);
   assert.deepEqual(signalsSent(killSpy), []);

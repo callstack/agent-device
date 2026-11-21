@@ -48,7 +48,10 @@ test('a named session the daemon does not hold is refused on the session, not th
         'No active session "e2e-ios-0". Run agent-device open <app> --session e2e-ios-0 first, ' +
           'or omit --session to run against a device selector.',
       );
-      assert.equal(refusal.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+      assert.equal(
+        refusal.details?.reason,
+        PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+      );
       assert.equal(refusal.details?.dispatched, 'no');
       assert.equal(refusal.details?.session, 'e2e-ios-0');
       assert.match(String(refusal.hint), /agent-device session list/);

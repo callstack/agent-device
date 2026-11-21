@@ -336,7 +336,7 @@ export function motionRefusal(
         ? `Selector ${selector} had no confirmed resting position when the transition window ran out`
         : `Ref ${ref} had no confirmed resting position when the transition window ran out`,
       {
-        reason: INTERACTION_ERROR_REASONS.targetStillMoving,
+        reason: INTERACTION_ERROR_REASONS.targetStillMoving.reason,
         ...(selector !== undefined ? { selector } : { ref }),
         ...(resolved.node?.rect ? { rect: resolved.node.rect } : {}),
         ...(movedToRect ? { movedToRect } : {}),

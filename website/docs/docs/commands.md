@@ -1372,6 +1372,8 @@ of a request reached the device, the failure is `unknown` and `error.details.dis
 counts those steps. A bounded resource refusal reports `no` for its refused step even when earlier
 batch or replay steps changed the app; check `dispatchedSteps` before retrying.
 
+[Error reasons](/docs/error-reasons) lists the typed reasons by command and subsystem.
+
 These refusals carry `dispatched: no` and a typed `error.details.reason`, so branch on the reason, not the message:
 
 - `session_or_device_selector_required`: the request had neither an active session nor a device selector. Open a session or pass `--platform`. Commands that require a session or a device selector before they read the request's target (`boot`, `clipboard`, `push`, `apps`, and siblings) answer this even when the request named a session the daemon does not hold.

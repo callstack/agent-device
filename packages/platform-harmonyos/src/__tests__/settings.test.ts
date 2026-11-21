@@ -50,7 +50,7 @@ test('HarmonyOS settings rejects unsupported setting and missing app bundle', as
     (error: unknown) =>
       error instanceof AppError &&
       error.message.includes('requires an app id') &&
-      error.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired &&
+      error.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason &&
       error.details?.dispatched === 'no',
   );
 });

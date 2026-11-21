@@ -20,7 +20,13 @@ const docLink = (slug: string, about: string) =>
  * reference pages an agent reads from the installed CLI (`agent-device help`,
  * `agent-device capabilities`) or only when it needs them. llms.txt names them from this list.
  */
-export const llmsSmallExclude = ['commands', 'capabilities', 'client-api', 'migrating-gestures'];
+export const llmsSmallExclude = [
+  'commands',
+  'capabilities',
+  'client-api',
+  'error-reasons',
+  'migrating-gestures',
+];
 const excludedTitles = llmsSmallExclude.map(docTitle);
 
 export const llmsDescription =

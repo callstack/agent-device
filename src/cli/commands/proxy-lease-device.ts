@@ -15,6 +15,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
   LEASE_DEVICE_SPEC_KEYS,
+  LEASE_REASONS,
   requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
 import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
@@ -278,7 +279,7 @@ function unboundLeaseError(state: RemoteConnectionState, lease: Lease): AppError
       session: state.session,
       leaseId: lease.leaseId,
       deviceKey: lease.deviceKey,
-      reason: 'LEASE_SCOPE_MISMATCH',
+      reason: LEASE_REASONS.scopeMismatch.reason,
       hint: 'Use a lease that names its device, or drop the lease id from the remote config and flags so open allocates one.',
     },
   );

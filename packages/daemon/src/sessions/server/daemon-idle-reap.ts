@@ -297,14 +297,14 @@ function isHeld(census: DaemonLifecycleCensus): boolean {
 
 function busy(census: DaemonLifecycleCensus): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon is busy and was not asked to leave.', {
-    reason: DAEMON_LIFECYCLE_REASONS.busy,
+    reason: DAEMON_LIFECYCLE_REASONS.busy.reason,
     ...census,
   });
 }
 
 function instanceMismatch(): AppError {
   return new AppError('COMMAND_FAILED', 'A lifecycle request names a different daemon instance.', {
-    reason: DAEMON_LIFECYCLE_REASONS.instanceMismatch,
+    reason: DAEMON_LIFECYCLE_REASONS.instanceMismatch.reason,
   });
 }
 
@@ -312,6 +312,6 @@ function ownerEmbedded(): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'A host process owns this daemon, so only that host can retire it.',
-    { reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded },
+    { reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason },
   );
 }

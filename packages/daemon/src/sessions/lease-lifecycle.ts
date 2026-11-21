@@ -1,6 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS, leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type {
@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/device';
 import { buildSessionLeaseFromRequest, type SessionLease } from '../core/lease-context.ts';
 import { assertRequestLeaseAdmission } from './request-admission.ts';
-import { errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
@@ -59,15 +59,20 @@ export async function cleanupExpiredLeasedSession(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
-  assertTeardownAllowed?: (ref: SessionRef) => void;
+  /** A composite request refuses an expired lease rather than tear its session down mid-run. */
+  refuseTeardown?: boolean;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
   if (
-    !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () =>
-      params.assertTeardownAllowed?.(ref),
-    )
+    !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () => {
+      if (!params.refuseTeardown) return;
+      throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+        reason: LEASE_REASONS.notFound.reason,
+        dispatched: 'no',
+      });
+    })
   )
     return false;
   await endLeasedSession(

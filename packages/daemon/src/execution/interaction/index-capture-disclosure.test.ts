@@ -38,7 +38,7 @@ const testCreateCommandSurface = commandSurfaceWithMembers((config) => ({
         target.kind === 'text'
           ? `wait timed out for text: ${target.text}`
           : 'wait timed out for selector';
-      throw new AppError('COMMAND_FAILED', message, { reason: WAIT_REASONS.targetAbsent });
+      throw new AppError('COMMAND_FAILED', message, { reason: WAIT_REASONS.targetAbsent.reason });
     },
   },
 }));

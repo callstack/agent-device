@@ -183,7 +183,7 @@ export function resolveNodeTouchPoint(
   if (resolution.kind === 'invalid') {
     throw discloseDispatch(
       new AppError('COMMAND_FAILED', failure.invalidMessage, {
-        reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
+        reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid.reason,
         ...bareTargetDetails(failure.blockedTargetDetails),
         ...scrollContainerRecovery(node, nodes, failure.shellQuotedSelector),
       }),

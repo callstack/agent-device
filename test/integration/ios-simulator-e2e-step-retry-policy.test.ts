@@ -25,9 +25,9 @@ function waitFailure(reason: string, retriable: boolean | undefined): CliJsonRes
 }
 
 for (const reason of [
-  WAIT_REASONS.captureStalled,
-  WAIT_REASONS.runnerRestartExhausted,
-  WAIT_REASONS.readinessExhausted,
+  WAIT_REASONS.captureStalled.reason,
+  WAIT_REASONS.runnerRestartExhausted.reason,
+  WAIT_REASONS.readinessExhausted.reason,
 ]) {
   test(`${reason} with the product's retriable verdict re-issues the step`, () => {
     assert.equal(isObservationPreventedStepMiss(waitFailure(reason, true)), true);
@@ -38,11 +38,11 @@ test('an observation-prevented reason without the product retriable verdict does
   // The negative that keeps the predicate keyed on the conjunction: a response carrying the same
   // reason but marked non-retriable (or carrying no verdict) must not buy a re-issue.
   assert.equal(
-    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.captureStalled, false)),
+    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.captureStalled.reason, false)),
     false,
   );
   assert.equal(
-    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.captureStalled, undefined)),
+    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.captureStalled.reason, undefined)),
     false,
   );
 });
@@ -50,9 +50,12 @@ test('an observation-prevented reason without the product retriable verdict does
 test('a retriable target-absent or deadline-exceeded wait does not re-issue', () => {
   // The screen was readable: the target was not there, or a readable capture consumed the
   // remaining budget. Re-issuing would hide a real absence, so these stay hard failures.
-  assert.equal(isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.targetAbsent, true)), false);
   assert.equal(
-    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.deadlineExceeded, true)),
+    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.targetAbsent.reason, true)),
+    false,
+  );
+  assert.equal(
+    isObservationPreventedStepMiss(waitFailure(WAIT_REASONS.deadlineExceeded.reason, true)),
     false,
   );
 });

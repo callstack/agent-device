@@ -208,13 +208,13 @@ export function resolveSnapshotScope(
     return errorResponse(
       'COMMAND_FAILED',
       `Ref ${snapshotScope} not found`,
-      { reason: INTERACTION_ERROR_REASONS.refNotFound, ref },
+      { reason: INTERACTION_ERROR_REASONS.refNotFound.reason, ref },
       { hint: STALE_REF_HINT },
     );
   }
   if (!resolved) {
     return errorResponse('COMMAND_FAILED', `Ref ${snapshotScope} has no label to scope by`, {
-      reason: INTERACTION_ERROR_REASONS.refUnlabeled,
+      reason: INTERACTION_ERROR_REASONS.refUnlabeled.reason,
       ref,
     });
   }

@@ -252,6 +252,29 @@ export function throwDaemonError(error: DaemonError): never {
 }
 
 /**
+ * One published `error.details.reason` value. `reason` is the wire spelling and never changes once
+ * published. `summary` is one sentence for the error reasons page. `commands` names the CLI
+ * commands that raise it.
+ */
+export type ReasonRow = Readonly<{
+  reason: string;
+  summary: string;
+  commands?: readonly [string, ...string[]];
+}>;
+
+/**
+ * A module's published reasons. Declare a table `as const satisfies ReasonTable` beside the code
+ * that classifies those failures, and read `TABLE.member.reason` at each construction site, so an
+ * undeclared reason does not compile. Every row names its commands, unless the table names the
+ * `Subsystem` its reasons span, such as `ReasonTable<'leases'>`. `pnpm generate:reasons` collects
+ * every table into the error reasons page. It refuses a reason value that two rows declare and a
+ * command the CLI does not have.
+ */
+export type ReasonTable<Subsystem extends string = never> = Readonly<
+  Record<string, [Subsystem] extends [never] ? Required<ReasonRow> : ReasonRow>
+>;
+
+/**
  * The `details.reason` values a pre-dispatch refusal answers with when the caller must know *why* a
  * request was stopped rather than read the prose: what a caller does to recover is the reason's
  * meaning, and the reason strings are wire vocabulary (documented in
@@ -267,14 +290,21 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    * the Apple, Android, and HarmonyOS owners all answer with this one reason for every per-app
    * setting, because the recovery is the same whichever setting asked.
    */
-  sessionAppRequired: 'session_app_required',
+  sessionAppRequired: {
+    reason: 'session_app_required',
+    summary:
+      'A per-app setting was requested, but the session binds no app and the request names none.',
+  },
   /**
    * A device-bound command was asked for with neither an active session nor an explicit device
    * selector, so there was no target to route to. Recovery: `open` a session or pass `--platform`
    * or another device selector, then retry. One reason covers every command that asks the daemon to
    * find a device for it; the command it asks for stays in the message.
    */
-  sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
+  sessionOrDeviceSelectorRequired: {
+    reason: 'session_or_device_selector_required',
+    summary: 'The request has neither an active session nor a device selector.',
+  },
   /**
    * The caller named a session by hand and this daemon holds no session under that address, so the
    * command stopped before its device was chosen. Recovery: `open` that session again, or drop
@@ -283,27 +313,36 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    * is that address which is gone, which is what a caller retries on after its daemon was replaced
    * or restarted mid-run (#3674).
    */
-  namedSessionNotFound: 'named_session_not_found',
+  namedSessionNotFound: {
+    reason: 'named_session_not_found',
+    summary: 'The request names a session that this daemon does not hold.',
+  },
   /**
    * An app-scoped setting named an app that resolves to no installed app on the target, so nothing
    * was granted, revoked, or cleared under that name. Recovery: run `apps` for the exact bundle id
    * or package, or install the app, then retry.
    */
-  appNotInstalled: 'app_not_installed',
+  appNotInstalled: {
+    reason: 'app_not_installed',
+    summary: 'The named app resolves to no installed app on the target.',
+  },
   /**
    * The request envelope itself was malformed (for example a positional that is not a string), so
    * the transport refused it before any handler read it. Recovery: fix the client that built the
    * request; resending it unchanged fails the same way.
    */
-  malformedRequest: 'malformed_request',
-} as const;
+  malformedRequest: {
+    reason: 'malformed_request',
+    summary: 'The transport refused the request envelope before any handler read it.',
+  },
+} as const satisfies ReasonTable<'request admission'>;
 
 /** The refused composite step did not dispatch; earlier steps may already have dispatched. */
 export const BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON =
   'bounded_composite_resource_unsupported' as const;
 
 export type PreDispatchRefusalReason =
-  (typeof PRE_DISPATCH_REFUSAL_REASONS)[keyof typeof PRE_DISPATCH_REFUSAL_REASONS];
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)[keyof typeof PRE_DISPATCH_REFUSAL_REASONS]['reason'];
 
 /** The details of a refusal that stopped a request before anything could reach a device. */
 export type RefusalDetails<TReason extends PreDispatchRefusalReason> = AppErrorDetails & {
@@ -313,10 +352,10 @@ export type RefusalDetails<TReason extends PreDispatchRefusalReason> = AppErrorD
 
 /** The details of a per-app setting refused for want of an app. */
 export function sessionAppRequiredDetails(): RefusalDetails<
-  (typeof PRE_DISPATCH_REFUSAL_REASONS)['sessionAppRequired']
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['sessionAppRequired']['reason']
 > {
   return {
-    reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason,
     dispatched: 'no',
   };
 }
@@ -329,9 +368,9 @@ export function sessionAppRequiredDetails(): RefusalDetails<
  */
 export function namedSessionNotFoundDetails(
   session: string,
-): RefusalDetails<(typeof PRE_DISPATCH_REFUSAL_REASONS)['namedSessionNotFound']> {
+): RefusalDetails<(typeof PRE_DISPATCH_REFUSAL_REASONS)['namedSessionNotFound']['reason']> {
   return {
-    reason: PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
     dispatched: 'no',
     session,
   };
@@ -339,30 +378,30 @@ export function namedSessionNotFoundDetails(
 
 /** The details of an app-scoped setting refused because its named app resolves to no installed app. */
 export function appNotInstalledDetails(): RefusalDetails<
-  (typeof PRE_DISPATCH_REFUSAL_REASONS)['appNotInstalled']
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['appNotInstalled']['reason']
 > {
   return {
-    reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled.reason,
     dispatched: 'no',
   };
 }
 
 /** The details of a request envelope the transport refused before any handler read it. */
 export function malformedRequestDetails(): RefusalDetails<
-  (typeof PRE_DISPATCH_REFUSAL_REASONS)['malformedRequest']
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['malformedRequest']['reason']
 > {
   return {
-    reason: PRE_DISPATCH_REFUSAL_REASONS.malformedRequest,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.malformedRequest.reason,
     dispatched: 'no',
   };
 }
 
 /** The details of a command refused for want of a target to route to. */
 export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
-  (typeof PRE_DISPATCH_REFUSAL_REASONS)['sessionOrDeviceSelectorRequired']
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['sessionOrDeviceSelectorRequired']['reason']
 > {
   return {
-    reason: PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired.reason,
     dispatched: 'no',
   };
 }

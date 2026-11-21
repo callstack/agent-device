@@ -261,7 +261,7 @@ test('#3181: the session-or-selector refusal reaches the caller with its reason 
     'capabilities requires an active session or an explicit device selector (e.g. --platform ios).',
   );
   expect(response.error.details?.reason).toBe(
-    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
+    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired.reason,
   );
   expect(response.error.details?.dispatched).toBe('no');
   // The hint stays the INVALID_ARGS default: the reason, not the prose, is the new information.

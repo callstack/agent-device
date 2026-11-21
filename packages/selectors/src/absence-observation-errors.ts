@@ -27,7 +27,7 @@ export function absenceObservationError(
   const firstMatch = 'firstMatch' in observation ? observation.firstMatch : undefined;
   const details = {
     command,
-    reason: INTERACTION_ERROR_REASONS.predicateFailed,
+    reason: INTERACTION_ERROR_REASONS.predicateFailed.reason,
     predicate: 'absent',
     selector,
     matches: observation.matches,
@@ -74,7 +74,7 @@ export function absenceUnreadableError(
     `${command} absent could not prove absence for selector ${selector}: capture was unreadable`,
     {
       command,
-      reason: INTERACTION_ERROR_REASONS.predicateFailed,
+      reason: INTERACTION_ERROR_REASONS.predicateFailed.reason,
       predicate: 'absent',
       selector,
       matches: 0,

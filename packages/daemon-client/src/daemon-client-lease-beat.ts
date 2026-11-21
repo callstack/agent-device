@@ -5,6 +5,7 @@ import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import {
+  LEASE_REASONS,
   MIN_LEASE_WINDOW_MS,
   isInactiveLeaseError,
   isProviderInstanceEndedError,
@@ -44,8 +45,8 @@ const MIN_LEASE_BEAT_INTERVAL_MS = 1_000;
  * a lease that stops renewing — the #2946 failure with extra steps.
  */
 const UNRENEWABLE_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
-  'LEASE_SCOPE_REQUIRED',
-  'LEASE_SCOPE_MISMATCH',
+  LEASE_REASONS.scopeRequired.reason,
+  LEASE_REASONS.scopeMismatch.reason,
 ]);
 
 /**

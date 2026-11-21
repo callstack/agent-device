@@ -496,7 +496,7 @@ for (const failure of ['sparse', 'canceled'] as const) {
         executeResult(resolved, session, req, { signal: controller.signal }),
       ).rejects.toMatchObject(
         failure === 'sparse'
-          ? { details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable } }
+          ? { details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable.reason } }
           : { name: 'AbortError' },
       );
       expect(fixture.captureScreenshot).toHaveBeenCalledTimes(1);
@@ -562,7 +562,7 @@ for (const outcome of ['capture failure', 'crop refusal', 'cancellation', 'publi
         if (outcome === 'capture failure') await expect(operation).rejects.toBe(captureFailure);
         if (outcome === 'crop refusal')
           await expect(operation).rejects.toMatchObject({
-            details: { reason: SCREENSHOT_CROP_REASONS.targetNotFound },
+            details: { reason: SCREENSHOT_CROP_REASONS.targetNotFound.reason },
           });
         if (outcome === 'cancellation')
           await expect(operation).rejects.toMatchObject({ name: 'AbortError' });
@@ -617,7 +617,7 @@ test('a partial crop surfaces its warning once in the result record and annotate
   const result = await executeResult(resolved, session, req);
 
   expect(result.warnings).toEqual([
-    expect.stringMatching(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection}:`)),
+    expect.stringMatching(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection.reason}:`)),
   ]);
   // The crop plan binds the snapshot for the crop alone: no overlay refs, no republished tree.
   expect(result).not.toHaveProperty('overlayRefs');
@@ -718,7 +718,7 @@ test('a provider TV crop clips a node at the page edge to the page, not to the l
 
   expect(result).toMatchObject({ width: 80, height: 200 });
   expect(result.warnings).toEqual([
-    expect.stringMatching(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection}:`)),
+    expect.stringMatching(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection.reason}:`)),
   ]);
 });
 
@@ -757,8 +757,8 @@ test('a provider TV crop is refused on a tree the TV plugins did not capture', a
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: {
-      reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
-      rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+      reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
+      rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
     },
   });
 });
@@ -873,8 +873,8 @@ for (const backend of ['coredevice', 'xctest', undefined] as const) {
           message:
             'screenshot --crop-on is not accepted on ios-physical-non-coredevice-capture targets',
           details: {
-            reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
-            rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+            reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
+            rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
           },
         });
         expect(fixture.captureSnapshot).not.toHaveBeenCalled();

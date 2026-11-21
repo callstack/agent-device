@@ -12,7 +12,7 @@ import {
   buildRemoteTempArtifactDirPath,
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { assertScriptTargetVacant, resolveScriptDestination } from '@agent-device/host-kit/file';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import {
@@ -575,11 +575,16 @@ async function downloadResponseArtifacts(
 }
 
 const RECORDING_DESTINATION_REASONS = {
-  notRequested: 'recording_destination_not_requested',
-} as const;
+  notRequested: {
+    reason: 'recording_destination_not_requested',
+    summary:
+      'A remote recording was saved to the current directory because the request named no destination; a warning.',
+    commands: ['record'],
+  },
+} as const satisfies ReasonTable;
 
 type RecordingDestinationWarning = {
-  reason: typeof RECORDING_DESTINATION_REASONS.notRequested;
+  reason: typeof RECORDING_DESTINATION_REASONS.notRequested.reason;
   field: string;
   path: string;
 };
@@ -591,7 +596,7 @@ function recordingDelivery() {
     add(field: string, written: string, fallback: boolean): void {
       if (fallback) {
         destinationWarnings.push({
-          reason: RECORDING_DESTINATION_REASONS.notRequested,
+          reason: RECORDING_DESTINATION_REASONS.notRequested.reason,
           field,
           path: written,
         });

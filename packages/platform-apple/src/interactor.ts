@@ -613,7 +613,7 @@ async function runAppleScreenshot(
         'INVALID_ARGS',
         `screenshot --fullscreen is not accepted on the macOS ${helper} surface: its capture frame is fixed`,
         {
-          reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+          reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame.reason,
           surface: helper,
         },
       );

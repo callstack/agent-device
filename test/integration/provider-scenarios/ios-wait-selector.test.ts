@@ -175,7 +175,7 @@ test('Apple wait text ignores a text field’s typed value but matches its label
     });
     const flags = { platform: 'ios' as const };
     const typed = await daemon.callCommand('wait', ['text', 'benchad', '1000'], flags);
-    assert.equal(typed.json?.error?.data?.details?.reason, WAIT_REASONS.targetAbsent);
+    assert.equal(typed.json?.error?.data?.details?.reason, WAIT_REASONS.targetAbsent.reason);
     assert.equal(
       assertRpcOk(await daemon.callCommand('wait', ['text', 'First name', '100'], flags)).text,
       'First name',

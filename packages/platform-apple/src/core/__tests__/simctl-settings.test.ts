@@ -394,7 +394,7 @@ test.for([
     expect(error).toMatchObject({
       code: 'INVALID_ARGS',
       message: `${setting} setting requires an active app in session`,
-      details: { reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired, dispatched: 'no' },
+      details: { reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason, dispatched: 'no' },
     });
     expect(runSimctl).not.toHaveBeenCalled();
   },

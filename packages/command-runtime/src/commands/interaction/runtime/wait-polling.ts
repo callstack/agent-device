@@ -232,7 +232,7 @@ function compactPollTimeline(polls: readonly WaitPollRecord[]): WaitPollRecord[]
 
 function waitCaptureStalledError(message: string, evidence: WaitFailureEvidence): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: WAIT_REASONS.captureStalled,
+    reason: WAIT_REASONS.captureStalled.reason,
     captureStalled: true,
     ...evidence,
     retriable: true,
@@ -242,7 +242,7 @@ function waitCaptureStalledError(message: string, evidence: WaitFailureEvidence)
 
 function waitRunnerRestartExhaustedError(message: string, evidence: WaitFailureEvidence): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: WAIT_REASONS.runnerRestartExhausted satisfies WaitReason,
+    reason: WAIT_REASONS.runnerRestartExhausted.reason satisfies WaitReason,
     waitRunnerRestartExhausted: true,
     ...evidence,
     retriable: true,
@@ -252,7 +252,7 @@ function waitRunnerRestartExhaustedError(message: string, evidence: WaitFailureE
 
 function waitReadinessExhaustedError(message: string, evidence: WaitFailureEvidence): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: WAIT_REASONS.readinessExhausted,
+    reason: WAIT_REASONS.readinessExhausted.reason,
     ...evidence,
     retriable: true,
     hint: `The wait timeout ended during readiness work (${evidence.readinessPhase}), before that poll could capture the screen. Retry with a timeout long enough to cover it.`,
@@ -261,7 +261,7 @@ function waitReadinessExhaustedError(message: string, evidence: WaitFailureEvide
 
 function waitDeadlineExceededError(message: string, evidence: WaitFailureEvidence): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: WAIT_REASONS.deadlineExceeded,
+    reason: WAIT_REASONS.deadlineExceeded.reason,
     captureTruncated: true,
     ...evidence,
   });
@@ -269,7 +269,7 @@ function waitDeadlineExceededError(message: string, evidence: WaitFailureEvidenc
 
 function waitTargetAbsentError(message: string, evidence: WaitFailureEvidence): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: WAIT_REASONS.targetAbsent,
+    reason: WAIT_REASONS.targetAbsent.reason,
     ...evidence,
   });
 }
@@ -309,7 +309,7 @@ function waitRetriableRefusalError(cause: unknown, evidence: WaitFailureEvidence
     {
       // `wait_capture_stalled` by definition: no readable capture established an observation
       // before the timeout. A reason the producer already set is more specific, so it wins.
-      reason: WAIT_REASONS.captureStalled satisfies WaitReason,
+      reason: WAIT_REASONS.captureStalled.reason satisfies WaitReason,
       ...refusal.details,
       ...evidence,
     },

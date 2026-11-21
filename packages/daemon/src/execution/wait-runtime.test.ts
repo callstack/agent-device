@@ -50,7 +50,7 @@ const testCreateCommandSurface = commandSurfaceWithMembers((config) => ({
       await config.backend.captureSnapshot?.(context, {});
       if (target.kind === 'text' && target.timeoutMs === 1) {
         throw new AppError('COMMAND_FAILED', `wait timed out for text: ${target.text}`, {
-          reason: WAIT_REASONS.targetAbsent,
+          reason: WAIT_REASONS.targetAbsent.reason,
         });
       }
       return {

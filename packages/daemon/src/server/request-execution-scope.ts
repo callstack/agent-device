@@ -467,14 +467,7 @@ export async function createRequestExecutionScope(params: {
             sessionName,
             sessionStore,
             leaseRegistry,
-            assertTeardownAllowed: () => {
-              if (command === 'batch' || command === 'replay' || boundedStep) {
-                throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-                  reason: 'LEASE_NOT_FOUND',
-                  dispatched: 'no',
-                });
-              }
-            },
+            refuseTeardown: command === 'batch' || command === 'replay' || boundedStep,
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,
