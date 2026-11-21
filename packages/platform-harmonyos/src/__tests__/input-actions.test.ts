@@ -5,12 +5,15 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyHdcRunnerStub } from '../toolbox.fixtures.ts';
 
 const { sleep, readHarmonyGestureViewport, invalidateHarmonyGestureViewport } = vi.hoisted(() => ({
-  sleep: vi.fn(),
+  sleep: vi.fn(async (_milliseconds: number) => undefined),
   readHarmonyGestureViewport: vi.fn(),
   invalidateHarmonyGestureViewport: vi.fn(),
 }));
 
-vi.mock('@agent-device/host-kit/retry', () => ({ sleep }));
+// The one timer this family owns paces one HDC write after another. It is the plain Node timer rather
+// than the host-kit retry scope's, whose module the plugin would bundle with its own diagnostic store,
+// so the suite stands it in here.
+vi.mock('node:timers/promises', () => ({ setTimeout: sleep }));
 vi.mock('../snapshot.ts', () => ({
   readHarmonyGestureViewport,
   invalidateHarmonyGestureViewport,

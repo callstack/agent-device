@@ -19,6 +19,17 @@ import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import {
+  HOST_KIT_EXEC_ROOTS,
+  HOST_KIT_SPECIFIER_PREFIX,
+  hostKitSources,
+  hostKitPublicEntries,
+  hostKitSymbolsReachingExec,
+  indexHostKitReach,
+  resolveRelativeSource,
+  type HostKitReachIndex,
+} from './host-kit-runtime-reach.ts';
+import { staleReachModules } from './process-reach.ts';
+import {
   APPLE_RUNNER_DIR,
   APPLE_RUNNER_PACKAGE,
   appleRunnerEntryImporterViolations,
@@ -115,60 +126,74 @@ const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   linux: '@agent-device/linux',
 };
 
-// The host-kit scopes a managed platform package must never reach at runtime. `command` reads the
-// daemon's ambient command scope and `diagnostics` reads its request diagnostic store, and a managed
-// plugin is bundled with its own copy of host-kit, so the daemon's scope never enters that copy: a
-// spawn or trace made through it runs with the daemon process environment, outside the request's
-// captured environment and exec trace. A managed plugin therefore binds to the `PlatformHost` its
-// `setup` receives. Type-only edges are allowed — they cost the bundle nothing.
-const MANAGED_HOST_KIT_SCOPES = [
-  '@agent-device/host-kit/command',
-  '@agent-device/host-kit/diagnostics',
-];
+/**
+ * The host-kit surfaces a managed platform package may not reach at runtime. Which exported names of a
+ * subpath are dangerous is not listed here: it is derived from the host-kit module graph by
+ * `host-kit-runtime-reach.ts`, so an export that starts loading `internal/exec.ts` or
+ * `internal/diagnostics.ts` — through its own import or through a new one added to a module it already
+ * used — is caught without an entry being edited here.
+ */
 
-// The web and Vega files that still import one of those scopes, as of the HarmonyOS plugin (#4317).
-// Each entry is that package's own migration slice, not an exception to this rule: no file joins the
-// list, and an entry leaves it when its file binds to the host its plugin was set up with. HarmonyOS
-// and Linux carry no entry: each builds one command runner from `host.runCommand` in `setup`, so its
-// packed bundle carries no separate host-kit command or diagnostics scope.
-const MANAGED_HOST_KIT_IMPORT_DEBT: Readonly<Record<string, readonly string[]>> = {
-  '@agent-device/web': [
-    'packages/platform-web/src/agent-browser-install.ts',
-    'packages/platform-web/src/agent-browser-lifecycle.ts',
-    'packages/platform-web/src/agent-browser-process-record.ts',
-    'packages/platform-web/src/agent-browser-provider.ts',
-    'packages/platform-web/src/agent-browser-tool.ts',
-    'packages/platform-web/src/interactor.ts',
-  ],
-  '@agent-device/vega': [
-    'packages/platform-vega/src/app-lifecycle.ts',
-    'packages/platform-vega/src/input-actions.ts',
-    'packages/platform-vega/src/inventory.ts',
-    'packages/platform-vega/src/tool-provider.ts',
-    'packages/platform-vega/src/vega-executable.ts',
-  ],
-  '@agent-device/harmonyos': [],
-  '@agent-device/linux': [],
-};
-
-function isManagedHostKitScope(spec: string): boolean {
-  return MANAGED_HOST_KIT_SCOPES.some((scope) => spec === scope || spec.startsWith(`${scope}/`));
-}
+// No host-kit scope is listed: the rule is derived, so every scope is policed, `process`, `file`,
+// `command`, `diagnostics`, `retry` and any scope added later.
+//
+// Why the graph decides this: a managed plugin is bundled with its own copy of host-kit, and the
+// daemon's command-host and diagnostic scopes never enter that copy. A runtime import of a host-kit
+// module that reaches the exec layer therefore answers with the daemon process environment, outside the
+// request's captured environment and exec trace, and its diagnostics land in the bundle's own store
+// rather than the request's log. A managed plugin binds to the `PlatformHost` its `setup` receives
+// instead, whose `processes` facet answers those reads on the core's own copy.
+//
+// What stays importable is what the graph proves loads neither root: the path helpers and the plain
+// filesystem helpers. Type-only edges are allowed anywhere — they cost the bundle nothing. The process
+// scope, the retry scope, the command scope, the diagnostics scope and the lock helpers are all
+// refused, including the ones that only answer `os.platform()` or wait on a timer: they are declared by
+// a module that also declares a process tool, so the bundle loads the tool with them. A plugin asks its
+// host what machine its commands run on, and paces itself with `node:timers/promises` the way the
+// core's own host does.
+const MANAGED_HOST_KIT_SCOPE_MESSAGE =
+  ': those exports load internal/exec.ts or internal/diagnostics.ts through the bundled copy, so run ' +
+  'the command, emit the diagnostic, read processes, or take the lock through the PlatformHost given to ' +
+  'setup, which answers inside the request environment and exec trace';
 
 function managedHostKitScopeViolations(
   file: string,
-  site: { spec: string; line: number; typeOnly: boolean },
+  site: {
+    spec: string;
+    line: number;
+    typeOnly: boolean;
+    symbols: readonly string[];
+    typeSymbols?: readonly string[];
+  },
   managedName: string,
+  reach: HostKitReachIndex,
 ): LayeringViolation[] {
-  if (site.typeOnly || !isManagedHostKitScope(site.spec)) return [];
-  if ((MANAGED_HOST_KIT_IMPORT_DEBT[managedName] ?? []).includes(file)) return [];
+  if (site.typeOnly) return [];
+  // A name written as `type` is erased, so it is not part of what the import loads.
+  const bound = site.symbols.filter((name) => !(site.typeSymbols ?? []).includes(name));
+  if (!site.spec.startsWith(HOST_KIT_SPECIFIER_PREFIX)) return [];
+  const surface = reach.surfaces.get(site.spec);
+  if (!surface) {
+    // A host-kit subpath the host-kit sources do not contain resolves outside this repository, so the
+    // bundled copy is unknown and the edge is refused rather than assumed pure.
+    return [
+      violation(
+        file,
+        site.line,
+        `${managedName} may not import the host-kit '${site.spec}' scope at runtime: no such ` +
+          `host-kit subpath exists to derive its exec reachability from${MANAGED_HOST_KIT_SCOPE_MESSAGE}`,
+      ),
+    ];
+  }
+  const reached = hostKitSymbolsReachingExec(surface, bound);
+  if (reached.length === 0) return [];
   return [
     violation(
       file,
       site.line,
-      `${managedName} may not import the host-kit '${site.spec}' scope at runtime: run the command ` +
-        'or emit the diagnostic through the PlatformHost given to setup, so the packed plugin stays ' +
-        'inside the request environment and exec trace',
+      `${managedName} may not import the host-kit '${site.spec}' scope at runtime ` +
+        `(${[...reached].sort().join(', ')})` +
+        MANAGED_HOST_KIT_SCOPE_MESSAGE,
     ),
   ];
 }
@@ -364,7 +389,11 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
   return violations;
 }
 
-function checkSource(file: string, source: string): LayeringViolation[] {
+function checkSource(
+  file: string,
+  source: string,
+  hostKitReach: HostKitReachIndex,
+): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   const ownerFamily = familyForPackageFile(file);
   // The Apple runner package is not a platform family: it owns its cache/lease files and usbmux
@@ -452,7 +481,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     if (!ownerFamily) continue;
     const managedName = MANAGED_PLATFORMS[ownerFamily as PlatformFamily];
     if (managedName && isProductionSourceFile(file)) {
-      violations.push(...managedHostKitScopeViolations(file, site, managedName));
+      violations.push(...managedHostKitScopeViolations(file, site, managedName, hostKitReach));
     }
     if (
       site.spec.startsWith('@agent-device/') &&
@@ -542,8 +571,27 @@ function isAllowedPlatformRootImport(
 export function checkPlatformPackagePolicy(
   sources: ReadonlyMap<string, string>,
   packages: readonly PlatformPackageDeclaration[],
-  options: { untrackedProductionFiles?: readonly string[] } = {},
+  options: {
+    untrackedProductionFiles?: readonly string[];
+    /**
+     * The host-kit sources to derive exec reachability from. Defaults to the host-kit files `sources`
+     * contains, which is what the gate passes; a caller that scans a slice injects its own.
+     */
+    hostKitSources?: ReadonlyMap<string, string>;
+  } = {},
 ): LayeringViolation[] {
+  // The host-kit files in the scan input are what the derivation walks. A scan slice without them
+  // answers that no subpath can be proved pure, which refuses a managed plugin's host-kit import rather
+  // than letting an absent graph pass it; the gate scan carries every host-kit source.
+  const hostKit = options.hostKitSources ?? hostKitSources(sources);
+  const hostKitReach = indexHostKitReach({
+    sources: hostKit,
+    entries: hostKitPublicEntries(hostKit),
+    resolve: (fromFile, spec) => {
+      const target = resolveRelativeSource(fromFile, spec);
+      return target !== undefined && hostKit.has(target) ? target : undefined;
+    },
+  });
   return [
     ...(options.untrackedProductionFiles ?? []).map((file) =>
       violation(
@@ -552,9 +600,20 @@ export function checkPlatformPackagePolicy(
         'untracked production source is not committed-state layering evidence; commit the complete slice before running the gate',
       ),
     ),
+    // The roots the derivation walks are declared paths: a move of either would otherwise answer
+    // "no export reaches the exec layer" for every managed plugin at once.
+    ...(hostKit.size === 0
+      ? []
+      : staleReachModules(
+          RULE,
+          'packages/host-kit/package.json',
+          HOST_KIT_EXEC_ROOTS,
+          [...hostKit.keys()],
+          'HOST_KIT_EXEC_ROOTS',
+        )),
     ...checkDeclarations(packages),
     ...checkPlatformComposition(sources.get(COMPOSITION_FILE)),
-    ...[...sources].flatMap(([file, source]) => checkSource(file, source)),
+    ...[...sources].flatMap(([file, source]) => checkSource(file, source, hostKitReach)),
   ];
 }
 

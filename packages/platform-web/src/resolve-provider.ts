@@ -1,5 +1,5 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
+import type { WebToolbox } from './toolbox.ts';
 
 /**
  * The provider a web request composed for itself, or `undefined` outside one. A reader that must
@@ -14,12 +14,13 @@ export async function resolveRequestScopedWebProvider(): Promise<WebProvider | u
 /**
  * The one policy for the provider of a web request: a request-scoped provider wins; a request
  * that reaches a web device with no composed provider gets the agent-browser provider bound to
- * the composing runtime's host. Every reader of one web request resolves through this module so
- * they agree on one provider (#3794): the interactor takes this fallback, while the readers that
- * must stay on the request's own browser session use {@link resolveRequestScopedWebProvider}.
+ * the host the plugin was set up with. Every reader of one web request resolves through this
+ * module so they agree on one provider (#3794): the interactor takes this fallback, while the
+ * readers that must stay on the request's own browser session use
+ * {@link resolveRequestScopedWebProvider}.
  */
-export async function resolveWebProviderForHost(
-  host: HostEnvironment,
+export async function resolveWebProviderForToolbox(
+  toolbox: WebToolbox,
   provider?: WebProvider,
   stateDir?: string,
 ): Promise<WebProvider> {
@@ -27,5 +28,5 @@ export async function resolveWebProviderForHost(
   const scoped = await resolveRequestScopedWebProvider();
   if (scoped) return scoped;
   const { createAgentBrowserWebProvider } = await import('./agent-browser-provider.ts');
-  return await createAgentBrowserWebProvider({ host, stateDir });
+  return await createAgentBrowserWebProvider({ toolbox, stateDir });
 }

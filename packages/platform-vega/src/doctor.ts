@@ -2,30 +2,32 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { firstOutputLine, TOOLCHAIN_TIMEOUT_MS } from '@agent-device/provision-kit/toolchain-probe';
 import {
-  createLocalVegaCliAdapter,
-  createLocalVegaToolProvider,
+  createVegaToolProvider,
   hasScopedVegaToolProvider,
   resolveVegaToolProvider,
 } from './tool-provider.ts';
+import type { VegaCommandRunner } from './command-host.ts';
+import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 
 type VegaInventoryProbe = Readonly<{
   devices: readonly DeviceInfo[];
   listedSerials: readonly string[];
 }>;
 
+/**
+ * The toolchain row `doctor --platform vega` reports. The probe runs over the plugin's own command
+ * route, so the version it reads is the CLI the plugin would spawn, and a CLI outside the host `PATH`
+ * still answers its own version. A provider the request scoped wins, as it does everywhere else.
+ */
 export async function vegaToolchainCheck(
   context: HostDiagnosticsContext,
-  host: HostEnvironment,
+  commands: VegaCommandRunner,
 ): Promise<DoctorCheck> {
-  // Doctor answers for the host `createHostDiagnostics` was composed with: it builds the same
-  // host-bound adapter the interactor route binds, so CLI resolution agrees with every other
-  // lookup of this runtime (#3794). A test-scoped provider still wins.
-  const provider = hasScopedVegaToolProvider()
+  const provider: VegaToolProvider = hasScopedVegaToolProvider()
     ? resolveVegaToolProvider()
-    : createLocalVegaToolProvider(createLocalVegaCliAdapter(host));
+    : createVegaToolProvider(commands);
   if (!(await provider.isAvailable())) {
     return {
       id: 'toolchain',

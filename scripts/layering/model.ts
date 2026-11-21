@@ -29,6 +29,14 @@ export type ImportEdge = {
    * dynamic imports that do not destructure named bindings.
    */
   symbols: readonly string[];
+  /**
+   * The `symbols` written with a per-specifier `type` marker (`import { type A, b } from …`). Those
+   * names are erased at runtime, so a rule that polices what an import loads judges the rest. An edge
+   * whose every name is like this is reported as `typeOnly`, and `symbols` still lists them: that list
+   * is what the name is called, not what is loaded. A caller that builds an edge by hand leaves it
+   * empty.
+   */
+  typeSymbols?: readonly string[];
 };
 
 export type ResolvedImportEdge = ImportEdge & {
@@ -191,18 +199,25 @@ function importedName(node: unknown): string | undefined {
   return record.type === 'Identifier' && typeof record.name === 'string' ? record.name : undefined;
 }
 
+/** The named symbols of an import or re-export, and the subset marked `type` per specifier. */
 function namedSymbols(
   specifiers: readonly Record<string, unknown>[],
   importedField: 'imported' | 'local',
-): string[] {
-  const symbols = specifiers.flatMap((specifier) => {
+): Readonly<{ symbols: string[]; typeSymbols: string[] }> {
+  const kindField = importedField === 'imported' ? 'importKind' : 'exportKind';
+  const names = specifiers.flatMap((specifier) => {
     const name = importedName(specifier[importedField]);
-    return specifier.type ===
-      (importedField === 'imported' ? 'ImportSpecifier' : 'ExportSpecifier') && name !== undefined
-      ? [name]
+    const isNamed =
+      specifier.type === (importedField === 'imported' ? 'ImportSpecifier' : 'ExportSpecifier');
+    return isNamed && name !== undefined
+      ? [{ name, typeOnly: specifier[kindField] === 'type' }]
       : [];
   });
-  return [...new Set(symbols)];
+  const unique = [...new Map(names.map((entry) => [entry.name, entry])).values()];
+  return {
+    symbols: unique.map(({ name }) => name),
+    typeSymbols: unique.filter(({ typeOnly }) => typeOnly).map(({ name }) => name),
+  };
 }
 
 function importTypeSourceName(qualifier: unknown): string | undefined {
@@ -226,7 +241,7 @@ function staticImportEdge(
   node: Record<string, unknown>,
   specifierNode: unknown,
   typeOnly: boolean,
-  symbols: string[],
+  names: Readonly<{ symbols: string[]; typeSymbols: string[] }>,
 ): ImportEdge | null {
   const spec = literalSpecifier(specifierNode);
   if (spec === undefined) return null;
@@ -236,7 +251,8 @@ function staticImportEdge(
     dynamic: false,
     typeOnly,
     line: sourceLine(source, start),
-    symbols,
+    symbols: names.symbols,
+    typeSymbols: names.typeSymbols,
   };
 }
 
@@ -264,6 +280,7 @@ export function parseImports(source: string): ImportEdge[] {
           typeOnly: false,
           line: sourceLine(source, start),
           symbols: capture ? [...capture.symbols] : [],
+          typeSymbols: [],
         },
       });
       return;
@@ -293,16 +310,16 @@ export function parseImports(source: string): ImportEdge[] {
         namedSymbols(specifiers, 'local'),
       );
     } else if (node.type === 'ExportAllDeclaration') {
-      edge = staticImportEdge(source, node, node.source, node.exportKind === 'type', []);
+      edge = staticImportEdge(source, node, node.source, node.exportKind === 'type', {
+        symbols: [],
+        typeSymbols: [],
+      });
     } else if (node.type === 'TSImportType') {
       const sourceName = importTypeSourceName(node.qualifier);
-      edge = staticImportEdge(
-        source,
-        node,
-        node.source,
-        true,
-        sourceName === undefined ? [] : [sourceName],
-      );
+      edge = staticImportEdge(source, node, node.source, true, {
+        symbols: sourceName === undefined ? [] : [sourceName],
+        typeSymbols: sourceName === undefined ? [] : [sourceName],
+      });
     }
     if (edge) located.push({ edge, start });
   });

@@ -1,7 +1,8 @@
 import path from 'node:path';
 import type { PlatformHost } from 'agent-device/plugins';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { sleep } from '@agent-device/host-kit/retry';
+import { setTimeout as sleep } from 'node:timers/promises';
+import type { HostOperatingSystem } from '@agent-device/contracts/platform-runtime-host';
 import type {
   LinuxCommandOptions,
   LinuxCommandResult,
@@ -25,6 +26,8 @@ export type LinuxCommandRunner = Readonly<{
     args: readonly string[],
     options?: LinuxCommandOptions,
   ): Promise<LinuxCommandResult>;
+  /** The operating system of the host the family was set up with. */
+  hostOs: HostOperatingSystem;
   /** True when the host resolves `cmd` on its `PATH`, or when `cmd` names an executable path. */
   which(cmd: string): Promise<boolean>;
   /**
@@ -59,6 +62,7 @@ export function createLinuxCommandRunner(host: PlatformHost): LinuxCommandRunner
   const env = host.env;
   return Object.freeze({
     run: async (cmd, args, options) => await host.runCommand(cmd, [...args], { ...options, env }),
+    hostOs: host.hostOs,
     which: async (cmd) => await hostResolvesExecutable(host, env, cmd),
     launchDetached: (cmd, args) => {
       // A host that cannot start a process outliving the request cannot open a desktop app: waiting

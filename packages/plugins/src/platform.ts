@@ -13,10 +13,20 @@ import type {
 } from '@agent-device/contracts/platform-plugin';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type {
+  HostOperatingSystem,
+  OwnedProcessRecord,
+  RecordedProcessLiveness,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import type {
+  HostProcessIdentityFacts,
+  HostProcessInfo,
+  OwnedProcessReapSummary,
+  OwnedProcessRecordStore,
+} from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 /**
@@ -92,6 +102,39 @@ export type PlatformHost = HostEnvironment &
      */
     isFileExecutable(path: string): Promise<boolean>;
     /**
+     * Whether the host resolves `executable` on its `PATH`, answered against the host environment
+     * the plugin was set up with. A plugin that prefers a tool from `PATH` asks this rather than
+     * searching `PATH` itself, so the lookup and the spawn it authorizes read one environment.
+     */
+    isExecutableOnPath(executable: string): Promise<boolean>;
+    /**
+     * What the host answers about processes the plugin already has pids for.
+     *
+     * A plugin is bundled with its own copy of the host kit, and the request's command-host and
+     * diagnostic scopes never enter that copy, so a process tool run from there answers with the
+     * daemon process environment and traces into the plugin's own store instead of the request's.
+     * Every process read a plugin makes therefore goes through this facet. Each read keeps its
+     * fail-closed answer: a pid the host did not answer for is unknown evidence, never proof a
+     * process is gone.
+     */
+    processes: PlatformHostProcesses;
+    /** The operating system the host runs, narrowed to the three it ships backends for. */
+    hostOs: HostOperatingSystem;
+    /**
+     * The Node running the host: its executable, for a launch that must not depend on a `PATH`
+     * lookup, and its version, for a capability read off the major number. The plugin launches
+     * commands through this host, so the Node that answers is the Node those commands run under.
+     */
+    nodeExecutablePath: string;
+    nodeVersion: string;
+    /** The host's temporary directory, which a per-install runtime home and socket dir derive from. */
+    temporaryDirectory: string;
+    /**
+     * This process's own pid, which a process scan must never match as one of its targets. A plugin
+     * reads it here rather than from its bundle's process globals, which name the bundle's process.
+     */
+    processId: number;
+    /**
      * Starts one streamed command as a managed process: the host publishes an ownership marker at
      * `markerPath` while the process lives, clears it when the process ends, and stops the process on
      * `terminate()`. A plugin streams through this rather than spawning a process of its own, so a
@@ -122,6 +165,88 @@ export type PlatformHost = HostEnvironment &
     emitDiagnostic(event: DiagnosticEventInput): void;
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;
+
+/**
+ * The process facet of {@link PlatformHost}: reads a plugin may make about pids it already knows,
+ * and the stop that acts on one. Named apart from the host so a plugin can pass just what a fleet
+ * scan needs.
+ */
+export type PlatformHostProcesses = Readonly<{
+  /** The host's process table. A plugin accounts for a fleet it started from this one read. */
+  list(options: { timeoutMs: number }): Promise<readonly HostProcessInfo[]>;
+  /**
+   * What the host says about each pid named, as the facts a caller acts on before it signals:
+   * start time, command, and whether the pid is a zombie. A pid the host did not answer for maps to
+   * all-`null` facts.
+   */
+  readIdentities(
+    pids: Iterable<number>,
+    options?: { timeoutMs?: number },
+  ): Promise<ReadonlyMap<number, HostProcessIdentityFacts>>;
+  /**
+   * The executable each pid is running, for a caller that must prove provenance rather than match a
+   * command line. A pid the host cannot name is absent, which is unknown evidence, not absence of
+   * the process.
+   */
+  readExecutablePaths(pids: Iterable<number>): Promise<ReadonlyMap<number, string>>;
+  /**
+   * The descendants of `rootPids` among `processes`, following parentage through to the whole subtree.
+   *
+   * A fleet scan matches the processes it owns and then has to include what they parented, which is a
+   * question about the host's process table rather than about the caller's matchers: only the host
+   * knows which parent-child relation its own table records. The rows are the caller's, so no second
+   * snapshot is taken and the answer cannot drift from the scan that produced them.
+   */
+  expandTree(rootPids: readonly number[], processes: readonly HostProcessInfo[]): HostProcessInfo[];
+  /**
+   * Whether each owned-process record still names the live process it recorded, judging all of them
+   * from one process-tool snapshot the host took.
+   *
+   * The fail-closed reading is the host's rule rather than the caller's. A pid the table did not list
+   * is unknown evidence unless the host's own liveness probe refuses it too, because a process tool
+   * that answered nothing is not proof a process exited; and only a start time the host can compare
+   * with the recorded one, in the host's own format, proves the pid changed hands. A plugin that
+   * applied this rule itself would have to know the start-time formats of a machine it does not run
+   * commands on, and would read them with a process tool outside the request's exec trace.
+   */
+  judgeRecordedLiveness(
+    records: readonly OwnedProcessRecord[],
+  ): Promise<readonly RecordedProcessLiveness[]>;
+  /**
+   * Stops every process an owned-process record names, and forgets only the ones it watched leave.
+   * The store is the host's own, so the record the reaper rewrites is the one the daemon reads. The
+   * reaper's own identity reads and signals run under the host, exactly as a stop does.
+   */
+  reapOwnedRecords(
+    store: OwnedProcessRecordStore,
+    options?: {
+      openWebSessionNames?: readonly string[];
+      purposes?: readonly string[];
+      termTimeoutMs?: number;
+      killTimeoutMs?: number;
+    },
+  ): Promise<OwnedProcessReapSummary>;
+  /**
+   * Runs `task` while the host holds the process lock at `lockDirPath`, and answers the lock's own
+   * questions — which process owns the claim, and whether that owner is still that process — from the
+   * host's copy of the lock mechanics.
+   *
+   * A lock is not a file write: claiming one names this process's identity with a process-tool read,
+   * and every poll of a held or stale lock re-proves the recorded owner and the guard holder with
+   * another. Run from the plugin's bundled copy, those reads answer with the daemon process
+   * environment and trace into the bundle's own store, so the request that waited shows no wait. The
+   * host is the process that takes the claim, so it names its own identity rather than being told it.
+   */
+  withLock<T>(params: {
+    /** The lock directory the host creates, holds and removes. */
+    lockDirPath: string;
+    /** How long the plugin will wait for a claim it cannot take; the host owns the poll. */
+    timeoutMs: number;
+    /** Names this lock in a timeout or an unverified release, in the request's log. */
+    description?: string;
+    task: () => Promise<T>;
+  }): Promise<T>;
+}>;
 
 export type PlatformSetup<Family extends Platform = Platform> = Family extends Platform
   ? Readonly<{
