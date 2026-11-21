@@ -86,15 +86,22 @@ export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
 }
 
 /**
- * Whether a request may see this session at all, i.e. whether listing it or naming it to the caller
+ * Whether a request may see a session at all, i.e. whether listing it or naming it to the caller
  * leaks another client's activity. Ownership scope decides the first half; a session that holds a
  * lease is revealed only to the request carrying that lease's id, because on a shared proxy token
- * the tenant label is a label and any holder of the token can send it (#4908).
+ * the tenant label is a label and any holder of the token can send it (#4908). The request scope
+ * and lease id are resolved once, so one listing judges every session against the same workspace.
  */
-export function sessionVisibleToRequest(session: SessionState, req: DaemonRequest): boolean {
-  if (!sessionMatchesInventoryScope(session, resolveSessionScope(req))) return false;
-  if (session.lease) return resolveLeaseScope(req).leaseId === session.lease.leaseId;
-  return true;
+export function createSessionVisibilityPredicate(
+  req: DaemonRequest,
+): (session: SessionState) => boolean {
+  const requestScope = resolveSessionScope(req);
+  const requestLeaseId = resolveLeaseScope(req).leaseId;
+  return (session) => {
+    if (!sessionMatchesInventoryScope(session, requestScope)) return false;
+    if (session.lease) return requestLeaseId === session.lease.leaseId;
+    return true;
+  };
 }
 
 function sessionMatchesInventoryScope(session: SessionState, requestScope: SessionScope): boolean {

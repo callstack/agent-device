@@ -50,7 +50,7 @@ import {
   resolveCommandDevice,
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
-import { sessionVisibleToRequest } from '../../session-routing.ts';
+import { createSessionVisibilityPredicate } from '../../session-routing.ts';
 import type {
   BoundDeviceRuntime,
   RuntimeFacts,
@@ -118,12 +118,13 @@ function sessionListInventoryResponse(
   req: DaemonRequest,
   sessionStore: SessionStore,
 ): DaemonResponse {
+  const visibleToRequest = createSessionVisibilityPredicate(req);
   return {
     ok: true,
     data: {
       sessions: sessionStore
         .listRefs()
-        .filter((ref) => sessionVisibleToRequest(ref.session, req))
+        .filter((ref) => visibleToRequest(ref.session))
         .map((ref) => publicSessionInfo(ref, sessionStore)),
     },
   };

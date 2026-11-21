@@ -15,7 +15,7 @@ import {
 } from '../../core/session-runtime-admission.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { sessionVisibleToRequest } from '../session-routing.ts';
+import { createSessionVisibilityPredicate } from '../session-routing.ts';
 import { releaseTargetLease } from '../target-lease-release.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
@@ -63,7 +63,7 @@ export async function handleShutdownCommand(
 
   const deviceSession = params.sessionStore.findByDevice(device.id);
   if (deviceSession) {
-    const visible = sessionVisibleToRequest(deviceSession.session, params.req);
+    const visible = createSessionVisibilityPredicate(params.req)(deviceSession.session);
     return errorResponse(
       'DEVICE_IN_USE',
       'Cannot shut down an active session device directly. Use close --shutdown to end the session and turn off the simulator/emulator.',
