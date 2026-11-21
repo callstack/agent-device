@@ -652,3 +652,42 @@ test('setAndroidSetting mobile-data stops sampling when the request is cancelled
     },
   );
 });
+
+// --- settings keep-awake: explicit stay-on mask write ---
+
+test('setAndroidSetting keep-awake writes the mask and reports the read-back state', async () => {
+  for (const { state, value, keepAwake } of [
+    { state: 'on', value: '7', keepAwake: 'enabled' },
+    { state: 'off', value: '0', keepAwake: 'disabled' },
+  ] as const) {
+    await withFakeAdb(
+      (args) => {
+        const joined = args.join(' ');
+        if (joined === `shell settings put global stay_on_while_plugged_in ${value}`) return '';
+        if (joined === 'shell settings get global stay_on_while_plugged_in') return value;
+        return undefined;
+      },
+      async ({ calls, device }) => {
+        const result = await setAndroidSetting(device, 'keep-awake', state);
+        assert.deepEqual(flatCalls(calls), [
+          `shell settings put global stay_on_while_plugged_in ${value}`,
+          'shell settings get global stay_on_while_plugged_in',
+        ]);
+        assert.deepEqual(result, { keepAwake, stayOnWhilePluggedIn: value });
+      },
+    );
+  }
+});
+
+test('setAndroidSetting keep-awake runs nothing for a state svc cannot spell', async () => {
+  await withFakeAdb(
+    (args) => ({ stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'keep-awake', 'forever'), {
+        code: 'INVALID_ARGS',
+        message: /Invalid setting state: forever/,
+      });
+      assert.deepEqual(calls, []);
+    },
+  );
+});

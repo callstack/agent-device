@@ -40,6 +40,7 @@ export const ANDROID_SETTINGS = [
   'bluetooth',
   'airplane',
   'mobile-data',
+  'keep-awake',
   'location',
   'animations',
   'appearance',
@@ -113,6 +114,30 @@ export async function setAndroidSetting(
         parseSettingState(state),
         signal,
       );
+    }
+    case 'keep-awake': {
+      // `svc power stayon true` is a no-op when the stored mask already covers the plugged-in
+      // sources (a device holding 15 answers "Updated" with the value unchanged — verified on
+      // a Redmi K60, Android 14). The write goes to the setting itself with the explicit
+      // BATTERY_PLUGGED_ANY mask, and the result carries the read-back state.
+      const enabled = parseSettingState(state);
+      await runAndroidShell(device, [
+        'settings',
+        'put',
+        'global',
+        'stay_on_while_plugged_in',
+        enabled ? '7' : '0',
+      ]);
+      const applied = await runAndroidShell(device, [
+        'settings',
+        'get',
+        'global',
+        'stay_on_while_plugged_in',
+      ]);
+      return {
+        keepAwake: enabled ? 'enabled' : 'disabled',
+        stayOnWhilePluggedIn: applied.stdout.trim(),
+      };
     }
     case 'location': {
       if (state.toLowerCase() === 'set') {

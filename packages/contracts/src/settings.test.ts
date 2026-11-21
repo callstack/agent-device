@@ -41,7 +41,7 @@ function expectInvalidArgs(run: () => unknown, message: string): void {
 describe('settings usage', () => {
   test('folds settings that share a form into one line', () => {
     expect(SETTINGS_USAGE_OVERRIDE.split(' | ')).toEqual([
-      'settings <wifi|bluetooth|airplane|mobile-data|location|animations> <on|off>',
+      'settings <wifi|bluetooth|airplane|mobile-data|keep-awake|location|animations> <on|off>',
       'settings location set <lat> <lon>',
       'settings appearance <light|dark|toggle>',
       `settings text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`,
@@ -56,7 +56,7 @@ describe('settings usage', () => {
 
   test('the invalid-args message lists the same forms, with the last one as an alternative', () => {
     expect(SETTINGS_INVALID_ARGS_MESSAGE).toMatch(
-      /^settings requires <wifi\|bluetooth\|airplane\|mobile-data\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
+      /^settings requires <wifi\|bluetooth\|airplane\|mobile-data\|keep-awake\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
     );
   });
 
@@ -240,7 +240,7 @@ describe('settingsAppScope', () => {
 });
 
 describe('settingsAppScope device-wide radios', () => {
-  test.each(['mobile-data', 'bluetooth'])(
+  test.each(['mobile-data', 'keep-awake', 'bluetooth'])(
     '%s switches the whole device wherever it is served',
     (setting) => {
       expect(settingsAppScope('mobile', setting, 'on')).toBe('device-level');

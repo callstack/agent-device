@@ -43,6 +43,28 @@ test('HarmonyOS clear-app-state force stops then clears bundle data and cache', 
   );
 });
 
+test('HarmonyOS keep-awake raises the screen-off timeout and off restores the system value', async () => {
+  assert.deepEqual(await setHarmonySetting(device, 'keep-awake', 'on'), { keepAwake: 'enabled' });
+  assert.deepEqual(await setHarmonySetting(device, 'keep-awake', 'OFF'), {
+    keepAwake: 'disabled',
+  });
+  assert.deepEqual(
+    mockRunHarmonyShell.mock.calls.map((call) => call[1]),
+    [
+      ['power-shell', 'timeout', '-o', '2147483647'],
+      ['power-shell', 'timeout', '-r'],
+    ],
+  );
+});
+
+test('HarmonyOS keep-awake runs nothing for a state the tool cannot spell', async () => {
+  await assert.rejects(
+    async () => await setHarmonySetting(device, 'keep-awake', 'always'),
+    /Invalid setting state: always/,
+  );
+  assert.deepEqual(mockRunHarmonyShell.mock.calls, []);
+});
+
 test('HarmonyOS settings rejects unsupported setting and missing app bundle', async () => {
   await assert.rejects(async () => await setHarmonySetting(device, 'wifi', 'on'), /not supported/);
   await assert.rejects(
