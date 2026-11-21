@@ -2050,19 +2050,66 @@ agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]
 agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>
 agent-device perf cpu profile stop --kind xctrace --out <profile.trace>
 agent-device perf cpu profile report --kind xctrace --out <report.json>
-agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>
+agent-device perf trace start --kind xctrace [--template <name>] --out <path>
+agent-device perf trace stop --kind xctrace --out <path>
 agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>
 agent-device perf cpu profile stop --kind simpleperf
 agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>
 agent-device perf trace start|stop --kind perfetto [--out <path>]
 ```
 
+**`perf frames`**
+
+Reads no options.
+
+**`perf memory sample`**
+
+Reads no options.
+
+**`perf memory snapshot`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--out <path>` | Output path |
+
+**`perf cpu profile start`**
+
 | Option | What it does |
 | --- | --- |
 | `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
 | `--template <name>` | Perf xctrace template name, for example Time Profiler |
+| `--out <path>` | Output path |
 
-Also accepts: [common options](#common-options): `--out <path>`.
+**`perf cpu profile stop`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--out <path>` | Output path |
+
+**`perf cpu profile report`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--template <name>` | Perf xctrace template name, for example Time Profiler |
+| `--out <path>` | Output path |
+
+**`perf trace start`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--template <name>` | Perf xctrace template name, for example Time Profiler |
+| `--out <path>` | Output path |
+
+**`perf trace stop`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--out <path>` | Output path |
 
 Supported targets: [Performance samples (frames, memory, CPU profiles)](/docs/capabilities#evidence-and-diagnostics).
 
@@ -2221,10 +2268,10 @@ agent-device metro prepare (--public-base-url <url> | --proxy-base-url <url>) [-
 agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]
 ```
 
+**`metro prepare`**
+
 | Option | What it does |
 | --- | --- |
-| `--metro-host <host>` | Session-scoped Metro/debug host hint |
-| `--metro-port <port>` | Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host |
 | `--project-root <path>` | metro prepare: React Native project root (default: cwd) |
 | `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
 | `--metro-kind auto\|react-native\|expo\|repack` | metro prepare: detect or force the React Native dev-server launcher kind |
@@ -2235,10 +2282,18 @@ agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-
 | `--listen-host <host>` | metro prepare: host dev server listens on (default: 0.0.0.0) |
 | `--status-host <host>` | metro prepare: host used for local dev-server /status polling (default: 127.0.0.1) |
 | `--startup-timeout-ms <ms>` | metro prepare: timeout while waiting for the dev server to become ready |
-| `--probe-timeout-ms <ms>` | metro prepare: timeout for /status and proxy bridge calls |
+| `--probe-timeout-ms <ms>` | metro prepare: timeout for /status and proxy bridge calls; metro reload: timeout for the reload request |
 | `--runtime-file <path>` | metro prepare: optional file path to persist the JSON result |
 | `--no-reuse-existing` | metro prepare: always start a fresh Metro process |
 | `--no-install-deps` | metro prepare: skip package-manager install when node_modules is missing |
+
+**`metro reload`**
+
+| Option | What it does |
+| --- | --- |
+| `--metro-host <host>` | Session-scoped Metro/debug host hint |
+| `--metro-port <port>` | Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host |
+| `--probe-timeout-ms <ms>` | metro prepare: timeout for /status and proxy bridge calls; metro reload: timeout for the reload request |
 | `--bundle-url <url>` | Session-scoped bundle URL hint |
 
 Exact behavior: `agent-device help metro`.
@@ -2271,7 +2326,7 @@ agent-device screenshot [path] [--out <path>] [--overlay-refs] [--crop-on <selec
 | --- | --- |
 | `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
 | `--crop-on <selector-expression>` | Screenshot: crop the capture to the frame of the selector resolved on the same screen |
-| `--pixel-density <n>` | Screenshot: output PNG pixel density in pixels per logical point (supported on iOS simulators only) |
+| `--pixel-density <n>` | Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators) |
 | `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
 | `--fullscreen, --full, -f` | Screenshot: on web capture the full page; on macOS app sessions capture the full desktop instead of the app window |
 | `--scale <0.01-1>` | Screenshot: resize both dimensions by this factor (or use AGENT_DEVICE_SCREENSHOT_SCALE) |
@@ -2342,7 +2397,38 @@ agent-device record stop                # Stop active recording
 
 **Screenshot diffs**
 
-`diff screenshot` reads `--baseline`, `--threshold`, `--out`, `--overlay-refs`, and `--screen-mask`. `diff snapshot` reads `-i`, `--depth`, `--scope`, and `--raw`; see [Snapshot and inspect](#snapshot-and-inspect). `--out` belongs to `diff screenshot`: `diff snapshot` writes no file. The CLI refuses `--screen-mask` on `diff snapshot` with `INVALID_ARGS`. It accepts every other option of one action on the other, and that action ignores it. Exact behavior: `agent-device help diff`.
+<!-- generated:command diff -->
+
+Diff snapshot or screenshot.
+
+```bash
+agent-device diff snapshot [-i] [-d <depth>] [-s <scope>] [--raw] | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs] [--screen-mask <black>]
+```
+
+**`diff snapshot`**
+
+| Option | What it does |
+| --- | --- |
+| `-i` | Snapshot: interactive elements only |
+| `--depth, -d <depth>` | Snapshot: limit snapshot depth |
+| `--scope, -s <scope>` | Snapshot: scope snapshot to label/identifier |
+| `--raw` | Snapshot: raw node output |
+
+**`diff screenshot`**
+
+| Option | What it does |
+| --- | --- |
+| `--out <path>` | Output path |
+| `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
+| `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
+| `--baseline, -b <path>` | Diff screenshot: path to baseline image file |
+| `--threshold <0-1>` | Diff screenshot: color distance threshold (default 0.1) |
+
+Supported targets: [Accessibility snapshot, snapshot diff, and audit](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help diff`.
+
+<!-- /generated -->
 
 - `diff screenshot` compares a live capture, or a saved `current.png` (no session needed), against `--baseline`. Inputs may be PNG or JPEG regardless of extension; HarmonyOS captures are JPEG. Output ranks changed regions with rectangles, changed-pixel counts, and share of the diff; `--out` writes a diff PNG with changed pixels tinted red. `ocr` and `nonTextDeltas` are never populated, so read the images yourself for qualitative review.
 - `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Keep it above `0` when either input is JPEG.
@@ -2412,9 +2498,31 @@ Manage session app logs.
 agent-device logs path | logs start | logs stop | logs clear [--restart] | logs doctor | logs mark [message...]
 ```
 
+**`logs path`**
+
+Reads no options.
+
+**`logs start`**
+
+Reads no options.
+
+**`logs stop`**
+
+Reads no options.
+
+**`logs clear`**
+
 | Option | What it does |
 | --- | --- |
 | `--restart` | logs clear: stop active stream, clear logs, then start streaming again |
+
+**`logs doctor`**
+
+Reads no options.
+
+**`logs mark`**
+
+Reads no options.
 
 Supported targets: [App logs](/docs/capabilities#evidence-and-diagnostics).
 
@@ -2680,6 +2788,16 @@ List sessions, show the state dir, or publish a script.
 ```bash
 agent-device session list | session state-dir | session save-script [path] [--force]
 ```
+
+**`session list`**
+
+Reads no options.
+
+**`session state-dir`**
+
+Reads no options.
+
+**`session save-script`**
 
 | Option | What it does |
 | --- | --- |

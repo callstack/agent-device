@@ -274,26 +274,31 @@ describe('several generated blocks share one section heading', () => {
 });
 
 describe('an option no action names is refused, never guessed', () => {
-  test('the diff schema names an action for one option only, so diff gets no generated block', () => {
-    const schema = getCliCommandSchema('diff');
-    assert.deepEqual(schema.flagsByAction, { snapshot: [], screenshot: ['screenshotScreenMask'] });
+  test('a schema that leaves an option unnamed gets no generated block', () => {
+    const schema = {
+      text: { summary: 'Record', description: 'Record' },
+      allowedFlags: ['out', 'fps'],
+      flagsByAction: { start: ['fps'], stop: [] },
+    } as unknown as CommandSchema;
     assert.throws(
-      () => buildCommandFacts('diff', schema, new Set<FlagKey>()),
-      /diff declares flagsByAction but names no action for: .*baseline, threshold/,
+      () => buildCommandFacts('record', schema, new Set<FlagKey>()),
+      /record declares flagsByAction but names no action for: out/,
     );
-    assert.equal(generatedCommands(committed).includes('diff'), false);
   });
 
-  test('record names an action for every option it reads, so its tables are per action', () => {
-    const schema = getCliCommandSchema('record');
-    const facts = buildCommandFacts('record', schema, new Set<FlagKey>());
-    assert.deepEqual(
-      facts.actions.map((action) => action.label),
-      Object.keys(schema.flagsByAction ?? {}).map((action) => `record ${action}`),
-    );
-  });
+  test.for(['diff', 'perf', 'metro', 'logs', 'session', 'record'])(
+    '%s names an action for every option it reads, so its tables are per action',
+    (command) => {
+      const schema = getCliCommandSchema(command);
+      const facts = buildCommandFacts(command, schema, new Set<FlagKey>());
+      assert.deepEqual(
+        facts.actions.map((action) => action.label),
+        Object.keys(schema.flagsByAction ?? {}).map((action) => `${command} ${action}`),
+      );
+      assert.ok(generatedCommands(committed).includes(command));
+    },
+  );
 });
-
 test('a multi-line synopsis renders one command form per line and no help prose', () => {
   const block = renderBlock(
     commandFacts({
