@@ -295,7 +295,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'int',
     min: 1,
     usageLabel: '--probe-timeout-ms <ms>',
-    usageDescription: 'metro prepare: timeout for /status and proxy bridge calls',
+    usageDescription:
+      'metro prepare: timeout for /status and proxy bridge calls; metro reload: timeout for the reload request',
     projectConfig: false,
     recorded: false,
   },

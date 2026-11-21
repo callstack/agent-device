@@ -33,7 +33,7 @@ Pass a flag only through layers that consume it:
   For pure grammar or grammar with its own mutually-exclusive brackets, use `[]`.
   Otherwise, use the subset it names. `Command flags:` always lists all of `allowedFlags`.
   For an opt-in across commands, set `usageHidden: true` on its flag definition. This excludes it from every synopsis.
-- If the first positional selects an action, declare `flagsByAction` on the CLI schema.
+- If the leading positionals select an action, declare `flagsByAction` on the CLI schema.
   Map each action to the options it reads. Derive `allowedFlags` from that table.
   From caller-supplied keys, the parser rejects typed options that the action never reads.
   Options the selected action ignores stay out of its request, even when config, env, or remote-config defaults set them. Thus, `AGENT_DEVICE_FPS=30` never breaks `record stop`.

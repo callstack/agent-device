@@ -85,6 +85,7 @@ const logsCliSchema = {
   positionalArgs: ['path|start|stop|clear|doctor|mark', 'message?'],
   allowsExtraPositionals: true,
   allowedFlags: ['restart'],
+  flagsByAction: { path: [], start: [], stop: [], clear: ['restart'], doctor: [], mark: [] },
 } as const satisfies CommandSchemaOverride;
 
 const eventsCliSchema = {

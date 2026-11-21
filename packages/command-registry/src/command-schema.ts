@@ -11,7 +11,9 @@ export type CommandSchema = {
   allowsExtraPositionals?: boolean;
   allowedFlags?: readonly FlagKey[];
   /**
-   * For a command whose first positional selects an action: the options that action reads.
+   * For a command whose leading positionals select an action: the options that action reads. A key
+   * of several words, such as `'cpu profile start'`, names an action path, and the parser selects the
+   * longest key whose words lead the positionals.
    *
    * `allowedFlags` is command-wide, because the parser does not know actions, so every option the
    * command declares reaches every one of its actions. An option the action never reads is then
