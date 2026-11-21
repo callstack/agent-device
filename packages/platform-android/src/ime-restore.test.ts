@@ -443,6 +443,33 @@ test('a restore records its flush window before it issues the write', async () =
   expect(recordedAtImeSet).toEqual([[DEVICE.id]]);
 });
 
+test('an unwritable state dir still restores the IME and holds this close for the window', async () => {
+  const host = bindAndroidAdbHostStub({
+    imeFlushRecords: {
+      write: async () => {
+        throw new Error('EACCES: permission denied');
+      },
+      clear: async () => {},
+      read: async () => undefined,
+    },
+  });
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const state = stuckDeviceState();
+
+  const result = await restoreWith(state, { shutdownTarget: true });
+
+  expect(result).toMatchObject({ restored: true, reason: 'ok' });
+  expect(state.settings.get('default_input_method')).toBe('com.samsung/.Keyboard');
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
+  expect(host.diagnostics).toContainEqual({
+    phase: 'android_test_ime_flush_record_write_failed',
+    level: 'warn',
+  });
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+});
+
 test('a shutdown of a physical device restores without any flush wait', async () => {
   bindAndroidAdbHostStub();
   const device: DeviceInfo = { ...DEVICE, kind: 'device', id: 'R5800ABC1' };

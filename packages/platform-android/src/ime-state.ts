@@ -2,7 +2,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { randomUUID } from 'node:crypto';
 import { sleep } from '@agent-device/host-kit/retry';
-import { requireAndroidAdbHost } from './adb-host.ts';
+import { normalizeError } from '@agent-device/kernel/errors';
+import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { getAndroidImeHelperDeviceKey } from './ime-helper.ts';
 import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 
@@ -116,21 +117,48 @@ export type TestImeFlushWait =
 // provenance rather than inheriting it: an issued-unconfirmed write after a confirmed one can
 // have re-displaced the IME, and only the newest write's confirmation justifies clearing
 // another close's retry evidence. A new deadline is always the latest one, so windows
-// coalesce. A failed write rejects: the restore then fails rather than leaving the kill
-// unguarded.
+// coalesce. A failed write never blocks the restore: it warns and returns the deadline it
+// could not record, so the calling close can still hold its own kill.
 export async function registerTestImeRestore(
   stateDir: string,
   serial: string,
   confirmed: boolean,
-): Promise<void> {
-  const records = requireAndroidAdbHost().imeFlushRecords;
-  await withTestImeFlushRecordLock(stateDir, serial, async () => {
-    await records.write(stateDir, serial, {
-      deadlineMs: requireAndroidAdbHost().monotonicNowMs() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
-      confirmed,
-      writer: FLUSH_RECORD_WRITER,
+): Promise<TestImeFlushRegistration> {
+  const host = requireAndroidAdbHost();
+  const deadlineMs = host.monotonicNowMs() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS;
+  try {
+    await withTestImeFlushRecordLock(stateDir, serial, async () => {
+      await host.imeFlushRecords.write(stateDir, serial, {
+        deadlineMs,
+        confirmed,
+        writer: FLUSH_RECORD_WRITER,
+      });
     });
-  });
+    return { deadlineMs, recorded: true };
+  } catch (error) {
+    emitAndroidAdbDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_flush_record_write_failed',
+      data: { device: serial, stateDir, error: normalizeError(error).message },
+    });
+    return { deadlineMs, recorded: false };
+  }
+}
+
+export type TestImeFlushRegistration = Readonly<{ deadlineMs: number; recorded: boolean }>;
+
+// Holds the caller's kill until a deadline it registered but could not record has passed. No
+// later process can see that window, so only the close that issued the write waits it out.
+export async function awaitUnrecordedTestImeFlushWindow(
+  deadlineMs: number,
+  signal?: AbortSignal,
+): Promise<TestImeFlushWait> {
+  const remainingMs = Math.min(
+    deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
+    SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
+  );
+  if (remainingMs > 0) await sleep(remainingMs, signal);
+  return signal?.aborted ? 'aborted' : 'covered-issued';
 }
 
 // Wait until the device's newest restore write is older than the flush window. Returns 'idle'
