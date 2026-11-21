@@ -1,7 +1,6 @@
 {
   "name": "@agent-device/web",
   "version": "0.22.0-dev",
-  "private": true,
   "type": "module",
   "description": "Managed web platform plugin for agent-device.",
   "exports": {
