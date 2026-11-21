@@ -122,7 +122,7 @@ agent-device devices --platform linux
 - The Linux device is the machine the daemon runs on, so `devices --platform linux` answers one desktop only on a Linux host. An X11 session uses `xdotool`, `xclip` or `xsel`, and `scrot`, `import`, or `gnome-screenshot`. A Wayland session uses `ydotool`, `wl-clipboard`, and `grim` or `gnome-screenshot`.
 - Snapshots read the AT-SPI2 tree through a Python helper the plugin ships, so install `python3-gi` and `gir1.2-atspi-2.0`, and keep an AT-SPI2 registry running on the session's D-Bus bus.
 - The plugin resolves every tool from the daemon host's `PATH`. Set that in the environment that starts the daemon.
-- Without the plugin, a command that names `--platform linux` fails with `details.reason: "plugin-not-installed"` and the install command. Commands that name no platform skip Linux.
+- Without the plugin, a command such as `devices` or `open` that names `--platform linux` fails with `details.reason: "plugin-not-installed"` and the install command. `doctor` does not fail: when its toolchain platform is Linux, the toolchain row in `data.checks` carries the same reason in `evidence.reason`. Commands that name no platform skip Linux.
 
 ## macOS desktop notes
 
