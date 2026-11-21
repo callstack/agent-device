@@ -58,6 +58,7 @@ export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
     coerceAdbResult: (result) => result,
     execFailureDetails: (result) => ({ exitCode: result.exitCode }),
     emitDiagnostic: () => {},
+    monotonicNowMs: () => performance.now(),
     imeRecoveryMarkers: {
       write: async (stateDir, serial) => {
         markerSet(stateDir).add(serial);

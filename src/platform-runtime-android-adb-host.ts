@@ -118,6 +118,8 @@ bindAndroidAdbHost({
   coerceAdbResult: coerceExecResult,
   execFailureDetails,
   emitDiagnostic,
+  // libuv's hrtime reads CLOCK_MONOTONIC, mach_absolute_time or QueryPerformanceCounter.
+  monotonicNowMs: () => Number(process.hrtime.bigint() / 1_000n) / 1_000,
   imeRecoveryMarkers: {
     write: async (stateDir, serial) => {
       const { writeAndroidTestImeRecoveryMarker } =
