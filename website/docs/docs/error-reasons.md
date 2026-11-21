@@ -197,9 +197,10 @@ These reasons can come from more than one command.
 | `LEASE_NOT_FOUND` | The lease that the request names is not active. |
 | `LEASE_SCOPE_MISMATCH` | The lease does not match the tenant, run, backend, provider, device, or client of the request. |
 | `LEASE_SCOPE_REQUIRED` | The lease was allocated with an owner scope that the request does not repeat. |
+| `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
+| `LEASE_ID_TOO_SHORT` | A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits). |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |
-| `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
 
 ### Macos helper

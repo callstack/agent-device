@@ -1,5 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { isTenantOwnedSessionName, normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { resolveSessionIsolationMode } from '../core/config.ts';
 import { tenantScopedSessionName } from '../core/session-tenant-scope.ts';
@@ -30,12 +30,6 @@ import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 /** Names the session a request runs in. */
-const LEASE_ADMISSION_REASONS = {
-  // The lease scope of the request differs from the lease of its session; `details.field` names the
-  // field.
-  sessionMismatch: { reason: 'LEASE_SESSION_MISMATCH' },
-} as const satisfies ReasonTable<'leases'>;
-
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,

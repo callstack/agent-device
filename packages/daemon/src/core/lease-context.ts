@@ -3,6 +3,7 @@ import { getRequestExecutionDeadlineMs } from '@agent-device/host-kit/request';
 import {
   AppError,
   BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
@@ -57,9 +58,11 @@ export type SessionLease = {
 };
 
 /** The `error.details.reason` values a session-lease refusal publishes. */
-const SESSION_LEASE_REASONS = {
-  leaseSessionMismatch: 'LEASE_SESSION_MISMATCH',
-} as const satisfies Record<string, string>;
+const LEASE_ADMISSION_REASONS = {
+  // The lease scope of the request differs from the lease of its session; `details.field` names the
+  // field.
+  sessionMismatch: { reason: 'LEASE_SESSION_MISMATCH' },
+} as const satisfies ReasonTable<'leases'>;
 
 type SessionLeaseHolder = { lease?: SessionLease | null };
 
@@ -172,7 +175,7 @@ export function assertRequestHoldsSessionLease(
 function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): void {
   if (!requestScope.leaseId) {
     throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
-      reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
+      reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
       field: 'leaseId',
       hint: 'Send the leaseId that the allocation returned (meta.leaseId or the leaseId param). From the CLI, open the session through connect proxy or connect --remote-config and keep the same --session; raw --tenant and --session flags do not send it.',
     });
@@ -224,7 +227,7 @@ function assertMatchingLeaseField(field: string, requestValue?: string, leaseVal
 
 function leaseFieldMismatchError(field: string): AppError {
   return new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
-    reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
+    reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
     field,
   });
 }

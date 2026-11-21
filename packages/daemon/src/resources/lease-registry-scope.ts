@@ -7,7 +7,7 @@ import {
   leaseProviderRequiringRuntime,
 } from '@agent-device/contracts/lease-scope';
 import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 
 export type LeaseRegistryOptions = {
@@ -150,8 +150,9 @@ const MIN_CALLER_CHOSEN_LEASE_ID_HEX_DIGITS = 32;
 
 /** The `error.details.reason` values a caller-chosen lease id refusal publishes. */
 const CALLER_CHOSEN_LEASE_ID_REASONS = {
-  tooShort: 'LEASE_ID_TOO_SHORT',
-} as const satisfies Record<string, string>;
+  // A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits).
+  tooShort: { reason: 'LEASE_ID_TOO_SHORT' },
+} as const satisfies ReasonTable<'leases'>;
 
 /**
  * A caller-chosen lease id becomes the bearer credential for the lease, so an id shorter than the
@@ -163,7 +164,7 @@ export function normalizeCallerChosenLeaseId(raw: string): string {
     throw new AppError(
       'INVALID_ARGS',
       `A caller-chosen lease id needs at least ${MIN_CALLER_CHOSEN_LEASE_ID_HEX_DIGITS} random hex digits (128 bits).`,
-      { reason: CALLER_CHOSEN_LEASE_ID_REASONS.tooShort },
+      { reason: CALLER_CHOSEN_LEASE_ID_REASONS.tooShort.reason },
     );
   }
   return leaseId;
