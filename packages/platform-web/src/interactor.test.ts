@@ -4,6 +4,7 @@ import { createWebInteractor } from './interactor.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withWebProvider } from './provider.ts';
 import { makeWebProvider } from './__tests__/test-utils.ts';
+import { createWebHostStub } from './toolbox.fixtures.ts';
 
 test('web interactor delegates first-slice operations to the scoped provider', async () => {
   const calls: string[] = [];
@@ -45,7 +46,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
   });
 
   const snapshot = await withWebProvider(provider, async () => {
-    const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
+    const interactor = await createWebInteractor(createWebHostStub().toolbox);
     await interactor.open('https://example.test');
     await interactor.open('app-shell', { url: 'https://example.test/deep' });
     await interactor.close('app-shell');
@@ -82,7 +83,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
 
 test('web interactor reports hover unsupported when the provider lacks it', async () => {
   await withWebProvider(makeWebProvider(), async () => {
-    const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
+    const interactor = await createWebInteractor(createWebHostStub().toolbox);
     assert.equal(interactor.tapRef, undefined);
     assert.equal(interactor.hover, undefined);
     assert.equal(interactor.hoverRef, undefined);
@@ -94,14 +95,14 @@ test('web interactor reports hover unsupported when the provider lacks it', asyn
 // web session must carry no fused double-click of its own.
 test('web interactor carries no fused double-click mechanic', async () => {
   await withWebProvider(makeWebProvider(), async () => {
-    const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
+    const interactor = await createWebInteractor(createWebHostStub().toolbox);
 
     assert.equal(interactor.doubleTap, undefined);
   });
 });
 
 test('web interactor reports unsupported operations explicitly', async () => {
-  const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
+  const interactor = await createWebInteractor(createWebHostStub().toolbox);
 
   await assert.rejects(
     () => interactor.back(),

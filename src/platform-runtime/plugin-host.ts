@@ -44,6 +44,19 @@ export function createPlatformPluginHost(
       const { isExecutablePath } = await import('@agent-device/host-kit/command');
       return await isExecutablePath(path);
     },
+    isExecutableOnPath: async (executable) => {
+      const { whichCmd } = await import('@agent-device/host-kit/command');
+      return await whichCmd(executable, host.env);
+    },
+    listHostProcesses: async (options) => {
+      const [{ listHostProcesses }, { withoutCommandExecutorOverride }] = await Promise.all([
+        import('@agent-device/host-kit/process'),
+        import('@agent-device/host-kit/command'),
+      ]);
+      // Reading the process table is a host read: a command override one request carries (an adb
+      // executor, say) must not answer for it.
+      return await withoutCommandExecutorOverride(async () => await listHostProcesses(options));
+    },
     startBackgroundCommand: async (request, signal) => {
       processes ??= await loadManagedAppLogProcesses(sessionsDir, host.env);
       return await processes.start(

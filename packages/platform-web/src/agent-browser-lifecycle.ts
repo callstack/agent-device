@@ -1,12 +1,12 @@
 import path from 'node:path';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { uniqueStrings } from '@agent-device/kernel/collections';
-import { emitDiagnostic, type DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/host-file';
 import {
   type OwnedProcessRecordStore,
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
+import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 
 import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
@@ -43,9 +43,10 @@ export type AgentBrowserCleanupResult = AgentBrowserProcessSummary & {
 export type AgentBrowserCleanupOptions = {
   /** The caller's host: its environment carries the idle-timeout overrides. */
   env: Readonly<EnvMap>;
+  /** Where the reap is reported: the host the plugin was set up with. */
+  emitDiagnostic(event: DiagnosticEventInput): void;
   openWebSessionNames?: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
-  emitDiagnostic?(event: DiagnosticEventInput): void;
   /** The fleet session whose open runs this cleanup: it has spawned nothing yet, so it never blocks the reap. */
   startingSession?: string;
 };
@@ -96,7 +97,7 @@ export async function cleanupManagedAgentBrowserOrphans(
     });
     const signalPids = [...reaped.terminatedPids];
     if (reaped.inspected > 0) {
-      (options.emitDiagnostic ?? emitDiagnostic)({
+      options.emitDiagnostic({
         level: 'warn',
         phase: 'web_agent_browser_orphan_cleanup',
         data: {

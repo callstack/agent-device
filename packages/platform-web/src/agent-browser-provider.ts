@@ -1,10 +1,9 @@
 import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/contracts/managed-web-backend';
-import { execFailureDetails } from '@agent-device/host-kit/command';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import {
   AppError,
+  commandFailureDetails,
   type DispatchDisclosure,
   discloseDispatchAfterSteps,
 } from '@agent-device/kernel/errors';
@@ -27,6 +26,7 @@ import {
   readStringProperty,
   type JsonObject,
 } from './json-utils.ts';
+import type { WebToolbox } from './toolbox.ts';
 import type {
   WebProvider,
   WebSnapshotOptions,
@@ -36,7 +36,6 @@ import {
   getManagedAgentBrowserStatus,
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
-  type ManagedBrowserHost,
 } from './agent-browser-tool.ts';
 import { agentBrowserFleetOf, type AgentBrowserFleet } from './agent-browser-fleet.ts';
 import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
@@ -52,8 +51,8 @@ const AGENT_BROWSER_DOCTOR_HINT =
   'Run `agent-device web setup` to install the managed web backend.';
 
 type AgentBrowserProviderOptions = {
-  /** The composing runtime's host; every backend spawn and status read uses it. */
-  host: ManagedBrowserHost;
+  /** The plugin's toolbox; every backend spawn, process read and diagnostic uses its host. */
+  toolbox: WebToolbox;
   /** The backend session key, read from the session device id; omitted for no session. */
   session?: string;
   stateDir?: string;
@@ -614,7 +613,8 @@ async function runAgentBrowserCommand(
   let exitCode = 0;
   let commandCompleted = false;
   let semanticSuccess = false;
-  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
+  const { host } = options.toolbox;
+  const status = getManagedAgentBrowserStatus({ host, stateDir: options.stateDir });
   try {
     const startingSession = cliArgs[0] === 'open' ? fleetSessionOf(options) : undefined;
     if (options.ownedProcessRecords && startingSession !== undefined) {
@@ -622,7 +622,7 @@ async function runAgentBrowserCommand(
     }
     await cleanupProviderStartupOrphans(options, startingSession);
     const result = await runManagedAgentBrowser(cliArgs, {
-      host: options.host,
+      toolbox: options.toolbox,
       stateDir: options.stateDir,
       allowFailure: true,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
@@ -687,10 +687,10 @@ async function finalizeAgentBrowserProcessRecord(params: {
         return;
       }
       if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
-        await recordManagedAgentBrowserProcesses(params.status, store, params.options.host);
+        await recordManagedAgentBrowserProcesses(params.status, store, params.options.toolbox);
       }
     } catch (error) {
-      (params.options.host.emitDiagnostic ?? emitDiagnostic)({
+      params.options.toolbox.host.emitDiagnostic({
         level: 'warn',
         phase: 'web_agent_browser_process_record_failed',
         data: { error: error instanceof Error ? error.message : String(error) },
@@ -783,12 +783,13 @@ async function cleanupProviderStartupOrphans(
   startingSession: string | undefined,
 ): Promise<void> {
   if (!options.openWebSessionNames) return;
-  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
+  const { host } = options.toolbox;
+  const status = getManagedAgentBrowserStatus({ host, stateDir: options.stateDir });
   if (!status.installed) return;
   try {
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
-      env: options.host.env,
-      ...(options.host.emitDiagnostic ? { emitDiagnostic: options.host.emitDiagnostic } : {}),
+      env: host.env,
+      emitDiagnostic: host.emitDiagnostic,
       openWebSessionNames: options.openWebSessionNames(),
       ...(startingSession === undefined ? {} : { startingSession }),
       ...(options.ownedProcessRecords === undefined
@@ -796,7 +797,7 @@ async function cleanupProviderStartupOrphans(
         : { ownedProcessRecords: options.ownedProcessRecords }),
     });
   } catch (error) {
-    (options.host.emitDiagnostic ?? emitDiagnostic)({
+    host.emitDiagnostic({
       level: 'warn',
       phase: 'web_agent_browser_provider_orphan_cleanup_failed',
       data: { error: error instanceof Error ? error.message : String(error) },
@@ -825,7 +826,7 @@ function unwrapAgentBrowserJson(
     throw new AppError(
       'COMMAND_FAILED',
       'agent-browser command failed',
-      execFailureDetails(result, {
+      commandFailureDetails(result, {
         cmd: AGENT_BROWSER,
         args: cliArgs,
         stdout: result.stdout.slice(0, 500),

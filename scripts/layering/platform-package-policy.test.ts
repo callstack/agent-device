@@ -924,9 +924,10 @@ test('managed platform code enters core only through the registry', () => {
 
 // A managed plugin ships its own copy of host-kit, so the daemon's command scope and request
 // diagnostic store never enter it: a runtime import of either runs outside the request the plugin was
-// asked to serve. The plugin binds to the host its `setup` receives instead.
+// asked to serve. The plugin binds to the host its `setup` receives instead. No managed package
+// carries an entry: every one of them is on the host.
 for (const family of ['web', 'vega', 'harmonyos'] as const) {
-  test(`a managed platform package reaches the host-kit command or diagnostics scope only in its listed migration files (${family})`, () => {
+  test(`a managed platform package may not reach the host-kit command or diagnostics scope (${family})`, () => {
     const file = `packages/platform-${family}/src/new-surface.ts`;
     for (const specifier of [
       '@agent-device/host-kit/command',

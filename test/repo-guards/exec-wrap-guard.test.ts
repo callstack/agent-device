@@ -12,8 +12,11 @@ import { test } from 'vitest';
 // whose details carry `processExitError: true`. Before PR #1072 ~49 call sites
 // spread the trio by hand and silently missed the flag, so users saw
 // "<tool> exited with code N" with no cause. The fix is centralized in
-// `execFailureDetails` / `requireExecSuccess` (@agent-device/host-kit/command); this guard
-// keeps new call sites from drifting back to inline spreads.
+// `execFailureDetails` / `requireExecSuccess` (@agent-device/host-kit/command) and, for a
+// caller that holds only a command answer and no host (a platform plugin running its commands
+// through its `PlatformHost`), `commandFailureDetails` / `requireCommandSuccess`
+// (@agent-device/kernel/errors); this guard keeps new call sites from drifting back to inline
+// spreads.
 //
 // A site that intentionally rebuilds the trio WITHOUT the flag (reachable at
 // exit 0, timeout errors where the message beats the excerpt, nested tool
@@ -83,7 +86,13 @@ function isInlineTrioViolation(source: string, callStart: number): boolean {
   // expressions, which are runner/daemon pass-throughs, not exec wraps).
   if (!/^\(\s*'COMMAND_FAILED'/.test(window)) return false;
   if (!TRIO_KEYS.every((key) => key.test(window))) return false;
-  if (window.includes('execFailureDetails') || window.includes('requireExecSuccess')) return false;
+  if (
+    window.includes('execFailureDetails') ||
+    window.includes('requireExecSuccess') ||
+    window.includes('commandFailureDetails') ||
+    window.includes('requireCommandSuccess')
+  )
+    return false;
   return !hasAllowMarker(source, callStart);
 }
 

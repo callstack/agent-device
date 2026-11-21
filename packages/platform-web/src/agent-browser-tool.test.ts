@@ -14,6 +14,7 @@ import {
   setupManagedAgentBrowser,
 } from './agent-browser-tool.ts';
 import { mkdtempForTestSync, writeFakeNpmCliScript } from './__tests__/test-utils.ts';
+import { createWebHostStub } from './toolbox.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
@@ -27,7 +28,7 @@ test('managed agent-browser reports actionable guidance when install is missing'
     await assert.rejects(
       () =>
         runManagedAgentBrowser(['doctor'], {
-          host: { env: process.env, cwd: process.cwd() },
+          toolbox: createWebHostStub({ stateDir }).toolbox,
           stateDir,
           timeoutMs: 1_000,
         }),
@@ -59,7 +60,7 @@ test('managed agent-browser runs its JS entry with the current Node runtime, not
       },
       async () =>
         await runManagedAgentBrowser(['snapshot', '--json'], {
-          host: { env: process.env, cwd: process.cwd() },
+          toolbox: createWebHostStub({ stateDir }).toolbox,
           stateDir,
           timeoutMs: 1_000,
         }),
@@ -80,6 +81,9 @@ test('managed agent-browser passes the managed runtime home and socket dir to th
   try {
     const install = installFakeManagedAgentBrowser(stateDir);
     let env: NodeJS.ProcessEnv | undefined;
+    // The plugin asks its own host to run the entry; the stub records that and hands the answer
+    // back through the command host this suite answers on.
+    const stub = createWebHostStub({ stateDir });
 
     await withCommandExecutorOverride(
       async (_cmd, _args, options) => {
@@ -88,7 +92,7 @@ test('managed agent-browser passes the managed runtime home and socket dir to th
       },
       async () =>
         await runManagedAgentBrowser(['doctor'], {
-          host: { env: process.env, cwd: process.cwd() },
+          toolbox: stub.toolbox,
           stateDir,
           timeoutMs: 1_000,
         }),
@@ -101,6 +105,11 @@ test('managed agent-browser passes the managed runtime home and socket dir to th
     assert.notEqual(install.runtimeHomeDir, install.homeDir);
     assert.ok(fs.existsSync(install.runtimeHomeDir));
     assert.ok(fs.existsSync(install.socketDir));
+    // The host the plugin was set up with ran the backend, with the managed environment it built.
+    assert.deepEqual(
+      stub.commands.map(({ executable, args }) => ({ executable, args })),
+      [{ executable: process.execPath, args: [install.entryScript, 'doctor'] }],
+    );
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -189,7 +198,7 @@ for (const scenario of [
               async () =>
                 await setupManagedAgentBrowser({
                   stateDir,
-                  host: { env: process.env, cwd: process.cwd() },
+                  toolbox: createWebHostStub({ stateDir }).toolbox,
                 }),
             );
           if (scenario.expected === 'missing') {
@@ -251,7 +260,7 @@ test('managed agent-browser setup reports an install that produced no entry', as
             () =>
               setupManagedAgentBrowser({
                 stateDir,
-                host: { env: process.env, cwd: process.cwd() },
+                toolbox: createWebHostStub({ stateDir }).toolbox,
               }),
             (error: unknown) =>
               error instanceof AppError &&
@@ -280,13 +289,13 @@ test('managed agent-browser setup gives the install lock back on every path out'
         async () => {
           await setupManagedAgentBrowser({
             stateDir,
-            host: { env: process.env, cwd: process.cwd() },
+            toolbox: createWebHostStub({ stateDir }).toolbox,
           });
           // The package exists by now, so this second call returns from *inside* the lock
           // rather than running to the end of it.
           await setupManagedAgentBrowser({
             stateDir,
-            host: { env: process.env, cwd: process.cwd() },
+            toolbox: createWebHostStub({ stateDir }).toolbox,
           });
         },
       );
