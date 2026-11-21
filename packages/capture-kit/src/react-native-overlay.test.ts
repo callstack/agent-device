@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import {
   analyzeReactNativeOverlay,
   formatReactNativeOverlayWarning,
@@ -150,5 +151,125 @@ describe('React Native overlay evidence', () => {
       node({ index: 0, ref: 'e1', label: '!, Warning: x', rect: collapsedBannerRect }),
     ];
     expect(analyzeReactNativeOverlay(nodes).detected).toBe(true);
+  });
+});
+
+/**
+ * From two entries up, LogBox's badge renders the entry count instead of `!`
+ * (`LogBoxNotificationCountBadge`), so the banner's joined label starts with a number. App rows
+ * open the same way, which is why the count form arms only on LogBox's own banner placement.
+ */
+describe('React Native collapsed banner with the entry-count badge', () => {
+  const iosViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 402, height: 874 });
+  const androidViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 });
+  /** LogBox's frame on a 402x874 surface: `left: 10; right: 10; bottom: 20`, notification 48 high. */
+  const iosCountBannerRect = { x: 10, y: 806, width: 382, height: 48 };
+
+  test('a banner whose badge shows the entry count is an overlay and a dismiss target', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '20, Failed to fetch',
+          rect: iosCountBannerRect,
+          hittable: true,
+        }),
+      ],
+      iosViewport,
+    );
+
+    expect(state.detected).toBe(true);
+    expect(state.primaryAction).toMatchObject({
+      action: 'close-collapsed-banner',
+      ref: 'e1',
+      label: '20, Failed to fetch',
+    });
+  });
+
+  test('a device-pixel count banner floating off the bottom edge is an overlay', () => {
+    const state = analyzeReactNativeOverlay(
+      [
+        node({
+          index: 0,
+          ref: 'e1',
+          label: '8, Network request failed',
+          rect: { x: 28, y: 2213, width: 1024, height: 132 },
+          hittable: true,
+        }),
+      ],
+      androidViewport,
+    );
+
+    expect(state.detected).toBe(true);
+  });
+
+  test('an ordinary row whose label starts with a number is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '2, Morning',
+        rect: { x: 0, y: 320, width: 402, height: 52 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a tab bar row whose label starts with a number is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '3, Cart',
+        rect: { x: 202, y: 811, width: 200, height: 63 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a full-width footer row flush with the bottom edge is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '2, Continue shopping',
+        rect: { x: 0, y: 822, width: 402, height: 52 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a price label is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '20,000원',
+        rect: iosCountBannerRect,
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
+  test('a count banner is not an overlay when the capture published no box', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '20, Failed to fetch',
+        rect: iosCountBannerRect,
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes).detected).toBe(false);
   });
 });

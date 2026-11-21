@@ -134,7 +134,7 @@ function addReactNativeOverlayActionCandidates(
   screenshotWidth: number,
   screenshotHeight: number,
 ): void {
-  const overlay = analyzeReactNativeOverlay(snapshot.nodes);
+  const overlay = analyzeReactNativeOverlay(snapshot.nodes, snapshot.viewport);
   const action = overlay.primaryAction;
   if (!action?.ref || !action.rect || !hasPositiveRect(action.rect)) return;
 

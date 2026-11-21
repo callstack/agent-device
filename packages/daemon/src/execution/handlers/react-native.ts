@@ -75,7 +75,7 @@ export async function handleReactNativeCommands(
     if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
       return responseForSparseReactNativeOverlaySnapshot(snapshot.snapshotQuality);
     }
-    const overlay = analyzeReactNativeOverlay(snapshot.nodes);
+    const overlay = analyzeReactNativeOverlay(snapshot.nodes, snapshot.viewport);
     const target = overlay.primaryAction;
     if (!target) {
       return responseForMissingReactNativeOverlayTarget(overlay.detected);
@@ -217,7 +217,10 @@ async function verifyReactNativeOverlayDismissal(params: InteractionRouteInput):
       nextCommand: 'agent-device screenshot',
     };
   }
-  const overlay = analyzeReactNativeOverlay(verificationSnapshot.nodes);
+  const overlay = analyzeReactNativeOverlay(
+    verificationSnapshot.nodes,
+    verificationSnapshot.viewport,
+  );
   if (!overlay.detected) {
     return {
       verified: true,
