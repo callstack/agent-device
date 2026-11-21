@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ReactDevtoolsFailureReason } from './react-devtools-reasons.ts';
 import {
   debuggerUrlOn,
   InspectorSession,
@@ -151,9 +152,18 @@ export async function callRuntime<T>(
   return JSON.parse(value) as T;
 }
 
-export type RuntimeFailure = { ok: false; reason: string; elapsedMs?: number; detail?: string };
+export type RuntimeFailure = {
+  ok: false;
+  reason: ReactDevtoolsFailureReason;
+  elapsedMs?: number;
+  detail?: string;
+};
 
-const RUNTIME_FAILURES: Record<string, { message: string; hint: string }> = {
+/** The message and recovery each runtime answer carries. */
+const RUNTIME_FAILURES: Record<
+  Exclude<ReactDevtoolsFailureReason, 'already-profiling'>,
+  { message: string; hint: string }
+> = {
   'no-devtools-hook': {
     message: 'The app runtime has no React DevTools hook.',
     hint: 'Use a development build; release builds do not include React DevTools.',
@@ -196,11 +206,32 @@ const RUNTIME_FAILURES: Record<string, { message: string; hint: string }> = {
   },
 };
 
+/**
+ * The error for one runtime answer. Every spelling the injected runtime can send has its own row
+ * in `REACT_DEVTOOLS_REASONS` and its own wording here. A spelling this build does not know
+ * (a stale injected runtime) never becomes the published reason: it travels as
+ * `details.runtimeReason` in the message instead.
+ */
 export function runtimeFailure(result: RuntimeFailure): AppError {
-  const known = RUNTIME_FAILURES[result.reason];
-  const message = known?.message ?? `React DevTools failed: ${result.reason}.`;
-  return new AppError('COMMAND_FAILED', result.detail ? `${message} ${result.detail}` : message, {
-    reason: result.reason,
-    ...(known ? { hint: known.hint } : {}),
-  });
+  const known = RUNTIME_FAILURES[result.reason as keyof typeof RUNTIME_FAILURES] as
+    | { message: string; hint: string }
+    | undefined;
+  if (known) {
+    return new AppError(
+      'COMMAND_FAILED',
+      result.detail ? `${known.message} ${result.detail}` : known.message,
+      { reason: result.reason, hint: known.hint },
+    );
+  }
+  const raw = String(result.reason);
+  return new AppError(
+    'COMMAND_FAILED',
+    `The React DevTools runtime reported an unknown failure (${raw}).${
+      result.detail ? ` ${result.detail}` : ''
+    }`,
+    {
+      runtimeReason: raw,
+      hint: 'Update agent-device; this app runtime is newer than this build.',
+    },
+  );
 }

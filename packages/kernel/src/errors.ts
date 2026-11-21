@@ -431,12 +431,17 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
   );
 }
 
-/** `details.reason` of a request whose deadline passed before its work could finish. */
-export const REQUEST_DEADLINE_REASON = 'daemon_request_timeout';
+/** The two deadlines that end work with a reason naming which budget ran out. */
+export const TIMEOUT_REASONS = {
+  // The daemon request its handler ran under passed its registered deadline.
+  daemonDeadline: { reason: 'daemon_request_timeout' },
+  // An `AbortSignal.timeout` ended the wait before the operation it guarded finished.
+  operationDeadline: { reason: 'operation_deadline_expired' },
+} as const satisfies ReasonTable<'timeouts'>;
 
-/** Whether `details` carry the {@link REQUEST_DEADLINE_REASON}, for a caller holding details. */
+/** Whether `details` carry {@link TIMEOUT_REASONS.daemonDeadline}, for a caller holding details. */
 export function isRequestDeadlineDetails(details: AppErrorDetails | undefined): boolean {
-  return details?.reason === REQUEST_DEADLINE_REASON;
+  return details?.reason === TIMEOUT_REASONS.daemonDeadline.reason;
 }
 
 /**
@@ -450,7 +455,7 @@ export function createRequestDeadlineError(details?: AppErrorDetails, cause?: un
     {
       hint: 'Check completed steps and the current device state before retrying the timed-out operation.',
       ...details,
-      reason: REQUEST_DEADLINE_REASON,
+      reason: TIMEOUT_REASONS.daemonDeadline.reason,
     },
     cause,
   );

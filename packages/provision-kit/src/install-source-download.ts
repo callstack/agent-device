@@ -2,12 +2,18 @@ import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   MAX_ARTIFACT_COMPRESSED_BYTES,
   createByteLimitStream,
 } from '@agent-device/host-kit/archive';
 import type { TransferPhaseWatchdog } from '@agent-device/host-kit/transport';
+
+/** Why a download of an app source refuses the bytes it is handed. */
+const INSTALL_SOURCE_DOWNLOAD_REASONS = {
+  // The response declared or carried more bytes than the artifact budget allows.
+  byteLimit: { reason: 'ARTIFACT_BYTE_LIMIT' },
+} as const satisfies ReasonTable<'install-from-source'>;
 
 import { approveDownloadSourceUrl } from './install-source-network.ts';
 import * as networkTransport from './install-source-network-transport.ts';
@@ -187,7 +193,7 @@ async function writeResponse(
       new AppError(
         'COMMAND_FAILED',
         `App source exceeds maximum size of ${MAX_ARTIFACT_COMPRESSED_BYTES} bytes`,
-        { reason: 'ARTIFACT_BYTE_LIMIT' },
+        { reason: INSTALL_SOURCE_DOWNLOAD_REASONS.byteLimit.reason },
       ),
   });
   // Accepted body bytes are the only progress that rearms the inactivity ceiling. The pipeline
@@ -225,7 +231,7 @@ function validateContentLength(raw: string | null): void {
   const length = Number(raw);
   if (!Number.isSafeInteger(length) || length > MAX_ARTIFACT_COMPRESSED_BYTES) {
     throw new AppError('COMMAND_FAILED', 'App source response exceeded the byte limit', {
-      reason: 'ARTIFACT_BYTE_LIMIT',
+      reason: INSTALL_SOURCE_DOWNLOAD_REASONS.byteLimit.reason,
     });
   }
 }

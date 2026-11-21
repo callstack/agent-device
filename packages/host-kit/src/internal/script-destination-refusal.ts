@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 /** The ways a step can be unsafe; `untrustedGroundWording` words each one for the caller. */
 export type ScriptAncestryExposure =
@@ -41,18 +41,27 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
 };
 
 /**
- * The typed reasons a destination-ancestry refusal answers with, named here rather than spelled again by
- * whoever reads them.
+ * Why a script destination was refused before anything was written: the ground the path runs
+ * through cannot be trusted to hold the file. ADR 0016.
  */
-export const SCRIPT_ANCESTRY_REASONS = ['script_ancestor_untrusted'] as const;
+export const SCRIPT_ANCESTRY_REASONS = {
+  // A directory the script path runs through is one another local user can change.
+  untrusted: { reason: 'script_ancestor_untrusted' },
+} as const satisfies ReasonTable<'script publication'>;
 
-/** A reason this rule answers with, or `undefined` for an error that came from somewhere else. */
-export function scriptAncestryReason(error: unknown): string | undefined {
+/** The reason this rule answers with. */
+export type ScriptAncestryReason =
+  (typeof SCRIPT_ANCESTRY_REASONS)[keyof typeof SCRIPT_ANCESTRY_REASONS]['reason'];
+
+/** The reason this rule answers with, or `undefined` for an error that came from somewhere else. */
+export function scriptAncestryReason(error: unknown): ScriptAncestryReason | undefined {
   if (!(error instanceof AppError)) return undefined;
   const reason = error.details?.reason;
   return typeof reason === 'string' &&
-    (SCRIPT_ANCESTRY_REASONS as readonly string[]).includes(reason)
-    ? reason
+    (Object.values(SCRIPT_ANCESTRY_REASONS) as ReadonlyArray<{ reason: string }>).some(
+      (row) => row.reason === reason,
+    )
+    ? (reason as ScriptAncestryReason)
     : undefined;
 }
 
@@ -68,7 +77,7 @@ export function scriptAncestryFailure(
     exposure === 'unnamed_entry' ? 'INVALID_ARGS' : 'COMMAND_FAILED',
     `Refusing to save the script under ${ancestor}: ${untrustedGroundWording[exposure]}`,
     {
-      reason: SCRIPT_ANCESTRY_REASONS[0],
+      reason: SCRIPT_ANCESTRY_REASONS.untrusted.reason,
       exposure,
       path: destination,
       ancestor,

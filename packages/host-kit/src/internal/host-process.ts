@@ -1,8 +1,46 @@
 import fs from 'node:fs';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
+import type {
+  HostEnvironmentSource,
+  HostProcessIdentityFacts,
+  HostProcessIdentityObservation,
+  HostProcessInfo,
+  ListHostProcessesOptions,
+} from './host-process-types.ts';
 import { sleep } from './retry.ts';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import type { ReasonTable } from '@agent-device/kernel/errors';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+
+export type {
+  HostEnvironmentSource,
+  HostProcessIdentityFacts,
+  HostProcessIdentityObservation,
+  HostProcessInfo,
+  ListHostProcessesOptions,
+} from './host-process-types.ts';
+
+/**
+ * Why a confirmed stop left the process alone. The verdict travels to the caller and, through
+ * {@link confirmedProcessStopDetails}, into `error.details.reason`.
+ */
+export const PROCESS_STOP_REASONS = {
+  // The host refused the signal, usually because another user owns the process.
+  signalFailed: { reason: 'signal-failed' },
+  // SIGKILL was accepted and the process still outlived the budget it was given.
+  exitTimeout: { reason: 'exit-timeout' },
+  // Nothing confirmed the pid names the recorded process, so signalling it was refused.
+  identityUnverified: { reason: 'identity-unverified' },
+} as const satisfies ReasonTable<'process stop'>;
+
+/** One {@link PROCESS_STOP_REASONS} spelling. */
+export type ProcessStopReason =
+  (typeof PROCESS_STOP_REASONS)[keyof typeof PROCESS_STOP_REASONS]['reason'];
+
+// The three verdict spellings, bound so a rule reads one name per verdict.
+const SIGNAL_FAILED = PROCESS_STOP_REASONS.signalFailed.reason;
+const EXIT_TIMEOUT = PROCESS_STOP_REASONS.exitTimeout.reason;
+const IDENTITY_UNVERIFIED = PROCESS_STOP_REASONS.identityUnverified.reason;
 
 const PS_TIMEOUT_MS = 1_000;
 // Every POSIX probe runs the first of these that exists, never a PATH lookup, so a hostile PATH
@@ -13,42 +51,6 @@ const HOST_PS_COMMANDS = ['/bin/ps', '/run/current-system/sw/bin/ps'] as const;
 // Windows process-table read gets at least this budget instead of the `ps` one.
 const WINDOWS_PS_TIMEOUT_MS = 2_000;
 const WINDOWS_PROCESS_TOOL = 'powershell.exe';
-
-export type HostProcessInfo = {
-  pid: number;
-  ppid?: number;
-  command: string;
-};
-
-export type HostProcessIdentityObservation = Readonly<{
-  state: string;
-  startTime: string;
-}>;
-
-/**
- * What the host says about one pid when a caller is about to signal it. Each field is `null`
- * when the host did not answer, which is unknown evidence rather than absence: only a `ps`
- * that names a different process proves the pid changed hands. `zombie` is `null` together
- * with an unreadable process state, since a zombie passes `kill(pid, 0)` and still reports
- * its original start time, so nothing else exposes that it already terminated.
- */
-export type HostProcessIdentityFacts = Readonly<{
-  startTime: string | null;
-  command: string | null;
-  zombie: boolean | null;
-}>;
-
-type HostProcessRunCommand = (
-  cmd: string,
-  args: string[],
-  options: ExecOptions,
-) => Promise<ExecResult>;
-
-/** The process-shaped object an entry point captures: Node's `process` satisfies it. */
-export type HostEnvironmentSource = Readonly<{
-  env: EnvMap;
-  cwd(): string;
-}>;
 
 /** Copies `source` (an entry point passes `process`) so later changes never reach the capture. */
 export function captureHostEnvironment(source: HostEnvironmentSource): HostEnvironment {
@@ -84,11 +86,6 @@ function hostPsCommand(): string {
   }
   return HOST_PS_COMMANDS[0];
 }
-
-export type ListHostProcessesOptions = {
-  timeoutMs: number;
-  runCommand?: HostProcessRunCommand;
-};
 
 export function isProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -673,9 +670,14 @@ type StopSignal = GracefulStopSignal | 'SIGKILL';
  */
 export type ConfirmedProcessStop =
   | Readonly<{ status: 'stopped'; signal?: StopSignal; reassigned?: true }>
-  | Readonly<{ status: 'retained'; reason: 'signal-failed'; signal: StopSignal; errno: string }>
-  | Readonly<{ status: 'retained'; reason: 'exit-timeout'; signal: 'SIGKILL' }>
-  | Readonly<{ status: 'retained'; reason: 'identity-unverified' }>;
+  | Readonly<{
+      status: 'retained';
+      reason: typeof SIGNAL_FAILED;
+      signal: StopSignal;
+      errno: string;
+    }>
+  | Readonly<{ status: 'retained'; reason: typeof EXIT_TIMEOUT; signal: 'SIGKILL' }>
+  | Readonly<{ status: 'retained'; reason: typeof IDENTITY_UNVERIFIED }>;
 
 /** The verdict keys a retained stop publishes as error `details`, and nothing else. */
 export type ConfirmedProcessStopDetails = Readonly<{
@@ -697,7 +699,7 @@ export function confirmedProcessStopDetails(
   return {
     reason: retained.reason,
     signal: 'signal' in retained ? retained.signal : undefined,
-    errno: retained.reason === 'signal-failed' ? retained.errno : undefined,
+    errno: retained.reason === SIGNAL_FAILED ? retained.errno : undefined,
     pid,
   };
 }
@@ -718,7 +720,7 @@ type ConfirmedProcessStopReason = Extract<ConfirmedProcessStop, { status: 'retai
  * so an unrelated failure's details cannot be forwarded as one.
  */
 function isConfirmedProcessStopReason(value: unknown): value is ConfirmedProcessStopReason {
-  return value === 'signal-failed' || value === 'exit-timeout' || value === 'identity-unverified';
+  return value === SIGNAL_FAILED || value === EXIT_TIMEOUT || value === IDENTITY_UNVERIFIED;
 }
 
 /**
@@ -738,7 +740,7 @@ export function readConfirmedProcessStopDetails(
     reason,
     signal:
       signal === 'SIGTERM' || signal === 'SIGINT' || signal === 'SIGKILL' ? signal : undefined,
-    errno: reason === 'signal-failed' && typeof errno === 'string' ? errno : undefined,
+    errno: reason === SIGNAL_FAILED && typeof errno === 'string' ? errno : undefined,
     pid,
   };
 }
@@ -818,14 +820,14 @@ export async function stopProcessAndConfirmExit(
   const identity = await proveStopTargetIdentity(target);
   if (identity === 'released' || identity === 'exited') return { status: 'stopped' };
   if (identity === 'reassigned') return { status: 'stopped', reassigned: true };
-  if (identity === 'unverified') return { status: 'retained', reason: 'identity-unverified' };
+  if (identity === 'unverified') return { status: 'retained', reason: IDENTITY_UNVERIFIED };
   const graceful = budget.gracefulSignal ?? 'SIGTERM';
   const term = await proveSignalStage(target, graceful, budget.termTimeoutMs);
   if (term.proof !== 'survived') return stageVerdict(term, graceful);
   const kill = await proveSignalStage(target, 'SIGKILL', budget.killTimeoutMs);
   if (kill.proof !== 'survived' && kill.proof !== 'unverified')
     return stageVerdict(kill, 'SIGKILL');
-  return { status: 'retained', reason: 'exit-timeout', signal: 'SIGKILL' };
+  return { status: 'retained', reason: EXIT_TIMEOUT, signal: 'SIGKILL' };
 }
 
 /** The verdict a signal stage settles on its own, before any further signal. */
@@ -839,7 +841,7 @@ function stageVerdict(
   // permission check, so escalating would spend a second budget repeating it.
   if (stage.proof === 'refused') return retainedSignalFailure(signal, stage.errno);
   // The pid outlived the grace period and the host will not say what it is now.
-  return { status: 'retained', reason: 'identity-unverified' };
+  return { status: 'retained', reason: IDENTITY_UNVERIFIED };
 }
 
 /** Pre-signal identity proof: `released` when `kill(pid, 0)` fails, else {@link judgeProcessIdentity}. */
@@ -851,7 +853,7 @@ async function proveStopTargetIdentity(
 }
 
 function retainedSignalFailure(signal: StopSignal, errno: string): ConfirmedProcessStop {
-  return { status: 'retained', reason: 'signal-failed', signal, errno };
+  return { status: 'retained', reason: SIGNAL_FAILED, signal, errno };
 }
 
 /** What one signal stage proved, within the budget that stage was given. */

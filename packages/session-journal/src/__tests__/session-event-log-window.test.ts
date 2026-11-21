@@ -13,8 +13,7 @@ import {
 } from '../session-event-log.ts';
 import { digestEventLogLine } from '../session-event-log-lines.ts';
 import {
-  EVENT_LOG_CURSOR_EXPIRED_REASON,
-  EVENT_LOG_WINDOW_UNVERIFIED_REASON,
+  EVENT_LOG_WINDOW_REASONS,
   resolveRotatedSessionEventLogPath,
   resolveSessionEventLogMaxBytes,
   rotateSessionEventLogIfNeeded,
@@ -45,7 +44,10 @@ test('a partial failed append refuses later appends and cursor reads without cha
 
   assert.equal(writes.mock.calls.length, 1);
   assert.equal(fs.readFileSync(eventLogPath, 'utf8'), partial);
-  assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.equal(
+    readError(eventLogPath, '0').details?.reason,
+    EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
+  );
 });
 
 test('a persisted incomplete rotated tail refuses placement even when its digest and line count match', async () => {
@@ -59,7 +61,10 @@ test('a persisted incomplete rotated tail refuses placement even when its digest
   assert.equal(bytes.at(-1), 0x0a);
   fs.truncateSync(rotatedPath, bytes.length - 1);
 
-  assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.equal(
+    readError(eventLogPath, '0').details?.reason,
+    EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
+  );
   assert.deepEqual(fs.readFileSync(rotatedPath), bytes.subarray(0, -1));
 });
 
@@ -217,7 +222,7 @@ test('rotation caps events.ndjson while cursors stay absolute across the retaine
 
   const expired = readError(eventLogPath, '0');
   assert.equal(expired.code, 'COMMAND_FAILED');
-  assert.equal(expired.details?.reason, EVENT_LOG_CURSOR_EXPIRED_REASON);
+  assert.equal(expired.details?.reason, EVENT_LOG_WINDOW_REASONS.cursorExpired.reason);
   assert.equal(expired.details?.earliestCursor, earliest);
   assert.equal(typeof expired.details?.hint, 'string');
 
@@ -242,7 +247,7 @@ test('a hand-deleted rotated generation expires its cursors instead of shifting 
   // Cursors that lived in the deleted generation are refused, not answered
   // with the surviving file's events; the surviving file keeps its own indices.
   const expired = readError(eventLogPath, String(earliest));
-  assert.equal(expired.details?.reason, EVENT_LOG_CURSOR_EXPIRED_REASON);
+  assert.equal(expired.details?.reason, EVENT_LOG_WINDOW_REASONS.cursorExpired.reason);
   assert.equal(expired.details?.earliestCursor, earliest + rotatedLines);
   assert.deepEqual(summaries(eventLogPath, String(earliest + rotatedLines), 1), [
     `event ${earliest + rotatedLines}`,
@@ -305,7 +310,7 @@ test('a retained generation whose length moved is refused rather than mapped', a
   );
 
   const unverified = readError(eventLogPath, '0');
-  assert.equal(unverified.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.equal(unverified.details?.reason, EVENT_LOG_WINDOW_REASONS.windowUnverified.reason);
 });
 
 test('an unreadable window sidecar refuses required rotation and preserves the typed cause', async () => {
@@ -319,7 +324,7 @@ test('an unreadable window sidecar refuses required rotation and preserves the t
 
   const unverified = readError(eventLogPath, '0');
   assert.equal(unverified.code, 'COMMAND_FAILED');
-  assert.equal(unverified.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.equal(unverified.details?.reason, EVENT_LOG_WINDOW_REASONS.windowUnverified.reason);
   assert.equal(typeof unverified.details?.hint, 'string');
 
   const before = fs.readFileSync(eventLogPath);
@@ -353,8 +358,14 @@ test('an unreadable window sidecar refuses required rotation and preserves the t
   assert.equal(failure?.data.operation, 'rotation');
   assert.equal(failure?.data.errno, undefined);
   assert.equal(failure?.data.error?.code, 'COMMAND_FAILED');
-  assert.equal(failure?.data.error?.details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
-  assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.equal(
+    failure?.data.error?.details?.reason,
+    EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
+  );
+  assert.equal(
+    readError(eventLogPath, '0').details?.reason,
+    EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
+  );
 });
 
 test('a rotated generation with no window record is refused rather than renumbered', async () => {
@@ -363,7 +374,10 @@ test('a rotated generation with no window record is refused rather than renumber
   await appendEvents(eventLogPath, 0, 3);
   fs.copyFileSync(eventLogPath, resolveRotatedSessionEventLogPath(eventLogPath));
 
-  assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_WINDOW_UNVERIFIED_REASON);
+  assert.equal(
+    readError(eventLogPath, '0').details?.reason,
+    EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
+  );
 });
 
 test('the default cap leaves an ordinary session log unrotated, and a non-integer override is ignored', async () => {
@@ -718,7 +732,10 @@ test.each([false, true])(
       retainedGeneration ? '6' : '4',
     );
     if (retainedGeneration) {
-      assert.equal(readError(eventLogPath, '0').details?.reason, EVENT_LOG_CURSOR_EXPIRED_REASON);
+      assert.equal(
+        readError(eventLogPath, '0').details?.reason,
+        EVENT_LOG_WINDOW_REASONS.cursorExpired.reason,
+      );
     }
   },
 );
@@ -753,7 +770,8 @@ test('a recorded active generation that shrank is refused without replacing its 
   await assert.rejects(
     rotateSessionEventLogIfNeeded(eventLogPath, 400, 400),
     (error: unknown) =>
-      error instanceof AppError && error.details?.reason === EVENT_LOG_WINDOW_UNVERIFIED_REASON,
+      error instanceof AppError &&
+      error.details?.reason === EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
   );
   assert.equal(fs.readFileSync(eventLogPath, 'utf8'), shortened);
   assert.deepEqual(fs.readFileSync(windowPath), window);

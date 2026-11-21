@@ -16,6 +16,7 @@ import {
   type ReactDevtoolsCommandOptions,
   type RuntimeFailure,
 } from './react-devtools-connection.ts';
+import { REACT_DEVTOOLS_REASONS } from './react-devtools-reasons.ts';
 import {
   analyzeReactProfile,
   isFindingFor,
@@ -152,7 +153,7 @@ async function startProfile(
   return await withAppRuntime(args, options, async (session, target) => {
     const result = await callRuntime<StartResult>(session, 'start');
     const app = targetAppId(target);
-    if (!result.ok && result.reason === 'already-profiling') {
+    if (!result.ok && result.reason === REACT_DEVTOOLS_REASONS.alreadyProfiling.reason) {
       return {
         app,
         alreadyProfiling: true,

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
   measureEventLogFile,
@@ -39,8 +39,13 @@ const RETAINED_GENERATIONS = 2;
 const WINDOW_READ_ATTEMPTS = 3;
 const EVENT_LOG_WRITER_TOKEN = randomUUID();
 
-export const EVENT_LOG_CURSOR_EXPIRED_REASON = 'EVENT_LOG_CURSOR_EXPIRED';
-export const EVENT_LOG_WINDOW_UNVERIFIED_REASON = 'EVENT_LOG_WINDOW_UNVERIFIED';
+/** Why a read of the retained session event log window refuses to place a cursor. */
+export const EVENT_LOG_WINDOW_REASONS = {
+  // The cursor names a line that rotation has already removed from the retained window.
+  cursorExpired: { reason: 'EVENT_LOG_CURSOR_EXPIRED' },
+  // The retained files do not match the window sidecar, so no cursor can be trusted.
+  windowUnverified: { reason: 'EVENT_LOG_WINDOW_UNVERIFIED' },
+} as const satisfies ReasonTable<'events'>;
 
 /** One retained file generation, identified by the digest of its first line. */
 type EventLogGeneration = {
@@ -236,7 +241,7 @@ export function assertSessionEventLogCursorRetained(cursor: number, earliestCurs
     'COMMAND_FAILED',
     `events cursor ${cursor} precedes the retained event log window; events before cursor ${earliestCursor} were rotated out.`,
     {
-      reason: EVENT_LOG_CURSOR_EXPIRED_REASON,
+      reason: EVENT_LOG_WINDOW_REASONS.cursorExpired.reason,
       cursor,
       earliestCursor,
       hint: `Resume with cursor ${earliestCursor}, the oldest retained event; earlier events are no longer available.`,
@@ -246,7 +251,7 @@ export function assertSessionEventLogCursorRetained(cursor: number, earliestCurs
 
 function unverifiedWindowError(eventLogPath: string, detail: string): AppError {
   return new AppError('COMMAND_FAILED', `Session event log window cannot be verified: ${detail}.`, {
-    reason: EVENT_LOG_WINDOW_UNVERIFIED_REASON,
+    reason: EVENT_LOG_WINDOW_REASONS.windowUnverified.reason,
     path: eventLogPath,
     hint: `Cursor positions for this session cannot be resolved. Delete ${eventLogPath}, ${resolveRotatedSessionEventLogPath(eventLogPath)}, and ${resolveWindowPath(eventLogPath)} to restart the timeline, or read the files directly.`,
   });

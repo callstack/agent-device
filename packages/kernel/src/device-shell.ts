@@ -1,4 +1,4 @@
-import { AppError } from './errors.ts';
+import { AppError, type ReasonTable } from './errors.ts';
 
 // `adb shell`, `adb exec-out`, and `hdc shell` hand the argv after the subcommand to the device's
 // `sh`, which re-parses it. The host never runs a shell, so the injection surface is purely
@@ -22,6 +22,16 @@ import { AppError } from './errors.ts';
 // runs a shell on the host; `shellQuote` and `shellQuoteIfNeeded` are the shared quoting primitive.
 
 const SAFE_SHELL_WORD = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+/** The refusals the device-shell funnel answers with, beside the funnel itself. */
+const DEVICE_SHELL_REASONS = {
+  // `hdc` drops an empty element, so the device command would lose an operand.
+  emptyWordUnsupported: { reason: 'hdc-empty-word-unsupported' },
+  // `hdc` double-quotes every element, so a shell fragment cannot reach the device as a script.
+  shellFragmentUnsupported: { reason: 'hdc-shell-fragment-unsupported' },
+  // A `shell`/`exec-out` command was dispatched that `deviceShellArgv` did not build.
+  unguardedArgv: { reason: 'unguarded-device-shell-argv' },
+} as const satisfies ReasonTable<'device shell'>;
 
 /** POSIX single-quote wrap (`'` → `'\''`), always one argument to a shell. */
 export function shellQuote(value: string): string {
@@ -88,7 +98,7 @@ function renderShellWord(word: ShellWord, transport: DeviceShellTransport): stri
           'INVALID_ARGS',
           'hdc drops an empty element instead of carrying it, so the device command would lose an operand.',
           {
-            reason: 'hdc-empty-word-unsupported',
+            reason: DEVICE_SHELL_REASONS.emptyWordUnsupported.reason,
             hint: 'Pass a value the transport can carry, or use a device action that needs no operand.',
           },
         );
@@ -101,7 +111,7 @@ function renderShellWord(word: ShellWord, transport: DeviceShellTransport): stri
     throw new AppError(
       'INVALID_ARGS',
       'hdc wraps every element in double quotes, so a shell fragment would reach the device as literal text instead of a script.',
-      { reason: 'hdc-shell-fragment-unsupported' },
+      { reason: DEVICE_SHELL_REASONS.shellFragmentUnsupported.reason },
     );
   }
   return word.script;
@@ -184,7 +194,7 @@ export function assertDeviceShellArgv(args: readonly string[], boundary: string)
   throw new AppError(
     'INVALID_ARGS',
     `${boundary}: device-shell argv must be built with deviceShellArgv (got ${JSON.stringify(args)}).`,
-    { reason: 'unguarded-device-shell-argv' },
+    { reason: DEVICE_SHELL_REASONS.unguardedArgv.reason },
   );
 }
 

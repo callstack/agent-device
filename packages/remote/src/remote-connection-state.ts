@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   deviceIdentityFlag,
   isDeviceTarget,
@@ -438,6 +438,12 @@ export function sessionLeaseScope(
   };
 }
 
+/** Why a remote command refuses before it reaches the connection. */
+const REMOTE_CONNECTION_REASONS = {
+  // A command used a leased connection without naming the session it belongs to.
+  sessionRequired: { reason: 'REMOTE_SESSION_REQUIRED' },
+} as const satisfies ReasonTable<'remote connection'>;
+
 /**
  * Refuses a caller that named no session the use of a leased connection: one whose device a lease
  * provider (proxy, a device cloud, or a provider plugin) leases for a single agent.
@@ -459,7 +465,7 @@ export function remoteSessionRequiredError(leaseProvider: string | undefined): A
     'INVALID_ARGS',
     'A leased remote connection needs its session named: pass --session <name> or set AGENT_DEVICE_SESSION.',
     {
-      reason: 'REMOTE_SESSION_REQUIRED',
+      reason: REMOTE_CONNECTION_REASONS.sessionRequired.reason,
       ...(leaseProvider === undefined ? {} : { leaseProvider }),
       hint: "Without a name, a command could reach another agent's connection on this machine.",
     },
