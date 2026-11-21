@@ -183,3 +183,17 @@ test('install_from_source on a leased session needs the lease id in its params',
   // Admitted: it reaches the device runtime, which this fake device does not implement.
   expect(owner.error?.data?.code, JSON.stringify(owner)).toBe('UNSUPPORTED_OPERATION');
 });
+
+test('an open of an existing leased session checks the lease id before the proxy metadata', async () => {
+  if (!world) return;
+
+  expectLeaseIdRefusal(await world.send('open', ['com.example.app'], { ...OWNER_SCOPE }));
+
+  const { clientId: _omitted, ...ownerWithoutClient } = OWNER_SCOPE;
+  const reopened = await world.send('open', ['com.example.app'], {
+    ...ownerWithoutClient,
+    leaseId: world.leaseId,
+  });
+  expect(reopened.error?.data?.code, JSON.stringify(reopened)).not.toBe('INVALID_ARGS');
+  expect(reopened.error?.data?.code, JSON.stringify(reopened)).not.toBe('UNAUTHORIZED');
+});

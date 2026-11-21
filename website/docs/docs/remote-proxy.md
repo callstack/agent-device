@@ -27,7 +27,7 @@ agent-device proxy --port 4310 --public-origin https://example.trycloudflare.com
 
 The command prints the local proxy URL and a `daemon auth token`. Keep the token secret: anyone who has it can control the daemon behind the proxy.
 
-The token authenticates the machine that connects, not each agent. Every agent that shares the token can reach the proxy, but a leased session accepts only requests that send its lease id. `connect proxy` saves that id for the session, so run every command through the saved connection with the same `--session`. A request that sets only `--tenant` and `--session` fails with `UNAUTHORIZED` and reason `LEASE_SESSION_MISMATCH`. If you put your own host in front of the proxy for several clients, authenticate each client there.
+The token authenticates the machine that connects, not each agent. Every agent that shares the token can reach the proxy, but a leased session accepts only requests that send its lease id. `open` saves that id in the connection `connect proxy` made, so run every command through that connection with the same `--session`. A request that sets only `--tenant` and `--session` fails with `UNAUTHORIZED` and reason `LEASE_SESSION_MISMATCH`. If you put your own host in front of the proxy for several clients, authenticate each client there.
 
 By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want the proxy reachable from the host network.
 

@@ -31,6 +31,7 @@ import {
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import {
+  assertRequestSendsLeaseId,
   isProxyLeaseScope,
   resolveLeaseScope,
   resolveSessionLeaseScope,
@@ -576,10 +577,27 @@ function resolveProviderSession(
     providerSessionId,
     tenantId: leaseScope.tenantId,
   });
-  if (providerSession) return providerSession;
+  if (providerSession) {
+    assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, providerSession.leaseId);
+    return providerSession;
+  }
   throw new AppError('UNAUTHORIZED', 'Provider session is not owned by the request tenant', {
     reason: 'PROVIDER_SESSION_NOT_OWNED',
   });
+}
+
+/**
+ * While its lease is active, a provider session belongs to the client that holds that lease: the
+ * lookup needs the lease id, as any request on the leased session does (ADR 0007). A released
+ * provider session keeps its tenant-scoped retention lookup.
+ */
+function assertRequestHoldsActiveProviderLease(
+  leaseRegistry: LeaseRegistry,
+  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseId: string,
+): void {
+  if (leaseRegistry.inspectLeaseBackend(leaseId) === undefined) return;
+  assertRequestSendsLeaseId(leaseScope, leaseId);
 }
 
 function readFlagString(

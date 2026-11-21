@@ -96,8 +96,8 @@ export function assertRequestLeaseAdmission(
     return undefined;
   }
   const requestLeaseScope = resolveLeaseScope(req);
-  assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
+  if (!sessionLease) assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   if (options.daemonPolicy?.requiredLeaseBackend) {
     const leased = Boolean(resolveSessionLeaseScope(req, session).leaseId);
     const lease = leased ? admitLease(req, leaseRegistry, session, options.env) : undefined;
@@ -201,8 +201,15 @@ export function assertProviderLeaseRequestNamesSession(
   if (leaseId || req.command === 'lease_allocate') throw remoteSessionRequiredError(leaseProvider);
 }
 
-export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {
-  if (isLeaseAdmissionExempt(req.command)) return;
+/**
+ * A fresh proxy open must name the full lease metadata. A request on a session that already holds a
+ * lease skips this: admission checks its lease id under the session lock instead.
+ */
+export function assertRequestLeaseAdmissionPreflight(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+): void {
+  if (isLeaseAdmissionExempt(req.command) || session?.lease) return;
   assertProxyOpenLeaseMetadata(req, resolveLeaseScope(req));
 }
 

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -40,8 +41,10 @@ const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
   shutdown: async () => {},
 };
 
-test('a find click on a leased session sends the lease id on the click it runs', async () => {
-  const sessionStore = makeSessionStore('agent-device-router-find-lease-');
+const OTHER_LEASE_ID = 'f'.repeat(32);
+
+function leasedRouter() {
+  const sessionStore = makeSessionStore('agent-device-router-nested-lease-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
@@ -78,10 +81,11 @@ test('a find click on a leased session sends the lease id on the click it runs',
       },
     ],
   } as never);
+  const root = mkdtempForTestSync('agent-device-router-nested-lease-log-');
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: createTouchCommandSurface(),
-    logPath: path.join(mkdtempForTestSync('agent-device-router-find-lease-log-'), 'daemon.log'),
+    logPath: path.join(root, 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,
@@ -89,6 +93,12 @@ test('a find click on a leased session sends the lease id on the click it runs',
     deviceRuntimeGateway: gateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
+  return { handler, leaseId: lease.leaseId, root };
+}
+
+test('a find click on a leased session sends the lease id on the click it runs', async () => {
+  const { handler, leaseId } = leasedRouter();
+  tapPoint.mockClear();
 
   // The owner sends the lease id only in meta, as a host that forwards per client does.
   const response = await handler({
@@ -97,9 +107,44 @@ test('a find click on a leased session sends the lease id on the click it runs',
     command: 'find',
     positionals: ['Continue', 'click'],
     flags: {},
-    meta: { leaseId: lease.leaseId },
+    meta: { leaseId },
   });
 
   expect(response.ok, JSON.stringify(response)).toBe(true);
   expect(tapPoint).toHaveBeenCalledTimes(1);
+});
+
+test('a replay that sends the lease id in its flags runs its steps on the leased session', async () => {
+  const { handler, leaseId, root } = leasedRouter();
+  const script = path.join(root, 'snapshot.ad');
+  fs.writeFileSync(script, 'snapshot\n');
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'replay',
+    positionals: [script],
+    flags: { leaseId },
+    meta: { cwd: root, sessionExplicit: true },
+  });
+
+  expect(response.ok, JSON.stringify(response)).toBe(true);
+});
+
+test('a batch step that names another lease id is refused even when the batch sends the right one', async () => {
+  const { handler, leaseId } = leasedRouter();
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'batch',
+    positionals: [],
+    flags: {
+      leaseId,
+      batchSteps: [{ command: 'snapshot', positionals: [], flags: { leaseId: OTHER_LEASE_ID } }],
+    },
+  });
+
+  expect(response.ok, JSON.stringify(response)).toBe(false);
+  expect(JSON.stringify(response)).toContain('LEASE_SESSION_MISMATCH');
 });

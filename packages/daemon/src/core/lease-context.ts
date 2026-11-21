@@ -116,14 +116,23 @@ export function resolveSessionLeaseScope(
 
 /**
  * A request the daemon builds inside an admitted request acts for the same caller, so it carries the
- * lease scope that the parent presented. Fields that the nested request names win.
+ * lease scope that the parent presented. A field the nested request names, in its meta or its
+ * flags, is kept, so a step that names another lease id is still refused.
  */
 export function handDownRequestLeaseScope(
   invoke: DaemonInvokeFn,
   parent: Pick<DaemonRequest, 'flags' | 'meta'>,
 ): DaemonInvokeFn {
-  const parentLeaseMeta = leaseScopeToRequestMeta(resolveLeaseScope(parent));
-  return async (req) => await invoke({ ...req, meta: { ...parentLeaseMeta, ...req.meta } });
+  const parentScope = resolveLeaseScope(parent);
+  return async (req) => {
+    const childScope = resolveLeaseScope(req);
+    const missing = Object.fromEntries(
+      Object.entries(parentScope).filter(
+        ([key]) => childScope[key as keyof LeaseScope] === undefined,
+      ),
+    ) as LeaseScope;
+    return await invoke({ ...req, meta: { ...leaseScopeToRequestMeta(missing), ...req.meta } });
+  };
 }
 
 /**
@@ -158,15 +167,20 @@ export function assertRequestHoldsSessionLease(
   return sessionLease;
 }
 
-function assertRequestPresentsSessionLease(requestScope: LeaseScope, sessionLease: SessionLease) {
+/** Refuses a request that does not send `leaseId`, the credential of the lease it acts on. */
+export function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): void {
   if (!requestScope.leaseId) {
     throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
       reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
       field: 'leaseId',
-      hint: 'Connect this session with connect proxy or connect --remote-config, then run commands with the same --session. Raw --tenant and --session flags do not send the lease id.',
+      hint: 'Send the leaseId that the allocation returned (meta.leaseId or the leaseId param). From the CLI, open the session through connect proxy or connect --remote-config and keep the same --session; raw --tenant and --session flags do not send it.',
     });
   }
-  assertMatchingLeaseField('leaseId', requestScope.leaseId, sessionLease.leaseId);
+  assertMatchingLeaseField('leaseId', requestScope.leaseId, leaseId);
+}
+
+function assertRequestPresentsSessionLease(requestScope: LeaseScope, sessionLease: SessionLease) {
+  assertRequestSendsLeaseId(requestScope, sessionLease.leaseId);
   assertMatchingLeaseField('tenantId', requestScope.tenantId, sessionLease.tenantId);
   assertMatchingLeaseField('runId', requestScope.runId, sessionLease.runId);
   assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, sessionLease.leaseProvider);

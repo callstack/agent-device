@@ -41,10 +41,26 @@ test('artifacts lists an owned active and recently released provider session', a
   const world = createWorld();
   const lease = await allocateLease(world, 'tenant-a', 'run-a');
 
+  await assert.rejects(
+    () =>
+      listArtifacts(world, {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        providerSessionId: 'session-tenant-a',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNAUTHORIZED' &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'leaseId',
+  );
+  assert.deepEqual(world.providerCalls, []);
+
   const active = await listArtifacts(world, {
     tenantId: 'tenant-a',
     runId: 'run-a',
     providerSessionId: 'session-tenant-a',
+    leaseId: lease.leaseId,
   });
   assert.equal(active.ok, true);
   assert.deepEqual(world.providerCalls, [
@@ -134,11 +150,12 @@ test('artifacts lists a provider session whose allocation outlasted the lease TT
     return { providerSessionId: 'slow-allocation-session' };
   };
 
-  await allocateLease(world, 'tenant-a', 'run-a');
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
   const listed = await listArtifacts(world, {
     tenantId: 'tenant-a',
     runId: 'run-a',
     providerSessionId: 'slow-allocation-session',
+    leaseId: lease.leaseId,
   });
   assert.equal(listed.ok, true);
 });
@@ -291,6 +308,7 @@ async function listArtifacts(
     runId: string;
     providerSessionId: string;
     leaseProvider?: string;
+    leaseId?: string;
   },
 ): Promise<DaemonResponse> {
   return (await handleLeaseCommands({
@@ -301,6 +319,7 @@ async function listArtifacts(
         tenantId: scope.tenantId,
         runId: scope.runId,
         leaseProvider: scope.leaseProvider ?? CLOUD_PROVIDER,
+        ...(scope.leaseId ? { leaseId: scope.leaseId } : {}),
       },
       { providerSessionId: scope.providerSessionId },
     ),

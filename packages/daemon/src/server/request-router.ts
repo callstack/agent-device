@@ -424,9 +424,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         lockedScope.req,
       ),
       invokeReplayAction: allowReplayActions
-        ? recordNestedRequests(
-            createReplayScopedActionInvoker(lockedScope, providerScope),
-            dispatchLedger,
+        ? handDownRequestLeaseScope(
+            recordNestedRequests(
+              createReplayScopedActionInvoker(lockedScope, providerScope),
+              dispatchLedger,
+            ),
+            lockedScope.req,
           )
         : undefined,
       providerScope,

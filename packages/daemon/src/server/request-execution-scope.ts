@@ -309,8 +309,9 @@ export async function createRequestExecutionScope(params: {
       : undefined;
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
-    assertProviderLeaseRequestNamesSession(scopedReq, sessionStore.get(sessionName));
-    assertRequestLeaseAdmissionPreflight(scopedReq);
+    const preflightSession = sessionStore.get(sessionName);
+    assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
+    assertRequestLeaseAdmissionPreflight(scopedReq, preflightSession);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
     // still supplies the device to wait for, but an out-of-range budget is refused before either.
     const openWaitBudgetMs =
