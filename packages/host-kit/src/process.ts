@@ -26,8 +26,6 @@ export {
   type ProcessStopIdentity,
   type ProcessStopTarget,
   readConfirmedProcessStopDetails,
-  readHostCpuArch,
-  readHostCpuArchSync,
   readHostProcessIdentityObservations,
   readHostProcessIdentityObservationsAsync,
   readProcessCommand,
@@ -41,6 +39,7 @@ export {
   waitForProcessExit,
   writeHostStderr,
 } from './internal/host-process.ts';
+export { readHostCpuArch, readHostCpuArchSync } from './internal/host-cpu-arch.ts';
 export { signalProcessGroupBestEffort } from './internal/exec.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {
