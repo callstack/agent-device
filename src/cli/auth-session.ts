@@ -288,18 +288,31 @@ export async function loginWithDeviceAuth(options: {
     () => writeCliSession({ stateDir: options.stateDir, session }),
     { io: options.io, keepWaiting: true },
   );
-  const refreshed = await refreshExpiredLoginToken({
+  const exchanged = await refreshExpiredLoginToken({
     stateDir: options.stateDir,
     approved,
     flags: options.flags,
     env,
     io: options.io,
   });
+  if (!exchanged)
+    return { accessToken: approved.accessToken, expiresAt: approved.expiresAt, session };
+  // A token and the expiry the cloud gave with it are one answer: an expiry from the approved pair
+  // would report the new token as already expired.
   return {
-    accessToken: refreshed?.accessToken ?? approved.accessToken,
-    expiresAt: refreshed?.expiresAt ?? approved.expiresAt,
-    session,
+    accessToken: exchanged.accessToken,
+    ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
+    session: readStoredSession(options.stateDir) ?? session,
   };
+}
+
+/** The stored record, or `null` when a later change removed it. */
+function readStoredSession(stateDir: string): CliSessionRecord | null {
+  try {
+    return readCliSession({ stateDir });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -364,10 +377,11 @@ export async function removeCliSession(options: { stateDir: string }): Promise<b
 /**
  * Serializes the changes to the session file: a login's write, a logout's removal, and the read,
  * token exchange and write that store a rotated credential. Device approval polling stays outside.
- * `keepWaiting` is for a change the cloud will not repeat (an approved login, a rotated
- * credential): a timed-out wait warns and waits again, and the change is never dropped. A change
- * that took effect is reported as done even when the lock is not given back cleanly: that release
- * failure is a warning, and the next contender reclaims the spent claim.
+ * `keepWaiting` is for a change the cloud will not repeat — an approved login: a timed-out wait
+ * warns and waits again, and the change is never dropped. A read the cloud will answer again leaves
+ * it off, so a command fails with the lock's typed reason instead of queueing behind a stuck
+ * sibling. A change that took effect is reported as done even when the lock is not given back
+ * cleanly: that release failure is a warning, and the next contender reclaims the spent claim.
  */
 async function withCliSessionLock<Result>(
   stateDir: string,
@@ -463,12 +477,16 @@ async function resolveCliSessionAccess(options: {
       const session = readCliSession({ stateDir });
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
       const cloudBaseUrl = resolveCloudBaseUrl(env, session.cloudBaseUrl);
-      let sent = session;
+      // The file is what a store compares against: the last record this command saw there, and
+      // `null` once a write would land on a session it did not write. `asked` is what the cloud
+      // accepts for this session now, which stays ahead of the file when a save failed.
+      const file = { holds: session as CliSessionRecord | null };
+      let asked = session;
       for (let exchange = 1; ; exchange += 1) {
-        const refreshed = await refreshAgentToken({ session: sent, flags, env, io });
-        const rotation = readCredentialRotation(refreshed, sent.refreshCredential);
+        const refreshed = await refreshAgentToken({ session: asked, flags, env, io });
+        const rotation = readCredentialRotation(refreshed, asked.refreshCredential);
         if (rotation) {
-          sent = storeRotatedCredential({ stateDir, sent, rotation, io });
+          asked = storeRotatedCredential({ stateDir, asked, file, rotation, io });
         }
         if (
           !isExpired(refreshed.expiresAt, io?.now) ||
@@ -482,7 +500,9 @@ async function resolveCliSessionAccess(options: {
         }
       }
     },
-    { io, keepWaiting: true },
+    // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
+    // typed reason, and the next command asks again.
+    { io },
   );
 }
 
@@ -497,32 +517,40 @@ function readCredentialRotation(
 ): { refreshCredential: string; expiresAt?: string } | null {
   const refreshCredential = refreshed.refreshCredential;
   if (!hasToken(refreshCredential) || refreshCredential === sentCredential) return null;
+  // A timestamp that cannot be read would make `isExpired` call the session expired, so one bad
+  // response would lock the CLI out of a working session. It is kept out of the record.
+  const readable = (value: string) => Number.isFinite(Date.parse(value));
   return {
     refreshCredential,
-    ...(hasToken(refreshed.sessionExpiresAt) ? { expiresAt: refreshed.sessionExpiresAt } : {}),
+    ...(hasToken(refreshed.sessionExpiresAt) && readable(refreshed.sessionExpiresAt)
+      ? { expiresAt: refreshed.sessionExpiresAt }
+      : {}),
   };
 }
 
 /**
- * Stores the credential that replaced the one this command sent, and answers with the record the
- * next exchange asks with. The session file lock is held here, and the file is read again first: a
- * change that is visible on that read (another command's store, a login, a logout) wins, and nothing
- * is written. A failed write keeps the command's access token and warns, because the cloud refuses
- * the old credential after its grace period. Either way the command keeps asking with the
- * replacement the cloud just gave it.
+ * Stores the credential that replaced the one this command asked with, and answers with the record
+ * the next exchange asks with. The session file lock is held here, and the file is read again first:
+ * a change that is visible on that read (another command's store, a login, a logout) wins, the file
+ * is no longer this command's to write, and nothing more is written. A failed write keeps the
+ * command's access token and warns, because the cloud refuses the old credential after its grace
+ * period. Either way the command keeps asking with the replacement the cloud just gave it.
  */
 function storeRotatedCredential(options: {
   stateDir: string;
-  sent: CliSessionRecord;
+  asked: CliSessionRecord;
+  file: { holds: CliSessionRecord | null };
   rotation: { refreshCredential: string; expiresAt?: string };
   io?: AuthIo;
 }): CliSessionRecord {
-  const { rotation, sent } = options;
+  const { asked, file, rotation } = options;
+  const held = file.holds;
   try {
     const stored = readCliSession({ stateDir: options.stateDir });
-    if (stored?.id === sent.id && stored.refreshCredential === sent.refreshCredential) {
+    if (held && stored?.id === held.id && stored.refreshCredential === held.refreshCredential) {
       const replaced: CliSessionRecord = { ...stored, ...rotation };
       writeCliSession({ stateDir: options.stateDir, session: replaced });
+      file.holds = replaced;
       return replaced;
     }
   } catch {
@@ -531,8 +559,13 @@ function storeRotatedCredential(options: {
       'Warning: the renewed CLI session could not be saved. ' +
         'If the next command is not authenticated, run agent-device auth login.\n',
     );
+    // The file is still the record this command read, and the save of the next rotation is compared
+    // to it, so a later save is tried again rather than skipped.
+    return { ...asked, ...rotation };
   }
-  return { ...sent, ...rotation };
+  // A session this command did not write: keep asking with what the cloud last gave.
+  file.holds = null;
+  return { ...asked, ...rotation };
 }
 
 async function refreshAgentToken(options: {

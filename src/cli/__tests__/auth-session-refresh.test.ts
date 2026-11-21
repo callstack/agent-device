@@ -217,6 +217,33 @@ test('a rotated credential is stored with the session expiry the refresh respons
     // A session expiry that slides with use replaces the one recorded at login.
     expiresAt: '2026-12-24T00:00:00.000Z',
   });
+
+  // An expiry that cannot be read is not stored: it would read back as an expired session and lock
+  // the CLI out of one that still works. The rotation itself is kept.
+  writeCliSession({
+    stateDir: tempRoot,
+    session: { ...stored, refreshCredential: 'adc_refresh_b' },
+  });
+  await resolveRemoteAuth({
+    command: 'snapshot',
+    flags: refreshFlags,
+    stateDir: tempRoot,
+    allowInteractiveLogin: false,
+    env: {},
+    io: {
+      now: () => Date.parse('2026-02-01T00:00:00.000Z'),
+      fetch: async () =>
+        jsonResponse({
+          accessToken: 'adc_agent_2',
+          refreshCredential: 'adc_refresh_c',
+          cliSession: { expiresAt: 'soon' },
+        }),
+    },
+  });
+  assert.deepEqual(readCliSession({ stateDir: tempRoot }), {
+    ...stored,
+    refreshCredential: 'adc_refresh_c',
+  });
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
