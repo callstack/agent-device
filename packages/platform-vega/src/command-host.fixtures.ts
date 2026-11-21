@@ -71,7 +71,16 @@ export function createVegaHostStub(
       pathProbes += 1;
       return onPath.has(executable);
     },
-    listHostProcesses: async () => [],
+    // Neither this family nor its devices are host processes: everything goes through the Vega CLI.
+    processes: {
+      list: async () => [],
+      readIdentities: async () => new Map(),
+      readIdentityObservations: async () => new Map(),
+      readExecutablePaths: async () => new Map(),
+      reapOwnedRecords: async () => {
+        throw new Error('the Vega family never reaps host processes');
+      },
+    } satisfies PlatformHost['processes'],
     runCommand: async (
       executable: string,
       args: string[],

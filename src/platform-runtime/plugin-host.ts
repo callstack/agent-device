@@ -48,15 +48,7 @@ export function createPlatformPluginHost(
       const { whichCmd } = await import('@agent-device/host-kit/command');
       return await whichCmd(executable, host.env);
     },
-    listHostProcesses: async (options) => {
-      const [{ listHostProcesses }, { withoutCommandExecutorOverride }] = await Promise.all([
-        import('@agent-device/host-kit/process'),
-        import('@agent-device/host-kit/command'),
-      ]);
-      // Reading the process table is a host read: a command override one request carries (an adb
-      // executor, say) must not answer for it.
-      return await withoutCommandExecutorOverride(async () => await listHostProcesses(options));
-    },
+    processes: createPlatformPluginProcessPort(host),
     startBackgroundCommand: async (request, signal) => {
       processes ??= await loadManagedAppLogProcesses(sessionsDir, host.env);
       return await processes.start(
@@ -76,6 +68,46 @@ export function createPlatformPluginHost(
       return runCmdDetachedMonitored(executable, args, { env: options.env });
     },
   } satisfies PlatformHost);
+}
+
+/**
+ * The host's process answers, served by the core's own copy of the host kit.
+ *
+ * A managed plugin is bundled with its own copy of that kit, and the request's command-host and
+ * diagnostic scopes never enter the bundled copy, so a process tool spawned from there runs with the
+ * daemon process environment and traces into the plugin's own store. Answering here puts every
+ * process read in the scope the request was opened with, which is where `--debug` shows it.
+ */
+function createPlatformPluginProcessPort(host: HostEnvironment): PlatformHost['processes'] {
+  return Object.freeze({
+    // The only read that does not leave the command-executor scope on its own: what a host says
+    // about its processes is a host read, never a toolchain command one request carries an override
+    // for (an adb executor, say). The reads below drop that scope themselves.
+    list: async (options) => {
+      const [{ listHostProcesses }, { withoutCommandExecutorOverride }] = await Promise.all([
+        import('@agent-device/host-kit/process'),
+        import('@agent-device/host-kit/command'),
+      ]);
+      return await withoutCommandExecutorOverride(async () => await listHostProcesses(options));
+    },
+    readIdentities: async (pids, options) => {
+      const { readProcessIdentities } = await import('@agent-device/host-kit/process');
+      return await readProcessIdentities(pids, options?.timeoutMs);
+    },
+    readIdentityObservations: async (pids) => {
+      const { readHostProcessIdentityObservationsAsync } =
+        await import('@agent-device/host-kit/process');
+      return await readHostProcessIdentityObservationsAsync(pids);
+    },
+    readExecutablePaths: async (pids) => {
+      const { readProcessExecutablePaths } = await import('@agent-device/host-kit/process');
+      return await readProcessExecutablePaths(pids, host);
+    },
+    reapOwnedRecords: async (store, options) => {
+      const { reapOwnedProcessRecordsAtStartup } = await import('@agent-device/host-kit/process');
+      return await reapOwnedProcessRecordsAtStartup(store, options);
+    },
+  });
 }
 
 async function loadManagedAppLogProcesses(sessionsDir: string, env: HostEnvironment['env']) {

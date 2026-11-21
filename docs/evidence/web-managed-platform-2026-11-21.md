@@ -106,7 +106,7 @@ SOCKET: /var/folders/…/T/adw/76dbf75458e3                (every call)
 The exec trace of those requests, as `--debug` wrote them. Two commands matter here for different
 reasons. `open` shows the backend spawn plus the process-table read that derives the owned-process
 record — that read is the call no backend reply can show, and it goes through the host's
-`listHostProcesses` port. `press` shows the three-spawn pointer sequence attributed to one request:
+`processes.list` port. `press` shows the three-spawn pointer sequence attributed to one request:
 
 ```
 {"phase":"exec_command","requestId":"f178ac3051b20133","command":"open","data":{"execId":"cd318f35-…","command":"node","event":"spawn","pid":13307,"timeoutMs":30000}}

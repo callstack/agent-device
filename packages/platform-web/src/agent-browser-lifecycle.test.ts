@@ -44,19 +44,14 @@ const identitiesMock = vi.hoisted(() =>
   ),
 );
 
+// The subject reads processes only through its host, so the suite controls those reads in the host
+// port below rather than by faking the host-kit module. The one module fake left is the platform the
+// fleet matchers branch on.
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
     ...actual,
     hostPlatform: () => probe.platform ?? actual.hostPlatform(),
-    listHostProcesses: async (options: Parameters<typeof actual.listHostProcesses>[0]) =>
-      await actual.listHostProcesses({ ...options, runCommand: runCmdMock }),
-    readHostProcessIdentityObservationsAsync: async (pids: Iterable<number>) =>
-      probe.unanswered
-        ? new Map<number, { state: string; startTime: string }>()
-        : await actual.readHostProcessIdentityObservationsAsync(pids),
-    readProcessIdentities: identitiesMock,
-    readProcessExecutablePaths: executablePathsMock,
   };
 });
 
@@ -78,17 +73,43 @@ import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 import {
   createOwnedProcessRecordStore,
   listHostProcesses,
+  readHostProcessIdentityObservationsAsync,
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
+import type { PlatformHost } from 'agent-device/plugins';
 import { createWebToolbox, type WebToolbox } from './toolbox.ts';
 
 bindTestCommandHost();
 const testHost = createLiveTestHostEnvironment();
 
 /**
- * The plugin's toolbox over an in-memory host: commands and process-table reads are recorded, and
- * the reads go through the module-level `listHostProcesses` this suite fakes, so a scenario's
- * `observeProcesses(...)` fixture still answers them.
+ * The process port of a host that reads the machine the way the core's host does: the process table
+ * through a `ps` the recorded command mock answers, and the identity and executable-path facts from
+ * the answers this suite's `observeProcesses(...)` fixture set up.
+ */
+function createHostProcessPort(): PlatformHost['processes'] {
+  return {
+    list: async (options) => await listHostProcesses({ ...options, runCommand: mockRunCmd }),
+    readIdentities: async (pids) => await identitiesMock([...pids]),
+    readIdentityObservations: async (pids) =>
+      probe.unanswered
+        ? new Map<number, { state: string; startTime: string }>()
+        : await readHostProcessIdentityObservationsAsync(pids),
+    // The host answers this read with the environment it was set up with, the way the real host port
+    // does; the suite's answer is the same fixture either way.
+    readExecutablePaths: async (pids) => await executablePathsMock([...pids], testHost),
+    reapOwnedRecords: async (store, options) =>
+      await reapOwnedProcessRecordsAtStartup(store, options),
+  };
+}
+
+/** The process port every cleanup and record call of this suite is handed. */
+const hostProcesses = createHostProcessPort();
+
+/**
+ * The plugin's toolbox over an in-memory host: commands and every process read are asked of this
+ * host, so the suite proves the fleet scan and the reap go through it rather than through the host-kit
+ * copy the plugin ships with.
  */
 function createLifecycleToolbox(stateDir: string): WebToolbox {
   const host = {
@@ -101,7 +122,7 @@ function createLifecycleToolbox(stateDir: string): WebToolbox {
     ) => await runCmdMock(executable, args, options),
     isFileExecutable: async () => false,
     isExecutableOnPath: async () => false,
-    listHostProcesses: async (options: { timeoutMs: number }) => await listHostProcesses(options),
+    processes: createHostProcessPort(),
     emitDiagnostic: () => {},
     withDiagnosticTimer: async <T>(_phase: string, operation: () => Promise<T>): Promise<T> =>
       await operation(),
@@ -232,6 +253,7 @@ test('cleanup skips reaping when the daemon reports open web sessions', async ()
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       openWebSessionNames: ['default-web'],
     });
 
@@ -278,6 +300,7 @@ test('cleanup skips reaping while the browser fleet holds an opening session', a
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       ownedProcessRecords,
     });
 
@@ -303,6 +326,7 @@ test('cleanup reaps when the only fleet session is the one whose open runs it', 
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       ownedProcessRecords,
       startingSession: 'fleet-web',
     });
@@ -330,6 +354,7 @@ test('cleanup evicts a launched session whose recorded browser exited, then reap
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       ownedProcessRecords,
     });
 
@@ -358,6 +383,7 @@ test('cleanup keeps a launched session when the process probe does not answer', 
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       ownedProcessRecords,
     });
 
@@ -386,6 +412,7 @@ test('cleanup skips reaping when managed browser socket activity is recent', asy
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
     });
 
     assert.equal(result.skipped?.reason, 'recent-browser-activity');
@@ -416,6 +443,7 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
     });
 
     assert.equal(result.skipped, undefined);
@@ -473,6 +501,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       ownedProcessRecords,
     });
 
@@ -948,10 +977,11 @@ test('cleanup retains legacy records without signaling or treating them as verif
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
       emitDiagnostic: () => {},
+      processes: hostProcesses,
       ownedProcessRecords: store,
     });
     expect(result.pids).toEqual([]);
-    expect(await managedWebBrowserProcessRecordIsLive(store)).toBe(false);
+    expect(await managedWebBrowserProcessRecordIsLive(store, hostProcesses)).toBe(false);
     expect(store.read()[0]?.records).toEqual([legacy]);
     expect(kill).not.toHaveBeenCalled();
   } finally {

@@ -16,7 +16,13 @@ import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provi
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import type { HostProcessInfo, OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import type {
+  HostProcessIdentityFacts,
+  HostProcessIdentityObservation,
+  HostProcessInfo,
+  OwnedProcessReapSummary,
+  OwnedProcessRecordStore,
+} from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 /**
@@ -98,11 +104,16 @@ export type PlatformHost = HostEnvironment &
      */
     isExecutableOnPath(executable: string): Promise<boolean>;
     /**
-     * The host's process table. A plugin that accounts for a fleet it started asks the host instead
-     * of running a process tool itself, so the read uses the host's own executable resolution and
-     * stays apart from whatever command override one request of this daemon carries.
+     * What the host answers about processes the plugin already has pids for.
+     *
+     * A plugin is bundled with its own copy of the host kit, and the request's command-host and
+     * diagnostic scopes never enter that copy, so a process tool run from there answers with the
+     * daemon process environment and traces into the plugin's own store instead of the request's.
+     * Every process read a plugin makes therefore goes through this facet. Each read keeps its
+     * fail-closed answer: a pid the host did not answer for is unknown evidence, never proof a
+     * process is gone.
      */
-    listHostProcesses(options: { timeoutMs: number }): Promise<readonly HostProcessInfo[]>;
+    processes: PlatformHostProcesses;
     /**
      * Starts one streamed command as a managed process: the host publishes an ownership marker at
      * `markerPath` while the process lives, clears it when the process ends, and stops the process on
@@ -134,6 +145,52 @@ export type PlatformHost = HostEnvironment &
     emitDiagnostic(event: DiagnosticEventInput): void;
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;
+
+/**
+ * The process facet of {@link PlatformHost}: reads a plugin may make about pids it already knows,
+ * and the stop that acts on one. Named apart from the host so a plugin can pass just what a fleet
+ * scan needs.
+ */
+export type PlatformHostProcesses = Readonly<{
+  /** The host's process table. A plugin accounts for a fleet it started from this one read. */
+  list(options: { timeoutMs: number }): Promise<readonly HostProcessInfo[]>;
+  /**
+   * What the host says about each pid named, as the facts a caller acts on before it signals:
+   * start time, command, and whether the pid is a zombie. A pid the host did not answer for maps to
+   * all-`null` facts.
+   */
+  readIdentities(
+    pids: Iterable<number>,
+    options?: { timeoutMs?: number },
+  ): Promise<ReadonlyMap<number, HostProcessIdentityFacts>>;
+  /**
+   * State and start time per pid from one process-tool snapshot. Unlike {@link readIdentities}, a
+   * pid the snapshot did not list is absent from the answer rather than answered with nothing.
+   */
+  readIdentityObservations(
+    pids: Iterable<number>,
+  ): Promise<ReadonlyMap<number, HostProcessIdentityObservation>>;
+  /**
+   * The executable each pid is running, for a caller that must prove provenance rather than match a
+   * command line. A pid the host cannot name is absent, which is unknown evidence, not absence of
+   * the process.
+   */
+  readExecutablePaths(pids: Iterable<number>): Promise<ReadonlyMap<number, string>>;
+  /**
+   * Stops every process an owned-process record names, and forgets only the ones it watched leave.
+   * The store is the host's own, so the record the reaper rewrites is the one the daemon reads. The
+   * reaper's own identity reads and signals run under the host, exactly as a stop does.
+   */
+  reapOwnedRecords(
+    store: OwnedProcessRecordStore,
+    options?: {
+      openWebSessionNames?: readonly string[];
+      purposes?: readonly string[];
+      termTimeoutMs?: number;
+      killTimeoutMs?: number;
+    },
+  ): Promise<OwnedProcessReapSummary>;
+}>;
 
 export type PlatformSetup<Family extends Platform = Platform> = Family extends Platform
   ? Readonly<{

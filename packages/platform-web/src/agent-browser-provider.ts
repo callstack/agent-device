@@ -735,31 +735,29 @@ const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Whether the process-table scan that rewrites the owned-process record has to run for one
- * agent-browser call.
+ * Whether the process-table scan that rewrites the owned-process record has to run for one call.
  *
- * Any failure may be the first command that finds the fleet died or restarted between calls, so
- * it refreshes; so do the {@link AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS} members, which launch,
- * end, and extend the fleet. A plain successful call
- * acts on a fleet the record already describes, and re-deriving that fleet means a process-tool
- * snapshot of every host process, which is the cost this seam exists to avoid.
- * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid
- * probe instead. It is fail-closed: an empty, undecodable, or unanswered probe falls back to the
- * scan, so a live fleet this daemon adopted from a predecessor becomes owned through the record
- * again, and a fleet that died or restarted outside a lifecycle boundary is caught by the next
- * command that can no longer name every process the record still claims is alive.
+ * Any failure may be the first command that finds the fleet died or restarted, so it refreshes; so
+ * do the {@link AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS} members, which launch, end, and extend the
+ * fleet. A plain successful call acts on the fleet the record already describes, and re-deriving it
+ * costs a process-tool snapshot of every host process: the cost this seam avoids.
+ * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid probe,
+ * asked of the host. It is fail-closed: an empty, undecodable, or unanswered probe falls back to the
+ * scan, so a fleet this daemon adopted from a predecessor is owned again, and one that died or
+ * restarted outside a lifecycle boundary is caught by the next command.
  */
 async function shouldRefreshAgentBrowserProcessRecord(
   params: Pick<
     Parameters<typeof finalizeAgentBrowserProcessRecord>[0],
-    'cliArgs' | 'commandCompleted' | 'semanticSuccess'
+    'cliArgs' | 'commandCompleted' | 'semanticSuccess' | 'options'
   >,
   store: OwnedProcessRecordStore,
 ): Promise<boolean> {
   if (!params.commandCompleted || !params.semanticSuccess) return true;
   const command = params.cliArgs[0];
   if (command !== undefined && AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS.has(command)) return true;
-  return !(await managedWebBrowserProcessRecordIsLive(store));
+  const { host } = params.options.toolbox;
+  return !(await managedWebBrowserProcessRecordIsLive(store, host.processes));
 }
 
 function canClearAgentBrowserRecord(
@@ -790,6 +788,7 @@ async function cleanupProviderStartupOrphans(
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
       env: host.env,
       emitDiagnostic: host.emitDiagnostic,
+      processes: host.processes,
       openWebSessionNames: options.openWebSessionNames(),
       ...(startingSession === undefined ? {} : { startingSession }),
       ...(options.ownedProcessRecords === undefined

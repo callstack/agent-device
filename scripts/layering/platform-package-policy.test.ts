@@ -966,3 +966,42 @@ test('a type-only host-kit import stays legal in a managed platform package', ()
     [],
   );
 });
+
+/** The host-kit findings one managed family's new file earns, as one string to match against. */
+function hostKitFindings(family: string, source: string): string {
+  const file = `packages/platform-${family}/src/new-surface.ts`;
+  const found = messages(new Map([...validSources(), [file, source]]));
+  return found.filter((message) => message.includes('host-kit')).join('\n');
+}
+
+// `host-kit/process` is policed export by export: an export that spawns a process tool escapes the
+// request's exec trace from a bundled plugin, and one that reads only this process's globals cannot.
+// `PlatformHost.processes` answers the first kind on the core's own copy. An edge naming no export
+// could reach any of them, so a namespace import is refused rather than assumed harmless. Every case
+// is asserted for every managed family: all three are on the host by the same rule.
+const PROCESS_SCOPE_CASES = [
+  [
+    'may not run a process tool through its own host-kit copy',
+    "import { listHostProcesses, readProcessIdentities } from '@agent-device/host-kit/process';\nvoid listHostProcesses; void readProcessIdentities;",
+    String.raw`@agent-device/%FAMILY% may not import the host-kit '@agent-device/host-kit/process' scope at runtime \(listHostProcesses, readProcessIdentities\): .*PlatformHost given to setup`,
+  ],
+  [
+    'keeps the process exports that read no process tool',
+    "import { expandProcessTree, hostPlatform, isProcessAlive } from '@agent-device/host-kit/process';\nvoid expandProcessTree; void hostPlatform; void isProcessAlive;",
+    '^$',
+  ],
+  [
+    'may not namespace-import the process scope',
+    "import * as hostProcess from '@agent-device/host-kit/process';\nvoid hostProcess;",
+    String.raw`@agent-device/%FAMILY% may not import the host-kit '@agent-device/host-kit/process' scope at runtime \(.*readProcessIdentities.*\)`,
+  ],
+] as const;
+
+for (const family of MANAGED_FAMILIES) {
+  for (const [label, source, refusal] of PROCESS_SCOPE_CASES) {
+    test(`a managed platform package ${label} (${family})`, () => {
+      const named = new RegExp(refusal.replaceAll('%FAMILY%', family));
+      assert.match(hostKitFindings(family, source), named);
+    });
+  }
+}

@@ -1,11 +1,9 @@
 import path from 'node:path';
+import type { PlatformHost } from 'agent-device/plugins';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/host-file';
-import {
-  type OwnedProcessRecordStore,
-  reapOwnedProcessRecordsAtStartup,
-} from '@agent-device/host-kit/process';
+import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 
 import { agentBrowserFleetOf } from './agent-browser-fleet.ts';
@@ -45,6 +43,8 @@ export type AgentBrowserCleanupOptions = {
   env: Readonly<EnvMap>;
   /** Where the reap is reported: the host the plugin was set up with. */
   emitDiagnostic(event: DiagnosticEventInput): void;
+  /** The host that reads and stops the recorded processes: the plugin was set up with it. */
+  processes: PlatformHost['processes'];
   openWebSessionNames?: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
   /** The fleet session whose open runs this cleanup: it has spawned nothing yet, so it never blocks the reap. */
@@ -82,14 +82,19 @@ export async function cleanupManagedAgentBrowserOrphans(
   if (!store) return emptyCleanupResult();
   const fleet = agentBrowserFleetOf(store);
   return await fleet.updateRecord(async () => {
-    if (fleet.sessions().length > 0 && (await managedWebBrowserProcessRecordIsDead(store))) {
+    if (
+      fleet.sessions().length > 0 &&
+      (await managedWebBrowserProcessRecordIsDead(store, options.processes))
+    ) {
       fleet.evictLaunched();
     }
     const fleetSessions = fleet.sessions().filter((name) => name !== options.startingSession);
     if (fleetSessions.length > 0) {
       return skippedCleanupResult('open-web-session', { openWebSessionNames: fleetSessions });
     }
-    const reaped = await reapOwnedProcessRecordsAtStartup(store, {
+    // The host reaps: it owns the record store, and the identity reads and signals the stop makes
+    // have to answer for the request's environment and exec trace, not the plugin bundle's.
+    const reaped = await options.processes.reapOwnedRecords(store, {
       openWebSessionNames,
       purposes: [MANAGED_WEB_BROWSER_PROCESS_PURPOSE],
       termTimeoutMs: WEB_BROWSER_REAP_TERM_TIMEOUT_MS,

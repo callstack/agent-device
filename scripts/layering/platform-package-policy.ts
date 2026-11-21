@@ -115,40 +115,96 @@ const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   linux: '@agent-device/linux',
 };
 
-// The host-kit scopes a managed platform package must never reach at runtime. `command` reads the
-// daemon's ambient command scope and `diagnostics` reads its request diagnostic store, and a managed
-// plugin is bundled with its own copy of host-kit, so the daemon's scope never enters that copy: a
-// spawn or trace made through it runs with the daemon process environment, outside the request's
-// captured environment and exec trace. A managed plugin therefore binds to the `PlatformHost` its
-// `setup` receives. Type-only edges are allowed — they cost the bundle nothing.
-const MANAGED_HOST_KIT_SCOPES = [
-  '@agent-device/host-kit/command',
-  '@agent-device/host-kit/diagnostics',
+/**
+ * One host-kit surface a managed platform package may not reach at runtime, with the exports that
+ * make it dangerous. `execExports` absent means every runtime export of the scope is; a scope with
+ * them is policed export by export, because most of its exports read no process at all.
+ */
+type ManagedHostKitScope = Readonly<{
+  specifier: string;
+  execExports?: readonly string[];
+}>;
+
+// The host-kit scopes a managed platform package must never reach at runtime, and the
+// `host-kit/process` exports among them that spawn a process tool. Each of those answers through the
+// exec layer — `ps`, PowerShell, `osascript`, `sysctl` — and a managed plugin is bundled with its own
+// copy of host-kit, so the daemon's command-host and diagnostic scopes never enter that copy: a spawn
+// or trace made through it runs with the daemon process environment, outside the request's captured
+// environment and exec trace. A managed plugin therefore binds to the `PlatformHost` its `setup`
+// receives, whose `processes` facet answers these same reads on the core's own copy.
+//
+// The rest of `host-kit/process` stays reachable: `hostPlatform`, `hostProcessId`,
+// `hostNodeExecutablePath`, `isProcessAlive`, `expandProcessTree` and `processStartTimesDiffer` read
+// this process's own globals or compute from what the caller already holds, so they cannot escape the
+// request's scope. Type-only edges are allowed anywhere — they cost the bundle nothing.
+const MANAGED_HOST_KIT_SCOPES: readonly ManagedHostKitScope[] = [
+  { specifier: '@agent-device/host-kit/command' },
+  { specifier: '@agent-device/host-kit/diagnostics' },
+  {
+    specifier: '@agent-device/host-kit/process',
+    // Every export of the scope that runs a process tool, directly or through one of these. Listed in
+    // source order so a violation names what the file reached for in the order it reads.
+    execExports: [
+      'readCurrentOwnerIdentity',
+      'readProcessStartTime',
+      'readProcessCommand',
+      'isProcessZombie',
+      'readHostCpuArch',
+      'readHostCpuArchSync',
+      'listHostProcesses',
+      'readProcessIdentities',
+      'readProcessIdentityFacts',
+      'readHostProcessIdentityObservations',
+      'readHostProcessIdentityObservationsAsync',
+      'readProcessExecutablePaths',
+      'stopProcessAndConfirmExit',
+      'reapOwnedProcessRecordsAtStartup',
+      'classifyOwnerLiveness',
+      'classifyOwnerLivenessAsync',
+    ],
+  },
 ];
 
 // Every managed platform package is on the host: the web and Vega plugins joined HarmonyOS, and no
-// file of any of them imports these scopes at runtime. A new managed family is therefore bound from
-// its first commit, and a file that wants a host-kit command or diagnostic helper is a bug to fix at
-// that file, not an entry to add here.
-function isManagedHostKitScope(spec: string): boolean {
-  return MANAGED_HOST_KIT_SCOPES.some((scope) => spec === scope || spec.startsWith(`${scope}/`));
+// file of any of them reaches one of these surfaces at runtime. A new managed family is therefore
+// bound from its first commit, and a file that wants a host-kit command, diagnostic or process helper
+// is a bug to fix at that file, not an entry to add here.
+function managedHostKitScopeViolationMessage(
+  spec: string,
+  symbols: readonly string[],
+  managedName: string,
+): string | undefined {
+  const scope = MANAGED_HOST_KIT_SCOPES.find(
+    (entry) => spec === entry.specifier || spec.startsWith(`${entry.specifier}/`),
+  );
+  if (!scope) return undefined;
+  let reachedExports: string | undefined;
+  if (scope.execExports) {
+    // A runtime edge that names no export — a namespace or bare import — could reach any of them,
+    // so it is refused rather than assumed harmless.
+    const reached =
+      symbols.length === 0
+        ? [...scope.execExports]
+        : scope.execExports.filter((name) => symbols.includes(name));
+    if (reached.length === 0) return undefined;
+    reachedExports = reached.join(', ');
+  }
+  return (
+    `${managedName} may not import the host-kit '${scope.specifier}' scope at runtime` +
+    (reachedExports === undefined ? '' : ` (${reachedExports})`) +
+    ': run the command, emit the diagnostic, or read processes through the PlatformHost given to ' +
+    'setup, so the packed plugin stays inside the request environment and exec trace'
+  );
 }
 
 function managedHostKitScopeViolations(
   file: string,
-  site: { spec: string; line: number; typeOnly: boolean },
+  site: { spec: string; line: number; typeOnly: boolean; symbols: readonly string[] },
   managedName: string,
 ): LayeringViolation[] {
-  if (site.typeOnly || !isManagedHostKitScope(site.spec)) return [];
-  return [
-    violation(
-      file,
-      site.line,
-      `${managedName} may not import the host-kit '${site.spec}' scope at runtime: run the command ` +
-        'or emit the diagnostic through the PlatformHost given to setup, so the packed plugin stays ' +
-        'inside the request environment and exec trace',
-    ),
-  ];
+  if (site.typeOnly) return [];
+  const message = managedHostKitScopeViolationMessage(site.spec, site.symbols, managedName);
+  return message === undefined ? [] : [violation(file, site.line, message)];
 }
 
 const INTERACTOR_COMPOSITION_FILE = 'src/core/interactors/register-builtins.ts';

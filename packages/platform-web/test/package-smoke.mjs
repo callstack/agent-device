@@ -193,10 +193,11 @@ test('packed core discovers web only after the managed platform is installed', (
     // copies of those stores, which a bundled host-kit copy never enters: spawned or timed through
     // it, these requests would carry no exec record and no capture timing at all.
     //
-    // The fleet-record read is the one call no backend reply can show. `open` starts a fleet, so the
-    // provider derives its owned-process record from a process-table read, which the host answers.
-    // Read through a bundled host-kit copy instead, the read still succeeds — and the request that
-    // owed it traces nothing, which is what the `ps` assertion below refuses to accept.
+    // The fleet-record reads are the ones no backend reply can show. `open` starts a fleet, so the
+    // provider derives its owned-process record from the host's process table, its per-pid identity
+    // reads, and the executable path of each candidate — on macOS one `osascript`, on Windows one CIM
+    // query. Read through a bundled host-kit copy instead, each read still succeeds — and the request
+    // that owed it traces nothing, which is what the two assertions below refuse to accept.
     const openRecords = requestRecordsOf(storeRoot, 'exec_command', 'open');
     assert.ok(
       openRecords.some((record) => record.data?.event === 'spawn' && record.data.command === 'ps'),
@@ -204,6 +205,14 @@ test('packed core discovers web only after the managed platform is installed', (
         openRecords.map((record) => record.data),
       )}`,
     );
+    if (process.platform === 'darwin') {
+      assert.ok(
+        openRecords.some(
+          (record) => record.data?.event === 'spawn' && record.data.command === 'osascript',
+        ),
+        `the open request traced no executable-path read out of ${openRecords.length} exec records`,
+      );
+    }
     const nodeBasenames = new Set(['node', 'node.exe']);
     for (const [command, expected] of [
       ['open', 'open https://example.test'],
