@@ -256,7 +256,28 @@ test('Android inventory still aborts when the request is cancelled during the fe
       { androidAvdSelection: 'running-only' },
       { ...scope, signal: controller.signal },
     ),
-    (error: unknown) => error instanceof AppError,
+    (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+});
+
+test('Android inventory fails when the feature probe of the requested serial times out', async () => {
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l') return result('List of devices attached\nemulator-5554 device\n');
+    if (key.includes('pm\0list\0features')) {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    }
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  await assert.rejects(
+    createAndroidInventory(host).discover(
+      { serial: 'emulator-5554', androidAvdSelection: 'running-only' },
+      scope,
+    ),
+    (error: unknown) => error instanceof AppError && error.details?.adbFailure === 'timeout',
   );
 });
 
