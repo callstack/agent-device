@@ -1422,7 +1422,7 @@ agent-device is text 'id="greeting"' "Welcome back"
 
 <!-- generated:command replay -->
 
-Replay a recorded session or Maestro flow.
+Replay a recorded session or Maestro flow (plugin, install separately).
 
 ```bash
 agent-device replay <path> | replay export <file.ad> [--out <path>]
@@ -1441,7 +1441,7 @@ agent-device replay <path> | replay export <file.ad> [--out <path>]
 | `--from <n>` | Replay: resume at 1-based plan step n, skipping 1..n-1 without executing them (requires --plan-digest; see a divergence report's resume field). replay only, not test |
 | `--plan-digest <sha256>` | Replay: the plan digest a --from resume must match (from a prior divergence report); mismatch, edits, or include/platform-expansion changes fail INVALID_ARGS before any action |
 | `--keep-session` | Replay: leave the session active by suppressing exactly an authored terminal close in a native .ad script; replay only, not test or Maestro YAML |
-| `--maestro` | Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. See agent-device help maestro for commands and boundaries |
+| `--maestro` | Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. Requires the @agent-device/maestro plugin, install separately. See agent-device help maestro for commands and boundaries |
 | `-e KEY=VALUE, --env KEY=VALUE` | Replay/Test: inject or override a ${KEY} variable for the script (repeatable) |
 
 Also accepts: [common options](#common-options): `--timeout <ms>`, `--out <path>`.
@@ -1452,7 +1452,7 @@ Exact behavior: `agent-device help replay`.
 
 <!-- generated:command test -->
 
-Run replay test suites.
+Run replay test suites (plugin, install separately).
 
 ```bash
 agent-device test <path-or-glob>...
@@ -1466,7 +1466,7 @@ agent-device test <path-or-glob>...
 | `--test-ime` | open/test/replay: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices; on test/replay it applies to the sessions the flow opens) |
 | `--no-test-ime` | open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens) |
 | `--update, -u` | Replay: retired as a rewrite (ADR 0012) — never edits the .ad file; every divergence already carries ranked selector suggestions, --update or not |
-| `--maestro` | Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. See agent-device help maestro for commands and boundaries |
+| `--maestro` | Replay: treat input as a supported Maestro YAML subset; unsupported syntax fails loudly. Requires the @agent-device/maestro plugin, install separately. See agent-device help maestro for commands and boundaries |
 | `-e KEY=VALUE, --env KEY=VALUE` | Replay/Test: inject or override a ${KEY} variable for the script (repeatable) |
 | `--fail-fast` | Test: stop the suite after the first failing script; with sharding, each shard stops independently |
 | `--retries <n>` | Test: retry each failed script up to n additional times |
