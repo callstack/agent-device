@@ -128,6 +128,20 @@ export function readTypeTextFromPositionals(positionals: string[]): DecodedTypeT
   return { target: undefined, targetPositionals: [], textPositionals: positionals };
 }
 
+/**
+ * The structured-input test for `type`'s `ref` field. It mirrors `readTypeTextFromPositionals`:
+ * a minted snapshot ref (`@e12`, optionally `@e12~s3`) passes through and a bare `e12` normalizes
+ * to `@e12` — the field names a target, so the bare minted id is unambiguous there — while any
+ * other value refuses with INVALID_ARGS instead of reaching the daemon as text (#4870 review).
+ */
+export function readTypeTargetRef(ref: string): string {
+  if (TYPE_TARGET_REF_PATTERN.test(ref)) return ref;
+  if (BARE_SNAPSHOT_REF_PATTERN.test(ref)) return `@${ref}`;
+  throw new AppError('INVALID_ARGS', `"${ref}" is not a snapshot ref.`, {
+    hint: 'Pass the ref exactly as the latest snapshot output minted it, for example "@e12"; a pin like "@e12~s3" also works.',
+  });
+}
+
 function readPointTarget(positionals: string[]): { x: number; y: number } {
   const firstPositional = positionals[0] ?? '';
   const unknownKey = detectUnknownSelectorKeyToken(firstPositional);

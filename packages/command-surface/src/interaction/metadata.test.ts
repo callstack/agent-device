@@ -114,6 +114,26 @@ test('type declares the optional snapshot-ref target beside the required text', 
   expect(typeMetadata.readInput({ text: 'more' })).not.toHaveProperty('ref');
 });
 
+test('type validates the ref field as a minted snapshot ref', () => {
+  const typeMetadata = interactionCommandMetadata.find((metadata) => metadata.name === 'type');
+  if (!typeMetadata) throw new Error('expected type metadata');
+
+  // A bare minted id names the same target the snapshot minted, so it normalizes to the
+  // @-prefixed token the daemon decodes (#4870 review).
+  expect(typeMetadata.readInput({ ref: 'e12', text: 'more' })).toMatchObject({
+    ref: '@e12',
+    text: 'more',
+  });
+  // A lookalike word is not a ref: refusing here keeps it from typing into the focused field.
+  expect(() => typeMetadata.readInput({ ref: 'Email', text: 'more' })).toThrow(AppError);
+  try {
+    typeMetadata.readInput({ ref: 'Email', text: 'more' });
+  } catch (error) {
+    expect((error as AppError).code).toBe('INVALID_ARGS');
+    expect((error as AppError).details?.hint).toMatch(/snapshot output/i);
+  }
+});
+
 test('type keeps a ref label out of the projected text positionals', () => {
   const typeMetadata = interactionCommandMetadata.find((metadata) => metadata.name === 'type');
   if (!typeMetadata) throw new Error('expected type metadata');
