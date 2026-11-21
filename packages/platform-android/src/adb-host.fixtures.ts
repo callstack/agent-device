@@ -81,6 +81,7 @@ export function bindAndroidAdbHostStub(
       processExitError: true,
       ...extra,
     }),
+    monotonicNowMs: () => performance.now(),
     emitDiagnostic: (event) => {
       diagnostics.push({ phase: event.phase, ...(event.level ? { level: event.level } : {}) });
     },

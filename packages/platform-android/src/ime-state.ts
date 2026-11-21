@@ -27,10 +27,9 @@ export const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
 // Each device's newest restore write is a durable flush record in the daemon state dir
 // (ime-recovery-marker.ts), so a daemon restart inside the window still holds the kill (#3346).
-// Deadlines use the HOST MONOTONIC CLOCK: libuv's hrtime reads CLOCK_MONOTONIC,
-// mach_absolute_time or QueryPerformanceCounter, which every process on one host boot shares,
-// which no wall-clock step moves, and which sleep() also runs on. Skew rule: a wall-clock
-// step cannot shorten a window, in this process or the next. A host reboot resets the clock;
+// Deadlines use the host monotonic clock (AndroidAdbHost.monotonicNowMs), which every process
+// on one host boot shares. Skew rule: a wall-clock step cannot shorten a window, in this
+// process or the next. A host reboot resets the clock;
 // the remaining wait is capped at one window, so a record from an earlier boot over-waits by
 // at most SETTINGS_PROVIDER_FLUSH_SETTLE_MS once and is then retired. Expiry rule: a record
 // whose deadline has passed costs no wait; the first kill-bound reader retires it, so a
@@ -39,10 +38,6 @@ export const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 // record this process wrote: a covered CONFIRMED window lets an uninspected close retire
 // another close's retry evidence (see isRecoveryMarkerClearEarned), but a dead process's
 // provenance cannot speak for activations that may have followed it.
-function hostMonotonicNowMs(): number {
-  return Number(process.hrtime.bigint() / 1_000n) / 1_000;
-}
-
 const FLUSH_RECORD_WRITER = randomUUID();
 const androidTestImeFlushRecordLocks = new Map<string, Promise<unknown>>();
 
@@ -131,7 +126,7 @@ export async function registerTestImeRestore(
   const records = requireAndroidAdbHost().imeFlushRecords;
   await withTestImeFlushRecordLock(stateDir, serial, async () => {
     await records.write(stateDir, serial, {
-      deadlineMs: hostMonotonicNowMs() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
+      deadlineMs: requireAndroidAdbHost().monotonicNowMs() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
       confirmed,
       writer: FLUSH_RECORD_WRITER,
     });
@@ -170,7 +165,7 @@ async function runTestImeFlushRound(
   const record = await requireAndroidAdbHost().imeFlushRecords.read(stateDir, serial);
   if (record === undefined) return 'idle';
   const remainingMs = Math.min(
-    record.deadlineMs - hostMonotonicNowMs(),
+    record.deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
     SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
   );
   if (remainingMs > 0) {
