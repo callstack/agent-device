@@ -113,16 +113,12 @@ test('shutdown rejects active session device and points to close --shutdown', as
 // #4908: naming the session that owns a busy device in the refusal is a leak when the caller is
 // another client on the same proxy token. The tenant label is not proof of ownership; the lease id
 // the caller sends is.
-const SHUTDOWN_VISIBILITY_CASES = [
-  { addressed: 'tenant-a:other-agent', leaseId: undefined, named: false },
-  { addressed: 'tenant-a:other-agent', leaseId: 'a'.repeat(32), named: true },
-  { addressed: 'tenant-a:remote-agent', leaseId: undefined, named: true },
-] as const;
-
-for (const { addressed, leaseId, named } of SHUTDOWN_VISIBILITY_CASES) {
-  test(`shutdown ${named ? 'names' : 'hides'} the leased session for a request on ${addressed} ${
+// A request on the leased session's own address is not an exception: without the lease id, naming
+// the session would confirm to a guessing caller that it exists and holds this device.
+for (const leaseId of [undefined, 'a'.repeat(32)] as const) {
+  test(`shutdown names the leased session in its DEVICE_IN_USE refusal for a request on its own address ${
     leaseId ? 'sending' : 'omitting'
-  } its lease id`, async () => {
+  } that lease id`, async () => {
     const sessionStore = makeSessionStore();
     const sessionAddress = 'tenant-a:remote-agent';
     const leasedDevice: SessionState['device'] = {
@@ -149,7 +145,7 @@ for (const { addressed, leaseId, named } of SHUTDOWN_VISIBILITY_CASES) {
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
-        session: addressed,
+        session: sessionAddress,
         command: 'shutdown',
         positionals: [],
         flags: { platform: 'ios', device: 'iPhone 17 Pro' },
@@ -159,7 +155,7 @@ for (const { addressed, leaseId, named } of SHUTDOWN_VISIBILITY_CASES) {
           ...(leaseId ? { leaseId } : {}),
         },
       },
-      sessionName: addressed,
+      sessionName: sessionAddress,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
@@ -168,9 +164,9 @@ for (const { addressed, leaseId, named } of SHUTDOWN_VISIBILITY_CASES) {
     expect(response?.ok).toBe(false);
     if (response && !response.ok) {
       expect(response.error.code).toBe('DEVICE_IN_USE');
-      expect(response.error.details?.session).toBe(named ? sessionAddress : undefined);
+      expect(response.error.details?.session).toBe(leaseId ? sessionAddress : undefined);
       expect(response.error.details?.hint).toBe(
-        named ? `Run agent-device close --shutdown --session ${sessionAddress}` : undefined,
+        leaseId ? `Run agent-device close --shutdown --session ${sessionAddress}` : undefined,
       );
     }
   });

@@ -63,10 +63,7 @@ export async function handleShutdownCommand(
 
   const deviceSession = params.sessionStore.findByDevice(device.id);
   if (deviceSession) {
-    // The request's own session address tells the caller nothing new, so it is always named.
-    const visible =
-      deviceSession.address === params.sessionName ||
-      sessionVisibleToRequest(deviceSession.session, params.req);
+    const visible = sessionVisibleToRequest(deviceSession.session, params.req);
     return errorResponse(
       'DEVICE_IN_USE',
       'Cannot shut down an active session device directly. Use close --shutdown to end the session and turn off the simulator/emulator.',
