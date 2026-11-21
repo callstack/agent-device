@@ -74,6 +74,7 @@
   "@agent-device/contracts/linux-tool-provider",
   "@agent-device/contracts/local-interactor-operation-set",
   "@agent-device/contracts/logs-runtime-plan",
+  "@agent-device/contracts/macos-platform-leaf",
   "@agent-device/contracts/managed-web-backend",
   "@agent-device/contracts/navigation",
   "@agent-device/contracts/network-runtime",

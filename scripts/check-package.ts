@@ -76,6 +76,19 @@ const EXCLUDED_IMPLEMENTATIONS = [
       'is required for input synthesis on Wayland',
     ],
   },
+  {
+    // macOS is a leaf of the bundled Apple family, so the Apple owner stays. What must not ship is
+    // the desktop implementation and its Swift helper. The shared XCTest runner's macOS wire cases
+    // and Swift branches stay in the core by decision (#4675), so no marker names them.
+    owner: 'macos platform',
+    paths: [/(?:^|\/)platform-macos\//, /(?:^|\/)macos-helper(?:\/|$)/],
+    markers: [
+      'agent-device-macos-helper',
+      'AGENT_DEVICE_MACOS_HELPER_BIN',
+      'macos_launch_services_registration_probe_failed',
+      'The native macOS app backend acts through accessibility actions only',
+    ],
+  },
 ] as const;
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

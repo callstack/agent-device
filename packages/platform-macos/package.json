@@ -39,8 +39,6 @@
   },
   "scripts": {
     "build": "node --experimental-strip-types build.mjs",
-    "build:helper": "node --experimental-strip-types ../../scripts/swift-toolchain-tmpdir.ts swift build -c release --package-path macos-helper",
-    "test:helper": "node --experimental-strip-types ../../scripts/swift-toolchain-tmpdir.ts swift test --package-path macos-helper",
     "prepack": "pnpm build"
   },
   "publishConfig": {

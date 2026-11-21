@@ -35,7 +35,7 @@ export function readTrackedPlatformPackageDeclarations(
       private?: boolean;
       exports?: Record<string, unknown>;
       publishConfig?: { exports?: Record<string, unknown> };
-      'agent-device'?: { platform?: unknown; apiVersion?: unknown };
+      'agent-device'?: { platform?: unknown; apiVersion?: unknown; appleOs?: unknown };
     };
     const family = path.posix.basename(dir).slice('platform-'.length);
     return {

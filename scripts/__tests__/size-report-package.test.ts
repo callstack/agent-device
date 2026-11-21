@@ -19,26 +19,11 @@ const fixturePack: { files: NpmPackEntry[] } = JSON.parse(
 
 const execFileAsync = promisify(execFile);
 
-// The fixture pack ships the macOS helper (manifest, sources, and per-target PackStub.swift),
-// so every assertion here names the manifest source the guard would read from the packed tree;
-// without it the guard falls back to this checkout's manifest via repoRoot.
-const helperManifestSource = [
-  '.target(',
-  '  name: "AgentDeviceMacOSInput",',
-  '.executableTarget(',
-  '  name: "AgentDeviceMacOSHelper",',
-  '.testTarget(',
-  '  name: "AgentDeviceMacOSHelperTests",',
-  '.testTarget(',
-  '  name: "AgentDeviceMacOSInputTests",',
-].join('\n');
-
 test('publish package requires bundled dependency license notices', () => {
   assert.throws(
     () =>
       assertPublishPackageContents(
         fixturePack.files.filter((entry) => entry.path !== 'dist/src/THIRD_PARTY_NOTICES.txt'),
-        { macosHelperManifestSource: helperManifestSource },
       ),
     /THIRD_PARTY_NOTICES\.txt/,
   );
@@ -48,7 +33,6 @@ test('publish package requires bundled dependency license notices', () => {
         fixturePack.files.map((entry) =>
           entry.path === 'dist/src/THIRD_PARTY_NOTICES.txt' ? { ...entry, size: 0 } : entry,
         ),
-        { macosHelperManifestSource: helperManifestSource },
       ),
     /non-empty.*THIRD_PARTY_NOTICES\.txt/,
   );
@@ -483,7 +467,6 @@ test('publish package gate rejects placeholder notices from the tree it packed',
     () =>
       assertPublishPackageContents(fixturePack.files, {
         noticesRoot: root,
-        macosHelperManifestSource: helperManifestSource,
       }),
     /no bundled dependency notices/,
   );
@@ -491,22 +474,16 @@ test('publish package gate rejects placeholder notices from the tree it packed',
   assert.doesNotThrow(() =>
     assertPublishPackageContents(fixturePack.files, {
       noticesRoot: root,
-      macosHelperManifestSource: helperManifestSource,
     }),
   );
 });
 
 test('publish package requires both Android helpers and excludes benchmark scripts', () => {
-  assert.doesNotThrow(() =>
-    assertPublishPackageContents(fixturePack.files, {
-      macosHelperManifestSource: helperManifestSource,
-    }),
-  );
+  assert.doesNotThrow(() => assertPublishPackageContents(fixturePack.files, {}));
   assert.throws(
     () =>
       assertPublishPackageContents(
         fixturePack.files.filter((entry) => !entry.path.startsWith('android/ime-helper/')),
-        { macosHelperManifestSource: helperManifestSource },
       ),
     /android\/ime-helper/,
   );
@@ -523,79 +500,25 @@ test('publish package requires both Android helpers and excludes benchmark scrip
   assert.doesNotThrow(() =>
     assertPublishPackageContents(
       fixturePack.files.filter((entry) => !entry.path.startsWith('apple/snapshot-bridge/')),
-      { macosHelperManifestSource: helperManifestSource },
     ),
   );
   assert.throws(
     () =>
-      assertPublishPackageContents(
-        [...fixturePack.files, { path: 'scripts/ios-snapshot-benchmark/run.ts', size: 1 }],
-        { macosHelperManifestSource: helperManifestSource },
-      ),
+      assertPublishPackageContents([
+        ...fixturePack.files,
+        { path: 'scripts/ios-snapshot-benchmark/run.ts', size: 1 },
+      ]),
     /benchmark or build scripts/,
   );
-  // Each declared test target needs its PackStub.swift or the install-time `swift build` of the
-  // packed tree dies; a missing one must name the missing path.
+  // The macOS helper ships in the @agent-device/macos plugin; a helper path in the core pack names
+  // the package that owns it.
   assert.throws(
     () =>
-      assertPublishPackageContents(
-        fixturePack.files.filter(
-          (entry) =>
-            entry.path !== 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
-        ),
-        { macosHelperManifestSource: helperManifestSource },
-      ),
-    /pack stubs: apple\/macos-helper\/Tests\/AgentDeviceMacOSInputTests\/PackStub\.swift/,
-  );
-  assert.throws(
-    () =>
-      assertPublishPackageContents(
-        [
-          ...fixturePack.files,
-          {
-            path: 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/ScheduleTests.swift',
-            size: 1,
-          },
-        ],
-        { macosHelperManifestSource: helperManifestSource },
-      ),
-    /macOS helper test sources/,
-  );
-  // A stub path under Tests/ that the declared list does not name is a test source, not an
-  // exemption: the old suffix rule let any PackStub.swift through.
-  assert.throws(
-    () =>
-      assertPublishPackageContents(
-        [
-          ...fixturePack.files,
-          {
-            path: 'apple/macos-helper/Tests/AgentDeviceSneakyTests/PackStub.swift',
-            size: 1,
-          },
-        ],
-        { macosHelperManifestSource: helperManifestSource },
-      ),
-    /macOS helper test sources: apple\/macos-helper\/Tests\/AgentDeviceSneakyTests\/PackStub\.swift/,
-  );
-  // The other direction: a declared stub whose target left the manifest is a dead stub riding in
-  // the pack on a stale package.json entry, exempt from the path guard, and must be named.
-  assert.throws(
-    () =>
-      assertPublishPackageContents(fixturePack.files, {
-        // The manifest now declares only the Input test target; the pack still ships both stubs.
-        macosHelperManifestSource: ['.testTarget(', '  name: "AgentDeviceMacOSInputTests",'].join(
-          '\n',
-        ),
-      }),
-    /no test target declares: apple\/macos-helper\/Tests\/AgentDeviceMacOSHelperTests\/PackStub\.swift/,
-  );
-  // Sources without the manifest are not a buildable Swift package; the pack must say so.
-  assert.throws(
-    () =>
-      assertPublishPackageContents(
-        fixturePack.files.filter((entry) => entry.path !== 'apple/macos-helper/Package.swift'),
-      ),
-    /sources without its Package\.swift/,
+      assertPublishPackageContents([
+        ...fixturePack.files,
+        { path: 'apple/macos-helper/Package.swift', size: 1 },
+      ]),
+    /includes the macOS helper, which @agent-device\/macos ships: apple\/macos-helper\/Package\.swift/,
   );
 });
 
