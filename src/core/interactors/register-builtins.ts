@@ -16,18 +16,6 @@ const androidPlugin = {
   },
 } as const satisfies PlatformPlugin;
 
-const linuxPlugin = {
-  id: 'linux',
-  platforms: ['linux'],
-  // Declares the platform-gated request provider resolver the linux family owns (the
-  // linux tool provider, formerly gated by `device.platform === 'linux'`).
-  providers: { platformGatedResolvers: ['linuxToolProvider'] },
-  createInteractor: async (_device, _runner, host) => {
-    const { createLinuxInteractor } = await import('@agent-device/platform-linux/interactor');
-    return createLinuxInteractor(host);
-  },
-} as const satisfies PlatformPlugin;
-
 /**
  * The builtin plugins, in `PLATFORMS` order so `registeredPlatforms()` derives
  * the canonical tuple's order (asserted by the parity test).
@@ -35,7 +23,6 @@ const linuxPlugin = {
 export const BUILTIN_PLATFORM_PLUGINS = [
   applePlugin,
   androidPlugin,
-  linuxPlugin,
 ] as const satisfies readonly PlatformPlugin[];
 
 // The leaf platforms covered by at least one builtin plugin, recovered from the

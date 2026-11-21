@@ -68,6 +68,14 @@ const EXCLUDED_IMPLEMENTATIONS = [
       'harmony-screen-recorder',
     ],
   },
+  {
+    owner: 'linux platform',
+    paths: [/(?:^|\/)platform-linux\//],
+    markers: [
+      'AT-SPI2 bridge is only available on Linux',
+      'is required for input synthesis on Wayland',
+    ],
+  },
 ] as const;
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
