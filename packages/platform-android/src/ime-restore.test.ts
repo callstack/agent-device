@@ -421,6 +421,28 @@ test('a kill-bound close after a daemon restart waits but trusts no inherited pr
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
+test('a restore records its flush window before it issues the write', async () => {
+  // A daemon that dies between `ime set` and the registrar's finally must still leave the
+  // next process a window to wait out.
+  const host = bindAndroidAdbHostStub();
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const deviceAdb = fakeImeDeviceAdb(stuckDeviceState());
+  const recordedAtImeSet: string[][] = [];
+
+  await withAndroidAdbProvider(
+    {
+      exec: async (args, options) => {
+        if (args[1] === 'ime' && args[2] === 'set') recordedAtImeSet.push(flushRecordSerials(host));
+        return await deviceAdb(args, options);
+      },
+    },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+  );
+
+  expect(recordedAtImeSet).toEqual([[DEVICE.id]]);
+});
+
 test('a shutdown of a physical device restores without any flush wait', async () => {
   bindAndroidAdbHostStub();
   const device: DeviceInfo = { ...DEVICE, kind: 'device', id: 'R5800ABC1' };

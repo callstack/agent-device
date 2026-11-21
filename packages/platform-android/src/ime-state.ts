@@ -209,6 +209,8 @@ async function consumeTestImeFlushRecord(
     if (current !== undefined) {
       if (!isSameFlushRecord(current, waited)) return 'extended';
       await records.clear(stateDir, serial);
+      // A write issued during that file I/O registers after this clear; its round drains it.
+      if (pendingTestImeRestoreWrite(serial)) return 'extended';
     }
     return waited.confirmed && waited.writer === FLUSH_RECORD_WRITER
       ? 'covered-confirmed'

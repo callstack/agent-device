@@ -152,9 +152,12 @@ async function restoreAndroidTestImeFor(
   // opens before issuing it: a kill-bound waiter drains in-flight writes before consulting
   // records and never reads the gap as "nothing owed". A `finally` close runs after the try
   // body's registration, so a waiter never sees the entry closed while its record is absent.
+  // An unconfirmed record lands before the write is issued, so a daemon that dies mid-restore
+  // still leaves the next process a window to wait out.
   const pendingWriteOpens = beginTestImeRestoreWrite(device.id);
   let writeConfirmed = false;
   try {
+    if (device.kind === 'emulator') await registerTestImeRestore(stateDir, device.id, false);
     await runAdbShell(adb, ['ime', 'set', previousIme], {
       allowFailure: true,
       timeoutMs: 10_000,
