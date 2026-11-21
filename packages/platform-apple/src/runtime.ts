@@ -69,6 +69,7 @@ import {
   type MacOsAppBackend,
 } from '@agent-device/contracts/session';
 import { macOsDesktop } from './core/macos-desktop.ts';
+import { isMacOsLeafInstalled } from './macos-leaf.ts';
 import { applyWatchOsOperationFacts, bindWatchOsOperations } from './os/watchos/facts.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
@@ -231,8 +232,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),
         shutdownTarget: shutdownFact(device),
-        // Under the native backend the installed macOS leaf names what only the runner serves.
-        ...(isMacOs(device) && macOsAppBackend(device) === 'native'
+        // Under the native backend the installed macOS leaf names what only the runner serves. With
+        // no package installed there is nothing to ask: the facts answer no native refusal, and the
+        // typed `plugin-not-installed` outcome stays with the commands that need the leaf.
+        ...(isMacOs(device) && macOsAppBackend(device) === 'native' && isMacOsLeafInstalled()
           ? await macOsDesktop().nativeBackendFacts()
           : {}),
       }),

@@ -19,7 +19,10 @@ import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
-import { bindMacOsLeafFixture } from './__tests__/macos-leaf.fixtures.ts';
+import {
+  bindAbsentMacOsLeafFixture,
+  bindMacOsLeafFixture,
+} from './__tests__/macos-leaf.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -299,6 +302,27 @@ test('the native macOS app backend refuses what the installed leaf names before 
     }
     expect(binding.facts.operations.tapPoint).toEqual({ available: true });
     expect(leaf.calls.map(({ operation }) => operation)).toContain('nativeBackendFacts');
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test('the native macOS app backend answers facts without the installed leaf', async () => {
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
+  bindAbsentMacOsLeafFixture();
+  try {
+    // The backend is a daemon setting, so the lookup must answer its table for a Mac it cannot
+    // drive rather than raise the leaf's install outcome: listing facts is not a macOS call.
+    const facts = await createApplePlatformRuntime(platformRuntimeHostFixture()).inspectFacts(
+      leaves.macos,
+    );
+    expect(facts.operations.screenRecordingStart).toEqual({ available: true });
+    expect(facts.operations.back).toEqual({ available: true });
+    expect(facts.operations.audioProbeStart).toEqual(
+      process.platform === 'darwin'
+        ? { available: true }
+        : expect.objectContaining({ available: false }),
+    );
   } finally {
     vi.unstubAllEnvs();
   }
