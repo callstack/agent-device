@@ -27,9 +27,15 @@ const COLLAPSED_WARNING_PREFIX_PATTERNS = [
   GENERIC_SEVERITY_PREFIX_PATTERN,
   /\b(?:possible\s+)?unhandled (?:promise )?rejection\b/,
 ] as const;
-/** LogBox insets the banner 10 units from each side, so it never spans the whole surface. */
-const COLLAPSED_BANNER_MIN_WIDTH_SURFACE_RATIO = 0.8;
-/** LogBox anchors the banner stack 20 units above the bottom edge; a safe area can sit between. */
+/**
+ * LogBox floats the banner with `left: 10; right: 10; bottom: 20` inside its own
+ * `LogBoxNotificationContainer`, so it keeps a visible gap on both sides and above the bottom edge.
+ * A row flush with the surface's side or bottom edge is app chrome — a tab bar, a footer, or a
+ * bottom-sheet row — however it opens. Ratios keep the rule scale-free across dp and device pixels.
+ */
+const COLLAPSED_BANNER_MIN_FLOAT_SURFACE_RATIO = 0.01;
+const COLLAPSED_BANNER_MAX_FLOAT_SURFACE_RATIO = 0.15;
+/** LogBox anchors the banner stack 20 units above the bottom edge; a safe area can widen that gap. */
 const COLLAPSED_BANNER_MAX_BOTTOM_MARGIN = 160;
 const COLLAPSED_BANNER_MAX_BOTTOM_MARGIN_SURFACE_RATIO = 0.15;
 const COLLAPSED_WARNING_TEXT_MARKERS = [
@@ -150,15 +156,26 @@ function isCollapsedBannerAtLogBoxPlacement(
   if (!surface) return false;
   const { width, height } = surface;
   if (!(width > 0) || !(height > 0)) return false;
+  const leftInset = rect.x;
+  const rightInset = width - (rect.x + rect.width);
   const bottomMargin = height - (rect.y + rect.height);
   return (
-    rect.width >= width * COLLAPSED_BANNER_MIN_WIDTH_SURFACE_RATIO &&
-    bottomMargin >= 0 &&
+    isWithinSurfaceBand(leftInset, width) &&
+    isWithinSurfaceBand(rightInset, width) &&
+    isWithinSurfaceBand(bottomMargin, height) &&
     bottomMargin <=
       Math.max(
         COLLAPSED_BANNER_MAX_BOTTOM_MARGIN,
         height * COLLAPSED_BANNER_MAX_BOTTOM_MARGIN_SURFACE_RATIO,
       )
+  );
+}
+
+/** True when a floated box keeps a visible gap on that side, and no more than LogBox's own. */
+function isWithinSurfaceBand(gap: number, surfaceExtent: number): boolean {
+  return (
+    gap >= surfaceExtent * COLLAPSED_BANNER_MIN_FLOAT_SURFACE_RATIO &&
+    gap <= surfaceExtent * COLLAPSED_BANNER_MAX_FLOAT_SURFACE_RATIO
   );
 }
 

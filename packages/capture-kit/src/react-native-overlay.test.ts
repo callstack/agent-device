@@ -162,6 +162,8 @@ describe('React Native overlay evidence', () => {
 describe('React Native collapsed banner with the entry-count badge', () => {
   const iosViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 402, height: 874 });
   const androidViewport = snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 });
+  /** LogBox's frame on a 402x874 surface: `left: 10; right: 10; bottom: 20`, notification 48 high. */
+  const iosCountBannerRect = { x: 10, y: 806, width: 382, height: 48 };
 
   test('a banner whose badge shows the entry count is an overlay and a dismiss target', () => {
     const state = analyzeReactNativeOverlay(
@@ -170,7 +172,7 @@ describe('React Native collapsed banner with the entry-count badge', () => {
           index: 0,
           ref: 'e1',
           label: '20, Failed to fetch',
-          rect: collapsedBannerRect,
+          rect: iosCountBannerRect,
           hittable: true,
         }),
       ],
@@ -185,14 +187,14 @@ describe('React Native collapsed banner with the entry-count badge', () => {
     });
   });
 
-  test('a device-pixel count banner above the bottom edge is an overlay', () => {
+  test('a device-pixel count banner floating off the bottom edge is an overlay', () => {
     const state = analyzeReactNativeOverlay(
       [
         node({
           index: 0,
           ref: 'e1',
           label: '8, Network request failed',
-          rect: { x: 28, y: 2146, width: 1024, height: 125 },
+          rect: { x: 28, y: 2213, width: 1024, height: 132 },
           hittable: true,
         }),
       ],
@@ -230,13 +232,27 @@ describe('React Native collapsed banner with the entry-count badge', () => {
     expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
   });
 
+  test('a full-width footer row flush with the bottom edge is not an overlay', () => {
+    const nodes = [
+      node({
+        index: 0,
+        ref: 'e1',
+        label: '2, Continue shopping',
+        rect: { x: 0, y: 822, width: 402, height: 52 },
+        hittable: true,
+      }),
+    ];
+    expect(analyzeReactNativeOverlay(nodes, iosViewport).detected).toBe(false);
+    expect(formatReactNativeOverlayWarning(nodes, iosViewport)).toBe(undefined);
+  });
+
   test('a price label is not an overlay', () => {
     const nodes = [
       node({
         index: 0,
         ref: 'e1',
         label: '20,000원',
-        rect: collapsedBannerRect,
+        rect: iosCountBannerRect,
         hittable: true,
       }),
     ];
@@ -250,7 +266,7 @@ describe('React Native collapsed banner with the entry-count badge', () => {
         index: 0,
         ref: 'e1',
         label: '20, Failed to fetch',
-        rect: collapsedBannerRect,
+        rect: iosCountBannerRect,
         hittable: true,
       }),
     ];
