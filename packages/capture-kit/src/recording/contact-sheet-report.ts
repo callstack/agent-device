@@ -10,28 +10,21 @@ export const CONTACT_SHEET_REASONS = {
   /** Frame decoding is Apple AVFoundation tooling, so a host on another platform cannot build one. */
   // The host cannot decode frames at all: frame decoding is Apple AVFoundation tooling.
   unsupportedHost: { reason: 'contact_sheet_unsupported_host' },
-  /** The MP4 timeline could not be read, so no bounded sample grid can be planned. */
   // The MP4 timeline could not be read, so no bounded sample grid can be planned.
   durationUnknown: { reason: 'contact_sheet_duration_unknown' },
-  /** Frame extraction ran and failed, rather than returning fewer frames. */
-  // Frame extraction ran and failed, rather than returning fewer frames.
+  // The contact sheet could not obtain usable extracted frames: the extractor failed to start or run.
   frameExtractionFailed: { reason: 'contact_sheet_frame_extraction_failed' },
-  /** Extraction returned nothing usable, so there is no sheet to draw. */
   // Extraction returned nothing usable, so there is no sheet to draw.
   noFrames: { reason: 'contact_sheet_no_frames' },
   /** The requested sheet would exceed the caller's image pixel budget even at the smallest cell. */
   // The sheet would exceed the caller's image pixel budget even at the smallest cell.
   pixelBudgetExceeded: { reason: 'contact_sheet_pixel_budget_exceeded' },
-  /** The file is present but is not a container this feature decodes, such as a WebM recording. */
   // The file is present but is not a container this feature decodes, such as a WebM recording.
   containerUnsupported: { reason: 'contact_sheet_container_unsupported' },
-  /** The sheet could not be written where it was asked to land. */
   // The sheet could not be written where it was asked to land.
   outputWriteFailed: { reason: 'contact_sheet_output_write_failed' },
-  /** The output resolves to the recording itself, which a sheet must never replace. */
   // The output resolves to the recording itself, which a sheet must never replace.
   outputCollidesWithInput: { reason: 'contact_sheet_output_collides_with_input' },
-  /** The change threshold is not a finite share between 0 and 1. */
   // The change threshold is not a finite share between 0 and 1.
   thresholdInvalid: { reason: 'contact_sheet_threshold_invalid' },
 } as const satisfies ReasonTable<'record'>;

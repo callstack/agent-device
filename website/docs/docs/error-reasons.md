@@ -105,7 +105,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `contact_sheet_unsupported_host` | The host cannot decode frames at all: frame decoding is Apple AVFoundation tooling. |
 | `contact_sheet_duration_unknown` | The MP4 timeline could not be read, so no bounded sample grid can be planned. |
-| `contact_sheet_frame_extraction_failed` | Frame extraction ran and failed, rather than returning fewer frames. |
+| `contact_sheet_frame_extraction_failed` | The contact sheet could not obtain usable extracted frames: the extractor failed to start or run. |
 | `contact_sheet_no_frames` | Extraction returned nothing usable, so there is no sheet to draw. |
 | `contact_sheet_pixel_budget_exceeded` | The sheet would exceed the caller's image pixel budget even at the smallest cell. |
 | `contact_sheet_container_unsupported` | The file is present but is not a container this feature decodes, such as a WebM recording. |
