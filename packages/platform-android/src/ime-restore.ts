@@ -17,6 +17,7 @@ import {
 import {
   activeTestImeDevices,
   awaitTestImeFlushWindow,
+  awaitUnrecordedTestImeFlushWindow,
   beginTestImeRestoreWrite,
   registerTestImeRestore,
   withAndroidTestImeRecoveryLock,
@@ -64,12 +65,13 @@ export async function restoreAndroidTestIme(
   options: { stateDir: string; shutdownTarget?: boolean; signal?: AbortSignal },
 ): Promise<AndroidTestImeRestoreResult> {
   return await withAndroidTestImeRecoveryLock(options.stateDir, device.id, async () => {
-    const result = await restoreOwnedAndroidTestIme(options.stateDir, device);
+    const unrecorded: UnrecordedFlushWindow = {};
+    const result = await restoreOwnedAndroidTestIme(options.stateDir, device, unrecorded);
     // Only a kill-bound close waits: it returns after the device's flush window is covered, so
     // the finalizer's kill lands after the provider's write. Ordinary closes never sleep.
     const settleOutcome: TestImeFlushWait =
       options.shutdownTarget === true
-        ? await awaitTestImeFlushWindow(options.stateDir, device.id, options.signal)
+        ? await awaitKillBoundFlushWindow(options, device.id, unrecorded)
         : 'idle';
     if (isRecoveryMarkerClearEarned(result.reason, settleOutcome)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
@@ -78,12 +80,27 @@ export async function restoreAndroidTestIme(
   });
 }
 
+// A deadline this call's restore registered but could not write to the state dir.
+type UnrecordedFlushWindow = { deadlineMs?: number };
+
+// The recorded window first, then any window only this call knows about.
+async function awaitKillBoundFlushWindow(
+  options: { stateDir: string; signal?: AbortSignal },
+  serial: string,
+  unrecorded: UnrecordedFlushWindow,
+): Promise<TestImeFlushWait> {
+  const outcome = await awaitTestImeFlushWindow(options.stateDir, serial, options.signal);
+  if (outcome === 'aborted' || unrecorded.deadlineMs === undefined) return outcome;
+  return await awaitUnrecordedTestImeFlushWindow(unrecorded.deadlineMs, options.signal);
+}
+
 // Restore this process's own device, or report that it never activated one. For an unactivated
 // device nothing is inspected (orphans from another process are handled by
 // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check), so recovery stays unknown.
 async function restoreOwnedAndroidTestIme(
   stateDir: string,
   device: DeviceInfo,
+  unrecorded: UnrecordedFlushWindow,
 ): Promise<AndroidTestImeRestoreResult> {
   const deviceKey = getAndroidImeHelperDeviceKey(device);
   if (!activeTestImeDevices.has(deviceKey)) {
@@ -93,7 +110,12 @@ async function restoreOwnedAndroidTestIme(
   // not skip this intentional close-time restore. The IME really is back on the previous keyboard,
   // so text routing must stop preferring the helper channel even on an abort.
   activeTestImeDevices.delete(deviceKey);
-  return await restoreAndroidTestImeFor(stateDir, resolveAndroidAdbExecutor(device), device);
+  return await restoreAndroidTestImeFor(
+    stateDir,
+    resolveAndroidAdbExecutor(device),
+    device,
+    unrecorded,
+  );
 }
 
 // The device was inspected and the helper is confirmed off it (restored, already not the active
@@ -117,6 +139,7 @@ async function restoreAndroidTestImeFor(
   stateDir: string,
   adb: AndroidAdbExecutor,
   device: DeviceInfo,
+  unrecorded: UnrecordedFlushWindow = {},
 ): Promise<AndroidTestImeRestoreResult> {
   const deviceLabel = device.id;
   if (activeTestImeDevices.has(getAndroidImeHelperDeviceKey(device))) {
@@ -153,7 +176,8 @@ async function restoreAndroidTestImeFor(
   // records and never reads the gap as "nothing owed". A `finally` close runs after the try
   // body's registration, so a waiter never sees the entry closed while its record is absent.
   // An unconfirmed record lands before the write is issued, so a daemon that dies mid-restore
-  // still leaves the next process a window to wait out.
+  // still leaves the next process a window to wait out. A record that cannot be written never
+  // blocks the restore: the write is still issued, and the calling close holds its own kill.
   const pendingWriteOpens = beginTestImeRestoreWrite(device.id);
   let writeConfirmed = false;
   try {
@@ -193,7 +217,8 @@ async function restoreAndroidTestImeFor(
     // this write confirmed, which is the only fact that may retire retry evidence.
     try {
       if (device.kind === 'emulator') {
-        await registerTestImeRestore(stateDir, device.id, writeConfirmed);
+        const registration = await registerTestImeRestore(stateDir, device.id, writeConfirmed);
+        unrecorded.deadlineMs = registration.recorded ? undefined : registration.deadlineMs;
       }
     } finally {
       pendingWriteOpens();
