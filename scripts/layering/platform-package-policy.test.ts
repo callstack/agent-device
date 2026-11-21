@@ -551,8 +551,7 @@ test('the web interactor subpath is loaded only by the builtin registry, dynamic
     assert.notDeepEqual(messages(sources), [], `${family} ${file} ${source}`);
   }
 
-  // A built-in package that declares a subpath nobody enumerated is rejected: the only declared
-  // exceptions are the Apple and Android facets, and a new seam has to be named here first.
+  // A built-in package that declares an unenumerated subpath is rejected (only Apple/Android facets).
   const undeclared = declarations().map((declaration) =>
     declaration.family === 'android'
       ? {
