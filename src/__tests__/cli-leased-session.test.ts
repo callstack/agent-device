@@ -2,7 +2,8 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeTempWorkspace } from '@agent-device/test-kit';
+import { installFakeManagedAgentBrowser, makeTempWorkspace } from '@agent-device/test-kit';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type { DaemonResponse } from '@agent-device/daemon-client';
 import {
@@ -361,14 +362,64 @@ test('a command that takes no session runs while a leased connection is active',
 
   // The active leased connection still makes a connection command name its session...
   assertSessionRequired(await runAgentCommand(solo, ['snapshot']));
-  // ...but `auth` runs on no connection, and `--session` is not one of its flags.
+  // ...but `auth` and `web` run on no connection, and `--session` is not one of their flags.
+  const install = await installFakeManagedAgentBrowser(solo.stateDir);
   const environments: Record<string, string>[] = [{}, { AGENT_DEVICE_SESSION: 'demo' }];
   for (const env of environments) {
-    const result = await runAgentCommand(solo, ['auth', 'status'], env);
-    assert.equal(result.code, null, result.stdout);
-    assert.equal(JSON.parse(result.stdout).data.authenticated, false);
-    assert.deepEqual(result.calls, []);
+    const auth = await runAgentCommand(solo, ['auth', 'status'], env);
+    assert.equal(auth.code, null, auth.stdout);
+    assert.equal(JSON.parse(auth.stdout).data.authenticated, false);
+    assert.deepEqual(auth.calls, []);
+
+    const doctor = await withCommandExecutorOverride(
+      async () => ({ stdout: 'ok', stderr: '', exitCode: 0 }),
+      async () => await runAgentCommand(solo, ['web', 'doctor'], env),
+    );
+    // `web` ends through process.exit, which the capture throws, so the report is the first document.
+    assert.match(doctor.stdout, /^\{\n {2}"success": true,/, doctor.stdout);
+    assert.ok(doctor.stdout.includes(JSON.stringify(install.binaryPath)), doctor.stdout);
+    assert.deepEqual(doctor.calls, []);
   }
+
+  fs.rmSync(solo.root, { recursive: true, force: true });
+});
+
+test('a command that takes no session never leases through a remote config', async () => {
+  const solo = workspace();
+  const remoteConfig = path.join(solo.project, 'generic.remote.json');
+  fs.writeFileSync(
+    remoteConfig,
+    JSON.stringify({
+      daemonBaseUrl: PROXY_URL,
+      tenant: 'acme',
+      runId: 'run-generic',
+      leaseBackend: 'android-instance',
+      platform: 'android',
+    }),
+  );
+
+  // A profile that names a lease provider asks for no session either: `auth` cannot take one.
+  for (const profile of [remoteConfig, writeLeasedProfile(solo)]) {
+    const auth = await runAgentCommand(solo, ['auth', 'status', '--remote-config', profile]);
+    assert.equal(auth.code, null, auth.stdout);
+    assert.equal(JSON.parse(auth.stdout).data.authenticated, false);
+    assert.deepEqual(auth.calls, []);
+    assert.equal(readRemoteConnectionState({ stateDir: solo.stateDir, session: 'default' }), null);
+  }
+
+  // The same profile does lease for a command that takes a session.
+  const open = await runAgentCommand(solo, [
+    'open',
+    'com.example',
+    '--remote-config',
+    remoteConfig,
+  ]);
+  assert.equal(open.code, null, open.stdout);
+  assert.ok(
+    open.calls.some((call) => call.command === 'lease_allocate'),
+    open.stdout,
+  );
+  assert.notEqual(readRemoteConnectionState({ stateDir: solo.stateDir, session: 'default' }), null);
 
   fs.rmSync(solo.root, { recursive: true, force: true });
 });

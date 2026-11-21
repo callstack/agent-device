@@ -130,12 +130,8 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'connect',
   'connection',
   'close',
-  'daemon',
-  'plugins',
-  'device',
   'disconnect',
   'metro',
-  'proxy',
   'session',
   'takeover',
 ]);
@@ -407,8 +403,10 @@ async function resolveRunContextOrExit(
           });
     // A leased remote config, or a connect without one (it always leases through a provider), needs
     // an explicit session before anything is resolved or leased (#3931).
+    const leasedRemoteConfig =
+      parsed.remoteConfigLeaseProvider && runsOnRemoteConnection(base.command);
     const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
-    if (flags.session === undefined && (parsed.remoteConfigLeaseProvider || leasedConnect)) {
+    if (flags.session === undefined && (leasedRemoteConfig || leasedConnect)) {
       throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
     }
     const daemonPaths = resolveDaemonPaths(flags.stateDir, {
@@ -788,9 +786,7 @@ function resolveActiveConnectionDefaults(options: {
   if (
     options.command === 'connect' ||
     options.command === 'connection' ||
-    // A command that cannot take a session (`auth`, `daemon`, `plugins`, `device`, `proxy`) runs
-    // on no connection. Reading the active one would refuse it for a session it cannot name.
-    !isFlagSupportedForCommand('session', options.command)
+    !runsOnRemoteConnection(options.command)
   ) {
     return null;
   }
@@ -805,19 +801,19 @@ function resolveActiveConnectionDefaults(options: {
   return defaults;
 }
 
+// A command that cannot take a session runs on no remote connection. Reading, authenticating or
+// leasing one would act for a session the command cannot name.
+function runsOnRemoteConnection(command: string): boolean {
+  return isFlagSupportedForCommand('session', command);
+}
+
 function shouldMaterializeRemoteConnection(command: string): boolean {
-  return !REMOTE_MATERIALIZATION_DEFERRED_COMMANDS.has(command);
+  return runsOnRemoteConnection(command) && !REMOTE_MATERIALIZATION_DEFERRED_COMMANDS.has(command);
 }
 
 function shouldResolveRemoteAuth(command: string): boolean {
-  return (
-    command !== 'auth' &&
-    command !== 'connection' &&
-    command !== 'daemon' &&
-    command !== 'plugins' &&
-    command !== 'device' &&
-    command !== 'proxy'
-  );
+  // `connection status` reports the stored record and sends no daemon request.
+  return runsOnRemoteConnection(command) && command !== 'connection';
 }
 
 function shouldWarnOpenMayMissRemoteRuntime(options: {

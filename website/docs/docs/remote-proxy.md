@@ -44,7 +44,7 @@ agent-device close
 agent-device disconnect
 ```
 
-Every command on a proxy connection must name its session, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. The same applies to every device-cloud connection. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, and sends nothing to the proxy. It never falls back to the connection that another agent on the same machine saved last. This includes `connect proxy` and `open --remote-config <file>` with a proxy profile. The client and run that the proxy leases under come from the session name, so two agents with different names never share a lease.
+Every command on a proxy connection that takes a session must name it, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. The same applies to every device-cloud connection. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, and sends nothing to the proxy. It never falls back to the connection that another agent on the same machine saved last. This includes `connect proxy` and `open --remote-config <file>` with a proxy profile. The client and run that the proxy leases under come from the session name, so two agents with different names never share a lease.
 
 `--daemon-auth-token <token>` works instead of the environment variable, but it authenticates only the command you pass it to. Later commands need the token again through the environment variable, a `daemonAuthToken` entry in your remote config profile, or the flag on each command.
 
