@@ -10,6 +10,11 @@ import type { resolveClickButton } from '@agent-device/contracts/click-button';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
 import { createInteractionRuntimeForRoute } from './interaction-runtime.ts';
+import { resolveBoundScreenshotRuntime } from '../../screenshot-runtime-binding.ts';
+import { captureScreenshotFromRequest } from '../../screenshot-runtime.ts';
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
+import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readSettleRequest } from './interaction-flags.ts';
 import { dispatchDirectIosSelectorTap } from './interaction-touch-direct-ios.ts';
 import { readDirectIosSelectorTapTarget } from '../../../core/interaction/internal/interaction-touch-direct-ios-eligibility.ts';
@@ -86,7 +91,53 @@ export async function dispatchTargetedTouchViaRuntime(
     ...buildTargetedRuntimeOptions(params, command, boundAdmitted),
     touchExecutor,
     settleObservationCapture: prepared.settleObservationCapture,
+    ...(admitted.target.kind === 'point' &&
+    (command === 'press' || command === 'click') &&
+    params.req.flags?.verify === true
+      ? { readbackCapture: createVerifyScreenshotCapture(params, admitted.session) }
+      : {}),
   });
+}
+
+function createVerifyScreenshotCapture(
+  params: TargetedTouchParams,
+  session: AdmittedTargetedTouch['session'],
+): NonNullable<AgentDeviceBackend['captureVerifyScreenshot']> {
+  // Bind lazily. A verified tap with a node at the point never needs screenshot authority.
+  let binding: ReturnType<typeof resolveBoundScreenshotRuntime> | undefined;
+  return async (outPath) => {
+    const capture = await (binding ??= resolveBoundScreenshotRuntime({
+      ...params,
+      device: session.device,
+      overlayRefs: false,
+    }));
+    if (!capture.ok) return undefined;
+    const dispatchContext = params.contextFromFlags(
+      params.req.flags,
+      session.appBundleId,
+      session.trace?.outPath,
+    );
+    const facts = await captureScreenshotFromRequest(
+      { session, dispatchContext, captureScreenshot: capture.runtime.captureScreenshot },
+      outPath,
+      {
+        surface: session.surface,
+        fullscreen: verifyStatusBarBand(session.device, undefined) > 0 ? true : undefined,
+        normalizeStatusBar: false,
+      },
+    );
+    return { ignoreTopHeightShare: verifyStatusBarBand(session.device, facts.displayRotation) };
+  };
+}
+
+function verifyStatusBarBand(device: DeviceInfo, rotation: DeviceRotation | undefined): number {
+  if (rotation?.startsWith('landscape') || device.target === 'tv' || device.target === 'desktop') {
+    return 0;
+  }
+  if (device.appleOs === 'ipados') return 0.02;
+  if (device.appleOs === 'ios') return 0.06;
+  if (device.platform === 'android' || device.platform === 'harmonyos') return 0.04;
+  return 0;
 }
 
 function buildTargetedRuntimeOptions(

@@ -44,6 +44,7 @@ export async function createInteractionRuntimeForRoute(
       pairedGestureViewport?: Rect;
       touchExecutor?: BoundTouchExecutor;
       gestures?: BoundGestureExecutor;
+      readbackCapture?: AgentDeviceBackend['captureVerifyScreenshot'];
       /**
        * Filled with the LAST capture this request consumed. ADR 0014 ambiguity
        * issuance is only valid against a tree the session stored under the
@@ -61,6 +62,7 @@ export async function createInteractionRuntimeForRoute(
     createCommandSurface: params.createCommandSurface,
     requestId: params.req.meta?.requestId,
     flags: params.req.flags,
+    ...(params.readbackCapture ? { readbackCapture: params.readbackCapture } : {}),
     session,
     contextFromFlags: params.contextFromFlags,
     captureSnapshot: async (flags, options) => {
@@ -213,7 +215,10 @@ function resolveBoundCapture(
 function createInteractionAgentDevice(params: InteractionRuntimeInput) {
   return params.createCommandSurface({
     backend: createInteractionBackend(params),
-    ...createDaemonRuntimePolicy('interaction commands', { plural: true }),
+    ...createDaemonRuntimePolicy('interaction commands', {
+      plural: true,
+      allowTempFiles: params.readbackCapture !== undefined,
+    }),
     sessions: params.runtimeSessions,
     signal: getRequestSignal(params.requestId),
   });
@@ -225,6 +230,7 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
     params.contextFromFlags(flags, session.appBundleId, session.trace?.outPath);
   return {
     platform: publicPlatformString(session.device),
+    ...(params.readbackCapture ? { captureVerifyScreenshot: params.readbackCapture } : {}),
     captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => ({
       snapshot: await params.captureSnapshot(flags, {
         interactiveOnly: options?.interactiveOnly === true,

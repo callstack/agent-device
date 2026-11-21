@@ -2,6 +2,7 @@ import { publishFileSync } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ArtifactAdapter, ReservedOutputFile } from '@agent-device/contracts/artifact-adapter';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { createDaemonTempFile } from './runtime-artifacts.ts';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,16 +52,7 @@ export function createDaemonScreenshotArtifactAdapter(
         );
       }
     },
-    createTempFile: async (options) => {
-      const root = await fs.mkdtemp(path.join(os.tmpdir(), `${options.prefix}-`));
-      return {
-        path: path.join(root, `file${options.ext}`),
-        visibility: 'internal',
-        cleanup: async () => {
-          await fs.rm(root, { recursive: true, force: true });
-        },
-      };
-    },
+    createTempFile: createDaemonTempFile,
   };
 }
 

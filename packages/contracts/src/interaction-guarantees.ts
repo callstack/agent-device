@@ -526,7 +526,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       verifyEvidence: {
         kind: 'runtime',
-        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
+        // Coordinate press and click compare screenshots when the baseline has no touch target at the point.
+        via: 'packages/command-runtime/src/commands/interaction/runtime/post-action-observation.ts#applyPostActionObservation',
         appliesTo: ['press', 'click', 'fill'],
       },
       settleObservation: {

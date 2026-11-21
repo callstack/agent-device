@@ -910,6 +910,25 @@ test('runtime press plan refuses a non-ref target', async () => {
   );
 });
 
+test('runtime press plan refuses --verify instead of dropping the pixel pair', async () => {
+  const device = createInteractionDevice(pinPadSnapshot(), {
+    tap: async () => ({ ok: true }),
+  });
+
+  await assert.rejects(
+    device.interactions.press(ref('@e1'), {
+      session: 'default',
+      refs: ['e1', 'e2'],
+      verify: true,
+    }),
+    (error: AppError) => {
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'verify_unsupported_on_ref_plan');
+      return true;
+    },
+  );
+});
+
 test('runtime press plan names the refused key and the pending keys when a member fails', async () => {
   const taps: Point[] = [];
   const device = createInteractionDevice(pinPadSnapshot(), {

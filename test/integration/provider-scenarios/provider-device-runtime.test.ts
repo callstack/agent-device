@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { PNG } from '@agent-device/capture-kit/png';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
@@ -56,6 +57,61 @@ test('provider session retains the allocated device and lease for implicit comma
     );
   });
 }, 15_000);
+
+test('coordinate verify uses the open provider device and excludes its portrait status bar', async () => {
+  const app = 'com.example.demo';
+  let frameCount = 0;
+  const framePaths: string[] = [];
+  await withProviderScenarioResource(
+    async () =>
+      await createFakeProviderWorld('android', async (outPath) => {
+        framePaths.push(outPath);
+        const frame = new PNG({ width: 25, height: 100 });
+        frame.data.fill(255);
+        if (frameCount++ === 1) frame.data[25 * 4 * 3] = 0;
+        await fs.promises.writeFile(outPath, PNG.sync.write(frame));
+        return { displayRotation: 'portrait' };
+      }),
+    async ({ daemon, runtime }) => {
+      const lease = await allocateFakeProviderLease(daemon);
+      assertRpcOk(
+        await daemon.callCommand('open', [app], leaseFlags(lease.leaseId), {
+          meta: leaseMeta(lease.leaseId),
+        }),
+      );
+      const start = runtime.calls.length;
+      const data = assertRpcOk(await daemon.callCommand('press', ['10', '80'], { verify: true }));
+      assert.deepEqual((data.evidence as Record<string, unknown>)?.screenshotDiff, {
+        changedFromBefore: false,
+        changedPixelRatio: 0,
+      });
+
+      const calls = runtime.calls
+        .slice(start)
+        .filter(({ type }) => type === 'tap' || type === 'screenshot');
+      const deviceId = runtime.deviceIdForLease(lease.leaseId);
+      assert.deepEqual(
+        calls.map(({ type, deviceId }) => [type, deviceId]),
+        [
+          ['screenshot', deviceId],
+          ['tap', deviceId],
+          ['screenshot', deviceId],
+        ],
+      );
+      for (const call of calls.filter(({ type }) => type === 'screenshot')) {
+        assert.partialDeepStrictEqual(call.options, {
+          appBundleId: app,
+          fullscreen: true,
+          normalizeStatusBar: false,
+          surface: 'app',
+        });
+      }
+      assert.equal(framePaths.length, 2);
+      for (const outPath of framePaths) assert.equal(fs.existsSync(outPath), false);
+      assertRpcOk(await daemon.callCommand('close'));
+    },
+  );
+});
 
 test('provider-owned iOS simulators relaunch without local CoreSimulator refresh', async () => {
   await withProviderScenarioResource(

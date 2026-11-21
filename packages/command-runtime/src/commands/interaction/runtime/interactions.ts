@@ -6,12 +6,20 @@ import type {
   RepeatedInput,
   ResolvedInteractionTarget,
   ResolvedTarget,
+  ScreenshotVerification,
 } from '@agent-device/contracts/interaction';
+import { isSemanticTouchTarget } from '@agent-device/selectors/touch-semantics';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
+import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { isFillableType } from '@agent-device/contracts/snapshot';
+import {
+  isFillableType,
+  isViewportRootNode,
+  resolveViewportRect,
+} from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { sleep, toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
@@ -176,9 +184,12 @@ async function tapCommand(
   const atRest = await admitResolvedTarget(runtime, options, resolutionRequest, resolved);
   const point = requireResolvedPoint(atRest);
   const pointObservation = pointObservationOf(atRest);
-  let backendResult;
-  try {
-    backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
+  const dispatchTap = runtime.backend.tap;
+  const dispatch = () =>
+    // The backend method keeps its receiver: an in-process backend method
+    // that reads `this` breaks under a bare call, and the adapter's closure
+    // exposes none.
+    dispatchTap.call(runtime.backend, toBackendContext(runtime, options), point, {
       button: options.button,
       count: options.count,
       intervalMs: options.intervalMs,
@@ -187,6 +198,26 @@ async function tapCommand(
       doubleTap: options.doubleTap,
       ...(pointObservation ? { pointObservation } : {}),
     });
+  let backendResult;
+  let screenshot: ScreenshotVerification | undefined;
+  try {
+    const baseline = atRest.preAction;
+    const useScreenshot =
+      observation.verify &&
+      atRest.kind === 'point' &&
+      baseline !== undefined &&
+      runtime.backend.captureVerifyScreenshot !== undefined &&
+      !baseline.nodes.some((node) => blocksPixelPairAtPoint(baseline.nodes, node, point));
+    if (useScreenshot) {
+      const { withScreenshotVerification } = await import('./verify-screenshot.ts');
+      ({ result: backendResult, screenshot } = await withScreenshotVerification(
+        runtime,
+        options,
+        dispatch,
+      ));
+    } else {
+      backendResult = await dispatch();
+    }
   } catch (error) {
     // Resolution is complete before the backend call. Preserve it out of
     // band so a daemon-level failure corroboration can still record the same
@@ -204,6 +235,7 @@ async function tapCommand(
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     },
     observation,
+    screenshot,
   );
 }
 
@@ -276,6 +308,15 @@ async function tapRefPlanCommand(
   // response identity, so the plan iterates `refs` alone.
   const plannedRefs = (options.refs ?? []).map((ref) => (ref.startsWith('@') ? ref : `@${ref}`));
   const observation = planPostActionObservation(options);
+  // A plan member is a tree-visible ref, and the pixel fallback behind
+  // --verify answers one point the pre-action tree cannot see. Refuse the
+  // flag instead of silently dropping the pair it promises.
+  if (observation.verify) {
+    throw new AppError('INVALID_ARGS', 'A multi-ref press plan cannot carry --verify', {
+      reason: INTERACTION_ERROR_REASONS.verifyUnsupportedOnRefPlan,
+      hint: 'Run --verify on a single press; the plan already dispatches tree-visible refs.',
+    });
+  }
   const members = await resolveRefPlanMembers(
     runtime,
     options,
@@ -421,4 +462,32 @@ function formatTargetForWarning(result: {
   if (result.target?.kind === 'ref') return result.target.ref;
   if (result.target?.kind === 'selector') return result.target.selector;
   return 'point';
+}
+
+/**
+ * Whether a pre-action tree node keeps the coordinate pixel pair off at `point`
+ * (the `--verify` screenshot fallback's tree-coverage gate).
+ *
+ * A node blocks when it covers the point and is a semantic touch target, or is
+ * hittable and smaller than the point's resolved viewport. The exemption is
+ * the ruling on #4297 (option a): a hittable node whose rect CONTAINS the
+ * point's resolved viewport — `resolveViewportRect`, including its
+ * largest-containing-rect fallback, which is what answers on Android where no
+ * window nodes exist — is the viewport-filling container every real tree
+ * carries (Android content `FrameLayout`, iOS full-screen `CollectionView`),
+ * not a touch target; excluding it keeps the gate reachable without a
+ * per-platform type list. A full-screen marked button still blocks: semantic
+ * targets never take the exemption.
+ */
+function blocksPixelPairAtPoint(
+  baselineNodes: SnapshotNode[],
+  node: SnapshotNode,
+  point: Point,
+): boolean {
+  if (!node.rect || !containsPoint(node.rect, point.x, point.y)) return false;
+  if (isViewportRootNode(node)) return false;
+  if (isSemanticTouchTarget(node)) return true;
+  if (node.hittable !== true) return false;
+  const viewport = resolveViewportRect(baselineNodes, node.rect);
+  return !rectContains(node.rect, viewport ?? node.rect);
 }

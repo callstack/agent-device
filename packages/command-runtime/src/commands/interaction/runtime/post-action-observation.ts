@@ -1,6 +1,7 @@
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type {
   InteractionEvidence,
+  ScreenshotVerification,
   ResolvedInteractionTarget,
   SettleObservation,
   SettleParams,
@@ -65,9 +66,28 @@ export async function applyPostActionObservation<T extends object>(
   resolved: ResolvedInteractionTarget,
   result: T,
   params: PostActionObservationPlan,
+  screenshot?: ScreenshotVerification,
 ): Promise<ObservedResult<T>> {
   const observed = await observeAfterInteraction(runtime, options, resolved, params);
-  return reconcileNonHittableHintWithEvidence({ ...result, ...observed });
+  const evidence =
+    screenshot && observed.evidence
+      ? {
+          ...observed.evidence,
+          // Any comparison that verification made saw a change: the tree
+          // digest, the settle surface, or the pixel pair. The pixel-only
+          // answer stays in screenshotDiff beside it.
+          changedFromBefore:
+            observed.evidence.surfaceChange !== undefined ||
+            observed.evidence.changedFromBefore === true ||
+            screenshot.changedFromBefore,
+          screenshotDiff: screenshot,
+        }
+      : observed.evidence;
+  return reconcileNonHittableHintWithEvidence({
+    ...result,
+    ...observed,
+    ...(evidence ? { evidence } : {}),
+  });
 }
 
 /**

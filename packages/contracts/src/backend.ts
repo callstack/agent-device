@@ -407,6 +407,8 @@ export type AgentDeviceBackend = {
     outPath: string,
     options?: BackendScreenshotOptions,
   ): Promise<BackendScreenshotResult | void>;
+  /** Request-bound frame for coordinate verification, with the comparison's status-bar exclusion. */
+  captureVerifyScreenshot?(outPath: string): Promise<{ ignoreTopHeightShare: number } | undefined>;
   readText?(context: BackendCommandContext, node: SnapshotNode): Promise<BackendReadTextResult>;
   /** Present only when the bound runtime advertised the conditional `findText` operation. */
   findText?(context: BackendCommandContext, text: string): Promise<BackendFindTextResult>;

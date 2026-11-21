@@ -75,9 +75,20 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
     interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
     digest: stringSchema('Order-independent digest of the post-action node multiset.'),
     changedFromBefore: booleanSchema(
-      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. Absent when no pre-action baseline was captured, so no comparison is claimed. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
+      'Whether verification observed a change. false is evidence, not failure. Absent when no pre-action baseline was captured, so no comparison is claimed. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
     ),
     surfaceChange: postActionSurfaceChangeSchema,
+    screenshotDiff: objectSchema(
+      {
+        changedFromBefore: booleanSchema(
+          'Whether the frame dimensions differed or the compared pixels differed; changedPixelRatio is absent on a dimension change.',
+        ),
+        changedPixelRatio: numberSchema(
+          'Share of compared pixels that changed, when frame dimensions match.',
+        ),
+      },
+      ['changedFromBefore'],
+    ),
   },
   ['nodeCount', 'interactiveNodeCount', 'digest'],
 );
@@ -498,7 +509,7 @@ const pressCommandFacet = defineCommandFacet({
     summary: 'Short-press a UI target',
     searchHint: 'click touch button',
     cliDetail:
-      'The hold duration is positional on longpress, not press --hold-ms. A comma-separated ref plan (press @e13,@e14,@e15,@e16; 2 to 16 refs, repeats allowed) resolves and admits every key against the current frame, then dispatches the admitted points: key 1 expires the frame, later keys dispatch where the snapshot showed them; a later refusal carries details.dispatchedSteps, details.refPlanKey, and details.refPlanPending, and sequence.points holds the dispatched points. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, and --double-tap apply to every key; the response ref is the first key. Recording refuses the plan.',
+      'The hold duration is positional on longpress, not press --hold-ms. A comma-separated ref plan (press @e13,@e14,@e15,@e16; 2 to 16 refs, repeats allowed) resolves and admits every key against the current frame, then dispatches the admitted points: key 1 expires the frame, later keys dispatch where the snapshot showed them; a later refusal carries details.dispatchedSteps, details.refPlanKey, and details.refPlanPending, and sequence.points holds the dispatched points. --interval-ms sleeps between keys; --count, --hold-ms, --jitter-px, and --double-tap apply to every key; the response ref is the first key. --verify refuses a ref plan; run it on a single press. Recording refuses the plan.',
   },
   metadata: metadata('press'),
   run: (client, input) => client.interactions.press(toPressOptions(input)),

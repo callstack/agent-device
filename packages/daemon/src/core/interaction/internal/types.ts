@@ -1,3 +1,4 @@
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/interactor-types';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -134,6 +135,7 @@ export type InteractionRuntimeInput = {
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
   gestures?: BoundGestureExecutor;
+  readbackCapture?: AgentDeviceBackend['captureVerifyScreenshot'];
   /**
    * The capture every observation on this request reads the screen through: the action binding's
    * own capture when its runtime use carries one, otherwise the capture the request admitted for
