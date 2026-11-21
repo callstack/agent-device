@@ -4,6 +4,9 @@ import {
   createAndroidProviderShellState,
 } from './android-ime-lifecycle-world.ts';
 
+// Shell states whose Settings app was force-stopped and not started since.
+const stoppedSettings = new WeakSet<object>();
+
 export function androidRepairAdbResult(
   args: readonly string[],
   shellState: ReturnType<typeof createAndroidProviderShellState>,
@@ -12,6 +15,11 @@ export function androidRepairAdbResult(
   stderr: string;
   exitCode: number;
 } {
+  if (args.join(' ') === 'shell am force-stop com.android.settings') {
+    stoppedSettings.add(shellState);
+  } else if (args[0] === 'shell' && args[1] === 'am' && args[2]?.startsWith('start')) {
+    stoppedSettings.delete(shellState);
+  }
   const ime = androidImeLifecycleAdbResult(args.join(' '), args, shellState);
   if (ime) return ime;
   if (args.join(' ') === 'shell getprop sys.boot_completed') {
@@ -19,7 +27,9 @@ export function androidRepairAdbResult(
   }
   if (args.join(' ') === 'shell dumpsys window windows') {
     return {
-      stdout: 'mCurrentFocus=Window{42 u0 com.android.settings/.Settings}\n',
+      stdout: stoppedSettings.has(shellState)
+        ? 'mCurrentFocus=null\n'
+        : 'mCurrentFocus=Window{42 u0 com.android.settings/.Settings}\n',
       stderr: '',
       exitCode: 0,
     };

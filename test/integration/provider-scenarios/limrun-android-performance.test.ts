@@ -42,9 +42,15 @@ vi.mock('@agent-device/host-kit/command', async (original) => ({
 
 test('Limrun Android memory sampling reaches the allocated session ADB through daemon dispatch', async () => {
   const dependencies = createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() });
+  // Plain close stops the session app; the fake device then reports it gone.
+  let settingsStopped = false;
   const sessionExec = vi.fn<typeof dependencies.host.runAdb>(async (invocation) => {
     const args = [...invocation.command];
     const ok = { exitCode: 0, stdout: '', stderr: '' };
+    if (args.join(' ') === 'shell am force-stop com.android.settings') {
+      settingsStopped = true;
+      return ok;
+    }
     if (args[0] === 'disconnect') return ok;
     expect(invocation.target.selector).toEqual({ kind: 'serial', serial: '127.0.0.1:62001' });
     if (args.join(' ') === 'shell dumpsys meminfo com.android.settings') {
@@ -57,7 +63,10 @@ test('Limrun Android memory sampling reaches the allocated session ADB through d
     ) {
       return { ...ok, stdout: 'Status: ok\nActivity: com.android.settings/.Settings\n' };
     }
-    return respondToAndroidSettingsAdbCommand(args, '', '', {});
+    return respondToAndroidSettingsAdbCommand(args, '', '', {
+      ...(settingsStopped ? { dumpsysWindow: () => 'mCurrentFocus=null\n' } : {}),
+      pidof: () => (settingsStopped ? { exitCode: 1, stdout: '', stderr: '' } : undefined),
+    });
   });
   const registration = createLimrunRuntime(
     { apiKey: 'test-api-key' },
@@ -108,7 +117,14 @@ test('Limrun Android memory sampling reaches the allocated session ADB through d
       'meminfo',
       'com.android.settings',
     ]);
+    sessionExec.mockClear();
     assertRpcOk(await daemon.callCommand('close', [], scope, options));
+    expect(sessionExec.mock.calls.map(([invocation]) => invocation.command)).toContainEqual([
+      'shell',
+      'am',
+      'force-stop',
+      'com.android.settings',
+    ]);
   } finally {
     await daemon.close();
     await runtime.shutdown();

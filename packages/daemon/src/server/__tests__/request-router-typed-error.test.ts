@@ -192,8 +192,8 @@ test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfac
     }),
   );
 
-  // A targeted close (an explicit positional app target) is what makes the
-  // repair-armed platform close actually dispatch instead of no-op.
+  // A targeted close (an explicit positional app target) makes the repair-armed platform close
+  // dispatch; a session with no app dispatches none.
   const response = await handler(request('close', { positionals: ['com.example.app'] }));
 
   expect(response.ok).toBe(false);
@@ -227,10 +227,9 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
   sessionStore.publish('typed-error', session);
 
   try {
-    // Untargeted close: no positionals, so no platform close is dispatched
-    // (`shouldDispatchPlatformClose`) — isolates the script-save failure from
-    // any platform-close error, matching BLOCKER 2's own targeted-vs-untargeted
-    // distinction above.
+    // Untargeted close on a session with no app: no platform close is dispatched, which isolates
+    // the script-save failure from any platform-close error, matching BLOCKER 2's own
+    // targeted-vs-untargeted distinction above.
     const response = await handler(request('close'));
 
     expect(response.ok).toBe(false);

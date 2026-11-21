@@ -95,8 +95,8 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
 
-  // A targeted close (an explicit positional app target) is what makes
-  // `dispatchTargetedPlatformClose` actually dispatch instead of no-op.
+  // A targeted close (an explicit positional app target) makes the platform close dispatch; a
+  // session with no app dispatches none.
   const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
     reason: 'device_disconnected',
     hint: 'Reconnect the device and retry close.',
@@ -184,8 +184,8 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   // default path — the commit must refuse to clobber it, giving a
   // deterministic commit FAILURE after a platform close that genuinely
   // succeeds (the lifecycle seam's `beforeEach` default resolves). A
-  // targeted close (an explicit positional app target) is what makes
-  // `dispatchTargetedPlatformClose` actually dispatch instead of no-op.
+  // targeted close (an explicit positional app target) makes the
+  // platform close dispatch; a session with no app dispatches none.
   fs.writeFileSync(
     healedPath,
     `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
@@ -281,7 +281,7 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
     'agent-device-repair-transaction-close-identity-untargeted-',
   );
   sessionStore.retire(sessionStore.lookup(sessionName)!);
-  makeCompleteRepairSession(sessionStore, sessionName, root);
+  makeCompleteRepairSession(sessionStore, sessionName, root).appBundleId = undefined;
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE artifact already sits at the default path so the commit
   // deterministically fails and the session is retained for retry.
@@ -290,9 +290,8 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
     `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
   );
 
-  // First attempt: UNTARGETED close — `shouldDispatchPlatformClose` is false
-  // (no positional target, not `web`), so the platform close never dispatches
-  // at all; the commit then fails (no-clobber).
+  // First attempt: UNTARGETED close on a session with no app (not `web`), so the platform close
+  // never dispatches at all; the commit then fails (no-clobber).
   const first = await handleCloseCommand({
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
@@ -324,6 +323,39 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
   expect(mockLifecycleDispatch).toHaveBeenCalledTimes(1);
   expect(mockLifecycleDispatch.mock.calls[0]?.[2]).toEqual(['com.example.app']);
   expect(retry.ok).toBe(true);
+});
+
+test('an untargeted close dispatches the session app once, and a retry naming that app skips the repeat', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-close-identity-session-app-',
+  );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
+  makeCompleteRepairSession(sessionStore, sessionName, root);
+  fs.writeFileSync(
+    path.join(root, 'flow.healed.ad'),
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+  const closeRequest = (positionals: string[], flags: Record<string, unknown>) =>
+    handleCloseCommand({
+      host: createTestHostEnvironment(),
+      platformServices: daemonPlatformServicesFixture(),
+      req: { token: 't', session: sessionName, command: 'close', positionals, flags },
+      sessionName,
+      logPath,
+      sessionStore,
+      leaseRegistry,
+    });
+
+  const first = await closeRequest([], {});
+  expect(first.ok).toBe(false);
+  expect(mockLifecycleDispatch).toHaveBeenCalledTimes(1);
+  expect(mockLifecycleDispatch.mock.calls[0]?.[2]).toEqual(['com.example.app']);
+
+  const retry = await closeRequest(['com.example.app'], {
+    saveScript: path.join(root, 'flow.promoted.ad'),
+  });
+  expect(retry.ok).toBe(true);
+  expect(mockLifecycleDispatch).toHaveBeenCalledTimes(1);
 });
 
 test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the succeeded close never skips the platform close for the new target', async () => {
