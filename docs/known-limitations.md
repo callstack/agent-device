@@ -26,6 +26,21 @@ the device and does not depend on `simctl pbcopy`. A tvOS simulator has no paste
 `agent-device` can write from inside the device, so `clipboard write` on tvOS still uses
 `simctl pbcopy` and is subject to this problem.
 
+## iOS: system prompts that ask for typed text accept no automated input
+
+iOS shows some prompts outside the app under test: an Apple ID password field, a Screen Time passcode, a device passcode request. `fill` and `type` act inside the app under test, so they cannot enter text into these prompts, and no command enters text there. A prompt that only asks to continue or to cancel is answerable. A prompt that waits for typed text needs a person at the device.
+
+**Workarounds:**
+
+- **Avoid the prompt** with the `settings` channel: `settings permission grant <permission>` pre-grants a permission before the flow, and `settings faceid match` passes a biometric check without the passcode prompt. `settings` on iOS is simulator-only.
+- **Answer without typing** with the `alert` channel: `alert accept` and `alert dismiss` press a recognized button, and `alert get` reads the labels of a prompt with unrecognized wording.
+
+## iOS device: `alert` matches English labels only
+
+On an iOS simulator, the runner also recognizes the device's preferred-language wording of the alert labels it knows. A physical iOS device has no such translation step, and tvOS and visionOS devices are the same: `alert accept` and `alert dismiss` match the English labels only. When the device runs in another language, the prompt's buttons carry localized labels, so `alert` answers `ALERT_BUTTON_NOT_FOUND` and taps nothing.
+
+**Workaround:** read the labels with `alert get`, then capture the prompt with `snapshot -i` and `press @ref` on the visible button.
+
 ## Android: non-ASCII text on real devices needs `--test-ime`
 
 `adb shell input text` cannot type non-ASCII text (for example Chinese characters or emoji) on any Android system image. `agent-device` installs its own headless test IME (`android-ime-helper`) to type that text. The test IME also keeps the on-screen system keyboard out of snapshots.
@@ -75,3 +90,9 @@ HarmonyOS HDC exposes no public clipboard interface. `agent-device` can therefor
 A copy-then-paste check on HarmonyOS therefore fails silently. The long-press paste flow still runs: the tap on **Paste** lands, and the field receives whatever the device clipboard already holds. Because `agent-device` cannot set that content, the paste can insert text that an earlier manual copy left on the device. The flow reports success, and you see the mismatch only when you read the field back.
 
 **Workaround:** put the text into the field with `fill` or `type`. Both enter text through ArkUI `uitest` and need no clipboard. To verify the app's own copy or paste UX, operate the device by hand, then read the field back with `snapshot`.
+
+## HarmonyOS: Web and custom-drawn content can miss the accessibility tree
+
+`snapshot` on HarmonyOS reads the ArkUI accessibility tree through `uitest`. Content that publishes no accessibility nodes has no entries in that tree: a Web component's page, and custom-drawn surfaces such as a Canvas or a game view. When such content dominates the screen, the capture comes back sparse, and a sparse capture has no usable `@refs`.
+
+**Workaround:** capture the screen with `screenshot`, read the image, and tap by coordinates (`click 120 340`). After a navigation, run `snapshot -i` again before you use refs.
