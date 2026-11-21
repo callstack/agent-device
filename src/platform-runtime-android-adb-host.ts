@@ -118,6 +118,8 @@ bindAndroidAdbHost({
   coerceAdbResult: coerceExecResult,
   execFailureDetails,
   emitDiagnostic,
+  // libuv's hrtime reads CLOCK_MONOTONIC, mach_absolute_time or QueryPerformanceCounter.
+  monotonicNowMs: () => Number(process.hrtime.bigint() / 1_000n) / 1_000,
   imeRecoveryMarkers: {
     write: async (stateDir, serial) => {
       const { writeAndroidTestImeRecoveryMarker } =
@@ -133,6 +135,23 @@ bindAndroidAdbHost({
       const { readAndroidTestImeRecoveryMarkers } =
         await import('@agent-device/platform-android/mechanics');
       return await readAndroidTestImeRecoveryMarkers(stateDir);
+    },
+  },
+  imeFlushRecords: {
+    write: async (stateDir, serial, record) => {
+      const { writeAndroidTestImeFlushRecord } =
+        await import('@agent-device/platform-android/mechanics');
+      await writeAndroidTestImeFlushRecord(stateDir, serial, record);
+    },
+    clear: async (stateDir, serial) => {
+      const { clearAndroidTestImeFlushRecord } =
+        await import('@agent-device/platform-android/mechanics');
+      await clearAndroidTestImeFlushRecord(stateDir, serial);
+    },
+    read: async (stateDir, serial) => {
+      const { readAndroidTestImeFlushRecord } =
+        await import('@agent-device/platform-android/mechanics');
+      return await readAndroidTestImeFlushRecord(stateDir, serial);
     },
   },
   resolveHelperArtifact: async (options) => {

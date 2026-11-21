@@ -64,6 +64,7 @@ const shutdownLoaders = {
 test('operation host composes the shared lazy Apple-tool and toolchain capabilities', () => {
   const host = createPlatformRuntimeHost({
     host: createLiveTestHostEnvironment(),
+    stateDir: '/tmp/state',
     sessionsDir: '/tmp/sessions',
     resolveSessionArtifacts: () => ({
       outputPath: '/tmp/sessions/one/app.log',
@@ -88,6 +89,7 @@ test.skipIf(process.platform === 'win32')(
     chmodSync(join(binDir, 'probe-tool'), 0o755);
     const host = createPlatformRuntimeHost({
       host: { env: { PATH: binDir }, cwd: binDir },
+      stateDir: '/tmp/state',
       sessionsDir: '/tmp/sessions',
       resolveSessionArtifacts: () => ({
         outputPath: '/tmp/sessions/one/app.log',

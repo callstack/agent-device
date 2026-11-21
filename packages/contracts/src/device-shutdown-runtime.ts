@@ -21,6 +21,8 @@ export type DeviceShutdownCloseCapability = Readonly<{
 export type DeviceShutdownRuntimeDependencies = Readonly<{
   appleTools: AppleToolHost;
   commands: HostCommandRunner;
+  /** The daemon state dir; Android reads durable test-IME flush records from it before a kill. */
+  stateDir: string;
 }>;
 
 export type DeviceShutdownFamilyRuntime = Readonly<{
@@ -33,7 +35,7 @@ export type DeviceShutdownRuntimeLoaders = Readonly<{
     dependencies: Pick<DeviceShutdownRuntimeDependencies, 'appleTools'>,
   ) => Promise<DeviceShutdownFamilyRuntime>;
   android: (
-    dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands'>,
+    dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands' | 'stateDir'>,
   ) => Promise<DeviceShutdownFamilyRuntime>;
 }>;
 

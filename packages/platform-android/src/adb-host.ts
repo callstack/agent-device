@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AndroidHelperInstallDecision, AndroidImeHelperArtifact } from './helper-artifacts.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 import type {
   AndroidAdbInvocation,
   AndroidAdbExecutor,
@@ -75,11 +76,22 @@ export type AndroidAdbHost = Readonly<{
     extra?: Record<string, unknown>,
   ): Record<string, unknown>;
   emitDiagnostic(event: AndroidAdbDiagnosticEvent): void;
+  /**
+   * Host monotonic time in milliseconds, shared by every process on one host boot and moved by
+   * no wall-clock step. Durable test-IME flush deadlines compare across daemon restarts on it.
+   */
+  monotonicNowMs(): number;
   /** Durable per-state-dir test-IME recovery markers (host-side files). */
   imeRecoveryMarkers: Readonly<{
     write(stateDir: string, serial: string): Promise<boolean>;
     clear(stateDir: string, serial: string): Promise<void>;
     read(stateDir: string): Promise<string[]>;
+  }>;
+  /** Durable per-state-dir test-IME flush deadlines (host-side files). */
+  imeFlushRecords: Readonly<{
+    write(stateDir: string, serial: string, record: AndroidTestImeFlushRecord): Promise<void>;
+    clear(stateDir: string, serial: string): Promise<void>;
+    read(stateDir: string, serial: string): Promise<AndroidTestImeFlushRecord | undefined>;
   }>;
   /** Resolves an npm-bundled helper artifact from the packaged install tree. */
   resolveHelperArtifact<Manifest extends { assetName: string }>(options: {

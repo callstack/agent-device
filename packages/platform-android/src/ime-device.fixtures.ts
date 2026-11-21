@@ -1,15 +1,38 @@
 import type { AndroidAdbExecutor, AndroidAdbExecutorResult } from './adb-transport.ts';
-import { testImeRestoreMarks } from './ime-state.ts';
+import { flushRecordKey, type AndroidAdbHostStub } from './adb-host.fixtures.ts';
+import { registerTestImeRestore } from './ime-state.ts';
 
 // An in-memory device speaking the exact shell surfaces the IME lifecycle touches: the
 // `settings secure` namespace and `ime enable/disable/set`. Shared by the colocated IME module tests.
 
-// Places a restore mark at an exact age on the register of flush windows. Default provenance
-// is confirmed: a registered window normally comes from a confirmed restore, and wait-
-// derivation tests read only atPerfMs; tests pinning marker-clear eligibility pass provenance
-// explicitly. Lives here so a mark-SHAPE change lands in one edit.
-export function seedRestoreMark(serial: string, ageMs: number, confirmed = true): void {
-  testImeRestoreMarks.set(serial, { atPerfMs: performance.now() - ageMs, confirmed });
+// Registers a restore through the production registrar, then ages its flush record by ageMs.
+// A `writer` other than this process stands in for a daemon that has since exited.
+// Default provenance is confirmed: a registered window normally comes from a confirmed
+// restore, and wait-derivation tests read only the deadline; tests pinning marker-clear
+// eligibility pass provenance explicitly. Lives here so a record-SHAPE change lands in one edit.
+export async function seedRestoreRecord(
+  host: AndroidAdbHostStub,
+  serial: string,
+  ageMs: number,
+  options: Readonly<{ confirmed?: boolean; stateDir?: string; writer?: string }> = {},
+): Promise<void> {
+  const stateDir = options.stateDir ?? '/state';
+  await registerTestImeRestore(stateDir, serial, options.confirmed ?? true);
+  const key = flushRecordKey(stateDir, serial);
+  const record = host.flushRecordStore.get(key);
+  if (!record) throw new Error('registrar wrote no flush record');
+  host.flushRecordStore.set(key, {
+    ...record,
+    deadlineMs: record.deadlineMs - ageMs,
+    writer: options.writer ?? record.writer,
+  });
+}
+
+export function flushRecordSerials(host: AndroidAdbHostStub, stateDir = '/state'): string[] {
+  const prefix = flushRecordKey(stateDir, '');
+  return [...host.flushRecordStore.keys()]
+    .filter((key) => key.startsWith(prefix))
+    .map((key) => key.slice(prefix.length));
 }
 
 export type FakeImeDeviceState = {

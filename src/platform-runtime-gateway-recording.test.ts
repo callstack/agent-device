@@ -21,6 +21,7 @@ test.each(unsupportedRecordingDevices)(
     const sessionsDir = mkdtempForTestSync('platform-runtime-recording-');
     const gateway = createPlatformRuntimeGateway({
       host: createLiveTestHostEnvironment(),
+      stateDir: sessionsDir,
       sessionsDir,
       resolveSessionArtifacts: (sessionId) => ({
         outputPath: path.join(sessionsDir, sessionId, 'app.log'),

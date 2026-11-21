@@ -171,8 +171,11 @@ export {
   setAndroidTestImeActiveForTests,
 } from './ime-lifecycle.ts';
 export {
+  clearAndroidTestImeFlushRecord,
   clearAndroidTestImeRecoveryMarker,
+  readAndroidTestImeFlushRecord,
   readAndroidTestImeRecoveryMarkers,
+  writeAndroidTestImeFlushRecord,
   writeAndroidTestImeRecoveryMarker,
 } from './ime-recovery-marker.ts';
 export {

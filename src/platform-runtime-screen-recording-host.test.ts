@@ -53,6 +53,7 @@ async function harness(device: DeviceInfo, launch = () => {}) {
   };
   const host = createPlatformRuntimeHost({
     host: { ...createLiveTestHostEnvironment(), env: { AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCache } },
+    stateDir: root,
     sessionsDir: root,
     resolveSessionArtifacts: () => {
       throw new Error('unused');
