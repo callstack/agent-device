@@ -236,6 +236,89 @@ test('auth login exchanges an approved access token that already expired for a l
   }
 });
 
+/**
+ * The approved session is saved before its already-expired access token is exchanged, so a refresh
+ * that fails transiently cannot take the login back: the command prints the session, and the next
+ * command refreshes it.
+ */
+test('auth login succeeds when the exchange of its expired approval token gets 503', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-auth-login-503-');
+  const requestPaths: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      requestPaths.push(url.pathname);
+      if (url.pathname === '/api/control-plane/device-auth/start') {
+        return jsonResponse({
+          deviceCode: 'device-code-1',
+          userCode: 'ABCD-1234',
+          verificationUri: 'https://cloud.example.test/login',
+          interval: 1,
+        });
+      }
+      if (url.pathname === '/api/control-plane/device-auth/poll') {
+        return jsonResponse({
+          status: 'approved',
+          accessToken: 'access-token-expired',
+          // Past on any clock this run happens on, so the login has to exchange this token.
+          expiresAt: '2001-01-01T00:00:00.000Z',
+          cliSession: {
+            id: 'cli-9',
+            refreshCredential: 'refresh-credential-9',
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          },
+        });
+      }
+      return new Response('<html>unavailable</html>', { status: 503 });
+    }),
+  );
+
+  const previousStdinIsTTY = process.stdin.isTTY;
+  const previousStdoutIsTTY = process.stdout.isTTY;
+  (process.stdin as { isTTY?: boolean }).isTTY = true;
+  (process.stdout as { isTTY?: boolean }).isTTY = true;
+  try {
+    const result = await runCliCapture(['auth', 'login', '--state-dir', stateDir, '--json'], {
+      env: {
+        AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example.test',
+        SSH_CONNECTION: '10.0.0.1 50000 10.0.0.2 22',
+        CI: undefined,
+        GITHUB_ACTIONS: undefined,
+        BUILDKITE: undefined,
+      },
+    });
+
+    assert.equal(result.code, null);
+    const data = JSON.parse(result.stdout).data as {
+      authenticated?: boolean;
+      sessionId?: string;
+      expiresAt?: string;
+      agentTokenExpiresAt?: string;
+    };
+    assert.equal(data.authenticated, true);
+    assert.equal(data.sessionId, 'cli-9');
+    assert.equal(data.expiresAt, '2099-01-01T00:00:00.000Z');
+    // The exchange never answered, so no token expiry is reported.
+    assert.equal(data.agentTokenExpiresAt, undefined);
+    assert.match(result.stderr, /could not be exchanged for a live access token/);
+    assert.deepEqual(requestPaths, [
+      '/api/control-plane/device-auth/start',
+      '/api/control-plane/device-auth/poll',
+      '/api/control-plane/cli-session/refresh',
+    ]);
+    // The session the login saved is what `auth status` will show.
+    const stored = JSON.parse(
+      fs.readFileSync(path.join(stateDir, 'auth', 'cli-session.json'), 'utf8'),
+    ) as { id?: string; refreshCredential?: string };
+    assert.equal(stored.id, 'cli-9');
+    assert.equal(stored.refreshCredential, 'refresh-credential-9');
+  } finally {
+    (process.stdin as { isTTY?: boolean }).isTTY = previousStdinIsTTY;
+    (process.stdout as { isTTY?: boolean }).isTTY = previousStdoutIsTTY;
+  }
+});
+
 test('auth logout removes a stored session and reports it', async () => {
   const stateDir = mkdtempForTestSync('agent-device-auth-logout-removed-');
   writeStoredCliSession(stateDir);

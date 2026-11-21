@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { acquireProcessLock, publishFileSync } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readCloudJsonResponse } from './cloud-response.ts';
@@ -17,12 +17,20 @@ const HTTP_TIMEOUT_MS = 15_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 // A holder keeps the session lock for one file operation, or for one token exchange, which spends
-// at most two request timeouts. A dead holder is reclaimed, so only a stuck live process makes a
-// contender wait this long.
+// at most two request timeouts; an approved login holds it across its save and that exchange. A
+// dead holder is reclaimed, so only a stuck live process makes a contender wait this long.
 const CLI_SESSION_LOCK_TIMEOUT_MS = 60_000;
 // A response whose access token is already expired is asked again, and no further: a cloud that
 // keeps answering with an expired token must not keep a command refreshing.
 const MAX_CLI_SESSION_TOKEN_EXCHANGES = 2;
+
+/** Every `details.reason` the CLI session store publishes. */
+const CLI_SESSION_REASONS = {
+  // The stored session was revoked, or the refresh answered with neither a token nor a rotation.
+  revoked: { reason: 'cli_session_revoked', commands: ['connect'] },
+  // The directory holding the session file cannot be written, so its lock cannot be taken.
+  storeUnwritable: { reason: 'cli_session_store_unwritable', commands: ['connect'] },
+} as const satisfies ReasonTable<'auth'>;
 
 export type CliSessionRecord = {
   version: 1;
@@ -151,6 +159,8 @@ export async function resolveRemoteAuth(options: {
     flags: options.flags,
     env,
     io: options.io,
+    // The command sends this token itself, so a failed exchange is the command's failure.
+    requiresLiveToken: true,
   });
   return {
     flags: { ...options.flags, daemonAuthToken: login.accessToken },
@@ -203,6 +213,8 @@ export async function resolveCloudAccessForConnect(options: {
     env,
     io: options.io,
     commandLabel: 'agent-device connect',
+    // `connect` sends this token itself, so a failed exchange is the command's failure.
+    requiresLiveToken: true,
   });
   return {
     accessToken: login.accessToken,
@@ -216,6 +228,9 @@ export async function loginWithDeviceAuth(options: {
   env: EnvMap;
   io?: AuthIo;
   commandLabel?: string;
+  // Whether the caller spends the returned access token itself. `connect` does, so a token exchange
+  // that fails is its failure. `auth login` only prints the session, so it keeps the approved pair.
+  requiresLiveToken?: boolean;
 }): Promise<{
   accessToken: string;
   expiresAt?: string;
@@ -272,6 +287,8 @@ export async function loginWithDeviceAuth(options: {
     throw new AppError('UNAUTHORIZED', 'Device authorization did not return CLI credentials.');
   }
   const nowIso = new Date(options.io?.now?.() ?? Date.now()).toISOString();
+  const approvedToken = approved.accessToken;
+  const approvedExpiresAt = approved.expiresAt;
   const session: CliSessionRecord = {
     version: 1,
     id: approved.cliSession?.id ?? `cli-${Date.now().toString(36)}`,
@@ -283,47 +300,43 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
-  await withCliSessionLock(
+  return await withCliSessionLock(
     options.stateDir,
-    () => writeCliSession({ stateDir: options.stateDir, session }),
+    async (): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> => {
+      writeCliSession({ stateDir: options.stateDir, session });
+      if (!isExpired(approvedExpiresAt, options.io?.now))
+        return {
+          accessToken: approvedToken,
+          ...(hasToken(approvedExpiresAt) ? { expiresAt: approvedExpiresAt } : {}),
+          session,
+        };
+      // The approval's access token already expired: its expiry says nothing about the login's
+      // answer, so the transient-failure path below reports the approved pair without one.
+      try {
+        // The exchange runs on the record just saved, under the same acquisition that saved it:
+        // another login cannot write between the two and have its credential exchanged here.
+        return await exchangeCliSessionAccess({
+          stateDir: options.stateDir,
+          session,
+          flags: options.flags,
+          env,
+          io: options.io,
+        });
+      } catch (error) {
+        // A revoked session is refused even to an explicit login. Any other failure is transient,
+        // and the approved session is already saved: a caller that spends the token itself needs
+        // the live one and propagates, while `auth login` only prints the session and succeeds.
+        if (options.requiresLiveToken || isCliSessionRevoked(error)) throw error;
+        warnBestEffort(
+          options.io,
+          'Warning: the saved CLI session could not be exchanged for a live access token. ' +
+            'The next command will refresh it.\n',
+        );
+        return { accessToken: approvedToken, session };
+      }
+    },
     { io: options.io, keepWaiting: true },
   );
-  const exchanged = await refreshExpiredLoginToken({
-    stateDir: options.stateDir,
-    approved,
-    flags: options.flags,
-    env,
-    io: options.io,
-  });
-  if (!exchanged)
-    return { accessToken: approved.accessToken, expiresAt: approved.expiresAt, session };
-  // A token and the expiry the cloud gave with it are one answer: an expiry from the approved pair
-  // would report the new token as already expired.
-  return {
-    accessToken: exchanged.accessToken,
-    ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
-    // What the exchange ran on and left in the file, which may be another process's login.
-    session: readCliSession({ stateDir: options.stateDir }) ?? session,
-  };
-}
-
-/**
- * Exchanges the access token an approved login returned when it is already expired: a wait for a
- * stuck sibling's session lock can outlive the token the cloud approved with. The exchange runs on
- * the session that is saved now, which may be another process's login, and reports its own refusal
- * the way a command's refresh does — including a lock timeout, which leaves the saved session in
- * place for the next command to exchange.
- */
-async function refreshExpiredLoginToken(options: {
-  stateDir: string;
-  approved: DeviceAuthPollResponse;
-  flags: CliFlags;
-  env: EnvMap;
-  io?: AuthIo;
-}): Promise<{ accessToken: string; expiresAt?: string } | null> {
-  const { approved, env, flags, io, stateDir } = options;
-  if (!isExpired(approved.expiresAt, io?.now)) return null;
-  return await resolveCliSessionAccess({ stateDir, flags, env, io });
 }
 
 export function readCliSession(options: { stateDir: string }): CliSessionRecord | null {
@@ -381,9 +394,35 @@ async function withCliSessionLock<Result>(
   task: () => Result | Promise<Result>,
   options: { io?: AuthIo; keepWaiting?: boolean } = {},
 ): Promise<Result> {
-  const { io } = options;
   const sessionPath = resolveCliSessionPath(stateDir);
-  fs.mkdirSync(path.dirname(sessionPath), { recursive: true, mode: 0o700 });
+  const release = await acquireCliSessionLock(sessionPath, options);
+  let result: Result;
+  try {
+    result = await task();
+  } catch (error) {
+    await release().catch(() => undefined);
+    throw error;
+  }
+  await release().catch(() => {
+    warnBestEffort(
+      options.io,
+      'Warning: the CLI session file lock could not be released cleanly.\n',
+    );
+  });
+  return result;
+}
+
+/**
+ * Takes the session file lock, waiting as `keepWaiting` asks. The lock state is written beside the
+ * session file, so the auth directory must be writable: a refusal to write there is reported as a
+ * storage problem that names the directory, not as a filesystem error.
+ */
+async function acquireCliSessionLock(
+  sessionPath: string,
+  options: { io?: AuthIo; keepWaiting?: boolean },
+): Promise<Awaited<ReturnType<typeof acquireProcessLock>>> {
+  const { io } = options;
+  const authDir = path.dirname(sessionPath);
   const owner = readCurrentOwnerIdentity();
   const acquire = () =>
     acquireProcessLock({
@@ -395,8 +434,11 @@ async function withCliSessionLock<Result>(
   let release: Awaited<ReturnType<typeof acquire>> | undefined;
   while (!release) {
     try {
+      fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
       release = await acquire();
     } catch (error) {
+      const fault = unwritableSessionStore(error, authDir);
+      if (fault) throw fault;
       if (!options.keepWaiting || !isProcessLockTimeout(error)) throw error;
       warnBestEffort(
         io,
@@ -404,21 +446,36 @@ async function withCliSessionLock<Result>(
       );
     }
   }
-  let result: Result;
-  try {
-    result = await task();
-  } catch (error) {
-    await release().catch(() => undefined);
-    throw error;
-  }
-  await release().catch(() => {
-    warnBestEffort(io, 'Warning: the CLI session file lock could not be released cleanly.\n');
-  });
-  return result;
+  return release;
 }
 
 function isProcessLockTimeout(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === 'process_lock_timeout';
+}
+
+/**
+ * The typed refusal for a filesystem fault that stops the store from writing, or `undefined` for
+ * every other error. The hint names the directory to repair, because that is the one step that ends
+ * it.
+ */
+function unwritableSessionStore(error: unknown, authDir: string): AppError | undefined {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : undefined;
+  if (code !== 'EACCES' && code !== 'EPERM' && code !== 'EROFS') return undefined;
+  const fix = `Run \`chmod 700 ${authDir}\`, or point AGENT_DEVICE_STATE_DIR at a private directory you own.`;
+  return new AppError(
+    'COMMAND_FAILED',
+    `The CLI session store ${authDir} cannot be written.`,
+    {
+      reason: CLI_SESSION_REASONS.storeUnwritable.reason,
+      authDir,
+      fix,
+      hint: fix,
+    },
+    error instanceof Error ? error : undefined,
+  );
 }
 
 export function resolveCliSessionPath(stateDir: string): string {
@@ -464,39 +521,58 @@ async function resolveCliSessionAccess(options: {
   // lock and writes nothing. The credential is read again once the lock is held.
   const stored = readCliSession({ stateDir });
   if (!stored || isExpired(stored.expiresAt, io?.now)) return null;
-  return await withCliSessionLock(
+  // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
+  // typed reason, and the next command asks again.
+  const exchanged = await withCliSessionLock(
     stateDir,
     async () => {
       const session = readCliSession({ stateDir });
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
-      const cloudBaseUrl = resolveCloudBaseUrl(env, session.cloudBaseUrl);
-      // The file is what a store compares against: the last record this command saw there, and
-      // `null` once a write would land on a session it did not write. `asked` is what the cloud
-      // accepts for this session now, which stays ahead of the file when a save failed.
-      const file = { holds: session as CliSessionRecord | null };
-      let asked = session;
-      for (let exchange = 1; ; exchange += 1) {
-        const refreshed = await refreshAgentToken({ session: asked, flags, env, io });
-        const rotation = readCredentialRotation(refreshed, asked.refreshCredential);
-        if (rotation) {
-          asked = storeRotatedCredential({ stateDir, asked, file, rotation, io });
-        }
-        if (
-          !isExpired(refreshed.expiresAt, io?.now) ||
-          exchange >= MAX_CLI_SESSION_TOKEN_EXCHANGES
-        ) {
-          return {
-            accessToken: refreshed.accessToken,
-            ...(hasToken(refreshed.expiresAt) ? { expiresAt: refreshed.expiresAt } : {}),
-            cloudBaseUrl,
-          };
-        }
-      }
+      return await exchangeCliSessionAccess({ stateDir, session, flags, env, io });
     },
-    // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
-    // typed reason, and the next command asks again.
     { io },
   );
+  if (!exchanged) return null;
+  return {
+    accessToken: exchanged.accessToken,
+    ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
+    cloudBaseUrl: resolveCloudBaseUrl(env, exchanged.session.cloudBaseUrl),
+  };
+}
+
+/**
+ * Exchanges a session's stored credential for an access token and answers with the token and the
+ * session record the exchange leaves behind: when the cloud rotates the credential, the record
+ * stored here is the one returned. The session file lock is held here, so the caller's write of the
+ * record it exchanges cannot be separated from this exchange.
+ */
+async function exchangeCliSessionAccess(options: {
+  stateDir: string;
+  session: CliSessionRecord;
+  flags: CliFlags;
+  env: EnvMap;
+  io?: AuthIo;
+}): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> {
+  const { env, flags, io, stateDir } = options;
+  // The file is what a store compares against: the last record this command saw there, and
+  // `null` once a write would land on a session it did not write. `asked` is what the cloud
+  // accepts for this session now, which stays ahead of the file when a save failed.
+  const file = { holds: options.session as CliSessionRecord | null };
+  let asked = options.session;
+  for (let exchange = 1; ; exchange += 1) {
+    const refreshed = await refreshAgentToken({ session: asked, flags, env, io });
+    const rotation = readCredentialRotation(refreshed, asked.refreshCredential);
+    if (rotation) {
+      asked = storeRotatedCredential({ stateDir, asked, file, rotation, io });
+    }
+    if (!isExpired(refreshed.expiresAt, io?.now) || exchange >= MAX_CLI_SESSION_TOKEN_EXCHANGES) {
+      return {
+        accessToken: refreshed.accessToken,
+        ...(hasToken(refreshed.expiresAt) ? { expiresAt: refreshed.expiresAt } : {}),
+        session: asked,
+      };
+    }
+  }
 }
 
 /**
@@ -592,12 +668,12 @@ async function refreshAgentToken(options: {
     fetchImpl: options.io?.fetch,
   });
   // Revocation is answered before the tokens: a response that reports it is refused even when it
-  // also carries credentials.
+  // also carries credentials. The refusal names only its own reason: `status` and `error` are
+  // response-supplied text and can echo a credential back into the command's output.
   if (response.status === 'revoked' || response.error === 'revoked') {
     throw new AppError('UNAUTHORIZED', 'Stored cloud CLI session was revoked.', {
       hint: 'Run agent-device auth login again, or set AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
-      status: response.status,
-      error: response.error,
+      reason: CLI_SESSION_REASONS.revoked.reason,
     });
   }
   if (hasToken(response.accessToken)) {
@@ -614,9 +690,13 @@ async function refreshAgentToken(options: {
   }
   throw new AppError('UNAUTHORIZED', 'Failed to refresh CLI session.', {
     hint: 'Run agent-device auth login again, or set AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
-    status: response.status,
-    error: response.error,
+    reason: CLI_SESSION_REASONS.revoked.reason,
   });
+}
+
+/** Whether a failure is this module's refusal of a session the cloud will not refresh again. */
+function isCliSessionRevoked(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === CLI_SESSION_REASONS.revoked.reason;
 }
 
 async function pollDeviceAuth(options: {

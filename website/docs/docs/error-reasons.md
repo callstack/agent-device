@@ -11,6 +11,20 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ## Commands
 
+### `auth`
+
+| Reason | Meaning |
+| --- | --- |
+| `cli_session_revoked` | The stored session was revoked, or the refresh answered with neither a token nor a rotation. |
+| `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
+
+### `connect`
+
+| Reason | Meaning |
+| --- | --- |
+| `cli_session_revoked` | The stored session was revoked, or the refresh answered with neither a token nor a rotation. |
+| `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
+
 ### `fold`
 
 | Reason | Meaning |

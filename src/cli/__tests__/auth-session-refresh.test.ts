@@ -11,7 +11,7 @@ import {
 import * as hostKitFile from '@agent-device/host-kit/file';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const baseFlags = {
@@ -324,47 +324,162 @@ test('a store of the rotated credential that fails keeps the access token and wa
   }
 });
 
-test('a login that must exchange an expired approval token reports a lock timeout with the session saved', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-auth-login-exchange-lock-');
-  const timeout = new AppError('COMMAND_FAILED', 'Timed out waiting for cloud CLI session file', {
-    reason: 'process_lock_timeout',
-  });
-  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
-  try {
-    // The save of the approved login is given the lock; the exchange that follows is not.
-    acquire.mockResolvedValueOnce(async () => {});
-    acquire.mockRejectedValueOnce(timeout);
-    await assert.rejects(
-      async () =>
-        await loginWithDeviceAuth({
+/**
+ * An approved login has its session saved before the token exchange runs, so an exchange that fails
+ * transiently is not the login's failure: `auth login` printed a session, not a token. A caller that
+ * sends the token itself cannot recover, so it reports the same failure.
+ */
+test('an expired approval token whose exchange fails transiently keeps the login and fails the caller that spends the token', async () => {
+  const run = async (requiresLiveToken: boolean) => {
+    const tempRoot = mkdtempForTestSync('agent-device-auth-login-exchange-503-');
+    const warnings: string[] = [];
+    const requestPaths: string[] = [];
+    const io = {
+      now: () => Date.parse('2026-02-01T01:00:00.000Z'),
+      stdinIsTTY: true as const,
+      stdoutIsTTY: true as const,
+      stderr: {
+        write: (chunk: string) => {
+          warnings.push(chunk);
+          return true;
+        },
+      },
+      openBrowser: async () => {},
+      fetch: async (url: URL | RequestInfo) => {
+        const href = String(url);
+        requestPaths.push(new URL(href).pathname);
+        if (href.endsWith('/device-auth/start')) {
+          return jsonResponse({
+            deviceCode: 'device-secret',
+            userCode: 'ABCD-EFGH',
+            verificationUri: 'https://cloud.example/authorize',
+            interval: 1,
+          });
+        }
+        if (href.endsWith('/device-auth/poll')) {
+          return jsonResponse({
+            status: 'approved',
+            accessToken: 'adc_agent_expired',
+            // Past on the pinned clock: the login has to exchange this token.
+            expiresAt: '2026-02-01T00:30:00.000Z',
+            cliSession: { id: 'session-503', refreshCredential: 'adc_refresh_503' },
+          });
+        }
+        return new Response('<html>private-body-secret</html>', { status: 503 });
+      },
+    };
+    try {
+      const outcome = await (async () => {
+        if (!requiresLiveToken) {
+          const login = await loginWithDeviceAuth({
+            stateDir: tempRoot,
+            flags: baseFlags,
+            env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+            io,
+          });
+          return { accessToken: login.accessToken, expiresAt: login.expiresAt };
+        }
+        const resolved = await resolveRemoteAuth({
+          command: 'connect',
+          flags: refreshFlags,
           stateDir: tempRoot,
-          flags: baseFlags,
+          allowInteractiveLogin: true,
           env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
-          io: {
-            now: () => Date.parse('2026-02-01T01:00:00.000Z'),
-            stdinIsTTY: true,
-            stdoutIsTTY: true,
-            openBrowser: async () => {},
-            fetch: async (url) =>
-              String(url).endsWith('/device-auth/start')
-                ? jsonResponse({
-                    deviceCode: 'device-secret',
-                    userCode: 'ABCD-EFGH',
-                    verificationUri: 'https://cloud.example/authorize',
-                    interval: 1,
-                  })
-                : jsonResponse({
-                    status: 'approved',
-                    accessToken: 'adc_agent_expired',
-                    expiresAt: '2026-02-01T00:30:00.000Z',
-                    cliSession: { id: 'session-late', refreshCredential: 'adc_refresh_late' },
-                  }),
-          },
-        }),
-      (error: unknown) => normalizeError(error).details?.reason === 'process_lock_timeout',
-    );
-    // The approval is not lost: the session is on disk for the next command to exchange.
-    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_late');
+          io,
+        });
+        return { accessToken: resolved.flags.daemonAuthToken, expiresAt: undefined };
+      })();
+      return {
+        outcome,
+        warnings,
+        requestPaths,
+        stored: readCliSession({ stateDir: tempRoot }),
+      };
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  };
+
+  // `auth login` printed a session: it reports success, without the expiry of a token the cloud
+  // already said was expired, and the saved session is there for the next command.
+  const login = await run(false);
+  assert.equal(login.outcome.accessToken, 'adc_agent_expired');
+  assert.equal(login.outcome.expiresAt, undefined);
+  assert.equal(login.stored?.id, 'session-503');
+  assert.match(login.warnings.join(''), /could not be exchanged for a live access token/);
+  assert.deepEqual(login.requestPaths, [
+    '/api/control-plane/device-auth/start',
+    '/api/control-plane/device-auth/poll',
+    '/api/control-plane/cli-session/refresh',
+  ]);
+
+  // `connect` sends the token it is handed, so the same 503 fails it.
+  await assert.rejects(
+    async () => await run(true),
+    (error: unknown) => normalizeError(error).details?.status === 503,
+  );
+});
+
+/**
+ * The login's save and the exchange of an expired approval token share one acquisition of the
+ * session lock, so a sibling login cannot write its own session between them and have its
+ * credential exchanged here.
+ */
+test('a login that exchanges an expired approval token does it under the acquisition that saved the session', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-login-one-lock-');
+  const realAcquire = hostKitFile.acquireProcessLock;
+  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
+  const events: string[] = [];
+  const sent: unknown[] = [];
+  try {
+    acquire.mockImplementation((async (params) => {
+      const release = await realAcquire(params);
+      events.push('acquire');
+      return async () => {
+        events.push('release');
+        await release();
+      };
+    }) as typeof acquire);
+    const login = await loginWithDeviceAuth({
+      stateDir: tempRoot,
+      flags: baseFlags,
+      env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+      io: {
+        now: () => Date.parse('2026-02-01T01:00:00.000Z'),
+        stdinIsTTY: true,
+        stdoutIsTTY: true,
+        openBrowser: async () => {},
+        fetch: async (url, init) => {
+          const href = String(url);
+          if (href.endsWith('/device-auth/start')) {
+            return jsonResponse({
+              deviceCode: 'device-secret',
+              userCode: 'ABCD-EFGH',
+              verificationUri: 'https://cloud.example/authorize',
+              interval: 1,
+            });
+          }
+          if (href.endsWith('/device-auth/poll')) {
+            return jsonResponse({
+              status: 'approved',
+              accessToken: 'adc_agent_expired',
+              expiresAt: '2026-02-01T00:30:00.000Z',
+              cliSession: { id: 'session-one-lock', refreshCredential: 'adc_refresh_one' },
+            });
+          }
+          events.push('refresh');
+          sent.push(JSON.parse(String(init?.body)).refreshCredential);
+          return jsonResponse({
+            accessToken: 'adc_agent_live',
+            expiresAt: '2026-02-01T02:00:00.000Z',
+          });
+        },
+      },
+    });
+
+    assert.equal(login.accessToken, 'adc_agent_live');
+    assert.deepEqual(sent, ['adc_refresh_one']);
+    assert.deepEqual(events, ['acquire', 'refresh', 'release']);
   } finally {
     acquire.mockRestore();
     fs.rmSync(tempRoot, { recursive: true, force: true });
