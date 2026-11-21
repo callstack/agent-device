@@ -1,16 +1,27 @@
 import type { PlatformHost } from 'agent-device/plugins';
 import { runCmd, type ExecOptions } from '@agent-device/host-kit/command';
 import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
+import { hostTemporaryDirectory } from '@agent-device/host-kit/host-file';
 import {
+  expandProcessTree,
+  hostNodeExecutablePath,
+  hostNodeVersion,
+  hostPlatform,
+  hostProcessId,
+  isProcessAlive,
+  processStartTimesDiffer,
   readHostProcessIdentityObservationsAsync,
   readProcessExecutablePaths,
   readProcessIdentities,
   type HostProcessIdentityFacts,
-  type HostProcessIdentityObservation,
   type HostProcessInfo,
   type OwnedProcessRecordStore,
   type OwnedProcessReapSummary,
 } from '@agent-device/host-kit/process';
+import type {
+  OwnedProcessRecord,
+  RecordedProcessLiveness,
+} from '@agent-device/contracts/platform-runtime-host';
 import { createWebToolbox, type WebToolbox } from './toolbox.ts';
 
 /** One command the plugin asked its host to run, plus what the host was told about it. */
@@ -28,8 +39,8 @@ export type WebHostStubCommand = Readonly<{
 export type WebHostStubProcessRead = Readonly<
   | { kind: 'table'; pids: [] }
   | { kind: 'identities'; pids: readonly number[] }
-  | { kind: 'observations'; pids: readonly number[] }
   | { kind: 'executable-paths'; pids: readonly number[] }
+  | { kind: 'liveness'; pids: readonly number[] }
   | {
       kind: 'reap';
       pids: [];
@@ -58,14 +69,16 @@ export type WebHostStubProcesses = Readonly<{
   ) =>
     | Promise<ReadonlyMap<number, HostProcessIdentityFacts>>
     | ReadonlyMap<number, HostProcessIdentityFacts>;
-  observations?: (
-    pids: readonly number[],
-  ) =>
-    | Promise<ReadonlyMap<number, HostProcessIdentityObservation>>
-    | ReadonlyMap<number, HostProcessIdentityObservation>;
   executablePaths?: (
     pids: readonly number[],
   ) => Promise<ReadonlyMap<number, string>> | ReadonlyMap<number, string>;
+  /**
+   * The host's judgement of the records the plugin asked about. Absent, the stub answers the way a
+   * host that could read nothing does: every record stays unknown evidence.
+   */
+  liveness?: (
+    records: readonly OwnedProcessRecord[],
+  ) => Promise<readonly RecordedProcessLiveness[]> | readonly RecordedProcessLiveness[];
   reap?: OwnedProcessReapSummary;
 }>;
 
@@ -97,7 +110,7 @@ export function createWebHostStub(
     stateDir?: string;
     /** Answers one process-table read; the plugin reads the table to derive its fleet record. */
     processes?: HostProcessInfo[];
-    /** Answers the identity, observation, executable-path and reap calls; defaults to nothing. */
+    /** Answers the identity, liveness, executable-path and reap calls; defaults to nothing. */
     readProcesses?: (reads: WebHostStubProcessReads) => WebHostStubProcesses;
     ownedProcessRecords?: PlatformHost['ownedProcessRecords'];
     openWebSessionNames?: () => readonly string[];
@@ -123,15 +136,19 @@ export function createWebHostStub(
       processReads.push({ kind: 'identities', pids: named });
       return answered.identities?.(named) ?? new Map();
     },
-    readIdentityObservations: async (pids) => {
-      const named = [...pids];
-      processReads.push({ kind: 'observations', pids: named });
-      return answered.observations?.(named) ?? new Map();
-    },
     readExecutablePaths: async (pids) => {
       const named = [...pids];
       processReads.push({ kind: 'executable-paths', pids: named });
       return answered.executablePaths?.(named) ?? new Map();
+    },
+    // The stub expands with the host kit's own rule, so the scan is answered the way the host answers
+    // it, while the plugin still has to ask rather than run the expansion of its own bundled copy.
+    expandTree: (rootPids, processes) =>
+      expandProcessTree([...rootPids], [...processes]).map((processInfo) => ({ ...processInfo })),
+    judgeRecordedLiveness: async (records) => {
+      const named = [...records];
+      processReads.push({ kind: 'liveness', pids: named.map((record) => record.pid) });
+      return (await answered.liveness?.(named)) ?? named.map(() => 'unobserved' as const);
     },
     reapOwnedRecords: async (store, options) => {
       processReads.push({ kind: 'reap', pids: [], store, options });
@@ -154,6 +171,9 @@ export function createWebHostStub(
     env: input.env ?? process.env,
     cwd: input.cwd ?? process.cwd(),
     stateDir: input.stateDir ?? '/host-state',
+    // The machine the stub's commands would really run on: the same one the test process runs on, so
+    // the plugin's install layout, launch argv and self-pid exclusion are the production ones.
+    ...realHostMachineFacts(),
     runCommand: async (
       executable: string,
       args: string[],
@@ -206,10 +226,57 @@ export function createWebHostStub(
 export function realHostProcessReads(): WebHostStubProcesses {
   return {
     identities: async (pids) => await readProcessIdentities(pids),
-    observations: async (pids) => await readHostProcessIdentityObservationsAsync(pids),
     executablePaths: async (pids) =>
       await readProcessExecutablePaths(pids, { env: process.env, cwd: process.cwd() }),
+    liveness: async (records) => await judgeRecordedLivenessLikeTheHost(records),
   };
+}
+
+/**
+ * The machine answers a host stub gives, read from the process the test runs in.
+ *
+ * A plugin builds its managed install layout, the argv it launches, and the pid a fleet scan must not
+ * match as its own from these, and asks its host for them rather than reading process globals of its
+ * own (R13). A stub therefore has to answer them, and reading them here keeps a fixture from
+ * re-implementing what the core's own plugin host answers. A `*.fixtures.*` file may not be imported
+ * by another test, so this one small answer lives beside the toolbox the host stub stands in for.
+ */
+export function realHostMachineFacts(): Pick<
+  PlatformHost,
+  'hostOs' | 'nodeExecutablePath' | 'nodeVersion' | 'temporaryDirectory' | 'processId'
+> {
+  const platform = hostPlatform();
+  return {
+    hostOs:
+      platform === 'darwin' || platform === 'linux' || platform === 'win32' ? platform : 'other',
+    nodeExecutablePath: hostNodeExecutablePath(),
+    nodeVersion: hostNodeVersion(),
+    temporaryDirectory: hostTemporaryDirectory(),
+    processId: hostProcessId(),
+  };
+}
+
+/**
+ * The host's own fail-closed record judgement, answered with this process's reads. A test that wants
+ * the gate to decide for the machine it runs on asks for this rather than re-implementing the rule.
+ */
+export async function judgeRecordedLivenessLikeTheHost(
+  records: readonly OwnedProcessRecord[],
+): Promise<readonly RecordedProcessLiveness[]> {
+  if (records.length === 0) return [];
+  const observations = await readHostProcessIdentityObservationsAsync(
+    records.map((record) => record.pid),
+  );
+  return records.map((record) => {
+    const observation = observations.get(record.pid);
+    if (observation === undefined) return isProcessAlive(record.pid) ? 'unobserved' : 'not-alive';
+    if (
+      observation.state.startsWith('Z') ||
+      processStartTimesDiffer(observation.startTime, record.startTime)
+    )
+      return 'not-alive';
+    return observation.startTime === record.startTime ? 'alive' : 'unobserved';
+  });
 }
 
 /** A reap that inspected nothing: a stub test asserts the reap was asked, not what it stopped. */

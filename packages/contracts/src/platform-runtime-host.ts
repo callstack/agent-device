@@ -32,6 +32,15 @@ export type ManagedProcessIdentity = Readonly<{
 export type ManagedProcessOwnership = 'missing' | 'owned-alive' | 'ownership-lost';
 
 /**
+ * Whether a durable process record still names the live process it recorded, as the process that owns
+ * process reads answers. {@link ManagedProcessOwnership} asks a caller's own marker for a process it
+ * started; this asks a record an earlier run wrote. A process the host's table did not list stays
+ * `unobserved` rather than becoming proof it exited, so a caller never acts on a process-tool read
+ * that simply failed.
+ */
+export type RecordedProcessLiveness = 'alive' | 'not-alive' | 'unobserved';
+
+/**
  * A daemon-owned process identity that may outlive the request which spawned
  * it. The purpose is bounded recovery metadata, not a command selector.
  */

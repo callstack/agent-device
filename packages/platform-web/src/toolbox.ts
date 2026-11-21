@@ -21,6 +21,18 @@ export type WebToolbox = Readonly<{
   withDiagnosticTimer: PlatformHost['withDiagnosticTimer'];
 }>;
 
+/**
+ * What the web family asks its host about the machine its commands run on. The managed install layout,
+ * the Node that launches the backend, and the pid a fleet scan must not match as its own are all
+ * answers about the process that spawns the plugin's commands, so the plugin takes them from its host
+ * rather than from the host-kit copy it ships with: that copy answers with the bundle's own process
+ * globals, and its reads run outside the request's environment and exec trace (R13).
+ */
+export type WebMachine = Pick<
+  PlatformHost,
+  'hostOs' | 'nodeExecutablePath' | 'nodeVersion' | 'temporaryDirectory' | 'processId'
+>;
+
 export function createWebToolbox(host: PlatformHost): WebToolbox {
   return Object.freeze({
     host,

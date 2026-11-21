@@ -144,10 +144,13 @@ const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
 // rather than the request's log. A managed plugin binds to the `PlatformHost` its `setup` receives
 // instead, whose `processes` facet answers those reads on the core's own copy.
 //
-// What stays importable is what the graph proves loads neither root: `hostPlatform`, `hostProcessId`,
-// `hostNodeExecutablePath`, `isProcessAlive`, `expandProcessTree`, `processStartTimesDiffer`,
-// `uniquePositivePids`, the retry timer, and every file helper. Type-only edges are allowed anywhere —
-// they cost the bundle nothing.
+// What stays importable is what the graph proves loads neither root: the path helpers and the plain
+// filesystem helpers. Type-only edges are allowed anywhere — they cost the bundle nothing. The process
+// scope, the retry scope, the command scope, the diagnostics scope and the lock helpers are all
+// refused, including the ones that only answer `os.platform()` or wait on a timer: they are declared by
+// a module that also declares a process tool, so the bundle loads the tool with them. A plugin asks its
+// host what machine its commands run on, and paces itself with `node:timers/promises` the way the
+// core's own host does.
 const MANAGED_HOST_KIT_SCOPE_MESSAGE =
   ': those exports load internal/exec.ts or internal/diagnostics.ts through the bundled copy, so run ' +
   'the command, emit the diagnostic, read processes, or take the lock through the PlatformHost given to ' +

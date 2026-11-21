@@ -45,15 +45,8 @@ const identitiesMock = vi.hoisted(() =>
 );
 
 // The subject reads processes only through its host, so the suite controls those reads in the host
-// port below rather than by faking the host-kit module. The one module fake left is the platform the
-// fleet matchers branch on.
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
-  return {
-    ...actual,
-    hostPlatform: () => probe.platform ?? actual.hostPlatform(),
-  };
-});
+// port below rather than by faking the host-kit module. The machine it branches on is answered by the
+// same host, so a case that wants another operating system sets `probe.platform` and the port obliges.
 
 import {
   DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS,
@@ -72,15 +65,23 @@ import {
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 import {
   createOwnedProcessRecordStore,
+  expandProcessTree,
   listHostProcesses,
-  readHostProcessIdentityObservationsAsync,
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
 import type { PlatformHost } from 'agent-device/plugins';
+import { judgeRecordedLivenessLikeTheHost, realHostMachineFacts } from './toolbox.fixtures.ts';
 import { createWebToolbox, type WebToolbox } from './toolbox.ts';
 
 bindTestCommandHost();
 const testHost = createLiveTestHostEnvironment();
+/** The host answers the install layout is built from, read from this process. */
+const machine = realHostMachineFacts();
+
+/** The host answer a `Node.Platform` maps to, which is the one shape `PlatformHost.hostOs` allows. */
+function hostOperatingSystem(platform: NodeJS.Platform): 'darwin' | 'linux' | 'win32' | 'other' {
+  return platform === 'darwin' || platform === 'linux' || platform === 'win32' ? platform : 'other';
+}
 
 /**
  * The process port of a host that reads the machine the way the core's host does: the process table
@@ -91,10 +92,11 @@ function createHostProcessPort(): PlatformHost['processes'] {
   return {
     list: async (options) => await listHostProcesses({ ...options, runCommand: mockRunCmd }),
     readIdentities: async (pids) => await identitiesMock([...pids]),
-    readIdentityObservations: async (pids) =>
+    expandTree: (rootPids, processes) => expandProcessTree([...rootPids], [...processes]),
+    judgeRecordedLiveness: async (records) =>
       probe.unanswered
-        ? new Map<number, { state: string; startTime: string }>()
-        : await readHostProcessIdentityObservationsAsync(pids),
+        ? [...records].map(() => 'unobserved' as const)
+        : await judgeRecordedLivenessLikeTheHost([...records]),
     // The host answers this read with the environment it was set up with, the way the real host port
     // does; the suite's answer is the same fixture either way.
     readExecutablePaths: async (pids) => await executablePathsMock([...pids], testHost),
@@ -117,6 +119,10 @@ const hostProcesses = createHostProcessPort();
 function createLifecycleToolbox(stateDir: string): WebToolbox {
   const host = {
     ...testHost,
+    ...realHostMachineFacts(),
+    // The one platform branch the fleet matchers have: they ask the host which machine it is on
+    // rather than reading the process's own, so the suite's `probe.platform` fixture is answered here.
+    ...(probe.platform === undefined ? {} : { hostOs: hostOperatingSystem(probe.platform) }),
     stateDir,
     runCommand: async (
       executable: string,
@@ -154,7 +160,7 @@ test('managed Chrome launch args include a stable agent-device ownership marker 
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const marker = agentBrowserChromeLaunchMarker(status);
 
@@ -193,7 +199,7 @@ function matchChrome(
   processInfo: { pid: number; command: string },
   status: ReturnType<typeof getManagedAgentBrowserStatus>,
 ) {
-  return summarizeAgentBrowserProcesses([processInfo], status).processes[0];
+  return summarizeAgentBrowserProcesses([processInfo], status, machine).processes[0];
 }
 
 test('ownership detection accepts only Chrome-like processes with managed markers', () => {
@@ -202,7 +208,7 @@ test('ownership detection accepts only Chrome-like processes with managed marker
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const marker = agentBrowserChromeLaunchMarker(status);
     const managedChrome = path.join(
@@ -251,7 +257,7 @@ test('cleanup skips reaping when the daemon reports open web sessions', async ()
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
       env: process.env,
@@ -298,7 +304,7 @@ test('cleanup skips reaping while the browser fleet holds an opening session', a
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
@@ -324,7 +330,7 @@ test('cleanup reaps when the only fleet session is the one whose open runs it', 
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
@@ -352,7 +358,7 @@ test('cleanup evicts a launched session whose recorded browser exited, then reap
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
@@ -381,7 +387,7 @@ test('cleanup keeps a launched session when the process probe does not answer', 
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
@@ -407,7 +413,7 @@ test('cleanup skips reaping when managed browser socket activity is recent', asy
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     fs.mkdirSync(status.socketDir, { recursive: true });
     fs.writeFileSync(path.join(status.socketDir, 'agent-browser.sock'), '');
@@ -438,7 +444,7 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     fs.mkdirSync(status.socketDir, { recursive: true });
     mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
@@ -499,7 +505,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
       env: process.env,
@@ -528,7 +534,7 @@ test('process summary reports only conservatively owned managed Chrome processes
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const marker = agentBrowserChromeLaunchMarker(status);
     const summary = summarizeAgentBrowserProcesses(
@@ -538,6 +544,7 @@ test('process summary reports only conservatively owned managed Chrome processes
         { pid: 103, command: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
       ],
       status,
+      machine,
     );
 
     assert.equal(summary.count, 2);
@@ -610,7 +617,7 @@ test.each([
       installFakeManagedAgentBrowser(stateDir);
       const status = getManagedAgentBrowserStatus({
         stateDir,
-        host: { env: process.env, cwd: process.cwd() },
+        host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
       });
       const binary = nativeBinary(status.installDir);
       const observed = binary.replaceAll('\\', '/').toUpperCase();
@@ -643,10 +650,10 @@ test('a managed binary symlink cannot confer ownership on an executable outside 
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const binary = nativeBinary(status.installDir);
-    const linkedBinary = nativeBinary(managedInstallPaths(stateDir, '0.27.1').installDir);
+    const linkedBinary = nativeBinary(managedInstallPaths(stateDir, '0.27.1', machine).installDir);
     const linkedBin = path.dirname(linkedBinary);
     const outsideBin = path.join(stateDir, 'unrelated-bin');
     fs.renameSync(linkedBin, outsideBin);
@@ -674,10 +681,10 @@ test('records verified current and retained native roots and stable descendants'
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const current = nativeBinary(status.installDir);
-    const previous = managedInstallPaths(stateDir, '0.27.1');
+    const previous = managedInstallPaths(stateDir, '0.27.1', machine);
     const retained = nativeBinary(previous.installDir);
     const marker = agentBrowserChromeLaunchMarker(status);
     const rows: ProcessFixture[] = [
@@ -719,14 +726,14 @@ test('records verified current and retained native roots and stable descendants'
 test('browser home roots require executable containment and marker roots require Chrome', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const otherStateDir = mkdtempForTestSync('agent-device-web-other-');
-  const previous = managedInstallPaths(stateDir, '0.27.1');
+  const previous = managedInstallPaths(stateDir, '0.27.1', machine);
   try {
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
-    const other = managedInstallPaths(otherStateDir, '0.27.1');
+    const other = managedInstallPaths(otherStateDir, '0.27.1', machine);
     fs.mkdirSync(previous.installDir, { recursive: true });
     const otherBinary = nativeBinary(other.installDir);
     const home = path.join(
@@ -801,7 +808,7 @@ test('an unstable root or intermediate process cannot authorize its descendants'
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const binary = nativeBinary(status.installDir);
     const rows: ProcessFixture[] = [
@@ -856,7 +863,7 @@ test('recording refuses a scanned command that differs from the bracketed identi
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const binary = nativeBinary(status.installDir);
     observeProcesses([{ pid: 101, command: `${binary} daemon`, executable: binary }]);
@@ -881,10 +888,10 @@ test('recording and reaping require executable provenance and matching identity'
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const binary = nativeBinary(status.installDir);
-    const previous = nativeBinary(managedInstallPaths(stateDir, '0.27.1').installDir);
+    const previous = nativeBinary(managedInstallPaths(stateDir, '0.27.1', machine).installDir);
     const rows: ProcessFixture[] = [
       { pid: 11001, command: `${binary} daemon`, executable: binary },
       { pid: 11002, command: `${previous} daemon`, executable: previous },
@@ -965,7 +972,7 @@ test('cleanup retains legacy records without signaling or treating them as verif
     installFakeManagedAgentBrowser(stateDir);
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
     const store = createOwnedProcessRecordStore({
       stateDir,

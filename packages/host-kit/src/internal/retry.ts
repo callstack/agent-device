@@ -1,6 +1,5 @@
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './diagnostics.ts';
-import { sleep } from './sleep.ts';
 
 type RetryPolicy = {
   maxAttempts: number;
@@ -252,6 +251,34 @@ function computeDelay(base: number, max: number, jitter: number, attempt: number
   const exp = Math.min(max, base * 2 ** (attempt - 1));
   const jitterAmount = exp * jitter;
   return Math.max(0, exp + (Math.random() * 2 - 1) * jitterAmount);
+}
+
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+
+    function onAbort(): void {
+      clearTimeout(timer);
+      finish();
+    }
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 }
 
 function publishRetryEvent(event: RetryTelemetryEvent): void {

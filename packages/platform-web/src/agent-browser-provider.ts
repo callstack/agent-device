@@ -1,6 +1,7 @@
 import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/contracts/managed-web-backend';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { sleep } from '@agent-device/host-kit/retry';
+// Pacing between two backend sends, on the timer the host itself waits with (`node:timers/promises`).
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   AppError,
   commandFailureDetails,

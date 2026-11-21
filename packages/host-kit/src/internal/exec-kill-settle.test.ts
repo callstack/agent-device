@@ -13,7 +13,7 @@ import {
   type ExecStreamOptions,
 } from './exec.ts';
 import { shellQuote } from '@agent-device/kernel/device-shell';
-import { sleep } from './sleep.ts';
+import { sleep } from './retry.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 // A direct child can hand our stdout/stderr pipes to a descendant, and `close` waits

@@ -14,7 +14,7 @@ import {
   setupManagedAgentBrowser,
 } from './agent-browser-tool.ts';
 import { mkdtempForTestSync, writeFakeNpmCliScript } from './__tests__/test-utils.ts';
-import { createWebHostStub } from './toolbox.fixtures.ts';
+import { createWebHostStub, realHostMachineFacts } from './toolbox.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
@@ -127,7 +127,7 @@ test('managed agent-browser status ignores a bin shim without the backend packag
 
     const status = getManagedAgentBrowserStatus({
       stateDir,
-      host: { env: process.env, cwd: process.cwd() },
+      host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
     });
 
     assert.equal(status.entryScript, undefined);

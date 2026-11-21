@@ -890,23 +890,38 @@ for (const family of ['web', 'vega', 'harmonyos'] as const) {
   });
 }
 
-// One name's verdict follows its own declaration: the liveness classifier reaches the exec layer and
-// is refused, while the pid arithmetic declared beside it in the same module graph does not.
-test('the host-kit process scope is judged name by name, not per subpath', () => {
+// One name's verdict follows its own declaration rather than its scope's worst export: in the file
+// scope, the path helper the graph proves pure stays importable while the lock helper beside it is
+// refused. Nothing about an export's name is consulted, so an export that starts loading the exec layer
+// is caught without anyone editing a list here.
+test('a host-kit scope is judged name by name, not per subpath', () => {
   const refused = hostKitFindings(
     'web',
-    "import { classifyOwnerLivenessFromObservation } from '@agent-device/host-kit/process';\nvoid classifyOwnerLivenessFromObservation;",
+    "import { acquireProcessLock } from '@agent-device/host-kit/file';\nvoid acquireProcessLock;",
   );
-  assert.match(
-    refused,
-    /host-kit\/process' scope at runtime \(classifyOwnerLivenessFromObservation\)/,
-  );
+  assert.match(refused, /host-kit\/file' scope at runtime \(acquireProcessLock\)/);
   const allowed = hostKitFindings(
     'web',
-    "import { uniquePositivePids } from '@agent-device/host-kit/process';\nvoid uniquePositivePids;",
+    "import { expandUserHomePath } from '@agent-device/host-kit/file';\nvoid expandUserHomePath;",
   );
   assert.equal(allowed, '');
 });
+
+// The process and retry scopes have no pure export left: every one of them is declared by a module that
+// also runs a process tool or carries the retry diagnostic store, so importing one drags that into the
+// bundle, where it answers with the daemon's environment. A plugin asks its host for each of these,
+// including the ones that look like arithmetic on a number it already has, and paces itself with
+// `node:timers/promises`, the timer the core's own host waits on.
+for (const family of ['web', 'vega', 'harmonyos'] as const) {
+  test(`a managed platform package may not pace itself through the host-kit retry scope (${family})`, () => {
+    assert.match(
+      hostKitFindings(family, "import { sleep } from '@agent-device/host-kit/retry';\nvoid sleep;"),
+      new RegExp(
+        `@agent-device/${family} .* host-kit '@agent-device/host-kit/retry' scope at runtime`,
+      ),
+    );
+  });
+}
 
 // Nothing about an export's name is consulted, so a new export that starts loading the exec layer is
 // caught without anyone editing a list: the same import turns from allowed to refused on the edit.
@@ -953,11 +968,11 @@ test('a missing exec-root source makes the derivation fail closed', () => {
   );
 });
 
-// `host-kit/process` is policed export by export: an export that spawns a process tool escapes the
-// request's exec trace from a bundled plugin, and one that reads only this process's globals cannot.
-// `PlatformHost.processes` answers the first kind on the core's own copy. An edge naming no export
-// could reach any of them, so a namespace import is refused rather than assumed harmless. Every case
-// is asserted for every managed family: all three are on the host by the same rule.
+// `host-kit/process` is policed export by export, and every export of it now loads a process tool from
+// some module the subpath evaluates, so none of them survives the bundling that puts a plugin's copy
+// outside the request's exec trace. `PlatformHost.processes` answers all of them on the core's own copy.
+// An edge naming no export could reach any of them, so a namespace import is refused rather than assumed
+// harmless. Every case is asserted for every managed family: all three are on the host by the same rule.
 const PROCESS_SCOPE_CASES = [
   [
     'may not run a process tool through its own host-kit copy',
@@ -965,9 +980,9 @@ const PROCESS_SCOPE_CASES = [
     String.raw`@agent-device/%FAMILY% may not import the host-kit '@agent-device/host-kit/process' scope at runtime \(listHostProcesses, readProcessIdentities\): .*PlatformHost given to setup`,
   ],
   [
-    'keeps the process exports that read no process tool',
+    'may not read a machine fact or expand a process tree through its own host-kit copy',
     "import { expandProcessTree, hostPlatform, isProcessAlive } from '@agent-device/host-kit/process';\nvoid expandProcessTree; void hostPlatform; void isProcessAlive;",
-    '^$',
+    String.raw`@agent-device/%FAMILY% may not import the host-kit '@agent-device/host-kit/process' scope at runtime \(expandProcessTree, hostPlatform, isProcessAlive\): .*PlatformHost given to setup`,
   ],
   [
     'may not namespace-import the process scope',

@@ -24,7 +24,7 @@ import {
   type AgentBrowserCleanupOptions,
 } from '../agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from '../agent-browser-tool.ts';
-import { createWebHostStub, type WebHostStub } from '../toolbox.fixtures.ts';
+import { createWebHostStub, realHostMachineFacts, type WebHostStub } from '../toolbox.fixtures.ts';
 import { mkdtempForTestSync } from './test-utils.ts';
 
 const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
@@ -54,7 +54,7 @@ function createFleetState() {
   });
   const status = getManagedAgentBrowserStatus({
     stateDir,
-    host: { env: process.env, cwd: process.cwd() },
+    host: { env: process.env, cwd: process.cwd(), ...realHostMachineFacts() },
   });
   return { stateDir, store, status };
 }

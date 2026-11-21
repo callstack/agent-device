@@ -40,6 +40,13 @@ function createPluginHost(
     env: input.env ?? {},
     cwd: '/host-cwd',
     stateDir: '/host-state',
+    // What the host says about the machine its commands run on. This family never reads these: its
+    // devices are reached over HDC, and no install layout or launch argv is derived from them.
+    hostOs: 'linux',
+    nodeExecutablePath: '/usr/bin/node',
+    nodeVersion: 'v24.0.0',
+    temporaryDirectory: '/tmp',
+    processId: 4242,
     runCommand: async (executable, args) => {
       input.commands?.push({ executable, args });
       return { stdout: '', stderr: '', exitCode: 0 };
@@ -52,7 +59,9 @@ function createPluginHost(
     processes: {
       list: async () => [],
       readIdentities: async () => new Map(),
-      readIdentityObservations: async () => new Map(),
+      expandTree: (rootPids, processes) =>
+        [...processes].filter((processInfo) => [...rootPids].includes(processInfo.pid)),
+      judgeRecordedLiveness: async (records) => [...records].map(() => 'unobserved' as const),
       readExecutablePaths: async () => new Map(),
       reapOwnedRecords: async () => {
         throw new Error('the Vega family never reaps host processes');

@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import {
   createOwnedProcessRecordStore,
@@ -217,6 +218,51 @@ test('the platform plugin host holds a lock and names this process as its owner'
   expect(fs.existsSync(lockDirPath)).toBe(false);
   // The owner identity read is a `ps`, traced by the host that took the claim.
   expect(tracedCommands(logPath)).toContain('ps');
+});
+
+// The managed web plugin asks this host whether a record an earlier run wrote still names its fleet,
+// because the answer depends on facts the plugin cannot read: the start-time format its own `ps` emits,
+// the zombie state, and the signal probe for a pid the table did not list. The fail-closed rule lives
+// here so one host's verdict is what every plugin gets.
+test('the platform plugin host judges a recorded fleet from its own process reads', async () => {
+  const root = mkdtempForTestSync('plugin-host-liveness-');
+  const host = createPlatformPluginHost(createLiveTestHostEnvironment(), root);
+  const processes = host.processes;
+  const recorded = (pid: number, startTime: string): OwnedProcessRecord => ({
+    pid,
+    startTime,
+    command: `command-${pid}`,
+    purpose: 'verified-managed-web-browser',
+  });
+
+  // This process is alive under the identity a host read of it answers with, so a record carrying that
+  // identity is judged alive.
+  const startTime = readProcessStartTime(process.pid);
+  if (startTime === null) throw new Error(`the host named no start time for ${process.pid}`);
+  expect(await processes.judgeRecordedLiveness([recorded(process.pid, startTime)])).toEqual([
+    'alive',
+  ]);
+
+  // A record written by a host that stamps start times another way cannot be compared at all: the
+  // answer is unknown evidence, not a verdict that the recorded fleet exited.
+  const otherLifetime = startTime.startsWith('linux:')
+    ? 'Fri Jan 01 00:00:00 2026'
+    : 'linux:11111111-1111-4111-8111-111111111111:12345';
+  expect(await processes.judgeRecordedLiveness([recorded(process.pid, otherLifetime)])).toEqual([
+    'unobserved',
+  ]);
+
+  // A pid this process started and reaped is gone: the table does not name it and the probe agrees.
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
+  const childPid = child.pid;
+  if (childPid === undefined) throw new Error('no pid for the short-lived process');
+  await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  expect(await processes.judgeRecordedLiveness([recorded(childPid, startTime)])).toEqual([
+    'not-alive',
+  ]);
+
+  // Nothing asked, nothing judged.
+  expect(await processes.judgeRecordedLiveness([])).toEqual([]);
 });
 
 /** The commands one debug run traced, in the order the request saw them. */

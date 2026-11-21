@@ -63,6 +63,13 @@ export function createVegaHostStub(
     env: input.env ?? { PATH: '/usr/bin', HOME: '/host-home' },
     cwd: '/host-cwd',
     stateDir: '/host-state',
+    // What the host says about the machine its commands run on. This family never reads these: its
+    // devices are reached through the Vega CLI, and no install layout or launch argv is derived.
+    hostOs: 'linux',
+    nodeExecutablePath: '/usr/bin/node',
+    nodeVersion: 'v24.0.0',
+    temporaryDirectory: '/tmp',
+    processId: 4242,
     emitDiagnostic: () => {},
     withDiagnosticTimer: async (_phase: string, operation: () => Promise<unknown>) =>
       await operation(),
@@ -75,7 +82,9 @@ export function createVegaHostStub(
     processes: {
       list: async () => [],
       readIdentities: async () => new Map(),
-      readIdentityObservations: async () => new Map(),
+      expandTree: (rootPids, processes) =>
+        [...processes].filter((processInfo) => [...rootPids].includes(processInfo.pid)),
+      judgeRecordedLiveness: async (records) => [...records].map(() => 'unobserved' as const),
       readExecutablePaths: async () => new Map(),
       reapOwnedRecords: async () => {
         throw new Error('the Vega family never reaps host processes');

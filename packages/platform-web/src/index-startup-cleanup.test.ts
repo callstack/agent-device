@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { realHostMachineFacts } from './toolbox.fixtures.ts';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
@@ -24,6 +25,7 @@ import { runCmd, isExecutablePath, whichCmd } from '@agent-device/host-kit/comma
 function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
   const host = {
     ...createLiveTestHostEnvironment(),
+    ...realHostMachineFacts(),
     stateDir,
     runCommand: runCmd,
     isFileExecutable: isExecutablePath,
@@ -33,7 +35,9 @@ function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
     processes: {
       list: async () => [],
       readIdentities: async () => new Map(),
-      readIdentityObservations: async () => new Map(),
+      expandTree: (rootPids, processes) =>
+        [...processes].filter((processInfo) => [...rootPids].includes(processInfo.pid)),
+      judgeRecordedLiveness: async (records) => [...records].map(() => 'unobserved' as const),
       readExecutablePaths: async () => new Map(),
       reapOwnedRecords: async () => {
         throw new Error('this suite stands the reap in for');
