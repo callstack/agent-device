@@ -1,5 +1,5 @@
 {
-  "path": ["apple", "android", "linux", "packages/host-swift/swift"],
+  "path": ["apple", "android", "packages/platform-linux/linux", "packages/host-swift/swift"],
   "format": ["swift", "objectivec", "kotlin", "java", "python"],
   "formatsExts": { "objectivec": ["m", "h"] },
   "mode": "weak",

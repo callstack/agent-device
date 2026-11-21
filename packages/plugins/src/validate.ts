@@ -3,6 +3,7 @@ import { isPlatform, type Platform } from '@agent-device/kernel/device-identity'
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
 import type {
   HarmonyPlatformOperations,
+  LinuxPlatformOperations,
   VegaPlatformOperations,
   WebPlatformOperations,
 } from '@agent-device/contracts/platform-plugin';
@@ -352,6 +353,10 @@ const HARMONY_OPERATIONS: Record<keyof HarmonyPlatformOperations, true> = {
   toolchainCheck: true,
 };
 
+const LINUX_OPERATIONS: Record<keyof LinuxPlatformOperations, true> = {
+  toolchainCheck: true,
+};
+
 const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unknown>) => void>> = {
   web(value) {
     const operations = value.operations;
@@ -382,6 +387,16 @@ const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unk
       )
     ) {
       throw invalidPlugin('HarmonyOS platform setup must supply HarmonyOS operations');
+    }
+  },
+  linux(value) {
+    const operations = value.operations;
+    if (
+      typeof value.withRequestProvider !== 'function' ||
+      !isRecord(operations) ||
+      Object.keys(LINUX_OPERATIONS).some((operation) => typeof operations[operation] !== 'function')
+    ) {
+      throw invalidPlugin('Linux platform setup must supply request scoping and Linux operations');
     }
   },
 };

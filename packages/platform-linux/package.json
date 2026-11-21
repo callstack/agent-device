@@ -1,27 +1,54 @@
 {
-  "name": "@agent-device/platform-linux",
-  "version": "0.0.0",
+  "name": "@agent-device/linux",
+  "version": "0.22.0-dev",
   "private": true,
   "type": "module",
-  "description": "Linux-family platform runtime metadata and implementations for agent-device.",
-  "dependencies": {
+  "description": "Managed Linux platform plugin for agent-device.",
+  "exports": {
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/build-config": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/gestures": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
+    "agent-device": "workspace:*"
   },
-  "devDependencies": {
-    "@agent-device/test-kit": "workspace:*"
+  "engines": {
+    "node": ">=22.12"
   },
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+  "files": [
+    "dist",
+    "linux"
+  ],
+  "license": "MIT",
+  "agent-device": {
+    "apiVersion": 3,
+    "platform": "linux"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types build.mjs",
+    "prepack": "pnpm build"
+  },
+  "publishConfig": {
+    "exports": {
+      "./agent-device": {
+        "types": "./dist/agent-device.d.mts",
+        "import": "./dist/agent-device.mjs"
+      }
     },
-    "./interactor": {
-      "types": "./src/interactor-facade.ts",
-      "default": "./src/interactor-facade.ts"
-    }
-  }
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/platform-linux"
+  },
+  "homepage": "https://agent-device.dev/docs/commands#linux-desktop-targets"
 }

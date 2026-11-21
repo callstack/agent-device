@@ -444,7 +444,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     linux: linux.contract(
       'packages/platform-linux/src/__tests__/clipboard.test.ts',
-      'writeLinuxClipboard uses xclip with stdin on X11',
+      'writeLinuxClipboard pipes the text to xclip on X11',
       'Linux clipboard writes through the supported X11 host-tool seam',
     ),
   },
@@ -953,7 +953,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     // Promoted from command-contract to live: the desktop replay now clicks a resolved digit
     // button on real Linux hardware and the downstream wait only passes if the click landed
     // (formerly missed — AT-SPI extents were computed screen-absolute-wrong under GTK4; see
-    // linux/atspi-dump.py).
+    // packages/platform-linux/linux/atspi-dump.py).
     linux: linux.replayLive('the Linux desktop replay clicks a resolved calculator digit button'),
   },
   [C.fill]: {
@@ -1070,7 +1070,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     // Promoted from command-contract to live: GTK4 gnome-calculator's entry previously exposed no
     // Text-interface content to selectors (a PyGObject binding call-pattern bug — see
-    // linux/atspi-dump.py), so no tree-level assertion could hold. Fixed, so the desktop replay's
+    // packages/platform-linux/linux/atspi-dump.py), so no tree-level assertion could hold. Fixed,
+    // so the desktop replay's
     // typed calculation now has a real wait assertion on the computed result.
     linux: linux.replayLive(
       'the Linux desktop replay types a calculation and its result is selectable',

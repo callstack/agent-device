@@ -34,6 +34,7 @@ vi.mock('./platform-runtime-host.ts', () => {
 import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
 import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
 import { harmonySelectionFixture } from './platform-runtime-harmonyos-provider.fixtures.ts';
+import { linuxSelectionFixture } from './platform-runtime-linux-provider.fixtures.ts';
 import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import {
   createPlatformDeviceInventoryGateways,
@@ -42,10 +43,15 @@ import {
 
 bindTestCommandHost();
 
-// All three optional families that ship as platform plugins are supplied here, so the registry
+// All four optional families that ship as platform plugins are supplied here, so the registry
 // covers the whole canonical family tuple.
 const platformSelection = composePlatformPlugins(
-  [webSelectionFixture().get(), vegaSelectionFixture().get(), harmonySelectionFixture().get()],
+  [
+    webSelectionFixture().get(),
+    vegaSelectionFixture().get(),
+    harmonySelectionFixture().get(),
+    linuxSelectionFixture().get(),
+  ],
   [],
 );
 const platformModuleRegistry = createPlatformModuleRegistryForHost({}, platformSelection);

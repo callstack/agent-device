@@ -1,5 +1,6 @@
 import { webSelectionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
 import { vegaSelectionFixture } from '../../../src/platform-runtime-vega-provider.fixtures.ts';
+import { linuxSelectionFixture } from '../../../src/platform-runtime-linux-provider.fixtures.ts';
 import { composePlatformPlugins } from '../../../src/platform-runtime/platform-plugins.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -174,6 +175,12 @@ export async function createProviderScenarioHarness(
     const providerModules =
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
+    // A scenario that resolves a Linux tool provider serves the Linux family through the installed
+    // plugin: the selection is what gives the family its runtime and interactor at all, and what
+    // lets a request scope a provider for it.
+    const linuxSelection = linuxToolProvider
+      ? linuxSelectionFixture(input.host, input.baseDir)
+      : undefined;
     const platforms = composePlatformPlugins(
       [
         webSelectionFixture(input.host, input.baseDir, {
@@ -181,10 +188,11 @@ export async function createProviderScenarioHarness(
           ownedProcessRecords: rootDeps.ownedProcessRecords,
         }).get(),
         vegaSelectionFixture(input.host, input.baseDir).get(),
+        ...(linuxSelection ? [linuxSelection.get()] : []),
       ],
       [],
     );
-    const { web, vega } = platforms;
+    const { web, vega, linux } = platforms;
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
       platforms,
       host: input.host,
@@ -228,6 +236,7 @@ export async function createProviderScenarioHarness(
         },
         web,
         vega,
+        linux,
       });
     return Object.freeze({
       ...rootDeps,
