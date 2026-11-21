@@ -244,7 +244,7 @@ agent-device close [app] [--save-script [path]] [--force, --overwrite] [--shutdo
 | --- | --- |
 | `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
 | `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
-| `--shutdown` | close, disconnect: after ending the session, shut down its simulator or emulator where supported and release a retained lease or provider attachment (an attached cloud instance keeps running) |
+| `--shutdown` | close, disconnect: also shut down the session device where supported; a Limrun instance agent-device created is deleted with its data, an attached one keeps running. close also releases a lease or attachment kept on close |
 
 Supported targets: [Open and close apps, URLs, and deep links](/docs/capabilities#apps-and-devices).
 

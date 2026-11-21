@@ -395,7 +395,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--shutdown',
     usageDescription:
-      'close, disconnect: after ending the session, shut down its simulator or emulator where supported and release a retained lease or provider attachment (an attached cloud instance keeps running)',
+      'close, disconnect: also shut down the session device where supported; a Limrun instance agent-device created is deleted with its data, an attached one keeps running. close also releases a lease or attachment kept on close',
     projectConfig: true,
     recorded: false,
   },
