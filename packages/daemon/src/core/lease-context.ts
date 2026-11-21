@@ -168,15 +168,10 @@ export function assertRequestHoldsSessionLease(
   const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
   if (!sessionLease) return undefined;
   assertRequestPresentsLease(resolveLeaseScope(req), sessionLease);
-  // Meta wins the tenant (HTTP intake may attest it), so a tenant flag that names another tenant,
-  // such as a batch step's, is compared on its own.
-  assertMatchingTenant(readTenantFlag(req.flags), sessionLease.tenantId);
+  // Meta wins the request scope (HTTP intake may attest the tenant, and a batch step inherits the
+  // batch's meta), so a lease field sent in flags, such as a batch step's, is compared on its own.
+  assertSuppliedLeaseLabels(resolveLeaseScope({ flags: req.flags }), sessionLease);
   return sessionLease;
-}
-
-function readTenantFlag(flags: DaemonRequest['flags']): string | undefined {
-  const tenant = (flags as Record<string, unknown> | undefined)?.tenant;
-  return typeof tenant === 'string' ? tenant : undefined;
 }
 
 /** Refuses a request that does not send `leaseId`, the credential of the lease it acts on. */
@@ -188,7 +183,12 @@ function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): v
       hint: 'Send the leaseId that the allocation returned (meta.leaseId or the leaseId param). From the CLI, open the session through connect proxy or connect --remote-config and keep the same --session; raw --tenant and --session flags do not send it.',
     });
   }
-  const requested = canonicalLeaseId(requestScope.leaseId);
+  assertMatchingLeaseId(requestScope.leaseId, leaseId);
+}
+
+function assertMatchingLeaseId(requestValue: string | undefined, leaseId: string): void {
+  if (requestValue === undefined) return;
+  const requested = canonicalLeaseId(requestValue);
   if (requested !== undefined && requested === canonicalLeaseId(leaseId)) return;
   throw leaseFieldMismatchError('leaseId');
 }
@@ -209,6 +209,15 @@ export function assertRequestPresentsLease(
   lease: Omit<SessionLease, 'expiresAt'>,
 ): void {
   assertRequestSendsLeaseId(requestScope, lease.leaseId);
+  assertSuppliedLeaseLabels(requestScope, lease);
+}
+
+/** Compares each lease field the scope names with the lease; a field it omits is not compared. */
+function assertSuppliedLeaseLabels(
+  requestScope: LeaseScope,
+  lease: Omit<SessionLease, 'expiresAt'>,
+): void {
+  assertMatchingLeaseId(requestScope.leaseId, lease.leaseId);
   assertMatchingTenant(requestScope.tenantId, lease.tenantId);
   assertMatchingLeaseBackend(requestScope.leaseBackend, lease.leaseBackend);
   assertMatchingLeaseField('runId', requestScope.runId, lease.runId);

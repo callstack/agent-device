@@ -217,3 +217,27 @@ test('a batch step tenant flag does not refuse a step on an unleased session', a
 
   expect(response.ok, JSON.stringify(response)).toBe(true);
 });
+
+test('on an unleased session a batch step keeps the batch lease over a lease id in its flags', async () => {
+  const { handler, leaseId } = leasedRouter({ leased: false });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'batch',
+    positionals: [],
+    flags: {
+      batchSteps: [{ command: 'snapshot', positionals: [], flags: { leaseId: OTHER_LEASE_ID } }],
+    },
+    meta: {
+      leaseId,
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'proxy',
+      clientId: 'client-a',
+      deviceKey: 'ios:SIM-001',
+    },
+  });
+
+  expect(response.ok, JSON.stringify(response)).toBe(true);
+});
