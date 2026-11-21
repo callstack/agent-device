@@ -397,7 +397,7 @@ const audio = await client.observability.audio({
 await client.observability.audio({ platform: 'web', action: 'probe', probeAction: 'stop' });
 ```
 
-Pass `platform: 'web'`, `'macos'`, `'ios'` (simulators), or `'android'` (emulators on macOS hosts). See [Audio probes](/docs/debugging-profiling#audio-probes) for what each platform samples, permissions, and unsupported targets.
+Pass `platform: 'web'`, `'macos'`, `'ios'` (simulators), or `'android'` (emulators on macOS hosts). Every host-capture platform needs the `@agent-device/macos` plugin on the daemon's host, because the sampler lives there. See [Audio probes](/docs/debugging-profiling#audio-probes) for what each platform samples, permissions, and unsupported targets.
 
 `client.observability.perf()` requires an options object with an explicit `area`; a call without one fails with an error that names the replacement. The option shapes mirror the `perf` CLI forms:
 

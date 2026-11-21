@@ -49,3 +49,12 @@ export function macOsPlatformCompositionFixture(
   bindPlatformLeaves(platforms);
   return platforms;
 }
+
+/**
+ * Binds the platform selection of a process with no macOS package installed, as the daemon's
+ * composition does. Every macOS branch of the bundled Apple owner then answers the typed
+ * `plugin-not-installed` outcome with the package's install command.
+ */
+export function bindAbsentMacOsLeafCompositionFixture(): void {
+  bindPlatformLeaves(composePlatformPlugins([], [], undefined, []));
+}
