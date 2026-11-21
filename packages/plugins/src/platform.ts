@@ -106,6 +106,7 @@ export type PlatformHost = HostEnvironment &
       }>,
       signal?: AbortSignal,
     ): Promise<PlatformBackgroundProcess>;
+    /**
      * Starts `executable` detached, with its output discarded, and answers how it ended. A target
      * that outlives the call that started it — a desktop app, a display-server helper — must not
      * hold the request open for its whole life, so the host starts it, unrefs it, and reports its
