@@ -166,25 +166,21 @@ export const MACOS_HELPER_REFUSAL_REASONS: ReadonlySet<string> = new Set([
   MACOS_HELPER_REASONS.noScrollBar.reason,
   MACOS_HELPER_REASONS.noContextMenu.reason,
 ]);
-export const MACOS_DELIVERY_MECHANISMS = [
-  'ax-press',
-  'ax-focus',
-  'ax-value',
-  'ax-selected-text',
-  'ax-confirm',
-  'ax-scroll-bar',
-  'ax-show-menu',
-  'key-events',
-] as const;
-type AssertTrue<T extends true> = T;
-/** Compile-time pin: this table and the leaf contract name the same mechanisms. */
-export type MacOsDeliveryMechanismsMatchContract = AssertTrue<
-  [MacOsDeliveryMechanism] extends [(typeof MACOS_DELIVERY_MECHANISMS)[number]]
-    ? [(typeof MACOS_DELIVERY_MECHANISMS)[number]] extends [MacOsDeliveryMechanism]
-      ? true
-      : false
-    : false
->;
+// Total over the contract's mechanism type: a mechanism the leaf contract names and this table
+// omits, or the reverse, fails the build.
+const DELIVERY_MECHANISMS: Record<MacOsDeliveryMechanism, true> = {
+  'ax-press': true,
+  'ax-focus': true,
+  'ax-value': true,
+  'ax-selected-text': true,
+  'ax-confirm': true,
+  'ax-scroll-bar': true,
+  'ax-show-menu': true,
+  'key-events': true,
+};
+export const MACOS_DELIVERY_MECHANISMS: readonly MacOsDeliveryMechanism[] = Object.keys(
+  DELIVERY_MECHANISMS,
+) as MacOsDeliveryMechanism[];
 
 export function resolveMacOsHelperPackageRootFrom(modulePath: string): string {
   let currentDir = path.dirname(modulePath);

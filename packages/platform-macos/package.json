@@ -55,5 +55,5 @@
     "url": "git+https://github.com/callstack/agent-device.git",
     "directory": "packages/platform-macos"
   },
-  "homepage": "https://agent-device.dev/docs/commands#macos-desktop-targets"
+  "homepage": "https://agent-device.dev/docs/commands#desktop-targets"
 }

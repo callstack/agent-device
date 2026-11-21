@@ -59,6 +59,8 @@ The first run needs XCUITest automation permission.
 
 When you change Apple targets, synchronize the kernel model, runtime-fact admission, dispatch,
 discovery, and xctestrun preparation. Simulator-set scoping must not hide the host macOS target.
+macOS desktop automation is the managed `@agent-device/macos` plugin.
+Before you run a macOS device check, install the packed plugin with `agent-device plugins add` into an isolated `AGENT_DEVICE_HOME`.
 HarmonyOS has no provisioned CI device or HDC. Mocked tests do not replace local hardware evidence.
 Before you run a live smoke harness, read its entry file under `test/integration/` for environment requirements.
 
