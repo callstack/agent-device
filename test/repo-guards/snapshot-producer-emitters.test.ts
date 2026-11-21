@@ -261,6 +261,17 @@ test('an unlisted producer in a residue is reported even though the residue publ
   ]);
 });
 
+for (const declaration of [
+  String.raw`export const residue = { 'produc\u0065r': 'unlisted-tree' };`,
+  "export const EXAMPLE_PRODUCER = 'unlisted-tree';",
+]) {
+  test(`a module that never spells producer in plain lowercase is still scanned: ${declaration}`, () => {
+    assert.deepEqual(producerEmitterViolations([], example([declaration, ''])), [
+      `${EXAMPLE_CAPTURE}:1 emits 'unlisted-tree', which SNAPSHOT_PRODUCERS does not list`,
+    ]);
+  });
+}
+
 test('a computed identifier key is not a producer property, but a computed string key is', () => {
   const keyed = (key: string) =>
     example([
