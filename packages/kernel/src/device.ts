@@ -669,7 +669,7 @@ function resolveDeviceBySerial(candidates: DeviceInfo[], selector: DeviceSelecto
     (device) => device.id === selector.serial && isSerialAddressablePlatform(device.platform),
   );
   if (!match) {
-    const hint = deviceNotFoundHint(candidates, selector.serial, 'serial');
+    const hint = deviceNotFoundHint(candidates, selector.serial ?? '', 'serial');
     throw new AppError('DEVICE_NOT_FOUND', serialDeviceNotFoundMessage(selector), {
       ...(hint === undefined ? {} : { hint }),
       dispatched: 'no',
@@ -695,15 +695,8 @@ function resolveDeviceByName(
   return match;
 }
 
-/**
- * The one not-found answer for all three selector sites: the flag an observed device carries the
- * value under, or for `--device` the one candidate name a quote fold away, else none (#2064).
- */
-function deviceNotFoundHint(
-  candidates: DeviceInfo[],
-  value: string | undefined,
-  flag?: DeviceIdentityFlag,
-) {
+/** The one not-found answer for all three selector sites: the flag an observed device carries the value under, or for `--device` the one candidate name a quote fold away (#2064). */
+function deviceNotFoundHint(candidates: DeviceInfo[], value: string, flag?: DeviceIdentityFlag) {
   const identity = candidates.find((device) => device.id === value);
   const identityFlag = identity && deviceIdentityFlag(identity.platform);
   if (identity && identityFlag && identityFlag !== flag) {
@@ -711,7 +704,7 @@ function deviceNotFoundHint(
       ? `${value} is the id of ${JSON.stringify(identity.name)}, not its name. Did you mean --${identityFlag} ${value}?`
       : `${value} identifies ${JSON.stringify(identity.name)} here. Did you mean --${identityFlag} ${value}?`;
   }
-  const requested = quoteFoldDeviceName(value ?? '');
+  const requested = quoteFoldDeviceName(value);
   const close = candidates.filter((device) => quoteFoldDeviceName(device.name) === requested);
   const only = flag === undefined && close.length === 1 ? close[0] : undefined;
   if (!only) return undefined;
