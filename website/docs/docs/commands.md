@@ -692,7 +692,7 @@ agent-device tv-remote [press|longpress] <up|down|left|right|select|menu|home|ba
 
 | Option | What it does |
 | --- | --- |
-| `--duration-ms <ms>` | Scroll: pace the gesture over this duration; tv-remote: hold the button this long (Android TV long-presses on any positive value) |
+| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported; tv-remote: hold the button this long (Android TV long-presses on any positive value) |
 
 Supported targets: [TV remote keys](/docs/capabilities#system-and-hardware).
 
@@ -1322,7 +1322,7 @@ agent-device scroll <direction|top|bottom|refresh> [amount] [--until <selector>]
 
 | Option | What it does |
 | --- | --- |
-| `--duration-ms <ms>` | Scroll: pace the gesture over this duration; tv-remote: hold the button this long (Android TV long-presses on any positive value) |
+| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported; tv-remote: hold the button this long (Android TV long-presses on any positive value) |
 | `--pixels <n>` | Scroll: explicit gesture distance in pixels |
 | `--until <selector>` | Scroll: repeat passes until the selector is visible on screen |
 | `--max-passes <n>` | Scroll --until: maximum gestures |

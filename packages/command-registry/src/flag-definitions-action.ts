@@ -127,7 +127,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--duration-ms <ms>',
     usageDescription:
-      'Scroll: pace the gesture over this duration; tv-remote: hold the button this long (Android TV long-presses on any positive value)',
+      'Scroll: pace the gesture over this duration when supported; tv-remote: hold the button this long (Android TV long-presses on any positive value)',
     projectConfig: true,
     recorded: false,
   },
