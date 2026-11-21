@@ -1,4 +1,8 @@
-export { isScrollableNodeLike, isScrollableType } from '../snapshot-scroll.ts';
+export {
+  isScrollIndicatorNode,
+  isScrollableNodeLike,
+  isScrollableType,
+} from '../snapshot-scroll.ts';
 export {
   findSnapshotScopeRange,
   matchesSnapshotScope,

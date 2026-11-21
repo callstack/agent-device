@@ -77,12 +77,17 @@ extension RunnerTests {
   // MARK: - Snapshot Entry
 
   /**
-   * Every element-type name one iOS capture can publish, keyed by the raw value the SDK numbers it
-   * with. The golden table `contracts/fixtures/ios-element-type-names.json` holds the same rows, and
-   * the Simulator AX bridge mirrors them by index in `ELEMENT_TYPE_NAMES`
+   * Every element-type name a capture can carry, keyed by the raw value the SDK numbers it with. The
+   * golden table `contracts/fixtures/ios-element-type-names.json` holds the same rows, and the
+   * Simulator AX bridge mirrors them by index in `ELEMENT_TYPE_NAMES`
    * (`packages/platform-apple/src/snapshot-source/tree.ts`), so one node carries one `type` whichever
    * producer served it (#4657). `RunnerTests+ElementTypeNamesTests` reads that table through this
    * dictionary and fails when a row names a raw value differently here.
+   *
+   * One table serves every runner platform, so a macOS, tvOS, visionOS or watchOS capture publishes
+   * these names too: the numbers and the names come from the same SDK header on all of them. The
+   * presented-surface rule still reads the raw-value spelling, so a consumer of a capture from an
+   * older runner keeps working.
    *
    * A row keyed by an SDK case cannot drift from the number: the case names the number. The two rows
    * keyed by a bare number cover the SDK-hidden Keyboard and Key values, whose numbers the table owns.
