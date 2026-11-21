@@ -38,8 +38,44 @@ const webPlugin = `
   });
 `;
 
+const linuxPackage = '@agent-device/linux';
+const linuxPlugin = `
+  export default () => ({
+    apiVersion: 3,
+    contributes: [{
+      kind: 'platform',
+      family: 'linux',
+      setup(host) {
+        return {
+          family: 'linux',
+          createInteractor: async () => ({ activate: async () => {} }),
+          inventoryModule: {
+            family: 'linux',
+            loadInventory: async () => ({
+              discover: async () => [{ platform: 'linux', kind: 'device', target: 'desktop', id: 'local', name: host.stateDir }],
+            }),
+          },
+          runtimeModule: { family: 'linux', loadRuntime() { throw new Error('must stay lazy'); } },
+          withRequestProvider: async (_, task) => task(),
+          operations: {
+            toolchainCheck: async () => ({
+              id: 'toolchain',
+              status: 'pass',
+              summary: 'Linux desktop tools on ' + host.stateDir,
+            }),
+          },
+        };
+      },
+    }],
+  });
+`;
+
 function selectWeb(home: string) {
   selectPlugin(home, webPackage, webPlugin, { claims: { apiVersion: 3, platform: 'web' } });
+}
+
+function selectLinux(home: string) {
+  selectPlugin(home, linuxPackage, linuxPlugin, { claims: { apiVersion: 3, platform: 'linux' } });
 }
 
 async function withDaemonComposition(
@@ -106,29 +142,96 @@ test('daemon composition sets up a stored web platform and its inventory and doc
   });
 });
 
-test.each(['linux', 'apple'])(
-  'a store claim cannot replace the bundled %s family',
-  async (family) => {
-    const { home, env } = pluginHome();
-    selectPlugin(home, webPackage, webPlugin.replaceAll("'web'", JSON.stringify(family)), {
-      claims: { apiVersion: 3, platform: family },
+test('a store claim cannot replace the bundled apple family', async () => {
+  const family = 'apple';
+  const { home, env } = pluginHome();
+  selectPlugin(home, webPackage, webPlugin.replaceAll("'web'", JSON.stringify(family)), {
+    claims: { apiVersion: 3, platform: family },
+  });
+  const stateDir = path.join(home, 'state');
+  await withDaemonComposition(env, stateDir, async (deps, host) => {
+    expect(deps.pluginInventory).toContainEqual(
+      expect.objectContaining({
+        package: webPackage,
+        platform: family,
+        state: 'failed',
+        error: expect.objectContaining({ reason: 'duplicate_platform' }),
+      }),
+    );
+    await expect(createManagedWebBackend(host).doctor({ stateDir })).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'plugin-not-installed', family: 'web' }),
     });
-    const stateDir = path.join(home, 'state');
-    await withDaemonComposition(env, stateDir, async (deps, host) => {
-      expect(deps.pluginInventory).toContainEqual(
-        expect.objectContaining({
-          package: webPackage,
-          platform: family,
-          state: 'failed',
-          error: expect.objectContaining({ reason: 'duplicate_platform' }),
-        }),
-      );
-      await expect(createManagedWebBackend(host).doctor({ stateDir })).rejects.toMatchObject({
-        details: expect.objectContaining({ reason: 'plugin-not-installed', family: 'web' }),
-      });
+  });
+});
+
+test('an installed Linux plugin answers the daemon composition it is registered into', async () => {
+  // The whole store-to-daemon path for the family, with nothing Linux-specific in core: the plugin
+  // registers from the store, its inventory answers a discovery request, its interactor is what a
+  // Linux device resolves to, and `doctor --platform linux` prints the row the plugin computed from
+  // the host it was set up with.
+  const { home, env } = pluginHome();
+  const stateDir = path.join(home, 'state');
+  selectLinux(home);
+  await withDaemonComposition(env, stateDir, async (deps) => {
+    expect(deps.pluginInventory).toContainEqual(
+      expect.objectContaining({
+        package: linuxPackage,
+        platform: 'linux',
+        source: 'store',
+        state: 'active',
+      }),
+    );
+    const devices = await deps.requestRouter.deviceInventoryGateways.localOnly.discover(
+      { platform: 'linux' },
+      inventoryScope(),
+    );
+    expect(devices).toEqual([
+      expect.objectContaining({ platform: 'linux', id: 'local', target: 'desktop' }),
+    ]);
+    await expect(
+      deps.interactorResolution.resolve(
+        { platform: 'linux', id: 'local', kind: 'device', target: 'desktop', name: 'Local' },
+        {},
+      ),
+    ).resolves.toHaveProperty('activate');
+    const check = await deps.hostDiagnostics.toolchainCheck('linux', {
+      stateDir,
+      metroPort: 8081,
+      shouldProbeMetro: false,
+      isProviderDevice: () => false,
+      emitProgress: () => {},
+      listLocalDeviceInventory: async () => [],
+      shouldPropagateInventoryProbeError: () => false,
+      transportOverrides: Object.freeze({}),
     });
-  },
-);
+    expect(check).toMatchObject({ id: 'toolchain', status: 'pass' });
+  });
+});
+
+test('an installed Linux plugin claiming Linux without the family registration fails validation', async () => {
+  // Linux is no longer bundled, so a store claim is not a duplicate — it is the family's only
+  // registration. The store validates the registration shape before the composition sees it, so a
+  // package that answers another family's shape never becomes the Linux runtime.
+  const family = 'linux';
+  const { home, env } = pluginHome();
+  selectPlugin(home, webPackage, webPlugin.replaceAll("'web'", JSON.stringify(family)), {
+    claims: { apiVersion: 3, platform: family },
+  });
+  const stateDir = path.join(home, 'state');
+  await withDaemonComposition(env, stateDir, async (deps, host) => {
+    expect(deps.pluginInventory).toContainEqual(
+      expect.objectContaining({
+        package: webPackage,
+        platform: family,
+        state: 'failed',
+        error: expect.objectContaining({ reason: 'invalid_plugin' }),
+      }),
+    );
+    await expect(createManagedWebBackend(host).doctor({ stateDir })).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'plugin-not-installed', family: 'web' }),
+    });
+  });
+});
 
 test('absent web reports the same install hint for daemon inventory, interactors and web doctor', async () => {
   const { home, env } = pluginHome();

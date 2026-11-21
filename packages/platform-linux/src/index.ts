@@ -1,112 +1,101 @@
+import type { PlatformContribution, PlatformHost } from 'agent-device/plugins';
 import type {
   InventoryPlatformModule,
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform-module';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
-
-// fallow-ignore-next-line code-duplication
-type DeferredFunction = (...args: never[]) => unknown;
-type Deferred<Fn extends DeferredFunction> = (
-  ...args: Parameters<Fn>
-) => Promise<Awaited<ReturnType<Fn>>>;
-
-function deferred<Fn extends DeferredFunction>(load: () => Promise<Fn>): Deferred<Fn> {
-  return (async (...args: Parameters<Fn>) =>
-    await (
-      await load()
-    )(...args)) as unknown as Deferred<Fn>;
-}
+import type {
+  LinuxPlatformOperations,
+  LinuxPlatformRegistration,
+} from '@agent-device/contracts/platform-plugin';
+import type { LinuxToolbox } from './toolbox.ts';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 
 const metadata = Object.freeze({
   family: 'linux',
 } satisfies PlatformModuleMetadata);
 
-export const runtimeModule = Object.freeze({
-  ...metadata,
-  loadRuntime: async (host) => {
-    const { createLinuxPlatformRuntime } = await import('./runtime.ts');
-    return createLinuxPlatformRuntime(host);
-  },
-} satisfies PlatformRuntimeModule);
+/**
+ * The toolbox module, resolved exactly once per process. The façade must stay metadata-eager
+ * (ADR-0019), so the module that binds a host's command port enters with the first operation that
+ * needs it rather than above it. Only the module is memoized: each `setup` call binds its own host.
+ */
+let toolboxModule: Promise<typeof import('./toolbox.ts')> | undefined;
 
-export const inventoryModule: InventoryPlatformModule<'linux'> = Object.freeze({
-  ...metadata,
-  loadInventory: async (host) => {
-    const { createLinuxInventory } = await import('./inventory.ts');
-    return createLinuxInventory(host);
-  },
-});
-
-export type { LinuxToolProvider } from './tool-provider.ts';
-
-export const openLinuxApp = deferred<(typeof import('./app-lifecycle.ts'))['openLinuxApp']>(
-  async () => (await import('./app-lifecycle.ts')).openLinuxApp,
-);
-export const closeLinuxApp = deferred<(typeof import('./app-lifecycle.ts'))['closeLinuxApp']>(
-  async () => (await import('./app-lifecycle.ts')).closeLinuxApp,
-);
-export const backLinux = deferred<(typeof import('./app-lifecycle.ts'))['backLinux']>(
-  async () => (await import('./app-lifecycle.ts')).backLinux,
-);
-export const homeLinux = deferred<(typeof import('./app-lifecycle.ts'))['homeLinux']>(
-  async () => (await import('./app-lifecycle.ts')).homeLinux,
-);
-
-export const readLinuxClipboard = deferred<(typeof import('./clipboard.ts'))['readLinuxClipboard']>(
-  async () => (await import('./clipboard.ts')).readLinuxClipboard,
-);
-export const writeLinuxClipboard = deferred<
-  (typeof import('./clipboard.ts'))['writeLinuxClipboard']
->(async () => (await import('./clipboard.ts')).writeLinuxClipboard);
-
-export const doubleClickLinux = deferred<(typeof import('./input-actions.ts'))['doubleClickLinux']>(
-  async () => (await import('./input-actions.ts')).doubleClickLinux,
-);
-export const fillLinux = deferred<(typeof import('./input-actions.ts'))['fillLinux']>(
-  async () => (await import('./input-actions.ts')).fillLinux,
-);
-export const focusLinux = deferred<(typeof import('./input-actions.ts'))['focusLinux']>(
-  async () => (await import('./input-actions.ts')).focusLinux,
-);
-export const longPressLinux = deferred<(typeof import('./input-actions.ts'))['longPressLinux']>(
-  async () => (await import('./input-actions.ts')).longPressLinux,
-);
-export const pressLinux = deferred<(typeof import('./input-actions.ts'))['pressLinux']>(
-  async () => (await import('./input-actions.ts')).pressLinux,
-);
-export const rightClickLinux = deferred<(typeof import('./input-actions.ts'))['rightClickLinux']>(
-  async () => (await import('./input-actions.ts')).rightClickLinux,
-);
-export const middleClickLinux = deferred<(typeof import('./input-actions.ts'))['middleClickLinux']>(
-  async () => (await import('./input-actions.ts')).middleClickLinux,
-);
-export const scrollLinux = deferred<(typeof import('./input-actions.ts'))['scrollLinux']>(
-  async () => (await import('./input-actions.ts')).scrollLinux,
-);
-export const swipeLinux = deferred<(typeof import('./input-actions.ts'))['swipeLinux']>(
-  async () => (await import('./input-actions.ts')).swipeLinux,
-);
-export const typeLinux = deferred<(typeof import('./input-actions.ts'))['typeLinux']>(
-  async () => (await import('./input-actions.ts')).typeLinux,
-);
-
-export const screenshotLinux = deferred<(typeof import('./screenshot.ts'))['screenshotLinux']>(
-  async () => (await import('./screenshot.ts')).screenshotLinux,
-);
-export const captureLinuxSurfaceSnapshot = deferred<
-  (typeof import('./surface-snapshot.ts'))['captureLinuxSurfaceSnapshot']
->(async () => (await import('./surface-snapshot.ts')).captureLinuxSurfaceSnapshot);
-export const readLinuxTextAtPoint = deferred<
-  (typeof import('./snapshot.ts'))['readLinuxTextAtPoint']
->(async () => (await import('./snapshot.ts')).readLinuxTextAtPoint);
-export const createLocalLinuxToolProvider = deferred<
-  (typeof import('./tool-provider.ts'))['createLocalLinuxToolProvider']
->(async () => (await import('./tool-provider.ts')).createLocalLinuxToolProvider);
-
-export async function withLinuxToolProvider<T>(
-  provider: import('./tool-provider.ts').LinuxToolProvider | undefined,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const { withLinuxToolProvider: implementation } = await import('./tool-provider.ts');
-  return await implementation(provider, fn);
+/**
+ * A bound toolbox and the provider built on it, made on first use and then reused: a `setup` that
+ * never runs a command imports and builds nothing, and the operations of one setup share the one
+ * route it binds its host to.
+ */
+function linuxToolbox(host: PlatformHost) {
+  let bound: Promise<Readonly<{ toolbox: LinuxToolbox; provider: LinuxToolProvider }>> | undefined;
+  return async () =>
+    (bound ??= (toolboxModule ??= import('./toolbox.ts')).then(async ({ createLinuxToolbox }) => {
+      const toolbox = createLinuxToolbox(host);
+      const { createLinuxToolProvider } = await import('./tool-provider.ts');
+      return Object.freeze({ toolbox, provider: createLinuxToolProvider(toolbox) });
+    }));
 }
+
+function linuxPlatformPlugin() {
+  return {
+    apiVersion: 3,
+    contributes: [
+      {
+        kind: 'platform',
+        family: 'linux',
+        // Importing this package evaluates nothing but itself, and the host is bound to a toolbox
+        // only when an operation first needs one. Every operation below asks the same lazy
+        // resolution, so one setup builds exactly one route for the whole family.
+        setup(host: PlatformHost): LinuxPlatformRegistration {
+          const bind = linuxToolbox(host);
+          const inventoryModule: InventoryPlatformModule<'linux'> = Object.freeze({
+            ...metadata,
+            // The family's inventory asks the core for the host facts it names: an installed plugin
+            // reports the one desktop device of a Linux host and nothing anywhere else.
+            loadInventory: async (host) => {
+              const { createLinuxInventory } = await import('./inventory.ts');
+              return createLinuxInventory(host);
+            },
+          });
+          const runtimeModule = Object.freeze({
+            ...metadata,
+            loadRuntime: async (host) => {
+              const { createLinuxPlatformRuntime } = await import('./runtime.ts');
+              const { toolbox, provider } = await bind();
+              return createLinuxPlatformRuntime(host, toolbox, provider);
+            },
+          } satisfies PlatformRuntimeModule & { readonly family: 'linux' });
+          return {
+            family: 'linux',
+            inventoryModule,
+            runtimeModule,
+            createInteractor: async () => {
+              const { createLinuxInteractor } = await import('./interactor.ts');
+              const { toolbox, provider } = await bind();
+              return createLinuxInteractor(toolbox, provider);
+            },
+            withRequestProvider: async <T>(provider: LinuxToolProvider, task: () => Promise<T>) => {
+              const { withLinuxToolProvider } = await import('./tool-provider.ts');
+              return await withLinuxToolProvider(provider, task);
+            },
+            operations: {
+              toolchainCheck: async () => {
+                const [{ linuxToolchainCheck }, { provider }] = await Promise.all([
+                  import('./doctor.ts'),
+                  bind(),
+                ]);
+                return await linuxToolchainCheck(provider);
+              },
+            } satisfies LinuxPlatformOperations,
+          };
+        },
+      },
+    ],
+  } satisfies {
+    apiVersion: 3;
+    contributes: [Extract<PlatformContribution, { family: 'linux' }>];
+  };
+}
+
+export { linuxPlatformPlugin as default };

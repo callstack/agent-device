@@ -26,7 +26,9 @@ import {
   WEB_DESKTOP_DEVICE,
 } from '@agent-device/test-kit';
 import { builtinPlatformPlugins } from './interactors/builtin-platform-plugin-set.ts';
+import { linuxSelectionFixture } from '../platform-runtime-linux-provider.fixtures.ts';
 import { vegaSelectionFixture } from '../platform-runtime-vega-provider.fixtures.ts';
+import { webSelectionFixture } from '../platform-runtime-web-provider.fixtures.ts';
 import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
@@ -45,15 +47,22 @@ const UNGATED_KEYS = [
   'appleSimulatorScreenRecordingTransport',
 ] as const;
 
-function gatedResolversByHand(device: DeviceInfo): Set<PlatformGatedProviderResolverKey> {
+function gatedResolversByHand(
+  device: DeviceInfo,
+  served: Partial<Record<'linux' | 'vega' | 'web', boolean>> = {},
+): Set<PlatformGatedProviderResolverKey> {
   const applies = new Set<PlatformGatedProviderResolverKey>();
   if (device.platform === 'android') applies.add('androidAdbProvider');
   if (isApplePlatform(device.platform)) {
     applies.add('appleRunnerProvider');
     applies.add('appleToolProvider');
   }
-  if (device.platform === 'vega') applies.add('vegaToolProvider');
-  if (device.platform === 'linux') applies.add('linuxToolProvider');
+  // An optional family this process does not serve is never asked for a provider: its selection is
+  // absent, so there is no scope to enter and a resolver may otherwise open a session nothing closes.
+  if (device.platform === 'vega' && served.vega === true) applies.add('vegaToolProvider');
+  if (device.platform === 'linux' && served.linux === true) applies.add('linuxToolProvider');
+  // Web is the exception: its resolver has no session or process to open, so it runs for a web device
+  // either way, and only the scope entry needs the selection.
   if (device.platform === 'web') applies.add('webProvider');
   return applies;
 }
@@ -94,7 +103,11 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ...buildDeviceMatrix(),
 ];
 
-const PLUGIN_OWNED_KEYS: PlatformGatedProviderResolverKey[] = ['vegaToolProvider', 'webProvider'];
+const PLUGIN_OWNED_KEYS: PlatformGatedProviderResolverKey[] = [
+  'linuxToolProvider',
+  'vegaToolProvider',
+  'webProvider',
+];
 const BUILT_IN_KEYS = GATED_KEYS.filter((key) => !PLUGIN_OWNED_KEYS.includes(key));
 
 test('built-in provider facets retain the former routing', () => {
@@ -117,7 +130,7 @@ test('built-in provider facets retain the former routing', () => {
   }
 });
 
-test('every family carries the providers facet with the resolvers it owns', () => {
+test('the built-in families carry only the resolvers they own', () => {
   assert.deepEqual(
     [...builtinPlatformPlugins.get('apple').plugin.providers!.platformGatedResolvers].sort(),
     ['appleRunnerProvider', 'appleToolProvider'],
@@ -126,53 +139,60 @@ test('every family carries the providers facet with the resolvers it owns', () =
     [...builtinPlatformPlugins.get('android').plugin.providers!.platformGatedResolvers],
     ['androidAdbProvider'],
   );
-  assert.deepEqual(
-    [...builtinPlatformPlugins.get('linux').plugin.providers!.platformGatedResolvers],
-    ['linuxToolProvider'],
-  );
+  // The managed families answer for themselves: their selections are what gate their resolvers, so
+  // no builtin facet may claim one.
+  assert.equal(builtinPlatformPlugins.tryGet('linux'), undefined);
 });
 
-test('root provider composition invokes exactly the resolvers the former gate did', async () => {
-  // The plugin-owned families are supplied here: an optional family this process does not serve is
-  // not asked for a provider at all, so the table equivalence below needs the selection.
-  const vega = vegaSelectionFixture();
-  for (const device of SAMPLE_DEVICES) {
-    const invoked = new Set<string>();
-    const spy = (key: string) => (): undefined => {
-      invoked.add(key);
-      return undefined;
-    };
-    const providers: PlatformProviderResolvers = {
-      androidAdbProvider: spy('androidAdbProvider'),
-      appleRunnerProvider: spy('appleRunnerProvider'),
-      appleToolProvider: spy('appleToolProvider'),
-      vegaToolProvider: spy('vegaToolProvider'),
-      linuxToolProvider: spy('linuxToolProvider'),
-      webProvider: spy('webProvider'),
-      appleRunnerScreenRecordingTransport: spy('appleRunnerScreenRecordingTransport'),
-      appleSimulatorScreenRecordingTransport: spy('appleSimulatorScreenRecordingTransport'),
-    };
+test('root provider composition asks an optional family only when the process serves it', async () => {
+  // Served families are supplied here; a family the process does not serve is the same run with its
+  // selection left out, and then its resolver must not run at all.
+  const served = {
+    linux: linuxSelectionFixture(),
+    vega: vegaSelectionFixture(),
+    web: webSelectionFixture(),
+  };
+  for (const serves of [true, false] as const) {
+    for (const device of SAMPLE_DEVICES) {
+      const invoked = new Set<string>();
+      const spy = (key: string) => (): undefined => {
+        invoked.add(key);
+        return undefined;
+      };
+      const providers: PlatformProviderResolvers = {
+        androidAdbProvider: spy('androidAdbProvider'),
+        appleRunnerProvider: spy('appleRunnerProvider'),
+        appleToolProvider: spy('appleToolProvider'),
+        vegaToolProvider: spy('vegaToolProvider'),
+        linuxToolProvider: spy('linuxToolProvider'),
+        webProvider: spy('webProvider'),
+        appleRunnerScreenRecordingTransport: spy('appleRunnerScreenRecordingTransport'),
+        appleSimulatorScreenRecordingTransport: spy('appleSimulatorScreenRecordingTransport'),
+      };
 
-    const name = `prov-${device.id}`;
-    const context: PlatformProviderRequestContext = {
-      device,
-      session: { name, device },
-      requestedSession: name,
-      requestId: `req-${device.id}`,
-    };
-    await createRequestPlatformProviders({
-      providers,
-      vega,
-    }).run(context, async () => {});
+      const name = `prov-${device.id}`;
+      const context: PlatformProviderRequestContext = {
+        device,
+        session: { name, device },
+        requestedSession: name,
+        requestId: `req-${device.id}`,
+      };
+      await createRequestPlatformProviders({
+        providers,
+        ...(serves ? { linux: served.linux, vega: served.vega, web: served.web } : {}),
+      }).run(context, async () => {});
 
-    const gatedInvoked = new Set(GATED_KEYS.filter((key) => invoked.has(key)));
-    assert.deepEqual(
-      [...gatedInvoked].sort(),
-      [...gatedResolversByHand(device)].sort(),
-      `gated resolvers invoked for ${device.id}`,
-    );
-    for (const key of UNGATED_KEYS) {
-      assert.ok(invoked.has(key), `ungated resolver ${key} must run for ${device.id}`);
+      const gatedInvoked = new Set(GATED_KEYS.filter((key) => invoked.has(key)));
+      assert.deepEqual(
+        [...gatedInvoked].sort(),
+        [
+          ...gatedResolversByHand(device, serves ? { linux: true, vega: true, web: true } : {}),
+        ].sort(),
+        `gated resolvers invoked for ${device.id}`,
+      );
+      for (const key of UNGATED_KEYS) {
+        assert.ok(invoked.has(key), `ungated resolver ${key} must run for ${device.id}`);
+      }
     }
   }
 });

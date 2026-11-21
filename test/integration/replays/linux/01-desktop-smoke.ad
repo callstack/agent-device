@@ -21,7 +21,7 @@ is exists "appname=gnome-calculator || windowtitle=Calculator || label=Calculato
 # design. Formerly missed: AT-SPI's Component.get_extents(SCREEN) returns (0,0) for every
 # non-toplevel widget under this GTK4 build, so the click landed on the window's own header-bar
 # button instead — fixed by computing screen-absolute rects from CoordType.WINDOW plus the
-# toplevel frame's own screen origin (linux/atspi-dump.py).
+# toplevel frame's own screen origin (packages/platform-linux/linux/atspi-dump.py).
 click "role=button label=1"
 # R41 (#1739): `type` executes through the bound `typeText` operation rather than the retired
 # interactor leaf. The keystrokes spell a full calculation: the clicked 1 plus the typed 00+55=

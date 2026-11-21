@@ -49,7 +49,7 @@ test.each([
   ['android', 'examples/test-app/src/App.tsx', true],
   ['android', 'packages/platform-linux/src/index.ts', false],
   ['linux', 'packages/platform-linux/src/index.ts', true],
-  ['linux', 'linux/atspi-dump.py', true],
+  ['linux', 'packages/platform-linux/linux/atspi-dump.py', true],
   ['linux', 'packages/platform-android/src/index.ts', false],
   ['web', 'packages/platform-web/src/index.ts', true],
   ['web', 'packages/platform-android/src/index.ts', false],

@@ -10,14 +10,18 @@ export type SnapshotSurfaceLoader = (
   signal?: AbortSignal,
 ) => Promise<SnapshotResult>;
 
+/**
+ * The surface captures the core still owns. The Linux desktop capture is not one of them: the AT-SPI
+ * read is that family's own mechanics, so it lives in the Linux plugin and runs over the host that
+ * plugin was set up with (#4676). What remains here is the macOS surface, whose projector the core
+ * keeps because the Apple runtime reaches it for a non-app surface.
+ */
 export type SnapshotSurfaceLoaders = Readonly<{
-  linux: SnapshotSurfaceLoader;
   macos: SnapshotSurfaceLoader;
 }>;
 
 export function createSnapshotRuntimeHost(loaders: SnapshotSurfaceLoaders): SnapshotRuntimeHost {
   const captureSurface: SnapshotRuntimeHost['captureSurface'] = async (device, options, signal) => {
-    if (device.platform === 'linux') return await loaders.linux(options, signal);
     requireMacOsSurfaceDevice(device);
     return await loaders.macos(options, signal);
   };

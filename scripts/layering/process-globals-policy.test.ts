@@ -73,12 +73,18 @@ test('command spawn boundaries permit the scoped host but still reject raw proce
   for (const file of [
     'packages/host-kit/src/internal/exec.ts',
     'packages/platform-apple/src/core/tool-provider.ts',
-    'packages/platform-linux/src/tool-provider.ts',
     'src/platform-runtime-android-adb-host.ts',
   ]) {
     assert.deepEqual(check('commandHostEnvironment();', file), [], file);
     assert.equal(check('process.env;', file).length, 1, file);
   }
+});
+
+test('the Linux plugin binds to its host instead of joining the command spawn boundaries', () => {
+  // The managed Linux plugin (#4676) runs every desktop tool through the PlatformHost its `setup`
+  // received, so it has no reason to read the ambient command-host scope that a spawn adapter may.
+  const file = 'packages/platform-linux/src/tool-provider.ts';
+  assert.equal(check('commandHostEnvironment();', file).length, 1);
 });
 
 test('renamed and namespace command-host calls cannot bypass the boundary', () => {

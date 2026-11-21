@@ -1,5 +1,6 @@
 import type {
   HarmonyPlatformSelection,
+  LinuxPlatformSelection,
   VegaPlatformSelection,
   WebPlatformSelection,
 } from '@agent-device/contracts/platform-plugin';
@@ -23,6 +24,7 @@ export function createHostDiagnostics(
   web?: WebPlatformSelection,
   vega?: VegaPlatformSelection,
   harmony?: HarmonyPlatformSelection,
+  linux?: LinuxPlatformSelection,
 ): HostDiagnostics {
   const { env } = host;
   return Object.freeze({
@@ -43,6 +45,11 @@ export function createHostDiagnostics(
         const { active } = harmony ?? {};
         if (active) return await active.operations.toolchainCheck();
         return await pluginAbsenceCheck('HarmonyOS', harmony);
+      }
+      if (platform === 'linux') {
+        const { active } = linux ?? {};
+        if (active) return await active.operations.toolchainCheck();
+        return await pluginAbsenceCheck('Linux', linux);
       }
       if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
         const { appleToolchainCheck } = await import('@agent-device/platform-apple/doctor');
