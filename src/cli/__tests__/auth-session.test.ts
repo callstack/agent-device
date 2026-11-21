@@ -14,7 +14,7 @@ import {
 import * as hostKitFile from '@agent-device/host-kit/file';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import {
   mkdtempForTestSync,
   recordCommandSpawns,
@@ -438,6 +438,86 @@ test('a stored rotation is kept when the lock release fails, and the warning is 
     });
     assert.equal(thrown.flags.daemonAuthToken, 'adc_agent_1');
     assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+  } finally {
+    acquire.mockRestore();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a timed-out session lock wait keeps waiting and never drops a rotated credential or a login', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-lock-timeout-');
+  const timeout = new AppError('COMMAND_FAILED', 'Timed out waiting for cloud CLI session file', {
+    reason: 'process_lock_timeout',
+  });
+  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
+  const warnings: string[] = [];
+  const stderr = { write: (chunk: string) => warnings.push(chunk) > 0 };
+  try {
+    writeCliSession({
+      stateDir: tempRoot,
+      session: {
+        version: 1,
+        id: 'session-timeout',
+        cloudBaseUrl: 'https://cloud.example',
+        refreshCredential: 'adc_refresh_old',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    acquire.mockRejectedValueOnce(timeout);
+    let refreshes = 0;
+    await resolveRemoteAuth({
+      command: 'snapshot',
+      flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+      stateDir: tempRoot,
+      allowInteractiveLogin: false,
+      env: {},
+      io: {
+        stderr,
+        fetch: async () => {
+          refreshes += 1;
+          return jsonResponse({ accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_new' });
+        },
+      },
+    });
+    assert.equal(refreshes, 1);
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+
+    acquire.mockRejectedValueOnce(timeout);
+    let approvals = 0;
+    await loginWithDeviceAuth({
+      stateDir: tempRoot,
+      flags: baseFlags,
+      env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+      io: {
+        stdinIsTTY: true,
+        stdoutIsTTY: true,
+        stderr,
+        openBrowser: async () => {},
+        fetch: async (url) => {
+          if (String(url).endsWith('/device-auth/start')) {
+            approvals += 1;
+            return jsonResponse({
+              deviceCode: 'device-secret',
+              userCode: 'ABCD-EFGH',
+              verificationUri: 'https://cloud.example/authorize',
+              expiresIn: 600,
+              interval: 1,
+            });
+          }
+          return jsonResponse({
+            status: 'approved',
+            accessToken: 'adc_agent_login',
+            cliSession: { id: 'session-login', refreshCredential: 'adc_refresh_login' },
+          });
+        },
+      },
+    });
+    assert.equal(approvals, 1);
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_login');
+    assert.equal(
+      warnings.filter((line) => line.startsWith('Waiting for another agent-device process')).length,
+      2,
+    );
   } finally {
     acquire.mockRestore();
     fs.rmSync(tempRoot, { recursive: true, force: true });

@@ -17,8 +17,7 @@ const HTTP_TIMEOUT_MS = 15_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 // A holder keeps the session lock for one file operation, and a dead holder is reclaimed, so only
-// a stuck live process makes a contender wait this long. The bound is long because the change
-// that waits is often one the cloud will not repeat: an approved login or a rotated credential.
+// a stuck live process makes a contender wait this long.
 const CLI_SESSION_LOCK_TIMEOUT_MS = 60_000;
 
 export type CliSessionRecord = {
@@ -278,7 +277,7 @@ export async function loginWithDeviceAuth(options: {
   await withCliSessionLock(
     options.stateDir,
     () => writeCliSession({ stateDir: options.stateDir, session }),
-    options.io,
+    { io: options.io, keepWaiting: true },
   );
   return {
     accessToken: approved.accessToken,
@@ -331,23 +330,39 @@ export async function removeCliSession(options: { stateDir: string }): Promise<b
 /**
  * Serializes the changes to the session file: a login's write, a logout's removal, and the
  * re-read and write that store a rotated credential. Device approval polling stays outside.
- * A change that took effect is reported as done even when the lock is not given back cleanly:
- * that release failure is a warning, and the next contender reclaims the spent claim.
+ * `keepWaiting` is for a change the cloud will not repeat (an approved login, a rotated
+ * credential): a timed-out wait warns and waits again, and the change is never dropped. A change
+ * that took effect is reported as done even when the lock is not given back cleanly: that release
+ * failure is a warning, and the next contender reclaims the spent claim.
  */
 async function withCliSessionLock<Result>(
   stateDir: string,
   task: () => Result,
-  io?: AuthIo,
+  options: { io?: AuthIo; keepWaiting?: boolean } = {},
 ): Promise<Result> {
+  const { io } = options;
   const sessionPath = resolveCliSessionPath(stateDir);
   fs.mkdirSync(path.dirname(sessionPath), { recursive: true, mode: 0o700 });
   const owner = readCurrentOwnerIdentity();
-  const release = await acquireProcessLock({
-    lockDirPath: `${sessionPath}.lock`,
-    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
-    timeoutMs: CLI_SESSION_LOCK_TIMEOUT_MS,
-    description: 'cloud CLI session file',
-  });
+  const acquire = () =>
+    acquireProcessLock({
+      lockDirPath: `${sessionPath}.lock`,
+      owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+      timeoutMs: CLI_SESSION_LOCK_TIMEOUT_MS,
+      description: 'cloud CLI session file',
+    });
+  let release: Awaited<ReturnType<typeof acquire>> | undefined;
+  while (!release) {
+    try {
+      release = await acquire();
+    } catch (error) {
+      if (!options.keepWaiting || !isProcessLockTimeout(error)) throw error;
+      warnBestEffort(
+        io,
+        'Waiting for another agent-device process to release the CLI session file...\n',
+      );
+    }
+  }
   let result: Result;
   try {
     result = task();
@@ -359,6 +374,10 @@ async function withCliSessionLock<Result>(
     warnBestEffort(io, 'Warning: the CLI session file lock could not be released cleanly.\n');
   });
   return result;
+}
+
+function isProcessLockTimeout(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === 'process_lock_timeout';
 }
 
 export function resolveCliSessionPath(stateDir: string): string {
@@ -445,7 +464,7 @@ async function storeRotatedCredential(options: {
         if (stored?.id !== sent.id || stored.refreshCredential !== sent.refreshCredential) return;
         writeCliSession({ stateDir: options.stateDir, session: { ...stored, refreshCredential } });
       },
-      options.io,
+      { io: options.io, keepWaiting: true },
     );
   } catch {
     warnBestEffort(
