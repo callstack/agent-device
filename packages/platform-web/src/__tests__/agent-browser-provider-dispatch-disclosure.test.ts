@@ -21,6 +21,7 @@ import {
 } from './test-utils.ts';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
+import { createWebHostStub } from '../toolbox.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -153,7 +154,7 @@ async function scrollRefusedOnThirdStep(): Promise<void> {
 /** The managed backend is not installed, so the CLI is never spawned. */
 async function openWithMissingBackend(): Promise<void> {
   const provider = createAgentBrowserWebProvider({
-    host: { env: process.env, cwd: process.cwd() },
+    toolbox: createWebHostStub().toolbox,
     stateDir: mkdtempForTestSync('agent-device-web-disclosure-missing-'),
   });
   await provider.open('https://example.test');

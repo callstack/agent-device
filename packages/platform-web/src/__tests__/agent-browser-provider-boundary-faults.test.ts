@@ -6,6 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createFailNthCommandExecutor, mkdtempForTestSync } from './test-utils.ts';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
+import { createWebHostStub } from '../toolbox.fixtures.ts';
 
 bindTestCommandHost();
 
@@ -26,7 +27,7 @@ for (const [commandClass, runOperation] of Object.entries(COMMAND_CLASS_OPERATIO
     try {
       installFakeManagedAgentBrowser(stateDir);
       const provider = createAgentBrowserWebProvider({
-        host: { env: process.env, cwd: process.cwd() },
+        toolbox: createWebHostStub({ stateDir }).toolbox,
         stateDir,
         session: 'boundary',
       });

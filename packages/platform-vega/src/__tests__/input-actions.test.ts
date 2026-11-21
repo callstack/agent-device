@@ -2,19 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { pressVegaTvRemote } from '../input-actions.ts';
-import { createLocalVegaToolProvider, withVegaToolProvider } from '../tool-provider.ts';
+import { createVegaCommandRunnerStub } from '../command-host.fixtures.ts';
+import { createVegaToolProvider, withVegaToolProvider } from '../tool-provider.ts';
 
 test('pressVegaTvRemote maps every shared button without leaking key names to callers', async () => {
-  const commands: string[][] = [];
-  const provider = createLocalVegaToolProvider({
-    isAvailable: async () => true,
-    run: async (args) => {
-      commands.push(args);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  });
+  const commands = createVegaCommandRunnerStub();
 
-  await withVegaToolProvider(provider, async () => {
+  await withVegaToolProvider(createVegaToolProvider(commands), async () => {
     for (const button of [
       'up',
       'down',
@@ -30,7 +24,7 @@ test('pressVegaTvRemote maps every shared button without leaking key names to ca
   });
 
   assert.deepEqual(
-    commands.map((args) => args.at(-1)),
+    commands.calls.map(({ args }) => args.at(-1)),
     [
       'inputd-cli button_press KEY_UP',
       'inputd-cli button_press KEY_DOWN',
@@ -45,21 +39,14 @@ test('pressVegaTvRemote maps every shared button without leaking key names to ca
 });
 
 test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async () => {
-  const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
-  const provider = createLocalVegaToolProvider({
-    isAvailable: async () => true,
-    run: async (args, options) => {
-      calls.push({ args, timeoutMs: options?.timeoutMs });
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  });
+  const commands = createVegaCommandRunnerStub();
 
-  await withVegaToolProvider(provider, async () => {
+  await withVegaToolProvider(createVegaToolProvider(commands), async () => {
     await pressVegaTvRemote({ id: 'VirtualDevice' }, 'select', 0);
     await pressVegaTvRemote({ id: 'VirtualDevice' }, 'select', 10_000);
   });
 
-  assert.deepEqual(calls, [
+  assert.deepEqual(commands.calls, [
     {
       args: [
         'device',
@@ -70,6 +57,7 @@ test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async 
         'inputd-cli button_press KEY_ENTER --holdDuration 0',
       ],
       timeoutMs: 10_000,
+      allowFailure: true,
     },
     {
       args: [
@@ -81,22 +69,18 @@ test('pressVegaTvRemote passes exact hold duration boundaries to inputd', async 
         'inputd-cli button_press KEY_ENTER --holdDuration 10000',
       ],
       timeoutMs: 20_000,
+      allowFailure: true,
     },
   ]);
 });
 
 test('pressVegaTvRemote surfaces unsupported inputd controls as command failures', async () => {
-  const provider = createLocalVegaToolProvider({
-    isAvailable: async () => true,
-    run: async () => ({
-      exitCode: 2,
-      stdout: '',
-      stderr: 'Unsupported key',
-    }),
-  });
+  const commands = createVegaCommandRunnerStub([
+    { exitCode: 2, stdout: '', stderr: 'Unsupported key' },
+  ]);
 
   await assert.rejects(
-    withVegaToolProvider(provider, async () => {
+    withVegaToolProvider(createVegaToolProvider(commands), async () => {
       await pressVegaTvRemote({ id: 'VirtualDevice' }, 'menu');
     }),
     (error: unknown) =>

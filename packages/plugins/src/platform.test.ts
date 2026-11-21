@@ -45,10 +45,29 @@ async function startStore(env: HostEnvironment['env']) {
     platformHost: {
       ...host,
       stateDir,
+      // What the host says about the machine its commands run on. No family in this test reads them:
+      // the plugin under test only names its state dir.
+      hostOs: 'linux',
+      nodeExecutablePath: '/usr/bin/node',
+      nodeVersion: 'v24.0.0',
+      temporaryDirectory: '/tmp',
+      processId: 4242,
       runCommand: async () => {
         throw new Error('setup must not start a process');
       },
       isFileExecutable: async () => false,
+      isExecutableOnPath: async () => false,
+      processes: {
+        list: async () => [],
+        readIdentities: async () => new Map(),
+        expandTree: (_rootPids, processes) => [...processes],
+        judgeRecordedLiveness: async (records) => [...records].map(() => 'unobserved' as const),
+        readExecutablePaths: async () => new Map(),
+        reapOwnedRecords: async () => {
+          throw new Error('setup must not reap host processes');
+        },
+        withLock: async (params) => await params.task(),
+      },
       emitDiagnostic: () => {},
       withDiagnosticTimer: async (_phase, run) => await run(),
     },

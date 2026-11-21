@@ -9,6 +9,7 @@ import {
   type CommandExecutorOverride,
 } from '@agent-device/host-kit/command';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
+import { createWebHostStub } from '../toolbox.fixtures.ts';
 import {
   agentBrowserJsonResult,
   managedAgentBrowserCliArgs,
@@ -54,7 +55,7 @@ function createTwoSessionDaemon() {
   let published = ['session-a'];
   const providerOf = (session: string) =>
     createAgentBrowserWebProvider({
-      host: { env: process.env, cwd: process.cwd() },
+      toolbox: createWebHostStub({ stateDir, ownedProcessRecords: store }).toolbox,
       session,
       stateDir,
       openWebSessionNames: () => published,

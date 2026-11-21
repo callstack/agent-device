@@ -1,7 +1,4 @@
-import type { PlatformHost } from 'agent-device/plugins';
 import path from 'node:path';
-import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
-import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   createHostDirectoryLinkSync,
   ensureHostDirectorySync,
@@ -12,16 +9,10 @@ import {
   readHostTextFileSync,
   removeHostFileSync,
 } from '@agent-device/host-kit/host-file';
-import {
-  hostNodeExecutablePath,
-  hostNodeVersion,
-  hostPlatform,
-  hostProcessId,
-  readProcessStartTime,
-} from '@agent-device/host-kit/process';
 import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
+import type { WebCommandResult } from './command-host.ts';
 import {
   installManagedAgentBrowserPackage,
   writeManagedAgentBrowserManifest,
@@ -31,6 +22,7 @@ import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,
 } from './agent-browser-lifecycle.ts';
+import type { WebMachine, WebToolbox } from './toolbox.ts';
 
 const MANAGED_AGENT_BROWSER_VERSION = '0.39.0';
 
@@ -40,12 +32,10 @@ const SETUP_TIMEOUT_MS = 5 * 60_000;
 const DOCTOR_TIMEOUT_MS = 60_000;
 
 export type AgentBrowserToolStatus = ManagedWebBackendStatus;
-export type ManagedBrowserHost = HostEnvironment &
-  Partial<Pick<PlatformHost, 'runCommand' | 'emitDiagnostic' | 'withDiagnosticTimer'>>;
 
 export type ManagedAgentBrowserRunOptions = {
-  /** The caller's host: its environment selects the state dir and seeds the backend env. */
-  host: ManagedBrowserHost;
+  /** The plugin's toolbox: its host selects the state dir and seeds the backend env. */
+  toolbox: WebToolbox;
   stateDir?: string;
   timeoutMs: number;
   allowFailure?: boolean;
@@ -62,95 +52,120 @@ export type ManagedAgentBrowserRunOptions = {
 export async function runManagedAgentBrowser(
   args: readonly string[],
   options: ManagedAgentBrowserRunOptions,
-): Promise<ExecResult> {
-  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
-  if (!status.installed) throw missingManagedToolError(status);
+): Promise<WebCommandResult> {
+  const status = getManagedAgentBrowserStatus({
+    host: options.toolbox.host,
+    stateDir: options.stateDir,
+  });
+  if (!status.installed) throw missingManagedToolError(status, options.toolbox.host);
   return await spawnManagedAgentBrowser(status, args, options);
 }
 
 export async function setupManagedAgentBrowser(options: {
-  host: ManagedBrowserHost;
+  toolbox: WebToolbox;
   stateDir?: string;
 }): Promise<AgentBrowserToolStatus> {
-  const status = getManagedAgentBrowserStatus(options);
-  assertWebNodeSupported(status.nodeMajor);
-  const processId = hostProcessId();
+  const status = getManagedAgentBrowserStatus(managedStatusOptions(options));
+  assertWebNodeSupported(status.nodeMajor, options.toolbox.host);
 
-  return await withProcessLock({
-    acquire: () =>
-      acquireProcessLock({
-        lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
-        owner: {
-          pid: processId,
-          startTime: readProcessStartTime(processId),
-          acquiredAtMs: Date.now(),
-        },
-        timeoutMs: SETUP_TIMEOUT_MS,
-        description: 'managed agent-browser setup',
-      }),
+  // The install lock goes through the host: claiming it names this process's identity with a `ps`
+  // read, and every poll of a held or stale lock re-proves the recorded owner and the guard holder
+  // with another. Answered from the plugin's bundled copy those reads run with the daemon
+  // environment and trace into the bundle's own store, so the request that waited shows no wait.
+  return await options.toolbox.host.processes.withLock({
+    lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
+    timeoutMs: SETUP_TIMEOUT_MS,
+    description: 'managed agent-browser setup',
     task: async () => {
-      const freshStatus = getManagedAgentBrowserStatus(options);
+      const freshStatus = getManagedAgentBrowserStatus(managedStatusOptions(options));
       if (freshStatus.installed) return freshStatus;
       ensureHostDirectorySync(freshStatus.installDir);
       await installManagedAgentBrowserPackage({
         packageRoot: path.join(freshStatus.installDir, 'package'),
         packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
         timeoutMs: SETUP_TIMEOUT_MS,
-        env: options.host.env,
-        runCommand: options.host.runCommand,
+        env: options.toolbox.host.env,
+        machine: options.toolbox.host,
+        commands: options.toolbox.commands,
       });
       // The backend entry only exists once npm has written the package.
-      const installedStatus = getManagedAgentBrowserStatus(options);
+      const installedStatus = getManagedAgentBrowserStatus(managedStatusOptions(options));
       if (!installedStatus.entryScript) throw unusableInstallError(installedStatus);
       await spawnManagedAgentBrowser(installedStatus, ['install'], {
-        host: options.host,
+        toolbox: options.toolbox,
         timeoutMs: SETUP_TIMEOUT_MS,
       });
       await spawnManagedAgentBrowser(installedStatus, ['doctor', '--offline', '--quick'], {
-        host: options.host,
+        toolbox: options.toolbox,
         timeoutMs: DOCTOR_TIMEOUT_MS,
       });
       writeManagedAgentBrowserManifest({
         installDir: installedStatus.installDir,
         packageName: AGENT_BROWSER,
         version: MANAGED_AGENT_BROWSER_VERSION,
+        machine: options.toolbox.host,
       });
-      return await getManagedAgentBrowserStatus(options);
+      return await getManagedAgentBrowserStatus(managedStatusOptions(options));
     },
   });
 }
 
 export async function doctorManagedAgentBrowser(options: {
-  host: ManagedBrowserHost;
+  toolbox: WebToolbox;
   stateDir?: string;
 }): Promise<{ status: AgentBrowserToolStatus; stdout: string; stderr: string; exitCode: number }> {
-  const status = getManagedAgentBrowserStatus(options);
+  const status = getManagedAgentBrowserStatus(managedStatusOptions(options));
   if (!status.installed) {
-    throw missingManagedToolError(status);
+    throw missingManagedToolError(status, options.toolbox.host);
   }
   const result = await spawnManagedAgentBrowser(status, ['doctor', '--offline', '--quick'], {
-    host: options.host,
+    toolbox: options.toolbox,
     timeoutMs: DOCTOR_TIMEOUT_MS,
     allowFailure: true,
   });
   return { status, ...result };
 }
 
+/** Reads a status for the host one of the toolbox-taking operations was set up with. */
+function managedStatusOptions(options: { toolbox: WebToolbox; stateDir?: string }): {
+  host: WebStatusHost;
+  stateDir?: string;
+} {
+  return {
+    host: options.toolbox.host,
+    ...(options.stateDir === undefined ? {} : { stateDir: options.stateDir }),
+  };
+}
+
+/**
+ * The host whose answers describe one managed install: the environment and working directory the
+ * caller captured, plus what the host says about the machine those commands run on. Every field is
+ * asked of the host so the status names paths, and a Node, the process that spawns the backend can
+ * actually use.
+ */
+export type WebStatusHost = HostEnvironment & WebMachine;
+
+/**
+ * Where the managed backend is on disk, and whether it is there. Reads only the host's environment
+ * and the filesystem, so it answers the same way whether or not anything is installed.
+ */
 export function getManagedAgentBrowserStatus(options: {
-  host: ManagedBrowserHost;
+  /** Either the calling runtime's host or the plugin's own host; both answer the same way. */
+  host: WebStatusHost;
   stateDir?: string;
 }): AgentBrowserToolStatus {
-  const stateDir =
-    options.stateDir ?? options.host.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir(options.host);
+  const { host } = options;
+  const stateDir = options.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir(host);
   const { installDir, homeDir, runtimeHomeDir, socketDir } = managedInstallPaths(
     stateDir,
     MANAGED_AGENT_BROWSER_VERSION,
+    host,
   );
   const packageDir = resolveManagedPackageDir(installDir);
-  const binaryPath = resolveManagedBinaryPath(installDir);
+  const binaryPath = resolveManagedBinaryPath(installDir, host);
   const entryScript = resolveManagedEntryScript(packageDir);
   const installed = entryScript !== undefined && hasManifest(installDir);
-  const nodeMajor = Number.parseInt(hostNodeVersion().replace(/^v/, '').split('.')[0] ?? '0', 10);
+  const nodeMajor = Number.parseInt(host.nodeVersion.replace(/^v/, '').split('.')[0] ?? '0', 10);
   return {
     version: MANAGED_AGENT_BROWSER_VERSION,
     stateDir,
@@ -173,14 +188,14 @@ async function spawnManagedAgentBrowser(
   status: AgentBrowserToolStatus,
   args: readonly string[],
   options: Omit<ManagedAgentBrowserRunOptions, 'stateDir'>,
-): Promise<ExecResult> {
-  if (!status.entryScript) throw missingManagedToolError(status);
-  return await (options.host.runCommand ?? runCmd)(
-    hostNodeExecutablePath(),
+): Promise<WebCommandResult> {
+  if (!status.entryScript) throw missingManagedToolError(status, options.toolbox.host);
+  return await options.toolbox.commands.run(
+    options.toolbox.host.nodeExecutablePath,
     [status.entryScript, ...args],
     {
       allowFailure: options.allowFailure,
-      env: managedAgentBrowserEnv(status, options.host.env),
+      env: managedAgentBrowserEnv(status, options.toolbox.host.env),
       timeoutMs: options.timeoutMs,
       signal: options.signal,
       stdin: options.stdin,
@@ -271,18 +286,18 @@ function resolveManagedPackageDir(installDir: string): string {
   return path.join(installDir, 'package', 'node_modules', AGENT_BROWSER);
 }
 
-function resolveManagedBinaryPath(installDir: string): string {
-  const shim = hostPlatform() === 'win32' ? `${AGENT_BROWSER}.cmd` : AGENT_BROWSER;
+function resolveManagedBinaryPath(installDir: string, host: WebStatusHost): string {
+  const shim = host.hostOs === 'win32' ? `${AGENT_BROWSER}.cmd` : AGENT_BROWSER;
   return path.join(installDir, 'package', 'node_modules', '.bin', shim);
 }
 
-function missingManagedToolError(status: AgentBrowserToolStatus): AppError {
+function missingManagedToolError(status: AgentBrowserToolStatus, host: WebStatusHost): AppError {
   return new AppError('TOOL_MISSING', 'Managed web browser backend is not installed.', {
     version: MANAGED_AGENT_BROWSER_VERSION,
     installDir: status.installDir,
     hint:
       status.nodeSupported === false
-        ? `Web automation requires Node ${MINIMUM_WEB_NODE_MAJOR}+; current Node is ${hostNodeVersion()}.`
+        ? `Web automation requires Node ${MINIMUM_WEB_NODE_MAJOR}+; current Node is ${host.nodeVersion}.`
         : 'Run `agent-device web setup` to install the managed web backend.',
   });
 }
@@ -298,10 +313,10 @@ function unusableInstallError(status: AgentBrowserToolStatus): AppError {
   });
 }
 
-function assertWebNodeSupported(nodeMajor: number): void {
+function assertWebNodeSupported(nodeMajor: number, host: WebStatusHost): void {
   if (nodeMajor >= MINIMUM_WEB_NODE_MAJOR) return;
   throw new AppError('UNSUPPORTED_OPERATION', 'Web automation requires Node 24 or newer.', {
-    currentNode: hostNodeVersion(),
+    currentNode: host.nodeVersion,
     requiredNodeMajor: MINIMUM_WEB_NODE_MAJOR,
     hint: 'Run agent-device with Node 24+ for web setup and web automation.',
   });

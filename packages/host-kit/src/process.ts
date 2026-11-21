@@ -44,7 +44,10 @@ export {
   writeHostStderr,
 } from './internal/host-process.ts';
 export { signalProcessGroupBestEffort } from './internal/exec.ts';
-export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
+export {
+  reapOwnedProcessRecordsAtStartup,
+  type OwnedProcessReapSummary,
+} from './internal/owned-process-reaper.ts';
 export {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
@@ -60,6 +63,7 @@ export {
   ownerIdentityMatches,
   type OwnerLiveness,
   readCurrentOwnerIdentity,
+  readCurrentOwnerIdentityAsync,
 } from './internal/owner-identity.ts';
 
 /** Observes actual executable paths. Missing entries are unknown, not proof of exit. */

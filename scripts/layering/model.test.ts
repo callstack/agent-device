@@ -76,6 +76,43 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
   );
 });
 
+test('parseImports marks the names written with a per-specifier type marker', () => {
+  const edges = parseImports(
+    [
+      "import { type HostProcessInfo, readProcessIdentities } from './host-process.ts';",
+      "import type { OwnedProcessRecordStore } from './store.ts';",
+      "import * as hostProcess from './namespace.ts';",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, typeOnly, symbols, typeSymbols }) => ({
+      spec,
+      typeOnly,
+      symbols,
+      typeSymbols,
+    })),
+    [
+      // One erased name and one real one: what the import loads is the real one alone.
+      {
+        spec: './host-process.ts',
+        typeOnly: false,
+        symbols: ['HostProcessInfo', 'readProcessIdentities'],
+        typeSymbols: ['HostProcessInfo'],
+      },
+      // Every name erased: the edge is type-only, and `symbols` still names them.
+      {
+        spec: './store.ts',
+        typeOnly: true,
+        symbols: ['OwnedProcessRecordStore'],
+        typeSymbols: [],
+      },
+      // A namespace import binds whatever the module exports, marked or not.
+      { spec: './namespace.ts', typeOnly: false, symbols: [], typeSymbols: [] },
+    ],
+  );
+});
+
 test('parseImports records TSImportType edges separately from dynamic imports', () => {
   const edges = parseImports(
     [
@@ -293,6 +330,7 @@ test('parseImports detects multiline dynamic imports', () => {
       typeOnly: false,
       line: 1,
       symbols: [],
+      typeSymbols: [],
     },
   ]);
 });
@@ -307,6 +345,7 @@ test('parseImports resolves constant-template dynamic imports', () => {
       typeOnly: false,
       line: 1,
       symbols: [],
+      typeSymbols: [],
     },
   ]);
 });
