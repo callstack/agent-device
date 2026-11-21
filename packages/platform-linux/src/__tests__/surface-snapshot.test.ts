@@ -1,48 +1,58 @@
-import { beforeEach, expect, test, vi } from 'vitest';
-
-const { snapshotLinux } = vi.hoisted(() => ({
-  snapshotLinux: vi.fn(),
-}));
-
-vi.mock('../snapshot.ts', () => ({ snapshotLinux }));
-
+import { test } from 'vitest';
+import assert from 'node:assert/strict';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { createLinuxHostStub } from '../toolbox.fixtures.ts';
+import { createLinuxToolProvider } from '../tool-provider.ts';
 import { captureLinuxSurfaceSnapshot } from '../surface-snapshot.ts';
 
-beforeEach(() => {
-  snapshotLinux.mockReset();
+function node(partial: Partial<RawSnapshotNode> & { index: number }): RawSnapshotNode {
+  return { type: 'text', ...partial };
+}
+
+test('the Linux surface capture stamps its producer and projects the shape', async () => {
+  const stub = createLinuxHostStub({ env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' } });
+  const provider = createLinuxToolProvider(stub.toolbox, {
+    accessibility: {
+      captureTree: async surface => ({
+        nodes: [node({ index: 0, label: 'Files', rect: { x: 0, y: 0, width: 10, height: 10 } })],
+        truncated: false,
+        surface,
+      }),
+    },
+  });
+
+  const result = await captureLinuxSurfaceSnapshot(stub.toolbox, provider, {
+    surface: 'desktop',
+  });
+
+  assert.equal(result.producer, 'linux-atspi');
+  assert.deepEqual(
+    (result.nodes ?? []).map(n => n.label),
+    ['Files'],
+  );
 });
 
-test('Linux surface snapshots preserve interactive ancestors before depth filtering', async () => {
-  snapshotLinux.mockResolvedValue({
-    truncated: false,
-    nodes: [
-      { index: 0, depth: 0, type: 'Application', label: 'App' },
-      { index: 1, parentIndex: 0, depth: 1, type: 'Group', label: 'Panel' },
-      { index: 2, parentIndex: 1, depth: 2, type: 'Button', label: 'Continue', hittable: true },
-      { index: 3, parentIndex: 1, depth: 2, type: 'StaticText', label: 'Details' },
-    ],
+test('the Linux surface capture applies the request projection options', async () => {
+  const stub = createLinuxHostStub({ env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' } });
+  const provider = createLinuxToolProvider(stub.toolbox, {
+    accessibility: {
+      captureTree: async surface => ({
+        nodes: [
+          { index: 0, type: 'Group', label: 'desktop', depth: 0 },
+          { index: 1, type: 'Button', label: 'Files', depth: 1, parentIndex: 0 },
+          { index: 2, type: 'StaticText', label: 'Trash', depth: 3, parentIndex: 1 },
+        ],
+        truncated: false,
+        surface,
+      }),
+    },
   });
-  const signal = new AbortController().signal;
 
-  const result = await captureLinuxSurfaceSnapshot(
-    { surface: 'desktop', interactiveOnly: true, depth: 1 },
-    signal,
+  const result = await captureLinuxSurfaceSnapshot(stub.toolbox, provider, { depth: 1 });
+
+  // The family owns the capture, and still returns the shape the rest of the system projects.
+  assert.deepEqual(
+    (result.nodes ?? []).map(n => n.label),
+    ['desktop', 'Files'],
   );
-
-  expect(snapshotLinux).toHaveBeenCalledWith('desktop', signal);
-  expect(result).toEqual({
-    backend: 'linux-atspi',
-    producer: 'linux-atspi',
-    truncated: false,
-    nodes: [
-      { index: 0, depth: 0, type: 'Application', label: 'App', parentIndex: undefined },
-      {
-        index: 1,
-        parentIndex: 0,
-        depth: 1,
-        type: 'Group',
-        label: 'Panel',
-      },
-    ],
-  });
 });

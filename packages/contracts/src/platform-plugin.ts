@@ -2,6 +2,7 @@ import type { ManagedWebBackend } from './managed-web-backend.ts';
 import type { DoctorCheck } from './doctor.ts';
 import type { HostDiagnosticsContext } from './host-diagnostics.ts';
 import type { InventoryPlatformModule, PlatformModuleRegistry } from './platform-module.ts';
+import type { LinuxToolProvider } from './linux-tool-provider.ts';
 import type { PlatformRuntimeModule } from './platform-runtime-operations.ts';
 import type { WebProvider } from './web-provider.ts';
 import type { VegaToolProvider } from './vega-tool-provider.ts';
@@ -142,6 +143,35 @@ export type HarmonyPlatformSelection = Readonly<{
   get(): HarmonyPlatformRegistration;
 }>;
 
+/**
+ * What the core asks of the Linux plugin: the toolchain probe that answers `doctor --platform
+ * linux`, and the request scope the family owns. The desktop capture and every interaction the
+ * family runs go through the registration's runtime and interactor, which use the host the plugin
+ * was set up with.
+ */
+export type LinuxPlatformOperations = Readonly<{
+  toolchainCheck(): Promise<DoctorCheck>;
+}>;
+
+export type LinuxPlatformRegistration = Readonly<{
+  family: 'linux';
+  inventoryModule: InventoryPlatformModule<'linux'>;
+  runtimeModule: PlatformRuntimeModule & { readonly family: 'linux' };
+  createInteractor: PlatformPlugin['createInteractor'];
+  withRequestProvider<T>(provider: LinuxToolProvider, task: () => Promise<T>): Promise<T>;
+  operations: LinuxPlatformOperations;
+}>;
+
+/**
+ * How the running process answers for the Linux family, installed or not. `get()` raises the
+ * selection's own typed outcome when the plugin is absent or failed to load, so `doctor --platform
+ * linux` names the install command rather than reporting nothing.
+ */
+export type LinuxPlatformSelection = Readonly<{
+  active?: LinuxPlatformRegistration;
+  get(): LinuxPlatformRegistration;
+}>;
+
 export type PlatformPluginSet<Plugin extends PlatformPlugin = PlatformPlugin> =
   PlatformModuleRegistry<{ family: Platform; plugin: Plugin }>;
 
@@ -150,6 +180,7 @@ export type PlatformModuleSelection = Readonly<{
   web: WebPlatformSelection;
   vega: VegaPlatformSelection;
   harmony: HarmonyPlatformSelection;
+  linux: LinuxPlatformSelection;
   inventoryModules: readonly InventoryPlatformModule[];
   runtimeModules: readonly PlatformRuntimeModule[];
   reportAbsent(family: Platform): AppError;

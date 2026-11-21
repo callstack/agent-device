@@ -1,26 +1,31 @@
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import type { LinuxDisplayServer } from '@agent-device/contracts/linux-tool-provider';
 
-/** The Linux family's display-server vocabulary, from one detector (#3794). */
-export type DisplayServer = 'wayland' | 'x11';
+/** The display decision bound to one host environment. */
+export type LinuxDisplayConfig = Readonly<{
+  detectDisplayServer(): LinuxDisplayServer;
+}>;
 
 /**
- * The display decision bound to one host. A local provider builds it at construction from its
- * runtime's host, so input, clipboard and screenshot selection share one answer that no other
- * runtime's host can change (#3794).
+ * Reads the display server from one host's environment: the only display decision in the family.
+ * A Wayland session is announced by its socket or by the session type, and anything else drives X11.
  */
-export type LinuxDisplayConfig = {
-  detectDisplayServer(): DisplayServer;
-};
-
-/** Reads the display server from one host's environment; the only display decision in the family. */
-export function detectLinuxDisplayServer(env: Readonly<EnvMap>): DisplayServer {
+export function detectLinuxDisplayServer(
+  env: Readonly<Record<string, string | undefined>>,
+): LinuxDisplayServer {
   if (env['WAYLAND_DISPLAY']) return 'wayland';
   if (env['XDG_SESSION_TYPE'] === 'wayland') return 'wayland';
   return 'x11';
 }
 
-export function createLinuxDisplayConfig(host: HostEnvironment): LinuxDisplayConfig {
+/**
+ * The display decision of the host the plugin was set up with. The environment is read on each
+ * question rather than once here, so a session that starts a Wayland compositor mid-request is not
+ * pinned to the answer `setup` happened to see.
+ */
+export function createLinuxDisplayConfig(
+  readEnv: () => Readonly<Record<string, string | undefined>>,
+): LinuxDisplayConfig {
   return Object.freeze({
-    detectDisplayServer: () => detectLinuxDisplayServer(host.env),
+    detectDisplayServer: () => detectLinuxDisplayServer(readEnv()),
   });
 }

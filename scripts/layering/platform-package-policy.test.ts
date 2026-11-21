@@ -18,7 +18,7 @@ const inventoryModuleNames = {
   web: 'webInventoryModule',
 } as const;
 
-const MANAGED_FAMILIES = ['web', 'vega', 'harmonyos'] as const;
+const MANAGED_FAMILIES = ['web', 'vega', 'harmonyos', 'linux'] as const;
 
 function isManagedFamily(family: string): boolean {
   return (MANAGED_FAMILIES as readonly string[]).includes(family);
@@ -177,7 +177,10 @@ test('family packages are exact, private, and expose only their root facade', ()
     found,
     /Managed platform must declare its family and export only @agent-device\/harmonyos\/agent-device/,
   );
-  assert.match(found, /platform-linux must export exactly its root façade/);
+  assert.match(
+    found,
+    /Managed platform must declare its family and export only @agent-device\/linux\/agent-device/,
+  );
   assert.match(found, /missing canonical platform package.*platform-web/);
 });
 
@@ -613,48 +616,55 @@ test('platform-web production source may use only the canonical positional-ref s
   }
 });
 
-test('interactor subpaths are loaded only by the builtin registry, dynamically', () => {
-  for (const family of ['linux', 'web']) {
-    const allowed = validSources();
-    allowed.set(
-      'src/core/interactors/register-builtins.ts',
-      `const load = () => import('@agent-device/platform-${family}/interactor');`,
-    );
-    assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), [], family);
+test('the web interactor subpath is loaded only by the builtin registry, dynamically', () => {
+  const family = 'web';
+  const allowed = validSources();
+  allowed.set(
+    'src/core/interactors/register-builtins.ts',
+    `const load = () => import('@agent-device/platform-${family}/interactor');`,
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), [], family);
 
-    for (const [file, source] of [
-      [
-        'src/core/interactors/register-builtins.ts',
-        `import { x } from '@agent-device/platform-${family}/interactor';`,
-      ],
-      ['src/core/interactors.ts', `void import('@agent-device/platform-${family}/interactor');`],
-      [
-        'packages/daemon/src/probe.ts',
-        `void import('@agent-device/platform-${family}/interactor');`,
-      ],
-      [
-        'src/core/interactors/register-builtins.ts',
-        `void import('@agent-device/platform-${family}/snapshot');`,
-      ],
-      [
-        `packages/platform-${family === 'web' ? 'linux' : 'web'}/src/probe.ts`,
-        `void import('@agent-device/platform-${family}/interactor');`,
-      ],
-    ] as const) {
-      const sources = validSources();
-      sources.set(file, source);
-      assert.notDeepEqual(messages(sources), [], `${family} ${file} ${source}`);
-    }
+  for (const [file, source] of [
+    [
+      'src/core/interactors/register-builtins.ts',
+      `import { x } from '@agent-device/platform-${family}/interactor';`,
+    ],
+    ['src/core/interactors.ts', `void import('@agent-device/platform-${family}/interactor');`],
+    [
+      'packages/daemon/src/probe.ts',
+      `void import('@agent-device/platform-${family}/interactor');`,
+    ],
+    [
+      'src/core/interactors/register-builtins.ts',
+      `void import('@agent-device/platform-${family}/snapshot');`,
+    ],
+    [
+      'packages/platform-linux/src/probe.ts',
+      `void import('@agent-device/platform-${family}/interactor');`,
+    ],
+  ] as const) {
+    const sources = validSources();
+    sources.set(file, source);
+    assert.notDeepEqual(messages(sources), [], `${family} ${file} ${source}`);
   }
 
+  // A built-in package that declares a subpath nobody enumerated is rejected: the only declared
+  // exceptions are the Apple and Android facets, and a new seam has to be named here first.
   const undeclared = declarations().map((declaration) =>
-    declaration.family === 'linux'
-      ? { ...declaration, exportedSubpaths: ['@agent-device/platform-linux'] }
+    declaration.family === 'android'
+      ? {
+          ...declaration,
+          exportedSubpaths: [
+            ...declaration.exportedSubpaths,
+            '@agent-device/platform-android/not-a-seam',
+          ],
+        }
       : declaration,
   );
   assert.match(
     messages(validSources(), undeclared).join('\n'),
-    /platform-linux must export exactly its root façade.*mechanics subpaths/,
+    /platform-android must export exactly its root façade.*mechanics subpaths/,
   );
 });
 

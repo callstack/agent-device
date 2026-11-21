@@ -29,7 +29,6 @@ const PROCESS_ENTRIES = new Set([
 const COMMAND_HOST_BOUNDARIES = new Set([
   'packages/host-kit/src/internal/exec.ts',
   'packages/platform-apple/src/core/tool-provider.ts',
-  'packages/platform-linux/src/tool-provider.ts',
   'src/platform-runtime-android-adb-host.ts',
 ]);
 // Presentation packages take terminal facts as input, so they reach no process member at all.

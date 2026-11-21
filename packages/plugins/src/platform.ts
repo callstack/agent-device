@@ -3,6 +3,8 @@ import type { Platform } from '@agent-device/kernel/device';
 import type {
   HarmonyPlatformOperations,
   HarmonyPlatformRegistration,
+  LinuxPlatformOperations,
+  LinuxPlatformRegistration,
   PlatformPlugin,
   VegaPlatformOperations,
   VegaPlatformRegistration,
@@ -10,8 +12,10 @@ import type {
   WebPlatformRegistration,
 } from '@agent-device/contracts/platform-plugin';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
+import type { ExecDetachedExit } from '@agent-device/host-kit/command';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -45,6 +49,12 @@ export type PlatformBackgroundProcess = AsyncDisposable &
     wait: Promise<{ stdout: string; stderr: string; exitCode: number | null; signal?: string }>;
     terminate(): Promise<void>;
   }>;
+
+/** What the host answered a detached launch: the process it started and how that process ended. */
+export type DetachedCommandLaunch = Readonly<{
+  pid: number;
+  exited: Promise<ExecDetachedExit>;
+}>;
 
 /** Authority shared by web setup and daemon-owned web sessions. */
 export type PlatformHost = HostEnvironment &
@@ -84,6 +94,18 @@ export type PlatformHost = HostEnvironment &
       }>,
       signal?: AbortSignal,
     ): Promise<PlatformBackgroundProcess>;
+     * Starts `executable` detached, with its output discarded, and answers how it ended. A target
+     * that outlives the call that started it — a desktop app, a display-server helper — must not
+     * hold the request open for its whole life, so the host starts it, unrefs it, and reports its
+     * exit through `exited` instead of awaiting it. Absent where the host cannot start a process
+     * that outlives the request; a family that needs it says so rather than waiting on a spawn it
+     * never got.
+     */
+    launchDetached?(
+      executable: string,
+      args: string[],
+      options: { env?: HostEnvironment['env'] },
+    ): Promise<DetachedCommandLaunch>;
     emitDiagnostic(event: DiagnosticEventInput): void;
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;
@@ -116,7 +138,15 @@ export type PlatformSetup<Family extends Platform = Platform> = Family extends P
             }>
           : Family extends 'harmonyos'
             ? Readonly<{ operations: HarmonyPlatformOperations }>
-            : unknown)
+            : Family extends 'linux'
+              ? Readonly<{
+                  withRequestProvider<T>(
+                    provider: LinuxToolProvider,
+                    task: () => Promise<T>,
+                  ): Promise<T>;
+                  operations: LinuxPlatformOperations;
+                }>
+              : unknown)
   : never;
 
 export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family extends Platform
@@ -126,7 +156,9 @@ export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family
       ? VegaPlatformRegistration
       : Family extends 'harmonyos'
         ? HarmonyPlatformRegistration
-        : Readonly<{
+        : Family extends 'linux'
+          ? LinuxPlatformRegistration
+          : Readonly<{
             family: Family;
             createInteractor: PlatformPlugin['createInteractor'];
             inventoryModule: InventoryPlatformModule<Family>;

@@ -1,179 +1,78 @@
-import type { ClickButton } from '@agent-device/contracts/click-button';
-import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  runCmd,
-  runCmdDetachedMonitored,
-  whichCmd,
-  type ExecDetachedExit,
-  type ExecOptions,
-  type ExecResult,
-  commandHostEnvironment,
-} from '@agent-device/host-kit/command';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
-
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
-
 import type {
-  LinuxAccessibilityTree,
-  LinuxSnapshotSurface,
-  LinuxTraversalOptions,
-} from './accessibility-types.ts';
-import {
-  createLinuxDisplayConfig,
-  detectLinuxDisplayServer,
-  type LinuxDisplayConfig,
-} from './display.ts';
+  LinuxClipboardProvider,
+  LinuxDesktopProvider,
+  LinuxScreenshotProvider,
+  LinuxToolProvider,
+} from '@agent-device/contracts/linux-tool-provider';
+import { createLinuxAccessibilityProvider } from './atspi-bridge.ts';
+import type { LinuxToolbox } from './toolbox.ts';
+import { createLinuxDisplayConfig } from './display.ts';
 
-export type LinuxToolCommandExecutor = (
-  cmd: string,
-  args: string[],
-  options?: ExecOptions,
-) => Promise<ExecResult>;
+export type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 
-export type LinuxToolAvailabilityChecker = (cmd: string) => Promise<boolean>;
+/** The parts a caller may supply over the family's own tool route, each answering one intent. */
+export type LinuxToolProviderOverrides = Partial<Omit<LinuxToolProvider, 'display'>>;
 
 /**
- * Starts a process that outlives the call, with its output discarded, and settles `exited` when it
- * ends: with `error` when it could not start, else with its exit code or signal.
+ * Builds the local provider for one host: every Linux tool call it makes runs through the toolbox the
+ * plugin was set up with, and the display decision comes from that host's environment, never an
+ * ambient read (#3794).
  */
-export type LinuxToolDetachedLauncher = (
-  cmd: string,
-  args: string[],
-) => { exited: Promise<ExecDetachedExit> };
-
-export type LinuxDesktopProvider = {
-  openTarget(target: string): Promise<void>;
-  closeApp(app: string): Promise<void>;
-};
-
-export type LinuxClipboardProvider = {
-  readText(): Promise<string>;
-  writeText(text: string): Promise<void>;
-};
-
-export type LinuxScreenshotOptions = {
-  fullscreen?: boolean;
-  stabilize?: boolean;
-  surface?: string;
-};
-
-export type LinuxScreenshotProvider = {
-  capture(outPath: string, options?: LinuxScreenshotOptions): Promise<void>;
-};
-
-export type LinuxAccessibilityProvider = {
-  captureTree(
-    surface: LinuxSnapshotSurface,
-    options?: LinuxTraversalOptions,
-  ): Promise<LinuxAccessibilityTree>;
-};
-
-export type LinuxPointerButton = ClickButton;
-
-export type LinuxInputProvider = {
-  click(x: number, y: number, button: LinuxPointerButton): Promise<void>;
-  doubleClick(x: number, y: number): Promise<void>;
-  longPress(x: number, y: number, durationMs: number): Promise<void>;
-  drag(x1: number, y1: number, x2: number, y2: number, durationMs: number): Promise<void>;
-  scroll(
-    direction: ScrollDirection,
-    options?: { amount?: number; pixels?: number; durationMs?: number },
-  ): Promise<void>;
-  typeText(text: string, options?: { delayMs?: number }): Promise<void>;
-  key(combo: string, scancodes: string[]): Promise<void>;
-};
-
-export type LinuxToolProvider = {
-  /** The bound display decision every local tool selection in this provider shares (#3794). */
-  display: LinuxDisplayConfig;
-  runCommand: LinuxToolCommandExecutor;
-  whichCommand: LinuxToolAvailabilityChecker;
-  launchDetached: LinuxToolDetachedLauncher;
-  desktop: LinuxDesktopProvider;
-  clipboard?: LinuxClipboardProvider;
-  screenshot?: LinuxScreenshotProvider;
-  accessibility?: LinuxAccessibilityProvider;
-  input?: LinuxInputProvider;
-};
-
-const whichOnPath = async (cmd: string): Promise<boolean> =>
-  await whichCmd(cmd, commandHostEnvironment().env);
-
-/** A provider under construction; only the display decision is required up front. */
-/**
- * The parts a caller may supply. A caller that injects `runCommand` owns process execution, so it
- * also supplies `launchDetached`: the host-local detached runner never stands in beside an
- * injected executor.
- */
-export type LinuxToolProviderOverrides = Partial<
-  Omit<LinuxToolProvider, 'runCommand' | 'launchDetached'>
-> &
-  (
-    | { runCommand?: undefined; launchDetached?: LinuxToolDetachedLauncher }
-    | { runCommand: LinuxToolCommandExecutor; launchDetached: LinuxToolDetachedLauncher }
-  );
-
-type LinuxToolProviderParts = { display: LinuxDisplayConfig } & LinuxToolProviderOverrides;
-
-/** Adds the local parts a partial provider omits; every part then belongs to this instance. */
-function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): LinuxToolProvider {
-  const runCommand = provider.runCommand ?? runCmd;
-  const whichCommand = provider.whichCommand ?? whichOnPath;
-  const launchDetached = provider.launchDetached ?? runCmdDetachedMonitored;
-  const display = provider.display;
-  return {
-    runCommand,
-    whichCommand,
-    launchDetached,
+export function createLinuxToolProvider(
+  toolbox: LinuxToolbox,
+  overrides: LinuxToolProviderOverrides = {},
+): LinuxToolProvider {
+  // The command primitives are resolved first, and the family's own semantic parts are built on the
+  // resolved ones: a caller that replaces the command route or the pacing replaces it for the whole
+  // provider, not only for the methods it named. The display decision is never replaced: it is read
+  // from the host this toolbox was set up with, which is what makes it the same decision the tools
+  // this provider spawns were resolved for (#3794).
+  const commands = withCommandOverrides(toolbox.commands, overrides);
+  const display = createLinuxDisplayConfig(() => toolbox.env);
+  return Object.freeze({
     display,
-    desktop:
-      provider.desktop ?? createLocalLinuxDesktopProvider(runCommand, whichCommand, launchDetached),
-    clipboard:
-      provider.clipboard ?? createLocalLinuxClipboardProvider(runCommand, whichCommand, display),
-    screenshot:
-      provider.screenshot ?? createLocalLinuxScreenshotProvider(runCommand, whichCommand, display),
-    ...(provider.accessibility ? { accessibility: provider.accessibility } : {}),
-    ...(provider.input ? { input: provider.input } : {}),
-  };
+    runCommand: commands.run,
+    whichCommand: commands.which,
+    launchDetached: commands.launchDetached,
+    sleep: commands.sleep,
+    desktop: overrides.desktop ?? createLinuxDesktopProvider(commands),
+    clipboard: overrides.clipboard ?? createLinuxClipboardProvider(commands, display),
+    screenshot: overrides.screenshot ?? createLinuxScreenshotProvider(commands, display),
+    accessibility: overrides.accessibility ?? createLinuxAccessibilityProvider(commands),
+    ...(overrides.input ? { input: overrides.input } : {}),
+  });
 }
 
-/**
- * Builds a local provider that reads its configuration from `host`, never from the ambient one:
- * one provider instance per composing runtime, owning its display decision (#3794).
- */
-export function createLocalLinuxToolProvider(
-  options: { host: HostEnvironment } & LinuxToolProviderOverrides,
-): LinuxToolProvider {
-  const { host, ...provider } = options;
-  return completeLocalLinuxToolProvider({
-    ...provider,
-    display: provider.display ?? createLinuxDisplayConfig(host),
+function withCommandOverrides(
+  commands: LinuxToolbox['commands'],
+  overrides: LinuxToolProviderOverrides,
+): LinuxToolbox['commands'] {
+  return Object.freeze({
+    run: overrides.runCommand ?? commands.run,
+    which: overrides.whichCommand ?? commands.which,
+    launchDetached: overrides.launchDetached ?? commands.launchDetached,
+    sleep: overrides.sleep ?? commands.sleep,
+    diagnose: commands.diagnose,
   });
 }
 
 /**
- * The fallback for callers outside every composed runtime (standalone leaf calls, scripts that
- * name no host): it reads the display decision from the command host of the call, like the
- * ambient read it replaces. A composed runtime binds its own host at `createLinuxInteractor`, so
- * its display decision never comes from here (#3794).
+ * The request scope the Linux family owns. Root composition resolves a provider for a request and
+ * hands it back to the plugin through the registration's `withRequestProvider`, which enters it for
+ * the request's work. The interactor and the runtime read the entered provider in preference to the
+ * one built from their own host, so a request that owns a display decision and a command route is the
+ * only one that answers for it.
  */
-// Names no executor, so the host-local defaults apply, including the detached app launcher.
-const localLinuxToolProvider = completeLocalLinuxToolProvider({
-  display: {
-    detectDisplayServer: () => detectLinuxDisplayServer(commandHostEnvironment().env),
-  },
-});
+const linuxToolProviderScope = createScopedProvider<
+  LinuxToolProvider | undefined,
+  LinuxToolProvider
+>(undefined);
 
-const linuxToolProviderScope = createScopedProvider(
-  localLinuxToolProvider,
-  completeLocalLinuxToolProvider,
-);
-
-export function resolveLinuxToolProvider(provider?: LinuxToolProvider): LinuxToolProvider {
-  return linuxToolProviderScope.resolve(provider);
+/** The provider this call should use: the one a request scoped, else the caller's own. */
+export function resolveLinuxToolProvider(own: LinuxToolProvider): LinuxToolProvider {
+  return linuxToolProviderScope.resolve() ?? own;
 }
 
 export function hasScopedLinuxToolProvider(): boolean {
@@ -187,94 +86,84 @@ export async function withLinuxToolProvider<T>(
   return await linuxToolProviderScope.run(provider, fn);
 }
 
-export async function runLinuxToolCommand(
-  cmd: string,
-  args: string[],
-  options?: ExecOptions,
-): Promise<ExecResult> {
-  return await resolveLinuxToolProvider().runCommand(cmd, args, options);
-}
-
-/** What a launched app's exit says went wrong: a start failure, a non-zero exit, or a signal. */
-function describeLaunchExit(exit: ExecDetachedExit): Record<string, unknown> | undefined {
-  if (exit.error !== undefined) return { error: exit.error };
-  if (exit.signal !== undefined) return { signal: exit.signal };
-  if (exit.exitCode !== undefined && exit.exitCode !== 0) return { exitCode: exit.exitCode };
-  return undefined;
-}
-
-function createLocalLinuxDesktopProvider(
-  runCommand: LinuxToolCommandExecutor,
-  whichCommand: LinuxToolAvailabilityChecker,
-  launchDetached: LinuxToolDetachedLauncher,
+export function createLinuxDesktopProvider(
+  commands: LinuxToolbox['commands'],
 ): LinuxDesktopProvider {
   return {
     async openTarget(target) {
       if (target.includes('://') || target.startsWith('/')) {
-        await runCommand('xdg-open', [target]);
+        await commands.run('xdg-open', [target]);
         return;
       }
 
-      if (await whichCommand(target)) {
-        // A desktop app outlives the command that opened it. Run detached with its output
-        // discarded: a piped child would keep everything it prints in daemon memory until it exits.
-        void launchDetached(target, []).exited.then((exit) => {
+      if (await commands.which(target)) {
+        // A desktop app outlives the command that opened it. Run detached with its output discarded:
+        // a piped child would keep everything it prints in daemon memory until it exits.
+        void commands.launchDetached(target, []).exited.then((exit) => {
           const failure = describeLaunchExit(exit);
           if (failure === undefined) return;
-          emitDiagnostic({
+          commands.diagnose({
             level: 'warn',
             phase: 'linux_app_launch',
             data: { app: target, ...failure },
           });
         });
-        await sleep(500);
+        await commands.sleep(500);
         return;
       }
 
-      await runCommand('xdg-open', [target], { allowFailure: true });
+      await commands.run('xdg-open', [target], { allowFailure: true });
     },
     async closeApp(app) {
-      if (await whichCommand('wmctrl')) {
-        await runCommand('wmctrl', ['-c', app], { allowFailure: true });
+      if (await commands.which('wmctrl')) {
+        await commands.run('wmctrl', ['-c', app], { allowFailure: true });
         return;
       }
 
-      await runCommand('pkill', ['-x', app], { allowFailure: true });
+      await commands.run('pkill', ['-x', app], { allowFailure: true });
     },
   };
 }
 
-function createLocalLinuxClipboardProvider(
-  runCommand: LinuxToolCommandExecutor,
-  whichCommand: LinuxToolAvailabilityChecker,
-  display: LinuxDisplayConfig,
+export function createLinuxClipboardProvider(
+  commands: LinuxToolbox['commands'],
+  display: LinuxToolProvider['display'],
 ): LinuxClipboardProvider {
   return {
     async readText() {
-      const tool = await resolveLocalLinuxTool(whichCommand, display, LOCAL_CLIPBOARD_TOOLS);
+      const tool = await resolveLocalLinuxTool(commands, display, LOCAL_CLIPBOARD_TOOLS);
       const command = LOCAL_CLIPBOARD_READ_COMMANDS[tool];
-      return (await runCommand(command.cmd, command.args, command.options)).stdout;
+      return (await commands.run(command.cmd, command.args, command.options)).stdout;
     },
     async writeText(text) {
-      const tool = await resolveLocalLinuxTool(whichCommand, display, LOCAL_CLIPBOARD_TOOLS);
+      const tool = await resolveLocalLinuxTool(commands, display, LOCAL_CLIPBOARD_TOOLS);
       const command = LOCAL_CLIPBOARD_WRITE_COMMANDS[tool](text);
-      await runCommand(command.cmd, command.args, command.options);
+      await commands.run(command.cmd, command.args, command.options);
     },
   };
 }
 
-function createLocalLinuxScreenshotProvider(
-  runCommand: LinuxToolCommandExecutor,
-  whichCommand: LinuxToolAvailabilityChecker,
-  display: LinuxDisplayConfig,
+export function createLinuxScreenshotProvider(
+  commands: LinuxToolbox['commands'],
+  display: LinuxToolProvider['display'],
 ): LinuxScreenshotProvider {
   return {
     async capture(outPath) {
-      const tool = await resolveLocalLinuxTool(whichCommand, display, LOCAL_SCREENSHOT_TOOLS);
+      const tool = await resolveLocalLinuxTool(commands, display, LOCAL_SCREENSHOT_TOOLS);
       const command = LOCAL_SCREENSHOT_COMMANDS[tool](outPath);
-      await runCommand(command.cmd, command.args, command.options);
+      await commands.run(command.cmd, command.args, command.options);
     },
   };
+}
+
+/** What a launched app's exit says went wrong: a start failure, a non-zero exit, or a signal. */
+function describeLaunchExit(
+  exit: Awaited<ReturnType<LinuxToolbox['commands']['launchDetached']>['exited']>,
+): Record<string, unknown> | undefined {
+  if (exit.error !== undefined) return { error: exit.error };
+  if (exit.signal !== undefined) return { signal: exit.signal };
+  if (exit.exitCode !== undefined && exit.exitCode !== 0) return { exitCode: exit.exitCode };
+  return undefined;
 }
 
 type LocalLinuxClipboardTool = 'wl-clipboard' | 'xclip' | 'xsel';
@@ -282,7 +171,7 @@ type LocalLinuxScreenshotTool = 'grim' | 'gnome-screenshot' | 'scrot' | 'import'
 type LocalLinuxToolCommand = {
   cmd: string;
   args: string[];
-  options?: ExecOptions;
+  options?: { allowFailure?: boolean; timeoutMs?: number; stdin?: string };
 };
 type LocalLinuxToolCandidate<T extends string> = {
   tool: T;
@@ -375,13 +264,13 @@ const LOCAL_SCREENSHOT_COMMANDS: Record<
 };
 
 async function resolveLocalLinuxTool<T extends string>(
-  whichCommand: LinuxToolAvailabilityChecker,
-  display: LinuxDisplayConfig,
+  commands: LinuxToolbox['commands'],
+  display: LinuxToolProvider['display'],
   config: LocalLinuxToolConfig<T>,
 ): Promise<T> {
   const server = display.detectDisplayServer();
   for (const candidate of config[server]) {
-    if (await whichCommand(candidate.command)) return candidate.tool;
+    if (await commands.which(candidate.command)) return candidate.tool;
   }
   throw new AppError('TOOL_MISSING', server === 'wayland' ? config.waylandError : config.x11Error);
 }

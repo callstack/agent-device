@@ -4,8 +4,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformModuleSelection } from '@agent-device/contracts/platform-plugin';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
-import { builtinPlatformSelectionFixture } from './platform-runtime-builtin-platforms.fixtures.ts';
 import { vegaPlatformCompositionFixture } from './platform-runtime-vega-provider.fixtures.ts';
+import { linuxPlatformCompositionFixture } from './platform-runtime-linux-provider.fixtures.ts';
 
 const unsupportedRecordingDevices = [
   {
@@ -14,7 +14,9 @@ const unsupportedRecordingDevices = [
     name: 'Linux desktop',
     kind: 'device',
     target: 'desktop',
-    platforms: builtinPlatformSelectionFixture(),
+    // Linux is a platform plugin, so this scenario supplies it: the assertion is about what the
+    // plugin's runtime reports, not about the builtin family set.
+    platforms: linuxPlatformCompositionFixture(),
   },
   {
     platform: 'vega',

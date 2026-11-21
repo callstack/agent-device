@@ -36,11 +36,6 @@ import {
   readAndroidAppStateWithExecutor,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
 } from '@agent-device/platform-android';
-import {
-  captureLinuxSurfaceSnapshot,
-  inventoryModule as linuxInventoryModule,
-  runtimeModule as linuxRuntimeModule,
-} from '@agent-device/platform-linux';
 import type { PlatformModuleSelection } from '@agent-device/contracts/platform-plugin';
 import {
   createComposedPlatformRuntimeGateway,
@@ -85,7 +80,6 @@ export function createPlatformModuleRegistryForHost(
       createAndroidInventoryModule({
         sdkRoots: configuredValues(env.ANDROID_SDK_ROOT, env.ANDROID_HOME),
       }),
-      linuxInventoryModule,
       ...(platforms?.inventoryModules ?? []),
     ],
     platforms?.reportAbsent,
@@ -118,7 +112,7 @@ const androidRuntimeModule = createAndroidRuntimeModule({
 
 function createPlatformRuntimeModuleRegistry(platforms: PlatformModuleSelection) {
   return createPlatformModuleRegistry<PlatformRuntimeModule>(
-    [appleRuntimeModule, androidRuntimeModule, linuxRuntimeModule, ...platforms.runtimeModules],
+    [appleRuntimeModule, androidRuntimeModule, ...platforms.runtimeModules],
     platforms.reportAbsent,
     platforms.assertSelectionCurrent,
   );
@@ -151,7 +145,6 @@ export function createPlatformRuntimeGateway(
         shutdownLoaders,
         assertShutdownAllowed: options.assertShutdownAllowed,
         snapshot: createSnapshotRuntimeHost({
-          linux: (snapshotOptions, signal) => captureLinuxSurfaceSnapshot(snapshotOptions, signal),
           macos: (snapshotOptions, signal) =>
             loadMacOsSurfaceSnapshot(snapshotOptions, signal, options.host.env),
         }),

@@ -1,262 +1,220 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
-import { afterAll, beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
-
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn(), whichCmd: vi.fn() };
-});
-
-import { captureAccessibilityTree } from '../atspi-bridge.ts';
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
+import path from 'node:path';
+import { withMockedPlatform } from '@agent-device/test-kit';
+import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
+import { createLinuxToolProvider } from '../tool-provider.ts';
+import { resolveLinuxAtspiScriptPath } from '../atspi-script.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
-bindTestCommandHost();
-
-const mockRunCmd = vi.mocked(runCmd);
-const mockWhichCmd = vi.mocked(whichCmd);
-
-// Stub process.platform to 'linux' for these tests
-const originalPlatform = process.platform;
-beforeEach(() => {
-  mockRunCmd.mockReset();
-  mockWhichCmd.mockReset();
-  mockWhichCmd.mockResolvedValue(true);
-  Object.defineProperty(process, 'platform', { value: 'linux' });
-});
-
-afterAll(() => {
-  Object.defineProperty(process, 'platform', { value: originalPlatform });
-});
-
-function makePythonResult(nodes: Record<string, unknown>[], truncated = false) {
-  return JSON.stringify({ nodes, truncated, surface: 'desktop' });
+/** The AT-SPI2 capture route, answering through the host the plugin was set up with. */
+function captureAtspi(
+  stub: LinuxHostStub,
+  surface: 'desktop' | 'frontmost-app' = 'desktop',
+  options: { maxNodes?: number; maxDepth?: number; maxApps?: number; signal?: AbortSignal } = {},
+) {
+  const provider = createLinuxToolProvider(stub.toolbox);
+  return provider.accessibility!.captureTree(surface, options);
 }
 
-test('parses Python JSON output into RawSnapshotNodes with normalized roles', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: makePythonResult([
-      {
-        index: 0,
-        role: 'push button',
-        label: 'OK',
-        value: null,
-        rect: { x: 10, y: 20, width: 80, height: 30 },
-        enabled: true,
-        selected: false,
-        hittable: true,
-        depth: 0,
-        parentIndex: null,
-        pid: 1234,
-        appName: 'TestApp',
-        windowTitle: 'Main Window',
-      },
-      {
-        index: 1,
-        role: 'label',
-        label: 'Hello',
-        value: null,
-        rect: null,
-        enabled: true,
-        selected: false,
-        hittable: false,
-        depth: 1,
-        parentIndex: 0,
-        pid: 1234,
-        appName: 'TestApp',
-        windowTitle: 'Main Window',
-      },
-    ]),
-    stderr: '',
+function stubPython(
+  stdout: string,
+  answer: Readonly<{ exitCode?: number; stderr?: string }> = {},
+): LinuxHostStub {
+  return createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['python3'],
+    respond: (executable) =>
+      executable === 'python3'
+        ? { stdout, exitCode: answer.exitCode ?? 0, stderr: answer.stderr ?? '' }
+        : {},
   });
+}
 
-  const result = await captureAccessibilityTree('desktop');
-
-  assert.equal(result.nodes.length, 2);
-  assert.equal(result.truncated, false);
-  assert.equal(result.surface, 'desktop');
-
-  // Role normalization
-  assert.equal(result.nodes[0]!.type, 'Button');
-  assert.equal(result.nodes[0]!.role, 'push button');
-  assert.equal(result.nodes[0]!.label, 'OK');
-  assert.deepEqual(result.nodes[0]!.rect, { x: 10, y: 20, width: 80, height: 30 });
-
-  assert.equal(result.nodes[1]!.type, 'StaticText');
-  assert.equal(result.nodes[1]!.role, 'label');
-  assert.equal(result.nodes[1]!.parentIndex, 0);
-});
-
-test('passes surface and limit args to Python script', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: makePythonResult([]),
-    stderr: '',
-  });
-
-  await captureAccessibilityTree('frontmost-app', {
-    maxNodes: 500,
-    maxDepth: 8,
-    maxApps: 10,
-  });
-
-  const callArgs = mockRunCmd.mock.calls[0]![1] as string[];
-  assert.ok(callArgs.includes('--surface'));
-  assert.ok(callArgs.includes('frontmost-app'));
-  assert.ok(callArgs.includes('--max-nodes'));
-  assert.ok(callArgs.includes('500'));
-  assert.ok(callArgs.includes('--max-depth'));
-  assert.ok(callArgs.includes('8'));
-  assert.ok(callArgs.includes('--max-apps'));
-  assert.ok(callArgs.includes('10'));
-});
-
-test('passes capture cancellation to the AT-SPI process', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: makePythonResult([]),
-    stderr: '',
-  });
-  const controller = new AbortController();
-
-  await captureAccessibilityTree('desktop', { signal: controller.signal });
-
-  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.signal, controller.signal);
-});
-
-test('throws TOOL_MISSING when python3 is not found', async () => {
-  mockWhichCmd.mockResolvedValue(false);
-
-  await assert.rejects(
-    () => captureAccessibilityTree('desktop'),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'TOOL_MISSING');
-      assert.ok(err.message.includes('python3'));
-      return true;
+const TREE = JSON.stringify({
+  nodes: [
+    {
+      index: 0,
+      role: 'push button',
+      label: 'OK',
+      rect: { x: 4, y: 8, width: 40, height: 20 },
+      depth: 1,
+      parentIndex: 5,
+      pid: 411,
+      appName: 'Files',
+      windowTitle: 'Home',
     },
-  );
+  ],
+  truncated: false,
+  surface: 'desktop',
 });
 
-test('throws TOOL_MISSING when python3-gi is missing', async () => {
-  mockRunCmd.mockResolvedValue({
+test('the AT-SPI capture runs the helper shipped with the plugin', async () => {
+  const stub = stubPython(TREE);
+
+  await withMockedPlatform('linux', () => captureAtspi(stub));
+
+  const command = stub.commands[0]!;
+  assert.equal(command.executable, 'python3');
+  assert.equal(command.args[0], resolveLinuxAtspiScriptPath());
+  // The helper has to ship inside the installed package, not resolve against a repository layout.
+  assert.equal(path.basename(command.args[0]!), 'atspi-dump.py');
+  assert.equal(path.dirname(command.args[0]!).endsWith('linux'), true);
+});
+
+test('the AT-SPI capture passes the surface and traversal limits', async () => {
+  const stub = stubPython(TREE);
+
+  await withMockedPlatform('linux', () =>
+    captureAtspi(stub, 'frontmost-app', { maxNodes: 10, maxDepth: 3, maxApps: 2 }),
+  );
+
+  assert.deepEqual(stub.commands[0]!.args.slice(1), [
+    '--surface',
+    'frontmost-app',
+    '--max-nodes',
+    '10',
+    '--max-depth',
+    '3',
+    '--max-apps',
+    '2',
+  ]);
+});
+
+test('the AT-SPI capture falls back to the helper defaults and tolerates a non-zero probe answer', async () => {
+  const stub = stubPython(TREE);
+
+  await withMockedPlatform('linux', () => captureAtspi(stub));
+
+  const command = stub.commands[0]!;
+  assert.deepEqual(command.args.slice(3), [
+    '--max-nodes',
+    '1500',
+    '--max-depth',
+    '12',
+    '--max-apps',
+    '24',
+  ]);
+  // The helper's own failure answer is read from its exit code, so the run must not throw first.
+  assert.equal(command.allowFailure, true);
+});
+
+test('the AT-SPI capture maps helper roles through the family role map', async () => {
+  const stub = stubPython(TREE);
+
+  const result = await withMockedPlatform('linux', () => captureAtspi(stub));
+
+  assert.deepEqual(result.nodes, [
+    {
+      index: 0,
+      type: 'Button',
+      role: 'push button',
+      label: 'OK',
+      value: undefined,
+      rect: { x: 4, y: 8, width: 40, height: 20 },
+      enabled: undefined,
+      selected: undefined,
+      hittable: undefined,
+      depth: 1,
+      parentIndex: 5,
+      pid: 411,
+      appName: 'Files',
+      windowTitle: 'Home',
+    },
+  ]);
+  assert.equal(result.surface, 'desktop');
+  assert.equal(result.truncated, false);
+});
+
+test('the AT-SPI capture reports the missing PyGObject bindings as a missing tool', async () => {
+  const stub = stubPython('', {
     exitCode: 1,
-    stdout: '',
     stderr: "ModuleNotFoundError: No module named 'gi'",
   });
 
   await assert.rejects(
-    () => captureAccessibilityTree('desktop'),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'TOOL_MISSING');
-      assert.ok(err.message.includes('python3-gi'));
+    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'TOOL_MISSING');
+      assert.match(error.message, /python3-gi/);
       return true;
     },
   );
 });
 
-test('throws COMMAND_FAILED on non-zero exit with unknown error', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 1,
-    stdout: '',
-    stderr: 'Segmentation fault',
+test('the AT-SPI capture reports a helper that failed for another reason', async () => {
+  const stub = stubPython('', { exitCode: 2, stderr: 'Display :0 not found' });
+
+  await assert.rejects(
+    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.message, /Display :0 not found/);
+      return true;
+    },
+  );
+});
+
+test('the AT-SPI capture reports output it cannot parse', async () => {
+  const stub = stubPython('not json');
+
+  await assert.rejects(
+    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.message, /invalid JSON/);
+      return true;
+    },
+  );
+});
+
+test('the AT-SPI capture reports the helper own error answer', async () => {
+  const stub = stubPython(
+    JSON.stringify({ nodes: [], truncated: false, surface: 'desktop', error: 'no registry' }),
+  );
+
+  await assert.rejects(
+    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.message, /AT-SPI2: no registry/);
+      return true;
+    },
+  );
+});
+
+test('the AT-SPI capture asks before spawning when the host has no python3', async () => {
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: [],
   });
 
   await assert.rejects(
-    () => captureAccessibilityTree('desktop'),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'COMMAND_FAILED');
-      assert.ok(err.message.includes('Segmentation fault'));
+    () => withMockedPlatform('linux', () => captureAtspi(stub)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'TOOL_MISSING');
+      assert.match(error.message, /python3/);
       return true;
     },
   );
+  assert.deepEqual(stub.commands, []);
 });
 
-test('throws COMMAND_FAILED on invalid JSON output', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: 'not json at all',
-    stderr: '',
-  });
+test('the AT-SPI capture refuses off a Linux host without touching it', async () => {
+  const stub = stubPython(TREE);
 
   await assert.rejects(
-    () => captureAccessibilityTree('desktop'),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'COMMAND_FAILED');
-      assert.ok(err.message.includes('invalid JSON'));
+    () => captureAtspi(stub),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_PLATFORM');
       return true;
     },
   );
-});
-
-test('throws COMMAND_FAILED when Python returns an error field', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: JSON.stringify({
-      error: 'Could not get desktop accessible. Is the accessibility bus running?',
-    }),
-    stderr: '',
-  });
-
-  await assert.rejects(
-    () => captureAccessibilityTree('desktop'),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'COMMAND_FAILED');
-      assert.ok(err.message.includes('accessibility bus'));
-      return true;
-    },
-  );
-});
-
-test('handles truncated result', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: makePythonResult(
-      [{ index: 0, role: 'frame', label: 'Win', depth: 0, parentIndex: null }],
-      true,
-    ),
-    stderr: '',
-  });
-
-  const result = await captureAccessibilityTree('desktop');
-  assert.equal(result.truncated, true);
-});
-
-test('coerces null fields to undefined in node output', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: makePythonResult([
-      {
-        index: 0,
-        role: 'panel',
-        label: null,
-        value: null,
-        rect: null,
-        enabled: null,
-        selected: null,
-        hittable: false,
-        depth: 0,
-        parentIndex: null,
-        pid: null,
-        appName: null,
-        windowTitle: null,
-      },
-    ]),
-    stderr: '',
-  });
-
-  const result = await captureAccessibilityTree('desktop');
-  const node = result.nodes[0]!;
-  assert.equal(node.label, undefined);
-  assert.equal(node.value, undefined);
-  assert.equal(node.rect, undefined);
-  assert.equal(node.parentIndex, undefined);
-  assert.equal(node.pid, undefined);
-  assert.equal(node.appName, undefined);
-  assert.equal(node.windowTitle, undefined);
+  assert.deepEqual(stub.commands, []);
 });

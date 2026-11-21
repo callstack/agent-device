@@ -11,12 +11,13 @@ import type {
 import type { AppleRunnerCommandExecutor, AppleRunnerProvider } from '@agent-device/apple-runner';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
 import type {
+  LinuxPlatformSelection,
   VegaPlatformSelection,
   WebPlatformSelection,
 } from '@agent-device/contracts/platform-plugin';
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
-import type { LinuxToolProvider } from '@agent-device/platform-linux';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import { webBackendKeyOf, type DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
@@ -66,6 +67,7 @@ export type RequestPlatformProviderOptions = Readonly<{
   providers?: PlatformProviderResolvers;
   web?: WebPlatformSelection;
   vega?: VegaPlatformSelection;
+  linux?: LinuxPlatformSelection;
 }>;
 
 type ResolvedRequestPlatformProviders = {
@@ -93,6 +95,7 @@ type RequestPlatformProviderScopeWrapper = <T>(task: () => Promise<T>) => Promis
 type RequestPlatformSelections = Readonly<{
   web?: WebPlatformSelection;
   vega?: VegaPlatformSelection;
+  linux?: LinuxPlatformSelection;
 }>;
 
 type RequestPlatformProviderDescriptor = {
@@ -119,7 +122,7 @@ export function createComposedRequestPlatformProviders(
 ): RequestPlatformProviders {
   const providers = options.providers ?? {};
   const hasConfiguredResolvers = hasPlatformProviderResolvers(providers);
-  const selections = { web: options.web, vega: options.vega };
+  const selections = { web: options.web, vega: options.vega, linux: options.linux };
   return Object.freeze({
     hasConfiguredResolvers,
     run: async <T>(
@@ -247,16 +250,19 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
   },
   {
     resolverKey: 'linuxToolProvider',
-    resolve(providers, context) {
+    resolve(providers, context, selections) {
+      // The selection gates before the resolver, as Vega's does: a request whose family this
+      // process does not serve has no scope to wrap the provider into, and a resolver may open a
+      // session or start a process per call with nothing to close what it returned.
+      if (!selections.linux?.active) return {};
       const resolver = providers.linuxToolProvider;
-      if (!resolver || !platformGatedResolverApplies('linuxToolProvider', context.device))
-        return {};
+      if (!resolver || context.device.platform !== 'linux') return {};
       return { linuxTool: { provider: resolver(context) } };
     },
-    async appendWrapper(scopedProviders, wrappers) {
-      if (!scopedProviders.linuxTool?.provider) return;
-      const { withLinuxToolProvider } = await import('@agent-device/platform-linux');
-      appendRequestProviderWrapper(wrappers, scopedProviders.linuxTool, withLinuxToolProvider);
+    async appendWrapper(scopedProviders, wrappers, selections) {
+      const active = selections.linux?.active;
+      if (!scopedProviders.linuxTool?.provider || !active) return;
+      appendRequestProviderWrapper(wrappers, scopedProviders.linuxTool, active.withRequestProvider);
     },
   },
   {

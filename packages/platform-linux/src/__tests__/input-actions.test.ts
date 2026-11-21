@@ -1,140 +1,138 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
-import { afterAll, beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
+import { createLinuxToolProvider } from '../tool-provider.ts';
+import { fillLinux, pressLinux, scrollLinux, sendKey, typeLinux } from '../input-actions.ts';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import { AppError } from '@agent-device/kernel/errors';
 
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn(), whichCmd: vi.fn() };
-});
-
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
-import { fillLinux, pressLinux, scrollLinux, typeLinux, sendKey } from '../input-actions.ts';
-
-bindTestCommandHost();
-
-const mockRunCmd = vi.mocked(runCmd);
-const mockWhichCmd = vi.mocked(whichCmd);
-
-const originalPlatform = process.platform;
-const originalEnv = { ...process.env };
-
-function setupXdotool(): void {
-  Object.defineProperty(process, 'platform', { value: 'linux' });
-  process.env['XDG_SESSION_TYPE'] = 'x11';
-  delete process.env['WAYLAND_DISPLAY'];
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'xdotool');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+function x11Stub(): LinuxHostStub {
+  return createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['xdotool'],
+    respond: () => ({}),
+  });
 }
 
-function setupYdotool(): void {
-  Object.defineProperty(process, 'platform', { value: 'linux' });
-  process.env['XDG_SESSION_TYPE'] = 'wayland';
-  process.env['WAYLAND_DISPLAY'] = 'wayland-0';
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'ydotool');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+function waylandStub(): LinuxHostStub {
+  return createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
+    tools: ['ydotool'],
+    respond: () => ({}),
+  });
 }
 
-/** Extract the [command, args] pairs from all runCmd calls. */
-function calls(): Array<[string, string[]]> {
-  return mockRunCmd.mock.calls.map((c) => [c[0], c[1] as string[]]);
+function calls(stub: LinuxHostStub): Array<[string, readonly string[]]> {
+  return stub.commands.map((c) => [c.executable, c.args]);
 }
 
-beforeEach(() => {
-  mockRunCmd.mockReset();
-  mockWhichCmd.mockReset();
-});
+function providerOf(stub: LinuxHostStub): LinuxToolProvider {
+  return createLinuxToolProvider(stub.toolbox);
+}
 
-afterAll(() => {
-  Object.defineProperty(process, 'platform', { value: originalPlatform });
-  Object.assign(process.env, originalEnv);
-});
-
-// ── xdotool tests ────────────────────────────────────────────────────────
+// ── xdotool ──────────────────────────────────────────────────────────────
 
 test('typeLinux omits --delay when delayMs is 0', async () => {
-  setupXdotool();
-  await typeLinux('test', 0);
-  const c = calls();
-  const typeCall = c.find(([cmd, args]) => cmd === 'xdotool' && args.includes('type'));
+  const stub = x11Stub();
+  await typeLinux(providerOf(stub), 'test', 0);
+
+  const typeCall = calls(stub).find(
+    ([cmd, args]) => cmd === 'xdotool' && (args as string[]).includes('type'),
+  );
   assert.ok(typeCall);
-  assert.ok(!typeCall[1].includes('--delay'));
+  assert.equal((typeCall[1] as string[]).includes('--delay'), false);
 });
 
 // `fill <target> ""` is the clear-field primitive (#2063). Typing zero characters over the
 // Ctrl+A selection leaves the old value selected but intact, so the empty fill must delete
 // the selection instead.
 test('fillLinux deletes the select-all selection for an empty text', async () => {
-  setupXdotool();
-  await fillLinux(10, 20, '');
-  const c = calls();
-  const backspaceCall = c.find(([cmd, args]) => cmd === 'xdotool' && args.includes('BackSpace'));
-  assert.ok(backspaceCall);
-  const typeCall = c.find(([cmd, args]) => cmd === 'xdotool' && args.includes('type'));
-  assert.equal(typeCall, undefined);
+  const stub = x11Stub();
+  await fillLinux(providerOf(stub), 10, 20, '');
+
+  const args = calls(stub).map(([, a]) => a as string[]);
+  assert.ok(args.some((a) => a.includes('BackSpace')));
+  assert.equal(args.some((a) => a.includes('type')), false);
 });
 
-test('scrollLinux preserves xdotool repeat count for non-paced scroll', async () => {
-  setupXdotool();
-  await scrollLinux('down', { pixels: 75 });
-  const c = calls();
+test('scrollLinux preserves the xdotool repeat count for non-paced scroll', async () => {
+  const stub = x11Stub();
+  await scrollLinux(providerOf(stub), 'down', { pixels: 75 });
+
   assert.ok(
-    c.some(
+    calls(stub).some(
       ([cmd, args]) =>
         cmd === 'xdotool' &&
-        args.includes('click') &&
-        args.includes('--repeat') &&
-        args.includes('5'),
+        (args as string[]).includes('click') &&
+        (args as string[]).includes('--repeat') &&
+        (args as string[]).includes('5'),
     ),
   );
 });
 
-// ── ydotool tests ────────────────────────────────────────────────────────
+// ── ydotool ──────────────────────────────────────────────────────────────
 
-test('pressLinux uses ydotool mousemove + click on Wayland', async () => {
-  setupYdotool();
-  await pressLinux(100, 200);
-  const c = calls();
-  assert.ok(
-    c.some(
-      ([cmd, args]) =>
-        cmd === 'ydotool' && args.includes('mousemove') && args.includes('--absolute'),
-    ),
-  );
-  assert.ok(
-    c.some(([cmd, args]) => cmd === 'ydotool' && args.includes('click') && args.includes('0xC0')),
-  );
+test('pressLinux uses ydotool mousemove and click on Wayland', async () => {
+  const stub = waylandStub();
+  await pressLinux(providerOf(stub), 100, 200);
+
+  const args = calls(stub).map(([, a]) => a as string[]);
+  assert.ok(args.some((a) => a.includes('mousemove') && a.includes('--absolute')));
+  assert.ok(args.some((a) => a.includes('click') && a.includes('0xC0')));
 });
 
 test('sendKey uses ydotool with scancodes', async () => {
-  setupYdotool();
-  await sendKey('alt+Left', ['56:1', '105:1', '105:0', '56:0']);
-  const c = calls();
+  const stub = waylandStub();
+  await sendKey(providerOf(stub), 'alt+Left', ['56:1', '105:1', '105:0', '56:0']);
+
   assert.ok(
-    c.some(([cmd, args]) => cmd === 'ydotool' && args.includes('key') && args.includes('56:1')),
+    calls(stub).some(
+      ([cmd, args]) => cmd === 'ydotool' && (args as string[]).includes('key') && (args as string[]).includes('56:1'),
+    ),
   );
 });
 
 test('typeLinux uses ydotool type', async () => {
-  setupYdotool();
-  await typeLinux('hello');
-  const c = calls();
+  const stub = waylandStub();
+  await typeLinux(providerOf(stub), 'hello');
+
   assert.ok(
-    c.some(([cmd, args]) => cmd === 'ydotool' && args.includes('type') && args.includes('hello')),
+    calls(stub).some(
+      ([cmd, args]) => cmd === 'ydotool' && (args as string[]).includes('type') && (args as string[]).includes('hello'),
+    ),
   );
 });
 
 test('scrollLinux uses ydotool mousemove --wheel for vertical scroll', async () => {
-  setupYdotool();
-  const result = await scrollLinux('up', { pixels: 80, durationMs: 1 });
-  const c = calls();
+  const stub = waylandStub();
+  const result = await scrollLinux(providerOf(stub), 'up', { pixels: 80, durationMs: 1 });
+
   assert.ok(
-    c.some(
+    calls(stub).some(
       ([cmd, args]) =>
         cmd === 'ydotool' &&
-        args.includes('mousemove') &&
-        args.includes('--wheel') &&
-        args.includes('-y'),
+        (args as string[]).includes('mousemove') &&
+        (args as string[]).includes('--wheel') &&
+        (args as string[]).includes('-y'),
     ),
   );
   assert.equal(result.durationMs, 1);
+});
+
+test('input synthesis refuses with TOOL_MISSING when the host has no tool for the display', async () => {
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: [],
+  });
+
+  await assert.rejects(
+    () => pressLinux(providerOf(stub), 1, 2),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'TOOL_MISSING');
+      assert.match(error.message, /xdotool/);
+      return true;
+    },
+  );
+  assert.deepEqual(stub.commands, []);
 });

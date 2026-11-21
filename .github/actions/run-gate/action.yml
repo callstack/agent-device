@@ -24,6 +24,18 @@ runs:
         export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-replay-plugins}"
         node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
         echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
+    # The Linux device lanes drive the family through its managed plugin, so the store carries it
+    # before the gate runs. Staged from the workspace build the job just produced, the same way the
+    # replay packages are: the lane then exercises the plugin a user installs, not core code.
+    - name: Install the Linux platform plugin for Linux device gates
+      if: contains(fromJSON('["replay-linux", "linux-command-evidence"]'), inputs.gate)
+      shell: bash
+      run: |
+        set -euo pipefail
+        pnpm --filter @agent-device/linux build
+        export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-replay-plugins}"
+        AGENT_DEVICE_WORKSPACE_PLUGINS=linux node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
+        echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
     - id: run
       shell: bash
       env:

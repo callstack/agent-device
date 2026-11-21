@@ -1,20 +1,21 @@
 /**
  * Shared Linux input-tool resolution — display server and input tool.
  *
- * The display decision comes from the resolved provider's bound host, never an ambient read
- * (#3794). Nothing is memoized: the interactor that enters a provider is built per request, so a
- * cache would not outlive the request it serves. A refusal simply throws.
+ * The display decision comes from the provider that is running the action, never an ambient read
+ * (#3794). Nothing is memoized: a refusal simply throws, and the next call asks again, which is what
+ * lets a tool installed while the daemon runs answer without a restart.
  */
 
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveLinuxToolProvider, type LinuxToolProvider } from './tool-provider.ts';
-import type { DisplayServer } from './display.ts';
-import type { LinuxInputSelection } from './input-tool.ts';
+import type {
+  LinuxInputSelection,
+  LinuxToolProvider,
+} from '@agent-device/contracts/linux-tool-provider';
 
 export async function ensureInputTool(
-  provider: LinuxToolProvider = resolveLinuxToolProvider(),
+  provider: LinuxToolProvider,
 ): Promise<LinuxInputSelection> {
-  const display: DisplayServer = provider.display.detectDisplayServer();
+  const display = provider.display.detectDisplayServer();
 
   if (display === 'wayland') {
     if (await provider.whichCommand('ydotool')) return { tool: 'ydotool', display };

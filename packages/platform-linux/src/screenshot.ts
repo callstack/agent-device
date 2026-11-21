@@ -1,8 +1,10 @@
-import { resolveLinuxToolProvider, type LinuxScreenshotOptions } from './tool-provider.ts';
+import type { ScreenshotOptions } from '@agent-device/contracts/interactor-types';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 
 export async function screenshotLinux(
+  provider: LinuxToolProvider,
   outPath: string,
-  options?: LinuxScreenshotOptions,
+  options?: ScreenshotOptions,
 ): Promise<void> {
-  await resolveLinuxToolProvider().screenshot!.capture(outPath, options);
+  await provider.screenshot!.capture(outPath, options);
 }

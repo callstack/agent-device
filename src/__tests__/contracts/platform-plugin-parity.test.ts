@@ -13,7 +13,7 @@ import { missingPlatformPlugin } from '../../core/platform-plugin-absence.ts';
 
 // The optional families that ship as platform plugins: parsing a selector for them resolves a
 // registration only through the plugin registry, never through a builtin row.
-const PLATFORM_PLUGIN_FAMILIES = ['harmonyos', 'vega', 'web'] as const;
+const PLATFORM_PLUGIN_FAMILIES = ['harmonyos', 'vega', 'linux', 'web'] as const;
 
 // Independent copy of the internal platform accept-set. The CLI `--platform`
 // enum derives separately from `PLATFORM_SELECTORS`; this oracle keeps registry
@@ -32,7 +32,7 @@ function parsePlatformByHand(value: unknown): Platform | undefined {
 test('built-in platforms follow the canonical family order', () => {
   // The builtin set holds exactly the families the packed core still owns, in canonical
   // `PLATFORMS` order. The optional families that ship as platform plugins have no row here.
-  assert.deepEqual(builtinPlatformPlugins.families, ['apple', 'android', 'linux']);
+  assert.deepEqual(builtinPlatformPlugins.families, ['apple', 'android']);
 });
 
 test('every required family is covered by a builtin plugin; optional families may be absent', () => {
@@ -91,7 +91,7 @@ test('a family plugin resolves to the SAME instance for every leaf it owns', () 
   // Single-platform plugins are distinct objects.
   assert.notEqual(
     builtinPlatformPlugins.get('android').plugin,
-    builtinPlatformPlugins.get('linux').plugin,
+    builtinPlatformPlugins.get('apple').plugin,
   );
 });
 

@@ -4,12 +4,9 @@ import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/inte
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { eagerClosureOf } from '@agent-device/test-kit';
 
-const { captureLinuxSurfaceSnapshot, captureMacOsSurfaceSnapshot } = vi.hoisted(() => ({
-  captureLinuxSurfaceSnapshot: vi.fn(),
+const { captureMacOsSurfaceSnapshot } = vi.hoisted(() => ({
   captureMacOsSurfaceSnapshot: vi.fn(),
 }));
-
-vi.mock('@agent-device/platform-linux', () => ({ captureLinuxSurfaceSnapshot }));
 
 import { createSnapshotRuntimeHost } from '@agent-device/capture-kit/snapshot-desktop-surface';
 
@@ -21,21 +18,12 @@ const macosDevice = {
   kind: 'device',
 } as DeviceInfo;
 
-const linuxDevice = {
-  id: 'linux-desktop',
-  name: 'Linux Desktop',
-  platform: 'linux',
-  kind: 'device',
-} as DeviceInfo;
-
 beforeEach(() => {
-  captureLinuxSurfaceSnapshot.mockReset();
   captureMacOsSurfaceSnapshot.mockReset();
 });
 
 function createHost() {
   return createSnapshotRuntimeHost({
-    linux: captureLinuxSurfaceSnapshot,
     macos: captureMacOsSurfaceSnapshot,
   });
 }
@@ -81,43 +69,20 @@ test('Apple snapshot host preserves non-app macOS surface capture and menubar id
   });
 });
 
-test('Linux snapshot host preserves interactive ancestor projection before depth filtering', async () => {
-  captureLinuxSurfaceSnapshot.mockResolvedValue({
-    backend: 'linux-atspi',
-    producer: 'linux-atspi',
-    truncated: false,
-    nodes: [
-      { index: 0, depth: 0, type: 'Application', label: 'App', parentIndex: undefined },
-      { index: 1, parentIndex: 0, depth: 1, type: 'Group', label: 'Panel' },
-    ],
-  });
-  const signal = new AbortController().signal;
+test('desktop snapshot host refuses a device whose surface the core does not project', async () => {
+  // The Linux desktop capture moved to the Linux plugin (#4676): the core's host no longer answers
+  // for it, so a Linux device reaching this host is a routing mistake, not a missing loader.
+  const linuxDevice = {
+    id: 'linux-desktop',
+    name: 'Linux Desktop',
+    platform: 'linux',
+    kind: 'device',
+  } as DeviceInfo;
 
-  const result = await createHost().captureSurface(
-    linuxDevice,
-    { surface: 'desktop', interactiveOnly: true, depth: 1 },
-    signal,
-  );
-
-  expect(captureLinuxSurfaceSnapshot).toHaveBeenCalledWith(
-    { surface: 'desktop', interactiveOnly: true, depth: 1 },
-    signal,
-  );
-  expect(result).toEqual({
-    backend: 'linux-atspi',
-    producer: 'linux-atspi',
-    truncated: false,
-    nodes: [
-      { index: 0, depth: 0, type: 'Application', label: 'App', parentIndex: undefined },
-      {
-        index: 1,
-        parentIndex: 0,
-        depth: 1,
-        type: 'Group',
-        label: 'Panel',
-      },
-    ],
-  });
+  await expect(
+    createHost().captureSurface(linuxDevice, { surface: 'desktop' }, new AbortController().signal),
+  ).rejects.toThrow(/macOS surface/i);
+  expect(captureMacOsSurfaceSnapshot).not.toHaveBeenCalled();
 });
 
 test('iOS snapshot host presents provider facts and keeps raw truncation evidence explicit', async () => {
