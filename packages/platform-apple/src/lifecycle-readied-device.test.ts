@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import type { DeviceBootPerformance } from '@agent-device/contracts/device-boot';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import { coldSimulatorLifecycleHost, openInput, simulator } from './lifecycle.fixtures.ts';
 
@@ -72,6 +73,63 @@ test('a failed preparation leaves the original device bound', async () => {
   await lifecycle.openApplication(openInput());
 
   expect(prewarmRunnerSession).toHaveBeenCalledWith(shutdownSimulator, {}, signal, false);
+});
+
+// --- #4791: the open's preparation carries its own boot report out ---
+//
+// The routed daemon lane answers the port itself, so only this lane can prove the Apple lifecycle
+// actually forwards readiness's answer. Deleting that forwarding must fail here.
+
+test('preparing an open on a Shutdown Simulator reports that its boot step performed the boot', async () => {
+  const { host } = coldSimulatorLifecycleHost();
+  const lifecycle = bindAppleApplicationLifecycle({
+    host,
+    device: shutdownSimulator,
+    signal: new AbortController().signal,
+  });
+  const reports: DeviceBootPerformance[] = [];
+
+  await lifecycle.prepareApplicationOpen({
+    ...prepareOpenInput,
+    onBootPerformance: (report) => reports.push(report),
+  });
+
+  expect(reports).toEqual([{ performed: true }]);
+});
+
+test('preparing an open whose boot CoreSimulator refuses reports no boot performed', async () => {
+  const { host } = coldSimulatorLifecycleHost({
+    bootFailure: { exitCode: 149, stderr: 'Unable to boot device in current state: Booted' },
+  });
+  const lifecycle = bindAppleApplicationLifecycle({
+    host,
+    device: shutdownSimulator,
+    signal: new AbortController().signal,
+  });
+  const reports: DeviceBootPerformance[] = [];
+
+  await lifecycle.prepareApplicationOpen({
+    ...prepareOpenInput,
+    onBootPerformance: (report) => reports.push(report),
+  });
+
+  // The open still succeeds — the simulator is up, just not because of this call — so the session
+  // learns the one thing close needs: this open owns no stop.
+  expect(reports).toEqual([{ performed: false, reason: 'already-booted' }]);
+});
+
+test('an open that asks for no boot report still prepares', async () => {
+  const { host, calls } = coldSimulatorLifecycleHost();
+  const lifecycle = bindAppleApplicationLifecycle({
+    host,
+    device: shutdownSimulator,
+    signal: new AbortController().signal,
+  });
+
+  await lifecycle.prepareApplicationOpen(prepareOpenInput);
+
+  // Readiness answers whether or not the caller asked, and asking nothing costs the open nothing.
+  expect(calls.filter((call) => call.args.includes('bootstatus'))).toHaveLength(1);
 });
 
 test('a cancelled runner preparation prepares nothing and leaves the original device bound', async () => {

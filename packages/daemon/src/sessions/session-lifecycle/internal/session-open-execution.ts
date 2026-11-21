@@ -23,16 +23,13 @@ import type {
   OpenApplicationTiming,
   OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import type {
-  DeviceBootPerformance,
-  CloseBootOwnership,
-} from '@agent-device/contracts/device-boot';
-import { resolveSessionBootOwnership } from '@agent-device/contracts/device-boot';
+import type { DeviceBootPerformance } from '@agent-device/contracts/device-boot';
+import { resolveSessionBootOwnership } from './session-boot-ownership.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { requestCwd } from '../../../core/context.ts';
-import type { SessionRef, SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
+import type { CloseBootOwnership, SessionRef, SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
@@ -349,8 +346,8 @@ export async function completeOpenCommand(params: {
     lifecycle.owner.kind === 'local-family',
   );
   // #4791: the snapshot that says "stopped" is an inference, and the platform's own boot step is the
-  // proof. The pair below is what the session records: who owns the stop, and what close must say when
-  // the inference is refused.
+  // proof. The answer below is what the session records: who owns the stop, and what close must say
+  // when the inference is refused.
   const bootOwnership = resolveSessionBootOwnership({
     inferredFromSnapshot: preparedSelection?.bootOccurred === true,
     bootPerformance: params.bootPerformance,

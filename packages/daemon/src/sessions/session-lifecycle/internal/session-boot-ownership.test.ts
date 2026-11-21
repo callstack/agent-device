@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { resolveSessionBootOwnership } from '../device-boot.ts';
+import { resolveSessionBootOwnership } from './session-boot-ownership.ts';
 
 // #4791: boot ownership is decided from the platform's own boot report, not from what an inventory
 // snapshot said before the boot could happen. These pin the decision at the owner of the type; the
-// routed close behavior is pinned in the daemon's session-lifecycle lane.
+// routed close behavior is pinned in the session-lifecycle __tests__ lane.
 describe('resolveSessionBootOwnership', () => {
   test('a boot the boot step reports performing owns the stop on its own', () => {
     expect(
@@ -11,7 +11,7 @@ describe('resolveSessionBootOwnership', () => {
         inferredFromSnapshot: false,
         bootPerformance: { performed: true },
       }),
-    ).toEqual({ ownsBoot: true, bootOwnerUnverified: false });
+    ).toBe('proved');
   });
 
   test('the snapshot inference still owns the boot for an owner that reports nothing', () => {
@@ -19,7 +19,7 @@ describe('resolveSessionBootOwnership', () => {
     // nothing and the inference stays in charge there.
     expect(
       resolveSessionBootOwnership({ inferredFromSnapshot: true, bootPerformance: undefined }),
-    ).toEqual({ ownsBoot: true, bootOwnerUnverified: false });
+    ).toBe('inferred');
   });
 
   test('a boot the boot step disproves refuses the snapshot inference and says so', () => {
@@ -28,7 +28,7 @@ describe('resolveSessionBootOwnership', () => {
         inferredFromSnapshot: true,
         bootPerformance: { performed: false, reason: 'already-booted' },
       }),
-    ).toEqual({ ownsBoot: false, bootOwnerUnverified: true });
+    ).toBe('disproved');
   });
 
   test('nothing is owed when neither the snapshot nor the boot step claims a boot', () => {
@@ -37,6 +37,15 @@ describe('resolveSessionBootOwnership', () => {
         inferredFromSnapshot: false,
         bootPerformance: { performed: false, reason: 'no-boot-attempt' },
       }),
-    ).toEqual({ ownsBoot: false, bootOwnerUnverified: false });
+    ).toBe('none');
+  });
+
+  test('a disproved boot nobody inferred is no claim either', () => {
+    expect(
+      resolveSessionBootOwnership({
+        inferredFromSnapshot: false,
+        bootPerformance: { performed: false, reason: 'already-booted' },
+      }),
+    ).toBe('none');
   });
 });
