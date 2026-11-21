@@ -286,7 +286,7 @@ describe('an option no action names is refused, never guessed', () => {
     );
   });
 
-  test.for(['diff', 'perf', 'metro', 'logs', 'session', 'record'])(
+  test.for(['diff', 'perf', 'metro', 'logs', 'session', 'record'] as const)(
     '%s names an action for every option it reads, so its tables are per action',
     (command) => {
       const schema = getCliCommandSchema(command);
