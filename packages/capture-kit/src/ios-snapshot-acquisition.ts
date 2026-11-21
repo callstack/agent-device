@@ -7,7 +7,7 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import { SNAPSHOT_PRODUCERS } from '@agent-device/contracts/snapshot-producers';
+import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type {
   RawSnapshotNode,
@@ -31,7 +31,7 @@ function deriveIosSnapshotAcquisitionResidue(
     { kind: 'unavailable-fact', fact: 'hittability' },
     { kind: 'unavailable-fact', fact: 'acquisition-depth' },
   ];
-  if (SNAPSHOT_PRODUCERS[producer].truncation === 'unavailable') {
+  if (snapshotProducerFacts(producer)?.truncation !== 'available') {
     residue.push({ kind: 'unavailable-fact', fact: 'truncation' });
   }
   if (viewport.kind === 'missing') {

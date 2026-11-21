@@ -5,7 +5,10 @@ import type {
   BackendSnapshotOptions,
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
-import type { IosSnapshotProducer } from '@agent-device/contracts/ios-snapshot';
+import type {
+  IosSnapshotProducer,
+  KnownIosSnapshotProducer,
+} from '@agent-device/contracts/ios-snapshot';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
@@ -74,9 +77,9 @@ test('runtime snapshot upgrades an absent truncation flag only for producers tha
     'simulator-ax-bridge': false,
     'appium-source': undefined,
     'revyl-ios-tree': undefined,
-  } as const satisfies Record<IosSnapshotProducer, boolean | undefined>;
+  } as const satisfies Record<KnownIosSnapshotProducer, boolean | undefined>;
 
-  for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {
+  for (const producer of Object.keys(expected) as KnownIosSnapshotProducer[]) {
     const device = createSnapshotOnlyDevice({
       snapshot: { nodes: [], backend: 'xctest', producer, createdAt: 1 },
     });

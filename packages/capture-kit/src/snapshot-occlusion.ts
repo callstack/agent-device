@@ -8,11 +8,11 @@ import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
   isScrollableNodeLike,
-  type SnapshotProducer,
   snapshotBarKind,
   snapshotNodeKindIncludesAny as nodeKindIncludesAny,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
+import type { SnapshotProducerIdentity } from '@agent-device/contracts/snapshot-producers';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [
@@ -98,7 +98,7 @@ function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): Neighbour
 }
 
 export type SnapshotOcclusionOptions = {
-  producer?: SnapshotProducer;
+  producer?: SnapshotProducerIdentity;
   /** Backend-declared overlay roots that use the shared geometric scan (for example Android IME). */
   isAdditionalOverlayNode?: (node: RawSnapshotNode) => boolean;
 };

@@ -1,6 +1,6 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SnapshotProducer } from './snapshot-producers.ts';
+import type { SnapshotProducerIdentity } from './snapshot-producers.ts';
 
 export function normalizeType(type: string): string {
   let normalized = type
@@ -33,7 +33,7 @@ type SnapshotBarKind = (typeof APPLE_BAR_KINDS | typeof ANDROID_BAR_KINDS)[numbe
 /** Reads native bar identity only from captures that publish native type or class names. */
 export function snapshotBarKind(
   node: SnapshotBarNode,
-  producer: SnapshotProducer | undefined,
+  producer: SnapshotProducerIdentity | undefined,
 ): SnapshotBarKind | undefined {
   if (
     producer === 'apple-runner' ||
@@ -58,7 +58,7 @@ export function snapshotBarKind(
 /** Identifies native iOS bars whose direct items use platform sizing. */
 export function isNativeIosSnapshotBarNode(
   node: SnapshotBarNode,
-  producer: SnapshotProducer | undefined,
+  producer: SnapshotProducerIdentity | undefined,
 ): boolean {
   return (
     (producer === 'apple-runner' || producer === 'simulator-ax-bridge') &&
