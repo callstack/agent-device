@@ -383,6 +383,14 @@ test('a rotated credential waits for a logout that holds the session file lock',
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('logout without a stored session takes no lock and writes nothing', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-logout-empty-');
+
+  assert.equal(await removeCliSession({ stateDir: tempRoot }), false);
+  assert.equal(fs.existsSync(path.dirname(resolveCliSessionPath(tempRoot))), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('device login does not print a user code that carries control characters', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-code-');
   let stderr = '';

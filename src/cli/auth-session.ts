@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { acquireProcessLock, publishFileSync, withProcessLock } from '@agent-device/host-kit/file';
+import { acquireProcessLock, publishFileSync } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -16,7 +16,10 @@ const DEVICE_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const HTTP_TIMEOUT_MS = 15_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
-const CLI_SESSION_LOCK_TIMEOUT_MS = 10_000;
+// A holder keeps the session lock for one file operation, and a dead holder is reclaimed, so only
+// a stuck live process makes a contender wait this long. The bound is long because the change
+// that waits is often one the cloud will not repeat: an approved login or a rotated credential.
+const CLI_SESSION_LOCK_TIMEOUT_MS = 60_000;
 
 export type CliSessionRecord = {
   version: 1;
@@ -272,8 +275,10 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
-  await withCliSessionLock(options.stateDir, () =>
-    writeCliSession({ stateDir: options.stateDir, session }),
+  await withCliSessionLock(
+    options.stateDir,
+    () => writeCliSession({ stateDir: options.stateDir, session }),
+    options.io,
   );
   return {
     accessToken: approved.accessToken,
@@ -315,6 +320,7 @@ export function writeCliSession(options: { stateDir: string; session: CliSession
 
 export async function removeCliSession(options: { stateDir: string }): Promise<boolean> {
   const filePath = resolveCliSessionPath(options.stateDir);
+  if (!fs.existsSync(filePath)) return false;
   return await withCliSessionLock(options.stateDir, () => {
     if (!fs.existsSync(filePath)) return false;
     fs.rmSync(filePath, { force: true });
@@ -325,21 +331,34 @@ export async function removeCliSession(options: { stateDir: string }): Promise<b
 /**
  * Serializes the changes to the session file: a login's write, a logout's removal, and the
  * re-read and write that store a rotated credential. Device approval polling stays outside.
+ * A change that took effect is reported as done even when the lock is not given back cleanly:
+ * that release failure is a warning, and the next contender reclaims the spent claim.
  */
-async function withCliSessionLock<Result>(stateDir: string, task: () => Result): Promise<Result> {
+async function withCliSessionLock<Result>(
+  stateDir: string,
+  task: () => Result,
+  io?: AuthIo,
+): Promise<Result> {
   const sessionPath = resolveCliSessionPath(stateDir);
   fs.mkdirSync(path.dirname(sessionPath), { recursive: true, mode: 0o700 });
   const owner = readCurrentOwnerIdentity();
-  return await withProcessLock({
-    acquire: () =>
-      acquireProcessLock({
-        lockDirPath: `${sessionPath}.lock`,
-        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
-        timeoutMs: CLI_SESSION_LOCK_TIMEOUT_MS,
-        description: 'cloud CLI session file',
-      }),
-    task: async () => task(),
+  const release = await acquireProcessLock({
+    lockDirPath: `${sessionPath}.lock`,
+    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+    timeoutMs: CLI_SESSION_LOCK_TIMEOUT_MS,
+    description: 'cloud CLI session file',
   });
+  let result: Result;
+  try {
+    result = task();
+  } catch (error) {
+    await release().catch(() => undefined);
+    throw error;
+  }
+  await release().catch(() => {
+    writeStderr(io, 'Warning: the CLI session file lock could not be released cleanly.\n');
+  });
+  return result;
 }
 
 export function resolveCliSessionPath(stateDir: string): string {
@@ -419,11 +438,15 @@ async function storeRotatedCredential(options: {
   const { sent, refreshCredential } = options;
   if (refreshCredential === sent.refreshCredential) return;
   try {
-    await withCliSessionLock(options.stateDir, () => {
-      const stored = readCliSession({ stateDir: options.stateDir });
-      if (stored?.id !== sent.id || stored.refreshCredential !== sent.refreshCredential) return;
-      writeCliSession({ stateDir: options.stateDir, session: { ...stored, refreshCredential } });
-    });
+    await withCliSessionLock(
+      options.stateDir,
+      () => {
+        const stored = readCliSession({ stateDir: options.stateDir });
+        if (stored?.id !== sent.id || stored.refreshCredential !== sent.refreshCredential) return;
+        writeCliSession({ stateDir: options.stateDir, session: { ...stored, refreshCredential } });
+      },
+      options.io,
+    );
   } catch {
     writeStderr(
       options.io,
