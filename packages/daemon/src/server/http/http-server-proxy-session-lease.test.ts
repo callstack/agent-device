@@ -122,6 +122,13 @@ async function startProxiedDaemon() {
   };
 }
 
+function expectLeaseFieldRefusal(body: RpcBody, field: string): void {
+  expect(body.error?.data, JSON.stringify(body)).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_SESSION_MISMATCH', field },
+  });
+}
+
 function expectLeaseIdRefusal(body: RpcBody): void {
   expect(body.error?.data, JSON.stringify(body)).toMatchObject({
     code: 'UNAUTHORIZED',
@@ -182,6 +189,15 @@ test('install_from_source on a leased session needs the lease id in its params',
   });
   // Admitted: it reaches the device runtime, which this fake device does not implement.
   expect(owner.error?.data?.code, JSON.stringify(owner)).toBe('UNSUPPORTED_OPERATION');
+  expectLeaseFieldRefusal(
+    await world.rpc('agent_device.install_from_source', {
+      ...install,
+      ...OWNER_SCOPE,
+      runId: 'run-other',
+      leaseId: world.leaseId,
+    }),
+    'runId',
+  );
 });
 
 test('an open of an existing leased session checks the lease id before the proxy metadata', async () => {

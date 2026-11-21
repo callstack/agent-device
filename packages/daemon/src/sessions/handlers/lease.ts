@@ -551,6 +551,10 @@ async function listCloudArtifactsForRequest(
       'artifacts requires an active cloud lease or --provider-session <id>.',
     );
   }
+  // A presented active lease id is checked with its labels first, before any tenant-filtered lookup.
+  if (leaseScope.leaseId) {
+    assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, leaseScope.leaseId);
+  }
   const providerSession = resolveProviderSession(leaseRegistry, leaseScope, providerSessionId);
   const result = await cloudArtifactProvider?.listCloudArtifacts?.({
     provider: leaseScope.leaseProvider,
@@ -588,8 +592,8 @@ function resolveProviderSession(
 
 /**
  * While its lease is active, a provider session belongs to the client that holds that lease: the
- * lookup needs the lease id and matching labels, as any request on the leased session does (ADR 0007). A released
- * provider session keeps its tenant-scoped retention lookup.
+ * lookup needs the lease id and matching labels, as any request on the leased session does
+ * (ADR 0007). A released provider session keeps its tenant-scoped retention lookup.
  */
 function assertRequestHoldsActiveProviderLease(
   leaseRegistry: LeaseRegistry,

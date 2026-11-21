@@ -431,6 +431,47 @@ test.each([
   },
 );
 
+test.each([
+  ['clientId', { clientId: '' }],
+  ['deviceKey', { deviceKey: '' }],
+  ['leaseProvider', { leaseProvider: '' }],
+  ['leaseBackend', { leaseBackend: '' as never }],
+] as const)('an empty %s differs from the session lease', (field, label) => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:SIM-001',
+  });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: 'proxy',
+      clientId: 'client-a',
+      deviceKey: 'ios:SIM-001',
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId, ...label } }),
+        registry,
+        session,
+        { env: process.env },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === field,
+  );
+});
+
 test('a lease backend that differs only in case and space matches the session lease', () => {
   const registry = new LeaseRegistry();
   const { lease, session } = iosLeasedSession(registry);

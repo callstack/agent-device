@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { runBatch } from '@agent-device/command-registry/batch';
 import { collectBatchStepDelivery } from '../../core/request-script-delivery-ledger.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
-import { resolveLeaseScope } from '../../core/lease-context.ts';
+import { assertMatchingTenant, resolveLeaseScope } from '../../core/lease-context.ts';
 
 export async function runBatchCommands(
   req: DaemonRequest,
@@ -37,10 +37,11 @@ export async function runBatchCommands(
  */
 function withoutFlaggedLeaseMeta(step: DaemonRequest): DaemonRequest['meta'] {
   if (!step.meta) return step.meta;
-  // The tenant stays in meta: the HTTP intake may have attested it, and a step flag must not replace it.
-  const flagged = Object.keys(resolveLeaseScope({ flags: step.flags })).filter(
-    (key) => key !== 'tenantId',
-  );
+  const stepScope = resolveLeaseScope({ flags: step.flags });
+  // The tenant stays in meta: the HTTP intake may have attested it. A step tenant must name it.
+  if (step.meta.tenantId !== undefined)
+    assertMatchingTenant(stepScope.tenantId, step.meta.tenantId);
+  const flagged = Object.keys(stepScope).filter((key) => key !== 'tenantId');
   if (flagged.length === 0) return step.meta;
   const meta: Record<string, unknown> = { ...step.meta };
   for (const key of flagged) delete meta[key];

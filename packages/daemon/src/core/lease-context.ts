@@ -11,6 +11,7 @@ import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contra
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import { stripUndefined } from '@agent-device/kernel/record';
+import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import {
   findMissingProxyLeaseFields,
   isProxyLeaseScope,
@@ -181,14 +182,15 @@ function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): v
 
 /**
  * Refuses a request that does not send the lease's id, or sends a label that differs from the
- * lease. A label the lease does not carry differs from any value the request sends.
+ * lease. A label the lease does not carry differs from any value the request sends, and so does an
+ * empty label.
  */
 export function assertRequestPresentsLease(
   requestScope: LeaseScope,
   lease: Omit<SessionLease, 'expiresAt'>,
 ): void {
   assertRequestSendsLeaseId(requestScope, lease.leaseId);
-  assertMatchingLeaseField('tenantId', requestScope.tenantId, lease.tenantId);
+  assertMatchingTenant(requestScope.tenantId, lease.tenantId);
   assertMatchingLeaseBackend(requestScope.leaseBackend, lease.leaseBackend);
   assertMatchingLeaseField('runId', requestScope.runId, lease.runId);
   assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, lease.leaseProvider);
@@ -196,15 +198,27 @@ export function assertRequestPresentsLease(
   assertMatchingLeaseField('deviceKey', requestScope.deviceKey, lease.deviceKey);
 }
 
+/**
+ * Refuses a tenant that does not name the expected tenant once both are normalized. An empty or
+ * malformed tenant names none, so it differs.
+ */
+export function assertMatchingTenant(requestValue?: string, expectedValue?: string): void {
+  if (requestValue === undefined) return;
+  const requested = normalizeTenantId(requestValue);
+  if (requested !== undefined && requested === normalizeTenantId(expectedValue)) return;
+  throw leaseFieldMismatchError('tenantId');
+}
+
 function assertMatchingLeaseBackend(requestValue?: string, leaseValue?: string) {
-  if (!requestValue) return;
+  if (requestValue === undefined) return;
   const requested = readLeaseBackend(requestValue);
   if (requested !== undefined && requested === readLeaseBackend(leaseValue)) return;
   throw leaseFieldMismatchError('leaseBackend');
 }
 
+/** An omitted label is not compared; an empty one differs from the lease. */
 function assertMatchingLeaseField(field: string, requestValue?: string, leaseValue?: string) {
-  if (!requestValue || requestValue === leaseValue) return;
+  if (requestValue === undefined || requestValue === leaseValue) return;
   throw leaseFieldMismatchError(field);
 }
 

@@ -169,8 +169,8 @@ function toInstallFromSourceDaemonRequest(
     flags: { platform },
     meta: {
       requestId: readStringParam(params, 'requestId'),
-      // A leased session admits only a request that sends its lease id (ADR 0007).
-      leaseId: readStringParam(params, 'leaseId'),
+      // A leased session admits only a request that sends its lease id; its labels are checked too (ADR 0007).
+      ...readLeaseLabelParams(params),
       installSource: parseInstallSource(params),
       retainMaterializedPaths: readBooleanParam(params, 'retainPaths'),
       materializedPathRetentionMs:
@@ -196,8 +196,25 @@ function toReleaseMaterializedPathsDaemonRequest(
     positionals: [],
     meta: {
       requestId: readStringParam(params, 'requestId'),
+      // The install that retained the paths recorded this tenant as their owner.
+      tenantId: readTenantParam(params),
       materializationId,
     },
+  };
+}
+
+function readTenantParam(params: Record<string, unknown>): string | undefined {
+  return readStringParam(params, 'tenantId') ?? readStringParam(params, 'tenant');
+}
+
+function readLeaseLabelParams(params: Record<string, unknown>) {
+  return {
+    tenantId: readTenantParam(params),
+    runId: readStringParam(params, 'runId'),
+    leaseId: readStringParam(params, 'leaseId'),
+    leaseProvider: readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
+    deviceKey: readStringParam(params, 'deviceKey'),
+    clientId: readStringParam(params, 'clientId'),
   };
 }
 

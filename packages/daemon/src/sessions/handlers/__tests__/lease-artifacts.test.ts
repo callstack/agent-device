@@ -116,6 +116,48 @@ test.each([
   },
 );
 
+test('artifacts by an active lease id checks its labels before provider dispatch', async () => {
+  const world = createWorld();
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
+
+  await assert.rejects(
+    () =>
+      listArtifacts(world, { tenantId: 'tenant-a', runId: 'run-other', leaseId: lease.leaseId }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'runId',
+  );
+  assert.deepEqual(world.providerCalls, []);
+});
+
+test('artifacts with an active lease id checks the tenant before the tenant-filtered lookup', async () => {
+  const world = createWorld();
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
+
+  await assert.rejects(
+    () =>
+      listArtifacts(world, {
+        tenantId: 'tenant-b',
+        runId: 'run-a',
+        providerSessionId: 'session-tenant-a',
+        leaseId: lease.leaseId,
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'tenantId',
+  );
+
+  const padded = await listArtifacts(world, {
+    tenantId: ' tenant-a ',
+    runId: 'run-a',
+    providerSessionId: 'session-tenant-a',
+    leaseId: lease.leaseId,
+  });
+  assert.equal(padded.ok, true);
+});
+
 test('artifacts refuses a released provider session after the retention window', async () => {
   let now = 1_000;
   const world = createWorld({
@@ -333,7 +375,7 @@ async function listArtifacts(
   scope: {
     tenantId: string;
     runId: string;
-    providerSessionId: string;
+    providerSessionId?: string;
     leaseProvider?: string;
     leaseId?: string;
     leaseBackend?: string;
@@ -350,7 +392,7 @@ async function listArtifacts(
         ...(scope.leaseId ? { leaseId: scope.leaseId } : {}),
         ...(scope.leaseBackend ? { leaseBackend: scope.leaseBackend as never } : {}),
       },
-      { providerSessionId: scope.providerSessionId },
+      scope.providerSessionId ? { providerSessionId: scope.providerSessionId } : {},
     ),
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,
