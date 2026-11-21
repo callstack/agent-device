@@ -130,6 +130,15 @@ const RETIRED_RECORD_CONFIG_KEY = {
     '--record is per-invocation only: pass --record on the command, or record: true in the SDK/MCP call, to keep a corrective read in a healed script',
 } as const;
 
+// Removed config keys, each with the guidance that replaces it.
+const RETIRED_CONFIG_KEY_MIGRATIONS: Readonly<Record<string, string>> = {
+  [RETIRED_RECORD_CONFIG_KEY.flagKey]: `${RETIRED_RECORD_CONFIG_KEY.migration}.`,
+  [RETIRED_SCREENSHOT_MAX_SIZE.flagKey]:
+    'use "screenshotScale" (0.01-1) to downscale screenshots. Recordings capture at native resolution.',
+  installSource:
+    'pass a download URL to install-from-source <url>. For a GitHub Actions artifact, see agent-device help remote.',
+};
+
 function parseConfigObject(
   source: Record<string, unknown>,
   origin: { source: ConfigFileSource; label: string },
@@ -139,27 +148,18 @@ function parseConfigObject(
     ([key]) => key !== 'plugins' || origin.source !== 'user',
   );
   for (const [rawKey, rawValue] of entries) {
-    if (rawKey === RETIRED_RECORD_CONFIG_KEY.flagKey) {
+    const migration = Object.hasOwn(RETIRED_CONFIG_KEY_MIGRATIONS, rawKey)
+      ? RETIRED_CONFIG_KEY_MIGRATIONS[rawKey]
+      : undefined;
+    if (migration) {
       throw new AppError(
         'INVALID_ARGS',
-        `Config key "${rawKey}" in ${origin.label} was removed; ${RETIRED_RECORD_CONFIG_KEY.migration}.`,
+        `Config key "${rawKey}" in ${origin.label} was removed; ${migration}`,
       );
     }
     const key = rawKey as FlagKey;
     const spec = getOptionSpec(key);
     if (!spec) {
-      if (rawKey === RETIRED_SCREENSHOT_MAX_SIZE.flagKey) {
-        throw new AppError(
-          'INVALID_ARGS',
-          `Config key "${rawKey}" in ${origin.label} was removed; use "screenshotScale" (0.01-1) to downscale screenshots. Recordings capture at native resolution.`,
-        );
-      }
-      if (rawKey === 'installSource') {
-        throw new AppError(
-          'INVALID_ARGS',
-          `Config key "${rawKey}" in ${origin.label} was removed; pass a download URL to install-from-source <url>. For a GitHub Actions artifact, see agent-device help remote.`,
-        );
-      }
       throw new AppError('INVALID_ARGS', `Unknown config key "${rawKey}" in ${origin.label}.`);
     }
     if (!spec.configurable) {
