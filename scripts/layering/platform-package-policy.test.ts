@@ -408,8 +408,7 @@ test('R13 leaves the Android test-only fixture subpaths to R83 for every consume
   allowed.set('test/integration/provider-scenarios/android.test.ts', fixtureImport);
   assert.deepEqual(messages(allowed), []);
 
-  // Production importers of a fixture are R83's to refuse (package-export-surface.test.ts);
-  // R13 holds no second list of them.
+  // Production importers of a fixture are R83's to refuse (package-export-surface.test.ts), not R13's.
   for (const file of [
     'packages/command-surface/src/replay/index.ts',
     'src/core/interactors/android.ts',
@@ -528,7 +527,8 @@ test('the web interactor subpath is loaded only by the builtin registry, dynamic
     'src/core/interactors/register-builtins.ts',
     `const load = () => import('@agent-device/platform-${family}/interactor');`,
   );
-  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations(), policyOptions()), [], family);
+  const found = checkPlatformPackagePolicy(allowed, declarations(), policyOptions());
+  assert.deepEqual(found, [], family);
 
   for (const [file, source] of [
     [
