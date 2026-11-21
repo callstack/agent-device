@@ -1,4 +1,5 @@
 import { isSystemScrollIndicatorLabel } from '@agent-device/kernel/scroll-indicator';
+import { isScrollIndicatorNode } from '@agent-device/contracts/snapshot';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ElementMatchCandidateDetails } from '@agent-device/kernel/errors';
@@ -258,6 +259,9 @@ function semanticSurfaceLabel(node: SnapshotNode, type: string, text: string): s
 function looksScrollable(node: SnapshotNode, type: string): boolean {
   if (type === 'scroll-area') {
     return true;
+  }
+  if (isScrollIndicatorNode(node)) {
+    return false;
   }
   const rawType = (node.type ?? '').toLowerCase();
   const rawRole = `${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase();

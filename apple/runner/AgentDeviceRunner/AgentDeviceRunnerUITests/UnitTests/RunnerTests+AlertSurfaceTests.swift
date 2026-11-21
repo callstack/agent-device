@@ -70,7 +70,7 @@ extension RunnerTests {
           index: index,
           parentIndex: node.parentIndex < 0 ? nil : node.parentIndex,
           element: node.element,
-          type: alertSurfaceTypeName(XCUIElement.ElementType(rawValue: UInt(node.elementType)) ?? .any),
+          type: elementTypeName(XCUIElement.ElementType(rawValue: UInt(node.elementType)) ?? .any),
           identifier: node.identifier,
           label: node.label,
           rect: RecordedAlertSurfaceRect(frame: node.frame),

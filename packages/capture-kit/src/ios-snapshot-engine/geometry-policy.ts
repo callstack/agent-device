@@ -53,11 +53,11 @@ export const SYSTEM_WINDOW_CLASSES: ReadonlySet<string> = new Set([
  * `Element(<number>)` for the same node, so both spellings count; the raw-value spelling is derived from
  * these numbers rather than listed beside them (#3565).
  *
- * The numbers belong to `ELEMENT_TYPE_NAMES` in `packages/platform-apple/src/snapshot-source/tree.ts`,
- * which is the table that turns an accessibility raw value into one of these names, and nothing imports
- * across that boundary — capture-kit sits below platform-apple. The golden table's vocabulary is the tie
- * that keeps the two in agreement: its parity test is read both by that package's own test, which
- * re-derives each name's index from the owner's table, and by both classifier parity tests.
+ * The numbers belong to `contracts/fixtures/ios-element-type-names.json`, the shared element-type table
+ * that names this rule's `Sheet`, `Drawer`, `Alert` and `Dialog` rows, and nothing imports across that
+ * boundary — capture-kit sits below platform-apple. The golden table's vocabulary is the tie that keeps
+ * this rule in agreement with both producers: its parity test is read both by the bridge test, which
+ * re-derives each name's index from `ELEMENT_TYPE_NAMES`, and by both classifier parity tests.
  */
 export const PRESENTING_ELEMENT_TYPES: ReadonlyMap<string, number> = new Map([
   ['Sheet', 5],

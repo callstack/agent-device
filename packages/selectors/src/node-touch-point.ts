@@ -126,17 +126,10 @@ function findPrecedingScrollContainer(
           candidate.parentIndex === node.parentIndex &&
           candidate.index < node.index &&
           hasUsableRect(candidate) &&
-          isScrollableNodeLike(candidate) &&
-          !isScrollIndicator(candidate),
+          isScrollableNodeLike(candidate),
       )
       .at(-1) ?? null
   );
-}
-
-/** A scroll bar's kind also says "scroll", and it is not what the target scrolled out of. */
-function isScrollIndicator(node: SnapshotNode): boolean {
-  const kind = `${node.type ?? ''} ${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase();
-  return /scroll\s?(bar|indicator)/.test(kind);
 }
 
 /**

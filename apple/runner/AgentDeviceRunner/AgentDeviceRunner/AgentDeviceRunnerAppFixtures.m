@@ -221,7 +221,8 @@ static UIAlertController *RunnerAlertDeclineChoiceFixture(BOOL affirmativeOnly, 
 }
 @end
 
-@interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate, UITextFieldDelegate>
+@interface AgentDeviceRunnerFixtureViewController ()
+    <UNUserNotificationCenterDelegate, UITextFieldDelegate, UIPickerViewDataSource, UIPickerViewDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
 @property(nonatomic, strong) UILabel *navigationBackStatus;
@@ -391,6 +392,19 @@ static NSUInteger AgentDeviceDigitCount(NSString *text, NSUInteger limit) {
 @end
 
 @implementation AgentDeviceRunnerFixtureViewController
+
+// The picker-wheel fixture's content: one component, so the screen holds exactly one wheel.
+- (NSInteger)numberOfComponentsInPickerView:(UIPickerView *)pickerView {
+  return 1;
+}
+
+- (NSInteger)pickerView:(UIPickerView *)pickerView numberOfRowsInComponent:(NSInteger)component {
+  return 4;
+}
+
+- (NSString *)pickerView:(UIPickerView *)pickerView titleForRow:(NSInteger)row forComponent:(NSInteger)component {
+  return @[@"First", @"Second", @"Third", @"Fourth"][row];
+}
 
 // `--hide-status-bar` stands in for a landscape iPhone, full-screen video, or an RN screen that hides
 // its status bar.
@@ -1487,6 +1501,16 @@ static const NSTimeInterval AgentDevicePopoverLateFocusSeconds = 1.0;
       button.frame = CGRectMake(30 + i * 170, 20, 100, 30);
       [self.view addSubview:button];
     }
+  }
+
+  // A real picker wheel: UIKit reports each wheel of a UIPickerView as its own element type, which
+  // is the node #4657 saw named `Element(39)` by one producer and `PickerWheel` by the other.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-picker-wheel"]) {
+    UIPickerView *picker = [[UIPickerView alloc] initWithFrame:CGRectMake(0, 300, 390, 216)];
+    picker.dataSource = self;
+    picker.delegate = self;
+    picker.accessibilityIdentifier = @"agent-device-picker-wheel";
+    [self.view addSubview:picker];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-collapsed-tab-bar"]) {

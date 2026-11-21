@@ -772,6 +772,46 @@ test('the element-type names the presented-surface rule reads are the ones this 
   }
 });
 
+/**
+ * The shared element-type table `contracts/fixtures/ios-element-type-names.json` is what both iOS
+ * producers read for a node's `type` (#4657). This is the bridge's half of that tie: it decodes every
+ * raw value the way a real capture does and holds the published name against the table. The runner's
+ * half is `RunnerTests+ElementTypeNamesTests`, so a rename that reaches one producer and not the
+ * other fails on the side that moved.
+ */
+test('the bridge names every raw value the shared element-type table names', () => {
+  const table = JSON.parse(
+    fs.readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'contracts',
+        'fixtures',
+        'ios-element-type-names.json',
+      ),
+      'utf8',
+    ),
+  ) as { types: Array<{ rawValue: number; name: string }> };
+  assert.ok(table.types.length > 0);
+
+  for (const { rawValue, name } of table.types) {
+    const decoded = decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [frame]: { X: 0, Y: 0, Width: 390, Height: 844 },
+        [children]: [{ [automationType]: rawValue, [children]: [] }],
+      },
+      { truncated: false },
+      limits,
+    );
+
+    assert.equal(decoded.nodes[1]?.type, name, `raw element type ${rawValue}`);
+  }
+});
+
 const traitClassification = JSON.parse(
   fs.readFileSync(
     new URL('../../../../contracts/fixtures/ios-trait-classification.json', import.meta.url),

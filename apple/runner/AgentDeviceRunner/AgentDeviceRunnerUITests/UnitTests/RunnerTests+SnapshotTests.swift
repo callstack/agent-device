@@ -441,6 +441,48 @@ extension RunnerTests {
     XCTAssertEqual(capture.outcome, .completed)
     XCTAssertFalse(capture.acquisition.truncated)
   }
+
+  /// A picker wheel's own element type reaches a snapshot by name, the way the Simulator AX bridge
+  /// names it. Before the shared element-type table, this node arrived as `Element(39)` (#4657).
+  @MainActor
+  func testPickerWheelScreenPublishesTheNamedElementType() throws {
+    app.launchArguments = ["--agent-device-picker-wheel"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    // UIKit puts the identifier on the UIPickerView itself; the wheel is its component child.
+    XCTAssertTrue(
+      app.pickerWheels.element.waitForExistence(timeout: appExistenceTimeout),
+      "the fixture must show a picker wheel"
+    )
+    let hint = CaptureHint(
+      projection: .regular,
+      depth: nil,
+      regularPresentedDepth: nil,
+      interactiveOnly: false,
+      customActions: false
+    )
+    let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
+    let wheel = try XCTUnwrap(
+      Self.snapshotDescendants(of: context.rootSnapshot).first { $0.elementType == .pickerWheel },
+      "the fixture's picker wheel must answer the element-type query"
+    )
+    let capture = try recursiveTreeSnapshotAcquisition(
+      context: context,
+      hint: hint,
+      processingDeadline: Date().addingTimeInterval(treeCaptureSliceBudget)
+    )
+    let nodes = capture.acquisition.nodes
+    XCTAssertEqual(capture.outcome, .completed)
+    XCTAssertEqual(elementTypeName(wheel.elementType), "PickerWheel")
+    XCTAssertEqual(nodes.filter { $0.type == "PickerWheel" }.count, 1)
+    XCTAssertFalse(
+      nodes.contains { $0.type == "Element(\(XCUIElement.ElementType.pickerWheel.rawValue))" },
+      "the runner must not name a type the shared table covers by its raw value"
+    )
+  }
 #endif
 }
 #endif

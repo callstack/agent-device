@@ -38,7 +38,6 @@ const VIEWPORT_CHROME_TOP_INSET_PT = 4;
 const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
 const TAB_BAR_KIND_FRAGMENTS = ['tabbar'];
 const NAVIGATION_BAR_KIND_FRAGMENTS = ['navigationbar'];
-const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
   'link',
@@ -621,11 +620,12 @@ function isNavigationBarAround(bar: RawSnapshotNode, rect: Rect): boolean {
   );
 }
 
-/** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
+/**
+ * A bar or a scroll container inside `rect`. {@link isScrollableNodeLike} answers no for a scroll
+ * indicator, whose class names scrolling while it holds nothing to scroll.
+ */
 function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
-  const isHostedRegion =
-    isViewportChromeBarNode(node) ||
-    (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
+  const isHostedRegion = isViewportChromeBarNode(node) || isScrollableNodeLike(node);
   const nodeRect = positiveRect(node.rect);
   return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
 }

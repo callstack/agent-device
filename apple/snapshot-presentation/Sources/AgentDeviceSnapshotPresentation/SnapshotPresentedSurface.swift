@@ -8,6 +8,7 @@ import Foundation
 public enum SnapshotPresentedSurface {
   /// Element types that name a presentation, keyed by the element-type numbering every iOS producer
   /// reads. A producer whose name table stops short publishes `Element(<number>)` for the same node.
+  /// `contracts/fixtures/ios-element-type-names.json` names these four rows and the numbers they carry.
   public static let presentingElementTypes: [String: Int] = [
     "Sheet": 5,
     "Drawer": 6,
