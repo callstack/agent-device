@@ -546,12 +546,6 @@ export function isInactiveLeaseError(error: unknown): boolean {
   );
 }
 
-/**
- * The reason a provider gives when the device instance behind a lease ended outside the daemon, read
- * from the table so the spelling has one owner.
- */
-export const PROVIDER_INSTANCE_ENDED = LEASE_REASONS.instanceEnded.reason;
-
 /** Whether `error` says the provider's device instance ended, which ends its lease. */
 export function isProviderInstanceEndedError(error: unknown): boolean {
   return (
@@ -559,7 +553,7 @@ export function isProviderInstanceEndedError(error: unknown): boolean {
     error !== null &&
     (error as Readonly<{ code?: unknown }>).code === 'COMMAND_FAILED' &&
     (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason ===
-      PROVIDER_INSTANCE_ENDED
+      LEASE_REASONS.instanceEnded.reason
   );
 }
 
