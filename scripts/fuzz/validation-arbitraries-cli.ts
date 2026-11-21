@@ -42,7 +42,6 @@ export const UNGENERATED_FLAG_KEYS: Readonly<Record<string, string>> = {
   snapshotDiff: 'rewrites the command to `diff`, so the case no longer asserts what it planted',
   steps: 'belongs to the pinned batch step-source seeds',
   stepsFile: 'belongs to the pinned batch step-source seeds',
-  installSource: 'carries no CLI token at all (`names: []`) — reachable only through config',
   batchOnError: 'supported only on `batch`, which is waived above, so no case can carry it',
   batchMaxSteps: 'supported only on `batch`, which is waived above, so no case can carry it',
 };
@@ -69,16 +68,14 @@ export function validationSurfaceBuildCount(): number {
   return surfaceBuilds;
 }
 
-/** Every definition that can be written as a token at all, minus the waived keys. */
+/** Every definition, minus the waived keys. */
 const safeFlagPool = memoize<readonly FlagDefinition[]>(() =>
-  getFlagDefinitions().filter(
-    (definition) => !(definition.key in UNGENERATED_FLAG_KEYS) && definition.names.length > 0,
-  ),
+  getFlagDefinitions().filter((definition) => !(definition.key in UNGENERATED_FLAG_KEYS)),
 );
 
 /** Long token when there is one; short-only definitions (`-i`) are part of the surface too. */
 function flagToken(definition: FlagDefinition): string {
-  return definition.names.find((name) => name.startsWith('--')) ?? definition.names[0]!;
+  return definition.names.find((name) => name.startsWith('--')) ?? definition.names[0];
 }
 
 /**

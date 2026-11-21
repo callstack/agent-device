@@ -121,7 +121,7 @@ type ScreenshotSpecificFlagKey = (typeof SCREENSHOT_ACTION_FLAG_KEYS)[number];
 
 type ScreenshotSpecificFlagDefinition = {
   key: ScreenshotSpecificFlagKey;
-  names: readonly string[];
+  names: readonly [string, ...string[]];
   type: 'boolean' | 'int' | 'number' | 'string' | 'enum';
   enumValues?: readonly string[];
   min?: number;

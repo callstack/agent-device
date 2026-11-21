@@ -154,6 +154,12 @@ function parseConfigObject(
           `Config key "${rawKey}" in ${origin.label} was removed; use "screenshotScale" (0.01-1) to downscale screenshots. Recordings capture at native resolution.`,
         );
       }
+      if (rawKey === 'installSource') {
+        throw new AppError(
+          'INVALID_ARGS',
+          `Config key "${rawKey}" in ${origin.label} was removed; pass a download URL to install-from-source <url>. For a GitHub Actions artifact, see agent-device help remote.`,
+        );
+      }
       throw new AppError('INVALID_ARGS', `Unknown config key "${rawKey}" in ${origin.label}.`);
     }
     if (!spec.configurable) {

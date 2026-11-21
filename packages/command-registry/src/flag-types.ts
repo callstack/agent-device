@@ -14,7 +14,7 @@ export type NonRecordableFlagKey = Exclude<FlagKey, keyof CommandFlags>;
 export type RecordableFlagKey = Extract<FlagKey, keyof CommandFlags>;
 
 type FlagDefinitionBody = {
-  names: readonly string[];
+  names: readonly [string, ...string[]];
   type: FlagType;
   multiple?: boolean;
   enumValues?: readonly string[];

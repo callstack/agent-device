@@ -1240,3 +1240,27 @@ test('invalid config key returns parse error before daemon dispatch', async () =
 
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('config names the removal of installSource and the URL replacement', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, '.agent-device', 'config.json'),
+    JSON.stringify({
+      installSource: { type: 'github-actions-artifact', repo: 'acme/mobile', artifact: 1 },
+    }),
+    'utf8',
+  );
+
+  const result = await runCliCapture(['install-from-source', 'https://example.com/app.apk'], {
+    cwd: project,
+    env: { HOME: home },
+    sendToDaemon: async () => ({ ok: true, data: {} }),
+  });
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Config key "installSource" .* was removed; pass a download URL/);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
