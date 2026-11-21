@@ -153,6 +153,7 @@ test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not 
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(foreignXctestrunPath), false);
 });
 
 test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root', async () => {
@@ -359,6 +360,7 @@ test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure'
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(existingXctestrunPath), false);
   assert.deepEqual(repairedPaths, [existingXctestrunPath, rebuiltXctestrunPath]);
 });
 
@@ -479,10 +481,11 @@ test('ensureXctestrunArtifact discards and rebuilds a manifest whose bytes no lo
   assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
   assert.equal(result.reason, 'artifact_content_mismatch');
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(cachedXctestrunPath), false);
 });
 
 test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mismatch', async () => {
-  const { derivedPath } = await makeCachedRunnerXctestrun(macOsDevice);
+  const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun(macOsDevice);
   const metadataPath = resolveRunnerCacheMetadataPath(derivedPath);
   const expectedMetadata = resolveExpectedRunnerCacheMetadata(macOsDevice, repoRoot);
   const staleMetadata = {
@@ -507,6 +510,7 @@ test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mism
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  assert.equal(fs.existsSync(existingXctestrunPath), false);
   const rebuiltMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
   assert.deepEqual(
     stripRunnerCacheArtifacts(rebuiltMetadata),
@@ -600,7 +604,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
 
   await markRunnerXctestrunArtifactBadForRun(hit, 'stress health failed');
-  assert.equal(fs.existsSync(resolveRunnerCacheMetadataPath(derivedPath)), false);
+  assert.equal(fs.existsSync(cachedXctestrunPath), false);
 
   let rebuiltXctestrunPath = '';
   mockRunCmdStreaming.mockImplementationOnce(async (_command, args) => {

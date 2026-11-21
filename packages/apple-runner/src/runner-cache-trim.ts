@@ -36,24 +36,18 @@ export async function trimRunnerBuildScratch(
   if (!isExpectedKey(derived, expectedKeyPath)) return [];
   const kept = resolveKeptPaths(derived, protectedPaths);
   if (!kept) return [];
-  const live = listLiveRunnerTrees(derived);
-  if (live.includes('')) return [];
-  for (const tree of live) kept.add(keptUnit(tree));
+  for (const tree of listLiveRunnerTrees(derived)) kept.add(keptUnit(tree));
   return await trimDirectory(derived, derived, kept);
 }
 
 /**
  * Removes everything under `derived` except the `kept` entries (relative to `derived`) and the
- * directories that hold them. A kept tree at the root keeps everything but the cache metadata.
+ * directories that hold them.
  */
 export async function removeRunnerCacheEntriesExcept(
   derived: string,
   kept: ReadonlySet<string>,
 ): Promise<void> {
-  if (kept.has('')) {
-    await fs.promises.rm(path.join(derived, RUNNER_CACHE_METADATA_FILE), { force: true });
-    return;
-  }
   await trimDirectory(derived, derived, kept);
 }
 
@@ -88,8 +82,11 @@ function listRunnerTrees(derived: string, relative: string): string[] {
   } catch {
     return [];
   }
-  if (entries.some((entry) => entry.isFile() && entry.name.endsWith('.xctestrun')))
-    return [relative];
+  // An `.xctestrun` at the cache root is no build's products directory, so it is never a tree.
+  const holdsXctestrun = entries.some(
+    (entry) => entry.isFile() && entry.name.endsWith('.xctestrun'),
+  );
+  if (relative !== '' && holdsXctestrun) return [relative];
   if (relative.split(path.sep).filter(Boolean).length >= RUNNER_TREE_MAX_DEPTH) return [];
   return entries
     .filter((entry) => entry.isDirectory())
