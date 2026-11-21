@@ -127,7 +127,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--duration-ms <ms>',
     usageDescription:
-      'Scroll: pace the gesture over this duration when supported; tv-remote: button press duration (Android TV maps any positive value to a long-press)',
+      'Scroll: pace the gesture over this duration; tv-remote: hold the button this long (Android TV long-presses on any positive value)',
     projectConfig: true,
     recorded: false,
   },
@@ -395,7 +395,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--shutdown',
     usageDescription:
-      'close, disconnect: after ending the session, also shutdown the session simulator or emulator, or delete or release its cloud instance',
+      'close, disconnect: after ending the session, shut down its simulator or emulator and release a lease kept on close',
     projectConfig: true,
     recorded: false,
   },
