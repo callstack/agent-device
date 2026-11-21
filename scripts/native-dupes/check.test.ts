@@ -123,7 +123,7 @@ fun captureWindow(frames: List<Int>): Int {
 `,
   },
   {
-    file: 'linux/capture.py',
+    file: 'packages/platform-linux/linux/capture.py',
     format: 'python',
     source: `
 def capture_window(frames):
