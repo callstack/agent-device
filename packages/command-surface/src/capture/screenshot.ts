@@ -40,7 +40,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     ),
     overlayRefs: booleanField(),
     pixelDensity: integerField(
-      'Output screenshot pixel density in pixels per logical point. iOS simulators only; other targets refuse it.',
+      'Output screenshot pixel density in pixels per logical point. iOS-family simulators only; other targets refuse it.',
       { min: 1 },
     ),
     screenMask: enumField(
