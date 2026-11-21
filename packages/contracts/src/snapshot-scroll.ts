@@ -1,3 +1,4 @@
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType, snapshotNodeKindIncludesAny } from './snapshot-text.ts';
 
 /**
@@ -15,14 +16,10 @@ const SCROLL_INDICATOR_KIND_FRAGMENTS = [
   'scroll indicator',
 ];
 
-/** Whether `type` names a scroll indicator rather than the content a scroll moves. */
-function isScrollIndicatorType(type: string): boolean {
-  return snapshotNodeKindIncludesAny({ type }, SCROLL_INDICATOR_KIND_FRAGMENTS);
-}
-
 export function isScrollableType(type: string | null | undefined): boolean {
-  const value = `${type ?? ''}`;
-  if (!value || isScrollIndicatorType(value)) {
+  // An Android helper node publishes null for a type it could not read; nothing scrolls there.
+  const value = type ?? '';
+  if (!value || isScrollIndicatorNode({ type: value })) {
     return false;
   }
   const normalized = normalizeType(value);
@@ -38,19 +35,15 @@ export function isScrollableType(type: string | null | undefined): boolean {
 }
 
 /** Whether a node names a scroll indicator — the bar or knob, not the content beside it. */
-export function isScrollIndicatorNode(node: {
-  type?: string | null;
-  role?: string | null;
-  subrole?: string | null;
-}): boolean {
+export function isScrollIndicatorNode(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+): boolean {
   return snapshotNodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS);
 }
 
-export function isScrollableNodeLike(node: {
-  type?: string | null;
-  role?: string | null;
-  subrole?: string | null;
-}): boolean {
+export function isScrollableNodeLike(
+  node: Pick<RawSnapshotNode, 'type' | 'role' | 'subrole'>,
+): boolean {
   if (isScrollIndicatorNode(node)) {
     return false;
   }
