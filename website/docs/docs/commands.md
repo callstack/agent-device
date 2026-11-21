@@ -244,7 +244,7 @@ agent-device close [app] [--save-script [path]] [--force, --overwrite] [--shutdo
 | --- | --- |
 | `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
 | `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
-| `--shutdown` | close: shutdown associated simulator/emulator after ending session |
+| `--shutdown` | close, disconnect: shutdown associated simulator/emulator after ending session |
 
 Supported targets: [Open and close apps, URLs, and deep links](/docs/capabilities#apps-and-devices).
 
@@ -692,7 +692,7 @@ agent-device tv-remote [press|longpress] <up|down|left|right|select|menu|home|ba
 
 | Option | What it does |
 | --- | --- |
-| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported |
+| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported; tv-remote: button press duration (Android TV maps any positive value to a long-press) |
 
 Supported targets: [TV remote keys](/docs/capabilities#system-and-hardware).
 
@@ -1322,7 +1322,7 @@ agent-device scroll <direction|top|bottom|refresh> [amount] [--until <selector>]
 
 | Option | What it does |
 | --- | --- |
-| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported |
+| `--duration-ms <ms>` | Scroll: pace the gesture over this duration when supported; tv-remote: button press duration (Android TV maps any positive value to a long-press) |
 | `--pixels <n>` | Scroll: explicit gesture distance in pixels |
 | `--until <selector>` | Scroll: repeat passes until the selector is visible on screen |
 | `--max-passes <n>` | Scroll --until: maximum gestures |
