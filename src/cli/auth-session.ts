@@ -302,24 +302,17 @@ export async function loginWithDeviceAuth(options: {
   return {
     accessToken: exchanged.accessToken,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
-    session: readStoredSession(options.stateDir) ?? session,
+    // What the exchange ran on and left in the file, which may be another process's login.
+    session: readCliSession({ stateDir: options.stateDir }) ?? session,
   };
-}
-
-/** The stored record, or `null` when a later change removed it. */
-function readStoredSession(stateDir: string): CliSessionRecord | null {
-  try {
-    return readCliSession({ stateDir });
-  } catch {
-    return null;
-  }
 }
 
 /**
  * Exchanges the access token an approved login returned when it is already expired: a wait for a
  * stuck sibling's session lock can outlive the token the cloud approved with. The exchange runs on
  * the session that is saved now, which may be another process's login, and reports its own refusal
- * the way a command's refresh does.
+ * the way a command's refresh does — including a lock timeout, which leaves the saved session in
+ * place for the next command to exchange.
  */
 async function refreshExpiredLoginToken(options: {
   stateDir: string;

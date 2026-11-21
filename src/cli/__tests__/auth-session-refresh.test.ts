@@ -11,7 +11,7 @@ import {
 import * as hostKitFile from '@agent-device/host-kit/file';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const baseFlags = {
@@ -320,6 +320,53 @@ test('a store of the rotated credential that fails keeps the access token and wa
     assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_old');
   } finally {
     publish.mockRestore();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a login that must exchange an expired approval token reports a lock timeout with the session saved', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-login-exchange-lock-');
+  const timeout = new AppError('COMMAND_FAILED', 'Timed out waiting for cloud CLI session file', {
+    reason: 'process_lock_timeout',
+  });
+  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
+  try {
+    // The save of the approved login is given the lock; the exchange that follows is not.
+    acquire.mockResolvedValueOnce(async () => {});
+    acquire.mockRejectedValueOnce(timeout);
+    await assert.rejects(
+      async () =>
+        await loginWithDeviceAuth({
+          stateDir: tempRoot,
+          flags: baseFlags,
+          env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+          io: {
+            now: () => Date.parse('2026-02-01T01:00:00.000Z'),
+            stdinIsTTY: true,
+            stdoutIsTTY: true,
+            openBrowser: async () => {},
+            fetch: async (url) =>
+              String(url).endsWith('/device-auth/start')
+                ? jsonResponse({
+                    deviceCode: 'device-secret',
+                    userCode: 'ABCD-EFGH',
+                    verificationUri: 'https://cloud.example/authorize',
+                    interval: 1,
+                  })
+                : jsonResponse({
+                    status: 'approved',
+                    accessToken: 'adc_agent_expired',
+                    expiresAt: '2026-02-01T00:30:00.000Z',
+                    cliSession: { id: 'session-late', refreshCredential: 'adc_refresh_late' },
+                  }),
+          },
+        }),
+      (error: unknown) => normalizeError(error).details?.reason === 'process_lock_timeout',
+    );
+    // The approval is not lost: the session is on disk for the next command to exchange.
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_late');
+  } finally {
+    acquire.mockRestore();
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });

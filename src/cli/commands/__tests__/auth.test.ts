@@ -161,9 +161,12 @@ test('auth login exchanges an approved access token that already expired for a l
       requestUrls.push(url.pathname);
       if (url.pathname === '/api/control-plane/cli-session/refresh') {
         sentCredential = JSON.parse(String(init?.body)).refreshCredential;
+        // No token expiry, so a login that reported one here would be reporting the expired
+        // approval's. The session expiry it slides is a third date.
         return jsonResponse({
           accessToken: 'access-token-live',
-          expiresAt: '2099-01-01T00:00:00.000Z',
+          refreshCredential: 'refresh-credential-9',
+          cliSession: { expiresAt: '2099-12-24T00:00:00.000Z' },
         });
       }
       if (url.pathname === '/api/control-plane/device-auth/start') {
@@ -207,10 +210,14 @@ test('auth login exchanges an approved access token that already expired for a l
     assert.equal(result.code, null);
     const data = JSON.parse(result.stdout).data as {
       agentTokenExpiresAt?: string;
+      expiresAt?: string;
       sessionId?: string;
     };
-    // The login reports the token it exchanged, and the expiry that came with it.
-    assert.equal(data.agentTokenExpiresAt, '2099-01-01T00:00:00.000Z');
+    // The exchange answered without a token expiry, so none is reported: the expired approval's is
+    // not reused for a token that is not expired.
+    assert.equal(data.agentTokenExpiresAt, undefined);
+    // The session reported is the record the exchange left in the file, expiry and all.
+    assert.equal(data.expiresAt, '2099-12-24T00:00:00.000Z');
     assert.equal(data.sessionId, 'cli-8');
     assert.deepEqual(requestUrls, [
       '/api/control-plane/device-auth/start',
@@ -218,6 +225,11 @@ test('auth login exchanges an approved access token that already expired for a l
       '/api/control-plane/cli-session/refresh',
     ]);
     assert.equal(sentCredential, 'refresh-credential-8');
+    const stored = JSON.parse(
+      fs.readFileSync(path.join(stateDir, 'auth', 'cli-session.json'), 'utf8'),
+    ) as { expiresAt?: string; refreshCredential?: string };
+    assert.equal(stored.refreshCredential, 'refresh-credential-9');
+    assert.equal(stored.expiresAt, '2099-12-24T00:00:00.000Z');
   } finally {
     (process.stdin as { isTTY?: boolean }).isTTY = previousStdinIsTTY;
     (process.stdout as { isTTY?: boolean }).isTTY = previousStdoutIsTTY;
