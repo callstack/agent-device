@@ -19,7 +19,7 @@ import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import {
   createLocalAppleToolProvider,
   withAppleToolProvider,
-  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+  SIMCTL_REASONS,
 } from '../tool-provider.ts';
 import { captureSimulatorScreenshotWithRetry } from '../screenshot.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
@@ -160,7 +160,7 @@ test('the retry loop stops at its declared attempt ceiling and reports the typed
 
   assert.ok(error && error instanceof Error);
   const details = (error as { details?: Record<string, unknown> }).details;
-  assert.equal(details?.reason, SIMCTL_SCREENSHOT_TIMEOUT_REASON);
+  assert.equal(details?.reason, SIMCTL_REASONS.screenshotTimeout.reason);
   assert.equal(attempts, 5, 'the retry budget is the declared five attempts, no more');
 });
 

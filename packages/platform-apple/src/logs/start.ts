@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type {
   AppLogBackgroundProcess,
   AppLogLiveSnapshot,
@@ -31,6 +31,11 @@ import {
   buildIosDeviceConsoleLaunchArgs,
   buildIosSimulatorLogStreamArgs,
 } from './log-predicate.ts';
+
+const SIMULATOR_LOG_REASONS = {
+  // The simulator log stream did not start in time.
+  streamLaunchTimeout: { reason: 'simulator-log-stream-launch-timeout' },
+} as const satisfies ReasonTable<'logs'>;
 
 // Measured launches take 1-2 s on a loaded host.
 const SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS = 10_000;
@@ -247,7 +252,7 @@ async function waitForSimulatorStreamLaunch(
         'COMMAND_FAILED',
         `Simulator log stream did not start within ${SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS}ms`,
         {
-          reason: 'simulator-log-stream-launch-timeout',
+          reason: SIMULATOR_LOG_REASONS.streamLaunchTimeout.reason,
           timeoutMs: SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS,
           hint: 'Check that the simulator finished booting, then retry logs start.',
         },

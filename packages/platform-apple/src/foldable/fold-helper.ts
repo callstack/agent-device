@@ -18,6 +18,21 @@ export const FOLD_HELPER_REASONS = {
   hingeAngleNoSample: { reason: 'fold-hinge-angle-no-sample' },
 } as const satisfies ReasonTable<'fold'>;
 
+const FOLD_HELPER_ORIENTATION_REASONS = {
+  // The fold helper could not send the orientation to the iOS simulator.
+  hidDispatchFailed: { reason: 'orientation-hid-dispatch-failed' },
+} as const satisfies ReasonTable<'orientation'>;
+
+const FOLD_HELPER_PANEL_REASONS = {
+  // The fold helper returned no panel table for the iOS simulator.
+  panelsUnreadable: { reason: 'fold-helper-panels-unreadable' },
+} as const satisfies ReasonTable<'foldable panels'>;
+
+type FoldHelperFailureReason =
+  | (typeof FOLD_HELPER_REASONS)[keyof typeof FOLD_HELPER_REASONS]['reason']
+  | (typeof FOLD_HELPER_ORIENTATION_REASONS)[keyof typeof FOLD_HELPER_ORIENTATION_REASONS]['reason']
+  | (typeof FOLD_HELPER_PANEL_REASONS)[keyof typeof FOLD_HELPER_PANEL_REASONS]['reason'];
+
 const HINGE_ANGLE_NO_SAMPLE_HINT =
   "The fold helper's hinge read returned no valid CoreMotion sample. The details name the cause: stderr such as a simulator runtime without CMAngleManager, or timeoutMs when the read did not finish.";
 
@@ -144,7 +159,10 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
   } satisfies FoldHelper);
 }
 
-type ModeFailure = Readonly<{ message: string; details: { reason: string; hint?: string } }>;
+type ModeFailure = Readonly<{
+  message: string;
+  details: { reason: FoldHelperFailureReason; hint?: string };
+}>;
 
 const DISPATCH_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator hinge pose',
@@ -153,7 +171,7 @@ const DISPATCH_FAILURE: ModeFailure = {
 
 const ROTATE_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator orientation',
-  details: { reason: 'orientation-hid-dispatch-failed' },
+  details: { reason: FOLD_HELPER_ORIENTATION_REASONS.hidDispatchFailed.reason },
 };
 
 const NO_SAMPLE_FAILURE: ModeFailure = {
@@ -166,7 +184,7 @@ const NO_SAMPLE_FAILURE: ModeFailure = {
 
 const PANELS_FAILURE: ModeFailure = {
   message: 'The simulator reported no panel table',
-  details: { reason: 'fold-helper-panels-unreadable' },
+  details: { reason: FOLD_HELPER_PANEL_REASONS.panelsUnreadable.reason },
 };
 
 /** The helper's one JSON line, when it is this version's shape. */

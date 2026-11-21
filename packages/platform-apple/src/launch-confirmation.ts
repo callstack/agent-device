@@ -3,7 +3,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { alertIfPresent } from './alert.ts';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 import {
@@ -11,7 +11,10 @@ import {
   RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
 } from '@agent-device/apple-runner';
 
-export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
+export const LAUNCH_CONFIRMATION_REASONS = {
+  // iOS asks to open another app's URL scheme instead of the session app's.
+  foreignApp: { reason: 'launch_confirmation_foreign_app' },
+} as const satisfies ReasonTable<'open'>;
 
 /** Short presentation window for the optional launch-confirmation probe. */
 const LAUNCH_CONFIRMATION_PRESENTATION_TIMEOUT_MS = 3_000;
@@ -103,7 +106,7 @@ export async function answerLaunchConfirmation(
   }
   if (owner.owner !== port.appBundleId) {
     throw new AppError('COMMAND_FAILED', `The launch URL asks to open ${owner.owner} instead.`, {
-      reason: LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
+      reason: LAUNCH_CONFIRMATION_REASONS.foreignApp.reason,
       foreignAppBundleId: owner.owner,
       sessionAppBundleId: port.appBundleId,
       hint: `iOS is asking whether to open ${owner.owner}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,

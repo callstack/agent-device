@@ -17,6 +17,7 @@ import {
   sessionAppRequiredDetails,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
@@ -260,14 +261,15 @@ const FRESH_INSTALL_DATA_DIRECTORIES = [
   'tmp',
 ];
 
-/**
- * `details.reason` of a `clear-app-state` refused because the installed app owns no data container.
- * A driver branches on this rather than the prose: there is nothing to delete, so retrying cannot
- * help. The motivating case ships inside the simulator runtime and cannot be uninstalled, so the
- * hint may only point at recoveries a caller actually has: reset the simulator, or uninstall an
- * app they installed themselves.
- */
-export const IOS_NO_DATA_CONTAINER_REASON = 'app-no-data-container';
+export const APP_SETTINGS_REASONS = {
+  /**
+   * There is nothing to delete, so retrying cannot help. The motivating case ships inside the
+   * simulator runtime and cannot be uninstalled, so the hint may only point at recoveries a caller
+   * actually has: reset the simulator, or uninstall an app they installed themselves.
+   */
+  // `clear-app-state` was refused because the installed app owns no data container.
+  noDataContainer: { reason: 'app-no-data-container' },
+} as const satisfies ReasonTable<'settings'>;
 
 const IOS_NO_DATA_CONTAINER_HINT =
   'Clear the app under test instead. A runtime-shipped app keeps no data container, so this command has no app state to remove; to reset it, erase or recreate the simulator device, or uninstall and reinstall the app if you installed it yourself.';
@@ -308,7 +310,7 @@ async function clearIosSimulatorAppState(
   });
   if (!container) {
     throw new AppError('UNSUPPORTED_OPERATION', iosNoDataContainerMessage(bundleId), {
-      reason: IOS_NO_DATA_CONTAINER_REASON,
+      reason: APP_SETTINGS_REASONS.noDataContainer.reason,
       appBundleId: bundleId,
       deviceId: device.id,
       hint: IOS_NO_DATA_CONTAINER_HINT,

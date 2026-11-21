@@ -4,7 +4,7 @@ import type {
   AccessibilityAuditInput,
 } from '@agent-device/contracts/capture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isRunnerNativeAuditUnavailableError } from '@agent-device/apple-runner';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 
@@ -33,13 +33,10 @@ export async function collectNativeAudit(
   }
 }
 
-/**
- * Published `details.reason` values for a native audit the runner answered with a malformed result.
- * `website/docs/docs/commands.md` documents each value.
- */
 const NATIVE_AUDIT_FAILURES = {
+  // The runner answered the native audit with a missing or malformed result.
   invalidResult: { reason: 'native-audit-invalid-result' },
-} as const satisfies Record<string, { reason: string }>;
+} as const satisfies ReasonTable<'audit'>;
 
 function mapNativeAuditIssues(data: Record<string, unknown>): NativeAuditFinding[] {
   if (!Array.isArray(data.auditIssues)) {

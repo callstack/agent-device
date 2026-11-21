@@ -67,7 +67,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   resolveAppleToolProvider,
   withAppleToolProvider,
-  SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+  SIMCTL_REASONS,
 } from '../tool-provider.ts';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
@@ -141,7 +141,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
     new AppError('COMMAND_FAILED', 'xcrun exited with code 60', {
       stderr: 'Timeout waiting for screen surfaces',
       exitCode: 60,
-      reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+      reason: SIMCTL_REASONS.screenshotTimeout.reason,
     }),
   );
   mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/fallback.png' });
@@ -634,7 +634,7 @@ test('captureSimulatorScreenshotWithFallback keeps the real runner fallback insi
     new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
       stderr: 'Timeout waiting for screen surfaces',
       exitCode: 60,
-      reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+      reason: SIMCTL_REASONS.screenshotTimeout.reason,
     }),
   );
   mockRunAppleRunnerCommand.mockImplementation(async () => {

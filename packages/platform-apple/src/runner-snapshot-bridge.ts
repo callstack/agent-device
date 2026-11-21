@@ -6,7 +6,7 @@ import {
 } from '@agent-device/apple-runner';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { SnapshotSourceChannel } from '@agent-device/capture-kit/snapshot-router';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { hasSimulatorBridge } from './snapshot-observability.ts';
@@ -31,8 +31,10 @@ export type RunnerSnapshotBridgeTarget = Readonly<{
   generation: string;
 }>;
 
-/** Why the runner could not name the foreground process of the app: the bridge reader's own code. */
-const TARGET_UNAVAILABLE = 'runner-snapshot-bridge-target-unavailable';
+const SNAPSHOT_BRIDGE_REASONS = {
+  // The runner could not name the app's foreground process; `details.bridgeFailureCode` says why.
+  targetUnavailable: { reason: 'runner-snapshot-bridge-target-unavailable' },
+} as const satisfies ReasonTable<'snapshot capture'>;
 
 /** Bounds the target read, which costs one AXRuntime and two sysctl reads in the runner. */
 const TARGET_READ_TIMEOUT_MS = 5_000;
@@ -220,7 +222,7 @@ function readTarget(
       'COMMAND_FAILED',
       `Unable to resolve the foreground app in the runner (${code}).`,
       {
-        reason: TARGET_UNAVAILABLE,
+        reason: SNAPSHOT_BRIDGE_REASONS.targetUnavailable.reason,
         bridgeFailureCode: code,
         appBundleId: expected.appBundleId,
       },

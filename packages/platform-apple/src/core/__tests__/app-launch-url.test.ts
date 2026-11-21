@@ -17,7 +17,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator } from '../simulator.ts';
 import {
   IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
-  IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
+  APP_LAUNCH_REASONS,
   openIosApp,
 } from '../app-launch.ts';
 
@@ -84,7 +84,7 @@ test('a Simulator that never answers openurl fails the open at its own bound', a
   assert.equal(failure.code, 'COMMAND_FAILED');
   assert.deepEqual(failure.details, {
     timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
-    reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
+    reason: APP_LAUNCH_REASONS.simulatorOpenUrlTimeout.reason,
     deviceId: IOS_TEST_SIMULATOR.id,
     hint: IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
   });

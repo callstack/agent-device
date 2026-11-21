@@ -29,7 +29,7 @@ vi.mock('../screenshot-status-bar.ts', async (importOriginal) => {
 
 import { ensureBootedSimulator } from '../simulator.ts';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
-import { SIMCTL_SCREENSHOT_TIMEOUT_REASON } from '../tool-provider.ts';
+import { SIMCTL_REASONS } from '../tool-provider.ts';
 import { IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS } from '../config.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import {
@@ -58,7 +58,7 @@ const CAPTURE_FAILURE = new AppError('COMMAND_FAILED', 'xcrun exited with code 6
   exitCode: 60,
   processExitError: true,
   hint: 'Capture stderr excerpt preserved for the operator.',
-  reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+  reason: SIMCTL_REASONS.screenshotTimeout.reason,
 });
 
 function listingFor(udid: string, state: string): ExecResult {
@@ -179,7 +179,7 @@ test('a fresh Shutdown answer boots the skipped-check simulator once and re-capt
 });
 
 test.each([
-  { label: 'typed timeout', typedReason: SIMCTL_SCREENSHOT_TIMEOUT_REASON, code: 60 },
+  { label: 'typed timeout', typedReason: SIMCTL_REASONS.screenshotTimeout.reason, code: 60 },
   { label: 'unattributed state failure', typedReason: undefined, code: 405 },
 ])('successful recovery retains the original $label diagnostic', async ({ typedReason, code }) => {
   const device = simulator(`sim-recovery-diagnostic-${code}`);

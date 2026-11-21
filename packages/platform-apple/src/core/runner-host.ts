@@ -9,7 +9,7 @@ import {
   runCmdStreaming,
 } from '@agent-device/host-kit/command';
 import { shellQuote } from '@agent-device/kernel/device-shell';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   isProcessAlive,
@@ -53,6 +53,11 @@ import {
   runXcrun,
 } from './tool-provider.ts';
 
+const RUNNER_HOST_REASONS = {
+  // The Apple runner was asked for its host before the daemon bound one.
+  hostUnbound: { reason: 'apple_runner_host_unbound' },
+} as const satisfies ReasonTable<'apple runner'>;
+
 /**
  * The real host capabilities for `@agent-device/platform-apple/runner`: the one place
  * the runner package's port meets the root-owned utilities. Consumed by the
@@ -76,7 +81,7 @@ export const appleRunnerHost: AppleRunnerHost = {
     const host = getAppleRunnerHostEnvironment();
     if (!host) {
       throw new AppError('COMMAND_FAILED', 'Apple runner configuration has no bound host.', {
-        reason: 'apple_runner_host_unbound',
+        reason: RUNNER_HOST_REASONS.hostUnbound.reason,
       });
     }
     return host;

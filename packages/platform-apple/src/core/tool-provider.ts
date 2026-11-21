@@ -30,6 +30,7 @@ import type {
   AppleToolExecOptions,
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
 export type {
   AppleMacOsHelperProvider,
@@ -64,8 +65,11 @@ const SIMCTL_ERROR_HEADER =
 const SIMCTL_SCREENSHOT_TIMEOUT_DOMAIN = 'NSPOSIXErrorDomain';
 const SIMCTL_SCREENSHOT_TIMEOUT_CODE = 60;
 
-/** The local screenshot timeout reason consumed by retry and runner fallback. */
-export const SIMCTL_SCREENSHOT_TIMEOUT_REASON = 'simulator-screenshot-timeout';
+/** Retry and the runner fallback read `screenshotTimeout`. */
+export const SIMCTL_REASONS = {
+  // `simctl io screenshot` timed out (ETIMEDOUT) on the simulator.
+  screenshotTimeout: { reason: 'simulator-screenshot-timeout' },
+} as const satisfies ReasonTable<'screenshot'>;
 
 /** Screenshot options follow `io <udid> screenshot`; a simulator-set prefix precedes it. */
 function isSimctlScreenshotArgs(args: ScopedSimctlArgs): boolean {
@@ -73,7 +77,7 @@ function isSimctlScreenshotArgs(args: ScopedSimctlArgs): boolean {
   return unscoped[0] === 'io' && unscoped[2] === 'screenshot';
 }
 
-/** Stamp {@link SIMCTL_SCREENSHOT_TIMEOUT_REASON}, preserving exec's own timeout evidence. */
+/** Stamp `simulator-screenshot-timeout`, preserving exec's own timeout evidence. */
 async function runLocalSimctlCommand(
   args: ScopedSimctlArgs,
   options?: AppleToolExecOptions,
@@ -90,7 +94,7 @@ async function runLocalSimctlCommand(
   return requireExecSuccess(result, `xcrun exited with code ${result.exitCode}`, {
     cmd: 'xcrun',
     args: commandArgs,
-    ...(isScreenshotTimeout ? { reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON } : {}),
+    ...(isScreenshotTimeout ? { reason: SIMCTL_REASONS.screenshotTimeout.reason } : {}),
   });
 }
 

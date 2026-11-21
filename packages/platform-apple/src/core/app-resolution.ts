@@ -1,6 +1,6 @@
 import type { SimulatorAppListOptions, SimulatorAppMetadata } from './tool-provider-types.ts';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import {
   createAppResolutionCache,
@@ -122,7 +122,7 @@ function isUnresolvedInstalledApp(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   return (
     error.code === 'APP_NOT_INSTALLED' ||
-    error.details?.reason === IOS_APP_LIST_UNREADABLE_REASON ||
+    error.details?.reason === APP_RESOLUTION_REASONS.appListUnreadable.reason ||
     Array.isArray(error.details?.matches)
   );
 }
@@ -303,8 +303,10 @@ async function listSimulatorApps(
   }));
 }
 
-/** `details.reason` of an app resolution that failed because `simctl` produced no app list. */
-const IOS_APP_LIST_UNREADABLE_REASON = 'app-list-unreadable';
+const APP_RESOLUTION_REASONS = {
+  // `simctl` produced no list of the simulator's installed apps, so the app could not be resolved.
+  appListUnreadable: { reason: 'app-list-unreadable' },
+} as const satisfies ReasonTable<'apple app resolution'>;
 
 /**
  * The installed apps an app resolution matches against. A listing `simctl` could not produce is a
@@ -314,7 +316,7 @@ async function requireSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
   const read = await resolveAppleToolProvider().simulatorApps.list(device);
   if (read.type === 'unreadable') {
     throw new AppError('COMMAND_FAILED', `Could not list the apps installed on ${device.id}`, {
-      reason: IOS_APP_LIST_UNREADABLE_REASON,
+      reason: APP_RESOLUTION_REASONS.appListUnreadable.reason,
       deviceId: device.id,
       exitCode: read.exitCode,
       stderr: read.stderr,

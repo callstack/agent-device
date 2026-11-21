@@ -50,7 +50,7 @@ import { ensureBootedSimulator, readSimulatorBootState } from './simulator.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
 import { SIMCTL_SHUTDOWN_STATE } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
-import { resolveAppleToolProvider, SIMCTL_SCREENSHOT_TIMEOUT_REASON } from './tool-provider.ts';
+import { resolveAppleToolProvider, SIMCTL_REASONS } from './tool-provider.ts';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
@@ -571,7 +571,7 @@ export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {
     isCommandTimeoutError(error) ||
     (error instanceof AppError &&
       error.code === 'COMMAND_FAILED' &&
-      error.details?.reason === SIMCTL_SCREENSHOT_TIMEOUT_REASON)
+      error.details?.reason === SIMCTL_REASONS.screenshotTimeout.reason)
   );
 }
 

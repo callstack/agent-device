@@ -1,7 +1,7 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { RunnerCommand } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
@@ -9,6 +9,11 @@ import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS, IOS_GUEST_DISPLAY_PROBE_BUDGET_MS }
 import type { FoldHelper } from '../foldable/fold-helper.ts';
 import { runIosDevicectlJsonRequest } from './devicectl.ts';
 import { simulatorAddressFor } from './simctl.ts';
+
+const CAPTURE_PANEL_REASONS = {
+  // The foldable's panel table did not say which of its lit panels to capture.
+  capturePanelUnidentified: { reason: 'capture-panel-unidentified' },
+} as const satisfies ReasonTable<'foldable panels'>;
 
 export type AppleDeviceDisplay = {
   /** CoreDevice display name, which `simctl io --display` also accepts. */
@@ -500,7 +505,7 @@ export async function resolveAppleCaptureTarget(
       `The panel table did not identify which panel of ${device.name} to capture`,
       {
         deviceId: device.id,
-        reason: 'capture-panel-unidentified',
+        reason: CAPTURE_PANEL_REASONS.capturePanelUnidentified.reason,
         litPanelCount: inventory.displays.filter((display) => display.power === 'lit').length,
         hint: UNIDENTIFIED_PANEL_HINT,
       },

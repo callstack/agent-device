@@ -323,7 +323,8 @@ struct AgentDeviceMacOSHelper {
         action: action
       )
       else {
-        throw HelperError.commandFailed("alert action failed", details: ["reason": "missing_button"])
+        throw HelperError.commandFailed(
+          "alert action failed", details: ["reason": HelperFailureReason.missingButton.rawValue])
       }
       let status = AXUIElementPerformAction(button, kAXPressAction as CFString)
       guard status == .success else {
@@ -669,7 +670,8 @@ private func pressAtPosition(_ request: MouseClickRequest) throws {
   do {
     try postMouseClick(request)
   } catch MouseClickDeliveryError.eventCreationFailed {
-    throw HelperError.commandFailed("press action failed", details: ["reason": "event_creation_failed"])
+    throw HelperError.commandFailed(
+      "press action failed", details: ["reason": HelperFailureReason.eventCreationFailed.rawValue])
   }
 }
 

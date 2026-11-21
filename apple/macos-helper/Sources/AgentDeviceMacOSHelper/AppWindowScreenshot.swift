@@ -60,19 +60,19 @@ enum AppWindowScreenshotRefusal: Error {
     let message: String
     switch self {
     case .windowNotFound:
-      details["reason"] = "window-not-found"
+      details["reason"] = HelperFailureReason.windowNotFound.rawValue
       details["hint"] =
         "Open or unminimize a window of the app on the current Space, then retry the screenshot."
       message = "screenshot could not find an on-screen window for the app"
     case .frontWindowCaptureExcluded(let frontWindowId):
-      details["reason"] = "front-window-capture-excluded"
+      details["reason"] = HelperFailureReason.frontWindowCaptureExcluded.rawValue
       details["frontWindowId"] = String(frontWindowId)
       details["hint"] =
         "The app excludes the front window from screen capture. Run `snapshot` to read the window's UI tree; retrying the excluded window will not help."
       message =
         "screenshot could not capture the app's front window: the app excludes it from capture"
     case .frontWindowNotShareable(let frontWindowId):
-      details["reason"] = "front-window-not-shareable"
+      details["reason"] = HelperFailureReason.frontWindowNotShareable.rawValue
       details["frontWindowId"] = String(frontWindowId)
       details["hint"] =
         "The front window is unavailable to screen capture. If it is opening or closing, retry after it settles."

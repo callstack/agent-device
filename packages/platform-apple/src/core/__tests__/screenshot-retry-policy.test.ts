@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { shouldRetryIosSimulatorScreenshot } from '../screenshot.ts';
-import { SIMCTL_SCREENSHOT_TIMEOUT_REASON } from '../tool-provider.ts';
+import { SIMCTL_REASONS } from '../tool-provider.ts';
 
 test('shouldRetryIosSimulatorScreenshot retries the timeout reason the adapter stamps', () => {
   // The reason the local simctl adapter stamps from the tool's protocol header; see
@@ -10,7 +10,7 @@ test('shouldRetryIosSimulatorScreenshot retries the timeout reason the adapter s
   const error = new AppError('COMMAND_FAILED', 'xcrun exited with code 60', {
     stderr: 'Timeout waiting for screen surfaces',
     exitCode: 60,
-    reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+    reason: SIMCTL_REASONS.screenshotTimeout.reason,
   });
   assert.equal(shouldRetryIosSimulatorScreenshot(error), true);
 });

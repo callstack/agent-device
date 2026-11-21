@@ -18,7 +18,7 @@ import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { PNG } from '@agent-device/capture-kit/png';
 import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/fake-apple-tool.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
-import { SIMCTL_SCREENSHOT_TIMEOUT_REASON } from '../tool-provider.ts';
+import { SIMCTL_REASONS } from '../tool-provider.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
@@ -103,7 +103,7 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
           return new AppError('COMMAND_FAILED', 'xcrun simctl exited with code 60', {
             exitCode: 60,
             stderr: 'Detected file type from extension: PNG\nTimeout waiting for screen surfaces\n',
-            reason: SIMCTL_SCREENSHOT_TIMEOUT_REASON,
+            reason: SIMCTL_REASONS.screenshotTimeout.reason,
           });
         }
         writeFileSync(args.at(-1) ?? '', sourcePng);
