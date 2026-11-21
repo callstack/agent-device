@@ -14,7 +14,9 @@ import {
   restoreAndroidTestIme,
   restoreOrphanedAndroidTestImeOnDaemonStartup,
 } from './ime-restore.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 import {
+  registerTestImeRestore,
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
   SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
@@ -507,6 +509,40 @@ test('an unrecordable window from an ordinary close still holds a later standalo
   releaseSleep();
   await expect(kill).resolves.toMatchObject({ success: true });
   expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('an unrecorded newer write outranks an older confirmed record for the marker clear', async () => {
+  // The record holds an older confirmed window; the newest write failed to record, so only its
+  // fallback deadline remains. Covering both must report the newest write's unconfirmed
+  // provenance, and the uninspected close must keep the marker for the startup retry.
+  const records = new Map<string, AndroidTestImeFlushRecord>();
+  let failWrites = false;
+  const host = bindAndroidAdbHostStub({
+    imeFlushRecords: {
+      write: async (stateDir, serial, record) => {
+        if (failWrites) throw new Error('ENOSPC: no space left on device');
+        records.set(flushRecordKey(stateDir, serial), record);
+      },
+      clear: async (stateDir, serial) => {
+        records.delete(flushRecordKey(stateDir, serial));
+      },
+      read: async (stateDir, serial) => records.get(flushRecordKey(stateDir, serial)),
+    },
+  });
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  await registerTestImeRestore(STATE_DIR, DEVICE.id, true);
+  const key = flushRecordKey(STATE_DIR, DEVICE.id);
+  const confirmedRecord = records.get(key);
+  if (!confirmedRecord) throw new Error('confirmed record missing');
+  records.set(key, { ...confirmedRecord, deadlineMs: confirmedRecord.deadlineMs - 100 });
+  failWrites = true;
+  await registerTestImeRestore(STATE_DIR, DEVICE.id, true);
+
+  const result = await restoreWith(stuckDeviceState(), { shutdownTarget: true });
+
+  expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
+  expect(sleep).toHaveBeenCalledTimes(2);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
 test('a shutdown of a physical device restores without any flush wait', async () => {

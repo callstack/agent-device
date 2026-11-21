@@ -167,23 +167,27 @@ export async function awaitTestImeFlushWindow(
 ): Promise<TestImeFlushWait> {
   if (signal?.aborted) return 'aborted';
   for (;;) {
-    const outcome = await runTestImeFlushRound(stateDir, serial, signal);
+    const recorded: { deadlineMs?: number } = {};
+    const outcome = await runTestImeFlushRound(stateDir, serial, recorded, signal);
     if (outcome === 'extended') continue;
     if (outcome === 'aborted') return outcome;
     const unrecorded = await awaitUnrecordedTestImeFlushDeadline(serial, signal);
     if (unrecorded === 'extended') continue;
     if (unrecorded === 'aborted') return 'aborted';
-    // A covered fallback window proves only that a write was issued.
-    return unrecorded === 'covered' && outcome === 'idle' ? 'covered-issued' : outcome;
+    // A fallback newer than the record belongs to the newest write, and it proves only that
+    // the write was issued.
+    const fallbackIsNewest =
+      unrecorded !== 'none' && unrecorded > (recorded.deadlineMs ?? Number.NEGATIVE_INFINITY);
+    return fallbackIsNewest ? 'covered-issued' : outcome;
   }
 }
 
-// Sleeps out this process's fallback deadline after the recorded one, then retires it. A
+// Sleeps out this process's fallback deadline after the recorded one, retires it and returns it. A
 // write opened or a fallback moved while sleeping means a newer window and another round.
 async function awaitUnrecordedTestImeFlushDeadline(
   serial: string,
   signal?: AbortSignal,
-): Promise<'none' | 'covered' | 'aborted' | 'extended'> {
+): Promise<number | 'none' | 'aborted' | 'extended'> {
   const deadlineMs = unrecordedTestImeFlushDeadlines.get(serial);
   if (deadlineMs === undefined) return 'none';
   const remainingMs = Math.min(
@@ -197,7 +201,7 @@ async function awaitUnrecordedTestImeFlushDeadline(
   if (pendingTestImeRestoreWrite(serial)) return 'extended';
   if (unrecordedTestImeFlushDeadlines.get(serial) !== deadlineMs) return 'extended';
   unrecordedTestImeFlushDeadlines.delete(serial);
-  return 'covered';
+  return deadlineMs;
 }
 
 // One round: drain in-flight writes, then sleep out the newest record's remainder and consume
@@ -205,11 +209,13 @@ async function awaitUnrecordedTestImeFlushDeadline(
 async function runTestImeFlushRound(
   stateDir: string,
   serial: string,
+  recorded: { deadlineMs?: number },
   signal?: AbortSignal,
 ): Promise<TestImeFlushWait | 'extended'> {
   if (!(await quietTestImeRestoreWrites(serial, signal))) return 'aborted';
   const record = await requireAndroidAdbHost().imeFlushRecords.read(stateDir, serial);
   if (record === undefined) return 'idle';
+  recorded.deadlineMs = record.deadlineMs;
   const remainingMs = Math.min(
     record.deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
     SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
