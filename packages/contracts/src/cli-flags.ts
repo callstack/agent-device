@@ -50,6 +50,9 @@ export type CliFlags = CloudProviderProfileFields &
     runId?: string;
     leaseId?: string;
     leaseBackend?: LeaseBackend;
+    deviceKey?: string;
+    reason?: string;
+    ttlMs?: number;
     provider?: string;
     providerSessionId?: string;
     force?: boolean;

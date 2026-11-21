@@ -169,11 +169,16 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Pause agent interactions while a person controls a device',
       description:
-        'Temporarily hand control of the active remote lease device to a person. The foreground command pauses state-changing agent commands, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. Uses the active connection and --session, with normal tenant and lease admission. status lists holds on that device; release removes a hold owned by the admitted lease. The host-only /admin/human-control/holds API uses the separate local daemon token. Holds do not survive daemon restart. Local takeover without a remote device lease is not supported.',
+        'Temporarily hand control of a device to a person. The foreground command pauses state-changing agent commands on the active remote lease device, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. It uses the active connection and --session, with normal tenant and lease admission. status lists holds on that device. release removes a hold owned by the admitted lease; without a session or lease it removes a host hold by id. hold pins one device for a script: it writes a host hold through the daemon host token, so lease allocation and device mutations on that device wait until the TTL passes or release removes the hold. Name the device with --device-key, or with --platform plus device selectors. Name the backend with --lease-backend or --platform. The host hold rides the /admin/human-control/holds API with the local daemon token, or --daemon-base-url and --daemon-auth-token. Holds do not survive daemon restart; re-establish them after reconnecting. Local takeover without a remote device lease is not supported.',
     },
-    usageOverride: 'takeover [status | release <hold-id>] [--session <name>]',
-    listUsageOverride: 'takeover [status|release]',
-    positionalArgs: ['status|release?', 'hold-id?'],
+    usageOverride: 'takeover [status | hold | release <hold-id>] [--session <name>]',
+    listUsageOverride: 'takeover [status|hold|release]',
+    positionalArgs: ['status|hold|release?', 'hold-id?'],
+    flagsByAction: {
+      hold: ['deviceKey', 'reason', 'ttlMs', 'platform', 'target', 'device', 'udid', 'serial'],
+      status: ['session', 'tenant', 'runId', 'leaseId', 'sessionIsolation', 'daemonTransport'],
+      release: ['session', 'tenant', 'runId', 'leaseId', 'sessionIsolation', 'daemonTransport'],
+    },
     supportedFlags: [
       'stateDir',
       'session',
@@ -186,6 +191,14 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'leaseId',
       'leaseBackend',
       'sessionIsolation',
+      'deviceKey',
+      'reason',
+      'ttlMs',
+      'platform',
+      'target',
+      'device',
+      'udid',
+      'serial',
     ],
   },
   'react-devtools': {

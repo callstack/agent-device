@@ -272,6 +272,12 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['osVersion', 'imageTag', 'deviceMode', 'deviceBaseline', 'physical'],
     },
     {
+      // `takeover hold` rides the host-only admin HTTP surface, so no provider scenario reaches it.
+      name: 'takeover host hold',
+      owner: 'takeover command and host hold admin tests',
+      keys: ['deviceKey', 'reason', 'ttlMs'],
+    },
+    {
       name: 'cloud artifact provider lookup',
       owner:
         'cloud provider profile, artifact provider, CLI output, and cloud WebDriver provider scenario tests',

@@ -52,7 +52,7 @@ export function createLeaseClient(
   };
 }
 
-function normalizeHumanControlHold(value: unknown): HumanControlHold {
+export function normalizeHumanControlHold(value: unknown): HumanControlHold {
   if (
     !isRecord(value) ||
     !isRecord(value.scope) ||
