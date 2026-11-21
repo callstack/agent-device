@@ -105,12 +105,12 @@ Exact behavior: `agent-device help shutdown`.
 - When several shut-down devices match equally, `boot` fails with `AMBIGUOUS_MATCH`. Add `--pick newest` to choose one; it never picks between booted or provider devices.
 - `shutdown` refuses a device that an active session uses. End that session with `close --shutdown` first. On [Limrun](/docs/limrun#create-and-delete-an-instance), `shutdown` deletes an instance that agent-device created, or releases an attachment to an existing one.
 - A never-booted iOS Simulator can take minutes to boot. If the `--timeout` runs out, the command fails with `boot_timeout` and the device keeps booting, so a retry finds it further along. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
-- On macOS, the Android emulator window opens behind the focused app.
+- On macOS, the Android emulator window opens behind the focused app. This is best-effort: the emulator can still take focus if the focused app cannot be read, or if its window appears after the startup budget runs out.
 
 Select a device:
 
 - `--platform apple` covers iOS, tvOS, and macOS. Add `--target mobile|tv|desktop` to choose phone or tablet, TV, or desktop targets.
-- With no `--device`, `--udid`, or `--serial`, a command that needs one device prefers virtual over physical and booted over offline devices. If several still tie, such as two booted emulators, it fails with `AMBIGUOUS_MATCH` and lists the candidates.
+- With no `--device`, `--udid`, or `--serial`, a command that needs one device prefers virtual over physical and booted over offline devices. If several still tie, such as two booted emulators, it fails with `AMBIGUOUS_MATCH` and lists the candidates. Commands inside a session use the session's device.
 - Commands without `--session` use an implicit session for your worktree and platform. For named sessions and `--session-lock`, see [Sessions](/docs/sessions).
 
 Device claims and the daemon:
@@ -153,10 +153,10 @@ Exact behavior: `agent-device help daemon`.
 
 <!-- /generated -->
 
-- Each session claims its device. When another owner holds the claim, `open` fails with `DEVICE_IN_USE` and one of these reasons: `DEVICE_CLAIM_LIVE_OWNER`, `DEVICE_CLAIM_RECOVERY_PENDING`, or `DEVICE_CLAIM_OWNER_UNCERTAIN`. Nothing reached the device. To wait for a held device, pass `open --wait <ms>`. See [Sessions](/docs/sessions#release-a-device-another-session-or-workspace-holds).
+- Each session claims its device. When another owner holds the claim, `open` fails with `DEVICE_IN_USE` and one of these reasons: `DEVICE_CLAIM_LIVE_OWNER`, `DEVICE_CLAIM_RECOVERY_PENDING`, or `DEVICE_CLAIM_OWNER_UNCERTAIN`. Nothing reached the device. If the device rebooted after the claim was taken, `open` takes the claim instead and reports the release in `warnings`. To wait for a held device, pass `open --wait <ms>`. See [Sessions](/docs/sessions#release-a-device-another-session-or-workspace-holds).
 - `device status --json` shows whether a new session can take each device now (`acquirable`) and what blocks it (`blockedBy`). It does not contact the daemon or run recovery, so `open` can still decide differently.
 - `device release --stale` clears a claim whose owner provably cannot release it, such as an exited process. It refuses live and uncertain owners.
-- A command starts the local daemon when none runs. A daemon from another version is replaced only when it holds no work. Otherwise the command fails with `daemon-busy`. A daemon from a release too old to report its work fails with `daemon-incompatible`. End it deliberately with `daemon stop`. Node.js clients can choose differently; see [Daemon lifecycle](/docs/client-api#daemon-lifecycle).
+- A command that needs the local daemon starts it when none runs. A daemon from another version is replaced only when it holds no work. Otherwise the command fails with `daemon-busy`. A daemon from a release too old to report its work fails with `daemon-incompatible`. End it deliberately with `daemon stop`. Node.js clients can choose differently; see [Daemon lifecycle](/docs/client-api#daemon-lifecycle).
 - `daemon stop --clean` also removes the Apple runner processes and leases that daemon kept.
 - On macOS, `daemon stop` can refuse a daemon that an older build started, with `details.terminationReason: identity-unverified`. Stop it with the build that started it, or send `SIGTERM` to its recorded PID. Do not run an older and a newer build on one macOS host: device claims and runner leases are shared by the host.
 - `daemon stop` refuses a daemon that a host process embeds (`daemon-owner-embedded`). Close it in that process with the handle from `startAgentDevice()`. For the other refusals, see [Daemon lifecycle](/docs/client-api#daemon-lifecycle).
@@ -234,9 +234,9 @@ Exact behavior: `agent-device help close`.
 - On a local iOS Simulator, the first capture after `open` waits for the app's first screen. If the wait ends first, the snapshot warns with `postGestureOutcome.kind: "loading"` or `"unsettled"`. Run `snapshot -i` or `wait text <expected>` before you act. An app whose first screen has no labeled controls, such as a game canvas, always waits the full time; pass `--no-post-gesture-stabilization` to skip the wait.
 - `open --wait <ms>` waits for a device that another session holds. A claim held by another workspace is not waited for: `open` returns the recovery command at once. `install` and `reinstall` never wait.
 - If an app on an iOS simulator shows an empty accessibility tree after an earlier XCTest session, run `open <app> --relaunch`, then `snapshot -i`.
-- Android React Native: `open --relaunch` needs an installed package name, not an APK path. For JS changes, run `metro reload` instead.
-- Android: `open settings --relaunch` restarts the app that the intent opened. It fails when the intent matches more than one activity.
-- Android: `close` fails with `android-app-close-timeout` when the app does not leave the foreground or its processes do not exit in time. It fails with `android-process-probe-unavailable` when it cannot list the app's processes; if that happens before the stop, the app keeps running.
+- Android React Native: `open --relaunch` needs an installed package name, not an APK path. For Metro-served JS changes, run `metro reload` instead.
+- ADB-backed Android: `open settings --relaunch` restarts the app that the intent opened. It fails when the intent matches more than one activity.
+- ADB-backed Android: `close` fails with `android-app-close-timeout` when the app does not leave the foreground or its processes do not exit in time. It fails with `android-process-probe-unavailable` when it cannot list the app's processes; if that happens before the stop, the app keeps running.
 - If `close` cannot confirm its cleanup, it keeps the session and its device claim. Run `close` again with the same options to release the device, without `--save-script` if the first attempt saved the script. The same applies when `open --relaunch` cannot confirm its effects.
 
 iOS Simulator launch prompt:
@@ -357,17 +357,17 @@ Exact behavior: `agent-device help hardware-button`.
 <!-- /generated -->
 
 - `back` uses the app's own back navigation: the back key on Android, the visible back control on macOS, and the Menu button on tvOS. On macOS, an app with no back control by identifier or "Back" label refuses with `in_app_back_control_unavailable` and nothing is pressed; press the app's control by its ref.
-- iOS has no system back. `back` presses the navigation bar's system back button, or swipes from the left edge when there is none. It never presses a custom "Back" button, and it does not dismiss a modal or sheet: press that screen's Close or Cancel control. On Android, system back also closes dialogs.
-- `back_swipe_no_change` means the swipe did not change the screen. `details.dismissControls` lists the visible Back, Close, and Cancel buttons as selectors, for example `agent-device press 'role=button label="Close"'`. `back` never presses them itself, because they can discard a draft.
+- iOS has no system back. `back` presses the navigation bar's system back button when it finds exactly one, and otherwise swipes from the left edge. It never presses a custom "Back" button, and it does not dismiss a modal or sheet: press that screen's Close or Cancel control. On Android, system back also closes dialogs.
+- `back_swipe_no_change` means the swipe did not change the screen. `details.dismissControls` lists the Back, Close, and Cancel buttons at the top of the app window as selectors, for example `agent-device press 'role=button label="Close"'`. `back` never presses them itself, because they can discard a draft.
 - `back_swipe_unverified` means `back` cannot tell whether it navigated, for example because the screen kept changing. Check with `snapshot`.
 - `back_swipe_not_dispatched` means nothing reached the device, so a retry is safe.
 - An app with a left-edge drawer can open the drawer instead of going back. When the app shows its own back or close control, press it by its ref.
 - `back --system` sends system back: the Android back key or the tvOS Menu button. macOS has no system back and refuses it. visionOS refuses `back`.
-- `orientation` works on iOS and Android mobile targets only. On Android, it turns auto-rotate off, and the lock stays after the session ends. `orientation auto` gives rotation back to the sensor on ADB-backed Android only. An iPhone Duo refuses `portrait-upside-down`.
+- `orientation` works on iOS and Android mobile targets only. On ADB-backed Android, it turns auto-rotate off, and the lock stays after the session ends. `orientation auto` gives rotation back to the sensor on ADB-backed Android only. An iPhone Duo refuses `portrait-upside-down`.
 - `action-button` reports that the press was sent, not what it triggered. A model without the button fails with `hardware_control_unavailable` and nothing is pressed. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone.
 - `shake` works on iOS simulators and local Android emulators, not on Android TV or remote providers. On iOS, the app gets a motion-shake event but no accelerometer data, so an app that detects shakes through CoreMotion does not see it. Take a snapshot to see what the app did.
 - On Android, `shake-rest-acceleration-unreadable` means the emulator console returned no accelerometer reading, so nothing was sent. `shake-console-refused` after a swing means the accelerometer may not be back at rest. Check with `adb emu sensor get acceleration`.
-- `hardware-button` presses a key once and reports the press, not what the OS did with it. Android presses every key. A physical iPhone or iPad presses volume only, iOS simulators refuse volume, and TV targets point you to `tv-remote`.
+- `hardware-button` presses a key once and reports the press, not what the OS did with it. Android presses every key. A physical iPhone or iPad presses volume only, iOS simulators refuse every key, and TV targets point you to `tv-remote`.
 - On Android, `power` toggles the screen. After a press that turns the screen off, later commands can hit a locked screen; use `hardware-button wake`.
 
 Fold a foldable device:
@@ -392,7 +392,7 @@ Exact behavior: `agent-device help fold`.
 
 - `fold closed|half-open|open` sets the pose of an iPhone Duo simulator or a foldable Android emulator, such as `pixel_9_pro_fold`. It reports the pose only after the device confirms it. Physical devices are refused.
 - Take a new snapshot after every fold, even a failed one. Refs and coordinates from before it are stale.
-- On iOS, the first fold on a host or Xcode builds a helper and takes longer. The response's panel size is not the next snapshot's viewport, so do not use it to place a tap.
+- On iOS, `fold` needs an Xcode with foldable HID support. The first fold on a host or Xcode builds a helper and takes longer. The response's panel size is not the next snapshot's viewport, so do not use it to place a tap.
 - `--keyframes` plays a timed hinge trajectory on iOS only, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":5000,"angle":180}]'`.
 - For failure reasons, see [error reasons](/docs/error-reasons). For panels and poses, see `agent-device help foldable`.
 
@@ -551,7 +551,7 @@ agent-device capabilities --session checkout --json
 
 - `devices` lists available targets after `--platform` and [isolation scopes](#device-isolation-scopes). Each device shows `model` and `osVersion` when the platform reports them. These fields describe a device and are not selectors.
 - `open --json` and `session list --json` report the attached device the same way, so a CI job can record the OS a run used. A cloud provider can grant a different OS than you asked for.
-- `capabilities --json` lists the commands the target supports in `availableCommands`. Use it instead of keeping your own platform support table. On Android, `targetReadiness.press: "bounded-geometry"` means presses already wait for moving targets, so a test harness needs no fixed delay before a tap.
+- `capabilities --json` lists the commands the target supports in `availableCommands`. Use it instead of keeping your own platform support table. On Android, `targetReadiness.press: "bounded-geometry"` means ref and selector presses already wait for moving targets, so a test harness needs no fixed delay before a tap.
 
 ### HarmonyOS command boundary
 
@@ -559,7 +559,7 @@ HarmonyOS support uses HDC and ArkUI `uitest`. On API 24 devices it supports lif
 
 - Gestures use one pointer. Multi-touch gestures and `gesture drag` return `UNSUPPORTED_OPERATION`.
 - Physical devices support whole-screen recording with `record start <path> --scope device` or `--scope system`, without `--fps`, `--quality`, or `--hide-touches`. Emulator recording is refused.
-- Not available: orientation, clipboard, alerts, network/audio capture, push and app-event delivery, React Native helpers, and trace capture. `perf memory sample` reports process RSS only.
+- Not available: orientation, clipboard, alerts, network/audio capture, push and app-event delivery, React Native helpers, and trace capture. `settings` supports only `clear-app-state`. `perf memory sample` reports process RSS only.
 
 ## Diagnostics
 
@@ -694,7 +694,8 @@ agent-device close --session watch --shutdown
 - `fill` and `type` type into the system input sheet and press its Done button by its English label. On another system language, the command fails with `TEXT_INPUT_COMMIT_NOT_OBSERVED` and the text stays in the sheet; press its commit button by ref.
 - `action-button` works on Apple Watch Ultra only.
 - `record` captures the watch screen as on an iOS simulator.
-- `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures are refused with `unsupported-platform-leaf`.
+- `open`, `close`, `install`, `uninstall`, `boot`, `snapshot`, `find`, `wait`, `is`, `get`, `press`, `longpress`, `appstate`, and `screenshot` work as on iOS.
+- Every other command is refused with `unsupported-platform-leaf`, including `orientation`, `keyboard`, `app-switcher`, `clipboard`, `settings`, `alert`, `logs`, `network`, `perf`, `push`, `apps`, and multi-touch gestures.
 - Open apps by their watch bundle ID, such as `com.apple.NanoSettings`. Aliases such as `settings` resolve to iPhone bundle IDs.
 
 ## Desktop targets
@@ -710,10 +711,9 @@ agent-device snapshot -i --platform apple --target desktop
 - Use an `app` session for normal app control: `open`, `snapshot`, `click`, `fill`, `press`, `scroll`, `back`, `screenshot`, `record`. In an app session, `screenshot` captures the app window, not the whole desktop.
 - Use the other surfaces to inspect desktop-wide UI before you choose an app: `frontmost-app` is the focused app, `desktop` is the visible windows, and `menubar` is the active app's menu bar and menu extras. `desktop` is inspect-only. To act inside one app, open it in an `app` session.
 - `open <app> --platform macos --surface menubar` targets one app's menu bar extras. Prefer it for status-item apps.
-- `open <app>` attaches to a copy of the app that is already running, including one you started yourself.
-- Electron and other Chromium-based apps show their web content in the snapshot. The first `snapshot` turns on the app's Chromium accessibility tree, which stays on while the app runs.
+- `open <app>` attaches to a copy of the app that is already running, including one you started yourself. A copy still registering with macOS, or copies running from more than one path, can get a second instance.
 - Prefer selectors and `@ref`s over x/y, because window positions shift between runs. Use `click --button secondary` for context menus, then run `snapshot -i` again.
-- Finder and similar apps read two quick `--count` clicks as a double-click. Pass an `--interval-ms` longer than the system double-click time to keep them apart.
+- On `frontmost-app` and `menubar`, Finder and similar apps read two quick `--count` clicks as a double-click. Pass an `--interval-ms` longer than the system double-click time to keep them apart.
 - macOS also supports `clipboard`, `trigger-app-event`, `logs`, `network dump`, `audio probe` (needs Screen Recording permission), `alert`, and part of `settings` (see [Settings helpers](#settings-helpers)).
 - Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `shake`, `fold`, `install`, `reinstall`, `uninstall`, `install-from-source`, and `push`.
 
@@ -723,6 +723,8 @@ Set `AGENT_DEVICE_MACOS_APP_BACKEND=native` to run macOS app sessions without XC
 - An app session opens and closes only its own app. Use a new `--session` for another app or surface.
 - An app session refuses `clipboard`, `settings`, and `audio probe` with `unsupported-device-scope`, because they act on the whole Mac. Use a `--surface desktop` session for them.
 - An app session cannot see UI that another process shows, such as a system permission prompt.
+- Electron and other Chromium-based apps show their web content in the snapshot. The first `snapshot` turns on the app's Chromium accessibility tree, which stays on while the app runs.
+- `click`, `press`, and `fill` need an element with an accessibility action inside one of the app's windows, not its menu bar. `scroll` scrolls the area at the center of the front window.
 - `screenshot` captures only the app's front window, even when it is covered.
 - `click --button secondary` fails with `context-menu-not-observed` when no menu opened. Take a snapshot and retry on another element.
 - `record`, `prepare`, `back`, `longpress`, `--hold-ms`, `--double-tap`, and gestures fail with `unsupported-device-backend`. Use the default XCTest backend for those.
@@ -898,8 +900,8 @@ Handle system alerts:
 - `alert` handles system alerts on iOS, macOS, and Android permission dialogs. On iOS it also covers app-owned modal popups and Safari's page prompts.
 - Use `alert get` for a quick check, and `alert wait <short-ms>` only when a prompt may appear after async work. Do not use `settings permission` to answer a dialog already on screen; it is for setup before a flow.
 - `accept` and `dismiss` are sent once and never replayed, even if the response is lost. A closed alert does not prove that a permission was granted, so verify the app outcome.
-- `accept` picks the lasting grant, such as `Allow While Using App` over `Allow Once`, or "Allow all" on Android's partial-media sheet. `dismiss` presses only a recognized decline button, such as `Cancel` or `Don't Allow`. iOS simulators also recognize these labels in the device's preferred languages; physical iOS devices, tvOS, and visionOS use English labels only.
-- An unrecognized or ambiguous button fails with `ALERT_BUTTON_NOT_FOUND` or `alert_button_undecided`, and nothing is pressed. Read the labels with `alert get`, then press your choice with `snapshot -i` and `press @ref`.
+- `accept` picks the lasting grant, such as `Allow While Using App` over `Allow Once`, or "Allow all" on Android's partial-media sheet. On iOS, `dismiss` presses only a recognized decline button, such as `Cancel` or `Don't Allow`. iOS simulators also recognize these labels in the device's preferred languages; physical iOS devices, tvOS, and visionOS use English labels only.
+- On iOS and Android, an unrecognized or ambiguous button fails with `ALERT_BUTTON_NOT_FOUND` or `alert_button_undecided`, and nothing is pressed. Read the labels with `alert get`, then press your choice with `snapshot -i` and `press @ref`. macOS falls back to the default or cancel button, then the first or last button.
 - `ALERT_UNRESOLVED` means the runner found an alert it cannot act on. Inspect it with `screenshot` and `snapshot -i`, then `press @ref` on the visible button.
 - `alert-window-expired`, `ALERT_CONFIRMATION_UNAVAILABLE`, `ALERT_DEADLINE_EXCEEDED`, and `dispatched: unknown` mean the press may have happened. Run `alert get` before you act again.
 - An `alert get` that fails with `runner_main_thread_timeout` does not mean there is no alert; that is `alert-not-found`.
@@ -1015,7 +1017,7 @@ A successful `click` or `press` means the action was sent to where the command f
 
 `--settle` reads the tree in the same view as the refs you last read: the full tree after `snapshot`, the interactive view after `snapshot -i`.
 
-After an action that animated the screen, a `click` or `press` on a ref or selector waits for the target to come to rest. If it does not, the command refuses with `target_still_moving` and nothing is pressed. Run `wait <selector>` on the target and retry, or add `--settle`. A refused `@ref` press needs a new `snapshot -i`, because the wait retires the ref. Presses at raw coordinates skip this check.
+After an action that animated the screen, a `click` or `press` on a ref or selector waits for the target to come to rest. If it does not, the command refuses with `target_still_moving` and nothing is pressed. Run `wait <selector>` on the target and retry, or add `--settle`. A refused `@ref` press needs a new `snapshot -i`, because the wait retires the ref. Presses at raw coordinates, and `click @ref` on the web, skip this check.
 
 On iOS, a press on a control nested inside a larger touch control, such as a swipe action beside its row, refuses with `target_not_hittable` when the platform reports the control as not hittable. Reveal the control, for example by swiping its row, and take a new `snapshot -i`.
 
@@ -1208,11 +1210,11 @@ Exact behavior: `agent-device help gesture`.
 
 - Touch platforms refuse `hover`; use `longpress` for a hold. For `hover` on the web, see [Web Automation](#web-automation).
 - `swipe` is a quick throw. `gesture pan` is a deliberate timed drag with one pointer, or two with `--pointer-count 2`. `gesture fling` is a fast directional throw. To update old scripts, see [Rewrite old gesture commands](/docs/migrating-gestures).
-- `gesture pan --hold-ms <ms>` holds before it moves, for drag handles that expose no element and so no ref, such as reorder grips.
+- `gesture pan --hold-ms <ms>` holds one pointer before it moves, for drag handles that expose no element and so no ref, such as reorder grips.
 - `gesture drag source destination` holds one pointer from a selector or ref to another. It and `--hold-ms` work on Android touch devices and iOS/iPadOS only.
 - `gesture pinch`, `gesture rotate`, `gesture transform`, and two-finger `gesture pan` work in Android, iOS, and iPadOS app sessions. iOS sessions through a WebDriver provider refuse them. A path that does not fit the viewport fails instead of being clamped. Use `orientation` to rotate the device.
-- `gesture tap` touches 2 to 5 points at once. WebDriver providers refuse it unless they declare `tapGesture` support. Three or more fingers can trigger iOS system gestures such as undo, so verify app state afterwards. Use `press` for one finger.
-- A long press, scroll, or swipe that fails with `synthesized_gesture_not_dispatched` sent nothing, so a retry is safe. `synthesized_gesture_outcome_unknown` means it may have run; check the screen first.
+- `gesture tap` touches 2 to 5 points at once in Android and iOS/iPadOS app sessions. WebDriver providers refuse it unless they declare `tapGesture` support. Three or more fingers can trigger iOS system gestures such as undo, so verify app state afterwards. Use `press` for one finger.
+- On iOS, a long press, scroll, or swipe that fails with `synthesized_gesture_not_dispatched` sent nothing, so a retry is safe. `synthesized_gesture_outcome_unknown` means it may have run; check the screen first.
 - On iOS, a one-finger `gesture pan` can cross into the keyboard area. Use it for an intended drag where the app supports interactive keyboard dismissal.
 - Apps may not report exactly the requested pan, scale, and rotation. Verify app state, and prefer separate `gesture pan`, `gesture pinch`, or `gesture rotate` commands when exact values matter. See `agent-device help gestures`.
 
@@ -1541,7 +1543,7 @@ agent-device reinstall com.example.app ./build/MyApp.app --platform ios
 ```
 
 - `reinstall <app> <path>` uninstalls and installs in one command, for login resets and repeatable test setup. Device coverage, formats, and remote upload match `install`.
-- If the new archive cannot be unpacked, the installed app and its data stay. An install failure after the uninstall can still leave the app removed.
+- On iOS and Android, if the new archive cannot be unpacked, the installed app and its data stay. An install failure after the uninstall can still leave the app removed.
 
 ## App uninstall
 
@@ -1719,7 +1721,7 @@ Platform support:
 Device settings:
 
 - `settings animations off` (Android) stabilizes runs with heavy animation. Turn animations back on afterwards.
-- `settings bluetooth` and `settings mobile-data` are Android only and need adb. On Android, `settings airplane` needs Android 11 or newer. Connectivity takes a moment to settle, so poll the app instead of asserting offline behavior at once.
+- `settings bluetooth` and `settings mobile-data` are Android only and need adb. `settings bluetooth` needs Android 8.1 or newer, and `settings airplane` needs Android 11 or newer. Connectivity takes a moment to settle, so poll the app instead of asserting offline behavior at once.
 - Pair `settings mobile-data on` with `settings wifi off` to move a session, such as a video stream, from Wi-Fi to cellular. On a multi-SIM device, or one without an active SIM, the command can fail even when the switch took effect.
 - `settings text-size` without a category reads the current size. It works on iPhone and iPad simulators and on Android. A running app picks up a new size only after `open <app> --relaunch`.
 
@@ -1736,7 +1738,7 @@ App state:
 
 Permissions:
 
-- `permission` applies to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. `--app` counts only on the command line; `AGENT_DEVICE_TARGET_APP` never retargets a settings change.
+- On iOS and Android, `permission` applies to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. `--app` counts only on the command line; `AGENT_DEVICE_TARGET_APP` never retargets a settings change.
 - Refusals change nothing: `app_not_installed` (install the app or fix the id), `session_app_required` (run `open <app>` or name the app), `setting_app_not_package` (an Android intent alias such as `settings` is not a package), and `setting_app_not_consumed` (a device-wide setting such as `location set`, `mobile-data`, or `bluetooth` takes no app).
 - On iOS simulators, the simulator decides which permissions it can change and refuses the rest. `grant all` skips a refused service with a warning.
 - On Android, a permission group applies only the permissions the app declares. `full|limited` applies only to iOS `photos`.
@@ -1976,7 +1978,7 @@ agent-device perf trace stop --kind xctrace --out hitches.trace
 - Platform limits that decide which command to use:
   - `perf frames`: Android, and connected iOS devices. iOS simulators and macOS report it unavailable.
   - `perf memory snapshot --kind android-hprof`: Android, for a debuggable or profileable process. `--kind memgraph`: iOS simulators and macOS.
-  - `--kind xctrace`: iOS simulators, connected iOS devices, and macOS. It does not profile Android; use `--kind simpleperf` or `--kind perfetto` there.
+  - `--kind xctrace`: iOS simulators, connected iOS devices, and macOS. It does not profile Android; use `--kind simpleperf` or `--kind perfetto` there. All three need the app running.
   - HarmonyOS is memory-only.
 
 For the measurement workflow and output examples, see [Performance snapshots](/docs/debugging-profiling#performance-snapshots).
@@ -2064,7 +2066,7 @@ agent-device open "React Navigation Example" --platform ios --device "iPhone 17 
 ```
 
 - Use a different simulator and session per worktree; one simulator cannot run two copies of the same bundle id.
-- `open` points the app at the Metro server you name, including Expo dev clients. A dev build that boots straight into its embedded bundle still needs a native rebuild.
+- `open` points the app at the Metro server you name, including an Expo dev client that registers a single `exp+<slug>` scheme. A dev build that boots straight into its embedded bundle still needs a native rebuild.
 - Each session remembers its dev server for a flagless `metro reload --session <name>`; see [Metro reload](#metro-reload).
 - Rebuild and reinstall when native code, native dependencies, bundle identifiers, entitlements, or generated native project files change.
 - Close every session when done:
@@ -2187,7 +2189,7 @@ agent-device record stop
 **Screenshots**
 
 - Set `AGENT_DEVICE_SCREENSHOT_SCALE=0.3` or `screenshotScale` in config to save tokens by default; `--scale` overrides it. Leave it unset or pass `--scale 1` for pixel-diff baselines. `--max-size` is refused; use `--scale`.
-- Android screenshots capture at once. Use `--normalize-status-bar` for repeatable status-bar chrome and to wait for transient UI to fade.
+- ADB-backed Android screenshots capture at once. Use `--normalize-status-bar` for repeatable status-bar chrome and to wait for transient UI to fade.
 - `--overlay-refs` takes a new snapshot and draws refs on the image. With `--json`, each ref also has a screenshot-space `center` for a `press <x> <y>` fallback. At small scales, labels can become unreadable.
 - `--crop-on` works on iOS simulators, Android emulators, physical iPhones in portrait, and the Tizen and webOS TV plugins. It needs exactly one framed node, and the crop is re-encoded, so do not byte-compare it with an older crop.
 - On macOS, `--fullscreen` applies only to app sessions. Other surfaces always capture the main display.
