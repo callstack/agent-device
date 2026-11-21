@@ -11,6 +11,8 @@ import {
   summarizeCliSession,
   writeCliSession,
 } from '../auth-session.ts';
+import { acquireProcessLock } from '@agent-device/host-kit/file';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import {
   mkdtempForTestSync,
@@ -335,6 +337,52 @@ test('a rotated credential does not replace a session that changed during the re
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a rotated credential waits for a logout that holds the session file lock', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-rotate-lock-');
+  writeCliSession({
+    stateDir: tempRoot,
+    session: {
+      version: 1,
+      id: 'session-lock',
+      cloudBaseUrl: 'https://cloud.example',
+      refreshCredential: 'adc_refresh_old',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  });
+  const owner = readCurrentOwnerIdentity();
+  const releaseLock = await acquireProcessLock({
+    lockDirPath: `${resolveCliSessionPath(tempRoot)}.lock`,
+    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+    description: 'test logout',
+  });
+  let responded!: () => void;
+  const response = new Promise<void>((resolve) => (responded = resolve));
+  const refresh = resolveRemoteAuth({
+    command: 'snapshot',
+    flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+    stateDir: tempRoot,
+    allowInteractiveLogin: false,
+    env: {},
+    io: {
+      fetch: async () => {
+        responded();
+        return jsonResponse({ accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_new' });
+      },
+    },
+  });
+
+  await response;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  // The store has not written while the logout holds the lock.
+  assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_old');
+  fs.rmSync(resolveCliSessionPath(tempRoot));
+  await releaseLock();
+
+  assert.equal((await refresh).flags.daemonAuthToken, 'adc_agent_1');
+  assert.equal(readCliSession({ stateDir: tempRoot }), null);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('device login does not print a user code that carries control characters', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-code-');
   let stderr = '';
@@ -525,7 +573,7 @@ test('device login opens browser, stores CLI session, and returns agent token', 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('auth summary and logout do not expose stored refresh credentials', () => {
+test('auth summary and logout do not expose stored refresh credentials', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-summary-');
   writeCliSession({
     stateDir: tempRoot,
@@ -541,7 +589,7 @@ test('auth summary and logout do not expose stored refresh credentials', () => {
   const status = summarizeCliSession({ stateDir: tempRoot });
   assert.equal(status.authenticated, true);
   assert.equal(JSON.stringify(status).includes('adc_refresh_hidden'), false);
-  assert.equal(removeCliSession({ stateDir: tempRoot }), true);
+  assert.equal(await removeCliSession({ stateDir: tempRoot }), true);
   assert.equal(summarizeCliSession({ stateDir: tempRoot }).authenticated, false);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
