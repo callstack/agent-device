@@ -2051,7 +2051,7 @@ agent-device perf memory sample --json
 agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]
 agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>
 agent-device perf cpu profile stop --kind xctrace --out <profile.trace>
-agent-device perf cpu profile report --kind xctrace --out <report.json>
+agent-device perf cpu profile report --kind xctrace [--template <name>] --out <report.json>
 agent-device perf trace start --kind xctrace [--template <name>] --out <path>
 agent-device perf trace stop --kind xctrace --out <path>
 agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>
