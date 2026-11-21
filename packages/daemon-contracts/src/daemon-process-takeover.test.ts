@@ -5,7 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
-import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  isProcessAlive,
+  readProcessCommand,
+  readProcessStartTime,
+} from '@agent-device/host-kit/process';
+import { staleBirthTokenLike } from '@agent-device/test-kit';
 import { isAgentDeviceDaemonProcess, stopDaemonProcess } from './daemon-process.ts';
 
 const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };
@@ -35,13 +40,13 @@ afterEach(async () => {
   }
 });
 
-/** A daemon entry from a branch-named checkout, whose path has no project-name marker. */
-function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: string } {
+/** A daemon entry from a checkout under `prefix`, whose path has no project-name marker. */
+function spawnFakeDaemon(prefix: string): { pid: number; entryPath: string } {
   // Vitest redirects `os.tmpdir()` under a worktree-named run directory. Use
   // the host temp root so this path itself cannot accidentally contain the
   // project name and mask the worktree identity regression.
   const tempRoot = process.platform === 'win32' ? os.tmpdir() : '/tmp';
-  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(tempRoot, 'repair-evidence-')));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(tempRoot, prefix)));
   spawnedRoots.push(root);
   const entryPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entryPath), { recursive: true });
@@ -54,6 +59,11 @@ function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: str
     exited: new Promise<void>((resolve) => child.once('exit', () => resolve())),
   });
   return { pid, entryPath };
+}
+
+/** A daemon entry from a branch-named checkout, whose path has no project-name marker. */
+function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: string } {
+  return spawnFakeDaemon('repair-evidence-');
 }
 
 // #1545: a reachable daemon with a code-signature mismatch is replaced. If a
@@ -96,7 +106,9 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
 
   const actualStartTime = readProcessStartTime(pid);
   assert.ok(actualStartTime, 'expected the spawned daemon to report a start time');
-  const staleStartTime = `${actualStartTime}-previous-lifetime`;
+  // A proven reuse needs a stale value in the same verified format as the live read; a legacy
+  // token would be unverified rather than proof.
+  const staleStartTime = staleBirthTokenLike(actualStartTime);
   assert.equal(isAgentDeviceDaemonProcess(pid, staleStartTime), false);
 
   const result = await stopDaemonProcess(
@@ -110,3 +122,60 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
   });
   assert.equal(isProcessAlive(pid), true);
 });
+
+// #4656: a record written before the provenance pin holds a raw `lstart` rendering — fr_FR prints
+// `mar. 17 nov. 19:42:27 2026`, locales that omit HH:mm:ss print no clock, and an earlier pinned
+// build stored the raw C form. All are unqualified, so at the daemon stop boundary they yield
+// unverified identity — never `already-exited`, and never a signal — so a live daemon is not
+// retired while it still runs.
+test.skipIf(process.platform !== 'darwin')(
+  'a legacy raw record yields unverified identity at daemon stop, not an exited daemon',
+  async () => {
+    const { pid } = spawnFakeDaemonFromBranchNamedCheckout();
+    const startTime = readProcessStartTime(pid);
+    assert.ok(startTime, 'expected the spawned daemon to report a start time');
+    assert.ok(startTime.startsWith('posix:'), `expected a posix birth token, got ${startTime}`);
+
+    for (const legacy of [
+      'mar. 17 nov. 19:42:27 2026',
+      '17 nov. 2026',
+      'Tue Nov 17 19:42:27 2026',
+    ]) {
+      const result = await stopDaemonProcess(
+        { pid, startTime: legacy },
+        { mode: 'graceful', termTimeoutMs: 200, killTimeoutMs: 100 },
+      );
+      assert.equal(result.status, 'retained', `legacy record ${legacy} must not retire the daemon`);
+      if (result.status === 'retained') {
+        assert.equal(result.reason, 'identity-unverified');
+      }
+      assert.equal(
+        isProcessAlive(pid),
+        true,
+        'no signal may reach a daemon the legacy record cannot verify',
+      );
+    }
+  },
+);
+
+test.skipIf(process.platform === 'win32')(
+  'the stop route reads a non-ASCII daemon argv as UTF-8, not as C-locale escapes',
+  async () => {
+    const { pid, entryPath } = spawnFakeDaemon('utf8-é-ü-');
+    assert.ok(entryPath.includes('é-ü'));
+
+    const command = readProcessCommand(pid);
+    assert.ok(command?.includes('é-ü'), `expected the UTF-8 argv, got ${JSON.stringify(command)}`);
+    const startTime = readProcessStartTime(pid);
+    assert.ok(startTime, 'expected the spawned daemon to report a start time');
+    assert.equal(isAgentDeviceDaemonProcess(pid, startTime), true);
+
+    const result = await stopDaemonProcess(
+      { pid, startTime },
+      { mode: 'graceful', ...TAKEOVER_TIMEOUTS },
+    );
+    assert.equal(result.status, 'exited');
+    await spawnedChildren.at(-1)!.exited;
+    assert.equal(isProcessAlive(pid), false);
+  },
+);

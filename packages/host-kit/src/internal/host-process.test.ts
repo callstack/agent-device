@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { withCommandHost } from './exec.ts';
 import {
   captureHostEnvironment,
   expandProcessTree,
@@ -8,7 +9,9 @@ import {
   judgeProcessIdentity,
   listHostProcesses,
   parseHostProcessList,
+  readHostProcessIdentityObservations,
   readProcessCommand,
+  readProcessIdentityFacts,
   readProcessStartTime,
   signalPidsBestEffort,
   uniquePositivePids,
@@ -30,6 +33,30 @@ test('readProcessStartTime returns value for current process', () => {
   }
   assert.ok(startTime.length > 0);
 });
+
+// #4656: macOS `ps` renders `lstart` in the caller's locale and zone, so a daemon and a client
+// under different ones disagreed on one live process.
+test.skipIf(process.platform === 'win32')(
+  'readers under different locales and time zones read one start token for a process',
+  async () => {
+    const readUnder = async (env: Record<string, string>) =>
+      await withCommandHost(
+        { host: { env: { ...process.env, ...env }, cwd: process.cwd() }, requestEnv: undefined },
+        async () => [
+          readProcessStartTime(process.pid),
+          readHostProcessIdentityObservations([process.pid]).get(process.pid)?.startTime,
+          (await readProcessIdentityFacts(process.pid)).startTime,
+        ],
+      );
+    const [token, ...others] = await readUnder({ LC_ALL: 'C', TZ: 'UTC' });
+    assert.match(token ?? '', /^(posix|linux):/);
+    assert.deepEqual(others, [token, token]);
+    assert.deepEqual(
+      await readUnder({ LC_ALL: 'fr_FR.UTF-8', LANG: 'fr_FR.UTF-8', TZ: 'Pacific/Kiritimati' }),
+      [token, token, token],
+    );
+  },
+);
 
 test('host process parser preserves command text after pid and parent pid', () => {
   assert.deepEqual(
@@ -139,9 +166,20 @@ test('captureHostEnvironment copies the environment and reads the working direct
 });
 
 // One row per verdict rule: `ours` needs every recorded claim read and matching.
+const POSIX_TOKEN = 'posix:1794944547000';
 test.each([
-  ['both claims read and matching', { startTime: 'S1', matches: true }, ['S1', 'recorded'], 'ours'],
-  ['only a start time recorded, read and matching', { startTime: 'S1' }, ['S1', null], 'ours'],
+  [
+    'both claims read and matching',
+    { startTime: POSIX_TOKEN, matches: true },
+    [POSIX_TOKEN, 'recorded'],
+    'ours',
+  ],
+  [
+    'only a start time recorded, read and matching',
+    { startTime: POSIX_TOKEN },
+    [POSIX_TOKEN, null],
+    'ours',
+  ],
   ['only a command recorded, read and matching', { matches: true }, [null, 'recorded'], 'ours'],
   [
     'a matching command beside an unread start time',
@@ -170,9 +208,9 @@ test.each([
     'unverified',
   ],
   [
-    'a contradicted start time',
-    { startTime: 'S1', matches: true },
-    ['S2', 'recorded'],
+    'a contradicted start time in the same provenanced format',
+    { startTime: 'posix:1763493000000', matches: true },
+    ['posix:1763493001000', 'recorded'],
     'reassigned',
   ],
   [
@@ -193,5 +231,26 @@ test('judgeProcessIdentity reads a zombie as exited whatever else the host says'
   assert.equal(
     judgeProcessIdentity({ startTime: 'S1' }, { startTime: 'S2', command: null, zombie: true }),
     'exited',
+  );
+});
+
+test('judgeProcessIdentity treats a legacy raw record against a provenanced read as unverified', () => {
+  // Records written before the provenance pin hold a raw `ps -o lstart` rendering: fr_FR prints
+  // `mar. 17 nov. 19:42:27 2026`, locales that omit HH:mm:ss print no clock at all, and even the
+  // C-locale C form carries no comparable provenance. None proves a different lifetime, so the
+  // verdict is unverified — never reassigned, and never permission to signal.
+  const facts = { startTime: 'posix:1763493000000', command: null, zombie: false };
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'mar. 17 nov. 19:42:27 2026' }, facts),
+    'unverified',
+  );
+  assert.equal(judgeProcessIdentity({ startTime: '17 nov. 2026' }, facts), 'unverified');
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'tir. 17. nov. 19:42:27 2026' }, facts),
+    'unverified',
+  );
+  assert.equal(
+    judgeProcessIdentity({ startTime: 'Tue Nov 17 19:42:27 2026' }, facts),
+    'unverified',
   );
 });

@@ -22,7 +22,7 @@ import {
 } from './host-process.ts';
 import { classifyOwnerLiveness } from './owner-identity.ts';
 
-const DAEMON_START = '20261008123456789012';
+const DAEMON_START = '202610081234567890129';
 const DAEMON_PID = 4242;
 // One CIM row as a Windows host answers it: pid|ppid|creation|command.
 const DAEMON_ROW = `${DAEMON_PID}|4321|${DAEMON_START}|C:\\Program Files\\node.exe  C:\\app\\dist\\src\\internal\\daemon.js`;
@@ -143,14 +143,14 @@ test('the CIM row body never lets one null field raise, and pins the invariant c
 test('the Windows batch snapshot answers one observation query for every selected pid', () => {
   windowsPlatform(() => {
     cimAnswers(
-      `${DAEMON_ROW}\r\n4343|4321|20261008123500000000|C:\\Windows\\System32\\cmd.exe\r\n`,
+      `${DAEMON_ROW}\r\n4343|4321|202610081235000000009|C:\\Windows\\System32\\cmd.exe\r\n`,
     );
     const observations = readHostProcessIdentityObservations([DAEMON_PID, 4343, DAEMON_PID]);
     assert.deepEqual(observations.get(DAEMON_PID), {
       state: 'R',
       startTime: DAEMON_START,
     });
-    assert.equal(observations.get(4343)?.startTime, '20261008123500000000');
+    assert.equal(observations.get(4343)?.startTime, '202610081235000000009');
   });
   assert.equal(mockRunCmdSync.mock.calls.length, 1);
   assert.match(String(mockRunCmdSync.mock.calls[0]![1][3]), /ProcessId=4242 OR ProcessId=4343/);
@@ -247,7 +247,7 @@ test('a live Windows owner matches its recorded CIM birth instead of staying unp
     );
     // The same pid answering a different birth proves PID reuse, which the
     // null-start Windows failure could never report.
-    cimAnswers(`${process.pid}|4321|20270101000000000000|\r\n`);
+    cimAnswers(`${process.pid}|4321|202701010000000000009|\r\n`);
     assert.equal(
       classifyOwnerLiveness({ owner: { pid: process.pid, startTime: DAEMON_START } }),
       'owner-process-reused',

@@ -2,6 +2,7 @@ import {
   bindTestCommandHost,
   createLiveTestHostEnvironment,
   installFakeManagedAgentBrowser,
+  STALE_LIFETIME_TOKEN,
 } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import * as hostFile from '@agent-device/host-kit/host-file';
@@ -11,6 +12,17 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from './__tests__/test-utils.ts';
+
+/** A start token per pid: one source, so a differing token proves a different lifetime. */
+function startToken(pid: number): string {
+  return `posix:${pid * 1000}`;
+}
+/** What a pinned `ps -o lstart=` prints for `startToken(pid)`. */
+function psLstart(pid: number): string {
+  return `Thu Jan  1 ${new Date(pid * 1000).toISOString().slice(11, 19)} 1970`;
+}
+/** A birth token naming a different lifetime than any `startToken`. */
+const LATER_LIFETIME = STALE_LIFETIME_TOKEN;
 
 const { runCmdMock, spawnMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
@@ -38,7 +50,7 @@ const identitiesMock = vi.hoisted(() =>
       new Map(
         [...pids].map((pid) => [
           pid,
-          { startTime: `start-${pid}`, command: `command-${pid}`, zombie: false },
+          { startTime: startToken(pid), command: `command-${pid}`, zombie: false },
         ]),
       ),
   ),
@@ -226,7 +238,7 @@ function recordedBrowserStore(stateDir: string, pid = NEVER_A_PID) {
         records: [
           {
             pid,
-            startTime: `start-${pid}`,
+            startTime: startToken(pid),
             command: `command-${pid}`,
             purpose: 'verified-managed-web-browser',
           },
@@ -420,7 +432,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
         records: [
           {
             pid: NEVER_A_PID,
-            startTime: `start-${NEVER_A_PID}`,
+            startTime: startToken(NEVER_A_PID),
             command: `command-${NEVER_A_PID}`,
             purpose: 'verified-managed-web-browser',
           },
@@ -513,7 +525,7 @@ function observeProcesses(processes: ProcessFixture[]) {
         [...pids].flatMap((pid) => {
           const row = processes.find((item) => item.pid === pid);
           return row
-            ? [[pid, { startTime: `start-${pid}`, command: row.command, zombie: false }]]
+            ? [[pid, { startTime: startToken(pid), command: row.command, zombie: false }]]
             : [];
         }),
       ),
@@ -632,7 +644,7 @@ test('records verified current and retained native roots and stable descendants'
       rows.slice(0, 4).map(({ pid, command }) => ({
         pid,
         command,
-        startTime: `start-${pid}`,
+        startTime: startToken(pid),
         purpose: 'verified-managed-web-browser',
       })),
     );
@@ -740,7 +752,7 @@ test('an unstable root or intermediate process cannot authorize its descendants'
           [...pids].map((pid) => [
             pid,
             {
-              startTime: `start-${pid}`,
+              startTime: startToken(pid),
               command: rows.find((row) => row.pid === pid)!.command,
               zombie: false,
             },
@@ -753,7 +765,7 @@ test('an unstable root or intermediate process cannot authorize its descendants'
           [...pids].map((pid) => [
             pid,
             {
-              startTime: pid === 102 || pid === 104 ? 'changed' : `start-${pid}`,
+              startTime: pid === 102 || pid === 104 ? LATER_LIFETIME : startToken(pid),
               command: rows.find((row) => row.pid === pid)!.command,
               zombie: false,
             },
@@ -780,7 +792,9 @@ test('recording refuses a scanned command that differs from the bracketed identi
     observeProcesses([{ pid: 101, command: `${binary} daemon`, executable: binary }]);
     identitiesMock.mockImplementation(
       async () =>
-        new Map([[101, { startTime: 'start-101', command: 'different command', zombie: false }]]),
+        new Map([
+          [101, { startTime: startToken(101), command: 'different command', zombie: false }],
+        ]),
     );
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     expect((await recordManagedAgentBrowserProcesses(status, store, testHost)).pids).toEqual([]);
@@ -844,7 +858,7 @@ test('recording and reaping require executable provenance and matching identity'
       (_command: string, args: readonly string[]) => {
         const pid = Number(args[1]);
         const command = rows.find((row) => row.pid === pid)?.command;
-        const start = pid === 11003 ? 'changed-start' : `start-${pid}`;
+        const start = pid === 11003 ? 'Fri Jan  2 00:00:00 1970' : psLstart(pid);
         const stdout = args[3] === 'pid=,command=' ? `${pid} ${command}\n` : `${pid} S ${start}\n`;
         const child = Object.assign(new ChildProcess(), {
           stdin: new PassThrough(),

@@ -319,6 +319,31 @@ test('a request command env reaches spawned commands; outside it they inherit th
   assert.equal(hostOnly.stdout, '/daemon/Developer');
 });
 
+const PRINT_TZ_AND_LOCALE = [
+  '-e',
+  'process.stdout.write(`${process.env.TZ ?? ""}|${process.env.LC_ALL ?? ""}`)',
+];
+
+test('envOverrides are the final word over the bound host environment, keeping TZ under a locale pin', async () => {
+  // Overrides merge over the effective child env instead of replacing it, so an `LC_ALL=C` pin
+  // alone still lets `TZ` through; the lstart probe itself pins `TZ=UTC` on top (host-process).
+  const host = hostWith({ TZ: 'Pacific/Kiritimati' });
+  const [pinned, requestEnvOverridden] = await Promise.all([
+    withCommandHost({ host, requestEnv: undefined }, async () =>
+      runCmd(process.execPath, PRINT_TZ_AND_LOCALE, { envOverrides: { LC_ALL: 'C' } }),
+    ),
+    withCommandHost({ host, requestEnv: { LC_ALL: 'fr_FR.UTF-8' } }, async () =>
+      runCmd(process.execPath, PRINT_TZ_AND_LOCALE, { envOverrides: { LC_ALL: 'C' } }),
+    ),
+  ]);
+  assert.equal(pinned.stdout, 'Pacific/Kiritimati|C');
+  assert.equal(
+    requestEnvOverridden.stdout,
+    'Pacific/Kiritimati|C',
+    'the override is the final word, ahead of the request env too',
+  );
+});
+
 test.runIf(process.platform !== 'win32')(
   'xcrun tool-not-found failures name the developer dir and how to change it',
   async () => {

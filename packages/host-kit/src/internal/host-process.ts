@@ -50,10 +50,7 @@ export type HostEnvironmentSource = Readonly<{
   cwd(): string;
 }>;
 
-/**
- * Snapshots the environment and working directory of `source`, which an entry point passes as
- * `process`. The environment is copied, so later changes to the source never reach the capture.
- */
+/** Copies `source` (an entry point passes `process`) so later changes never reach the capture. */
 export function captureHostEnvironment(source: HostEnvironmentSource): HostEnvironment {
   return { env: { ...source.env }, cwd: source.cwd() };
 }
@@ -113,11 +110,7 @@ export function isProcessGroupAlive(pid: number): boolean {
   }
 }
 
-/**
- * Reads who owns a pid, off the event loop, with a budget the caller names. Use this rather than
- * the synchronous probes when the answer decides whether a process is signaled: waiting is
- * reversible and signaling the wrong process is not. See {@link readProcessIdentities}.
- */
+/** Off-loop ownership read for answers that decide a signal; see {@link readProcessIdentities}. */
 export async function readProcessIdentityFacts(
   pid: number,
   timeoutMs = PS_TIMEOUT_MS,
@@ -196,7 +189,7 @@ async function runHostPsAsync<Row>(
   parse: (stdout: string) => Row[],
 ): Promise<Row[]> {
   try {
-    const result = await runCmd(hostPsCommand(), args, { allowFailure: true, timeoutMs });
+    const result = await runCmd(hostPsCommand(), args, hostPsOptions(args, timeoutMs));
     return result.exitCode !== 0 ? [] : parse(result.stdout);
   } catch {
     // A failed ps read is unknown evidence; callers remain fail-closed.
@@ -240,14 +233,56 @@ function readLinuxProcessStat(pid: number): { state: string; startTime: string }
   }
 }
 
-/** Positive proof of different lifetimes; unreadable or mixed-format records prove nothing. */
+/**
+ * `ps` renders `lstart` in the caller's locale and time zone, so every read that carries it pins
+ * both, as the final word over the child environment. Readers under different locales or zones
+ * then agree on one process. Other fields keep the caller's locale.
+ */
+const PS_LSTART_ENV: NodeJS.ProcessEnv = { LC_ALL: 'C', TZ: 'UTC' };
+
+function hostPsOptions(args: readonly string[], timeoutMs: number): ExecOptions {
+  const envOverrides = args.some((arg) => arg.includes('lstart=')) ? PS_LSTART_ENV : undefined;
+  return { allowFailure: true, timeoutMs, envOverrides };
+}
+
+const PS_LSTART = /^[A-Za-z]{3} ([A-Za-z]{3}) +(\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/;
+const PS_MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+
+/**
+ * The start token of a pinned `lstart` read: `posix:<epochMs>`. The fields are UTC wall-clock time,
+ * so they are never parsed in the reader's zone. An unreadable rendering is unknown evidence.
+ */
+function posixStartTimeToken(lstart: string): string | null {
+  const match = PS_LSTART.exec(lstart.trim());
+  const month = match ? PS_MONTHS.indexOf(match[1]!) : -1;
+  if (!match || month < 0) return null;
+  const [day, hour, minute, second, year] = match.slice(2).map(Number);
+  const token = `posix:${Date.UTC(year!, month, day, hour, minute, second)}`;
+  return startTimeTokenSource(token) === 'posix' ? token : null;
+}
+
+/** The last instant the four-digit-year `lstart` rendering can name: 9999-12-31T23:59:59Z. */
+const POSIX_TOKEN_MAX_EPOCH_MS = 253_402_300_799_000;
+
+/** The source of a start token. A `posix:` value has one only in the form a read writes. */
+function startTimeTokenSource(value: string): 'linux' | 'posix' | 'windows' | undefined {
+  if (value.startsWith('linux:')) return 'linux';
+  const epochMs = /^posix:(0|[1-9]\d*000)$/.exec(value)?.[1];
+  if (epochMs !== undefined && Number(epochMs) <= POSIX_TOKEN_MAX_EPOCH_MS) return 'posix';
+  return /^\d{21}$/.test(value) ? 'windows' : undefined;
+}
+
+/**
+ * Positive proof of different lifetimes: two tokens from one source that differ. An unreadable
+ * token, tokens from two sources, a malformed token, and a raw `ps` string prove nothing.
+ */
 export function processStartTimesDiffer(
   left: string | null | undefined,
   right: string | null | undefined,
 ): boolean {
   if (!left || !right) return false;
-  if (left.startsWith('linux:') !== right.startsWith('linux:')) return false;
-  return left !== right;
+  const source = startTimeTokenSource(left);
+  return source !== undefined && source === startTimeTokenSource(right) && left !== right;
 }
 
 export function readProcessStartTime(pid: number): string | null {
@@ -266,12 +301,7 @@ export function isProcessZombie(pid: number): boolean {
   return readProcessField(pid, 'state=')?.startsWith('Z') ?? false;
 }
 
-/**
- * What the host says about each pid named, from one process-tool snapshot. An unanswered pid is
- * missing from the map, which is unknown evidence rather than absence: a caller that signals on
- * the answer must stay fail-closed. Use {@link readHostProcessIdentityObservationsAsync} from a
- * path that is already waiting; this one blocks the event loop for the whole snapshot.
- */
+/** One blocking process-tool snapshot; unanswered pids are unknown, never absence. Use the async variant from waiting paths. */
 export function readHostProcessIdentityObservations(
   pids: Iterable<number>,
 ): ReadonlyMap<number, HostProcessIdentityObservation> {
@@ -280,12 +310,7 @@ export function readHostProcessIdentityObservations(
   return readHostProcessIdentitySnapshot(selected, readHostProcessIdentityRowsSync(selected));
 }
 
-/**
- * {@link readHostProcessIdentityObservations} off the event loop, with the same one-snapshot
- * guarantee and the same fail-closed answer. A daemon request path that only decides whether to
- * pay a cost must not stall every other request, timer, and abort handler behind a
- * `spawnSync` of the host process tool.
- */
+/** {@link readHostProcessIdentityObservations} off the event loop: same snapshot, same fail-closed answer. */
 export async function readHostProcessIdentityObservationsAsync(
   pids: Iterable<number>,
 ): Promise<ReadonlyMap<number, HostProcessIdentityObservation>> {
@@ -332,10 +357,8 @@ function readHostProcessIdentityRowsSync(
     return windowsProcessIdentityRows(readWindowsProcessRows(pids, WINDOWS_PS_TIMEOUT_MS));
   }
   try {
-    const result = runCmdSync(hostPsCommand(), HOST_PROCESS_IDENTITY_PS_ARGS(pids), {
-      allowFailure: true,
-      timeoutMs: PS_TIMEOUT_MS,
-    });
+    const args = HOST_PROCESS_IDENTITY_PS_ARGS(pids);
+    const result = runCmdSync(hostPsCommand(), args, hostPsOptions(args, PS_TIMEOUT_MS));
     return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
   } catch {
     // A failed ps snapshot is unknown evidence; callers remain fail-closed.
@@ -367,7 +390,8 @@ function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] 
     if (!Number.isInteger(pid) || pid <= 0) continue;
     // On Linux both facts come from one /proc read; the ps row is the fallback when /proc is unreadable.
     const linux = readLinuxProcessStat(pid);
-    rows.push(linux ? { pid, ...linux } : { pid, state: match[2]!, startTime: match[3]! });
+    const startTime = linux ? linux.startTime : posixStartTimeToken(match[3]!);
+    if (startTime !== null) rows.push({ pid, state: linux?.state ?? match[2]!, startTime });
   }
   return rows;
 }
@@ -392,11 +416,11 @@ function readProcessField(pid: number, field: HostProcessField): string | null {
     if (token !== undefined) return token;
   }
   try {
-    const result = runCmdSync(hostPsCommand(), ['-p', String(pid), '-o', field], {
-      allowFailure: true,
-      timeoutMs: PS_TIMEOUT_MS,
-    });
-    return processFieldValue(result);
+    const args = ['-p', String(pid), '-o', field];
+    const value = processFieldValue(
+      runCmdSync(hostPsCommand(), args, hostPsOptions(args, PS_TIMEOUT_MS)),
+    );
+    return field === 'lstart=' && value !== null ? posixStartTimeToken(value) : value;
   } catch {
     return null;
   }
@@ -408,12 +432,7 @@ function processFieldValue(result: ExecResult): string | null {
   return value.length > 0 ? value : null;
 }
 
-/**
- * Walks process-table stdout line by line, keeping rows whose first two
- * capture groups are a positive pid and an optional positive ppid. Every
- * process-table format (POSIX `ps`, Windows CIM) feeds its own row pattern
- * and row builder through this single walk.
- */
+/** Walks process-table stdout, keeping rows whose first groups are a positive pid (and optional ppid). */
 function parseProcessTableRows<T>(
   stdout: string,
   rowPattern: RegExp,
@@ -439,17 +458,9 @@ export function parseHostProcessList(stdout: string): HostProcessInfo[] {
   }));
 }
 
-/* -------------------------------------------------------------------------- */
-/* Windows process-identity branch (#3291)                                     */
-/*                                                                             */
-/* Windows hosts have no `ps`. The same identity facts come from one           */
-/* CIM (`Win32_Process`) query through PowerShell: `CreationDate` is the       */
-/* birth time proven against PID reuse, `CommandLine` is the command the       */
-/* daemon-identity patterns match, and a terminated process leaves the table   */
-/* entirely instead of lingering as a zombie, so a live row is never `Z`.      */
-/* A failed or unanswered query is unknown evidence, exactly like a failed     */
-/* `ps`, and every caller stays fail-closed on it.                             */
-/* -------------------------------------------------------------------------- */
+/* Windows branch (#3291): no `ps`; one CIM query gives CreationDate (PID-reuse proof) and
+   CommandLine (daemon-identity match), and a terminated process leaves the table, so no live
+   row is a zombie. A failed query is unknown evidence, exactly like a failed `ps`. */
 
 type WindowsProcessRow = Readonly<{
   pid: number;
@@ -831,10 +842,7 @@ function stageVerdict(
   return { status: 'retained', reason: 'identity-unverified' };
 }
 
-/**
- * Whether the live pid still names the process the caller recorded, read once before anything is
- * signaled. `released` is a pid `kill(pid, 0)` no longer finds; the rest is {@link judgeProcessIdentity}.
- */
+/** Pre-signal identity proof: `released` when `kill(pid, 0)` fails, else {@link judgeProcessIdentity}. */
 async function proveStopTargetIdentity(
   target: ProcessStopTarget,
 ): Promise<ProcessIdentityVerdict | 'released'> {
@@ -921,7 +929,7 @@ function signalProcessForStop(pid: number, signal: StopSignal): string | undefin
 
 const ERRNO_CODE = /^E[A-Z0-9]+$/;
 
-const SYSCTL_TIMEOUT_MS = 1_000;
+const SYSCTL_OPTIONS: ExecOptions = { allowFailure: true, timeoutMs: 1_000 };
 const APPLE_SILICON_SYSCTL = ['-n', 'hw.optional.arm64'] as const;
 
 let pendingHostCpuArch: Promise<string> | undefined;
@@ -972,10 +980,7 @@ function hostCpuArchName(appleSilicon: boolean, nodeArch: string): string {
 // where `process.arch` reports x64; Intel Macs do not define the key.
 async function isAppleSiliconMac(): Promise<boolean> {
   try {
-    const result = await runCmd('/usr/sbin/sysctl', APPLE_SILICON_SYSCTL, {
-      allowFailure: true,
-      timeoutMs: SYSCTL_TIMEOUT_MS,
-    });
+    const result = await runCmd('/usr/sbin/sysctl', APPLE_SILICON_SYSCTL, SYSCTL_OPTIONS);
     return result.exitCode === 0 && result.stdout.trim() === '1';
   } catch {
     return false;
@@ -984,10 +989,7 @@ async function isAppleSiliconMac(): Promise<boolean> {
 
 function isAppleSiliconMacSync(): boolean {
   try {
-    const result = runCmdSync('/usr/sbin/sysctl', APPLE_SILICON_SYSCTL, {
-      allowFailure: true,
-      timeoutMs: SYSCTL_TIMEOUT_MS,
-    });
+    const result = runCmdSync('/usr/sbin/sysctl', APPLE_SILICON_SYSCTL, SYSCTL_OPTIONS);
     return result.exitCode === 0 && result.stdout.trim() === '1';
   } catch {
     return false;

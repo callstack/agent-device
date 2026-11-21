@@ -7,7 +7,12 @@ import {
   readRegisteredDaemonIdentity,
   readRegisteredDaemonOwnership,
 } from './daemon-registration.ts';
-import { mkdtempForTestSync, publishDaemonRegistration } from '@agent-device/test-kit';
+import {
+  LIFETIME_TOKEN,
+  LEGACY_RAW_START_TIME,
+  mkdtempForTestSync,
+  publishDaemonRegistration,
+} from '@agent-device/test-kit';
 
 const roots: string[] = [];
 
@@ -55,14 +60,56 @@ test('a different published pid proves the owner no longer serves its state dir'
   assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4141, startTime: 'owner-start' }), true);
 });
 
-test('a published start time proves supersession only when both sides are readable', () => {
+test('a published start time proves supersession only when both sides are provenanced', () => {
   const stateDir = useStateDir();
-  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'successor-start' });
-  assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'owner-start' }), true);
+  // Two `posix:` tokens with different values are the same provenanced format, so the difference
+  // proves the pid changed hands.
+  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'posix:1763493001000' });
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'posix:1763493000000' }),
+    true,
+  );
+  // Raw historical renderings — a localized one, and even the C form — are unqualified, so they
+  // are unverified, never a proved supersession.
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'mar. 17 nov. 19:42:28 2026' }),
+    false,
+  );
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'Tue Nov 17 19:42:27 2026' }),
+    false,
+  );
   // An unreadable start time on either side leaves the identity unproven.
   assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: null }), false);
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: null });
-  assert.equal(isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'owner-start' }), false);
+  assert.equal(
+    isSupersededDaemonOwner({ stateDir, pid: 4242, startTime: 'posix:1763493000000' }),
+    false,
+  );
+});
+
+test('a record from an older release (a raw ps start time) is never treated as replaced', () => {
+  const stateDir = useStateDir();
+  publishDaemonRegistration(stateDir, { pid: 4242, startTime: LEGACY_RAW_START_TIME });
+
+  const identity = readRegisteredDaemonIdentity(infoPathOf(stateDir));
+  assert.equal(identity?.startTime, LEGACY_RAW_START_TIME);
+  // Raw record vs canonical live read: unknown, so not superseded — unresolved, not reassignment.
+  assert.equal(
+    isSupersededDaemonOwner({
+      stateDir,
+      pid: 4242,
+      startTime: LIFETIME_TOKEN,
+    }),
+    false,
+  );
+  assert.equal(
+    readRegisteredDaemonOwnership(infoPathOf(stateDir), {
+      pid: 4242,
+      startTime: LIFETIME_TOKEN,
+    }).state,
+    'unproven',
+  );
 });
 
 test('the published owner itself is never superseded, and absence is not proof', () => {

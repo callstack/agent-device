@@ -21,8 +21,14 @@ const PID = 4242;
 const BUDGET = { termTimeoutMs: 1_000, killTimeoutMs: 500 };
 type Signal = 'SIGTERM' | 'SIGINT' | 'SIGKILL';
 
-const START = 'Mon Oct 12 00:00:00 2026';
-const OTHER_START = 'Tue Oct 13 09:00:00 2026';
+// The ps stub below emits real C-form lstart rows; the reader canonicalizes them to these posix
+// tokens, so the recorded fixtures stay independent of the wire format.
+const C_FORM_START = 'Mon Oct 12 00:00:00 2026';
+const C_FORM_OTHER = 'Tue Oct 13 09:00:00 2026';
+const START = `posix:${Date.UTC(2026, 9, 12, 0, 0, 0)}`;
+const OTHER_START = `posix:${Date.UTC(2026, 9, 13, 9, 0, 0)}`;
+/** A raw C-form lstart as a pre-pin build would have recorded it: unqualified, never comparable. */
+const LEGACY_START = 'Mon Oct 12 00:00:00 2026';
 const COMMAND = '/usr/bin/node /app/dist/src/client/companion-tunnel.js --run-metro-companion';
 
 const STOPPED: ConfirmedProcessStop = { status: 'stopped' };
@@ -63,6 +69,8 @@ type HostCase = Readonly<{
    */
   afterExit?: 'zombie' | 'held';
   identity?: HostIdentity;
+  /** Overrides the recorded start time, for records a pre-pin build wrote. */
+  recordedStartTime?: string;
   /** A `ps` the host refuses outright, so identity cannot be read at all. */
   psFails?: boolean;
   /** The command line the process shows once it has received this signal, as after an `exec`. */
@@ -227,6 +235,15 @@ const STOP_CASES: HostCase[] = [
     expect: REASSIGNED,
   },
   {
+    // A record written before the provenance pin holds a raw C-form lstart, which is unqualified:
+    // the stop neither declares the live process exited nor authorizes a signal to it.
+    name: 'legacy raw start-time record beside a pinned read',
+    claims: 'startTime',
+    recordedStartTime: LEGACY_START,
+    ...HELD,
+    expect: UNVERIFIED,
+  },
+  {
     // A confirmed start time with another command line is the same lifetime, as after an argv
     // rewrite: never signaled, and never reported gone.
     name: 'pid whose command line names a different program under its recorded lifetime',
@@ -300,7 +317,14 @@ function driveHost(model: HostCase): { signals: Signal[] } {
     // Withheld is its own answer: `ps` finds the row and reports nothing for that column, which is
     // how Windows answers `CommandLine` for another user's process.
     if (field === 'pid=,state=,lstart=') {
-      return identity.startTime === null ? psRow(state) : psRow(state, identity.startTime);
+      // The host answers C-form lstart (what a real pinned ps prints); the reader canonicalizes.
+      const row =
+        identity.startTime === null
+          ? null
+          : identity.startTime === OTHER_START
+            ? C_FORM_OTHER
+            : C_FORM_START;
+      return row === null ? psRow(state) : psRow(state, row);
     }
     return identity.command === null ? EMPTY : psRow(identity.command);
   });
@@ -312,7 +336,10 @@ function targetOf(model: HostCase): ProcessStopTarget {
   return {
     pid: PID,
     identity: {
-      startTime: claims === 'startTime' || claims === 'both' ? START : undefined,
+      startTime:
+        claims === 'startTime' || claims === 'both'
+          ? (model.recordedStartTime ?? START)
+          : undefined,
       matches: claims === 'matches' || claims === 'both' ? (c) => c === COMMAND : undefined,
     },
   };

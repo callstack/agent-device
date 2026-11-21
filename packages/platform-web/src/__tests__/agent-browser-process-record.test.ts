@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
+import { STALE_LIFETIME_TOKEN } from '@agent-device/test-kit';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
 import type {
   HostProcessIdentityObservation,
@@ -27,7 +28,14 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
 const mockObservations = vi.mocked(observationsMock);
 const mockIsProcessAlive = vi.mocked(isProcessAliveMock);
 
-function record(pid: number, startTime = `start-${pid}`): OwnedProcessRecord {
+/** Canonical POSIX birth token per pid: provenanced, so a differing token proves a different lifetime. */
+function startToken(pid: number): string {
+  return `posix:${pid * 1000}`;
+}
+/** A birth token naming a different lifetime than any `startToken`. */
+const LATER_LIFETIME = STALE_LIFETIME_TOKEN;
+
+function record(pid: number, startTime = startToken(pid)): OwnedProcessRecord {
   return {
     pid,
     startTime,
@@ -78,7 +86,7 @@ function undecodableDaemonEntry() {
 function hostNamesEveryRequestedPid(): void {
   mockObservations.mockImplementation(async (pidsArg: Iterable<number>) => {
     const observations = new Map<number, HostProcessIdentityObservation>();
-    for (const pid of pidsArg) observations.set(pid, { state: 'Ss', startTime: `start-${pid}` });
+    for (const pid of pidsArg) observations.set(pid, { state: 'Ss', startTime: startToken(pid) });
     return observations;
   });
 }
@@ -110,7 +118,7 @@ test('a record whose every managed process is alive under its recorded identity 
 test('a process the host cannot name makes the record not-live', async () => {
   hostAnswers(
     new Map([
-      [11, { state: 'Ss', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
+      [11, { state: 'Ss', startTime: startToken(11) } satisfies HostProcessIdentityObservation],
     ]),
   );
   assert.equal(
@@ -124,7 +132,7 @@ test('a process the host cannot name makes the record not-live', async () => {
 test('a pid answering under a different start time is pid reuse, not the recorded fleet', async () => {
   hostAnswers(
     new Map([
-      [11, { state: 'Ss', startTime: 'a-later-boot' } satisfies HostProcessIdentityObservation],
+      [11, { state: 'Ss', startTime: LATER_LIFETIME } satisfies HostProcessIdentityObservation],
     ]),
   );
   assert.equal(
@@ -136,7 +144,7 @@ test('a pid answering under a different start time is pid reuse, not the recorde
 test('a recorded zombie is not a live fleet even with its start time intact', async () => {
   hostAnswers(
     new Map([
-      [11, { state: 'ZN', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
+      [11, { state: 'ZN', startTime: startToken(11) } satisfies HostProcessIdentityObservation],
     ]),
   );
   assert.equal(
@@ -173,7 +181,12 @@ test('a session-scoped record is not the daemon-scoped managed fleet', async () 
 test('a record of another purpose is not the managed fleet', async () => {
   const store = storeReturning([
     daemonEntry([
-      { pid: 11, startTime: 'start-11', command: 'command-11', purpose: 'simctl-screen-recording' },
+      {
+        pid: 11,
+        startTime: startToken(11),
+        command: 'command-11',
+        purpose: 'simctl-screen-recording',
+      },
     ]),
   ]);
   assert.equal(await managedWebBrowserProcessRecordIsLive(store), false);
@@ -199,8 +212,8 @@ test('a store that cannot answer reads as not-live, which sends the caller back 
 test('a record is dead only when every recorded process was observed not alive', async () => {
   hostAnswers(
     new Map([
-      [11, { state: 'ZN', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
-      [12, { state: 'Ss', startTime: 'a-later-boot' } satisfies HostProcessIdentityObservation],
+      [11, { state: 'ZN', startTime: startToken(11) } satisfies HostProcessIdentityObservation],
+      [12, { state: 'Ss', startTime: LATER_LIFETIME } satisfies HostProcessIdentityObservation],
     ]),
   );
   assert.equal(
@@ -214,8 +227,8 @@ test('a record is dead only when every recorded process was observed not alive',
 test('a recorded process still answering alive keeps the record from being dead', async () => {
   hostAnswers(
     new Map([
-      [11, { state: 'ZN', startTime: 'start-11' } satisfies HostProcessIdentityObservation],
-      [12, { state: 'Ss', startTime: 'start-12' } satisfies HostProcessIdentityObservation],
+      [11, { state: 'ZN', startTime: startToken(11) } satisfies HostProcessIdentityObservation],
+      [12, { state: 'Ss', startTime: startToken(12) } satisfies HostProcessIdentityObservation],
     ]),
   );
   assert.equal(

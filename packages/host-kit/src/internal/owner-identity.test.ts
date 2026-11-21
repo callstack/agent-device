@@ -26,13 +26,20 @@ test('distinguishes dead and PID-reused owners', () => {
     classifyOwnerLiveness({ owner: { pid: 999_999_999, startTime: 'old-start' } }),
     'owner-process-dead',
   );
+  // A proved reuse needs a recorded start time in the same provenanced format as the live read
+  // but with a different value: the `linux:` token on Linux, the CIM stamp on Windows, the
+  // `posix:` canonical token on macOS.
+  const liveStartTime = readProcessStartTime(process.pid);
+  const staleStartTime = liveStartTime?.startsWith('linux:')
+    ? 'linux:other-boot:1'
+    : liveStartTime !== null && /^\d{21}$/.test(liveStartTime)
+      ? '000000000000000000000'
+      : 'posix:1000';
   assert.equal(
     classifyOwnerLiveness({
       owner: {
         pid: process.pid,
-        startTime: readProcessStartTime(process.pid)?.startsWith('linux:')
-          ? 'linux:other-boot:1'
-          : 'not-this-process',
+        startTime: staleStartTime,
       },
     }),
     'owner-process-reused',
@@ -64,12 +71,39 @@ test('distinguishes a gone state directory from permission and transient I/O fai
 test('proves two owners differ only when the evidence is there', () => {
   const differs = (left: OwnerIdentity, right: OwnerIdentity) => ownerIdentityDiffers(left, right);
   assert.equal(differs({ pid: 1, startTime: 'a' }, { pid: 2, startTime: 'a' }), true);
-  assert.equal(differs({ pid: 1, startTime: 'a' }, { pid: 1, startTime: 'b' }), true);
+  // Two records in the same provenanced format with different values prove a reuse.
+  assert.equal(
+    differs(
+      { pid: 1, startTime: 'posix:1763493000000' },
+      { pid: 1, startTime: 'posix:1763493001000' },
+    ),
+    true,
+  );
+  // Two raw C-form renderings one second apart are unqualified: a legacy record never proves
+  // a reuse, not even against another raw rendering.
+  assert.equal(
+    differs(
+      { pid: 1, startTime: 'Mon Aug 10 20:00:00 2026' },
+      { pid: 1, startTime: 'Mon Aug 10 20:00:01 2026' },
+    ),
+    false,
+  );
+  // Two legacy-format records are not comparable: neither rendering was read by this build, so
+  // a difference between them proves nothing about the lifetime.
+  assert.equal(differs({ pid: 1, startTime: 'a' }, { pid: 1, startTime: 'b' }), false);
   assert.equal(differs({ pid: 1, startTime: 'a' }, { pid: 1, startTime: 'a' }), false);
   assert.equal(
     differs(
       { pid: 1, startTime: 'Mon Aug 10 20:00:00 2026' },
       { pid: 1, startTime: 'linux:boot:1' },
+    ),
+    false,
+  );
+  // A legacy localized rendering beside a C-form read is unverified, never a proved reuse.
+  assert.equal(
+    differs(
+      { pid: 1, startTime: 'mar. 10 août 20:00:00 2026' },
+      { pid: 1, startTime: 'Mon Aug 10 20:00:00 2026' },
     ),
     false,
   );
