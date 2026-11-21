@@ -25,6 +25,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
+| `cloud_login_origin_mismatch` | The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued the stored CLI session, so the stored credential is not sent. Log in with the named origin, or unset the override. |
 
 ### `back`
 

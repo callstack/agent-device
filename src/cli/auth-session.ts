@@ -32,6 +32,10 @@ const CLI_SESSION_REASONS = {
   tokenless: { reason: 'cli_session_refresh_unanswered', commands: ['connect'] },
   // The directory holding the session file cannot be written, so its lock cannot be taken.
   storeUnwritable: { reason: 'cli_session_store_unwritable', commands: ['connect'] },
+  // The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued
+  // the stored CLI session, so the stored credential is not sent. Log in with the named origin, or
+  // unset the override.
+  loginOriginMismatch: { reason: 'cloud_login_origin_mismatch' },
 } as const satisfies ReasonTable<'auth'>;
 
 export type CliSessionRecord = {
@@ -558,7 +562,7 @@ function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): void
   const storedUrl = resolveCloudBaseUrl({}, session.cloudBaseUrl);
   if (new URL(resolveCloudBaseUrl(env, storedUrl)).origin === new URL(storedUrl).origin) return;
   throw new AppError('UNAUTHORIZED', 'The stored CLI session belongs to another cloud API origin.', {
-    reason: 'cloud_login_origin_mismatch',
+    reason: CLI_SESSION_REASONS.loginOriginMismatch.reason,
     hint: 'Run agent-device auth login with this AGENT_DEVICE_CLOUD_BASE_URL, or unset it.',
   });
 }
