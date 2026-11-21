@@ -176,6 +176,43 @@ extension RunnerTests {
     XCTAssertEqual(pendingTargetActivation?.reason, "stale_target")
   }
 
+  /// A coordinate tap targets the screen: over SpringBoard (here the Home Screen, in the field a
+  /// notification banner) it runs in place, and activating the background session app first would
+  /// change what is under the point (#4655). A point the hit test does not answer keeps the repair.
+  @MainActor
+  func testCoordinateTapOverSpringboardRunsInPlaceWithoutActivatingTheSessionApp() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    XCUIDevice.shared.press(.home)
+    XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
+    pendingTargetActivation = nil
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      pendingTargetActivation = nil
+      app.terminate()
+    }
+    let overSpringboard = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-home","appBundleId":"com.callstack.agentdevice.runner","x":200,"y":400}"#
+    )
+    guard case .context(let context) = prepareActiveCommandContext(command: overSpringboard) else {
+      return XCTFail("a tap over SpringBoard must prepare a context")
+    }
+    XCTAssertTrue(context.app === springboard)
+    XCTAssertEqual(app.state, .runningBackground)
+    XCTAssertNil(pendingTargetActivation)
+
+    let offScreen = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-off-screen","appBundleId":"com.callstack.agentdevice.runner","x":-10000,"y":-10000}"#
+    )
+    guard case .context(let repaired) = prepareActiveCommandContext(command: offScreen) else {
+      return XCTFail("a tap the hit test does not answer must keep the foreground repair")
+    }
+    XCTAssertFalse(repaired.app === springboard)
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    XCTAssertEqual(pendingTargetActivation?.reason, "stale_target")
+  }
+
   @MainActor
   func testMissingBundleCommandInvalidatesCompleteCachedTargetState() throws {
     app.launch()

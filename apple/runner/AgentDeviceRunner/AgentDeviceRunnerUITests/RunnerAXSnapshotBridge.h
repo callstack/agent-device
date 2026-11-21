@@ -102,6 +102,11 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 /// snapshot target match uses; pids only — the client resolves no bundle id for an arbitrary app.
 + (NSArray<NSNumber *> *)activeApplicationProcessIdentifiers;
 
+/// Pid of the accessibility element that testmanagerd hit-tests at a screen point, or 0 when the hit
+/// test does not answer within one second.
++ (NSInteger)processIdentifierOfElementAtPoint:(CGPoint)point
+  NS_SWIFT_NAME(processIdentifierOfElement(at:));
+
 /// The frontier-extension loop, exposed for the runner unit bundle: a frontier whose element
 /// vanished or whose re-rooted request fails must count as missed, never as drained.
 + (nullable NSDictionary *)extendSnapshotFrontiers:(NSMutableArray<RunnerAXSnapshotFrontier *> *)frontiers

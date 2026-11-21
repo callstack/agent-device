@@ -389,7 +389,7 @@ extension RunnerTests {
       return response
     case .context(let context):
       activeApp = context.app
-      activeAppBundleId = routeToSpringboard
+      activeAppBundleId = context.app === springboard
         ? Self.springboardBundleId
         : context.systemSurface?.bundleId ?? mainOwned.bundleId
     }
@@ -580,6 +580,9 @@ extension RunnerTests {
         // The one request-dependent bypass: a coordinate-only synthesized tap whose cached target is
         // already foreground needs nothing brought forward.
         return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
+      }
+      if coordinateTapLandsOnSpringboard(command) {
+        return .context(ActiveCommandContext(app: springboard))
       }
       return prepareActivatedTarget(command: command)
     }
@@ -773,6 +776,23 @@ extension RunnerTests {
       penaltyTarget: .mainOwnedTarget,
       options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
     ) != nil
+#else
+    return false
+#endif
+  }
+
+  /// A coordinate tap targets the screen. When the session app is not in front and SpringBoard owns
+  /// the point (a notification banner, the Home Screen, Control Center), the tap is dispatched there:
+  /// activating the session app first would change what is under the point (#4655). The owner is the
+  /// pid of the accessibility hit test at the point, so a point over another app, or a point the hit
+  /// test does not answer, keeps the activation.
+  @MainActor
+  private func coordinateTapLandsOnSpringboard(_ command: Command) -> Bool {
+#if os(iOS)
+    guard isCoordinateOnlyTap(command), let x = command.x, let y = command.y else { return false }
+    guard resolveAppWithoutActivation(command: command).state != .runningForeground else { return false }
+    guard let springboardPid = Self.processIdentifier(of: springboard) else { return false }
+    return RunnerAXSnapshotBridge.processIdentifierOfElement(at: CGPoint(x: x, y: y)) == springboardPid
 #else
     return false
 #endif
