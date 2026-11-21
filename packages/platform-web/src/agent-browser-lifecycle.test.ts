@@ -21,8 +21,6 @@ function startToken(pid: number): string {
 function psLstart(pid: number): string {
   return `Thu Jan  1 ${new Date(pid * 1000).toISOString().slice(11, 19)} 1970`;
 }
-/** A birth token naming a different lifetime than any `startToken`. */
-const LATER_LIFETIME = STALE_LIFETIME_TOKEN;
 
 const { runCmdMock, spawnMock, probe } = vi.hoisted(() => ({
   runCmdMock: vi.fn(),
@@ -90,16 +88,7 @@ const testHost = createLiveTestHostEnvironment();
 /** The host answers the install layout is built from, read from this process. */
 const machine = realHostMachineFacts();
 
-/** The host answer a `Node.Platform` maps to, which is the one shape `PlatformHost.hostOs` allows. */
-function hostOperatingSystem(platform: NodeJS.Platform): 'darwin' | 'linux' | 'win32' | 'other' {
-  return platform === 'darwin' || platform === 'linux' || platform === 'win32' ? platform : 'other';
-}
-
-/**
- * The process port of a host that reads the machine the way the core's host does: the process table
- * through a `ps` the recorded command mock answers, and the identity and executable-path facts from
- * the answers this suite's `observeProcesses(...)` fixture set up.
- */
+/** A host process port answered by this suite's `ps` mock and `observeProcesses(...)` fixture. */
 function createHostProcessPort(): PlatformHost['processes'] {
   return {
     list: async (options) => await listHostProcesses({ ...options, runCommand: mockRunCmd }),
@@ -109,8 +98,7 @@ function createHostProcessPort(): PlatformHost['processes'] {
       probe.unanswered
         ? [...records].map(() => 'unobserved' as const)
         : await judgeRecordedLivenessLikeTheHost([...records]),
-    // The host answers this read with the environment it was set up with, the way the real host port
-    // does; the suite's answer is the same fixture either way.
+    // Answered with the host's own environment, as the real host port does.
     readExecutablePaths: async (pids) => await executablePathsMock([...pids], testHost),
     reapOwnedRecords: async (store, options) =>
       await reapOwnedProcessRecordsAtStartup(store, options),
@@ -122,19 +110,17 @@ function createHostProcessPort(): PlatformHost['processes'] {
 
 /** The process port every cleanup and record call of this suite is handed. */
 const hostProcesses = createHostProcessPort();
+const hostOsOf = (platform: NodeJS.Platform): PlatformHost['hostOs'] =>
+  platform === 'darwin' || platform === 'linux' || platform === 'win32' ? platform : 'other';
 
-/**
- * The plugin's toolbox over an in-memory host: commands and every process read are asked of this
- * host, so the suite proves the fleet scan and the reap go through it rather than through the host-kit
- * copy the plugin ships with.
- */
+/** The plugin's toolbox over an in-memory host, so every command and process read goes through it. */
 function createLifecycleToolbox(stateDir: string): WebToolbox {
   const host = {
     ...testHost,
     ...realHostMachineFacts(),
     // The one platform branch the fleet matchers have: they ask the host which machine it is on
     // rather than reading the process's own, so the suite's `probe.platform` fixture is answered here.
-    ...(probe.platform === undefined ? {} : { hostOs: hostOperatingSystem(probe.platform) }),
+    ...(probe.platform === undefined ? {} : { hostOs: hostOsOf(probe.platform) }),
     stateDir,
     runCommand: async (
       executable: string,
@@ -850,7 +836,7 @@ test('an unstable root or intermediate process cannot authorize its descendants'
           [...pids].map((pid) => [
             pid,
             {
-              startTime: pid === 102 || pid === 104 ? LATER_LIFETIME : startToken(pid),
+              startTime: pid === 102 || pid === 104 ? STALE_LIFETIME_TOKEN : startToken(pid),
               command: rows.find((row) => row.pid === pid)!.command,
               zombie: false,
             },
