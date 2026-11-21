@@ -13,6 +13,7 @@ import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-invent
 import { createHostDiagnostics } from './platform-runtime-host-diagnostics.ts';
 import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
+import { linuxPlatformCompositionFixture } from './platform-runtime-linux-provider.fixtures.ts';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
   mockAppleRunnerWarmupCheck: vi.fn(),
@@ -221,6 +222,95 @@ test('doctor targeted at a HarmonyOS plugin that failed to load reports what the
     family: 'harmonyos',
     package: '@agent-device/harmonyos',
   });
+});
+
+test('doctor targeted at Linux reports the absent plugin with its install command', async () => {
+  // Same contract as HarmonyOS: the row is the composition's own absence report, so it names the same
+  // package and command a Linux discovery request answers with.
+  const { linux } = composePlatformPlugins([], []);
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    undefined,
+    undefined,
+    linux,
+  ).toolchainCheck('linux', context);
+
+  expect(check?.id).toBe('toolchain');
+  expect(check?.status).toBe('fail');
+  expect(check?.summary).toContain('@agent-device/linux');
+  expect(check?.hint).toContain('agent-device plugins add @agent-device/linux');
+  expect(check?.command).toMatch(/^agent-device plugins add @agent-device\/linux/);
+  expect(check?.evidence).toMatchObject({
+    code: 'UNSUPPORTED_PLATFORM',
+    reason: 'plugin-not-installed',
+    family: 'linux',
+    package: '@agent-device/linux',
+  });
+});
+
+test('doctor targeted at a Linux plugin that failed to load reports what the plugin said', async () => {
+  const { linux } = composePlatformPlugins([], [
+    {
+      platform: 'linux',
+      source: 'store',
+      package: '@agent-device/linux',
+      version: '0.22.0-dev',
+      state: 'failed',
+      credentials: { variables: [], byBackend: {} },
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Plugin exited during setup',
+        reason: 'setup-threw',
+      },
+    },
+  ] satisfies readonly PluginInventoryEntry[]);
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    undefined,
+    undefined,
+    linux,
+  ).toolchainCheck('linux', context);
+
+  expect(check?.status).toBe('fail');
+  expect(check?.summary).toContain('Plugin exited during setup');
+  expect(check?.evidence).toMatchObject({
+    code: 'COMMAND_FAILED',
+    reason: 'setup-threw',
+    family: 'linux',
+    package: '@agent-device/linux',
+  });
+});
+
+test('doctor targeted at an installed Linux plugin prints the row the plugin computed', async () => {
+  // The toolchain probe is the plugin's: the core hands it nothing but the selection, so the tools
+  // it names are the ones the plugin resolved from the host it was set up with.
+  const { linux } = linuxPlatformCompositionFixture();
+  const check = await createHostDiagnostics(
+    createLiveTestHostEnvironment(),
+    undefined,
+    undefined,
+    undefined,
+    linux,
+  ).toolchainCheck('linux', context);
+
+  expect(check?.id).toBe('toolchain');
+  expect(['pass', 'warn', 'fail']).toContain(check?.status);
+  expect(check?.summary).toContain('Linux desktop tools');
+});
+
+test('doctor without a Linux selector reports no Linux row when the plugin is absent', async () => {
+  const { linux } = composePlatformPlugins([], []);
+  expect(
+    await createHostDiagnostics(
+      createLiveTestHostEnvironment(),
+      undefined,
+      undefined,
+      undefined,
+      linux,
+    ).toolchainCheck(undefined, context),
+  ).toBeUndefined();
 });
 
 test('doctor without a HarmonyOS selector reports no HarmonyOS row when the plugin is absent', async () => {

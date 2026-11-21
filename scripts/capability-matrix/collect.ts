@@ -15,7 +15,7 @@ import { createAndroidRuntimeModule } from '@agent-device/platform-android';
 import { webSelectionFixture } from '../../src/platform-runtime-web-provider.fixtures.ts';
 import { vegaSelectionFixture } from '../../src/platform-runtime-vega-provider.fixtures.ts';
 import { harmonySelectionFixture } from '../../src/platform-runtime-harmonyos-provider.fixtures.ts';
-import { runtimeModule as linuxRuntimeModule } from '@agent-device/platform-linux';
+import { linuxSelectionFixture } from '../../src/platform-runtime-linux-provider.fixtures.ts';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 import { createPluginHost, type RunHostCommand } from '@agent-device/plugins/host';
 import testmuPlugin from '@agent-device/testmu';
@@ -34,6 +34,7 @@ import { TARGETS, type Target } from './targets.ts';
 const webRuntimeModule = webSelectionFixture().get().runtimeModule;
 const vegaRuntimeModule = vegaSelectionFixture().get().runtimeModule;
 const harmonyosRuntimeModule = harmonySelectionFixture().get().runtimeModule;
+const linuxRuntimeModule = linuxSelectionFixture().get().runtimeModule;
 
 export type CommandSupport = Readonly<{
   /** Public commands the registry derives from runtime facts, in registry order. */

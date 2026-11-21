@@ -86,9 +86,6 @@ importers:
       '@agent-device/platform-apple':
         specifier: workspace:*
         version: link:packages/platform-apple
-      '@agent-device/platform-linux':
-        specifier: workspace:*
-        version: link:packages/platform-linux
       '@agent-device/plugins':
         specifier: workspace:*
         version: link:packages/plugins
@@ -836,7 +833,10 @@ importers:
         version: link:../..
 
   packages/platform-linux:
-    dependencies:
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -852,10 +852,12 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-    devDependencies:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/platform-vega:
     devDependencies:
