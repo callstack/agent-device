@@ -2037,9 +2037,97 @@ Things to know:
 
 ## Performance diagnostics
 
+<!-- generated:command perf -->
+
+Check frames, memory, or native profiles.
+
 ```bash
 agent-device perf frames --json
 agent-device perf memory sample --json
+agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]
+agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>
+agent-device perf cpu profile stop --kind xctrace --out <profile.trace>
+agent-device perf cpu profile report --kind xctrace --out <report.json>
+agent-device perf trace start --kind xctrace [--template <name>] --out <path>
+agent-device perf trace stop --kind xctrace --out <path>
+agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>
+agent-device perf cpu profile stop --kind simpleperf
+agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>
+agent-device perf trace start|stop --kind perfetto [--out <path>]
+```
+
+**`perf frames`**
+
+Reads no options.
+
+**`perf memory sample`**
+
+Reads no options.
+
+**`perf memory snapshot`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--out <path>` | Output path |
+
+**`perf cpu profile start`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--template <name>` | Perf xctrace template name, for example Time Profiler |
+| `--out <path>` | Output path |
+
+**`perf cpu profile stop`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--out <path>` | Output path |
+
+**`perf cpu profile report`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--template <name>` | Perf xctrace template name, for example Time Profiler |
+| `--out <path>` | Output path |
+
+**`perf trace start`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--template <name>` | Perf xctrace template name, for example Time Profiler |
+| `--out <path>` | Output path |
+
+**`perf trace stop`**
+
+| Option | What it does |
+| --- | --- |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--out <path>` | Output path |
+
+Supported targets: [Performance samples (frames, memory, CPU profiles)](/docs/capabilities#evidence-and-diagnostics).
+
+Exact behavior: `agent-device help perf`.
+
+<!-- /generated -->
+
+<!-- generated:command cdp -->
+
+Inspect CDP targets, JS heap, and leaks.
+
+```bash
+agent-device cdp [...args]
+```
+
+Exact behavior: `agent-device help cdp`.
+
+<!-- /generated -->
+
+```bash
 agent-device perf memory snapshot --kind android-hprof --out app.hprof
 agent-device perf memory snapshot --kind memgraph --out app.memgraph
 agent-device cdp target list --url http://127.0.0.1:8081
@@ -2075,6 +2163,18 @@ For the measurement workflow, data sources, and output examples, see [Performanc
 
 ## React Native components
 
+<!-- generated:command react-devtools -->
+
+React Native components, props/state/hooks, and render profiling.
+
+```bash
+agent-device react-devtools tree [@ref|Name]|find <Name>|inspect <@ref|Name>|errors|profile start|stop|report [Component]|commit [N]
+```
+
+Exact behavior: `agent-device help react-devtools`.
+
+<!-- /generated -->
+
 ```bash
 agent-device react-devtools tree [@ref|Name] [--depth 8] [--limit 60]
 agent-device react-devtools find <Name> [--exact] [--limit 20]
@@ -2109,8 +2209,21 @@ agent-device react-devtools profile commit <N>
 
 ## React Native overlays
 
+<!-- generated:command react-native -->
+
+Run React Native automation helpers.
+
 ```bash
 agent-device react-native dismiss-overlay
+```
+
+Supported targets: [React Native overlay dismissal](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help react-native`.
+
+<!-- /generated -->
+
+```bash
 agent-device react-native dismiss-overlay --platform android
 ```
 
@@ -2144,6 +2257,47 @@ agent-device close --platform ios --session rn-b
 
 ## Metro reload
 
+<!-- generated:command metro -->
+
+Prepare the dev server or reload apps.
+
+```bash
+agent-device metro prepare (--public-base-url <url> | --proxy-base-url <url>) [--project-root <path>] [--port <port>] [--kind auto|react-native|expo|repack]
+agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]
+```
+
+**`metro prepare`**
+
+| Option | What it does |
+| --- | --- |
+| `--project-root <path>` | metro prepare: React Native project root (default: cwd) |
+| `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
+| `--metro-kind auto\|react-native\|expo\|repack` | metro prepare: detect or force the React Native dev-server launcher kind |
+| `--public-base-url <url>` | metro prepare: public base URL used for direct dev-server bundle hints |
+| `--proxy-base-url <url>` | metro prepare: optional bridge origin for remote dev-server access |
+| `--bearer-token <token>` | metro prepare: host bridge bearer token (or AGENT_DEVICE_METRO_BEARER_TOKEN; falls back to AGENT_DEVICE_DAEMON_AUTH_TOKEN) |
+| `--port <port>` | metro prepare: local dev-server port (default: 8081) |
+| `--listen-host <host>` | metro prepare: host dev server listens on (default: 0.0.0.0) |
+| `--status-host <host>` | metro prepare: host used for local dev-server /status polling (default: 127.0.0.1) |
+| `--startup-timeout-ms <ms>` | metro prepare: timeout while waiting for the dev server to become ready |
+| `--probe-timeout-ms <ms>` | metro prepare: timeout for /status and proxy bridge calls; metro reload: timeout for the reload request |
+| `--runtime-file <path>` | metro prepare: optional file path to persist the JSON result |
+| `--no-reuse-existing` | metro prepare: always start a fresh Metro process |
+| `--no-install-deps` | metro prepare: skip package-manager install when node_modules is missing |
+
+**`metro reload`**
+
+| Option | What it does |
+| --- | --- |
+| `--metro-host <host>` | Session-scoped Metro/debug host hint |
+| `--metro-port <port>` | Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host |
+| `--probe-timeout-ms <ms>` | metro prepare: timeout for /status and proxy bridge calls; metro reload: timeout for the reload request |
+| `--bundle-url <url>` | Session-scoped bundle URL hint |
+
+Exact behavior: `agent-device help metro`.
+
+<!-- /generated -->
+
 ```bash
 agent-device metro reload
 agent-device metro reload --metro-host localhost --metro-port 8081
@@ -2157,6 +2311,48 @@ agent-device metro reload --bundle-url "http://localhost:8081/index.bundle?platf
 - Use `open <app> --relaunch` instead when the app is not connected to Metro, reload fails, or the native process must restart. See `agent-device help metro` for the full binding rules.
 
 ## Media and logs
+
+<!-- generated:command screenshot -->
+
+Capture a screenshot.
+
+```bash
+agent-device screenshot [path] [--out <path>] [--overlay-refs] [--crop-on <selector-expression>] [--pixel-density <n>] [--screen-mask <black>] [--fullscreen, --full, -f] [--scale <0.01-1>] [--no-stabilize] [--normalize-status-bar] [--capture-backend runner]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
+| `--crop-on <selector-expression>` | Screenshot: crop the capture to the frame of the selector resolved on the same screen |
+| `--pixel-density <n>` | Screenshot: output PNG pixel density in pixels per logical point; iOS-family simulators only, other targets refuse it |
+| `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
+| `--fullscreen, --full, -f` | Screenshot: on web capture the full page; on macOS app sessions capture the full desktop instead of the app window |
+| `--scale <0.01-1>` | Screenshot: resize both dimensions by this factor (or use AGENT_DEVICE_SCREENSHOT_SCALE) |
+| `--no-stabilize` | Screenshot: capture immediately without Android status-bar stabilization (the default) |
+| `--normalize-status-bar` | Screenshot: temporarily normalize iOS simulator or ADB-backed Android status-bar chrome for deterministic screenshot diffs; ADB-backed Android waits for transient UI to fade |
+| `--capture-backend runner` | Screenshot: on Apple targets capture through the XCTest runner (XCUIScreen), which leaves out the simulator-drawn Dynamic Island, instead of simctl; refused on other platforms, provider sessions and macOS surfaces the helper captures, and with --pixel-density, --screen-mask and --normalize-status-bar |
+
+Also accepts: [common options](#common-options): `--out <path>`.
+
+Supported targets: [Screenshots](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help screenshot`.
+
+<!-- /generated -->
+
+<!-- generated:command viewport -->
+
+Resize the active web viewport for the current session.
+
+```bash
+agent-device viewport <width> <height>
+```
+
+Supported targets: [Hover and viewport size](/docs/capabilities#interact-with-the-app).
+
+Exact behavior: `agent-device help viewport`.
+
+<!-- /generated -->
 
 ```bash
 agent-device screenshot                 # Auto filename
@@ -2199,6 +2395,39 @@ agent-device record stop                # Stop active recording
 
 **Screenshot diffs**
 
+<!-- generated:command diff -->
+
+Diff snapshot or screenshot.
+
+```bash
+agent-device diff snapshot [-i] [-d <depth>] [-s <scope>] [--raw] | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs] [--screen-mask <black>]
+```
+
+**`diff snapshot`**
+
+| Option | What it does |
+| --- | --- |
+| `-i` | Snapshot: interactive elements only |
+| `--depth, -d <depth>` | Snapshot: limit snapshot depth |
+| `--scope, -s <scope>` | Snapshot: scope snapshot to label/identifier |
+| `--raw` | Snapshot: raw node output |
+
+**`diff screenshot`**
+
+| Option | What it does |
+| --- | --- |
+| `--out <path>` | Output path |
+| `--overlay-refs` | Screenshot: draw current snapshot refs and target rectangles onto the saved PNG; diff screenshot: also write a separate current-screen overlay guide |
+| `--screen-mask <black>` | Screenshot or live screenshot diff: fill the iOS simulator screen outline with black; requires simctl capture |
+| `--baseline, -b <path>` | Diff screenshot: path to baseline image file |
+| `--threshold <0-1>` | Diff screenshot: color distance threshold (default 0.1) |
+
+Supported targets: [Accessibility snapshot, snapshot diff, and audit](/docs/capabilities#inspect-and-verify-the-ui).
+
+Exact behavior: `agent-device help diff`.
+
+<!-- /generated -->
+
 - `diff screenshot` compares a live capture, or a saved `current.png` (no session needed), against `--baseline`. Inputs may be PNG or JPEG regardless of extension; HarmonyOS captures are JPEG. Output ranks changed regions with rectangles, changed-pixel counts, and share of the diff; `--out` writes a diff PNG with changed pixels tinted red. `ocr` and `nonTextDeltas` are never populated, so read the images yourself for qualitative review.
 - `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Keep it above `0` when either input is JPEG.
 - The current image scales proportionally to the baseline width and aligns at the top left. Its scaled height rounds to the nearest pixel, with a minimum of one row. The comparison includes the full height of both images: extra or missing bottom rows count as differences, including blank or transparent rows, even at `--threshold 1`. Your original files stay unchanged. This does not crop system bars or move content into alignment.
@@ -2207,6 +2436,39 @@ agent-device record stop                # Stop active recording
 - Live iOS simulator diffs normalize status-bar chrome by default. Use `diff screenshot --baseline baseline.png --screen-mask black` to apply the same screen outline as a baseline captured with `screenshot --screen-mask black`. The mask affects only this live capture, including its optional ref overlay. It is refused with a saved current image or `diff snapshot`; saved-image comparisons do not apply a mask.
 
 **Recordings**
+
+<!-- generated:command record -->
+
+Start or stop screen recording.
+
+```bash
+agent-device record start [path] [--scope <app|device|system>] [--fps <n>] [--quality <medium|high>] [--hide-touches] | record stop | record contact-sheet <video.mp4> [--out <sheet.png>]
+```
+
+**`record start`**
+
+| Option | What it does |
+| --- | --- |
+| `--fps <n>` | Record: target frames per second (iOS physical device runner); also lowers the touch-overlay rate, which never exceeds 30 |
+| `--quality <medium\|high>` | Record: output quality preset; Android maps this to screenrecord bitrate, Limrun sessions map medium to recorder quality 5 and high to 8; Apple export always preserves the captured resolution, so it has no effect there. Legacy numeric values 5-7 map to medium; 8-10 map to high |
+| `--hide-touches` | Record: skip touch-overlay post-processing for faster raw benchmark videos |
+| `--scope <app\|device\|system>` | Record: app requires an active app session; device/system records the whole screen |
+
+**`record stop`**
+
+Reads no options.
+
+**`record contact-sheet`**
+
+| Option | What it does |
+| --- | --- |
+| `--out <path>` | Output path |
+
+Supported targets: [Screen recording](/docs/capabilities#evidence-and-diagnostics).
+
+Exact behavior: `agent-device help record`.
+
+<!-- /generated -->
 
 - `record start` defaults to app scope and needs a session from `open <app>`. Use `--scope device` or `--scope system` for whole-screen capture (multiple apps, settings, home screen) where the backend supports it.
 - iOS recording works on simulators and CoreDevice-backed physical devices. Physical devices capture runner screenshots, not a native video stream: no audio, dropped frames are expected, and the default is 15 FPS. `--fps <n>` (1-120) caps the rate; a busy app or long command yields fewer frames.
@@ -2225,6 +2487,76 @@ agent-device record stop                # Stop active recording
 - A contact sheet samples at most 48 times across the clip (every 250ms for short clips) and prints at most 24 cells, so a transient between samples can be missing; `warning` says when cells were thinned or samples skipped. It runs only on macOS hosts (`details.reason: contact_sheet_unsupported_host` elsewhere) and refuses WebM with `contact_sheet_container_unsupported`.
 
 **Session app logs:** See [Debugging and profiling](/docs/debugging-profiling#logs) for the clean-repro and grep workflow.
+
+<!-- generated:command logs -->
+
+Manage session app logs.
+
+```bash
+agent-device logs path | logs start | logs stop | logs clear [--restart] | logs doctor | logs mark [message...]
+```
+
+**`logs path`**
+
+Reads no options.
+
+**`logs start`**
+
+Reads no options.
+
+**`logs stop`**
+
+Reads no options.
+
+**`logs clear`**
+
+| Option | What it does |
+| --- | --- |
+| `--restart` | logs clear: stop active stream, clear logs, then start streaming again |
+
+**`logs doctor`**
+
+Reads no options.
+
+**`logs mark`**
+
+Reads no options.
+
+Supported targets: [App logs](/docs/capabilities#evidence-and-diagnostics).
+
+Exact behavior: `agent-device help logs`.
+
+<!-- /generated -->
+
+<!-- generated:command events -->
+
+Read session event timeline.
+
+```bash
+agent-device events [limit] [cursor]
+```
+
+Exact behavior: `agent-device help events`.
+
+<!-- /generated -->
+
+<!-- generated:command network -->
+
+Inspect HTTP(S) traffic from session logs.
+
+```bash
+agent-device network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--include summary\|headers\|body\|all` | Network: include headers, bodies, or both in output |
+
+Supported targets: [HTTP(S) request inspection](/docs/capabilities#evidence-and-diagnostics).
+
+Exact behavior: `agent-device help network`.
+
+<!-- /generated -->
 
 ```bash
 agent-device logs path                  # Print session log file path (e.g. ~/.agent-device/sessions/default/app.log)
@@ -2252,12 +2584,44 @@ agent-device network dump 25 --include headers --platform web # Browser requests
 
 **Crash symbols:** `debug symbols` symbolicates an Apple crash artifact against local dSYMs, writes the symbolicated artifact to `--out`, and prints a compact crash report. See [Crash symbolication](/docs/debugging-profiling#crash-symbolication).
 
+<!-- generated:command debug -->
+
+Symbolicate Apple crash artifacts.
+
+```bash
+agent-device debug symbols --artifact <crash.ips|crash.log> (--dsym <App.dSYM> | --search-path <dir>) [--out <symbolicated>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--artifact <path>` | Debug symbols: Apple crash artifact path (.ips, .crash, or .log) |
+| `--dsym <path>` | Debug symbols: matching .dSYM bundle path |
+| `--search-path <dir>` | Debug symbols: directory to scan for matching .dSYM bundles |
+
+Also accepts: [common options](#common-options): `--out <path>`.
+
+Exact behavior: `agent-device help debug`.
+
+<!-- /generated -->
+
 ```bash
 agent-device debug symbols --artifact crash.log --dsym MyApp.dSYM --out crash-symbolicated.log
 agent-device debug symbols --artifact crash.ips --search-path ./build --out crash-symbolicated.ips
 ```
 
 ## Tracing
+
+<!-- generated:command trace -->
+
+Start or stop trace capture.
+
+```bash
+agent-device trace start [path] | trace stop [path]
+```
+
+Exact behavior: `agent-device help trace`.
+
+<!-- /generated -->
 
 ```bash
 agent-device trace start
@@ -2323,7 +2687,123 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 - If `disconnect` cannot release the lease, it still removes the local connection state and prints the lease id, tenant, run, and the configured endpoint when available, so you can release the lease manually. It also keeps the generated profile. `disconnect --json` reports this case as `leaseId` and `releaseError`.
 - `metroProxyBaseUrl` is the bridge origin; do not add `/api/metro/...` paths. The bridge supplies iOS wildcard HTTPS hints and Android runtime routes. `metroPublicBaseUrl` is only needed for direct, non-bridge bundle hints. `metro prepare --remote-config ...` is an inspection/debug path that can write `--runtime-file <path>`.
 
+<!-- generated:command connect -->
+
+Configure remote or provider state.
+
+```bash
+agent-device connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--remote-config <path>` | Load remote host + Metro workflow settings from a specific profile file |
+| `--daemon-base-url <url>` | Explicit remote HTTP daemon base URL (skip local daemon discovery/startup) |
+| `--tenant <id>` | Tenant scope identifier for isolated daemon sessions |
+| `--run-id <id>` | Run identifier used for tenant lease admission checks |
+| `--lease-id <id>` | Lease identifier bound to tenant/run admission scope |
+| `--lease-backend ios-simulator\|ios-instance\|android-instance\|harmonyos-instance\|macos-app` | Lease backend for remote tenant connection admission |
+| `--provider-app <ref-or-path>` | Cloud provider app reference or local app path used when creating hosted WebDriver sessions |
+| `--provider-os-version <version>` | Hosted cloud provider OS version, for example 17 or 14.0 |
+| `--provider-device-type real\|virtual` | TestMu AI device pool: real devices or virtual devices (emulators and simulators). Defaults to virtual |
+| `--provider-project <name>` | Hosted cloud provider project label |
+| `--provider-build <name>` | Hosted cloud provider build label |
+| `--provider-session-name <name>` | Hosted cloud provider session label |
+| `--provider-device-orientation portrait\|landscape` | Screen orientation a hosted cloud provider session starts in. Set this rather than rotating after launch: a session that boots landscape renders login webviews landscape |
+| `--provider-geo-location <country>` | Hosted cloud provider IP geolocation country code, for example US |
+| `--provider-timezone <zone>` | Hosted cloud provider device time zone, for example New_York |
+| `--provider-appium-version <version>` | Hosted cloud provider Appium server version, for example 3.2.0. Without it each provider starts its own default (Appium 1.x on BrowserStack) |
+| `--provider-language <language>` | Hosted cloud provider app language, for example Fr |
+| `--provider-locale <locale>` | Hosted cloud provider device locale, for example Fr |
+| `--provider-network-profile <profile>` | Hosted cloud provider named network condition profile, for example 4g-lte-advanced-good. Mutually exclusive with --provider-custom-network |
+| `--provider-custom-network <shape>` | Hosted cloud provider custom network shape. Mutually exclusive with --provider-network-profile |
+| `--provider-no-resign-app` | iOS only: keep an Enterprise-signed app as uploaded instead of letting the provider re-sign it, which strips entitlements such as push notifications |
+| `--provider-network-logs` | Limrun: capture session network traffic; artifacts and close write it as a HAR file on the daemon host and print its path and any capture failures. Pass --provider-network-hosts with your app API hosts. Captured traffic exits through the daemon host, the HAR holds raw headers and bodies, certificate-pinned hosts and HTTPS hosts without HTTP/2 fail to connect, and DNS-over-HTTPS bypasses the capture |
+| `--provider-network-hosts <list>` | With --provider-network-logs: comma-separated hosts to capture, such as your app API hosts (exact hosts, wildcards like *.example.com, or localhost:&lt;port> routes). Replaces the noisy default of common public domains plus localhost:8081 |
+| `--aws-project-arn <arn>` | AWS Device Farm project ARN for hosted WebDriver sessions |
+| `--aws-device-arn <arn>` | AWS Device Farm device ARN for hosted WebDriver sessions |
+| `--aws-app-arn <arn>` | AWS Device Farm app ARN attached to hosted remote access sessions |
+| `--aws-region <region>` | AWS region for Device Farm API calls |
+| `--aws-interaction-mode INTERACTIVE\|NO_VIDEO\|VIDEO_ONLY` | AWS Device Farm remote access interaction mode |
+| `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
+| `--no-login` | Connect: fail instead of starting implicit cloud login |
+| `--os <version\|range>` | Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend |
+| `--image-tag <tag>` | Proxy lease: Android system image tag the backend picks the device by; refused without such a backend |
+| `--device-mode <slim\|full>` | Proxy lease: iOS simulator mode (slim or full) the backend leases; refused without such a backend |
+| `--device-baseline <name>` | Proxy lease: saved device state (baseline) the backend restores on the leased device; refused without such a backend |
+| `--physical` | Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend |
+
+Exact behavior: `agent-device help connect`.
+
+<!-- /generated -->
+
+<!-- generated:command disconnect -->
+
+Clear remote connection state and release leases.
+
+```bash
+agent-device disconnect [--shutdown]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--shutdown` | close: shutdown associated simulator/emulator after ending session |
+
+Exact behavior: `agent-device help disconnect`.
+
+<!-- /generated -->
+
+<!-- generated:command auth -->
+
+Manage cloud login state.
+
+```bash
+agent-device auth status|login|logout
+```
+
+Exact behavior: `agent-device help auth`.
+
+<!-- /generated -->
+
+<!-- generated:command connection -->
+
+Inspect the saved remote connection.
+
+```bash
+agent-device connection status
+```
+
+Exact behavior: `agent-device help connection`.
+
+<!-- /generated -->
+
 ## Session inspection
+
+<!-- generated:command session -->
+
+List sessions, show the state dir, or publish a script.
+
+```bash
+agent-device session list | session state-dir | session save-script [path] [--force]
+```
+
+**`session list`**
+
+Reads no options.
+
+**`session state-dir`**
+
+Reads no options.
+
+**`session save-script`**
+
+| Option | What it does |
+| --- | --- |
+| `--force, --overwrite` | Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing) |
+
+Exact behavior: `agent-device help session`.
+
+<!-- /generated -->
 
 ```bash
 agent-device session list
@@ -2334,6 +2814,23 @@ agent-device session list --json
 - A session entry reports `kind`, `model` and `osVersion` beside its `platform` and `device` when the host reported them, the way [Device discovery](#device-discovery) describes. It omits a field nothing reported, so a missing `osVersion` is expected rather than a fault. `session list --json` prints these fields flat: read `sessions[0].osVersion`, not `sessions[0].device.osVersion`, which is the device name. The SDK reports the same fields on `session.device`, and omits them the same way.
 
 ## Cloud provider artifacts
+
+<!-- generated:command artifacts -->
+
+List daemon or cloud provider session artifacts.
+
+```bash
+agent-device artifacts [provider-session-id] [--provider <name>]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--provider <name>` | Cloud provider name for provider-scoped commands |
+| `--provider-session <id>` | Cloud provider session id or ARN |
+
+Exact behavior: `agent-device help artifacts`.
+
+<!-- /generated -->
 
 ```bash
 agent-device artifacts --provider browserstack --provider-session <webdriver-session-id> --json
