@@ -53,6 +53,8 @@ const LINUX_LAUNCH_REFUSAL_REASONS = {
   hostLaunchUnavailable: 'host-launch-unavailable',
 } as const satisfies Record<string, string>;
 
+const BARE_COMMAND_NAME = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+
 export function createLinuxCommandRunner(host: PlatformHost): LinuxCommandRunner {
   const env = host.env;
   return Object.freeze({
@@ -91,8 +93,10 @@ async function hostResolvesExecutable(
   cmd: string,
 ): Promise<boolean> {
   const candidate = cmd.trim();
-  if (!candidate) return false;
+  if (!candidate || candidate.includes('\0')) return false;
   if (candidate.startsWith('/')) return await host.isFileExecutable(candidate);
+  // A bare name only: a relative path such as `../../tmp/tool` would resolve outside every PATH entry.
+  if (!BARE_COMMAND_NAME.test(candidate)) return false;
   const directories = (env.PATH ?? '')
     .split(path.delimiter)
     .map((entry) => entry.trim())

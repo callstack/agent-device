@@ -18,9 +18,9 @@ function detectLinuxDisplayServer(
 }
 
 /**
- * The display decision of the host the plugin was set up with. The environment is read on each
- * question rather than once here, so a session that starts a Wayland compositor mid-request is not
- * pinned to the answer `setup` happened to see.
+ * The display decision of the host the plugin was set up with, read from the environment that
+ * `readEnv` returns on each question. The family passes the setup host's environment, so the answer
+ * follows that environment, not the daemon's own.
  */
 export function createLinuxDisplayConfig(
   readEnv: () => Readonly<Record<string, string | undefined>>,
