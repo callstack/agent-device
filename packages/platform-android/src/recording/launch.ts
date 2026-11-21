@@ -1,4 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { ANDROID_SCREEN_RECORDING_REASONS } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import {
@@ -26,6 +28,7 @@ export async function startInitialTransaction(params: {
   await reconcileStartEvidence(transport, device);
   await prepareOutput();
   let last: unknown;
+  let startupRefusal: unknown;
   for (const remotePath of candidateRemotePaths(undefined)) {
     const manifestPath = transport.manifestPathFor(remotePath);
     await persistNativeManifest(
@@ -47,6 +50,9 @@ export async function startInitialTransaction(params: {
         throw signal.reason;
       }
       await removeFailedCandidateManifest(transport, manifestPath, error);
+      // A refusal may be about this candidate's directory, so the loop still tries the next one. But
+      // the recorder's own verdict outranks the last candidate's wrap when none of them records.
+      if (isRecorderStartupRefusal(error)) startupRefusal ??= error;
       last = error;
       continue;
     }
@@ -63,7 +69,7 @@ export async function startInitialTransaction(params: {
     }
     return { chunk, manifestPath, startedAtMs };
   }
-  throw last ?? new Error('Android screenrecord did not begin producing frames');
+  throw startupRefusal ?? last ?? new Error('Android screenrecord did not begin producing frames');
 }
 
 async function retireCanceledLaunchMarker(
@@ -114,6 +120,7 @@ export async function startPendingChunk(params: {
     launchAdmission,
   } = params;
   let last: unknown;
+  let startupRefusal: unknown;
   for (const remotePath of candidateRemotePaths(preferredDir)) {
     if (launchAdmission.aborted) throw new AndroidScreenRecordingStopClaimed();
     await persistNativeManifest(
@@ -128,21 +135,45 @@ export async function startPendingChunk(params: {
       return await startChunkAt(transport, remotePath, input);
     } catch (error) {
       if (error instanceof AndroidScreenRecordingStartRollbackUnconfirmed) throw error;
-      try {
-        // Clears the pending marker, which names a recorder nothing launched when the refusal raised
-        // this error.
-        await persistNativeManifest(
-          transport,
-          manifestPath,
-          createNativeManifest(device, input, startedAt, chunks, undefined, transport.mode),
-        );
-      } catch {
-        throw new AndroidScreenRecordingStartRollbackUnconfirmed(error);
-      }
+      await clearPendingLaunchEvidence({
+        transport,
+        device,
+        input,
+        startedAt,
+        chunks,
+        manifestPath,
+        launchError: error,
+      });
+      if (isRecorderStartupRefusal(error)) startupRefusal ??= error;
       last = error;
     }
   }
-  throw last ?? new Error('failed to start next Android recording chunk');
+  throw startupRefusal ?? last ?? new Error('failed to start next Android recording chunk');
+}
+
+/**
+ * Clears the pending marker, which names a recorder nothing launched when the refusal raised this
+ * error. A marker the device will not release leaves cleanup to fenced recovery.
+ */
+async function clearPendingLaunchEvidence(params: {
+  transport: Transport;
+  device: DeviceInfo;
+  input: ScreenRecordingStartInput;
+  startedAt: number;
+  chunks: readonly NativeChunk[];
+  manifestPath: string;
+  launchError: unknown;
+}): Promise<void> {
+  const { transport, device, input, startedAt, chunks, manifestPath, launchError } = params;
+  try {
+    await persistNativeManifest(
+      transport,
+      manifestPath,
+      createNativeManifest(device, input, startedAt, chunks, undefined, transport.mode),
+    );
+  } catch {
+    throw new AndroidScreenRecordingStartRollbackUnconfirmed(launchError);
+  }
 }
 
 async function removeFailedCandidateManifest(
@@ -156,4 +187,12 @@ async function removeFailedCandidateManifest(
   } catch {
     throw new AndroidScreenRecordingStartRollbackUnconfirmed(launchError);
   }
+}
+
+/** Whether the launch owner reports the recorder's own refusal, not a lost request or a dead path. */
+function isRecorderStartupRefusal(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.details?.reason === ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason
+  );
 }

@@ -20,6 +20,8 @@ type ProviderState = {
   manifests: Map<string, AndroidRecordingManifestFixture>;
   processes: Map<string, NativeProcess>;
   pulls: number;
+  /** Presence checks answered for the recorder this provider launched, so one can be the last. */
+  launchedRecorderPresenceChecks: number;
 };
 /**
  * A live process the Android kernel placed on a previously recorded pid: unrelated by default, or a
@@ -38,6 +40,17 @@ export function createAndroidRecordingProvider(params: {
   onPull?: (remotePath: string, localPath: string, count: number) => void;
   deadPids?: readonly string[];
   reusedPids?: readonly ReusedAndroidRecordingPid[];
+  /**
+   * The device refuses every launch: `screenrecord` writes this message to its stderr and exits 1
+   * before it produces a frame, exactly as a device whose policy denies the recorder does.
+   */
+  refusedStartupMessage?: string;
+  /**
+   * The recorder survives the launch probe and dies before readiness: the artifact stays empty and
+   * the process is gone from the second presence check on. This is the start that only the capture
+   * file can explain.
+   */
+  recorderDiesBeforeReadiness?: boolean;
 }): AndroidAdbProvider {
   const state = createProviderState(params.manifests, params.deadPids, params.reusedPids);
   return {
@@ -50,7 +63,12 @@ function createProviderState(
   deadPids: readonly string[] = [],
   reusedPids: readonly ReusedAndroidRecordingPid[] = [],
 ): ProviderState {
-  const state: ProviderState = { manifests: new Map(), processes: new Map(), pulls: 0 };
+  const state: ProviderState = {
+    manifests: new Map(),
+    processes: new Map(),
+    pulls: 0,
+    launchedRecorderPresenceChecks: 0,
+  };
   for (const manifest of initialManifests) {
     state.manifests.set(manifestPath(manifest), manifest);
     addManifestProcesses(manifest, state.processes, deadPids);
@@ -81,7 +99,7 @@ function respondToCommand(
   if (pull) return pull;
   if (args.join(' ') === 'shell getprop sys.boot_completed') return ok('1\n');
   const response =
-    args[0] === 'shell' ? respondToShellCommand(args.slice(1).join(' '), state) : undefined;
+    args[0] === 'shell' ? respondToShellCommand(args.slice(1).join(' '), params, state) : undefined;
   if (response) return response;
   throw new Error(`Unhandled Android recording provider command: ${args.join(' ')}`);
 }
@@ -100,12 +118,17 @@ function respondToPull(
   return ok();
 }
 
-function respondToShellCommand(command: string, state: ProviderState) {
+function respondToShellCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+  state: ProviderState,
+) {
   return (
     respondToManifestCommand(command, state) ??
-    respondToProcessCommand(command, state.processes) ??
-    respondToScreenrecordCommand(command, state.processes) ??
-    respondToArtifactCommand(command)
+    respondToStartupCaptureCommand(command, params) ??
+    respondToProcessCommand(command, params, state) ??
+    respondToScreenrecordCommand(command, params, state) ??
+    respondToArtifactCommand(command, params)
   );
 }
 
@@ -139,12 +162,16 @@ function respondToManifestTarget(
   return ok();
 }
 
-function respondToProcessCommand(command: string, processes: Map<string, NativeProcess>) {
+function respondToProcessCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+  state: ProviderState,
+) {
   return (
-    respondToProcessList(command, processes) ??
-    respondToProcessDirectory(command, processes) ??
-    respondToProcessMetadata(command, processes) ??
-    respondToProcessSignal(command, processes)
+    respondToProcessList(command, state.processes) ??
+    respondToProcessDirectory(command, params, state) ??
+    respondToProcessMetadata(command, state.processes) ??
+    respondToProcessSignal(command, state.processes)
   );
 }
 
@@ -156,11 +183,24 @@ function respondToProcessList(command: string, processes: Map<string, NativeProc
   return ok(alivePids.length > 0 ? `${alivePids.join('\n')}\n` : '');
 }
 
-function respondToProcessDirectory(command: string, processes: Map<string, NativeProcess>) {
+function respondToProcessDirectory(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+  state: ProviderState,
+) {
   const directory = /^test -d \/proc\/(\d+)$/.exec(command);
   const [, directoryPid] = directory ?? [];
-  if (directoryPid) return processes.get(directoryPid)?.alive ? ok() : missing();
-  return undefined;
+  if (!directoryPid) return undefined;
+  // A recorder that survives the launch probe and dies before readiness answers: the first presence
+  // check, the launch's own, finds it alive, and every later one finds it gone.
+  if (params.recorderDiesBeforeReadiness && directoryPid === '4321') {
+    const launchedRecorder = state.processes.get('4321');
+    if (launchedRecorder) {
+      if (state.launchedRecorderPresenceChecks === 0) state.launchedRecorderPresenceChecks = 1;
+      else launchedRecorder.alive = false;
+    }
+  }
+  return state.processes.get(directoryPid)?.alive ? ok() : missing();
 }
 
 function respondToProcessMetadata(command: string, processes: Map<string, NativeProcess>) {
@@ -179,27 +219,58 @@ function respondToProcessSignal(command: string, processes: Map<string, NativePr
   return nativeProcess ? ok() : missing();
 }
 
-function respondToScreenrecordCommand(command: string, processes: Map<string, NativeProcess>) {
+function respondToScreenrecordCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+  state: ProviderState,
+) {
   if (!command.startsWith('screenrecord --bit-rate ')) return undefined;
   const remotePath = command.match(
     /(\/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4)/,
   )?.[1];
   if (!remotePath) return missing();
-  processes.set('4321', { remotePath, startTime: '101', alive: true });
-  return ok('4321\n');
+  if (params.refusedStartupMessage !== undefined && !params.recorderDiesBeforeReadiness) {
+    // The launch answers its marker line with the recorder's pid; the device then refuses the
+    // recorder, which exits before the presence probe ever looks at it.
+    return ok('agent-device-screenrecord-pid:4321\n');
+  }
+  state.launchedRecorderPresenceChecks = 0;
+  state.processes.set('4321', { remotePath, startTime: '101', alive: true });
+  return ok('agent-device-screenrecord-pid:4321\n');
 }
 
-function respondToArtifactCommand(command: string) {
+/**
+ * The bounded read-back of the recorder's startup capture file, a sibling of the artifact. It
+ * answers the refused message; the host removes the capture in the same command.
+ */
+function respondToStartupCaptureCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+) {
+  if (!command.startsWith("head -c 1000 '/")) return undefined;
+  return ok(params.refusedStartupMessage ?? '');
+}
+
+function respondToArtifactCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+) {
   for (const prefix of ['test -e ', 'rm -f ']) {
     const target = shellPath(command, prefix);
-    if (target && isRecordingArtifactPath(target)) return ok();
+    if (target && (isRecordingArtifactPath(target) || isStartupCapturePath(target))) return ok();
   }
   const target = shellPath(command, 'stat -c %s ');
-  return target && isRecordingArtifactPath(target) ? ok('2048\n') : undefined;
+  if (!target || !isRecordingArtifactPath(target)) return undefined;
+  // A recorder that dies before readiness never wrote a frame, so the artifact stays empty.
+  return ok(params.recorderDiesBeforeReadiness ? '0\n' : '2048\n');
 }
 
 function isRecordingArtifactPath(path: string): boolean {
   return /^\/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4$/.test(path);
+}
+
+function isStartupCapturePath(path: string): boolean {
+  return /^\/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4\.err$/.test(path);
 }
 
 function addManifestProcesses(

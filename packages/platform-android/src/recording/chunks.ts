@@ -59,7 +59,13 @@ export async function startChunkAt(
       throw new Error('Android screenrecord returned an invalid process identity');
     }
     if (!(await waitForReady(transport, remotePath, nativeProcess, signal))) {
-      throw new Error('Android screenrecord did not begin producing frames');
+      // The recorder was alive when the host launched it and is gone, or wrote nothing, by now. Its
+      // own startup capture decides: a message there is the device's verdict on the recording, so it
+      // replaces this wrap; an empty capture says nothing and this message stands.
+      throw (
+        (await transport.readStartupFailure(remotePath, signal)) ??
+        new Error('Android screenrecord did not begin producing frames')
+      );
     }
     return {
       index: 1,
@@ -77,6 +83,10 @@ export async function startChunkAt(
     }
     if (signal?.aborted) throw signal.reason;
     throw error;
+  } finally {
+    // A chunk that is recording, or one that failed and was reported, holds nothing more for the
+    // capture. The read-back removes it; every other settled path discards it here.
+    await transport.discardStartupCapture(remotePath, signal);
   }
 }
 

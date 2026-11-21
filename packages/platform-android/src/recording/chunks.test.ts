@@ -177,6 +177,8 @@ test('rejects an invalid start identity without attempting a numeric PID stop', 
       return 'stopped' as const;
     },
     remove: async () => true,
+    readStartupFailure: async () => undefined,
+    discardStartupCapture: async () => {},
   } as never;
   await expect(
     startChunkAt(

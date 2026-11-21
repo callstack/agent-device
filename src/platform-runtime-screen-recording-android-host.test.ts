@@ -1,5 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { withAndroidAdbProvider } from '@agent-device/platform-android/mechanics';
+import { ANDROID_SCREEN_RECORDING_REASONS } from '@agent-device/contracts/screen-recording-runtime-host';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { createAndroidScreenRecordingTransport } from './platform-runtime-screen-recording-android-host.ts';
 import './platform-runtime-android-adb-host.ts';
 import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
@@ -36,7 +38,8 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
       exec: async (args: readonly string[]) => {
         calls.push(args);
         const command = args.slice(1).join(' ');
-        if (command.includes('screenrecord --bit-rate')) return result('42\n');
+        if (command.includes('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
         if (command === 'cat /proc/42/stat') return result(procStat(42, '42'));
         if (command === 'cat /proc/42/cmdline') {
           return result(
@@ -70,6 +73,151 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
     ['shell', 'test', '-e', '/sdcard/capture.mp4'],
     ['shell', 'stat', '-c', '%s', '/sdcard/capture.mp4'],
   ]);
+  // A recorder the device accepts answers right away: a liveness wait in the launch would tax every
+  // successful start to make a refused one slightly earlier.
+  const launchCommand = String(calls[0]?.[1]);
+  expect(launchCommand).not.toMatch(/sleep/);
+});
+
+test('captures the recorder startup output beside the artifact and settles it in its own calls', async () => {
+  // The capture is a sibling of the artifact, so the redirect opens wherever the recording itself may
+  // write, and it stays until readiness settles the chunk.
+  const commands: string[] = [];
+  const removals: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        commands.push(command);
+        if (command.startsWith('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
+        if (command === 'test -d /proc/42') return result();
+        if (command === 'cat /proc/42/stat') return result(procStat(42, '42'));
+        if (command === 'cat /proc/42/cmdline')
+          return result(['/system/bin/screenrecord', '/sdcard/capture.mp4', ''].join('\0'));
+        if (command.startsWith('rm -f ')) {
+          removals.push(args);
+          return result('');
+        }
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await transport.start({ remotePath: '/sdcard/capture.mp4' });
+      // The live recorder keeps the capture: readiness, not this probe, settles the chunk.
+      expect(removals).toEqual([]);
+      await transport.discardStartupCapture('/sdcard/capture.mp4');
+      expect(removals).toEqual([['shell', 'rm', '-f', '/sdcard/capture.mp4.err']]);
+    },
+  );
+  expect(commands[0]).toContain("2>'/sdcard/capture.mp4.err'");
+  // A recorder the device accepts answers right away: a liveness wait in the launch would tax every
+  // successful start to make a refused one slightly earlier.
+  expect(commands[0]).not.toMatch(/sleep/);
+});
+
+test('names the refusal from the capture after the recorder died past the probe', async () => {
+  // The launch probe found a live pid; readiness in `startChunkAt` is what notices the recorder is
+  // gone. It asks the transport to read the capture back, and the recorder's message answers.
+  const recorderMessage = "Unable to open '/sdcard/capture.mp4': Permission denied";
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
+        if (command === 'test -d /proc/42') return result();
+        if (command === 'cat /proc/42/stat') return result(procStat(42, '42'));
+        if (command === 'cat /proc/42/cmdline')
+          return result(['/system/bin/screenrecord', '/sdcard/capture.mp4', ''].join('\0'));
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'"))
+          return result(recorderMessage);
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await transport.start({ remotePath: '/sdcard/capture.mp4' });
+      const refusal = await transport.readStartupFailure('/sdcard/capture.mp4');
+      expect(normalizeError(refusal)).toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: expect.stringContaining(recorderMessage),
+        details: { reason: ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason },
+      });
+    },
+  );
+});
+
+test('reads no refusal when the capture holds nothing, and no capture at all', async () => {
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'")) return result('');
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await expect(transport.readStartupFailure('/sdcard/capture.mp4')).resolves.toBeUndefined();
+    },
+  );
+});
+
+test('reads no refusal from a capture read the device refused', async () => {
+  // A capture that never opened, or a device that went away mid-read, says nothing: the caller keeps
+  // its neutral error rather than a second failure or a refusal the device never made.
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'"))
+          return result('', 'error: device offline', 1);
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await expect(transport.readStartupFailure('/sdcard/capture.mp4')).resolves.toBeUndefined();
+    },
+  );
+});
+
+test('a failed capture discard leaves the caller error intact', async () => {
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('rm -f ')) return result('', 'rm: Permission denied', 1);
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await expect(transport.discardStartupCapture('/sdcard/capture.mp4')).resolves.toBeUndefined();
+    },
+  );
 });
 
 test('finds only exact screenrecord processes for the canonical remote path', async () => {
@@ -317,6 +465,215 @@ test('retains an interrupted empty-stderr presence probe as uncertain', async ()
   } finally {
     adbExecutor.override = undefined;
   }
+});
+
+test('reports the recorder startup message with a typed reason when its pid is gone', async () => {
+  const commands: string[] = [];
+  const recorderMessage = "Unable to open '/sdcard/capture.mp4': Permission denied";
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        commands.push(command);
+        if (command.startsWith('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
+        if (command === 'test -d /proc/42') return result('', '', 1);
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'"))
+          return result(recorderMessage);
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      const failure = await transport.start({ remotePath: '/sdcard/capture.mp4' }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(AppError);
+      expect(normalizeError(failure)).toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: expect.stringContaining(recorderMessage),
+        details: {
+          reason: ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason,
+          stderr: recorderMessage,
+          remotePath: '/sdcard/capture.mp4',
+        },
+      });
+    },
+  );
+  // The launch redirects the recorder's stderr so its reason survives, and the refusal reads that
+  // capture back once and removes it. The success-path cost is the redirect, not a liveness wait.
+  expect(commands).toEqual([
+    expect.stringMatching(
+      /^screenrecord --bit-rate 8000000 '\/sdcard\/capture\.mp4' >\/dev\/null 2>'\/sdcard\/capture\.mp4\.err' & echo agent-device-screenrecord-pid:\$!$/,
+    ),
+    'test -d /proc/42',
+    expect.stringMatching(
+      /^head -c 1000 '\/sdcard\/capture\.mp4\.err' 2>\/dev\/null; rm -f '\/sdcard\/capture\.mp4\.err'$/,
+    ),
+  ]);
+});
+
+test('refuses a launch whose merged stream carries only the recorder output, never a bare number as a pid', async () => {
+  // On a pty transport the recorder's own text shares stdout with the marker line. A refusal line
+  // that happens to be a bare number must not read as the recorder's pid: only the marker answers.
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('screenrecord --bit-rate')) return result('1\n');
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await expect(transport.start({ remotePath: '/sdcard/capture.mp4' })).rejects.toThrow(
+        'Android screenrecord did not return a process id',
+      );
+    },
+  );
+});
+
+test('reports the recorder message even when the launch answered no pid', async () => {
+  // A pty stream can lose the marker line while the recorder ran and refused. The capture is read on
+  // every failed start, so the recorder's own verdict still outranks the missing-pid wrap.
+  const recorderMessage = 'Permission denied';
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('screenrecord --bit-rate')) return result('');
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'"))
+          return result(recorderMessage);
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      const failure = await transport.start({ remotePath: '/sdcard/capture.mp4' }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(normalizeError(failure)).toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: expect.stringContaining(recorderMessage),
+        details: { reason: ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason },
+      });
+    },
+  );
+});
+
+test('reads the recorder startup message from a pty transport that merges its streams', async () => {
+  // `adb exec-out` on a pty carries the device's stderr inside stdout, so the capture read-back
+  // answers there.
+  const recorderMessage = "Unable to open '/sdcard/capture.mp4': Permission denied";
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
+        if (command === 'test -d /proc/42') return result('', '', 1);
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'"))
+          return result('', recorderMessage);
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      const failure = await transport.start({ remotePath: '/sdcard/capture.mp4' }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(normalizeError(failure)).toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: expect.stringContaining(recorderMessage),
+        details: {
+          reason: ANDROID_SCREEN_RECORDING_REASONS.startupFailed.reason,
+          stderr: recorderMessage,
+        },
+      });
+    },
+  );
+});
+
+test('keeps the neutral error for a recorder that dies without a word', async () => {
+  // An empty capture proves nothing: it is as consistent with a device shell that never opened the
+  // redirect as with a refusal, so only the recorder's own message earns the typed reason.
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
+        if (command === 'test -d /proc/42') return result('', '', 1);
+        if (command.startsWith("head -c 1000 '/sdcard/capture.mp4.err'")) return result('');
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      const failure = await transport.start({ remotePath: '/sdcard/capture.mp4' }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(normalizeError(failure)).toMatchObject({
+        code: 'UNKNOWN',
+        message: 'Android screenrecord did not expose a complete process identity',
+      });
+    },
+  );
+});
+
+test('keeps the identity refusal when a dead pid still has a live recorder of ours', async () => {
+  // Only a pid the presence probe finds gone is a startup refusal. A pid that is alive but whose
+  // identity cannot be read is a different failure, and reading a capture file the recorder may
+  // still be writing would report a live recording as refused.
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args.slice(1).join(' ');
+        if (command.startsWith('screenrecord --bit-rate'))
+          return result('agent-device-screenrecord-pid:42\n');
+        if (command === 'test -d /proc/42') return result();
+        if (command === 'cat /proc/42/cmdline')
+          return result(['/system/bin/screenrecord', '/sdcard/capture.mp4', ''].join('\0'));
+        if (command === 'cat /proc/42/stat') return result('', 'no such file', 1);
+        if (command === 'rm -f /sdcard/capture.mp4.err') return result();
+        return result('', `unexpected command: ${command}`, 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
+      await expect(transport.start({ remotePath: '/sdcard/capture.mp4' })).rejects.toThrow(
+        'Android screenrecord did not expose a complete process identity',
+      );
+    },
+  );
 });
 
 test('credits a path as absent only from a probe that answered, not from one that failed', async () => {

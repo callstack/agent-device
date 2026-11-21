@@ -55,6 +55,13 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
           : stopped.has(processIdentity.pid)
             ? 'missing'
             : 'owned-alive',
+    // The capture is the real host's reading of the device's file. A test that wants a refusal
+    // answers here with the AppError the host would have built; the neutral default says the
+    // capture held nothing.
+    readStartupFailure: async () => await legacy.readStartupFailure?.(),
+    discardStartupCapture: async () => {
+      await legacy.discardStartupCapture?.();
+    },
     stop: async (processIdentity: { pid: string }, options?: { force?: boolean }) => {
       if (legacy.stop) return await legacy.stop(processIdentity, options);
       if (legacy.signal) {
