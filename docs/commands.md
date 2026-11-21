@@ -1681,16 +1681,15 @@ agent-device uninstall com.example.app --platform android
 
 <!-- generated:command install-from-source -->
 
-Install app builds from URLs or CI artifacts.
+Install app builds from URLs.
 
 ```bash
-agent-device install-from-source <url> | install-from-source --github-actions-artifact <owner/repo:artifact>
+agent-device install-from-source <url>
 ```
 
 | Option | What it does |
 | --- | --- |
 | `--header <name:value>` | install-from-source: repeatable HTTP header for URL downloads |
-| `--github-actions-artifact <owner/repo:artifact>` | install-from-source: GitHub Actions artifact resolved by a remote daemon |
 | `--retain-paths` | install-from-source: keep materialized artifact paths after install |
 | `--retention-ms <ms>` | install-from-source: retain files for 1-2147483647 ms |
 
@@ -1703,16 +1702,27 @@ Exact behavior: `agent-device help install-from-source`.
 ```bash
 agent-device install-from-source https://example.com/builds/app.apk --platform android
 agent-device install-from-source https://example.com/builds/app.aab --platform android
-agent-device install-from-source --github-actions-artifact thymikee/RNCLI83:6635342232 --platform android
 ```
 
 - `install-from-source <url>` installs an artifact the daemon can reach at a URL; use `install` or `reinstall` for local files. Device coverage matches `install`.
 - `install-from-source` allows 600 seconds overall, including up to 120 seconds for the download. The local Android and iOS install limits match `install`.
 - A URL may point to an Android `.apk` or `.aab`, or, from any public host, to an archive containing one `.apk`, `.aab`, `.ipa`, or iOS `.app`.
-- `--github-actions-artifact <owner/repo:artifact>` lets a compatible remote daemon fetch a GitHub Actions artifact with its own credentials. A numeric artifact is treated as an id, anything else as a name.
 - Repeat `--header <name:value>` for authenticated or signed downloads. Sensitive headers are not forwarded to other origins.
 - `--retain-paths` keeps the downloaded and extracted files for 15 minutes. Use `--retention-ms <ms>` to set an integer duration from 1 to 2,147,483,647 milliseconds.
 - Limits: at most five redirects, no HTTPS-to-HTTP downgrade, 2 GiB download, 4 GiB extracted, 100,000 entries, and three nested archive layers. Links and special archive entries are rejected. `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` are honored. These match the Node.js client's `installFromSource()` checks.
+
+### Install a GitHub Actions artifact
+
+GitHub gives each artifact a signed download URL. The URL needs no credentials, so the device or remote daemon can fetch the build directly. The URL expires after about one minute, so get it right before the install:
+
+```bash
+url=$(curl -fsS -o /dev/null -w '%{redirect_url}' \
+  -H "Authorization: Bearer $(gh auth token)" \
+  https://api.github.com/repos/<owner>/<repo>/actions/artifacts/<artifact-id>/zip)
+agent-device install-from-source "$url" --platform android
+```
+
+In a GitHub Actions job, use `${{ secrets.GITHUB_TOKEN }}` instead of `gh auth token`. The token stays on the machine that runs the command.
 
 ## Push notification simulation
 
