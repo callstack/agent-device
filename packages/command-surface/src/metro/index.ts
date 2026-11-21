@@ -77,7 +77,12 @@ const metroCliSchema = {
   usageFlags: [],
   listUsageOverride: 'metro',
   positionalArgs: ['prepare|reload'],
-  allowedFlags: [...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS],
+  allowedFlags: [...new Set([...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS])],
+  // reload reads --probe-timeout-ms as its request timeout, and nothing else prepare reads.
+  flagsByAction: {
+    prepare: METRO_PREPARE_FLAGS,
+    reload: [...METRO_RELOAD_FLAGS, 'metroProbeTimeoutMs'],
+  },
 } as const satisfies CommandSchemaOverride;
 
 export const metroCliReader: CliReader = (positionals, flags) => {

@@ -70,6 +70,51 @@ test('parseArgs accepts the options each record action reads', () => {
   }
 });
 
+test('parseArgs refuses an option the selected action of a command never reads', () => {
+  const cases: Array<[string[], string]> = [
+    [['diff', 'snapshot', '--baseline', './base.png'], 'diff snapshot does not read --baseline'],
+    [
+      ['diff', 'screenshot', '--baseline', './base.png', '--depth', '3'],
+      'diff screenshot does not read --depth',
+    ],
+    [
+      ['perf', 'cpu', 'profile', 'stop', '--kind', 'xctrace', '--template', 'Time Profiler'],
+      'perf cpu profile stop does not read --template',
+    ],
+    [['perf', 'frames', '--template', 'Time Profiler'], 'perf frames does not read --template'],
+    [['metro', 'reload', '--project-root', './app'], 'metro reload does not read --project-root'],
+    [['logs', 'path', '--restart'], 'logs path does not read --restart'],
+    [['session', 'list', '--force'], 'session list does not read --force'],
+  ];
+
+  for (const [argv, message] of cases) {
+    assert.throws(
+      () => parseArgs(argv, { strictFlags: true }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message.startsWith(message),
+      `expected ${argv.join(' ')} to be refused`,
+    );
+  }
+});
+
+test('parseArgs accepts the options the selected action of a command reads', () => {
+  const cases: string[][] = [
+    ['diff', 'snapshot', '-i', '--depth', '3', '--raw'],
+    ['diff', 'screenshot', '--baseline', './base.png', '--out', './diff.png', '--threshold', '0.2'],
+    'perf cpu profile start --kind xctrace --template Profiler --out ./app.trace'.split(' '),
+    ['perf', 'cpu', 'profile', 'stop', '--kind', 'xctrace', '--out', './app.trace'],
+    ['metro', 'reload', '--metro-port', '8082', '--probe-timeout-ms', '5000'],
+    ['logs', 'clear', '--restart'],
+    ['session', 'save-script', './flow.ad', '--force'],
+  ];
+
+  for (const argv of cases) {
+    assert.doesNotThrow(() => parseArgs(argv, { strictFlags: true }), `expected ${argv.join(' ')}`);
+  }
+});
+
 test('parseArgs leaves an option every action reads to the command itself', () => {
   // --json and --no-record are read whatever action follows the command name, so an action table that
   // does not list them must not turn them into unread options.
@@ -82,10 +127,12 @@ test('parseArgs leaves an option every action reads to the command itself', () =
 });
 
 test('parseArgs leaves a command without an action table to its own validation', () => {
-  // `perf` declares no action option table at all, and `record nonsense` names an action the record
+  // `network` declares no action option table at all, and `record nonsense` names an action the record
   // table never lists. Neither may be refused as an unread option here: the first is validated by its
   // own command, and an action the table does not list belongs to the reader that owns the action list.
-  assert.doesNotThrow(() => parseArgs(['perf', 'start', './perf.json'], { strictFlags: true }));
+  assert.doesNotThrow(() =>
+    parseArgs(['network', 'dump', '--include', 'all'], { strictFlags: true }),
+  );
   assert.doesNotThrow(() =>
     parseArgs(['record', 'nonsense', '--fps', '30'], { strictFlags: true }),
   );

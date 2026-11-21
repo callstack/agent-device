@@ -1,6 +1,8 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   booleanField,
@@ -74,21 +76,23 @@ const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCo
   raw: booleanField(),
 });
 
+/**
+ * Which `diff` action reads which option. `diff snapshot` reads only the snapshot view options its
+ * daemon route forwards; `diff screenshot` compares images on the client and reads only its own.
+ */
+const DIFF_FLAGS_BY_ACTION: Readonly<Record<string, readonly FlagKey[]>> = {
+  snapshot: SNAPSHOT_FLAGS,
+  screenshot: ['baseline', 'threshold', 'out', 'overlayRefs', 'screenshotScreenMask'],
+};
+
 const diffCliSchema = {
   usageOverride:
-    'diff snapshot | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs] [--screen-mask <black>]',
+    'diff snapshot [-i] [-d <depth>] [-s <scope>] [--raw] | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs] [--screen-mask <black>]',
   usageFlags: [],
   positionalArgs: ['kind', 'current?'],
-  flagsByAction: { snapshot: [], screenshot: ['screenshotScreenMask'] },
-  allowedFlags: [
-    ...SNAPSHOT_FLAGS,
-    'baseline',
-    'threshold',
-    'out',
-    'overlayRefs',
-    'screenshotScreenMask',
-  ],
-} as const;
+  flagsByAction: DIFF_FLAGS_BY_ACTION,
+  allowedFlags: [...new Set(Object.values(DIFF_FLAGS_BY_ACTION).flat())],
+} as const satisfies CommandSchemaOverride;
 
 export const diffCliReader: CliReader = (positionals, flags) => {
   if (positionals[0] !== 'snapshot') {
