@@ -13,6 +13,7 @@ export type AndroidReadinessHost = Pick<
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { bootFailureHint } from '@agent-device/provision-kit/boot-diagnostics';
 import { androidAdbResultError, attachAdbFailureHint } from '../adb-executor.ts';
 import {
@@ -60,11 +61,15 @@ async function ensureEmulatorReady(
         input.headless,
         deadlineAtMs - host.clock.now(),
       );
+  // Where the boot got to, so a failure after the emulator answered tells a spent boot budget
+  // apart from a late step that failed on its own.
+  let bootWaitDone = false;
   try {
     const discovered =
       existing ??
       (await waitForDiscovery(host, selected.name, request, input.serial, deadlineAtMs, signal));
     await waitForBoot(host, discovered.id, deadlineAtMs, signal);
+    bootWaitDone = true;
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
@@ -79,11 +84,53 @@ async function ensureEmulatorReady(
     }
     return ready;
   } catch (error) {
-    if (launchedPid !== undefined && signal.aborted) {
-      await host.deviceReadiness.androidEmulator.terminate(launchedPid);
+    if (launchedPid !== undefined && !keepsBootAfterFailure(error, bootWaitDone, signal)) {
+      // This request's launch has no boot left to wait for: it goes with the failure, so no
+      // emulator is left running with no session to own it (#4847).
+      await terminateLaunch(host, launchedPid, error);
     }
     signal.throwIfAborted();
     throw error;
+  }
+}
+
+/**
+ * Whether a failed boot leaves its emulator booting, and so leaves this request's launch running.
+ * Only a boot-wait poller that ran out the startup budget answers yes; a canceled request always
+ * answers no — the abort owner owns that decision.
+ */
+function keepsBootAfterFailure(
+  error: unknown,
+  bootWaitDone: boolean,
+  signal: AbortSignal,
+): boolean {
+  if (signal.aborted) return false;
+  if (bootWaitDone) return false;
+  const details = asAppError(error).details;
+  return details?.reason === BOOT_TIMEOUT_REASON || details?.bootBudgetSpent === true;
+}
+
+/**
+ * Stops this request's launch, keeping the failure that caused the stop: a refused stop, such as a
+ * denied `device-shutdown` policy, is recorded beside that failure, never in its place.
+ */
+async function terminateLaunch(
+  host: AndroidReadinessHost,
+  launchedPid: number,
+  bootFailure: unknown,
+): Promise<void> {
+  try {
+    await host.deviceReadiness.androidEmulator.terminate(launchedPid);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_emulator_launch_terminate_failed',
+      data: {
+        pid: launchedPid,
+        error: error instanceof Error ? error.message : String(error),
+        bootFailure: bootFailure instanceof Error ? bootFailure.message : String(bootFailure),
+      },
+    });
   }
 }
 
@@ -221,6 +268,9 @@ function throwBootProbeFailure(
     hint: bootFailureHint(reason),
     ...(failure.details ?? {}),
     reason,
+    // Says this probe's own failure ended a boot whose budget ran out, which is what separates it
+    // from a probe that failed with booting still ahead of it.
+    ...(budgetSpent ? { bootBudgetSpent: true } : {}),
   };
   throw buildAndroidBootError(failure, reason, budgetSpent, details);
 }

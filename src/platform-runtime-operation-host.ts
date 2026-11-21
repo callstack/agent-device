@@ -121,7 +121,7 @@ export function createPlatformRuntimeHost(options: {
     deviceReadiness: Object.freeze({
       applePhysical: createApplePhysicalReadinessHost(),
       appleAutomation: createAppleAutomationKeepHotHost(),
-      androidEmulator: createAndroidEmulatorHost(),
+      androidEmulator: createAndroidEmulatorHost(process.platform, options.assertShutdownAllowed),
     }),
     deviceShutdown: createDeviceShutdownRuntimeHost(
       { appleTools, commands, stateDir: options.stateDir },

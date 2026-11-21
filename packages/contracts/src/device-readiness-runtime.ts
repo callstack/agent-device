@@ -58,6 +58,11 @@ export type DeviceReadinessRuntimeHost = Readonly<{
       pid: number,
       device: DeviceInfo,
     ): Promise<AndroidEmulatorLaunchIdentity | undefined>;
+    /**
+     * Stops the emulator process this host's `launch` of `pid` started, and throws without signaling
+     * when the daemon's policy denies `device-shutdown`. A caller that must not lose its own failure
+     * catches that refusal: the launch stays running.
+     */
     terminate(pid: number): Promise<void>;
   }>;
 }>;
