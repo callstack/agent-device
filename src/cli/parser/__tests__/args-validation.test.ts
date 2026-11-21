@@ -32,6 +32,41 @@ test('parseArgs rejects invalid record --fps range', () => {
   );
 });
 
+test('parseArgs refuses the --metro-kind alias on metro prepare and keeps it on connect', () => {
+  // `metro prepare` reads --kind only. --metro-kind stays a connect hint: it names the
+  // launcher kind deferred Metro preparation runs with, so connect still parses it.
+  assert.throws(
+    () =>
+      parseArgs(
+        [
+          'metro',
+          'prepare',
+          '--public-base-url',
+          'https://sandbox.example.test',
+          '--metro-kind',
+          'expo',
+        ],
+        { strictFlags: true },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Flag --metro-kind is not supported for command metro.',
+  );
+
+  const prepare = parseArgs(
+    ['metro', 'prepare', '--public-base-url', 'https://sandbox.example.test', '--kind', 'expo'],
+    { strictFlags: true },
+  );
+  assert.equal(prepare.command, 'metro');
+  assert.deepEqual(prepare.positionals, ['prepare']);
+  assert.equal(prepare.flags.kind, 'expo');
+
+  const connect = parseArgs(['connect', 'proxy', '--metro-kind', 'expo'], { strictFlags: true });
+  assert.equal(connect.command, 'connect');
+  assert.equal(connect.flags.metroKind, 'expo');
+});
+
 test('parseArgs refuses a record option the chosen action never reads', () => {
   const cases: Array<[string[], string]> = [
     [

@@ -2290,7 +2290,6 @@ agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-
 | --- | --- |
 | `--project-root <path>` | metro prepare: React Native project root (default: cwd) |
 | `--kind <kind>` | Kind selector for commands that support it, such as metro prepare or perf artifact collectors |
-| `--metro-kind auto\|react-native\|expo\|repack` | metro prepare: detect or force the React Native dev-server launcher kind |
 | `--public-base-url <url>` | metro prepare: public base URL used for direct dev-server bundle hints |
 | `--proxy-base-url <url>` | metro prepare: optional bridge origin for remote dev-server access |
 | `--bearer-token <token>` | metro prepare: host bridge bearer token (or AGENT_DEVICE_METRO_BEARER_TOKEN; falls back to AGENT_DEVICE_DAEMON_AUTH_TOKEN) |

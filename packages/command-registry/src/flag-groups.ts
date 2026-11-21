@@ -19,7 +19,6 @@ export const SELECTOR_SNAPSHOT_FLAGS = flagKeys('snapshotDepth', 'snapshotScope'
 export const METRO_PREPARE_FLAGS = flagKeys(
   'metroProjectRoot',
   'kind',
-  'metroKind',
   'metroPublicBaseUrl',
   'metroProxyBaseUrl',
   'metroBearerToken',
@@ -32,6 +31,10 @@ export const METRO_PREPARE_FLAGS = flagKeys(
   'metroNoReuseExisting',
   'metroNoInstallDeps',
 );
+
+// The `--metro-*` connect hint family `connect` saves for deferred Metro preparation. `metro
+// prepare` reads `--kind` and not the `--metro-kind` alias, so only connect allows this key.
+export const CONNECT_METRO_HINT_FLAGS = flagKeys('metroKind');
 
 export const METRO_RELOAD_FLAGS = flagKeys('metroHost', 'metroPort', 'bundleUrl');
 // The device spec a proxy lease is allocated by; the commands that allocate a proxy lease take it.
