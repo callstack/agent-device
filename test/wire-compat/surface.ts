@@ -457,6 +457,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'fetchRemoteArtifact',
         'materializeRemoteArtifacts',
         'downloadResponseArtifacts',
+        'downloadOneArtifact',
+        'DroppedArtifact',
         'resolveMaterializedArtifactPath',
       ),
       // The client functions and types that write the remote open --save-script request field and
