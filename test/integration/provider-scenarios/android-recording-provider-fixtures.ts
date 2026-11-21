@@ -38,6 +38,11 @@ export function createAndroidRecordingProvider(params: {
   onPull?: (remotePath: string, localPath: string, count: number) => void;
   deadPids?: readonly string[];
   reusedPids?: readonly ReusedAndroidRecordingPid[];
+  /**
+   * The device refuses every launch: `screenrecord` writes this message to its stderr and exits 1
+   * before it produces a frame, exactly as a device whose policy denies the recorder does.
+   */
+  refusedStartupMessage?: string;
 }): AndroidAdbProvider {
   const state = createProviderState(params.manifests, params.deadPids, params.reusedPids);
   return {
@@ -81,7 +86,7 @@ function respondToCommand(
   if (pull) return pull;
   if (args.join(' ') === 'shell getprop sys.boot_completed') return ok('1\n');
   const response =
-    args[0] === 'shell' ? respondToShellCommand(args.slice(1).join(' '), state) : undefined;
+    args[0] === 'shell' ? respondToShellCommand(args.slice(1).join(' '), params, state) : undefined;
   if (response) return response;
   throw new Error(`Unhandled Android recording provider command: ${args.join(' ')}`);
 }
@@ -100,11 +105,16 @@ function respondToPull(
   return ok();
 }
 
-function respondToShellCommand(command: string, state: ProviderState) {
+function respondToShellCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+  state: ProviderState,
+) {
   return (
     respondToManifestCommand(command, state) ??
+    respondToStartupCaptureCommand(command, params) ??
     respondToProcessCommand(command, state.processes) ??
-    respondToScreenrecordCommand(command, state.processes) ??
+    respondToScreenrecordCommand(command, params, state.processes) ??
     respondToArtifactCommand(command)
   );
 }
@@ -179,20 +189,42 @@ function respondToProcessSignal(command: string, processes: Map<string, NativePr
   return nativeProcess ? ok() : missing();
 }
 
-function respondToScreenrecordCommand(command: string, processes: Map<string, NativeProcess>) {
+function respondToScreenrecordCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+  processes: Map<string, NativeProcess>,
+) {
   if (!command.startsWith('screenrecord --bit-rate ')) return undefined;
   const remotePath = command.match(
     /(\/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4)/,
   )?.[1];
   if (!remotePath) return missing();
+  if (params.refusedStartupMessage !== undefined) {
+    // The launch answers its marker line with the recorder's pid; the device then refuses the
+    // recorder, which exits before the presence probe ever looks at it.
+    return ok('agent-device-screenrecord-pid:4321\n');
+  }
   processes.set('4321', { remotePath, startTime: '101', alive: true });
-  return ok('4321\n');
+  return ok('agent-device-screenrecord-pid:4321\n');
+}
+
+/**
+ * The bounded read-back of the recorder's startup capture file. It answers the refused message and
+ * records that the host removed the capture.
+ */
+function respondToStartupCaptureCommand(
+  command: string,
+  params: Parameters<typeof createAndroidRecordingProvider>[0],
+) {
+  if (!command.startsWith("head -c 1000 '/data/local/tmp/agent-device-recording-"))
+    return undefined;
+  return ok(params.refusedStartupMessage ?? '');
 }
 
 function respondToArtifactCommand(command: string) {
   for (const prefix of ['test -e ', 'rm -f ']) {
     const target = shellPath(command, prefix);
-    if (target && isRecordingArtifactPath(target)) return ok();
+    if (target && (isRecordingArtifactPath(target) || isStartupCapturePath(target))) return ok();
   }
   const target = shellPath(command, 'stat -c %s ');
   return target && isRecordingArtifactPath(target) ? ok('2048\n') : undefined;
@@ -200,6 +232,10 @@ function respondToArtifactCommand(command: string) {
 
 function isRecordingArtifactPath(path: string): boolean {
   return /^\/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4$/.test(path);
+}
+
+function isStartupCapturePath(path: string): boolean {
+  return /^\/data\/local\/tmp\/agent-device-recording-\d+\.err$/.test(path);
 }
 
 function addManifestProcesses(

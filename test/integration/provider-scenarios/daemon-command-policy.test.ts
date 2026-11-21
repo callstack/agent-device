@@ -142,7 +142,7 @@ function screenRecordingProcessResponse(
     return adbResult('', recordingRunning ? 0 : 1);
   }
   if (isAndroidScreenrecordStartCommand(command)) {
-    return adbResult('4321\n');
+    return adbResult('agent-device-screenrecord-pid:4321\n');
   }
   if (command === 'shell cat /proc/4321/stat') {
     return recordingRunning ? adbResult(processStat(4321, '424242')) : adbResult('', 1);
@@ -171,12 +171,17 @@ function recordingArtifactResponse(
 }
 
 function isAndroidScreenrecordStartCommand(command: string): boolean {
-  return command.startsWith('shell screenrecord ') && command.endsWith(' & echo $!');
+  return screenRecordingPath(command) !== undefined;
 }
 
+/**
+ * The artifact path of the launch command. The command also captures the recorder's own startup
+ * output to a sibling file and answers its pid on a marker line, so a refusal reports the
+ * recorder's message and the pid is never confused with the recorder's own output.
+ */
 function screenRecordingPath(command: string): string | undefined {
   const match = command.match(
-    /^shell screenrecord .* (?:'([^']+)'|(\/\S+)) >\/dev\/null 2>&1 & echo \$!$/,
+    /^shell screenrecord .* (?:'([^']+)'|(\/\S+)) >\/dev\/null 2>'(?:[^']+)' & echo agent-device-screenrecord-pid:\$!$/,
   );
   return match?.[1] ?? match?.[2];
 }

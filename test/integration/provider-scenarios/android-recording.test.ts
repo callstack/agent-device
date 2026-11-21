@@ -425,6 +425,46 @@ test('Provider-backed integration Android record start refuses completed evidenc
   );
 });
 
+test('Provider-backed integration Android record start reports a recorder the device refuses at startup', async () => {
+  await withAndroidRecordingScenario(
+    'agent-device-provider-scenario-android-refused-start-',
+    async (tmpDir) => {
+      const calls: string[][] = [];
+      const outputPath = path.join(tmpDir, 'refused.mp4');
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({
+              calls,
+              refusedStartupMessage: 'Permission denied',
+            }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
+      try {
+        const refused = await daemon.callCommand('record', ['start', outputPath], {
+          platform: 'android',
+          serial: PROVIDER_SCENARIO_ANDROID.id,
+          recordingScope: 'device',
+        });
+        const data = assertRpcError(
+          refused,
+          500,
+          'COMMAND_FAILED',
+          /Android screenrecord exited before it started recording/,
+        );
+        const details = data.details as Record<string, unknown>;
+        assert.equal(details.reason, 'android_screenrecord_startup_failed');
+        assert.match(String(details.stderr), /Permission denied/);
+        assert.equal(fs.existsSync(outputPath), false);
+      } finally {
+        await daemon.close();
+      }
+    },
+  );
+});
+
 test('Provider-backed integration Android corrupt descriptor is retained without native cleanup', async () => {
   await withAndroidRecordingScenario(
     'agent-device-provider-scenario-android-corrupt-',
