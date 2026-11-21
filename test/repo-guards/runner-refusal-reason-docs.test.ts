@@ -15,7 +15,7 @@ import {
  */
 
 type Surface = Readonly<{ name: string; relativePath: string }>;
-type Kind = 'rows' | 'object' | 'union';
+type Kind = 'rows' | 'object';
 const commandsDoc: Surface = { name: 'commands.md', relativePath: 'website/docs/docs/commands.md' };
 const cliHelpWorkflows: Surface = {
   name: 'cli-help-workflows.ts',
@@ -42,7 +42,11 @@ const REASON_TABLES = [
     commandsDoc,
     cliHelpWorkflows,
   ]),
-  reasonTable('DeviceClaimConflictReason', 'packages/contracts/src/device-inventory.ts', 'union'),
+  reasonTable(
+    'DEVICE_CLAIM_CONFLICT_REASONS',
+    'packages/contracts/src/device-inventory.ts',
+    'rows',
+  ),
 ];
 
 test('every reason of every exported published-reason table is documented at its surfaces', () => {
@@ -112,20 +116,6 @@ test('the extractors read every member and reject unsupported ones instead of dr
       /unsupported member in WAIT_REASONS/,
     );
   }
-  expectRead(
-    `export type DeviceClaimConflictReason = 'DEVICE_CLAIM_LIVE_OWNER' | 'DEVICE_CLAIM_OWNER_UNCERTAIN';`,
-    'DeviceClaimConflictReason',
-    'union',
-    ['DEVICE_CLAIM_LIVE_OWNER', 'DEVICE_CLAIM_OWNER_UNCERTAIN'],
-  );
-  for (const member of ['string']) {
-    expectReject(
-      `export type DeviceClaimConflictReason = ${member};`,
-      'DeviceClaimConflictReason',
-      'union',
-      /unsupported member in DeviceClaimConflictReason/,
-    );
-  }
 });
 
 /** Whether `docs` names `reason` as a whole token, so a longer reason that extends it does not count. */
@@ -135,43 +125,8 @@ function documentsReason(docs: string, reason: string): boolean {
 }
 
 /** Reads a published-reason table's members from the typed syntax, failing on anything unreadable. */
-function readReasons(
-  source: string,
-  filename: string,
-  name: string,
-  kind: 'rows' | 'object' | 'union',
-): string[] {
-  if (kind === 'union') return readUnionReasons(parseTs(filename, source), filename, name);
+function readReasons(source: string, filename: string, name: string, kind: Kind): string[] {
   return readTableReasons(exportedConstObject(parseTs(filename, source), name), name, kind);
-}
-
-/** The string members of an exported `type Name = 'a' | 'b'` union. */
-function readUnionReasons(
-  parsed: ReturnType<typeof parseTs>,
-  filename: string,
-  name: string,
-): string[] {
-  const aliases = parsed.program.body.flatMap((statement) =>
-    statement.type === 'ExportNamedDeclaration' &&
-    statement.declaration?.type === 'TSTypeAliasDeclaration'
-      ? [statement.declaration]
-      : [],
-  );
-  const alias = aliases.find(
-    (candidate) => candidate.id.type === 'Identifier' && candidate.id.name === name,
-  );
-  assert.ok(alias !== undefined, `${filename} must export the ${name} union.`);
-  const annotation = alias.typeAnnotation;
-  const members = annotation.type === 'TSUnionType' ? annotation.types : [annotation];
-  return members.map((member) => {
-    assert.ok(
-      member.type === 'TSLiteralType' &&
-        member.literal.type === 'Literal' &&
-        typeof member.literal.value === 'string',
-      `unsupported member in ${name}: ${member.type}`,
-    );
-    return member.literal.value;
-  });
 }
 
 /** The reasons of an exported const table: each row's `reason`, or each member's literal. */
