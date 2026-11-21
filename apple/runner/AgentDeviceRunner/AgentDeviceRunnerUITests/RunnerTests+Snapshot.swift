@@ -76,42 +76,105 @@ extension RunnerTests {
 
   // MARK: - Snapshot Entry
 
-  /// One raw-value table covers public XCTest cases and the SDK-hidden Keyboard/Key values.
-  static let elementTypeNamesByRawValue = [
+  /**
+   * Every element-type name one iOS capture can publish, keyed by the raw value the SDK numbers it
+   * with. The golden table `contracts/fixtures/ios-element-type-names.json` holds the same rows, and
+   * the Simulator AX bridge mirrors them by index in `ELEMENT_TYPE_NAMES`
+   * (`packages/platform-apple/src/snapshot-source/tree.ts`), so one node carries one `type` whichever
+   * producer served it (#4657). `RunnerTests+ElementTypeNamesTests` reads that table through this
+   * dictionary and fails when a row names a raw value differently here.
+   *
+   * A row keyed by an SDK case cannot drift from the number: the case names the number. The two rows
+   * keyed by a bare number cover the SDK-hidden Keyboard and Key values, whose numbers the table owns.
+   */
+  static let elementTypeNamesByRawValue: [UInt: String] = [
+    XCUIElement.ElementType.any.rawValue: "Other",
+    XCUIElement.ElementType.other.rawValue: "Other",
     XCUIElement.ElementType.application.rawValue: "Application",
+    XCUIElement.ElementType.group.rawValue: "Group",
     XCUIElement.ElementType.window.rawValue: "Window",
+    XCUIElement.ElementType.sheet.rawValue: "Sheet",
+    XCUIElement.ElementType.drawer.rawValue: "Drawer",
+    XCUIElement.ElementType.alert.rawValue: "Alert",
+    XCUIElement.ElementType.dialog.rawValue: "Dialog",
     XCUIElement.ElementType.button.rawValue: "Button",
-    XCUIElement.ElementType.cell.rawValue: "Cell",
-    XCUIElement.ElementType.staticText.rawValue: "StaticText",
-    XCUIElement.ElementType.textField.rawValue: "TextField",
-    XCUIElement.ElementType.textView.rawValue: "TextView",
-    XCUIElement.ElementType.secureTextField.rawValue: "SecureTextField",
-    XCUIElement.ElementType.switch.rawValue: "Switch",
-    XCUIElement.ElementType.slider.rawValue: "Slider",
-    XCUIElement.ElementType.link.rawValue: "Link",
-    XCUIElement.ElementType.image.rawValue: "Image",
+    XCUIElement.ElementType.radioButton.rawValue: "RadioButton",
+    XCUIElement.ElementType.radioGroup.rawValue: "RadioGroup",
+    XCUIElement.ElementType.checkBox.rawValue: "CheckBox",
+    XCUIElement.ElementType.disclosureTriangle.rawValue: "DisclosureTriangle",
+    XCUIElement.ElementType.popUpButton.rawValue: "PopUpButton",
+    XCUIElement.ElementType.comboBox.rawValue: "ComboBox",
+    XCUIElement.ElementType.menuButton.rawValue: "MenuButton",
+    XCUIElement.ElementType.toolbarButton.rawValue: "ToolbarButton",
+    XCUIElement.ElementType.popover.rawValue: "Popover",
+    19: "Keyboard",
+    20: "Key",
     XCUIElement.ElementType.navigationBar.rawValue: "NavigationBar",
     XCUIElement.ElementType.tabBar.rawValue: "TabBar",
-    XCUIElement.ElementType.collectionView.rawValue: "CollectionView",
-    XCUIElement.ElementType.table.rawValue: "Table",
-    XCUIElement.ElementType.scrollView.rawValue: "ScrollView",
+    XCUIElement.ElementType.tabGroup.rawValue: "TabGroup",
     XCUIElement.ElementType.toolbar.rawValue: "Toolbar",
-    XCUIElement.ElementType.searchField.rawValue: "SearchField",
-    XCUIElement.ElementType.segmentedControl.rawValue: "SegmentedControl",
-    XCUIElement.ElementType.stepper.rawValue: "Stepper",
-    XCUIElement.ElementType.picker.rawValue: "Picker",
-    XCUIElement.ElementType.activityIndicator.rawValue: "ActivityIndicator",
+    XCUIElement.ElementType.statusBar.rawValue: "StatusBar",
+    XCUIElement.ElementType.table.rawValue: "Table",
+    XCUIElement.ElementType.tableRow.rawValue: "TableRow",
+    XCUIElement.ElementType.tableColumn.rawValue: "TableColumn",
+    XCUIElement.ElementType.outline.rawValue: "Outline",
+    XCUIElement.ElementType.outlineRow.rawValue: "OutlineRow",
+    XCUIElement.ElementType.browser.rawValue: "Browser",
+    XCUIElement.ElementType.collectionView.rawValue: "CollectionView",
+    XCUIElement.ElementType.slider.rawValue: "Slider",
+    XCUIElement.ElementType.pageIndicator.rawValue: "PageIndicator",
     XCUIElement.ElementType.progressIndicator.rawValue: "ProgressIndicator",
-    XCUIElement.ElementType.checkBox.rawValue: "CheckBox",
-    XCUIElement.ElementType.radioButton.rawValue: "RadioButton",
+    XCUIElement.ElementType.activityIndicator.rawValue: "ActivityIndicator",
+    XCUIElement.ElementType.segmentedControl.rawValue: "SegmentedControl",
+    XCUIElement.ElementType.picker.rawValue: "Picker",
+    XCUIElement.ElementType.pickerWheel.rawValue: "PickerWheel",
+    XCUIElement.ElementType.switch.rawValue: "Switch",
     XCUIElement.ElementType.toggle.rawValue: "Toggle",
+    XCUIElement.ElementType.link.rawValue: "Link",
+    XCUIElement.ElementType.image.rawValue: "Image",
+    XCUIElement.ElementType.icon.rawValue: "Icon",
+    XCUIElement.ElementType.searchField.rawValue: "SearchField",
+    XCUIElement.ElementType.scrollView.rawValue: "ScrollView",
+    XCUIElement.ElementType.scrollBar.rawValue: "ScrollBar",
+    XCUIElement.ElementType.staticText.rawValue: "StaticText",
+    XCUIElement.ElementType.textField.rawValue: "TextField",
+    XCUIElement.ElementType.secureTextField.rawValue: "SecureTextField",
+    XCUIElement.ElementType.datePicker.rawValue: "DatePicker",
+    XCUIElement.ElementType.textView.rawValue: "TextView",
+    XCUIElement.ElementType.menu.rawValue: "Menu",
     XCUIElement.ElementType.menuItem.rawValue: "MenuItem",
+    XCUIElement.ElementType.menuBar.rawValue: "MenuBar",
+    XCUIElement.ElementType.menuBarItem.rawValue: "MenuBarItem",
+    XCUIElement.ElementType.map.rawValue: "Map",
     XCUIElement.ElementType.webView.rawValue: "WebView",
-    XCUIElement.ElementType.other.rawValue: "Other",
-    19: "Keyboard",
-    20: "Key"
+    XCUIElement.ElementType.incrementArrow.rawValue: "IncrementArrow",
+    XCUIElement.ElementType.decrementArrow.rawValue: "DecrementArrow",
+    XCUIElement.ElementType.timeline.rawValue: "Timeline",
+    XCUIElement.ElementType.ratingIndicator.rawValue: "RatingIndicator",
+    XCUIElement.ElementType.valueIndicator.rawValue: "ValueIndicator",
+    XCUIElement.ElementType.splitGroup.rawValue: "SplitGroup",
+    XCUIElement.ElementType.splitter.rawValue: "Splitter",
+    XCUIElement.ElementType.relevanceIndicator.rawValue: "RelevanceIndicator",
+    XCUIElement.ElementType.colorWell.rawValue: "ColorWell",
+    XCUIElement.ElementType.helpTag.rawValue: "HelpTag",
+    XCUIElement.ElementType.matte.rawValue: "Matte",
+    XCUIElement.ElementType.dockItem.rawValue: "DockItem",
+    XCUIElement.ElementType.ruler.rawValue: "Ruler",
+    XCUIElement.ElementType.rulerMarker.rawValue: "RulerMarker",
+    XCUIElement.ElementType.grid.rawValue: "Grid",
+    XCUIElement.ElementType.levelIndicator.rawValue: "LevelIndicator",
+    XCUIElement.ElementType.cell.rawValue: "Cell",
+    XCUIElement.ElementType.layoutArea.rawValue: "LayoutArea",
+    XCUIElement.ElementType.layoutItem.rawValue: "LayoutItem",
+    XCUIElement.ElementType.handle.rawValue: "Handle",
+    XCUIElement.ElementType.stepper.rawValue: "Stepper",
+    XCUIElement.ElementType.tab.rawValue: "Tab",
+    XCUIElement.ElementType.touchBar.rawValue: "TouchBar",
+    XCUIElement.ElementType.statusItem.rawValue: "StatusItem"
   ]
 
+  /// The name this producer publishes for an element type, and the raw-value spelling for one no row
+  /// names — which stays the only way an unseen number reaches a snapshot.
   func elementTypeName(_ type: XCUIElement.ElementType) -> String {
     Self.elementTypeNamesByRawValue[type.rawValue] ?? "Element(\(type.rawValue))"
   }

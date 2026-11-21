@@ -26,6 +26,14 @@ const ATTRIBUTE = Object.freeze({
   children: 'XC_kAXXCAttributeChildren',
 });
 
+/**
+ * The bridge's half of the element-type names both iOS producers publish, indexed by the raw value the
+ * SDK numbers each type with. `contracts/fixtures/ios-element-type-names.json` holds the same rows, and
+ * the XCTest runner mirrors them in `elementTypeNamesByRawValue`
+ * (`apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift`), so one node
+ * carries one `type` whichever producer served it (#4657). `tree.test.ts` re-derives every index from
+ * this array against that table.
+ */
 const ELEMENT_TYPE_NAMES: readonly string[] = [
   'Other',
   'Other',
