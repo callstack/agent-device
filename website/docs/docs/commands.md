@@ -690,7 +690,7 @@ agent-device close --session watch --shutdown
 - Simulators only. The host needs the watchOS simulator runtime: `xcodebuild -downloadPlatform watchOS`.
 - `scroll up|down` turns the Digital Crown, which also moves pickers and steppers that have crown focus. `scroll left|right` is refused; swipe instead.
 - `gesture swipe right-edge` goes back. `back` works only while a navigation back button is shown; on a root screen it refuses with `back_swipe_not_dispatched`, so press the screen's close control by ref.
-- `home` presses the Digital Crown. The watch face, Notification Center, and the Smart Stack are not reachable.
+- `home` presses the Digital Crown and acts on whatever is on screen: from an app it shows the watch face, and from the watch face it opens the app grid. Other commands act on the session app and bring it to the foreground first, so they cannot reach the watch face overlays such as Notification Center and the Smart Stack.
 - `fill` and `type` type into the system input sheet and press its Done button by its English label. On another system language, the command fails with `TEXT_INPUT_COMMIT_NOT_OBSERVED` and the text stays in the sheet; press its commit button by ref.
 - `action-button` works on Apple Watch Ultra only.
 - `record` captures the watch screen as on an iOS simulator.
