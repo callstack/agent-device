@@ -1,16 +1,11 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import {
   installInteractorSnapshotResolution,
   mockInteractorSnapshot,
 } from '../../../__tests__/support/interactor-resolution-fixture.ts';
-import {
-  touchCreateCommandSurface,
-  createTouchCommandSurface,
-} from '../../../__tests__/support/touch-command-surface-fake.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -96,100 +91,7 @@ test('type @ref focuses the field with the press stack, then appends the text', 
   expect(actions[1]?.positionals).toEqual(['hello']);
 });
 
-test('a type point target taps the coordinates and appends the text', async () => {
-  const sessionStore = makeSessionStore();
-  const session = makeSession('type-point-target');
-  sessionStore.publish('type-point-target', session);
-
-  const response = await handleInteractionCommands({
-    createCommandSurface: touchCreateCommandSurface,
-    req: {
-      token: 't',
-      session: 'type-point-target',
-      command: 'type',
-      positionals: ['100', '200', 'hello'],
-      flags: {},
-    },
-    sessionName: 'type-point-target',
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(true);
-  expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 100, y: 200 } }));
-  expect(mockTypeText).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello' }));
-});
-
-test('a type selector refused as AMBIGUOUS_MATCH never reaches the text operation', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'type-ambiguous-selector';
-  const session = makeSession(sessionName);
-  session.device = IOS_SIMULATOR;
-  sessionStore.publish(sessionName, session);
-
-  // Two same-label buttons in distinct branches: the press resolution refuses to choose.
-  mockCaptureSnapshotWithInteractor.mockResolvedValue({
-    nodes: [
-      { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'XCUIElementTypeButton',
-        label: 'Deploy',
-        rect: { x: 300, y: 300, width: 20, height: 20 },
-        enabled: true,
-        hittable: true,
-      },
-      {
-        index: 2,
-        parentIndex: 0,
-        type: 'XCUIElementTypeButton',
-        label: 'Deploy',
-        rect: { x: 500, y: 500, width: 20, height: 20 },
-        enabled: true,
-        hittable: true,
-      },
-    ],
-    backend: 'xctest',
-    producer: 'apple-runner',
-  });
-  const ambiguous = () =>
-    new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements', {
-      matches: 2,
-      candidates: ['@e2 [button] "Deploy"', '@e3 [button] "Deploy"'],
-    });
-  const ambiguousSurface = createTouchCommandSurface({
-    matchSelector: () => {
-      throw ambiguous();
-    },
-  });
-
-  const response = await handleInteractionCommands({
-    createCommandSurface: ambiguousSurface,
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'type',
-      positionals: ['label="Deploy"', 'hello'],
-      flags: {},
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('AMBIGUOUS_MATCH');
-  }
-  // The refusal is the focus tap's, so nothing was typed.
-  expect(mockTapPoint).not.toHaveBeenCalled();
-  expect(mockTypeText).not.toHaveBeenCalled();
-});
-
-test('type keeps lookalike ref words and numeric pairs as pure text with no focus tap', async () => {
+test('base text vocabulary types whole with no focus tap', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'type-lookalikes';
   sessionStore.publish(sessionName, makeSession(sessionName));
@@ -197,6 +99,10 @@ test('type keeps lookalike ref words and numeric pairs as pure text with no focu
   for (const positionals of [
     ['@elena', 'hi'],
     ['100', '200'],
+    ['1', '2', '3'],
+    ['selected', 'items', 'here'],
+    ['visible', 'soon'],
+    ['text="Sign in"', 'hello'],
   ] as const) {
     const response = await handleInteractionCommands({
       createCommandSurface: touchCreateCommandSurface,
@@ -220,3 +126,67 @@ test('type keeps lookalike ref words and numeric pairs as pure text with no focu
     );
   }
 });
+
+test.for([
+  { name: 'numeric text', slug: 'numeric', text: ['1', '2', '3'], joined: '1 2 3' },
+  {
+    name: 'selector-key text',
+    slug: 'selector-key',
+    text: ['text="Sign in"'],
+    joined: 'text="Sign in"',
+  },
+] as const)(
+  'a recorded targeted type with $name records one joined positional that replays without a second tap',
+  async ({ slug, text, joined }) => {
+    // The record run focuses @e1, then appends. The type step carries the text as ONE positional
+    // so a replay cannot re-split it into a target (#4870 review).
+    const recordName = `type-record-${slug}`;
+    const recordStore = publishTextboxSession(recordName);
+    const record = await runType(recordName, recordStore, ['@e1', ...text]);
+    expect(record?.ok).toBe(true);
+    const actions = recordStore.get(recordName)?.actions ?? [];
+    expect(actions.map((action) => action.command)).toEqual(['press', 'type']);
+    expect(actions[1]?.positionals).toEqual([joined]);
+
+    // The replay runs the recorded steps in a fresh session: the press taps once, and the type
+    // appends the whole text with no tap of its own — never a second tap at (1, 2).
+    const replayName = `${recordName}-replay`;
+    const replayStore = publishTextboxSession(replayName);
+    mockTapPoint.mockClear();
+    mockTypeText.mockClear();
+    for (const action of actions) {
+      const response = await runType(
+        replayName,
+        replayStore,
+        action.positionals ?? [],
+        action.command,
+      );
+      expect(response?.ok, action.command).toBe(true);
+    }
+    expect(mockTapPoint).toHaveBeenCalledOnce();
+    expect(mockTypeText).toHaveBeenCalledOnce();
+    expect(mockTypeText.mock.calls[0]?.[0]).toMatchObject({ text: joined });
+  },
+);
+
+async function runType(
+  sessionName: string,
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  positionals: string[],
+  command = 'type',
+) {
+  return await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command,
+      positionals,
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+}

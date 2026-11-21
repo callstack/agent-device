@@ -45,7 +45,7 @@ Command shapes:
 
 Targets:
   Prefer refs from the latest snapshot -i or settled diff. Use durable selectors when the label/id is known: label="Search", id="submit", role=button label="Follow". If label text matches both a field and its caption, target the field with label="Email" editable=true.
-  For text fields, use fill <target> <text> --settle to replace the field value; use type only to append to an already-focused field.
+  For text fields, use fill <target> <text> --settle to replace the field value; use type to append: type @ref "text" focuses @ref first, and plain type appends to the already-focused field.
   Do not use placeholders such as @ref, @eN, <button>, or <selector> in a final command plan. If the ref is unknown, first run snapshot -i.
   Coordinates are fallback-only after refs/selectors fail or accessibility omits the target; use screenshot or snapshot -i --json to choose a visible center point.
 

@@ -41,7 +41,7 @@ Targets:
 Rules:
   --settle is only for press/click/fill/longpress/hover/scroll/back; never open,
     snapshot, or close. type never accepts --settle.
-  fill <target> <text> --settle replaces; type <text> appends after focus.
+  fill <target> <text> --settle replaces; type [@ref] <text> appends, focusing @ref first.
   Late network/debounce result: wait text "Expected", not snapshot polling.
   Output full agent-device commands; no pipes, grep, jq, or pseudo-commands.
   Stop when the requested end state is visible. Mutations run serially.

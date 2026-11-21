@@ -570,6 +570,19 @@ export function interactionTargetFields() {
   };
 }
 
+/**
+ * Snapshot ref only, for a command whose target vocabulary is one captured element (`type`).
+ * The command's reader refuses a selector or point, so no other key claims a target here.
+ */
+export function refTargetFields() {
+  return {
+    ref: stringField('Snapshot element ref such as @e12.'),
+    label: stringField('Optional human label for ref.'),
+    target: retiredField(`target was removed; pass the ref at the top level: ${REF_FORM}.`),
+    kind: retiredField(`kind was removed; the ref key picks the UI target: ${REF_FORM}.`),
+  };
+}
+
 function targetFields(forms: string, choice: string) {
   return {
     ref: stringField(`Snapshot element ref such as @e12. Pass exactly one of ${choice}.`),
