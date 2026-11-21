@@ -50,6 +50,7 @@ function withCommandOverrides(
   overrides: LinuxToolProviderOverrides,
 ): LinuxToolbox['commands'] {
   return Object.freeze({
+    hostOs: commands.hostOs,
     run: overrides.runCommand ?? commands.run,
     which: overrides.whichCommand ?? commands.which,
     launchDetached: overrides.launchDetached ?? commands.launchDetached,
