@@ -175,6 +175,7 @@ export async function createProviderScenarioHarness(
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
       providerModules,
+      stateDir: input.baseDir,
       sessionsDir: input.sessionsDir,
       ownedProcesses: rootDeps.ownedProcessRecords,
       resolveSessionArtifacts: input.resolveSessionArtifacts,

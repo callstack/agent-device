@@ -1,7 +1,11 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+import { randomUUID } from 'node:crypto';
 import { sleep } from '@agent-device/host-kit/retry';
+import { normalizeError } from '@agent-device/kernel/errors';
+import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { getAndroidImeHelperDeviceKey } from './ime-helper.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 
 // Process-lived test-IME ownership state, shared by activation, restore, startup recovery, and
 // the emulator kill path.
@@ -22,43 +26,39 @@ export type AndroidTestImeOwnership = {
 // seeded elapsed times and sleep bounds from the window itself, never from a copied number.
 export const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
-// A device's restore mark: when the most recent registered write happened, and whether that
-// write confirmed. @internal the map is exported for tests; production touches it only
-// through the helpers here.
-export type TestImeRestoreMark = Readonly<{
-  /** Monotonic process-clock time (performance.now) of the write that earned this mark. */
-  atPerfMs: number;
-  /** True only when a read-back confirmed the write; an issued-but-unconfirmed write is false. */
-  confirmed: boolean;
-}>;
+// Each device's newest restore write is a durable flush record in the daemon state dir
+// (ime-recovery-marker.ts), so a daemon restart inside the window still holds the kill (#3346).
+// Deadlines use the host monotonic clock (AndroidAdbHost.monotonicNowMs), which every process
+// on one host boot shares. Skew rule: a wall-clock step cannot shorten a window, in this
+// process or the next. A host reboot resets the clock;
+// the remaining wait is capped at one window, so a record from an earlier boot over-waits by
+// at most SETTINGS_PROVIDER_FLUSH_SETTLE_MS once and is then retired. Expiry rule: a record
+// whose deadline has passed costs no wait; the first kill-bound reader retires it, so a
+// removed AVD never strands a shutdown. The kill-side wait consumes only the deadline: every
+// issued emulator write owes the hold. Marker clearing consumes `confirmed`, and only from a
+// record this process wrote: a covered CONFIRMED window lets an uninspected close retire
+// another close's retry evidence (see isRecoveryMarkerClearEarned), but a dead process's
+// provenance cannot speak for activations that may have followed it.
+const FLUSH_RECORD_WRITER = randomUUID();
+const androidTestImeFlushRecordLocks = new Map<string, Promise<unknown>>();
 
-// Per-device restore marks, keyed by serial. Timed entirely on the PROCESS MONOTONIC CLOCK
-// (performance.now) — never the wall clock, as the field name encodes, because sleep() runs
-// on libuv's monotonic loop clock, so a wall-clock-derived remaining time mixes two clocks,
-// and a forward NTP/VM-resume step could release the kill inside the window. Marks only move
-// forward, so windows coalesce into one wait. A mark's provenance says whether its write
-// confirmed by read-back (`confirmed`) or was merely issued. The kill-side wait consumes
-// only atPerfMs — every issued emulator write owes the hold. Marker clearing consumes
-// `confirmed`: only a covered CONFIRMED window lets an uninspected close retire another
-// close's retained retry evidence (see isRecoveryMarkerClearEarned). Every path that may
-// `adb emu kill` calls awaitTestImeFlushWindow first, and the kill-bound close consumes the
-// outcome so the pending marker clears only under a completed (or never-owed) wait.
-// The mark does NOT survive a daemon restart: a dead process's write cannot be re-derived
-// here. Restart-durable evidence needs a clock that outlives the process plus an expiry rule
-// — the forfeit and its alternatives are tracked as #3346.
-export const testImeRestoreMarks = new Map<string, TestImeRestoreMark>();
+function withTestImeFlushRecordLock<T>(
+  stateDir: string,
+  serial: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  return withKeyedLock(androidTestImeFlushRecordLocks, `${stateDir}:${serial}`, task);
+}
 
 // In-flight `ime set` writes, keyed by serial. The provider's window opens when the device
-// ACCEPTS the write, but the mark exists only after the registrar's finally registers it; a
-// kill-bound wait reading marks alone would find none and fire adb mid-write. The registrar
-// opens the entry before issuing the write and closes it only after that write's mark
+// ACCEPTS the write, but the record exists only after the registrar's finally registers it; a
+// kill-bound wait reading records alone would find none and fire adb mid-write. The registrar
+// opens the entry before issuing the write and closes it only after that write's record
 // registered — every issued emulator `ime set` registers one, whatever the outcome. Only a
-// non-emulator restore closes without a mark (no flush hazard there). A wait that returned
+// non-emulator restore closes without a record (no flush hazard there). A wait that returned
 // just before a write opens cannot be caught by in-process state at all; closing that residue
-// needs a lock spanning kill and restore, which the shutdown-runtime contract (commands
-// only, no stateDir) cannot form.
-// @internal exported for the registrar and for tests.
-export const testImePendingRestoreWrites = new Map<string, Set<Promise<void>>>();
+// needs a lock spanning kill and restore.
+const testImePendingRestoreWrites = new Map<string, Set<Promise<void>>>();
 
 /** Opens in-flight tracking for one issued `ime set`; returns the closing function. */
 export function beginTestImeRestoreWrite(serial: string): () => void {
@@ -103,68 +103,133 @@ async function awaitUntilAborted(pending: Promise<void>, signal?: AbortSignal): 
 }
 
 export type TestImeFlushWait =
-  /** No registered window existed to wait for. */
+  /** No flush record existed to wait for. */
   | 'idle'
-  /** Cancelled before covering; the mark stays for the next kill-bound caller. */
+  /** Cancelled before covering; the record stays for the next kill-bound caller. */
   | 'aborted'
-  /** Covered a window whose newest write issued a restore that never confirmed. */
+  /** Covered a window whose newest write issued a restore that never confirmed here. */
   | 'covered-issued'
-  /** Covered a window whose newest write confirmed by read-back. */
+  /** Covered a window whose newest write this process confirmed by read-back. */
   | 'covered-confirmed';
 
-// Every issued emulator restore registers its mark from the registrar's finally, whatever the
-// outcome; `confirmed` carries that write's own provenance. A later write REPLACES the
+// Deadlines whose flush record could not be written, keyed by serial. They cannot outlive
+// this process, which is the most an unwritable state dir allows.
+const unrecordedTestImeFlushDeadlines = new Map<string, number>();
+
+// Every issued emulator restore registers its record from the registrar's finally, whatever
+// the outcome; `confirmed` carries that write's own provenance. A later write REPLACES the
 // provenance rather than inheriting it: an issued-unconfirmed write after a confirmed one can
 // have re-displaced the IME, and only the newest write's confirmation justifies clearing
-// another close's retry evidence. atPerfMs only moves forward, so windows coalesce.
-export function registerTestImeRestore(serial: string, confirmed: boolean): void {
-  const previousPerfMs = testImeRestoreMarks.get(serial)?.atPerfMs ?? 0;
-  testImeRestoreMarks.set(serial, {
-    atPerfMs: Math.max(previousPerfMs, performance.now()),
-    confirmed,
-  });
+// another close's retry evidence. A new deadline is always the latest one, so windows
+// coalesce. A failed write never blocks the restore: it warns and keeps the deadline as this
+// process's fallback, so any later kill-bound path in this daemon still waits it out.
+export async function registerTestImeRestore(
+  stateDir: string,
+  serial: string,
+  confirmed: boolean,
+): Promise<void> {
+  const host = requireAndroidAdbHost();
+  const deadlineMs = host.monotonicNowMs() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS;
+  try {
+    await withTestImeFlushRecordLock(stateDir, serial, async () => {
+      await host.imeFlushRecords.write(stateDir, serial, {
+        deadlineMs,
+        confirmed,
+        writer: FLUSH_RECORD_WRITER,
+      });
+    });
+  } catch (error) {
+    unrecordedTestImeFlushDeadlines.set(
+      serial,
+      Math.max(unrecordedTestImeFlushDeadlines.get(serial) ?? 0, deadlineMs),
+    );
+    emitAndroidAdbDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_flush_record_write_failed',
+      data: { device: serial, stateDir, error: normalizeError(error).message },
+    });
+  }
 }
 
 // Wait until the device's newest restore write is older than the flush window. Returns 'idle'
-// when this process has no registered window (nothing to wait for), 'covered-issued' or
-// 'covered-confirmed' once the newest mark's window has elapsed — retiring the mark, since
-// nothing older can still be unflushed, and reporting that newest mark's provenance — and
-// 'aborted' when cancelled first: the caller must then skip the kill, and the mark stays so
+// when the state dir holds no record (nothing to wait for), 'covered-issued' or
+// 'covered-confirmed' once the newest record's window has elapsed — retiring the record, since
+// nothing older can still be unflushed, and reporting that record's provenance — and
+// 'aborted' when cancelled first: the caller must then skip the kill, and the record stays so
 // the next kill-bound path derives the same remaining wait.
 // Rounds repeat until nothing newer appears: a restore landing (or even ISSUING a write) while
 // a round sleeps carries a newer deadline, and this caller owns the kill, so reporting covered
-// on an older mark would release it inside the newer window — #3318 again.
+// on an older record would release it inside the newer window — #3318 again.
 export async function awaitTestImeFlushWindow(
+  stateDir: string,
   serial: string,
   signal?: AbortSignal,
 ): Promise<TestImeFlushWait> {
   if (signal?.aborted) return 'aborted';
   for (;;) {
-    const outcome = await runTestImeFlushRound(serial, signal);
-    if (outcome !== 'extended') return outcome;
+    const recorded: { deadlineMs?: number } = {};
+    const outcome = await runTestImeFlushRound(stateDir, serial, recorded, signal);
+    if (outcome === 'extended') continue;
+    if (outcome === 'aborted') return outcome;
+    const unrecorded = await awaitUnrecordedTestImeFlushDeadline(serial, signal);
+    if (unrecorded === 'extended') continue;
+    if (unrecorded === 'aborted') return 'aborted';
+    // A fallback newer than the record belongs to the newest write, and it proves only that
+    // the write was issued.
+    const fallbackIsNewest =
+      unrecorded !== 'none' && unrecorded > (recorded.deadlineMs ?? Number.NEGATIVE_INFINITY);
+    return fallbackIsNewest ? 'covered-issued' : outcome;
   }
 }
 
-// One round: drain in-flight writes, then sleep out the newest mark's remainder and consume
-// exactly that mark. 'extended' means a newer deadline appeared and another round must run.
-async function runTestImeFlushRound(
+// Sleeps out this process's fallback deadline after the recorded one, retires it and returns it. A
+// write opened or a fallback moved while sleeping means a newer window and another round.
+async function awaitUnrecordedTestImeFlushDeadline(
   serial: string,
   signal?: AbortSignal,
-): Promise<TestImeFlushWait | 'extended'> {
-  if (!(await quietTestImeRestoreWrites(serial, signal))) return 'aborted';
-  const mark = testImeRestoreMarks.get(serial);
-  if (mark === undefined) return 'idle';
-  const remainingMs = mark.atPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
+): Promise<number | 'none' | 'aborted' | 'extended'> {
+  const deadlineMs = unrecordedTestImeFlushDeadlines.get(serial);
+  if (deadlineMs === undefined) return 'none';
+  const remainingMs = Math.min(
+    deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
+    SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
+  );
   if (remainingMs > 0) {
     await sleep(remainingMs, signal);
     if (signal?.aborted) return 'aborted';
   }
-  return consumeTestImeFlushMark(serial, mark);
+  if (pendingTestImeRestoreWrite(serial)) return 'extended';
+  if (unrecordedTestImeFlushDeadlines.get(serial) !== deadlineMs) return 'extended';
+  unrecordedTestImeFlushDeadlines.delete(serial);
+  return deadlineMs;
+}
+
+// One round: drain in-flight writes, then sleep out the newest record's remainder and consume
+// exactly that record. 'extended' means a newer deadline appeared and another round must run.
+async function runTestImeFlushRound(
+  stateDir: string,
+  serial: string,
+  recorded: { deadlineMs?: number },
+  signal?: AbortSignal,
+): Promise<TestImeFlushWait | 'extended'> {
+  if (!(await quietTestImeRestoreWrites(serial, signal))) return 'aborted';
+  const record = await requireAndroidAdbHost().imeFlushRecords.read(stateDir, serial);
+  if (record === undefined) return 'idle';
+  recorded.deadlineMs = record.deadlineMs;
+  const remainingMs = Math.min(
+    record.deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
+    SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
+  );
+  if (remainingMs > 0) {
+    await sleep(remainingMs, signal);
+    if (signal?.aborted) return 'aborted';
+  }
+  return await consumeTestImeFlushRecord(stateDir, serial, record);
 }
 
 // True once no `ime set` this process issued is still unregistered. The registrar closes its
-// pending entry only after that write's mark registered (non-emulator restores register none),
-// so a drained, mark-less state truly means no registered window is owed — including one a
+// pending entry only after that write's record registered (non-emulator restores register
+// none), so a drained, record-less state truly means no window is owed — including one a
 // concurrent waiter just retired, which the caller reports as the conservative 'idle'.
 async function quietTestImeRestoreWrites(serial: string, signal?: AbortSignal): Promise<boolean> {
   const pending = pendingTestImeRestoreWrite(serial);
@@ -173,23 +238,41 @@ async function quietTestImeRestoreWrites(serial: string, signal?: AbortSignal): 
   return !signal?.aborted;
 }
 
-// Consume the mark one round waited for — identity, not timestamp: every registration stores
-// a fresh object, so a replaced mark is never mistaken for the one waited on. Unchanged or
-// already retired means covered with that mark's provenance; a newly opened write or a
-// replaced mark means a newer deadline exists and the caller must loop. With no await between
-// the read and the delete, the delete cannot erase a mark the round has not waited for, so an
-// extension always survives to its own round.
-function consumeTestImeFlushMark(
+// Consume the record one round waited for. Every registration stamps a fresh deadline, so an
+// equal record is the one waited on. Unchanged or already retired means covered with that
+// record's provenance; a newly opened write or a replaced record means a newer deadline
+// exists and the caller must loop. Registration takes the same lock, so the clear cannot
+// erase a record the round has not waited for, and an extension survives to its own round.
+async function consumeTestImeFlushRecord(
+  stateDir: string,
   serial: string,
-  waited: TestImeRestoreMark,
-): TestImeFlushWait | 'extended' {
-  if (pendingTestImeRestoreWrite(serial)) return 'extended';
-  const current = testImeRestoreMarks.get(serial);
-  if (current === undefined || current === waited) {
-    testImeRestoreMarks.delete(serial);
-    return waited.confirmed ? 'covered-confirmed' : 'covered-issued';
-  }
-  return 'extended';
+  waited: AndroidTestImeFlushRecord,
+): Promise<TestImeFlushWait | 'extended'> {
+  const records = requireAndroidAdbHost().imeFlushRecords;
+  return await withTestImeFlushRecordLock(stateDir, serial, async () => {
+    if (pendingTestImeRestoreWrite(serial)) return 'extended';
+    const current = await records.read(stateDir, serial);
+    if (current !== undefined) {
+      if (!isSameFlushRecord(current, waited)) return 'extended';
+      await records.clear(stateDir, serial);
+      // A write issued during that file I/O registers after this clear; its round drains it.
+      if (pendingTestImeRestoreWrite(serial)) return 'extended';
+    }
+    return waited.confirmed && waited.writer === FLUSH_RECORD_WRITER
+      ? 'covered-confirmed'
+      : 'covered-issued';
+  });
+}
+
+function isSameFlushRecord(
+  left: AndroidTestImeFlushRecord,
+  right: AndroidTestImeFlushRecord,
+): boolean {
+  return (
+    left.deadlineMs === right.deadlineMs &&
+    left.confirmed === right.confirmed &&
+    left.writer === right.writer
+  );
 }
 
 // Per-daemon-process cache of devices with the test IME active; input-actions.ts reads this to
@@ -217,12 +300,12 @@ export function withAndroidTestImeRecoveryLock<T>(
 }
 
 /**
- * @internal Test isolation hook for the active test-IME device set and flush timestamps.
+ * @internal Test isolation hook for the active test-IME device set and in-flight restore writes.
  */
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
-  testImeRestoreMarks.clear();
   testImePendingRestoreWrites.clear();
+  unrecordedTestImeFlushDeadlines.clear();
 }
 
 /**

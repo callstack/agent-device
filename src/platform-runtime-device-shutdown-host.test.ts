@@ -89,6 +89,7 @@ function shutdownHost(assertShutdownAllowed?: () => void) {
         which: async () => 'tool',
         run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
       },
+      stateDir: '/state',
     },
     shutdownLoaders,
     assertShutdownAllowed,

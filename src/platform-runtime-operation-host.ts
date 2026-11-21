@@ -52,6 +52,7 @@ export async function loadMacOsSurfaceSnapshot(
 
 export function createPlatformRuntimeHost(options: {
   host: HostEnvironment;
+  stateDir: string;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
@@ -117,7 +118,7 @@ export function createPlatformRuntimeHost(options: {
       androidEmulator: createAndroidEmulatorHost(),
     }),
     deviceShutdown: createDeviceShutdownRuntimeHost(
-      { appleTools, commands },
+      { appleTools, commands, stateDir: options.stateDir },
       options.shutdownLoaders,
       options.assertShutdownAllowed,
     ),

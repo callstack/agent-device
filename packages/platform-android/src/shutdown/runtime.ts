@@ -12,12 +12,12 @@ export type AndroidShutdownRuntime = Readonly<{
 }>;
 
 export function createAndroidShutdownRuntime(
-  dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands'>,
+  dependencies: Pick<DeviceShutdownRuntimeDependencies, 'commands' | 'stateDir'>,
 ): AndroidShutdownRuntime {
   return Object.freeze({
     canShutdownTarget,
     shutdownTarget: async (device, signal) =>
-      await shutdownAndroidTarget(dependencies.commands, device, signal),
+      await shutdownAndroidTarget(dependencies, device, signal),
   });
 }
 
@@ -26,7 +26,7 @@ export function canShutdownTarget(device: DeviceInfo): boolean {
 }
 
 async function shutdownAndroidTarget(
-  commands: DeviceShutdownRuntimeDependencies['commands'],
+  { commands, stateDir }: Pick<DeviceShutdownRuntimeDependencies, 'commands' | 'stateDir'>,
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<TargetShutdownResult> {
@@ -35,10 +35,11 @@ async function shutdownAndroidTarget(
   signal.throwIfAborted();
   // Every kill of an emulator goes through here, so this is where the settings-provider flush
   // window is enforced for ALL kill paths — close --shutdown, the standalone shutdown command,
-  // and any future caller. A restore this process registered postpones the kill until the
-  // provider has rewritten its file; an abort cancels the kill rather than letting it land
-  // inside the window, and the timestamp stays for the retry to wait out the remainder.
-  await awaitTestImeFlushWindow(device.id, signal);
+  // and any future caller. A restore recorded in this state dir, by this daemon or one that
+  // has since restarted, postpones the kill until the provider has rewritten its file; an
+  // abort cancels the kill rather than letting it land inside the window, and the record
+  // stays for the retry to wait out the remainder.
+  await awaitTestImeFlushWindow(stateDir, device.id, signal);
   signal.throwIfAborted();
   try {
     const result = await commands.run(

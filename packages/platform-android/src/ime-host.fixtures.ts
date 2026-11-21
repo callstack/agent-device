@@ -1,4 +1,5 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
+import type { AndroidTestImeFlushRecord } from './ime-recovery-marker.ts';
 
 export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
   const markers = new Map<string, Set<string>>();
@@ -7,6 +8,7 @@ export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
     markers.set(stateDir, entries);
     return entries;
   };
+  const flushRecords = new Map<string, AndroidTestImeFlushRecord>();
   bindAndroidAdbHost({
     environment: {},
     files: {
@@ -56,6 +58,7 @@ export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
     coerceAdbResult: (result) => result,
     execFailureDetails: (result) => ({ exitCode: result.exitCode }),
     emitDiagnostic: () => {},
+    monotonicNowMs: () => performance.now(),
     imeRecoveryMarkers: {
       write: async (stateDir, serial) => {
         markerSet(stateDir).add(serial);
@@ -65,6 +68,15 @@ export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
         markerSet(stateDir).delete(serial);
       },
       read: async (stateDir) => [...markerSet(stateDir)],
+    },
+    imeFlushRecords: {
+      write: async (stateDir, serial, record) => {
+        flushRecords.set(`${stateDir}\u0000${serial}`, record);
+      },
+      clear: async (stateDir, serial) => {
+        flushRecords.delete(`${stateDir}\u0000${serial}`);
+      },
+      read: async (stateDir, serial) => flushRecords.get(`${stateDir}\u0000${serial}`),
     },
     ensureHelperInstalled: async () => ({
       packageName: 'com.callstack.agentdevice.imehelper',

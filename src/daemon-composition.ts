@@ -120,6 +120,7 @@ export async function composeDaemonRuntimeDeps(
       assertShutdownAllowed,
       providerRuntimes: providerDeviceRuntimes,
       providerModules: providerComposition.platformModules,
+      stateDir: baseDir,
       sessionsDir,
       ownedProcesses: ownedProcessRecords,
       resolveSessionArtifacts,
