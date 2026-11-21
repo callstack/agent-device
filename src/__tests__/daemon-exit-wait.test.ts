@@ -70,7 +70,14 @@ test.each([0, -1, 1.5, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
   },
 );
 
-test.each(['posix:corrupt', 'posix:1500', 'posix:02000', 'posix:9007199254740993000'])(
+test.each([
+  'posix:corrupt',
+  'posix:1500',
+  'posix:02000',
+  'posix:9007199254740993000',
+  'posix:8640000000001000',
+  'posix:253402300800000',
+])(
   'a malformed stored token %s proves no exit: stop retains the daemon and sends no signal',
   async (startTime) => {
     expect(await waitForDaemonExit({ pid: PID, startTime }, { timeoutMs: 0 })).toMatchObject({

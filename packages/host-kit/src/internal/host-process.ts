@@ -261,11 +261,14 @@ function posixStartTimeToken(lstart: string): string | null {
   return startTimeTokenSource(token) === 'posix' ? token : null;
 }
 
+/** The last instant the four-digit-year `lstart` rendering can name: 9999-12-31T23:59:59Z. */
+const POSIX_TOKEN_MAX_EPOCH_MS = 253_402_300_799_000;
+
 /** The source of a start token. A `posix:` value has one only in the form a read writes. */
 function startTimeTokenSource(value: string): 'linux' | 'posix' | 'windows' | undefined {
   if (value.startsWith('linux:')) return 'linux';
   const epochMs = /^posix:(0|[1-9]\d*000)$/.exec(value)?.[1];
-  if (epochMs !== undefined && Number.isSafeInteger(Number(epochMs))) return 'posix';
+  if (epochMs !== undefined && Number(epochMs) <= POSIX_TOKEN_MAX_EPOCH_MS) return 'posix';
   return /^\d{21}$/.test(value) ? 'windows' : undefined;
 }
 
