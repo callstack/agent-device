@@ -60,11 +60,6 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli, withDeferredLogin } from './cli/auth-session.ts';
-import { exitBeforeCommand } from './cli/pre-command-failure.ts';
-import {
-  admitConnectProviderOrExit,
-  defersLoginUntilProviderAdmission,
-} from './cli/connect-preflight.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -173,6 +168,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
     async () => {
       // A provider this route cannot supply is refused here: before this run resolves an option that
       // can carry a credential, and before any credential value is registered for redaction.
+      const { admitConnectProviderOrExit } = await import('./cli/connect-preflight.ts');
       await admitConnectProviderOrExit(argv, host, { jsonRequested, debugEnabled });
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
         host,
@@ -214,6 +210,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         });
         // A `connect` that learns its provider from the profile it fetches holds a login it approves
         // until that provider is admitted; every other command saves a login as soon as it is approved.
+        const { defersLoginUntilProviderAdmission } = await import('./cli/connect-preflight.ts');
         await withDeferredLogin(
           { defersLogin: await defersLoginUntilProviderAdmission(ctx) },
           async () => {
@@ -327,6 +324,7 @@ async function exitOnParseFailure(
   argv: string[],
   options: { jsonRequested: boolean; debugEnabled: boolean },
 ): Promise<never> {
+  const { exitBeforeCommand } = await import('./cli/pre-command-failure.ts');
   return await exitBeforeCommand(error, argv, options, 'cli_parse_failed');
 }
 
