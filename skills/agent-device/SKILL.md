@@ -13,7 +13,7 @@ agent-device open <app> --foreground
 
 That starts the session and returns the initial interactive snapshot with `@refs`.
 
-Loop: act with `press|click|fill|longpress <target> ... --settle`, `scroll <direction> --settle`, or `back --settle`; continue from the printed diff, verify the named expectation with a read-only command (`wait text "..."`, `is`, or `get`; bare `find` clicks, so check with `find text "..." exists`), then run `agent-device close`, or `agent-device close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running.
+Loop: act with `press|click|fill|longpress <target> ... --settle`, `scroll <direction> --settle`, or `back --settle`; continue from the printed diff, verify the named expectation with a read-only command (`wait text "..."`, `is`, or `get`; bare `find` clicks, so check with `find text "..." exists`), then run `agent-device close`, or `agent-device close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running. When a result needs time, wait with `wait stable` or `wait absent <selector>` instead of sleeping and reading again.
 
 For exploratory QA, read `agent-device help dogfood`; its platform checks run `agent-device audit`.
 
@@ -21,8 +21,8 @@ For an accessibility review of a whole app, read `agent-device help accessibilit
 
 Reaching an off-screen target is one command, not a scroll-and-check loop: `scroll down --until <selector>` scrolls until that element is on screen, and `scroll bottom` runs to the end of the content. Repeated bare `scroll down` calls are the slow way to find something.
 
-Copy refs byte-for-byte: `@e12`, `@e12~s4` — keep the `@` and any `~sN`. Prefer current refs, then `id`/`label`/`role` selectors; coordinates are a last resort. If snapshot reports sparse/AX-unavailable, its refs and selectors are invalid: run `agent-device screenshot`, inspect the image, use coordinates, then retry `snapshot -i` after navigating. Otherwise run `snapshot -i` only when the diff lacks the next target.
+Copy refs byte-for-byte: `@e12`, `@e12~s4` — keep the `@` and any `~sN`. Prefer current refs, then `id`/`label`/`role` selectors; coordinates are a last resort. If snapshot reports sparse/AX-unavailable, its refs and selectors are invalid: run `agent-device screenshot`, inspect the image, use coordinates, then retry `snapshot -i` after navigating. Otherwise run `snapshot -i` only when the diff lacks the next target. Save a capture to a file you keep: `agent-device screenshot evidence.png` (or pass `--out <path>`).
 
-Error output includes corrective hints; follow them instead of re-planning. Only when the task is specialized (for example gestures, scripting, TV, macOS, remote, or debugging) or a command shape is unclear, run `agent-device help <topic>`. `agent-device --help` lists topics, but is not a startup step.
+Error output includes corrective hints; follow them instead of re-planning. If the error is `DEVICE_IN_USE`, another session holds the device: open with `--wait <ms>`, or run `agent-device device status --stale` and then `agent-device device release --stale` to clear a provably dead owner. Never kill daemon processes with `pkill -f agent-device`. Only when the task is specialized (for example gestures, scripting, TV, macOS, remote, or debugging) or a command shape is unclear, run `agent-device help <topic>`. `agent-device --help` lists topics, `agent-device help commands` lists commands; neither is a startup step.
 
 To capture network traffic on a Limrun session, see `agent-device help remote` or the Limrun docs.
