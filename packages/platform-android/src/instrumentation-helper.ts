@@ -360,6 +360,45 @@ function appendLine(value: string | undefined, line: string): string | undefined
 }
 
 /**
+ * The helper's stderr as far as it is safe to show a caller (#4026). The run's stderr can carry
+ * snapshot text: `am instrument` interleaves the device process's output, and a tagless hierarchy
+ * fragment reads as `ret" text="…" />`. A line holding such content — an attribute-like assignment,
+ * markup, an entity, or a payload record — is withheld whole, as is one the budget cannot hold,
+ * since a cut line cannot be proven clean. What is kept stays inside `STDERR_DIAGNOSTIC_MAX_CHARS`,
+ * so the cause line a provider reads (`uiautomator unavailable`, `am: Killed`) survives and screen
+ * text does not. `withheldLines` counts every withheld line so the omission stays on the record.
+ */
+export function readAndroidHelperStderrDiagnostic(
+  stderr: unknown,
+): Readonly<{ stderr?: string; withheldLines: number }> | undefined {
+  if (typeof stderr !== 'string') return undefined;
+  const kept: string[] = [];
+  let withheld = 0;
+  let keptLength = 0;
+  for (const line of stderr.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (
+      keptLength + trimmed.length + 1 > STDERR_DIAGNOSTIC_MAX_CHARS ||
+      holdsSnapshotMarker(trimmed)
+    ) {
+      withheld += 1;
+      continue;
+    }
+    kept.push(trimmed);
+    keptLength += trimmed.length + 1;
+  }
+  if (kept.length === 0) {
+    return withheld > 0 ? { withheldLines: withheld } : undefined;
+  }
+  return { stderr: kept.join('\n'), withheldLines: withheld };
+}
+
+// Matches the cap the parsed instrumentation fields are held to, so one budget covers every
+// helper-output field an error can carry.
+const STDERR_DIAGNOSTIC_MAX_CHARS = MESSAGE_FIELD_MAX_CHARS;
+
+/**
  * Whether a finished run is a start the system refused, and nothing else. All of these hold:
  * - `am instrument` reported `INSTRUMENTATION_FAILED`;
  * - the process exited with a non-zero code;
