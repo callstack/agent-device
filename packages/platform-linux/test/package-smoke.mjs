@@ -62,7 +62,7 @@ function atspiStubSource(logFile) {
     'const args = process.argv.slice(2);',
     'fs.appendFileSync(' +
       JSON.stringify(logFile) +
-      String.raw`, "TOOL: python3\nARGS: " + args.map((a) => (a.includes("/") ? "<script>" : a)).join(" ") + "\nPATH: " + process.env.PATH + "\nDISPLAY: " + (process.env.DISPLAY || "") + "\n");`,
+      String.raw`, "TOOL: python3\nARGS: " + args.map((a) => (a.includes("/") ? "<script>" : a)).join(" ") + "\nSCRIPT: " + args[0] + "\nPATH: " + process.env.PATH + "\nDISPLAY: " + (process.env.DISPLAY || "") + "\n");`,
     `process.stdout.write(${JSON.stringify(tree + '\n')});`,
   ].join('\n');
 }
@@ -188,20 +188,23 @@ test('packed core serves the Linux desktop only after the managed platform is in
     runCli(0, 'daemon', 'stop');
 
     runCli(0, 'plugins', 'add', './linux.tgz');
+    // A daemon started before the store changed cannot see the new entry, so the run that starts one is
+    // the family's own scoped doctor: on a host without a desktop it answers its own toolchain row
+    // through the installed plugin. That also proves the plugin loaded — a store entry whose family
+    // fails to register reports a failed state here rather than an empty device list later.
+    runCli(0, 'daemon', 'stop');
+    runCli(0, 'doctor', '--platform', 'linux');
+    const plugins = runCli(0, 'daemon', 'status').data.plugins;
+    assert.ok(
+      plugins.some((plugin) => plugin.platform === 'linux' && plugin.state === 'active'),
+      JSON.stringify(plugins),
+    );
     runCli(0, 'daemon', 'stop');
 
     // The Linux desktop device is the host's own session, so the family answers one only for a Linux
     // host. Everything below needs that host: the installed plugin then drives a whole interaction on
     // tools it resolved from the host PATH, which is what this run's Ubuntu job provides.
     if (process.platform !== 'linux') return;
-
-    // The plugin is loaded and active before any device is named: a store entry whose family fails to
-    // register would report a failed state here rather than an empty device list later.
-    const plugins = runCli(0, 'daemon', 'status').data.plugins;
-    assert.ok(
-      plugins.some((plugin) => plugin.platform === 'linux' && plugin.state === 'active'),
-      JSON.stringify(plugins),
-    );
 
     // An X11 session with the desktop tools on PATH, and a display nobody else's window manager owns.
     const desktopEnv = { ...cliEnv, DISPLAY: ':77', XDG_SESSION_TYPE: 'x11' };
@@ -223,24 +226,40 @@ test('packed core serves the Linux desktop only after the managed platform is in
     const opened = runCliWith(desktopEnv, 0, 'open', 'stub-desktop', '--platform', 'linux');
     assert.equal(opened.data.message, 'Opened: stub-desktop');
 
+    // `stub-desktop` is not an executable the host can resolve, so the open goes through the desktop
+    // opener rather than a detached launch of a binary the plugin found on `PATH`.
+    const expectedCalls = [['xdg-open', 'stub-desktop']];
+
     const captured = runCliWith(desktopEnv, 0, 'snapshot', '--platform', 'linux');
     assert.deepEqual(
-      captured.data.nodes.map(({ role, value }) => ({ role, value })),
-      [
-        { role: 'frame', value: 'Stub Window' },
-        { role: 'push button', value: 'OK' },
-      ],
+      captured.data.nodes.map((node) => node.label),
+      ['Stub Window', 'OK'],
       JSON.stringify(captured.data.nodes),
     );
+    // The capture runs the helper the plugin shipped, with the bridge's own tree limits.
+    expectedCalls.push([
+      'python3',
+      '<script> --surface desktop --max-nodes 1500 --max-depth 12 --max-apps 24',
+    ]);
 
     const shot = path.join(scratch, 'screen.png');
     const shotResult = runCliWith(desktopEnv, 0, 'screenshot', shot, '--platform', 'linux');
     assert.equal(shotResult.data.path, shot);
     assert.deepEqual([...fs.readFileSync(shot).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    expectedCalls.push(['scrot', shot]);
 
     const pressed = runCliWith(desktopEnv, 0, 'press', '42', '84', '--platform', 'linux');
     assert.equal(pressed.data.targetKind, 'point');
+    // The X11 route: probe the pointer, move it because it sits at 0,0 and the target is 42,84, click.
+    expectedCalls.push(
+      ['xdotool', 'getmouselocation --shell'],
+      ['xdotool', 'mousemove --sync 42 84'],
+      ['xdotool', 'click 1'],
+    );
+
     runCliWith(desktopEnv, 0, 'close', 'stub-desktop', '--platform', 'linux');
+    // `wmctrl` is planted, so the close closes the window by name rather than killing the process.
+    expectedCalls.push(['wmctrl', '-c stub-desktop']);
 
     const recorded = fs.readFileSync(toolCalls, 'utf8').split('\n').filter(Boolean);
     const tools = recorded.filter((line) => line.startsWith('TOOL: '));
@@ -249,33 +268,33 @@ test('packed core serves the Linux desktop only after the managed platform is in
     const displays = recorded.filter((line) => line.startsWith('DISPLAY: '));
     assert.equal(tools.length, invoked.length, 'every recorded call names its tool');
     assert.equal(paths.length, invoked.length, 'every recorded call names the PATH it ran with');
-    assert.deepEqual(
-      tools.map(
-        (line, index) => `${line.slice('TOOL: '.length)} ${invoked[index].slice('ARGS: '.length)}`,
-      ),
-      [
-        'xdotool getmouselocation --shell',
-        'xdotool mousemove --sync 42 84',
-        'xdotool click 1',
-        'xclip -selection clipboard -o',
-        'xdotool getmouselocation --shell',
-        'xdotool mousemove --sync 42 84',
-        'xdotool click 1',
-        'xdotool getmouselocation --shell',
-        'xdotool mousemove --sync 42 84',
-        'xdotool click 1',
-      ].join('\n'),
-      'the desktop route is the one the X11 session selects',
+    const calls = tools.map(
+      (line, index) => `${line.slice('TOOL: '.length)} ${invoked[index].slice('ARGS: '.length)}`,
+    );
+    // Every call the commands made, in order, must contain the route the X11 session selects: a step
+    // that quietly switched display server, or reached a tool the plugin did not resolve, breaks the
+    // subsequence or trips the Wayland check below.
+    const expected = expectedCalls.map(([tool, args]) => `${tool} ${args}`);
+    let cursor = 0;
+    for (const call of calls) {
+      if (call === expected[cursor]) cursor += 1;
+    }
+    assert.equal(
+      cursor,
+      expected.length,
+      `the desktop route is not the one the X11 session selects. Expected in order: ${JSON.stringify(
+        expected,
+        null,
+        2,
+      )} Got: ${JSON.stringify(calls, null, 2)}`,
+    );
+    assert.ok(
+      !calls.some((call) => /^(ydotool|wl-paste|wl-copy|grim|gnome-screenshot|import) /.test(call)),
+      `a Wayland or fallback tool ran on an X11 session: ${JSON.stringify(calls, null, 2)}`,
     );
 
-    // The capture runs the helper the plugin shipped, and each spawn got the host environment the CLI
-    // was started with: both facts come from the host, not from the bundle's own process.
-    assert.ok(
-      invoked.includes(
-        'ARGS: <script> --surface desktop --max-nodes 1500 --max-depth 12 --max-apps 24',
-      ),
-      `the snapshot never ran the plugin's own AT-SPI helper: ${invoked.join(' | ')}`,
-    );
+    // Each spawn got the host environment the CLI was started with: both facts come from the host, not
+    // from the bundle's own process.
     assert.ok(
       paths.every((line) => line.startsWith(`PATH: ${stubBin}${path.delimiter}`)),
       `a desktop tool ran with a PATH the plugin did not build: ${paths.join(' | ')}`,
@@ -284,9 +303,14 @@ test('packed core serves the Linux desktop only after the managed platform is in
       displays.every((line) => line === 'DISPLAY: :77'),
       `a desktop tool ran without the display the host named: ${displays.join(' | ')}`,
     );
-    assert.ok(
-      !invoked.some((line) => line.startsWith('ARGS: /') && !line.includes('<script>')),
-      `a helper was resolved outside the plugin bundle: ${invoked.join(' | ')}`,
+    // The one call that names a script must name the copy the plugin shipped, resolved relative to the
+    // installed package — never the repository layout a development checkout would offer.
+    const script = recorded.find((line) => line.startsWith('SCRIPT: '));
+    assert.ok(script, `the AT-SPI helper was never recorded: ${recorded.join(' | ')}`);
+    assert.match(
+      script,
+      /^SCRIPT: .*@agent-device[/\\]linux[/\\]linux[/\\]atspi-dump\.py$/,
+      script,
     );
   } finally {
     try {

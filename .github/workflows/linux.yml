@@ -185,8 +185,10 @@ jobs:
           xdotool version
 
       # The Linux family is a managed plugin now, so the device lanes serve it from the plugin store
-      # built by this job. The plugin is installed once here and then answers the visible replies
-      # below, which is the evidence that a user's `plugins add` install drives this desktop.
+      # built by this job. The plugin is installed once here and then answers the visible replies below
+      # and both Linux gates, which is the evidence that a user's `plugins add` install drives this
+      # desktop. The store is the one the gate action stages the replay pair into: that step merges its
+      # selections into the same config, so the daemon a gate starts carries all three packages.
       - name: Install the Linux platform plugin
         if: steps.impact.outputs.run != 'false'
         run: |
@@ -195,11 +197,14 @@ jobs:
           # ships beside it, and `plugins add` is a CLI command.
           pnpm build
           pnpm --filter @agent-device/linux pack --out "$RUNNER_TEMP/linux-plugin.tgz"
-          mkdir -p "$RUNNER_TEMP/agent-device-plugin-home"
-          export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-plugin-home}"
+          mkdir -p "$RUNNER_TEMP/agent-device-replay-plugins"
+          export AGENT_DEVICE_HOME="$RUNNER_TEMP/agent-device-replay-plugins"
           echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
           node bin/agent-device.mjs plugins add "$RUNNER_TEMP/linux-plugin.tgz" --json
           node bin/agent-device.mjs plugins list --json
+          # The store is read when a daemon starts, so the first Linux command below must not reach a
+          # daemon that was already running without this entry.
+          pnpm clean:daemon
 
       - name: Drive the Linux desktop through the installed plugin
         if: steps.impact.outputs.run != 'false'

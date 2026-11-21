@@ -208,8 +208,10 @@ test('the AT-SPI capture asks before spawning when the host has no python3', asy
 test('the AT-SPI capture refuses off a Linux host without touching it', async () => {
   const stub = stubPython(TREE);
 
+  // The check is the host's own platform, so the run has to mock it: the Linux lanes this suite also
+  // runs on would otherwise be on a Linux host and the capture would go on to spawn.
   await assert.rejects(
-    () => captureAtspi(stub),
+    () => withMockedPlatform('darwin', () => captureAtspi(stub)),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_PLATFORM');
