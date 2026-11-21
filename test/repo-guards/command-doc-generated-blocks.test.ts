@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { describe, test } from 'vitest';
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
+import { getCliCommandSchema } from '@agent-device/command-surface';
 import {
   buildCommandFacts,
   collectCommandFacts,
@@ -251,4 +252,40 @@ describe('several generated blocks share one section heading', () => {
       rendered,
     );
   });
+});
+
+describe('an option no action names is refused, never guessed', () => {
+  test('the diff schema names an action for one option only, so diff gets no generated block', () => {
+    const schema = getCliCommandSchema('diff');
+    assert.deepEqual(schema.flagsByAction, { snapshot: [], screenshot: ['screenshotScreenMask'] });
+    assert.throws(
+      () => buildCommandFacts('diff', schema, new Set<FlagKey>()),
+      /diff declares flagsByAction but names no action for: .*baseline, threshold/,
+    );
+    assert.equal(generatedCommands(committed).includes('diff'), false);
+  });
+
+  test('record names an action for every option it reads, so its tables are per action', () => {
+    const schema = getCliCommandSchema('record');
+    const facts = buildCommandFacts('record', schema, new Set<FlagKey>());
+    assert.deepEqual(
+      facts.actions.map((action) => action.label),
+      Object.keys(schema.flagsByAction ?? {}).map((action) => `record ${action}`),
+    );
+  });
+});
+
+test('a multi-line synopsis renders one command form per line and no help prose', () => {
+  const block = renderBlock(
+    commandFacts({
+      name: 'perf',
+      usage:
+        'perf frames --json\n  agent-device perf memory sample --json\n\n  Aggregate perf was removed.',
+    }),
+  );
+  assert.match(
+    block,
+    /```bash\nagent-device perf frames --json\nagent-device perf memory sample --json\n```/,
+  );
+  assert.doesNotMatch(block, /Aggregate perf was removed/);
 });
