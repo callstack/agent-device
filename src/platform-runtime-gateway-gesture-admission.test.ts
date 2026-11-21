@@ -1,5 +1,6 @@
 import { webSelectionFixture } from './platform-runtime-web-provider.fixtures.ts';
 import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
+import { linuxSelectionFixture } from './platform-runtime-linux-provider.fixtures.ts';
 import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
@@ -9,9 +10,13 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 bindTestCommandHost();
 
 const gateway = createPlatformRuntimeGateway({
-  // Both optional families this test probes are platform plugins, so the scenario supplies them.
+  // The optional families this test probes are platform plugins, so the scenario supplies them.
   platforms: composePlatformPlugins(
-    [webSelectionFixture().get(), vegaSelectionFixture().get()],
+    [
+      webSelectionFixture().get(),
+      vegaSelectionFixture().get(),
+      linuxSelectionFixture().get(),
+    ],
     [],
   ),
   host: createLiveTestHostEnvironment(),

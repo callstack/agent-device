@@ -1,56 +1,46 @@
-import { bindTestCommandHost, mkdtempForTest } from '@agent-device/test-kit';
-import fs from 'node:fs';
-import path from 'node:path';
-import { afterAll, beforeEach, test, vi } from 'vitest';
-import {
-  countDiagnosticEventsByPhase,
-  withDiagnosticsScope,
-} from '@agent-device/host-kit/diagnostics';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
+import { createLinuxToolProvider } from '../tool-provider.ts';
 import { pressLinux } from '../input-actions.ts';
-import {
-  createLocalLinuxToolProvider,
-  resolveLinuxToolProvider,
-  withLinuxToolProvider,
-  type LinuxToolCommandExecutor,
-  type LinuxToolDetachedLauncher,
-  type LinuxToolProviderOverrides,
-} from '../tool-provider.ts';
-import type { ExecDetachedExit } from '@agent-device/host-kit/command';
+import type { LinuxToolProviderOverrides } from '../tool-provider.ts';
 
-bindTestCommandHost();
-
-/** For a provider that injects an executor and launches no app in the scenario. */
-const launchesNoApp: LinuxToolDetachedLauncher = (cmd) => {
-  throw new Error(`this scenario launches no app: ${cmd}`);
-};
-
-const originalPlatform = process.platform;
-const originalEnv = { ...process.env };
-
-beforeEach(() => {
-  Object.defineProperty(process, 'platform', { value: 'linux' });
-  process.env['XDG_SESSION_TYPE'] = 'x11';
-  delete process.env['WAYLAND_DISPLAY'];
-});
-
-test('scoped Linux tool provider handles input discovery and command execution', async () => {
-  const commands: Array<[string, string[]]> = [];
-  const provider = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
-    whichCommand: async (cmd) => cmd === 'xdotool',
-    runCommand: async (cmd, args) => {
-      commands.push([cmd, args]);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
+function x11Stub(tools: readonly string[] = ['xdotool'], overrides: LinuxHostOverrides = {}) {
+  return createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools,
+    ...overrides,
   });
+}
 
-  await withLinuxToolProvider(provider, async () => {
-    await pressLinux(100, 200);
+function waylandStub(tools: readonly string[] = ['ydotool']) {
+  return createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
+    tools,
   });
+}
 
-  assert.deepEqual(commands, [
+type LinuxHostOverrides = Partial<Parameters<typeof createLinuxHostStub>[0]>;
+
+/**
+ * The provider under test. Interaction pacing is replaced so a test about which tool ran never
+ * waits on a real clock; the pacing itself is asserted separately.
+ */
+function providerFor(stub: LinuxHostStub, overrides: LinuxToolProviderOverrides = {}) {
+  return createLinuxToolProvider(stub.toolbox, { sleep: async () => {}, ...overrides });
+}
+
+const tuples = (
+  commands: readonly { executable: string; args: readonly string[] }[],
+): Array<[string, string[]]> =>
+  commands.map((c) => [c.executable, [...c.args]] as [string, string[]]);
+
+test('the provider routes input through the tool its host reports', async () => {
+  const stub = x11Stub();
+
+  await pressLinux(providerFor(stub), 100, 200);
+
+  assert.deepEqual(tuples(stub.commands), [
     // The position probe guards the --sync move: a no-op move emits no motion event and hangs.
     ['xdotool', ['getmouselocation', '--shell']],
     ['xdotool', ['mousemove', '--sync', '100', '200']],
@@ -58,41 +48,46 @@ test('scoped Linux tool provider handles input discovery and command execution',
   ]);
 });
 
+test('the provider hands every command the host environment it was set up with', async () => {
+  const stub = x11Stub();
+
+  await pressLinux(providerFor(stub), 1, 2);
+
+  assert.ok(stub.commands.length > 0);
+  for (const command of stub.commands) {
+    assert.equal(command.env?.XDG_SESSION_TYPE, 'x11');
+    assert.equal(command.env?.PATH, '/usr/bin');
+  }
+});
+
 test('xdotool press skips the --sync move when the pointer already sits on the target', async () => {
-  const commands: Array<[string, string[]]> = [];
-  const provider = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
-    whichCommand: async (cmd) => cmd === 'xdotool',
-    runCommand: async (cmd, args) => {
-      commands.push([cmd, args]);
-      const stdout = args[0] === 'getmouselocation' ? 'X=100\nY=200\nSCREEN=0\nWINDOW=1' : '';
-      return { exitCode: 0, stdout, stderr: '' };
-    },
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['xdotool'],
+    respond: (executable, args) =>
+      executable === 'xdotool' && args[0] === 'getmouselocation'
+        ? { stdout: 'X=100\nY=200\nSCREEN=0\nWINDOW=1' }
+        : {},
   });
 
-  await withLinuxToolProvider(provider, async () => {
-    await pressLinux(100, 200);
-  });
+  await pressLinux(providerFor(stub), 100, 200);
 
   // No mousemove: moving to the current position would wait forever for a motion event.
-  assert.deepEqual(commands, [
+  assert.deepEqual(tuples(stub.commands), [
     ['xdotool', ['getmouselocation', '--shell']],
     ['xdotool', ['click', '1']],
   ]);
 });
 
-test('scoped Linux input provider handles semantic input without host tool discovery', async () => {
+test('a scoped input provider answers synthesis without host tool discovery', async () => {
   const inputCalls: Array<[string, string, string, string]> = [];
-  const provider = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
-    whichCommand: async (cmd) => {
-      throw new Error(`unexpected input discovery: ${cmd}`);
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    respond: () => {
+      throw new Error('the injected input route owns synthesis');
     },
-    runCommand: async (cmd) => {
-      throw new Error(`unexpected host input command: ${cmd}`);
-    },
+  });
+  const provider = providerFor(stub, {
     input: {
       click: async (x, y, button) => {
         inputCalls.push(['click', String(x), String(y), button]);
@@ -106,246 +101,142 @@ test('scoped Linux input provider handles semantic input without host tool disco
     },
   });
 
-  await withLinuxToolProvider(provider, async () => {
-    await pressLinux(100, 200);
-  });
+  await pressLinux(provider, 100, 200);
 
   assert.deepEqual(inputCalls, [['click', '100', '200', 'primary']]);
+  assert.deepEqual(stub.commands, []);
 });
 
-test('Linux tool provider scopes do not share cached input tool resolution', async () => {
-  const providerA = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: {
-      env: { ...process.env, XDG_SESSION_TYPE: 'x11', WAYLAND_DISPLAY: '' },
-      cwd: process.cwd(),
-    },
-    whichCommand: async (cmd) => cmd === 'xdotool',
-    runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-  });
-  const providerB = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: {
-      env: { ...process.env, XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
-      cwd: process.cwd(),
-    },
-    whichCommand: async (cmd) => cmd === 'ydotool',
-    runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-  });
+test('two providers built on different hosts keep separate display decisions (#3794)', async () => {
+  const x11 = x11Stub();
+  await pressLinux(providerFor(x11), 1, 2);
 
-  await withLinuxToolProvider(providerA, async () => {
-    await pressLinux(1, 2);
-  });
+  const wayland = waylandStub();
+  await pressLinux(providerFor(wayland), 3, 4);
 
-  process.env['XDG_SESSION_TYPE'] = 'wayland';
-  process.env['WAYLAND_DISPLAY'] = 'wayland-0';
-  const commands: Array<[string, string[]]> = [];
-
-  await withLinuxToolProvider(
-    createLocalLinuxToolProvider({
-      host: {
-        env: { ...process.env, XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
-        cwd: process.cwd(),
-      },
-      ...providerB,
-      runCommand: async (cmd, args) => {
-        commands.push([cmd, args]);
-        return { exitCode: 0, stdout: '', stderr: '' };
-      },
-    }),
-    async () => {
-      await pressLinux(3, 4);
-    },
+  assert.equal(
+    tuples(x11.commands).some(
+      ([cmd, args]) => cmd === 'xdotool' && args.includes('mousemove') && args.includes('--sync'),
+    ),
+    true,
   );
-
-  assert.deepEqual(commands, [
+  assert.deepEqual(tuples(wayland.commands), [
     ['ydotool', ['mousemove', '--absolute', '-x', '3', '-y', '4']],
     ['ydotool', ['click', '0xC0']],
   ]);
 });
 
-test('local Linux desktop provider translates semantic lifecycle calls to host tools', async () => {
-  const commands: Array<[string, string[], boolean | undefined]> = [];
-  const provider = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
-    whichCommand: async (cmd) => cmd === 'wmctrl',
-    runCommand: async (cmd, args, options) => {
-      commands.push([cmd, args, options?.allowFailure]);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  });
+test('the desktop provider translates semantic lifecycle calls to host tools', async () => {
+  const stub = x11Stub(['wmctrl']);
+  const provider = providerFor(stub);
 
   await provider.desktop.openTarget('https://example.test');
   await provider.desktop.openTarget('demo.desktop');
   await provider.desktop.closeApp('Demo');
 
-  assert.deepEqual(commands, [
-    ['xdg-open', ['https://example.test'], undefined],
-    ['xdg-open', ['demo.desktop'], true],
-    ['wmctrl', ['-c', 'Demo'], true],
+  assert.deepEqual(tuples(stub.commands), [
+    ['xdg-open', ['https://example.test']],
+    ['xdg-open', ['demo.desktop']],
+    ['wmctrl', ['-c', 'Demo']],
   ]);
+  // The URL opens or fails the request; the .desktop fallback and the window close tolerate failure.
+  assert.deepEqual(
+    stub.commands.map((c) => c.allowFailure),
+    [undefined, true, true],
+  );
 });
 
-// `open <binary>` used to run the app as a piped child of the daemon, which kept every
-// byte the app printed in daemon memory for the app's whole life. The default launcher detaches,
-// for a provider built over a host and for the ambient one a call outside any runtime resolves.
-test.skipIf(!fs.existsSync('/proc/self/fd')).each([
-  [
-    'a host-built',
-    () =>
-      createLocalLinuxToolProvider({
-        host: { env: process.env, cwd: process.cwd() },
-        whichCommand: async (cmd) => cmd === 'fake-desktop-app',
-      }),
-  ],
-  ['the ambient', () => resolveLinuxToolProvider()],
-] as const)(
-  '%s Linux desktop provider launches an app binary detached from daemon pipes',
-  async (_name, makeProvider) => {
-    const binDir = await mkdtempForTest('linux-open-binary-');
-    const report = path.join(binDir, 'stdout-target');
-    fs.writeFileSync(
-      path.join(binDir, 'fake-desktop-app'),
-      `#!/bin/sh\nreadlink /proc/self/fd/2 > '${report}.tmp' && mv '${report}.tmp' '${report}'\n`,
-      { mode: 0o755 },
-    );
-    const originalPath = process.env['PATH'];
-    process.env['PATH'] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
-    try {
-      await makeProvider().desktop.openTarget('fake-desktop-app');
+test('the desktop provider launches an app binary through the host detached launcher', async () => {
+  const stub = x11Stub(['demo-app']);
 
-      await vi.waitFor(() => assert.ok(fs.existsSync(report)));
-      assert.equal(fs.readFileSync(report, 'utf8').trim(), '/dev/null');
-    } finally {
-      process.env['PATH'] = originalPath;
-    }
-  },
-);
+  await providerFor(stub).desktop.openTarget('demo-app');
 
-test('local Linux desktop provider launches an app binary through its detached launcher', async () => {
-  const launches: Array<[string, string[]]> = [];
-  const captured: string[] = [];
-  const provider = createLocalLinuxToolProvider({
-    host: { env: process.env, cwd: process.cwd() },
-    whichCommand: async (cmd) => cmd === 'demo-app',
-    runCommand: async (cmd) => {
-      captured.push(cmd);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-    launchDetached: (cmd, args) => {
-      launches.push([cmd, args]);
-      return { exited: new Promise(() => {}) };
+  assert.deepEqual(
+    stub.launches.map((l) => [l.executable, [...l.args]]),
+    [['demo-app', []]],
+  );
+  assert.deepEqual(stub.commands, []);
+});
+
+test('the desktop provider paces the request after a detached launch', async () => {
+  const stub = x11Stub(['demo-app']);
+  const paced: number[] = [];
+  const provider = createLinuxToolProvider(stub.toolbox, {
+    sleep: async (milliseconds) => {
+      paced.push(milliseconds);
     },
   });
 
   await provider.desktop.openTarget('demo-app');
 
-  assert.deepEqual(launches, [['demo-app', []]]);
-  assert.deepEqual(captured, []);
+  assert.deepEqual(paced, [500]);
 });
 
-/** The `linux_app_launch` events one `openTarget` writes, once its launch has exited. */
-async function launchDiagnostics(exit: ExecDetachedExit): Promise<Record<string, unknown>[]> {
-  const logPath = path.join(await mkdtempForTest('linux-launch-diagnostics-'), 'request.ndjson');
-  let exited: Promise<ExecDetachedExit> | undefined;
-  const provider = createLocalLinuxToolProvider({
-    host: { env: process.env, cwd: process.cwd() },
-    whichCommand: async () => true,
-    launchDetached: () => {
-      exited = Promise.resolve(exit);
-      return { exited };
+test('the desktop provider reports a launched app that ended badly', async () => {
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['demo-app'],
+    launchExit: () => ({ pid: 7, exitCode: 3 }),
+  });
+
+  await providerFor(stub).desktop.openTarget('demo-app');
+  await flushMicrotasks();
+
+  assert.deepEqual(stub.diagnostics, [
+    { level: 'warn', phase: 'linux_app_launch', data: { app: 'demo-app', exitCode: 3 } },
+  ]);
+});
+
+test('the desktop provider reports a launched app that could not start', async () => {
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['demo-app'],
+    launchExit: () => ({ pid: 0, error: 'spawn demo-app ENOENT' }),
+  });
+
+  await providerFor(stub).desktop.openTarget('demo-app');
+  await flushMicrotasks();
+
+  assert.deepEqual(stub.diagnostics, [
+    {
+      level: 'warn',
+      phase: 'linux_app_launch',
+      data: { app: 'demo-app', error: 'spawn demo-app ENOENT' },
     },
+  ]);
+});
+
+test('the desktop provider reports nothing for a launched app that exits cleanly', async () => {
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['demo-app'],
+    launchExit: () => ({ pid: 7, exitCode: 0 }),
   });
-  return await withDiagnosticsScope({ command: 'open', debug: true, logPath }, async () => {
-    await provider.desktop.openTarget('demo-app');
-    await exited;
-    const expected = countDiagnosticEventsByPhase(['linux_app_launch']);
-    const read = () =>
-      (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n') : [])
-        .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> })
-        .filter((event) => event.phase === 'linux_app_launch');
-    await vi.waitFor(() => assert.equal(read().length, expected));
-    return read().map((event) => event.data ?? {});
-  });
+
+  await providerFor(stub).desktop.openTarget('demo-app');
+  await flushMicrotasks();
+
+  assert.deepEqual(stub.diagnostics, []);
+});
+
+test('the desktop provider falls back to pkill when the host has no wmctrl', async () => {
+  const stub = x11Stub([]);
+
+  await providerFor(stub).desktop.closeApp('Demo');
+
+  assert.deepEqual(tuples(stub.commands), [['pkill', ['-x', 'Demo']]]);
+  assert.equal(stub.commands[0]?.allowFailure, true);
+});
+
+test('the screenshot provider translates capture to the tool the host reports', async () => {
+  const stub = x11Stub(['scrot']);
+
+  await providerFor(stub).screenshot!.capture('/tmp/screen.png');
+
+  assert.deepEqual(tuples(stub.commands), [['scrot', ['/tmp/screen.png']]]);
+});
+
+/** Lets every promise the launch's exit already settled run, including its diagnostic. */
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
 }
-
-test.each([
-  [
-    'a start failure',
-    { pid: 1, error: 'spawn demo-app ENOENT' },
-    { error: 'spawn demo-app ENOENT' },
-  ],
-  ['a non-zero exit', { pid: 2, exitCode: 3 }, { exitCode: 3 }],
-  ['a signal', { pid: 3, signal: 'SIGKILL' }, { signal: 'SIGKILL' }],
-] as const)(
-  'local Linux desktop provider reports %s of a launched app once',
-  async (_name, exit, field) => {
-    assert.deepEqual(await launchDiagnostics(exit), [{ app: 'demo-app', ...field }]);
-  },
-);
-
-test('local Linux desktop provider reports nothing for a launched app that exits cleanly', async () => {
-  assert.deepEqual(await launchDiagnostics({ pid: 4, exitCode: 0 }), []);
-});
-
-// An injected executor owns process execution, so the type refuses one without its own launcher:
-// the host-local detached runner must never stand in beside it. The directive fails typecheck if
-// the refusal goes away.
-function compileTimeInjectedExecutorNeedsLauncherProof(): void {
-  const runCommand: LinuxToolCommandExecutor = async () => ({
-    exitCode: 0,
-    stdout: '',
-    stderr: '',
-  });
-  // @ts-expect-error runCommand without launchDetached
-  const withoutLauncher: LinuxToolProviderOverrides = { runCommand };
-  const withLauncher: LinuxToolProviderOverrides = { runCommand, launchDetached: launchesNoApp };
-  void [withoutLauncher, withLauncher];
-}
-void compileTimeInjectedExecutorNeedsLauncherProof;
-
-test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
-  const commands: Array<[string, string[], boolean | undefined]> = [];
-  const provider = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
-    whichCommand: async () => false,
-    runCommand: async (cmd, args, options) => {
-      commands.push([cmd, args, options?.allowFailure]);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  });
-
-  await provider.desktop.closeApp('Demo');
-
-  assert.deepEqual(commands, [['pkill', ['-x', 'Demo'], true]]);
-});
-
-test('local Linux screenshot provider translates capture to available host tool', async () => {
-  const commands: Array<[string, string[]]> = [];
-  const provider = createLocalLinuxToolProvider({
-    launchDetached: launchesNoApp,
-    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
-    whichCommand: async (cmd) => cmd === 'scrot',
-    runCommand: async (cmd, args) => {
-      commands.push([cmd, args]);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  });
-
-  await provider.screenshot!.capture('/tmp/screen.png');
-
-  assert.deepEqual(commands, [['scrot', ['/tmp/screen.png']]]);
-});
-
-afterAll(() => {
-  Object.defineProperty(process, 'platform', { value: originalPlatform });
-  for (const key of Object.keys(process.env)) {
-    if (!(key in originalEnv)) {
-      delete process.env[key];
-    }
-  }
-  Object.assign(process.env, originalEnv);
-});

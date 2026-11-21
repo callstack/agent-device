@@ -136,8 +136,8 @@ export async function composeDaemonRuntimeDeps(
       providerComposition.inventory,
       providerComposition.assertSelectionCurrent,
     );
-    const { web, vega, harmony } = platforms;
-    const hostDiagnostics = createHostDiagnostics(host, web, vega, harmony);
+    const { web, vega, harmony, linux } = platforms;
+    const hostDiagnostics = createHostDiagnostics(host, web, vega, harmony, linux);
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
       host,
       platforms,
@@ -158,6 +158,7 @@ export async function composeDaemonRuntimeDeps(
       },
       web,
       vega,
+      linux,
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
       host,

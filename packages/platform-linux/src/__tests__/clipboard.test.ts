@@ -1,122 +1,98 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
-import { afterAll, beforeEach, test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
-
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn(), whichCmd: vi.fn() };
-});
-
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
+import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
+import { createLinuxToolProvider } from '../tool-provider.ts';
 import { readLinuxClipboard, writeLinuxClipboard } from '../clipboard.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
-bindTestCommandHost();
-
-const mockRunCmd = vi.mocked(runCmd);
-const mockWhichCmd = vi.mocked(whichCmd);
-
-const originalEnv = { ...process.env };
-
-function setupX11(): void {
-  process.env['XDG_SESSION_TYPE'] = 'x11';
-  delete process.env['WAYLAND_DISPLAY'];
+function stubFor(display: 'x11' | 'wayland', tools: readonly string[]): LinuxHostStub {
+  return createLinuxHostStub({
+    env: {
+      PATH: '/usr/bin',
+      XDG_SESSION_TYPE: display,
+      ...(display === 'wayland' ? { WAYLAND_DISPLAY: 'wayland-0' } : {}),
+    },
+    tools,
+    respond: () => ({ stdout: display === 'wayland' ? 'wayland content' : 'clipboard content' }),
+  });
 }
 
-function setupWayland(): void {
-  process.env['XDG_SESSION_TYPE'] = 'wayland';
-  process.env['WAYLAND_DISPLAY'] = 'wayland-0';
-}
+/** wl-clipboard installs `wl-paste` and `wl-copy` together, and the family probes for the pair. */
+const WAYLAND_CLIPBOARD = ['wl-paste', 'wl-copy'];
 
-beforeEach(() => {
-  mockRunCmd.mockReset();
-  mockWhichCmd.mockReset();
-});
-
-afterAll(() => {
-  Object.assign(process.env, originalEnv);
-});
-
-// ── X11 clipboard ────────────────────────────────────────────────────────
+// ── X11 ──────────────────────────────────────────────────────────────────
 
 test('readLinuxClipboard uses xclip on X11', async () => {
-  setupX11();
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'xclip');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'clipboard content', stderr: '' });
+  const stub = stubFor('x11', ['xclip']);
 
-  const result = await readLinuxClipboard();
-  assert.equal(result, 'clipboard content');
-  assert.equal(mockRunCmd.mock.calls[0]![0], 'xclip');
-  assert.ok((mockRunCmd.mock.calls[0]![1] as string[]).includes('-o'));
+  assert.equal(await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)), 'clipboard content');
+  const command = stub.commands[0]!;
+  assert.equal(command.executable, 'xclip');
+  assert.deepEqual(command.args, ['-selection', 'clipboard', '-o']);
+  assert.equal(command.allowFailure, true);
 });
 
 test('readLinuxClipboard falls back to xsel on X11', async () => {
-  setupX11();
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'xsel');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'from xsel', stderr: '' });
+  const stub = stubFor('x11', ['xsel']);
 
-  const result = await readLinuxClipboard();
-  assert.equal(result, 'from xsel');
-  assert.equal(mockRunCmd.mock.calls[0]![0], 'xsel');
+  assert.equal(await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)), 'clipboard content');
+  assert.equal(stub.commands[0]?.executable, 'xsel');
 });
 
-test('writeLinuxClipboard uses xclip with stdin on X11', async () => {
-  setupX11();
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'xclip');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+test('writeLinuxClipboard pipes the text to xclip on X11', async () => {
+  const stub = stubFor('x11', ['xclip']);
 
-  await writeLinuxClipboard('hello');
-  assert.equal(mockRunCmd.mock.calls[0]![0], 'xclip');
-  assert.equal((mockRunCmd.mock.calls[0]![2] as Record<string, unknown>).stdin, 'hello');
+  await writeLinuxClipboard(createLinuxToolProvider(stub.toolbox), 'hello');
+
+  const command = stub.commands[0]!;
+  assert.equal(command.executable, 'xclip');
+  assert.equal(command.stdin, 'hello');
 });
 
-test('readLinuxClipboard throws TOOL_MISSING when no tool on X11', async () => {
-  setupX11();
-  mockWhichCmd.mockResolvedValue(false);
+test('readLinuxClipboard refuses with TOOL_MISSING when X11 has no clipboard tool', async () => {
+  const stub = stubFor('x11', []);
 
   await assert.rejects(
-    () => readLinuxClipboard(),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'TOOL_MISSING');
-      assert.ok(err.message.includes('xclip'));
+    () => readLinuxClipboard(createLinuxToolProvider(stub.toolbox)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'TOOL_MISSING');
+      assert.match(error.message, /xclip/);
       return true;
     },
   );
+  assert.deepEqual(stub.commands, []);
 });
 
-// ── Wayland clipboard ────────────────────────────────────────────────────
+// ── Wayland ──────────────────────────────────────────────────────────────
 
 test('readLinuxClipboard uses wl-paste on Wayland', async () => {
-  setupWayland();
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'wl-paste');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'wayland content', stderr: '' });
+  const stub = stubFor('wayland', WAYLAND_CLIPBOARD);
 
-  const result = await readLinuxClipboard();
-  assert.equal(result, 'wayland content');
-  assert.equal(mockRunCmd.mock.calls[0]![0], 'wl-paste');
+  assert.equal(await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)), 'wayland content');
+  assert.equal(stub.commands[0]?.executable, 'wl-paste');
+  assert.deepEqual(stub.commands[0]?.args, ['--no-newline']);
 });
 
 test('writeLinuxClipboard uses wl-copy on Wayland', async () => {
-  setupWayland();
-  mockWhichCmd.mockImplementation(async (cmd) => cmd === 'wl-copy' || cmd === 'wl-paste');
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  const stub = stubFor('wayland', WAYLAND_CLIPBOARD);
 
-  await writeLinuxClipboard('copied');
-  assert.equal(mockRunCmd.mock.calls[0]![0], 'wl-copy');
-  assert.ok((mockRunCmd.mock.calls[0]![1] as string[]).includes('copied'));
+  await writeLinuxClipboard(createLinuxToolProvider(stub.toolbox), 'copied');
+
+  const command = stub.commands[0]!;
+  assert.equal(command.executable, 'wl-copy');
+  assert.deepEqual(command.args, ['--', 'copied']);
 });
 
-test('readLinuxClipboard throws TOOL_MISSING when no tool on Wayland', async () => {
-  setupWayland();
-  mockWhichCmd.mockResolvedValue(false);
+test('readLinuxClipboard refuses with TOOL_MISSING when Wayland has no clipboard tool', async () => {
+  const stub = stubFor('wayland', []);
 
   await assert.rejects(
-    () => readLinuxClipboard(),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.code, 'TOOL_MISSING');
-      assert.ok(err.message.includes('wl-paste'));
+    () => readLinuxClipboard(createLinuxToolProvider(stub.toolbox)),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'TOOL_MISSING');
+      assert.match(error.message, /wl-paste/);
       return true;
     },
   );

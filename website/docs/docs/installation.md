@@ -19,6 +19,7 @@ Install `agent-device` on the machine where your coding agent runs terminal comm
 - Android SDK and ADB for Android, Android TV, and Fire TV devices running Fire OS
 - HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`), plus the HarmonyOS platform plugin (see [HarmonyOS prerequisites](#harmonyos-prerequisites))
 - Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
+- Linux desktop tools (`xdotool` or `ydotool`, a clipboard tool, a screenshot tool, and `python3` with `python3-gi`) plus the Linux platform plugin for Linux desktop targets (see [Linux prerequisites](#linux-prerequisites))
 - Swift 5.9 or newer (Xcode command-line tools) for macOS desktop targets. `agent-device` builds its local macOS helper on first use
 
 ## Global install
@@ -108,6 +109,20 @@ agent-device open <package> --platform android --target tv
 ```
 
 Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device; see [Vega OS TV prerequisites](#vega-os-tv-prerequisites). For what a Fire TV gets on the Android TV backend, see [TV targets](/docs/commands#tv-targets).
+
+## Linux prerequisites
+
+Install the desktop tools for your session, then install the Linux platform plugin:
+
+```bash
+agent-device plugins add @agent-device/linux
+agent-device devices --platform linux
+```
+
+- The Linux device is the machine the daemon runs on, so `devices --platform linux` answers one desktop only on a Linux host. An X11 session uses `xdotool`, `xclip` or `xsel`, and `scrot`, `import`, or `gnome-screenshot`. A Wayland session uses `ydotool`, `wl-clipboard`, and `grim` or `gnome-screenshot`.
+- Snapshots read the AT-SPI2 tree through a Python helper the plugin ships, so install `python3-gi` and `gir1.2-atspi-2.0`, and keep an AT-SPI2 registry running on the session's D-Bus bus.
+- The plugin resolves every tool from the daemon host's `PATH`. Set that in the environment that starts the daemon.
+- Without the plugin, a command that names `--platform linux` fails with `details.reason: "plugin-not-installed"` and the install command. Commands that name no platform skip Linux.
 
 ## macOS desktop notes
 

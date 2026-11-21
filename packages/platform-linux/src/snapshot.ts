@@ -1,7 +1,7 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { captureAccessibilityTree, type SnapshotSurface } from './atspi-bridge.ts';
+import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolbox } from './toolbox.ts';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 /**
  * Map the session-level surface to an AT-SPI2 surface.
@@ -9,11 +9,14 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
  * (used for in-app XCTest sessions) is treated as 'frontmost-app' on Linux.
  * The 'menubar' surface is not yet supported; it falls back to 'desktop'.
  */
-function resolveLinuxSurface(surface: SessionSurface | undefined): SnapshotSurface {
+function resolveLinuxSurface(
+  toolbox: LinuxToolbox,
+  surface: SessionSurface | undefined,
+): 'desktop' | 'frontmost-app' {
   if (surface === 'desktop') return 'desktop';
   if (surface === 'frontmost-app' || surface === 'app') return 'frontmost-app';
   if (surface === 'menubar') {
-    emitDiagnostic({
+    toolbox.commands.diagnose({
       level: 'warn',
       phase: 'linux_snapshot',
       data: { message: 'menubar surface is not supported on Linux, falling back to desktop' },
@@ -23,27 +26,31 @@ function resolveLinuxSurface(surface: SessionSurface | undefined): SnapshotSurfa
 }
 
 export async function snapshotLinux(
+  toolbox: LinuxToolbox,
+  provider: LinuxToolProvider,
   surface: SessionSurface | undefined,
   signal?: AbortSignal,
 ): Promise<{
   nodes: RawSnapshotNode[];
   truncated?: boolean;
 }> {
-  const linuxSurface = resolveLinuxSurface(surface);
-  const result = await captureAccessibilityTree(linuxSurface, { signal });
+  const linuxSurface = resolveLinuxSurface(toolbox, surface);
+  const result = await provider.accessibility!.captureTree(linuxSurface, { signal });
 
   return {
-    nodes: result.nodes,
+    nodes: [...result.nodes],
     truncated: result.truncated,
   };
 }
 
 export async function readLinuxTextAtPoint(
+  toolbox: LinuxToolbox,
+  provider: LinuxToolProvider,
   x: number,
   y: number,
   surface: SessionSurface | undefined,
 ): Promise<string> {
-  const { nodes } = await snapshotLinux(surface);
+  const { nodes } = await snapshotLinux(toolbox, provider, surface);
   const matches = nodes
     .filter((node) => {
       const rect = node.rect;

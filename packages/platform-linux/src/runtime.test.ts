@@ -1,13 +1,15 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
 import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
 import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createLinuxHostStub, type LinuxHostStub } from './toolbox.fixtures.ts';
+import { createLinuxToolProvider } from './tool-provider.ts';
 import { createLinuxPlatformRuntime } from './runtime.ts';
+import type { LinuxSnapshotSurface } from '@agent-device/contracts/linux-tool-provider';
 
 type LegacyLifecycleCell = Readonly<{
   openTarget: boolean;
@@ -17,17 +19,38 @@ type LegacyLifecycleCell = Readonly<{
   portReverse: boolean;
 }>;
 
+const LINUX_DEVICE = {
+  platform: 'linux' as const,
+  id: 'linux',
+  name: 'Linux',
+  kind: 'device' as const,
+  target: 'desktop' as const,
+  booted: true,
+} satisfies DeviceInfo;
+
+/** One AT-SPI capture the runtime was asked to make: the surface and the signal it was given. */
+type CapturedAtspi = Readonly<{ surface: LinuxSnapshotSurface; signal: AbortSignal | undefined }>;
+
+/** Every capture the runtime asked its provider to make, newest last. */
+function createCaptureRecorder() {
+  const captures: CapturedAtspi[] = [];
+  return {
+    captures,
+    overrides: {
+      accessibility: {
+        captureTree: async (surface: LinuxSnapshotSurface, options?: { signal?: AbortSignal }) => {
+          captures.push({ surface, signal: options?.signal });
+          return { nodes: [], truncated: false, surface };
+        },
+      },
+    },
+  };
+}
+
 test.each([
   {
     name: 'desktop device',
-    device: {
-      platform: 'linux' as const,
-      id: 'linux',
-      name: 'Linux',
-      kind: 'device' as const,
-      target: 'desktop' as const,
-      booted: true,
-    },
+    device: LINUX_DEVICE,
     // Legacy open/close descriptor cell: linux.device. Runtime and prepare had no dispatch cell.
     legacy: {
       openTarget: true,
@@ -39,14 +62,7 @@ test.each([
   },
   {
     name: 'synthetic emulator',
-    device: {
-      platform: 'linux' as const,
-      id: 'linux-emulator',
-      name: 'Linux emulator',
-      kind: 'emulator' as const,
-      target: 'desktop' as const,
-      booted: true,
-    },
+    device: { ...LINUX_DEVICE, id: 'linux-emulator', name: 'Linux emulator', kind: 'emulator' as const },
     legacy: {
       openTarget: false,
       prepareAppleRunner: false,
@@ -57,14 +73,7 @@ test.each([
   },
   {
     name: 'synthetic simulator',
-    device: {
-      platform: 'linux' as const,
-      id: 'linux-simulator',
-      name: 'Linux simulator',
-      kind: 'simulator' as const,
-      target: 'desktop' as const,
-      booted: true,
-    },
+    device: { ...LINUX_DEVICE, id: 'linux-simulator', name: 'Linux simulator', kind: 'simulator' as const },
     legacy: {
       openTarget: false,
       prepareAppleRunner: false,
@@ -78,20 +87,10 @@ test.each([
 >)(
   'classifies the Linux $name lifecycle denominator against the legacy dispatch cell',
   async ({ device, legacy }) => {
-    const captureSurface = vi.fn(async () => ({
-      backend: 'linux-atspi' as const,
-      producer: 'linux-atspi' as const,
-      nodes: [],
-      truncated: false,
-    }));
-    const binding = await createLinuxPlatformRuntime(lifecycleHost(captureSurface)).bind({
+    const binding = await createLinuxRuntime().bind({
       device,
       intent: { kind: 'ordinary' },
-      scope: {
-        signal: new AbortController().signal,
-        diagnostics: { emit: () => {} },
-        progress: { report: () => {} },
-      },
+      scope: requestScope(),
     });
     expect(binding.facts.operations.networkDump).toMatchObject({
       available: false,
@@ -142,32 +141,168 @@ test.each([
     expect(binding.operations.captureSnapshot).toBeTypeOf(
       device.kind === 'device' ? 'function' : 'undefined',
     );
-    if (device.kind === 'device') {
-      await binding.operations.captureSnapshot?.({
-        options: { interactiveOnly: true, depth: 2, scope: 'Settings', surface: 'desktop' },
-      });
-      expect(captureSurface).toHaveBeenCalledWith(
-        device,
-        { interactiveOnly: true, depth: 2, scope: 'Settings', surface: 'desktop' },
-        expect.any(AbortSignal),
-      );
-    }
     expectLifecycleFacts(binding, legacy);
   },
 );
 
-function lifecycleHost(
-  captureSurface: SnapshotRuntimeHost['captureSurface'] = async () => ({
-    backend: 'linux-atspi' as const,
-    producer: 'linux-atspi' as const,
-    nodes: [],
-    truncated: false,
+test('the Linux runtime captures its own surface through the AT-SPI provider', async () => {
+  const recorder = createCaptureRecorder();
+  const runtime = createLinuxRuntime(recorder.overrides);
+  const binding = await runtime.bind({
+    device: LINUX_DEVICE,
+    intent: { kind: 'ordinary' },
+    scope: requestScope(),
+  });
+
+  const snapshot = await binding.operations.captureSnapshot?.({
+    options: { interactiveOnly: true, depth: 2, scope: 'Settings', surface: 'desktop' },
+  });
+
+  expect(snapshot?.producer).toBe('linux-atspi');
+  // The capture is the family's own: no desktop-surface loader is asked, and the request's projection
+  // options are applied by the plugin.
+  expect(recorder.captures).toEqual([{ surface: 'desktop', signal: expect.any(AbortSignal) }]);
+  expect(runtime.stub.diagnostics).toEqual([]);
+});
+
+test('the Linux runtime asks for the frontmost app when the request names the app surface', async () => {
+  const recorder = createCaptureRecorder();
+  const binding = await createLinuxRuntime(recorder.overrides).bind({
+    device: LINUX_DEVICE,
+    intent: { kind: 'ordinary' },
+    scope: requestScope(),
+  });
+
+  await binding.operations.captureSnapshot?.({ options: { surface: 'app' } });
+
+  expect(recorder.captures.map((capture) => capture.surface)).toEqual(['frontmost-app']);
+});
+
+// `linuxSnapshotOperations` is the direct capture owner now, so the shared
+// `bindSnapshotInteractor` composition does not cover it. Note it composes against
+// `request.scope.signal` rather than `request.signal` — the Linux owner takes its signal off the
+// request scope, which is exactly the detail a patch application can get wrong silently.
+test('the Linux surface capture composes the per-capture signal with the request scope signal', async () => {
+  const recorder = createCaptureRecorder();
+  const scope = new AbortController();
+  const binding = await createLinuxRuntime(recorder.overrides).bind({
+    device: LINUX_DEVICE,
+    intent: { kind: 'ordinary' },
+    scope: { ...requestScope(), signal: scope.signal },
+  });
+
+  const poll = new AbortController();
+  await binding.operations.captureSnapshot?.({ options: {}, signal: poll.signal });
+
+  const passed = recorder.captures[0]!.signal!;
+  expect(passed.aborted).toBe(false);
+  poll.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+  expect(passed.aborted).toBe(true);
+
+  // The scope signal must still cancel too: composition adds a way to cancel, never replaces one.
+  const second = new AbortController();
+  await binding.operations.captureSnapshot?.({ options: {}, signal: second.signal });
+  const passedSecond = recorder.captures[1]!.signal!;
+  scope.abort();
+  expect(passedSecond.aborted).toBe(true);
+});
+
+// R52/R53: Linux is the one owner whose gesture tiers genuinely split. Its drag primitive
+// preserves a coordinate fling's endpoints but not a direction-authored fling's speed semantics
+// (`gesture fling is not supported on Linux`), it synthesizes one contact, and it has no frame
+// read of its own — which is why `gestureViewport` is PREFERRED rather than required.
+test.each([
+  ['desktop device', 'device' as const, true],
+  ['non-desktop kind', 'emulator' as const, false],
+])('declares the Linux %s gesture and scroll cells', async (_name, kind, supported) => {
+  const facts = await createLinuxRuntime().inspectFacts({
+    ...LINUX_DEVICE,
+    kind,
+  });
+  expect(facts.operations.performGesturePlan.available).toBe(supported);
+  expect(facts.operations.scrollDirection.available).toBe(supported);
+  expect(facts.operations.performDirectionalFlingPlan.available).toBe(false);
+  expect(facts.operations.performMultiTouchGesturePlan.available).toBe(false);
+  expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
+  });
+  expect(facts.operations.gestureViewport.available).toBe(false);
+});
+
+test('hover has no Linux interactor route; the touch family reports its typed denial', async () => {
+  const facts = await createLinuxRuntime().inspectFacts(LINUX_DEVICE);
+  const hoverDenial = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: HOVER_UNAVAILABLE_HINT,
+  };
+  expect(facts.operations.hoverPoint).toEqual(hoverDenial);
+  expect(facts.operations.hoverRef).toEqual(hoverDenial);
+});
+
+test('binds the Linux coordinate-fling tier without a frame read', async () => {
+  const binding = await createLinuxRuntime().bind({
+    device: LINUX_DEVICE,
+    intent: { kind: 'ordinary' },
+    scope: requestScope(),
+  });
+  expect(binding.operations.performGesturePlan).toBeTypeOf('function');
+  expect(binding.operations.scrollDirection).toBeTypeOf('function');
+  expect(binding.operations.performDirectionalFlingPlan).toBeUndefined();
+  expect(binding.operations.performMultiTouchGesturePlan).toBeUndefined();
+  expect(binding.operations.performTargetAuthoredDrag).toBeUndefined();
+  // Absent, not broken: the caller derives the coordinate frame from a capture instead, which is
+  // exactly how a Linux gesture resolved its viewport before this migration.
+  expect(binding.operations.gestureViewport).toBeUndefined();
+});
+
+test('refuses to bind a device of another family', async () => {
+  await expect(
+    createLinuxRuntime().bind({
+      device: { ...LINUX_DEVICE, platform: 'android' as never },
+      intent: { kind: 'ordinary' },
+      scope: requestScope(),
+    }),
+  ).rejects.toThrow(/Linux runtime cannot bind this device/);
+});
+
+test('refuses an exact-owner intent for another owner', async () => {
+  const runtime = createLinuxRuntime();
+  await expect(
+    runtime.bind({
+      device: LINUX_DEVICE,
+      intent: { kind: 'exact-owner', owner: { kind: 'local', family: 'macos' } } as never,
+      scope: requestScope(),
+    }),
+  ).rejects.toThrow(/owner identity does not match/);
+});
+
+function createLinuxRuntime(
+  providerOverrides: Parameters<typeof createLinuxToolProvider>[1] = {},
+  stub: LinuxHostStub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    respond: () => ({}),
   }),
-): PlatformRuntimeHost {
-  return {
+) {
+  const host = {
     localInteractors: { resolve: async () => ({}) },
-    snapshot: { captureSurface },
+    clock: { sleep: async () => {} },
   } as unknown as PlatformRuntimeHost;
+  const provider = createLinuxToolProvider(stub.toolbox, {
+    sleep: async () => {},
+    ...providerOverrides,
+  });
+  // The runtime owner, with the host stub attached for the tests that assert what it recorded.
+  return Object.assign({}, createLinuxPlatformRuntime(host, stub.toolbox, provider), { stub });
+}
+
+function requestScope() {
+  return {
+    signal: new AbortController().signal,
+    diagnostics: { emit: () => {} },
+    progress: { report: () => {} },
+  };
 }
 
 function expectLifecycleFacts(
@@ -245,120 +380,3 @@ function expectLinuxNavigationAndKeyboardFacts(
     expect(binding.operations[operation]).toBeUndefined();
   }
 }
-
-// `linuxSnapshotOperations` is the other direct `captureSurface` caller, so the shared
-// `bindSnapshotInteractor` composition does not cover it either. Note it composes against
-// `request.scope.signal` rather than `request.signal` — the Linux owner takes its signal off the
-// request scope, which is exactly the detail a patch application can get wrong silently.
-test('the Linux surface capture composes the per-capture signal with the request scope signal', async () => {
-  const captureSurface = vi.fn<SnapshotRuntimeHost['captureSurface']>(async () => ({
-    backend: 'linux-atspi' as const,
-    producer: 'linux-atspi' as const,
-    nodes: [],
-    truncated: false,
-  }));
-  const scope = new AbortController();
-  const binding = await createLinuxPlatformRuntime(lifecycleHost(captureSurface)).bind({
-    device: {
-      platform: 'linux' as const,
-      id: 'linux',
-      name: 'Linux',
-      kind: 'device' as const,
-      target: 'desktop' as const,
-      booted: true,
-    },
-    intent: { kind: 'ordinary' },
-    scope: {
-      signal: scope.signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-  });
-
-  const poll = new AbortController();
-  await binding.operations.captureSnapshot?.({ options: {}, signal: poll.signal });
-
-  const passed = captureSurface.mock.calls[0]?.[2] as AbortSignal;
-  expect(passed.aborted).toBe(false);
-  poll.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
-  expect(passed.aborted).toBe(true);
-
-  // The scope signal must still cancel too: composition adds a way to cancel, never replaces one.
-  const second = new AbortController();
-  await binding.operations.captureSnapshot?.({ options: {}, signal: second.signal });
-  const passedSecond = captureSurface.mock.calls[1]?.[2] as AbortSignal;
-  scope.abort();
-  expect(passedSecond.aborted).toBe(true);
-});
-
-// R52/R53: Linux is the one owner whose gesture tiers genuinely split. Its drag primitive
-// preserves a coordinate fling's endpoints but not a direction-authored fling's speed semantics
-// (`gesture fling is not supported on Linux`), it synthesizes one contact, and it has no frame
-// read of its own — which is why `gestureViewport` is PREFERRED rather than required.
-test.each([
-  ['desktop device', 'device' as const, true],
-  ['non-desktop kind', 'emulator' as const, false],
-])('declares the Linux %s gesture and scroll cells', async (_name, kind, supported) => {
-  const facts = await createLinuxPlatformRuntime(lifecycleHost()).inspectFacts({
-    platform: 'linux',
-    id: 'linux',
-    name: 'Linux',
-    kind,
-    target: 'desktop',
-    booted: true,
-  });
-  expect(facts.operations.performGesturePlan.available).toBe(supported);
-  expect(facts.operations.scrollDirection.available).toBe(supported);
-  expect(facts.operations.performDirectionalFlingPlan.available).toBe(false);
-  expect(facts.operations.performMultiTouchGesturePlan.available).toBe(false);
-  expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
-    available: false,
-    hint: expect.stringContaining('source hold, timed movement, and destination hold'),
-  });
-  expect(facts.operations.gestureViewport.available).toBe(false);
-});
-
-test('hover has no Linux interactor route; the touch family reports its typed denial', async () => {
-  const facts = await createLinuxPlatformRuntime(lifecycleHost()).inspectFacts({
-    platform: 'linux',
-    id: 'linux',
-    name: 'Linux',
-    kind: 'device',
-    target: 'desktop',
-    booted: true,
-  });
-  const hoverDenial = {
-    available: false,
-    reason: 'unsupported-platform-leaf',
-    hint: HOVER_UNAVAILABLE_HINT,
-  };
-  expect(facts.operations.hoverPoint).toEqual(hoverDenial);
-  expect(facts.operations.hoverRef).toEqual(hoverDenial);
-});
-
-test('binds the Linux coordinate-fling tier without a frame read', async () => {
-  const binding = await createLinuxPlatformRuntime(lifecycleHost()).bind({
-    device: {
-      platform: 'linux',
-      id: 'linux',
-      name: 'Linux',
-      kind: 'device',
-      target: 'desktop',
-      booted: true,
-    },
-    intent: { kind: 'ordinary' },
-    scope: {
-      signal: new AbortController().signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-  });
-  expect(binding.operations.performGesturePlan).toBeTypeOf('function');
-  expect(binding.operations.scrollDirection).toBeTypeOf('function');
-  expect(binding.operations.performDirectionalFlingPlan).toBeUndefined();
-  expect(binding.operations.performMultiTouchGesturePlan).toBeUndefined();
-  expect(binding.operations.performTargetAuthoredDrag).toBeUndefined();
-  // Absent, not broken: the caller derives the coordinate frame from a capture instead, which is
-  // exactly how a Linux gesture resolved its viewport before this migration.
-  expect(binding.operations.gestureViewport).toBeUndefined();
-});
