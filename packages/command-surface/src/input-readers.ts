@@ -1,3 +1,4 @@
+import { BATCH_STEP_INPUT_REFUSALS } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 
 /** Primitive readers shared by the common-field table and the per-command field constructors. */
@@ -131,7 +132,7 @@ export function assertAllowedKeys(
           ...(hint === undefined ? {} : { hint }),
           ...(misplacedKeys.length === 0
             ? {}
-            : { reason: 'batch_step_misplaced_input_key', keys: misplacedKeys }),
+            : { reason: BATCH_STEP_INPUT_REFUSALS.misplacedKey.reason, keys: misplacedKeys }),
         };
   throw new AppError(
     'INVALID_ARGS',

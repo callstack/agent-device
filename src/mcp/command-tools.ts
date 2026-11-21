@@ -462,31 +462,65 @@ function findInadmissibleInput(
   const advertised = advertisedInputSchema(name, metadata).properties;
   const audience = toolInputAudience(metadata);
   for (const key of Object.keys(input)) {
-    if (Object.hasOwn(advertised, key)) continue;
-    // `Object.hasOwn`, not a plain lookup: `key` is a raw tool argument name, so
-    // `__proto__`/`constructor`/`toString` would otherwise read a value off
-    // `Object.prototype` and classify against it.
-    const keyAudience = Object.hasOwn(audience, key) ? audience[key] : undefined;
-    // Retired keys are absent from the advertised schema but still recognized:
-    // admit them so the command's own reader answers with migration guidance
-    // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
-    if (keyAudience?.kind === 'retired') continue;
-    if (keyAudience?.kind === 'operator') {
-      return { message: operatorInputRefusal(key, keyAudience.source) };
-    }
-    if (keyAudience?.kind === 'alias') {
-      if (options?.nested === true) continue;
-      return { message: aliasInputRefusal(key, keyAudience.of) };
-    }
-    const suggestion = suggestClosestKey(key, Object.keys(advertised));
-    return {
-      message:
-        `${key} is not an accepted argument for the ${name} tool.` +
-        (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
-      hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
-    };
+    const rejection = inadmissibleKey(
+      name,
+      metadata,
+      key,
+      advertised,
+      audience,
+      options?.nested === true,
+    );
+    if (rejection !== undefined) return rejection;
   }
   return undefined;
+}
+
+/**
+ * The admission verdict for one raw input key. Flat admission is canonical-only
+ * and retired keys are admitted; nested admission additionally admits the
+ * alias spellings the nested reader canonicalizes.
+ */
+function inadmissibleKey(
+  name: CommandName,
+  metadata: AdmissionMetadata,
+  key: string,
+  advertised: Record<string, JsonSchema>,
+  audience: InputAudienceMap,
+  nested: boolean,
+): AdmissionRejection | undefined {
+  if (Object.hasOwn(advertised, key)) return undefined;
+  // `Object.hasOwn`, not a plain lookup: `key` is a raw tool argument name, so
+  // `__proto__`/`constructor`/`toString` would otherwise read a value off
+  // `Object.prototype` and classify against it.
+  const keyAudience = Object.hasOwn(audience, key) ? audience[key] : undefined;
+  if (keyAudience === undefined) return unknownKeyRejection(name, metadata, key, advertised);
+  // Retired keys are absent from the advertised schema but still recognized:
+  // admit them so the command's own reader answers with migration guidance
+  // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
+  if (keyAudience.kind === 'retired') return undefined;
+  if (keyAudience.kind === 'operator') {
+    return { message: operatorInputRefusal(key, keyAudience.source) };
+  }
+  if (keyAudience.kind === 'alias') {
+    return nested ? undefined : { message: aliasInputRefusal(key, keyAudience.of) };
+  }
+  return unknownKeyRejection(name, metadata, key, advertised);
+}
+
+/** The refusal an undeclared key answers with, recovering through the nearest-key rule. */
+function unknownKeyRejection(
+  name: CommandName,
+  metadata: AdmissionMetadata,
+  key: string,
+  advertised: Record<string, JsonSchema>,
+): AdmissionRejection {
+  const suggestion = suggestClosestKey(key, Object.keys(advertised));
+  return {
+    message:
+      `${key} is not an accepted argument for the ${name} tool.` +
+      (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
+    hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
+  };
 }
 
 /**

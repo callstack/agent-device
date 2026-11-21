@@ -57,14 +57,25 @@ export function readBatchStepInputObject(
 }
 
 /**
+ * The typed refusals a batch step's structured input publishes as
+ * `details.reason`, so a Node client, MCP agent, or test harness tells them
+ * apart from every other INVALID_ARGS error without matching message text.
+ * The step-input key refusals of every surface read this one table.
+ */
+export const BATCH_STEP_INPUT_REFUSALS = {
+  unknownKey: { reason: 'batch_step_unknown_input_key' },
+  misplacedKey: { reason: 'batch_step_misplaced_input_key' },
+} as const satisfies Record<string, Readonly<{ reason: string }>>;
+
+/**
  * A step's structured input used to be a pass-through: any key the nested
  * command's field reader does not declare was silently dropped, so a step like
  * `{"command":"screenshot","input":{"out":...}}` ran without its output path
  * and reported success. When the caller passes the nested command's accepted
  * keys, every undeclared key is refused with the closest accepted key, the
  * refusal still carries the step-shape hint, and `details.reason` plus the
- * unknown keys travel as data (`batch_step_unknown_input_key`), so a client can
- * branch on the refusal without matching message text.
+ * unknown keys travel as data, so a client can branch on the refusal without
+ * matching message text.
  */
 function assertBatchStepInputKeys(
   input: Record<string, unknown>,
@@ -82,7 +93,7 @@ function assertBatchStepInputKeys(
       (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
     {
       hint,
-      reason: 'batch_step_unknown_input_key',
+      reason: BATCH_STEP_INPUT_REFUSALS.unknownKey.reason,
       unknownKeys,
       ...(suggestion === undefined ? {} : { suggestion }),
     },
