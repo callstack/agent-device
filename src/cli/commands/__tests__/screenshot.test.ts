@@ -61,7 +61,7 @@ test('screenshot surfaces response-level warnings under the summary', async () =
     screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
   );
 
-  assert.equal(out, `/tmp/shot.png (40x20)\nWarning: ${CROP_WARNING}\n`);
+  assert.equal(out, `40x20\n/tmp/shot.png\nWarning: ${CROP_WARNING}\n`);
 });
 
 test('screenshot --json carries response-level warnings in the data', async () => {
