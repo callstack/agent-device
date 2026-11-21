@@ -191,8 +191,12 @@ jobs:
         if: steps.impact.outputs.run != 'false'
         run: |
           set -euo pipefail
+          # The steps below drive the packed entry point, which refuses to run without the build it
+          # ships beside it, and `plugins add` is a CLI command.
+          pnpm build
           pnpm --filter @agent-device/linux pack --out "$RUNNER_TEMP/linux-plugin.tgz"
-          export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-replay-plugins}"
+          mkdir -p "$RUNNER_TEMP/agent-device-plugin-home"
+          export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-plugin-home}"
           echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
           node bin/agent-device.mjs plugins add "$RUNNER_TEMP/linux-plugin.tgz" --json
           node bin/agent-device.mjs plugins list --json

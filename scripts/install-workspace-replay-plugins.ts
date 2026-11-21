@@ -14,24 +14,27 @@ const WORKSPACE_PLUGIN_PACKAGES: Readonly<Record<string, WorkspacePluginPackage 
   linux: { dir: 'platform-linux', assets: ['linux'] },
 };
 
+/** Every device lane runs replay and Maestro, so those two are staged unless a lane adds to them. */
+const DEFAULT_WORKSPACE_PLUGIN_PACKAGES = ['maestro', 'replay'] as const;
+
 /**
  * Installs the explicitly selected workspace build into an isolated validation plugin store.
  *
- * The replay packages are staged for every run. A managed platform plugin is staged only when the
- * caller names it through `AGENT_DEVICE_WORKSPACE_PLUGINS`, because a platform plugin in the store
- * gives its family a runtime and interactor: a lane that does not expect the family to answer would
- * see a different daemon than the one it was written against.
+ * The replay packages are staged for every run. A managed platform plugin is staged in addition only
+ * when the caller names it through `AGENT_DEVICE_WORKSPACE_PLUGINS`, because a platform plugin in the
+ * store gives its family a runtime and interactor: a lane that does not expect the family to answer
+ * would see a different daemon than the one it was written against.
  */
 export function installWorkspaceReplayPlugins(
   env: NodeJS.ProcessEnv,
   source: boolean,
-  extraPackageIds?: readonly string[],
+  additionalPackageIds?: readonly string[],
 ): void {
   if (!env.AGENT_DEVICE_HOME)
     throw new Error('Workspace plugin installation requires AGENT_DEVICE_HOME');
   const configPath = resolveUserConfigPath(env);
   const home = path.dirname(configPath);
-  const packageIds = [...(extraPackageIds ?? ['maestro', 'replay'])];
+  const packageIds = [...DEFAULT_WORKSPACE_PLUGIN_PACKAGES, ...(additionalPackageIds ?? [])];
   const staged = packageIds.map((packageId) => ({
     packageId,
     installation: crypto.randomUUID(),
