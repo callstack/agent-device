@@ -50,8 +50,7 @@ test('closeAndroidApp waits until package is no longer foreground', async () => 
     ['shell', 'am', 'force-stop', 'com.example.app'],
     ['shell', 'dumpsys', 'window', 'windows'],
     ['shell', 'dumpsys', 'window', 'windows'],
-    ['shell', 'pidof', 'com.example.app'],
-    ['shell', 'pidof', 'com.example.app'],
+    ['shell', 'dumpsys', 'window', 'windows'],
   ]);
 });
 
@@ -92,8 +91,7 @@ test('closeAndroidApp returns after force-stop when package is already not foreg
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'am', 'force-stop', 'com.example.app'],
     ['shell', 'dumpsys', 'window', 'windows'],
-    ['shell', 'pidof', 'com.example.app'],
-    ['shell', 'pidof', 'com.example.app'],
+    ['shell', 'dumpsys', 'window', 'windows'],
   ]);
 });
 
@@ -142,12 +140,11 @@ test('closeAndroidApp waits until package process exits after force-stop', async
     ['shell', 'dumpsys', 'window', 'windows'],
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'pidof', 'com.example.app'],
-    ['shell', 'pidof', 'com.example.app'],
-    ['shell', 'pidof', 'com.example.app'],
+    ['shell', 'dumpsys', 'window', 'windows'],
   ]);
 });
 
-test('closeAndroidApp waits past the process fence for a killed process that exits slowly', async () => {
+test('closeAndroidApp waits past 2s for a killed process that exits slowly', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   try {
@@ -184,7 +181,6 @@ test('closeAndroidApp waits past the process fence for a killed process that exi
 test.each([
   ['foreground', 2_000, 1],
   ['exit', 10_000, 201],
-  ['process', 2_000, 42],
 ] as const)(
   'closeAndroidApp refuses an exhausted %s fence',
   async (phase, timeoutMs, pidofCalls) => {
@@ -195,10 +191,12 @@ test.each([
         {
           exec: async (args) => {
             calls.push(args);
-            const killed = calls.filter((call) => call[1] === 'am').length === 0;
+            const stopped = calls.some((call) => call[1] === 'am');
             const stdout =
               args[1] === 'pidof'
-                ? `${killed || phase !== 'process' ? '12345' : '67890'}\n`
+                ? phase === 'exit' || !stopped
+                  ? '12345\n'
+                  : ''
                 : args[1] === 'dumpsys'
                   ? `mCurrentFocus=Window{42 u0 ${phase === 'foreground' ? 'com.example.app/.MainActivity' : 'com.android.launcher/.Launcher'}}\n`
                   : '';
@@ -233,31 +231,19 @@ test.each([
 );
 
 test.each([
-  ['foreground', 1, 1_999, true, 3],
-  ['foreground', 1, 2_000, false, 1],
-  ['foreground', 1, 2_001, false, 1],
-  ['process', 1, 1_849, true, 3],
-  ['process', 1, 1_850, false, 2],
-  ['process', 1, 2_000, false, 2],
-  ['process', 1, 2_001, false, 2],
-  ['process', 2, 1_999, true, 3],
-  ['process', 2, 2_000, false, 3],
-  ['process', 2, 2_001, false, 3],
+  [1_999, true],
+  [2_000, false],
+  [2_001, false],
 ] as const)(
-  'closeAndroidApp admits %s probe %i completing at %ims only within its fence (success=%s)',
-  async (phase, probe, completionMs, succeeds, expectedProcessPolls) => {
+  'closeAndroidApp admits a foreground probe completing at %ims only within its fence (success=%s)',
+  async (completionMs, succeeds) => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
-    let processPolls = 0;
     try {
       await withAndroidAdbProvider(
         {
           exec: async (args) => {
-            if (args[1] === 'pidof') processPolls += 1;
-            if (
-              (phase === 'foreground' && args[1] === 'dumpsys') ||
-              (phase === 'process' && args[1] === 'pidof' && processPolls === probe + 1)
-            ) {
+            if (args[1] === 'dumpsys') {
               await new Promise((resolve) => setTimeout(resolve, completionMs - Date.now()));
             }
             return {
@@ -280,7 +266,7 @@ test.each([
                 assert.equal(error.code, 'COMMAND_FAILED');
                 assert.deepEqual(error.details, {
                   reason: 'android-app-close-timeout',
-                  phase,
+                  phase: 'foreground',
                   packageName: 'com.example.app',
                   timeoutMs: 2_000,
                 });
@@ -289,7 +275,6 @@ test.each([
           await Promise.all([result, vi.runAllTimersAsync()]);
         },
       );
-      assert.equal(processPolls, expectedProcessPolls);
     } finally {
       vi.useRealTimers();
     }
@@ -365,7 +350,7 @@ test('openAndroidApp relaunches a package that Android restarts right after the 
 });
 
 test.each([
-  [9_999, true, 4],
+  [9_999, true, 2],
   [10_000, false, 2],
   [10_001, false, 2],
 ] as const)(
@@ -420,7 +405,7 @@ test.each([
   },
 );
 
-test('closeAndroidApp refuses a new process that outlives the killed one', async () => {
+test('closeAndroidApp accepts a new process once the killed ones have exited', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   const calls: (readonly string[])[] = [];
@@ -429,8 +414,10 @@ test('closeAndroidApp refuses a new process that outlives the killed one', async
       {
         exec: async (args) => {
           calls.push(args);
-          const killed = calls.some((call) => call[1] === 'am');
-          const pids = !killed ? '12345' : Date.now() < 500 ? '12345 67890' : '67890';
+          // Android starts a new Settings process (67890) for a background client after the stop and
+          // keeps it, while the process that ran before the close (12345) exits within 500ms.
+          const stopped = calls.some((call) => call[1] === 'am');
+          const pids = !stopped ? '12345' : Date.now() < 500 ? '12345 67890' : '67890';
           return {
             stdout:
               args[1] === 'dumpsys'
@@ -445,12 +432,50 @@ test('closeAndroidApp refuses a new process that outlives the killed one', async
       },
       { serial: ANDROID_EMULATOR.id },
       async () => {
+        await Promise.all([
+          closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+          vi.runAllTimersAsync(),
+        ]);
+      },
+    );
+    assert.equal(calls.at(-1)?.[1], 'dumpsys', 'the foreground check ran last');
+    assert.ok(Date.now() < 2_000, 'a new process is not waited out');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('closeAndroidApp refuses a new process that is foreground once the killed ones have exited', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          const focus =
+            Date.now() < 100 ? 'com.android.launcher/.Launcher' : 'com.example.app/.MainActivity';
+          return {
+            stdout:
+              args[1] === 'dumpsys'
+                ? `mCurrentFocus=Window{43 u0 ${focus}}\n`
+                : args[1] === 'pidof'
+                  ? Date.now() < 100
+                    ? '12345\n'
+                    : '67890\n'
+                  : '',
+            stderr: '',
+            exitCode: 0,
+          };
+        },
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
         const rejection = assert.rejects(
           closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
           (error: unknown) =>
             error instanceof AppError &&
             error.details?.reason === 'android-app-close-timeout' &&
-            error.details?.phase === 'process',
+            error.details?.phase === 'foreground',
         );
         await Promise.all([rejection, vi.runAllTimersAsync()]);
       },
