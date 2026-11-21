@@ -7,8 +7,8 @@ import { storePluginCandidates } from '@agent-device/plugins/store';
 import { readPluginPackageClaims } from '@agent-device/plugins/validate';
 import { installWorkspaceReplayPlugins } from '../install-workspace-replay-plugins.ts';
 
-/** The staged directory for one package in the one installation this script staged into `home`. */
-function installedPackageDirectory(home: string, packageId: string): string {
+/** The manifest of one package in the one installation this script staged into `home`. */
+function installedManifest(home: string, packageId: string): Record<string, unknown> {
   const directory = path.join(home, 'plugins');
   const installation = fs
     .readdirSync(directory)
@@ -16,13 +16,17 @@ function installedPackageDirectory(home: string, packageId: string): string {
       fs.existsSync(path.join(directory, name, 'node_modules', `@agent-device/${packageId}`)),
     );
   assert.ok(installation, `no staged installation holds @agent-device/${packageId}`);
-  return path.join(directory, installation, 'node_modules', `@agent-device/${packageId}`);
-}
-
-/** The manifest of one package in the one installation this script staged into `home`. */
-function installedManifest(home: string, packageId: string): Record<string, unknown> {
   return JSON.parse(
-    fs.readFileSync(path.join(installedPackageDirectory(home, packageId), 'package.json'), 'utf8'),
+    fs.readFileSync(
+      path.join(
+        directory,
+        installation,
+        'node_modules',
+        `@agent-device/${packageId}`,
+        'package.json',
+      ),
+      'utf8',
+    ),
   ) as Record<string, unknown>;
 }
 
@@ -94,29 +98,6 @@ test('a non-source workspace install keeps the manifest fields the store reads b
       ['@agent-device/replay', 'ad', true],
     ],
     JSON.stringify(listed),
-  );
-});
-
-test('a lane that names a managed platform plugin stages it with its runtime assets', () => {
-  // The Linux lanes drive the family through the installed plugin, so staging must copy what the
-  // plugin reads at runtime — the AT-SPI helper — beside the manifest claims the store validates.
-  const home = mkdtempForTestSync('workspace-plugin-platform-');
-  installWorkspaceReplayPlugins({ AGENT_DEVICE_HOME: home }, false, ['linux']);
-
-  const manifest = installedManifest(home, 'linux');
-  assert.deepEqual(readPluginPackageClaims(manifest['agent-device']), [
-    { kind: 'platform', id: 'linux' },
-  ]);
-  const workspace = path.resolve(import.meta.dirname, '../../packages/platform-linux');
-  assert.deepEqual(
-    manifest.engines,
-    JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf8')).engines,
-  );
-
-  const helper = path.join(installedPackageDirectory(home, 'linux'), 'linux', 'atspi-dump.py');
-  assert.equal(
-    fs.readFileSync(helper, 'utf8'),
-    fs.readFileSync(path.join(workspace, 'linux', 'atspi-dump.py'), 'utf8'),
   );
 });
 

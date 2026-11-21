@@ -20,15 +20,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # The Linux device lanes drive the family through its managed plugin, so their store carries
-        # it: each lane then exercises the plugin a user installs rather than core code. The id is
-        # additive, so the replay pair the lane also needs stays staged by the same invocation.
-        if [ "${{ inputs.gate }}" = replay-linux ] || [ "${{ inputs.gate }}" = linux-command-evidence ]; then
-          pnpm --filter @agent-device/maestro --filter @agent-device/replay --filter @agent-device/linux build
-          export AGENT_DEVICE_WORKSPACE_PLUGINS=linux
-        else
-          pnpm --filter @agent-device/maestro --filter @agent-device/replay build
-        fi
+        pnpm --filter @agent-device/maestro --filter @agent-device/replay build
         export AGENT_DEVICE_HOME="${AGENT_DEVICE_HOME:-$RUNNER_TEMP/agent-device-replay-plugins}"
         node --experimental-strip-types scripts/install-workspace-replay-plugins.ts
         echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"

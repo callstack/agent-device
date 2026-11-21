@@ -15,15 +15,27 @@ import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-run
 import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import type { VegaToolProvider } from '@agent-device/contracts/vega-tool-provider';
 import type { WebProvider } from '@agent-device/contracts/web-provider';
-import type { ExecDetachedExit } from '@agent-device/host-kit/command';
 import type { DiagnosticEventInput, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
+/**
+ * How a process the host started detached ended: a start failure, a non-zero exit, or a signal.
+ * Declared by its shape rather than taken from the host's exec module, because this contract ships in
+ * the published bundle's declarations and a consumer that writes a plugin must not need Node's own
+ * type packages to read it.
+ */
+export type DetachedCommandExit = Readonly<{
+  pid: number;
+  exitCode?: number;
+  signal?: string;
+  error?: string;
+}>;
+
 /** What the host answered a detached launch: the process it started and how that process ended. */
 export type DetachedCommandLaunch = Readonly<{
   pid: number;
-  exited: Promise<ExecDetachedExit>;
+  exited: Promise<DetachedCommandExit>;
 }>;
 
 /** Authority shared by web setup and daemon-owned web sessions. */
