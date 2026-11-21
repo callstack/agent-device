@@ -14,6 +14,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
+  readTypeTextFromPositionals,
 } from '@agent-device/selectors/interaction-positionals';
 import {
   commonInputFromFlags,
@@ -80,11 +81,19 @@ export const interactionCliReaders = {
     x: Number(positionals[0]),
     y: Number(positionals[1]),
   }),
-  type: (positionals, flags) => ({
-    ...commonInputFromFlags(flags),
-    text: positionals.join(' '),
-    delayMs: flags.delayMs,
-  }),
+  type: (positionals, flags) => {
+    // The optional leading target splits off the text (`type @e12 "more"`); only a minted
+    // snapshot ref leads a target, so every other input keeps the focused-input text exactly as
+    // `positionals.join(' ')` (#4870 review).
+    const decoded = readTypeTextFromPositionals(positionals);
+    return {
+      ...commonInputFromFlags(flags),
+      ...selectorSnapshotInputFromFlags(flags),
+      ...(decoded.target === undefined ? {} : { ref: decoded.target.ref }),
+      text: decoded.textPositionals.join(' '),
+      delayMs: flags.delayMs,
+    };
+  },
   fill: (positionals, flags) => {
     const decoded = flags.textStdin
       ? readStdinFillTarget(positionals)
@@ -205,8 +214,13 @@ function longPressPositionals(input: LongPressOptions): string[] {
   return [...interactionTargetPositionals(input), ...optionalNumber(input.durationMs)];
 }
 
+/**
+ * The validated options own the target decision, so the projection is exactly the daemon
+ * grammar: one optional minted ref, then the text as one positional. `label` never projects —
+ * it names the ref for humans, and letting it through would type it (#4870 review).
+ */
 function typePositionals(input: TypeTextOptions): string[] {
-  return [input.text];
+  return input.ref === undefined ? [input.text] : [input.ref, input.text];
 }
 
 function fillPositionals(input: FillOptions): string[] {

@@ -268,7 +268,9 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
   });
 });
 
-test('a mistargeted type @ref is refused before binding and keeps the ref frame live for fill', async () => {
+// `type @e1 hi` is now the targeted form (see interaction-type-target.test.ts), so the mistargeted
+// `fill` this route still refuses is a snapshot ref with NO text: there is nothing to append.
+test('a type snapshot ref with no text is refused before binding and keeps the ref frame live', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'type-mistargeted-ref';
   const session = makeSession(sessionName);
@@ -286,7 +288,7 @@ test('a mistargeted type @ref is refused before binding and keeps the ref frame 
       token: 't',
       session: sessionName,
       command: 'type',
-      positionals: ['@e1', 'hi'],
+      positionals: ['@e1'],
       flags: {},
     },
     sessionName,
@@ -297,11 +299,12 @@ test('a mistargeted type @ref is refused before binding and keeps the ref frame 
 
   expect(response).toMatchObject({
     ok: false,
-    error: { code: 'INVALID_ARGS', message: 'type does not accept a target ref like "@e1"' },
+    error: { code: 'INVALID_ARGS', message: 'type @e1 requires text to append' },
   });
   expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
   expect(runtimeBindingSpies().bindDevice).not.toHaveBeenCalled();
   expect(mockTypeText).not.toHaveBeenCalled();
+  expect(mockTapPoint).not.toHaveBeenCalled();
 });
 
 test('click @ref on web records the ref result without fabricated coordinates', async () => {

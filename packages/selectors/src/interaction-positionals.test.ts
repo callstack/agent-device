@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
+  readTypeTextFromPositionals,
 } from './interaction-positionals.ts';
 
 function assertInvalidArgs(fn: () => unknown, messageFragment: string) {
@@ -105,5 +106,78 @@ test('readFillTargetFromPositionals treats every token after a ref as text', () 
     kind: 'ref',
     target: { ref: '@e29~s317228' },
     text: 'good morning',
+  });
+});
+
+// `type <target> <text>` splits an optional leading target off the text, and the target is only
+// a leading minted snapshot ref. Every positional base typed as text stays text, so unquoted
+// multi-word calls keep typing whole (#4870 review).
+
+test('readTypeTextFromPositionals leads with a minted snapshot ref and keeps lookalike words as text', () => {
+  assert.deepEqual(readTypeTextFromPositionals(['@e12', 'more']), {
+    target: { kind: 'ref', ref: '@e12' },
+    targetPositionals: ['@e12'],
+    textPositionals: ['more'],
+  });
+  // The pin suffix is part of the minted ref, so a pinned ref still leads a target.
+  assert.deepEqual(readTypeTextFromPositionals(['@e29~s317228', 'good', 'morning']), {
+    target: { kind: 'ref', ref: '@e29~s317228' },
+    targetPositionals: ['@e29~s317228'],
+    textPositionals: ['good', 'morning'],
+  });
+  // #4360: only real refs (`@e<digits>`, optional `~s<digits>`) are targets; a word that merely
+  // starts with @ types, whatever follows it.
+  for (const lookalike of ['@elena', '@E5', '@e2e', '@e12~sX', '@e12~s3x']) {
+    assert.deepEqual(
+      readTypeTextFromPositionals([lookalike, 'hi']),
+      { target: undefined, targetPositionals: [], textPositionals: [lookalike, 'hi'] },
+      lookalike,
+    );
+  }
+});
+
+test('readTypeTextFromPositionals keeps a ref with no text out of the text slot', () => {
+  // The caller refuses this as the mistargeted `fill` it usually is, so it must not
+  // silently become the text "@e12".
+  const decoded = readTypeTextFromPositionals(['@e12']);
+  assert.deepEqual(decoded.target, { kind: 'ref', ref: '@e12' });
+  assert.deepEqual(decoded.textPositionals, []);
+});
+
+test('readTypeTextFromPositionals never decodes base text as a selector or point target', () => {
+  // Each of these typed literally on base, so each must stay whole text that never taps
+  // (#4870 review). A selector key, a bare boolean key, and a phone-number number pair are the
+  // shapes the wider target vocabulary would have swallowed.
+  for (const positionals of [
+    ['text="Sign in"', 'hello'],
+    ['text=hello'],
+    ['selected', 'items', 'here'],
+    ['visible', 'soon'],
+    ['555', '123', '4567'],
+    ['1', '2', '3'],
+    ['100', '200'],
+    ['label="Deploy"', 'hi'],
+    // A ref quoted together with its text is one positional with a space, so it is not a
+    // leading minted ref and types whole, exactly as base did.
+    ['@e12 more'],
+  ] as const) {
+    assert.deepEqual(
+      readTypeTextFromPositionals([...positionals]),
+      { target: undefined, targetPositionals: [], textPositionals: [...positionals] },
+      positionals.join(' '),
+    );
+  }
+});
+
+test('readTypeTextFromPositionals keeps plain words as pure text', () => {
+  assert.deepEqual(readTypeTextFromPositionals(['hello', 'world']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['hello', 'world'],
+  });
+  assert.deepEqual(readTypeTextFromPositionals(['text', 'hello']), {
+    target: undefined,
+    targetPositionals: [],
+    textPositionals: ['text', 'hello'],
   });
 });

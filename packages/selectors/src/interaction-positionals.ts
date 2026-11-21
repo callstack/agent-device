@@ -29,6 +29,15 @@ export type DecodedFillTarget =
 
 const BARE_SNAPSHOT_REF_PATTERN = /^e\d+$/;
 
+/**
+ * The leading-target test for `type`: it accepts only a minted snapshot ref — `@e12`, optionally
+ * pinned like `@e12~s3`. Refs are minted only as `e<n>`, so every other leading token stays text,
+ * exactly as base typed it: lookalike words (`@elena`, `@E5`, `@e2e`), selector keys, and number
+ * pairs never decode into a target (#4360, #4870 review). Base refused any leading ref-shaped
+ * token as a mistargeted `fill`, so a minted ref is the one leading token base never typed.
+ */
+const TYPE_TARGET_REF_PATTERN = /^@e\d+(~s\d+)?$/;
+
 export function readInteractionTargetFromPositionals(
   positionals: string[],
 ): PositionalInteractionTarget {
@@ -86,6 +95,37 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
     target: readPointTarget(positionals.slice(0, 2)),
     text: pointText.length === 0 ? undefined : pointText.join(' '),
   };
+}
+
+/** The optional leading target of `type`: one minted snapshot ref. */
+export type DecodedTypeTextTarget = { kind: 'ref'; ref: string };
+
+export type DecodedTypeText = {
+  /** `undefined` when every positional is text and `type` keeps its focused-input semantics. */
+  target: DecodedTypeTextTarget | undefined;
+  /** The raw leading target tokens; `[]` when there is no target. */
+  targetPositionals: string[];
+  /** The raw text tokens; the caller joins them with spaces. */
+  textPositionals: string[];
+};
+
+/**
+ * Splits `type`'s positionals into an optional leading target and the text. Only a leading minted
+ * snapshot ref (`@e12`, optionally `@e12~s3`) decodes as a target; every other input stays whole
+ * text, so base vocabulary keeps typing literally: `type selected items here`, `type 555 123
+ * 4567`, and `type label="Deploy" hi` never tap (#4870 review). A ref with no text is NOT folded
+ * into text: the caller refuses it as the mistargeted `fill` it usually is.
+ */
+export function readTypeTextFromPositionals(positionals: string[]): DecodedTypeText {
+  const firstPositional = positionals[0];
+  if (firstPositional !== undefined && TYPE_TARGET_REF_PATTERN.test(firstPositional)) {
+    return {
+      target: { kind: 'ref', ref: firstPositional },
+      targetPositionals: [firstPositional],
+      textPositionals: positionals.slice(1),
+    };
+  }
+  return { target: undefined, targetPositionals: [], textPositionals: positionals };
 }
 
 function readPointTarget(positionals: string[]): { x: number; y: number } {

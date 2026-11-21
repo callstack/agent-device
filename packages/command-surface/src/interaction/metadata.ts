@@ -1,5 +1,6 @@
 import { CLICK_BUTTONS } from '@agent-device/contracts/click-button';
-import type { ElementTarget } from '@agent-device/contracts/client';
+import type { ElementTarget, TypeTextOptions } from '@agent-device/contracts/client';
+import { AppError } from '@agent-device/kernel/errors';
 import { GESTURE_KINDS, type GesturePayload } from '@agent-device/contracts/gesture-input';
 import { readGesturePayload } from '@agent-device/gestures/gesture-payload-reader';
 import {
@@ -35,7 +36,9 @@ import {
   pointArrayField,
   pointField,
   postGestureStabilizationFields,
+  readFieldInput,
   readTargetedInput,
+  refTargetFields,
   repeatedFields,
   requiredField,
   selectorSnapshotFields,
@@ -74,7 +77,7 @@ const interactionCommandDescriptions = {
     'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. This command changes focus only and does not enter or replace text.',
-  type: 'Append text to the currently focused input. This requires an active input and preserves its existing text.',
+  type: 'Append text to a text field. Pass a snapshot ref such as @e12 to focus that field first; omit the target to append to the focused input. The existing text is preserved. To replace the text, use fill.',
   scroll:
     'Scroll in a direction, or toward the top/bottom edge of scrollable content. The until input scrolls to an off-screen selector in one command. refresh is pull-to-refresh: one slow pull down, refused with scroll_refresh_not_at_top while content is hidden above. The optional amount is the finger-path fraction of the viewport axis, honored up to 0.8 of it; directional scrolls reduce release momentum, while app scroll physics determine the final content offset. A visible keyboard shortens the swiped band instead of being dismissed; when too little is left, the command refuses with scroll_keyboard_occludes_surface. A directional scroll also reports the movement it observed as movement: moved, at-edge, unchanged, or unobserved when the two reads could not back a claim either way; an unchanged surface inside a container that still hides content in that direction refuses with scroll_no_progress rather than repeating the requested distance. The movement field is absent where a tier verifies per pass (top/bottom, until), where the runtime cannot read a screen, where a settle observation or a replay already owns that observation, or where the operator opted out of it.',
   get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. The text format returns visible content; attrs returns the element attribute map.',
@@ -153,6 +156,11 @@ const focusFields = {
 };
 
 const typeFields = {
+  // The target is optional and accepts a snapshot ref only: `type "text"` appends to the focused
+  // input, while `type @e12 "text"` focuses @e12 first. The command description owns that
+  // optionality; the reader refuses a selector or point, so unquoted text can never re-decode
+  // into a target (#4870 review).
+  ...refTargetFields(),
   text: requiredField(stringField('Text to type.')),
   delayMs: integerField('Delay between typed characters.', { min: 0 }),
 };
@@ -284,7 +292,9 @@ export const interactionCommandMetadata = [
   defineTargetedCommandMetadata('hover', hoverFields),
   defineInteractionCommandMetadata('swipe', swipeFields),
   defineInteractionCommandMetadata('focus', focusFields),
-  defineInteractionCommandMetadata('type', typeFields),
+  defineFieldCommandMetadata('type', interactionCommandDescriptions.type, typeFields, {
+    readInput: readTypeCommandInput,
+  }),
   defineInteractionCommandMetadata('scroll', scrollFields),
   defineFieldCommandMetadata('get', interactionCommandDescriptions.get, getFields, {
     readInput: (input: unknown): GetInput =>
@@ -313,6 +323,31 @@ function readGestureCommandInput(input: unknown): GestureCommandInput {
   return gesture.kind === 'swipe' && optionalBoolean(record, 'postGestureStabilization') === false
     ? { ...gesture, postGestureStabilization: false }
     : gesture;
+}
+
+/**
+ * Reads `type`'s fields the way `readTargetedInput` does, but the target is optional and a
+ * snapshot ref only. Without this check the projected positionals would re-split structured
+ * input into a leading target and lose the rest as text, and `label` could leak into the typed
+ * value (#4870 review), so any selector or point key is refused where the caller can see it.
+ */
+function readTypeCommandInput(input: unknown): TypeTextOptions {
+  const record = readInputRecord(input);
+  if (record.selector !== undefined || record.x !== undefined || record.y !== undefined) {
+    throw new AppError('INVALID_ARGS', 'type takes at most one target, and only a snapshot ref.', {
+      hint: 'Pass {"ref":"@e12"} beside the text. For a selector or point target, use press/fill, or find with the type action.',
+    });
+  }
+  const { ref, label, ...rest } = readFieldInput(input, typeFields) as Record<string, unknown>;
+  if (label !== undefined && ref === undefined) {
+    throw new AppError('INVALID_ARGS', 'label applies only with ref.', {
+      hint: 'Pass label together with ref, for example {"ref":"@e12","label":"Sign in"}.',
+    });
+  }
+  return {
+    ...rest,
+    ...(ref === undefined ? {} : { ref, ...(label === undefined ? {} : { label }) }),
+  } as TypeTextOptions;
 }
 
 function defineTargetedCommandMetadata<
