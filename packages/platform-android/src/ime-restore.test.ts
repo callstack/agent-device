@@ -8,6 +8,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 
 import { bindAndroidAdbHostStub, flushRecordKey } from './adb-host.fixtures.ts';
+import { createAndroidShutdownRuntime } from './shutdown/runtime.ts';
 import { withAndroidAdbProvider } from './adb-provider-scope.ts';
 import {
   restoreAndroidTestIme,
@@ -468,6 +469,44 @@ test('an unwritable state dir still restores the IME and holds this close for th
     level: 'warn',
   });
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+});
+
+test('an unrecordable window from an ordinary close still holds a later standalone shutdown', async () => {
+  // A regular file at the flush-record path fails every record write while `ime set` and its
+  // read-back succeed. The ordinary close stays wait-free and clears its marker, so only this
+  // daemon's fallback deadline can keep the standalone shutdown out of the window.
+  bindAndroidAdbHostStub({
+    imeFlushRecords: {
+      write: async () => {
+        throw Object.assign(new Error('ENOTDIR: not a directory'), { code: 'ENOTDIR' });
+      },
+      clear: async () => {},
+      read: async () => undefined,
+    },
+  });
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
+  let releaseSleep!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    releaseSleep = resolve;
+  });
+
+  await expect(restoreWith(stuckDeviceState())).resolves.toMatchObject({ reason: 'ok' });
+  expect(sleep).not.toHaveBeenCalled();
+
+  sleep.mockImplementationOnce(() => settled);
+  const kill = createAndroidShutdownRuntime({
+    commands: { which: async () => 'adb', run },
+    stateDir: STATE_DIR,
+  }).shutdownTarget(DEVICE, new AbortController().signal);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
+  expect(run).not.toHaveBeenCalled();
+  releaseSleep();
+  await expect(kill).resolves.toMatchObject({ success: true });
+  expect(run).toHaveBeenCalledTimes(1);
 });
 
 test('a shutdown of a physical device restores without any flush wait', async () => {

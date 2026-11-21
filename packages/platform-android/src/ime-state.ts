@@ -112,18 +112,22 @@ export type TestImeFlushWait =
   /** Covered a window whose newest write this process confirmed by read-back. */
   | 'covered-confirmed';
 
+// Deadlines whose flush record could not be written, keyed by serial. They cannot outlive
+// this process, which is the most an unwritable state dir allows.
+const unrecordedTestImeFlushDeadlines = new Map<string, number>();
+
 // Every issued emulator restore registers its record from the registrar's finally, whatever
 // the outcome; `confirmed` carries that write's own provenance. A later write REPLACES the
 // provenance rather than inheriting it: an issued-unconfirmed write after a confirmed one can
 // have re-displaced the IME, and only the newest write's confirmation justifies clearing
 // another close's retry evidence. A new deadline is always the latest one, so windows
-// coalesce. A failed write never blocks the restore: it warns and returns the deadline it
-// could not record, so the calling close can still hold its own kill.
+// coalesce. A failed write never blocks the restore: it warns and keeps the deadline as this
+// process's fallback, so any later kill-bound path in this daemon still waits it out.
 export async function registerTestImeRestore(
   stateDir: string,
   serial: string,
   confirmed: boolean,
-): Promise<TestImeFlushRegistration> {
+): Promise<void> {
   const host = requireAndroidAdbHost();
   const deadlineMs = host.monotonicNowMs() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS;
   try {
@@ -134,31 +138,17 @@ export async function registerTestImeRestore(
         writer: FLUSH_RECORD_WRITER,
       });
     });
-    return { deadlineMs, recorded: true };
   } catch (error) {
+    unrecordedTestImeFlushDeadlines.set(
+      serial,
+      Math.max(unrecordedTestImeFlushDeadlines.get(serial) ?? 0, deadlineMs),
+    );
     emitAndroidAdbDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_flush_record_write_failed',
       data: { device: serial, stateDir, error: normalizeError(error).message },
     });
-    return { deadlineMs, recorded: false };
   }
-}
-
-export type TestImeFlushRegistration = Readonly<{ deadlineMs: number; recorded: boolean }>;
-
-// Holds the caller's kill until a deadline it registered but could not record has passed. No
-// later process can see that window, so only the close that issued the write waits it out.
-export async function awaitUnrecordedTestImeFlushWindow(
-  deadlineMs: number,
-  signal?: AbortSignal,
-): Promise<TestImeFlushWait> {
-  const remainingMs = Math.min(
-    deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
-    SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
-  );
-  if (remainingMs > 0) await sleep(remainingMs, signal);
-  return signal?.aborted ? 'aborted' : 'covered-issued';
 }
 
 // Wait until the device's newest restore write is older than the flush window. Returns 'idle'
@@ -178,8 +168,36 @@ export async function awaitTestImeFlushWindow(
   if (signal?.aborted) return 'aborted';
   for (;;) {
     const outcome = await runTestImeFlushRound(stateDir, serial, signal);
-    if (outcome !== 'extended') return outcome;
+    if (outcome === 'extended') continue;
+    if (outcome === 'aborted') return outcome;
+    const unrecorded = await awaitUnrecordedTestImeFlushDeadline(serial, signal);
+    if (unrecorded === 'extended') continue;
+    if (unrecorded === 'aborted') return 'aborted';
+    // A covered fallback window proves only that a write was issued.
+    return unrecorded === 'covered' && outcome === 'idle' ? 'covered-issued' : outcome;
   }
+}
+
+// Sleeps out this process's fallback deadline after the recorded one, then retires it. A
+// write opened or a fallback moved while sleeping means a newer window and another round.
+async function awaitUnrecordedTestImeFlushDeadline(
+  serial: string,
+  signal?: AbortSignal,
+): Promise<'none' | 'covered' | 'aborted' | 'extended'> {
+  const deadlineMs = unrecordedTestImeFlushDeadlines.get(serial);
+  if (deadlineMs === undefined) return 'none';
+  const remainingMs = Math.min(
+    deadlineMs - requireAndroidAdbHost().monotonicNowMs(),
+    SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
+  );
+  if (remainingMs > 0) {
+    await sleep(remainingMs, signal);
+    if (signal?.aborted) return 'aborted';
+  }
+  if (pendingTestImeRestoreWrite(serial)) return 'extended';
+  if (unrecordedTestImeFlushDeadlines.get(serial) !== deadlineMs) return 'extended';
+  unrecordedTestImeFlushDeadlines.delete(serial);
+  return 'covered';
 }
 
 // One round: drain in-flight writes, then sleep out the newest record's remainder and consume
@@ -281,6 +299,7 @@ export function withAndroidTestImeRecoveryLock<T>(
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
   testImePendingRestoreWrites.clear();
+  unrecordedTestImeFlushDeadlines.clear();
 }
 
 /**
