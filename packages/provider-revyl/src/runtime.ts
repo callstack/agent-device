@@ -22,7 +22,12 @@ import {
   revylSessionIdForLease,
   type RevylPlatform,
 } from './device.ts';
-import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
+import {
+  createRevylClient,
+  isRevylSessionGone,
+  REVYL_PROVIDER_REASONS,
+  type RevylClient,
+} from './revyl-client.ts';
 import {
   keepRevylSessionAlive,
   REVYL_ALLOCATION_TIMEOUT_MS,
@@ -268,7 +273,7 @@ function createRevylLeaseDriver(
     shuttingDown: (lease) => shuttingDownDuring(lease.leaseId, 'allocate'),
     releasing: (lease) =>
       new AppError('COMMAND_FAILED', `Revyl lease ${lease.leaseId} is being released.`, {
-        reason: 'provider-lease-releasing',
+        reason: REVYL_PROVIDER_REASONS.leaseReleasing.reason,
         leaseId: lease.leaseId,
         hint: 'Run open again; it allocates a new lease and rents a fresh device.',
       }),
@@ -340,7 +345,7 @@ function requireRevylLease(lease: DeviceLease, operation: 'recover' | 'release')
 
 function shuttingDownDuring(leaseId: string, operation: string): AppError {
   return new AppError('COMMAND_FAILED', `The Revyl runtime is shutting down.`, {
-    reason: 'runtime-shutting-down',
+    reason: REVYL_PROVIDER_REASONS.runtimeShuttingDown.reason,
     operation,
     leaseId,
     hint: 'Retry the command; the daemon is ending the sessions it holds.',

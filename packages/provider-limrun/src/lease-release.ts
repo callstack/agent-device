@@ -5,7 +5,12 @@ import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
 import { CAPTURE_OPEN_BUDGET_MS } from './capture-lifecycle.ts';
 import { deleteLimrunInstance } from './client-options.ts';
 import type { LimrunBudgetOutcome } from './lifecycle-budget.ts';
-import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
+import {
+  LIMRUN_PROVIDER,
+  LIMRUN_PROVIDER_REASONS,
+  platformForLimrunLeaseBackend,
+  type LimrunPlatform,
+} from './device.ts';
 import type {
   LimrunDeleteResult,
   LimrunDisposalOutcome,
@@ -498,7 +503,7 @@ export function allocationRefusedForTake(
     'DEVICE_IN_USE',
     `Limrun lease '${lease.leaseId}' was released while its instance was being prepared`,
     {
-      reason: 'limrun_lease_released_mid_allocation',
+      reason: LIMRUN_PROVIDER_REASONS.leaseReleasedMidAllocation.reason,
       ...(instanceId === undefined
         ? { hint: `Instance create for lease '${lease.leaseId}' may still rent one. Check Limrun.` }
         : { limrunInstanceId: instanceId, ...(ended === undefined ? {} : { hint: ended }) }),
@@ -562,7 +567,7 @@ function throwUnconfirmedDelete(
     'COMMAND_FAILED',
     message,
     {
-      reason: 'limrun_instance_delete_unconfirmed',
+      reason: LIMRUN_PROVIDER_REASONS.instanceDeleteUnconfirmed.reason,
       retriable: true,
       ...instanceDetails,
       ...(failure === undefined ? {} : { cause: failure }),

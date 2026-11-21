@@ -4,6 +4,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildRevylDevice, revylSessionIdForLease, type RevylPlatform } from './device.ts';
 import {
+  REVYL_PROVIDER_REASONS,
   REVYL_START_DEVICE_TIMEOUT_MS,
   isRevylSessionGone,
   revylFailureRefusedTheRequest,
@@ -148,7 +149,7 @@ export async function startRevylSession(
         'COMMAND_FAILED',
         `Revyl started the device as session ${echoed} instead of ${sessionId}.`,
         {
-          reason: 'provider-session-identity-mismatch',
+          reason: REVYL_PROVIDER_REASONS.sessionIdentityMismatch.reason,
           runId,
           providerSessionId: echoed,
           hint: 'Retry the command; agent-device ends a Revyl session by the identity it issued.',
@@ -166,7 +167,7 @@ export async function startRevylSession(
         'COMMAND_FAILED',
         `Revyl did not start a ${input.platform} device: ${started.error ?? started.message ?? 'no workflow run was returned'}`,
         {
-          reason: 'provider-start-refused',
+          reason: REVYL_PROVIDER_REASONS.startRefused.reason,
           platform: input.platform,
           ...(started.trace_id === undefined ? {} : { traceId: started.trace_id }),
         },
@@ -267,7 +268,7 @@ export function revylCallerGaveUp(
     'COMMAND_FAILED',
     `Revyl did not report a ready device within ${budgetMs} ms.`,
     {
-      reason: 'provider-not-ready',
+      reason: REVYL_PROVIDER_REASONS.notReady.reason,
       timeoutMs: budgetMs,
       providerSessionId,
       ...(budget.deadline === undefined ? {} : { deadline: budget.deadline }),
@@ -305,7 +306,7 @@ export function revylCleanupPending(
     'COMMAND_FAILED',
     `Revyl did not release session${one ? '' : 's'} ${ids}.`,
     {
-      reason: 'provider-cleanup-pending',
+      reason: REVYL_PROVIDER_REASONS.cleanupPending.reason,
       ...details,
       providerSessionIds: unconfirmed.map((stop) => stop.sessionId),
       causes: unconfirmed.map((stop) => stop.failure),
@@ -431,7 +432,11 @@ async function untilRevylWorkerReady(
             ? ''
             : ` (${connection.message})`
         }`,
-        { reason: 'provider-start-failed', runId, status: connection.status },
+        {
+          reason: REVYL_PROVIDER_REASONS.startFailed.reason,
+          runId,
+          status: connection.status,
+        },
       );
     }
     await sleepBefore(deadline, input.signal);

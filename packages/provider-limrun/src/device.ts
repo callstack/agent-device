@@ -1,7 +1,33 @@
 import { createHash } from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
+
+/**
+ * Every `details.reason` the Limrun provider publishes, keyed by what the failure means. Each
+ * refusal site reads a row here, so the plugin's wire vocabulary has one owner; the modules that
+ * classify those failures all load this one. `provider-instance-ended` is the lease vocabulary and
+ * stays with the lease table in `@agent-device/contracts/lease-scope`.
+ */
+export const LIMRUN_PROVIDER_REASONS = {
+  // A release could not confirm Limrun deleted the instance, so it may still be billed.
+  instanceDeleteUnconfirmed: { reason: 'limrun_instance_delete_unconfirmed' },
+  // The lease was released while its instance was still being prepared for the allocation.
+  leaseReleasedMidAllocation: { reason: 'limrun_lease_released_mid_allocation' },
+  // The lease holds no live session, so the command that addresses it has nothing to act on.
+  leaseNotLive: { reason: 'limrun_lease_not_live' },
+  // This runtime is shut down, so it refuses to allocate a lease into it.
+  runtimeShutDown: { reason: 'limrun_runtime_shut_down' },
+  // The instance stopped answering, so its app state cannot be read.
+  instanceUnreachable: { reason: 'limrun_instance_unreachable' },
+  // The ADB tunnel of this lease was already cleaned up, so nothing can be typed over it.
+  adbTunnelCleanedUp: { reason: 'limrun_adb_tunnel_cleaned_up' },
+  // The app-sync session of this lease has ended, so no further sync runs on it.
+  appSyncRetired: { reason: 'limrun_app_sync_retired' },
+  // Syncing the app to the instance stopped with nothing installed.
+  appSyncFailed: { reason: 'limrun_app_sync_failed' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 export type LimrunPlatform = 'ios' | 'android';
 

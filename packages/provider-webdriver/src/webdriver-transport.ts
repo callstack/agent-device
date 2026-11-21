@@ -1,7 +1,12 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
-import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
+import {
+  basicAuthHeader,
+  trimLeadingSlash,
+  WEBDRIVER_PROVIDER_REASONS,
+  withTrailingSlash,
+} from './webdriver-utils.ts';
 
 export type WebDriverAuth = {
   username: string;
@@ -21,12 +26,12 @@ export type WebDriverRequestPolicy = {
   sessionCreateTimeoutMs?: number;
 };
 
-/** Machine-readable `details.reason` of a request the transport gave up waiting on. */
-const WEBDRIVER_REQUEST_TIMEOUT_REASON = 'webdriver_request_timeout';
-
 /** A request the transport stopped waiting on; the server may still complete it. */
 export function isWebDriverRequestTimeout(error: unknown): error is AppError {
-  return error instanceof AppError && error.details?.reason === WEBDRIVER_REQUEST_TIMEOUT_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.requestTimeout.reason
+  );
 }
 
 /**
@@ -37,15 +42,6 @@ export function isWebDriverRequestTimeout(error: unknown): error is AppError {
 function dispatchDisclosure(dispatched: DispatchDisclosure): { dispatched: DispatchDisclosure } {
   return { dispatched };
 }
-
-/** Machine-readable `details.reason` of a request that never reached the driver. */
-const WEBDRIVER_CONNECT_REFUSED_REASON = 'webdriver_connect_refused';
-
-/**
- * Machine-readable `details.reason` of a request whose connection failed after it may have
- * reached the driver: a socket reset, or a response body cut off after the status line.
- */
-const WEBDRIVER_REQUEST_INTERRUPTED_REASON = 'webdriver_request_interrupted';
 
 /**
  * Socket error codes that prove the connection was never established, so no byte of the request
@@ -65,7 +61,10 @@ const ERROR_CAUSE_DEPTH_LIMIT = 4;
 
 /** A request whose connection failed before it was established (refused or unreachable host). */
 export function isWebDriverConnectRefused(error: unknown): error is AppError {
-  return error instanceof AppError && error.details?.reason === WEBDRIVER_CONNECT_REFUSED_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.connectRefused.reason
+  );
 }
 
 export type WebDriverRequestOverrides = {
@@ -217,7 +216,7 @@ export class WebDriverTransport {
     const payload = parsed.json;
     const error = webdriverError(status, payload);
     if (isWebDriverRouteUnsupported(error)) {
-      emitWebDriverDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
+      emitWebDriverDiagnostic(WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason, {
         method,
         path,
         status,
@@ -398,9 +397,6 @@ function nonJsonAnswerError(status: number, text: string): AppError {
   });
 }
 
-/** Machine-readable `details.reason` of a driver answer that it does not implement the route. */
-const WEBDRIVER_ROUTE_UNSUPPORTED_REASON = 'webdriver_route_unsupported';
-
 /**
  * The driver answered with the W3C `invalid session id` error: the session it was asked about does
  * not exist (never did, was deleted, or timed out on the driver).
@@ -418,10 +414,13 @@ export function isWebDriverInvalidSession(error: unknown): error is AppError {
  * the route. A command that tried every route it has and was refused by each carries the same.
  */
 export function unsupportedRouteRefusal(): {
-  reason: typeof WEBDRIVER_ROUTE_UNSUPPORTED_REASON;
+  reason: typeof WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason;
   dispatched: DispatchDisclosure;
 } {
-  return { reason: WEBDRIVER_ROUTE_UNSUPPORTED_REASON, ...dispatchDisclosure('no') };
+  return {
+    reason: WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason,
+    ...dispatchDisclosure('no'),
+  };
 }
 
 /** W3C `error` codes a driver answers with when it does not implement the route. */
@@ -472,7 +471,10 @@ export function emitWebDriverDiagnostic(phase: string, data: Record<string, unkn
  * route may already have acted.
  */
 export function isWebDriverRouteUnsupported(error: unknown): error is AppError {
-  return error instanceof AppError && error.details?.reason === WEBDRIVER_ROUTE_UNSUPPORTED_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.routeUnsupported.reason
+  );
 }
 
 function webdriverTimeoutError(
@@ -485,7 +487,7 @@ function webdriverTimeoutError(
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} timed out after ${timeoutMs}ms.`,
     {
-      reason: WEBDRIVER_REQUEST_TIMEOUT_REASON,
+      reason: WEBDRIVER_PROVIDER_REASONS.requestTimeout.reason,
       method,
       path,
       timeoutMs,
@@ -501,7 +503,7 @@ function webdriverConnectRefusedError(method: string, path: string, cause: unkno
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} could not reach the driver.`,
     {
-      reason: WEBDRIVER_CONNECT_REFUSED_REASON,
+      reason: WEBDRIVER_PROVIDER_REASONS.connectRefused.reason,
       method,
       path,
       ...dispatchDisclosure('no'),
@@ -515,7 +517,7 @@ function webdriverRequestInterruptedError(method: string, path: string, cause: u
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} lost its connection to the driver.`,
     {
-      reason: WEBDRIVER_REQUEST_INTERRUPTED_REASON,
+      reason: WEBDRIVER_PROVIDER_REASONS.requestInterrupted.reason,
       method,
       path,
       ...dispatchDisclosure('unknown'),
@@ -527,7 +529,10 @@ function webdriverRequestInterruptedError(method: string, path: string, cause: u
 function isRetriableWebDriverError(error: unknown): boolean {
   if (isWebDriverRequestTimeout(error)) return true;
   if (isWebDriverConnectRefused(error)) return true;
-  if (error instanceof AppError && error.details?.reason === WEBDRIVER_REQUEST_INTERRUPTED_REASON) {
+  if (
+    error instanceof AppError &&
+    error.details?.reason === WEBDRIVER_PROVIDER_REASONS.requestInterrupted.reason
+  ) {
     return true;
   }
   if (error instanceof AppError) {

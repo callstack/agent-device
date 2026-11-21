@@ -31,6 +31,7 @@ import {
   discloseDispatchAfterSteps,
 } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { REVYL_PROVIDER_REASONS } from './revyl-client.ts';
 import type { RevylSession } from './revyl-session.ts';
 import { captureRevylSnapshot, createRevylSnapshotReader } from './snapshot.ts';
 
@@ -155,7 +156,7 @@ class RevylInteractor implements Interactor {
         'UNSUPPORTED_OPERATION',
         `This Revyl session has not launched ${target}, so it has no app to end.`,
         {
-          reason: 'provider-app-not-launched',
+          reason: REVYL_PROVIDER_REASONS.appNotLaunched.reason,
           command: 'close',
           requestedApp: target,
           hint: 'Close without an app name to end the app this session runs, or open the app first.',
@@ -283,7 +284,10 @@ class RevylInteractor implements Interactor {
       throw new AppError(
         'COMMAND_FAILED',
         'Revyl reported no screen size for this session, so the scroll distance cannot be planned.',
-        { reason: 'provider-viewport-unavailable', runId: this.session.runId },
+        {
+          reason: REVYL_PROVIDER_REASONS.viewportUnavailable.reason,
+          runId: this.session.runId,
+        },
       );
     }
     const plan = buildScrollGesturePlan({
@@ -451,7 +455,7 @@ class RevylInteractor implements Interactor {
       const current = await this.workerAction('appearance');
       if (current.appearance !== 'light' && current.appearance !== 'dark') {
         throw new AppError('COMMAND_FAILED', 'Revyl did not report the current appearance.', {
-          reason: 'provider-invalid-response',
+          reason: REVYL_PROVIDER_REASONS.invalidResponse.reason,
           runId: this.session.runId,
         });
       }
@@ -518,7 +522,7 @@ class RevylInteractor implements Interactor {
     const app = appId?.trim() || this.session.launchedApp.bundleId;
     if (app) return app;
     throw new AppError('INVALID_ARGS', `The ${setting} setting needs an app.`, {
-      reason: 'provider-app-not-launched',
+      reason: REVYL_PROVIDER_REASONS.appNotLaunched.reason,
       command: 'settings',
       hint: 'Pass --app, or open the app first.',
     });
@@ -569,7 +573,7 @@ async function normalizeRevylIosDensity(
     throw new AppError(
       'COMMAND_FAILED',
       'Revyl reported no screen size for this session, so the screenshot density cannot be known.',
-      { reason: 'provider-viewport-unavailable' },
+      { reason: REVYL_PROVIDER_REASONS.viewportUnavailable.reason },
     );
   }
   const [{ readPngSize }, { resizePngFile }, { computeDensityScaledScreenshotSize }] =

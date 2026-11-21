@@ -23,6 +23,7 @@ import type {
 } from './runtime-dependencies.ts';
 import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
 import type { LimrunInstanceOwnership } from './instance-access.ts';
+import { LIMRUN_PROVIDER_REASONS } from './device.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
   awaitLimrunDeploymentOperation,
@@ -346,7 +347,7 @@ function alreadyCleanedUp(session: LimrunAndroidAdbSession): AppError {
     'SESSION_NOT_FOUND',
     `Limrun ADB tunnel for instance '${session.instanceId}' was already cleaned up`,
     {
-      reason: 'limrun_adb_tunnel_cleaned_up',
+      reason: LIMRUN_PROVIDER_REASONS.adbTunnelCleanedUp.reason,
       // The tunnel is gone whether the instance's delete confirmed or is still held for retry, so the hint
       // sends the caller to a new lease, and to Limrun only for the state where a release would refuse again.
       hint: `This interactor's ADB tunnel is closed for lease '${session.lease.leaseId}'. Open a new lease. If this lease's release was refused as an unconfirmed delete, ask Limrun to delete the instance first.`,

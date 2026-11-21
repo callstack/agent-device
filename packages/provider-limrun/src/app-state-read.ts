@@ -1,5 +1,6 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { AppError } from '@agent-device/kernel/errors';
+import { LIMRUN_PROVIDER_REASONS } from './device.ts';
 import type { LimrunDeviceSession } from './device-session.ts';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 
@@ -41,7 +42,7 @@ async function confirmLimrunIosInstanceAnswers(
       'COMMAND_FAILED',
       'Could not confirm that the Limrun iOS instance is running, so its app state is unknown.',
       {
-        reason: 'limrun_instance_unreachable',
+        reason: LIMRUN_PROVIDER_REASONS.instanceUnreachable.reason,
         hint: 'Retry appstate. If it keeps failing, the instance may have been terminated: run connect limrun and open again.',
       },
       error,

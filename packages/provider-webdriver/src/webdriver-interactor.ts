@@ -26,6 +26,7 @@ import {
 } from './capabilities.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
 import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
+import { WEBDRIVER_PROVIDER_REASONS } from './webdriver-utils.ts';
 import { touchPointer } from './webdriver-gestures.ts';
 import {
   scrollFrameFromAndroidWebDriverSource,
@@ -80,7 +81,7 @@ function textEntryClearTargetUnavailableError(): AppError {
   return new AppError(
     'UNSUPPORTED_OPERATION',
     'fill requires a focused element reference to clear and replace the field',
-    { reason: 'text_entry_clear_target_unavailable' },
+    { reason: WEBDRIVER_PROVIDER_REASONS.textEntryClearTargetUnavailable.reason },
   );
 }
 

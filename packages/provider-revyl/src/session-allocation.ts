@@ -2,6 +2,7 @@ import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { REVYL_PROFILE_FIELDS } from './profile-fields.ts';
+import { REVYL_PROVIDER_REASONS } from './revyl-client.ts';
 
 /**
  * Refuses the connect flags Revyl has no field for, so a flag that would be ignored is reported
@@ -78,7 +79,7 @@ export function requireSameRevylStartRequest(
     'INVALID_ARGS',
     `Revyl lease ${leaseId} already has a device started for a different ${differing.join(', ')}.`,
     {
-      reason: 'provider-lease-request-mismatch',
+      reason: REVYL_PROVIDER_REASONS.leaseRequestMismatch.reason,
       leaseId,
       fields: differing,
       hint: 'Disconnect and connect again to rent a device for the new app or device selection.',

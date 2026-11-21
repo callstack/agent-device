@@ -8,7 +8,7 @@ import type { ProviderConnectionVerification } from '@agent-device/contracts/rem
 import { AppError } from '@agent-device/kernel/errors';
 import { REVYL_PROVIDER, REVYL_SERVICE, type RevylPlatform } from './device.ts';
 import { requireRevylCredentials, type RevylCredentials } from './credentials.ts';
-import { createRevylClient } from './revyl-client.ts';
+import { createRevylClient, REVYL_PROVIDER_REASONS } from './revyl-client.ts';
 import { REVYL_PROFILE_FIELDS } from './profile-fields.ts';
 import { revylTextFlag } from './session-allocation.ts';
 
@@ -87,7 +87,7 @@ export async function verifyRevylProfile(
       'INVALID_ARGS',
       `${REVYL_SERVICE} installs the app from a URL, so --provider-app must be an https URL.`,
       {
-        reason: 'invalid_provider_app',
+        reason: REVYL_PROVIDER_REASONS.invalidApp.reason,
         hint: `Pass the URL ${REVYL_SERVICE} can read the build from; a local path cannot.`,
       },
     );
@@ -140,7 +140,7 @@ function isRevylAppUrl(value: string | undefined): boolean {
 function requireConnectPlatform(flags: CliFlags): RevylPlatform {
   if (flags.platform === 'ios' || flags.platform === 'android') return flags.platform;
   throw new AppError('INVALID_ARGS', `connect ${REVYL_PROVIDER} requires --platform ios|android.`, {
-    reason: 'unsupported_platform',
+    reason: REVYL_PROVIDER_REASONS.unsupportedPlatform.reason,
   });
 }
 

@@ -26,6 +26,7 @@ import {
   attachedLimrunInstanceId,
   buildLimrunDevice,
   LIMRUN_PROVIDER,
+  LIMRUN_PROVIDER_REASONS,
   parseLimrunDeviceId,
   platformForLimrunLeaseBackend,
   type LimrunPlatform,
@@ -777,9 +778,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       terminationReason = 'Unknown';
     }
     if (terminationReason === undefined) return undefined;
-    const { PROVIDER_INSTANCE_ENDED } = await import('@agent-device/contracts/lease-scope');
+    const { LEASE_REASONS } = await import('@agent-device/contracts/lease-scope');
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
-      reason: PROVIDER_INSTANCE_ENDED,
+      reason: LEASE_REASONS.instanceEnded.reason,
       terminationReason,
       instanceId: session.instanceId,
     });
@@ -810,7 +811,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       throw new AppError(
         'COMMAND_FAILED',
         `Limrun lease '${owner.lease.leaseId}' has no live session`,
-        { reason: 'limrun_lease_not_live' },
+        { reason: LIMRUN_PROVIDER_REASONS.leaseNotLive.reason },
       );
     }
     return session;
@@ -939,7 +940,7 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
     'SESSION_NOT_FOUND',
     `Cannot allocate Limrun lease '${lease.leaseId}': this runtime is shut down`,
     {
-      reason: 'limrun_runtime_shut_down',
+      reason: LIMRUN_PROVIDER_REASONS.runtimeShutDown.reason,
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
