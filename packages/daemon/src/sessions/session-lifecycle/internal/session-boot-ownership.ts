@@ -1,7 +1,5 @@
-import type {
-  CloseBootOwnership,
-  DeviceBootPerformance,
-} from '@agent-device/contracts/device-boot';
+import type { DeviceBootPerformance } from '@agent-device/contracts/device-boot';
+import type { CloseBootOwnership } from '../../../core/session-state.ts';
 
 /**
  * Decides what a session's `open` owns stopping, from the two answers it has.

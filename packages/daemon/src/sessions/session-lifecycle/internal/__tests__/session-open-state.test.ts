@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { publishOpenSession } from '../session-open-state.ts';
 import { makeSessionStore } from './session-open-runtime.fixtures.ts';
 import { NO_BOOT_PROOF } from '../../../../__tests__/support/boot-ownership-fixtures.ts';
-import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
+import type { CloseBootOwnership } from '../../../../core/session-state.ts';
 import {
   authoringPublication,
   makeIosSession,

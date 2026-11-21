@@ -1,4 +1,4 @@
-import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
+import type { CloseBootOwnership } from '../../core/session-state.ts';
 
 /**
  * The boot ownership an `open` records when it proved nothing about the device's boot: it owns no

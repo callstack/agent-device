@@ -100,15 +100,6 @@ export const CLOSE_BOOT_OWNER_UNVERIFIED_REASONS = {
 } as const satisfies Record<string, string>;
 
 /**
- * Whether a session's `open` owns stopping the device it holds, and whether it must say why not.
- * The four answers are exclusive by type: an open either proved its boot, inferred one the platform
- * did not disprove, disproved the inference it started from, or has no claim at all. #4791: only
- * `proved` and `inferred` owe a stop, and `disproved` is the one close reports. The decision that
- * produces a member lives with the session that records it (`resolveSessionBootOwnership`).
- */
-export type CloseBootOwnership = 'proved' | 'inferred' | 'disproved' | 'none';
-
-/**
  * The `details.failedOpenEmulatorCleanupReason` values a failed open publishes, from the owner of
  * this outcome. Callers read a member; none writes a literal.
  */

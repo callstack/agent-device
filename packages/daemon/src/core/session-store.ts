@@ -1,5 +1,4 @@
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
-import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
 import {
   resolveSessionDir,
   resolveSessionAppLogPath,
@@ -17,7 +16,12 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
+import type {
+  CloseBootOwnership,
+  SessionRef,
+  SessionRuntimeHints,
+  SessionState,
+} from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
 import {

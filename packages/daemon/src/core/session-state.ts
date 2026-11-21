@@ -137,6 +137,16 @@ export type SessionRef = Readonly<{
   lifetime: object;
 }>;
 
+/**
+ * Whether a session's `open` owns stopping the device it holds, and whether it must say why not.
+ * The four answers are exclusive by type: an open either proved its boot, inferred one the platform
+ * did not disprove, disproved the inference it started from, or has no claim at all. #4791: only
+ * `proved` and `inferred` owe a stop, and `disproved` is the one close reports. The daemon's own
+ * vocabulary: `resolveSessionBootOwnership` decides a member, `SessionStore.updateOpenDevice`
+ * records it, and a plain `close` reads what was recorded.
+ */
+export type CloseBootOwnership = 'proved' | 'inferred' | 'disproved' | 'none';
+
 export type SessionState = {
   name: string;
   sessionScope?: SessionScope;
