@@ -75,14 +75,22 @@ function createRoutedSession() {
     cwd: process.cwd(),
   });
 
-  async function run(command: {
-    name: 'open' | 'close';
-    flags?: Record<string, unknown>;
-    /** What the platform's own boot step reports about the open's preparation call. */
-    bootPerformance?: DeviceBootPerformance;
-  }) {
+  /** Every open of this suite must state what its boot step reports; a close reports nothing. */
+  type RunCommand =
+    | {
+        name: 'open';
+        /** What the platform's own boot step reports about the open's preparation call. */
+        bootPerformance: DeviceBootPerformance;
+        /** Fails the open after its ownership write and before dispatch, keeping the session. */
+        failBeforeDispatch?: boolean;
+        flags?: Record<string, unknown>;
+      }
+    | { name: 'close'; flags?: Record<string, unknown> };
+
+  async function run(command: RunCommand) {
     if (command.name === 'open') {
       // Selection sees a shut-down simulator, which is the inference #4791 refuses to act on alone.
+      // A re-open of this session resolves the session's own device and infers no boot at all.
       vi.mocked(resolveTargetDevice).mockResolvedValue(STOPPED_SIMULATOR);
     }
     const loader: LifecycleOperationsLoader = async (device, signal, shutdownTarget) => {
@@ -92,7 +100,8 @@ function createRoutedSession() {
         prepareApplicationOpen: async (
           input: Parameters<typeof operations.prepareApplicationOpen>[0],
         ) => {
-          input.onBootPerformance?.(command.bootPerformance!);
+          // An open states its boot report in its own command shape; a close prepares nothing.
+          if (command.name === 'open') input.onBootPerformance?.(command.bootPerformance);
         },
       });
     };
@@ -109,6 +118,18 @@ function createRoutedSession() {
         session: SESSION,
         positionals: command.name === 'open' ? ['Demo'] : [],
         flags: command.flags ?? {},
+        ...(command.name === 'open' && command.failBeforeDispatch
+          ? {
+              internal: {
+                openLifecycle: {
+                  beforeDispatch: async () => ({
+                    ok: false as const,
+                    error: { code: 'COMMAND_FAILED' as const, message: 'Dispatch refused' },
+                  }),
+                },
+              },
+            }
+          : {}),
       },
       sessionName: SESSION,
       logPath: path.join(stateDir, 'daemon.log'),
@@ -171,4 +192,53 @@ test('plain close stops the simulator whose boot the platform reports performing
   expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
   expect(closeWarnings(closed!)).toBeUndefined();
   if (closed?.ok) expect(closed.data).toMatchObject({ shutdown: { success: true } });
+}, 30_000);
+
+test('close --shutdown commands the stop a disproved open withheld', async () => {
+  // The state the warning actually creates: the user is told the device is still running and
+  // answers with an explicit shutdown. That commands the stop without the ownership question.
+  const runs = createRoutedSession();
+
+  const opened = await runs.run({
+    name: 'open',
+    bootPerformance: { performed: false, reason: 'already-booted' },
+  });
+  expect(opened?.ok).toBe(true);
+
+  const closed = await runs.run({ name: 'close', flags: { shutdown: true } });
+
+  expect(closed?.ok).toBe(true);
+  expect(mockShutdownTargetRuntime).toHaveBeenCalledTimes(1);
+  expect(closeWarnings(closed!)).toBeUndefined();
+  if (closed?.ok) expect(closed.data).toMatchObject({ shutdown: { success: true } });
+}, 30_000);
+
+test('a failed re-open cannot silence the disproved boot the session already reported', async () => {
+  // The re-open writes ownership before dispatch and its own readiness finds the foreign boot up,
+  // so it proves nothing. When its dispatch then fails, the surviving session keeps the record:
+  // the same simulator is still running on somebody else's boot, and close must still say so.
+  const runs = createRoutedSession();
+
+  const opened = await runs.run({
+    name: 'open',
+    bootPerformance: { performed: false, reason: 'already-booted' },
+  });
+  expect(opened?.ok).toBe(true);
+
+  const reopened = await runs.run({
+    name: 'open',
+    bootPerformance: { performed: false, reason: 'already-booted' },
+    flags: {},
+    failBeforeDispatch: true,
+  });
+  expect(reopened?.ok).toBe(false);
+  expect(runs.sessionStore.get(SESSION)?.bootOwnerUnverified).toBe(true);
+
+  const closed = await runs.run({ name: 'close' });
+
+  expect(closed?.ok).toBe(true);
+  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
+  expect(closeWarnings(closed!)).toEqual([
+    expect.stringContaining(CLOSE_BOOT_OWNER_UNVERIFIED_REASONS.bootOwnerUnverified),
+  ]);
 }, 30_000);

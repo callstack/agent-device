@@ -1,9 +1,8 @@
 import type { AndroidEmulatorLaunchIdentity } from '@agent-device/contracts/device-readiness-runtime';
-import type { CloseBootOwnership } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import type { SessionRef, SessionState } from '../../../core/session-state.ts';
+import type { CloseBootOwnership, SessionRef, SessionState } from '../../../core/session-state.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
 import { clearSessionSnapshot } from '../../../execution/session-snapshot.ts';
@@ -75,7 +74,8 @@ export function publishOpenSession(params: {
     deviceClaim,
   };
   const ref = store.publish(sessionName, draft);
-  if (bootOwnership.ownsBoot || bootOwnership.bootOwnerUnverified)
-    store.updateOpenDevice(ref, device, bootOwnership, params.androidLaunchIdentity);
+  // The store decides what each ownership answer records; a fresh draft carries the device already,
+  // and 'none' writes nothing but its absence. No second copy of that rule belongs here.
+  store.updateOpenDevice(ref, device, bootOwnership, params.androidLaunchIdentity);
   return store.refresh(ref);
 }
