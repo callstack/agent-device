@@ -103,9 +103,11 @@ const ensureDaemon = trackedClientCall(daemonEnsure.ensureDaemon);
 
 /**
  * Waits for the client calls that outlived their case, so every launch they make is spent on the
- * seams of the case that started them and never on the next one. A call that outlasts the whole
- * join is reported by the case that owns it and then dropped: a client call cannot be cancelled, so
- * waiting again in every later teardown would only report the same leak once per remaining case.
+ * seams of the case that started them and never on the next one. A client call cannot be cancelled,
+ * so this is bounded: a call that outlasts the join is reported once, by the case that owns it, and
+ * dropped. Dropping it means its remaining launches still land on the next case, which is why the
+ * join bound is a last resort and not the mechanism the file relies on — a case is expected to leave
+ * nothing for the join to wait out.
  */
 async function joinOutlivedClientCalls(): Promise<void> {
   const deadline = Date.now() + JOIN_OUTLIVED_CALLS_MS;
@@ -863,41 +865,40 @@ test('a quiesce the daemon never hears is judged again, not reported as a transp
   assertJudgedAgainForTheFullBudget(clock, 15_000);
 });
 
-test('a client call that outlives its case is still starting when the next one begins', async (t) => {
+test('a client call that outlives its case is still running when the next one begins', async (t) => {
   if (!(await withLoopback(t))) return;
-  // Vitest never cancels a test body: a case that times out keeps driving its client call while the
-  // next case is already running. This call is deliberately not awaited. Its first start answers
-  // 700 ms late and the retry waits 150 ms, so its second start reaches the shared launch seam only
-  // after this case's body has ended. The waits are this crossing's own window, not a production
-  // budget: without the join in `afterEach`, that second start lands on the next case's seams.
+  // This call is deliberately not awaited. Its first start answers 250 ms late and the retry between
+  // the two starts waits 150 ms of real time, so its second start reaches the shared launch seam
+  // roughly 400 ms after this case's body has ended and its seams have been reset. Those waits are
+  // this crossing's own window, not a production budget.
   const { stateDir } = stateDirAndPaths();
   vi.mocked(sleep).mockImplementation(actualRetry.sleep);
   const exit = { pid: 999_999, exitCode: 1 };
-  const startAnsweredLate = new Promise<void>((resolve) => setTimeout(resolve, 700));
-  // A failed local startup makes two starts; the third step is the spare this call never reaches.
+  const startAnsweredLate = new Promise<void>((resolve) => setTimeout(resolve, 250));
   spawn.mockImplementation(
     planRegisteredDaemonLaunches([
       { kind: 'exit', exit, exitGate: startAnsweredLate },
-      { kind: 'exit', exit },
       { kind: 'exit', exit },
     ]),
   );
 
   void ensureDaemon({ stateDir, daemonTransport: 'http' });
 
-  // The call must be at its launch seam before its case ends, or it crosses nothing.
+  // The call must have reached its launch seam, and be one start from its end, before its case ends.
   for (let poll = 0; spawn.mock.calls.length === 0 && poll < 100; poll += 1)
     await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(spawn.mock.calls.length, 1, 'the call had reached its launch seam in its own case');
+  assert.equal(inFlightClientCalls.size, 1, 'the call was still running when its case ended');
 });
 
 test('the call that outlived the case before this one records no launch here', async (t) => {
   if (!(await withLoopback(t))) return;
-  // The case above ends while its client call is still running, and that call's second start lands a
-  // few hundred milliseconds into this one. This case asks its client for nothing, so nothing may be
-  // recorded on the launch seam while it waits: any recorded start belongs to the outlived call,
-  // spending this case's seams — which is how one slow case used to fail the case after it.
-  for (let poll = 0; poll < 12; poll += 1) {
+  // The case above ends while its client call is still running, and that call's second start lands
+  // about 400 ms into this one. This case asks its client for nothing, so nothing may be recorded on
+  // the launch seam while it waits: any recorded start belongs to the outlived call, spending this
+  // case's seams — which is how one slow case used to fail the case after it.
+  assert.equal(inFlightClientCalls.size, 0, 'the case before this one left no call in flight');
+  for (let poll = 0; poll < 10; poll += 1) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(spawn.mock.calls.length, 0, 'no daemon launch may be recorded during this case');
   }
