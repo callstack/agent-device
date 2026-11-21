@@ -325,7 +325,6 @@ export async function loginWithDeviceAuth(options: {
           stateDir: options.stateDir,
           session,
           flags: options.flags,
-          env,
           io: options.io,
         });
       } catch (error) {
@@ -537,7 +536,8 @@ async function resolveCliSessionAccess(options: {
     async () => {
       const session = readCliSession({ stateDir });
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
-      return await exchangeCliSessionAccess({ stateDir, session, flags, env, io });
+      assertStoredSessionOrigin(session, env);
+      return await exchangeCliSessionAccess({ stateDir, session, flags, io });
     },
     { io },
   );
@@ -545,8 +545,22 @@ async function resolveCliSessionAccess(options: {
   return {
     accessToken: exchanged.accessToken,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
+    // The refresh went to the stored URL. A same-origin override still names the connection.
     cloudBaseUrl: resolveCloudBaseUrl(env, exchanged.session.cloudBaseUrl),
   };
+}
+
+/**
+ * The stored credential goes only to the cloud that issued it. An override that names another
+ * origin would send it to that origin, so the command stops before any request.
+ */
+function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): void {
+  const storedUrl = resolveCloudBaseUrl({}, session.cloudBaseUrl);
+  if (new URL(resolveCloudBaseUrl(env, storedUrl)).origin === new URL(storedUrl).origin) return;
+  throw new AppError('UNAUTHORIZED', 'The stored CLI session belongs to another cloud API origin.', {
+    reason: 'cloud_login_origin_mismatch',
+    hint: 'Run agent-device auth login with this AGENT_DEVICE_CLOUD_BASE_URL, or unset it.',
+  });
 }
 
 /**
@@ -560,10 +574,9 @@ async function exchangeCliSessionAccess(options: {
   stateDir: string;
   session: CliSessionRecord;
   flags: CliFlags;
-  env: EnvMap;
   io?: AuthIo;
 }): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> {
-  const { env, flags, io, stateDir } = options;
+  const { flags, io, stateDir } = options;
   // The file is what a store compares against: the last record this command saw there, and
   // `null` once a write would land on a session it did not write. `asked` is what the cloud
   // accepts for this session now, which stays ahead of the file when a save failed. `saved` is
@@ -579,7 +592,7 @@ async function exchangeCliSessionAccess(options: {
   for (let exchange = 1; ; exchange += 1) {
     let refreshed;
     try {
-      refreshed = await refreshAgentToken({ session: asked, flags, env, io });
+      refreshed = await refreshAgentToken({ session: asked, flags, io });
     } catch (error) {
       // Only the first exchange is required. A token already read from the cloud stays usable by
       // the daemon that accepted it, so a transient failure of the optional exchange that asks
@@ -677,7 +690,6 @@ function storeRotatedCredential(options: {
 async function refreshAgentToken(options: {
   session: CliSessionRecord;
   flags: CliFlags;
-  env: EnvMap;
   io?: AuthIo;
 }): Promise<{
   accessToken: string;
@@ -685,9 +697,9 @@ async function refreshAgentToken(options: {
   refreshCredential?: string;
   sessionExpiresAt?: string;
 }> {
-  const cloudBaseUrl = resolveCloudBaseUrl(options.env, options.session.cloudBaseUrl);
+  // The refresh goes to the URL stored with the session, never to an override.
   const response = await postJson<CliSessionRefreshResponse>({
-    baseUrl: cloudBaseUrl,
+    baseUrl: resolveCloudBaseUrl({}, options.session.cloudBaseUrl),
     pathName: CLI_SESSION_REFRESH_PATH,
     body: {
       refreshCredential: options.session.refreshCredential,
@@ -808,6 +820,8 @@ async function postJson<T>(options: {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(options.body),
+    // A redirect would resend a credential or device code to the redirect target.
+    redirect: 'error',
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
   });
   return await readCloudJsonResponse<T>(response, {
