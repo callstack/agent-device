@@ -159,6 +159,65 @@ test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async
   assert.deepEqual(invalidateHarmonyGestureViewport.mock.calls, [[DEVICE], [DEVICE]]);
 });
 
+test('openHarmonyApp appends launch args verbatim after the aa start target words', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: 'start ability successfully',
+    stderr: '',
+  });
+
+  await openHarmonyApp(DEVICE, 'com.example.application', {
+    activity: 'EntryAbility',
+    launchArgs: ['--ps', 'configKey', 'debug', '--pi', 'retryCount', '3'],
+  });
+
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.slice(0, 2), [
+    'hdc',
+    [
+      '-t',
+      'harmony-1',
+      'shell',
+      'aa',
+      'start',
+      '-a',
+      'EntryAbility',
+      '-b',
+      'com.example.application',
+      '--ps',
+      'configKey',
+      'debug',
+      '--pi',
+      'retryCount',
+      '3',
+    ],
+  ]);
+});
+
+test('openHarmonyApp forwards no extra aa start words when launch args are absent', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: 'start ability successfully',
+    stderr: '',
+  });
+
+  await openHarmonyApp(DEVICE, 'com.example.application', { activity: 'EntryAbility' });
+
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.slice(0, 2), [
+    'hdc',
+    [
+      '-t',
+      'harmony-1',
+      'shell',
+      'aa',
+      'start',
+      '-a',
+      'EntryAbility',
+      '-b',
+      'com.example.application',
+    ],
+  ]);
+});
+
 test('openHarmonyApp refuses an ability name outside the module grammar before any hdc call', async () => {
   for (const activity of ['Entry$(id)', 'Entry;reboot', 'Entry Ability', '1Entry', 'Entry"x', '']) {
     await assert.rejects(

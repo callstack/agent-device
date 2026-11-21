@@ -211,10 +211,11 @@ function requireHarmonyAbilityName(ability: string): void {
   });
 }
 
+/** Launches a bundle's ability; each `launchArgs` entry lands as one quoted `aa start` argument. */
 export async function openHarmonyApp(
   device: DeviceInfo,
   bundleId: string,
-  options?: { activity?: string; signal?: AbortSignal },
+  options?: { activity?: string; launchArgs?: string[]; signal?: AbortSignal },
 ): Promise<void> {
   if (options?.activity !== undefined) requireHarmonyAbilityName(options.activity);
   const launchTarget = options?.activity
@@ -238,6 +239,7 @@ export async function openHarmonyApp(
   }
   const words: ShellWord[] = ['aa', 'start', '-a', launchTarget.ability, '-b', bundleId];
   if (launchTarget.module) words.push('-m', launchTarget.module);
+  words.push(...(options?.launchArgs ?? []));
   const result = await runHarmonyShell(device, words, { signal: options?.signal });
   if (!result.stdout.includes('start ability successfully')) {
     throw new AppError('COMMAND_FAILED', `Failed to start ${bundleId}`, {
