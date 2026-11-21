@@ -190,6 +190,115 @@ test('collectArkUiNodes does not label a control that contains another control',
   );
 });
 
+test('collectArkUiNodes gives a lone control on a full-screen page no borrowed label', () => {
+  // A screen holding exactly one control (an icon-only FAB) makes every ancestor up to the capture
+  // root a "container with one control". Without a bound on the row, the FAB would borrow the first
+  // words of the whole document — the headline hundreds of pixels away — and a `label=` selector for
+  // the headline would match the button as well.
+  const loneControlLayout = parseHarmonyLayout(
+    JSON.stringify({
+      attributes: { type: 'unknown', bounds: '[0,0][1084,2412]' },
+      children: [
+        {
+          attributes: { type: 'root', bounds: '[0,105][1084,2412]' },
+          children: [
+            {
+              attributes: { type: 'Stack', bounds: '[0,105][1084,2412]' },
+              children: [
+                {
+                  attributes: { type: 'Column', bounds: '[0,105][1084,900]' },
+                  children: [
+                    {
+                      attributes: {
+                        type: 'Text',
+                        bounds: '[48,180][640,260]',
+                        text: 'Account & security',
+                      },
+                    },
+                  ],
+                },
+                {
+                  attributes: {
+                    type: 'Button',
+                    bounds: '[888,2140][1036,2288]',
+                    clickable: 'true',
+                  },
+                  children: [
+                    { attributes: { type: 'SymbolGlyph', bounds: '[924,2176][1000,2252]' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  const { nodes } = collectArkUiNodes(loneControlLayout, { ...UNBOUNDED, maxNodes: 5_000 });
+
+  const fab = nodes.find((node) => node.type === 'Button');
+  assert.notEqual(fab, undefined);
+  assert.equal(fab?.label, undefined);
+  assert.equal(fab?.hittable, true);
+
+  // The headline names itself through `value`, and nothing on the page borrows it as a `label`, so a
+  // selector for those words still matches one node.
+  const headline = nodes.find((node) => node.value === 'Account & security');
+  assert.notEqual(headline, undefined);
+  assert.equal(headline?.label, undefined);
+  assert.deepEqual(
+    nodes.filter((node) => node.label === 'Account & security').map((node) => node.type),
+    [],
+  );
+});
+
+test('collectArkUiNodes lends a control row words through a wrapper that hugs it', () => {
+  // The bound must not over-trim: a FAB wrapped in a stack that is itself a row still reads the
+  // words of that row, even when the screen container above it would reach the whole page.
+  const wrappedControlLayout = parseHarmonyLayout(
+    JSON.stringify({
+      attributes: { type: 'unknown', bounds: '[0,0][1084,2412]' },
+      children: [
+        {
+          attributes: { type: 'root', bounds: '[0,105][1084,2412]' },
+          children: [
+            {
+              attributes: { type: 'Stack', bounds: '[0,105][1084,2412]' },
+              children: [
+                {
+                  attributes: { type: 'Row', bounds: '[0,2100][1084,2330]' },
+                  children: [
+                    {
+                      attributes: { type: 'Text', bounds: '[48,2160][700,2240]', text: 'Drafts' },
+                    },
+                    {
+                      attributes: { type: 'Stack', bounds: '[864,2120][1044,2300]' },
+                      children: [
+                        {
+                          attributes: {
+                            type: 'Button',
+                            bounds: '[888,2140][1036,2288]',
+                            clickable: 'true',
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  const { nodes } = collectArkUiNodes(wrappedControlLayout, { ...UNBOUNDED, maxNodes: 5_000 });
+
+  assert.equal(nodes.find((node) => node.type === 'Button')?.label, 'Drafts');
+});
+
 test('resolveRefLabel answers a HarmonyOS ref with its own row words', () => {
   const nodes = interactiveFixtureNodes();
   const backButton = nodes.find((node) => node.type === 'Button')!;

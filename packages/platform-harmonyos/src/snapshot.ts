@@ -47,11 +47,16 @@ type ArkUiLayoutNode = {
  * An icon-only `Button` answers with neither. So the words a person reads have to be read off the
  * control's row (#4906).
  *
- * The row of a control is the nearest container that holds it and no other control: the settings row
- * of a `Toggle`, the title bar of a back `Button`. Anything wider holds several controls, and its
- * words would name all of them. Two bounded passes fold the answers for a capture in O(nodes), and
- * nothing outside the row is searched — searching wider is what made an unlabeled back button report
- * the label of a node elsewhere on the screen (#4907).
+ * The row of a control is the container around it that holds that control and no other control, and
+ * hugs it: the settings row of a `Toggle`, the title bar of a back `Button`. The outermost such
+ * container wins when several hug the control in a chain. Anything wider holds several controls, and
+ * its words would name all of them. Two bounded passes fold the answers for a capture in O(nodes),
+ * and nothing outside the row is searched — searching wider is what made an unlabeled back button
+ * report the label of a node elsewhere on the screen (#4907).
+ *
+ * Hugging is what stops the borrow on a screen with a single control: without a size bound, every
+ * ancestor of an icon-only FAB up to the capture root holds exactly one control, and the FAB reads
+ * the first words of the whole document — the headline far above it — as its own label.
  */
 type ArkUiRowIndex = Readonly<{
   /** The first words the node's subtree renders, in document order. */
@@ -61,6 +66,29 @@ type ArkUiRowIndex = Readonly<{
   /** The row container the node sits in, or `undefined` when nothing bounds it. */
   rowOf(node: ArkUiLayoutNode): ArkUiLayoutNode | undefined;
 }>;
+
+/**
+ * How many multiples of a control's own height a container may reach and still count as that
+ * control's row. A row on a device is one line beside the control: across the real captures this
+ * shipped against, the container around a leaf control reaches at most 3.5 times the control's
+ * height, while the column and screen containers a lone control sits under reach ten or more.
+ */
+const ARK_UI_ROW_MAX_HEIGHT_MULTIPLE = 4;
+
+/** Whether the container wraps the control the way a row does: it holds it and is barely taller. */
+function isArkUiRowOf(container: ArkUiLayoutNode, control: ArkUiLayoutNode): boolean {
+  const outer = parseArkUiBounds(stringAttribute(container.attributes ?? {}, 'bounds'));
+  const inner = parseArkUiBounds(stringAttribute(control.attributes ?? {}, 'bounds'));
+  if (outer === undefined || inner === undefined) return false;
+  const insideContainer =
+    inner.x >= outer.x &&
+    inner.y >= outer.y &&
+    inner.x + inner.width <= outer.x + outer.width &&
+    inner.y + inner.height <= outer.y + outer.height;
+  return (
+    insideContainer && outer.height <= ARK_UI_ROW_MAX_HEIGHT_MULTIPLE * Math.max(inner.height, 1)
+  );
+}
 
 function indexArkUiRows(root: ArkUiLayoutNode): ArkUiRowIndex {
   const textOfSubtree = new Map<ArkUiLayoutNode, string | undefined>();
@@ -85,18 +113,23 @@ function indexArkUiRows(root: ArkUiLayoutNode): ArkUiRowIndex {
   };
   fold(root);
 
-  const assignRows = (
-    node: ArkUiLayoutNode,
-    onlyControlContainer: ArkUiLayoutNode | undefined,
-  ): void => {
-    rowOf.set(node, onlyControlContainer);
-    for (const child of node.children ?? []) {
-      // A container holding exactly one control is that control's row: the settings row of a
-      // `Toggle`, the title bar of a back `Button`. Anything wider belongs to several controls.
-      assignRows(child, controlsBelow.get(node) === 1 ? node : onlyControlContainer);
+  // The row is read from the container around the control outwards, and the climb stops at the first
+  // container that is not the control's row: one holding another control, or one too tall to be a
+  // row. Stopping on the height keeps a lone control on a full-height page without a row, so it
+  // borrows nothing instead of the first words of the whole document.
+  const assignRows = (node: ArkUiLayoutNode, ancestors: ArkUiLayoutNode[]): void => {
+    let row: ArkUiLayoutNode | undefined;
+    for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+      const container = ancestors[index]!;
+      if (controlsBelow.get(container) !== 1 || !isArkUiRowOf(container, node)) break;
+      row = container;
     }
+    rowOf.set(node, row);
+    ancestors.push(node);
+    for (const child of node.children ?? []) assignRows(child, ancestors);
+    ancestors.pop();
   };
-  assignRows(root, undefined);
+  assignRows(root, []);
 
   return {
     textOfSubtree: (node) => textOfSubtree.get(node),
