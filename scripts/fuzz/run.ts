@@ -14,7 +14,6 @@ import {
   writeFuzzEnvelope,
 } from './envelope.ts';
 import { runCases } from './execute.ts';
-import { generateAndCheck } from './generate.ts';
 import { describeFailure, type FuzzFailure } from './invariant.ts';
 import { fallbackFuzzOptions, FUZZ_USAGE, readFuzzOptions, type FuzzOptions } from './options.ts';
 import { getFuzzTarget } from './registry.ts';
@@ -34,12 +33,15 @@ function corpusCasesFor(target: FuzzTarget): string[] {
     .map((entry) => entry.input);
 }
 
-/** One target's run: generated (fast-check, shrinking) or a replay of the checked-in corpus. */
+type GenerateAndCheck = typeof import('./generate.ts').generateAndCheck;
+
+/** One target's run: generated (fast-check, shrinking), or without a generator a corpus replay. */
 async function runOneTarget(
   target: FuzzTarget,
   options: FuzzOptions,
+  generateAndCheck: GenerateAndCheck | undefined,
 ): Promise<{ cases: number; failures: FuzzFailure[]; replayHint?: string }> {
-  if (options.replayCorpus) {
+  if (generateAndCheck === undefined) {
     const cases = corpusCasesFor(target);
     return { cases: cases.length, failures: await runCases(target, cases, options.caseTimeoutMs) };
   }
@@ -57,9 +59,18 @@ async function runOneTarget(
 async function fuzzTargets(targets: readonly FuzzTarget[], options: FuzzOptions) {
   const failures: FuzzFailure[] = [];
   const targetRuns: FuzzTargetRun[] = [];
+  // fast-check and the arbitraries take about a second to load, and only generation needs them.
+  // Loading them before the first timer keeps that cost out of every target's duration.
+  const generateAndCheck = options.replayCorpus
+    ? undefined
+    : (await import('./generate.ts')).generateAndCheck;
   for (const target of targets) {
     const started = Date.now();
-    const { cases, failures: found, replayHint } = await runOneTarget(target, options);
+    const {
+      cases,
+      failures: found,
+      replayHint,
+    } = await runOneTarget(target, options, generateAndCheck);
     const durationMs = Date.now() - started;
     targetRuns.push({ target: target.name, cases, failures: found.length, durationMs });
     process.stdout.write(

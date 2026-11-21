@@ -14,22 +14,73 @@ type FixtureSource = Readonly<{ file: string; source: string }>;
 /** Follows local fixture imports so a renamed helper or a new consumer cannot leave the guard. */
 export function scanDaemonFixtureLaunches(files: readonly FixtureSource[]): string[] {
   const paths = new Set(files.map(({ file }) => file));
-  const parsed = new Map(files.map(({ file, source }) => [file, parseFixtureSource(file, source)]));
-  const importers = new Map<string, string[]>();
-  for (const [file, { dependencies }] of parsed) {
-    for (const specifier of dependencies) {
-      const dependency = resolveLocalImport(file, specifier, paths);
-      if (dependency) importers.set(dependency, [...(importers.get(dependency) ?? []), file]);
+  const parsed = new Map<string, ParsedFixtureSource>();
+  const parse = ({ file, source }: FixtureSource): ParsedFixtureSource => {
+    let entry = parsed.get(file);
+    if (!entry) parsed.set(file, (entry = parseFixtureSource(file, source)));
+    return entry;
+  };
+  const resolvedImports = new Map<string, ReadonlySet<string>>();
+  const importsOf = (entry: FixtureSource): ReadonlySet<string> => {
+    let imports = resolvedImports.get(entry.file);
+    if (!imports) {
+      imports = new Set(
+        parse(entry).dependencies.flatMap(
+          (specifier) => resolveLocalImport(entry.file, specifier, paths) ?? [],
+        ),
+      );
+      resolvedImports.set(entry.file, imports);
+    }
+    return imports;
+  };
+  // Only a file that could name the seed needs its tree walked; everything else joins through imports.
+  const family = new Set(
+    files
+      .filter((entry) => mayNameSeed(entry.source) && namesSeed(parse(entry).program()))
+      .map(({ file }) => file),
+  );
+  // Parsing every file to build the whole import graph costs seconds, so only a file that could
+  // import a family member is parsed. An escape can spell any request, so every file with one is a
+  // candidate.
+  const escaped = files.filter(({ source }) => source.includes('\\'));
+  const unescaped = files.filter(({ source }) => !source.includes('\\'));
+  const pending = [...family];
+  while (pending.length > 0) {
+    const member = pending.pop()!;
+    const candidates = [...escaped, ...unescaped.filter(mayImport(member))];
+    for (const candidate of candidates) {
+      if (family.has(candidate.file) || !importsOf(candidate).has(member)) continue;
+      family.add(candidate.file);
+      pending.push(candidate.file);
     }
   }
-  // Only a file that could name the seed needs its tree walked; everything else joins through imports.
-  const seeds = files
-    .filter(({ file, source }) => mayNameSeed(source) && namesSeed(parsed.get(file)!.program()))
-    .map(({ file }) => file);
-  const family = reachedFrom(seeds, importers);
   return files
     .filter(({ file }) => family.has(file))
     .flatMap(({ file, source }) => daemonFixtureLaunchViolations(source, file));
+}
+
+/**
+ * A cheap superset of the unescaped files whose relative request resolves to `member`.
+ * {@link resolveLocalImport} reaches `member` from the member path, its `.js` alias, or its
+ * extensionless path. Each segment of a resolved path is spelled by the request, unless `.` and `..`
+ * steps take it from the importer's own path, which puts the importer under that path. A request to
+ * an index passes through its directory, so the directory stands for every form of an index.
+ */
+function mayImport(member: string): (entry: FixtureSource) => boolean {
+  const stem = member.replace(/\.ts$/, '');
+  const targets =
+    lastSegment(stem) === 'index' ? [path.posix.dirname(member)] : [member, `${stem}.js`, stem];
+  // Every target's last segment contains this name. A module named `.ts` has an empty one, which
+  // admits every file.
+  const name = lastSegment(targets.at(-1)!);
+  const ancestors = targets.map((target) => `${target}/`);
+  return ({ file, source }) =>
+    source.includes(name) || ancestors.some((ancestor) => file.startsWith(ancestor));
+}
+
+/** Unlike `path.basename`, keeps an empty segment empty (`src/fixtures/` gives ``). */
+function lastSegment(target: string): string {
+  return target.slice(target.lastIndexOf('/') + 1);
 }
 
 type ParsedFixtureSource = Readonly<{ program: () => AstNode; dependencies: readonly string[] }>;
@@ -74,22 +125,6 @@ function namesSeed(program: AstNode): boolean {
       found = true;
   });
   return found;
-}
-
-function reachedFrom(
-  seeds: readonly string[],
-  importers: ReadonlyMap<string, string[]>,
-): Set<string> {
-  const reached = new Set(seeds);
-  const pending = [...seeds];
-  while (pending.length > 0) {
-    for (const importer of importers.get(pending.pop()!) ?? []) {
-      if (reached.has(importer)) continue;
-      reached.add(importer);
-      pending.push(importer);
-    }
-  }
-  return reached;
 }
 
 function resolveLocalImport(

@@ -105,6 +105,26 @@ for (const specifier of ['..', '.', String.raw`.\u002e`]) {
   });
 }
 
+for (const [fixture, consumer, specifier] of [
+  ['src/support.ts', 'src/support/consumer.test.ts', '.'],
+  ['src/support.ts', 'src/support/nested/consumer.test.ts', '..'],
+  ['src/support.ts', 'src/support.js/consumer.test.ts', '.'],
+  ['src/support/.ts', 'src/support/consumer.test.ts', './.ts'],
+] as const) {
+  test(`the repo scan follows '${specifier}' from ${consumer} to ${fixture}`, () => {
+    const bad = `import { runCmdDetachedMonitored } from '@agent-device/host-kit/command'; const spawn = vi.mocked(runCmdDetachedMonitored); spawn.mockImplementation(() => { throw new Error('raw'); });`;
+    const violations = scanDaemonFixtureLaunches([
+      {
+        file: fixture,
+        source: `import { createRegisteredDaemonFixtures } from '@agent-device/test-kit'; export const fixtures = createRegisteredDaemonFixtures({});`,
+      },
+      { file: consumer, source: `import { fixtures } from '${specifier}'; ${bad}` },
+    ]);
+    assert.equal(violations.length, 1);
+    assert.ok(violations[0]!.includes(consumer));
+  });
+}
+
 for (const expression of [
   '(spawn as any)',
   'spawn!',

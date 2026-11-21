@@ -96,6 +96,9 @@ function publishArgument(call: AstNode): AstNode | undefined {
 }
 
 function scanModule(file: string, source: string): ProducerScan {
+  // Only a `producer` key or a `*_PRODUCER` binding records anything, and an escape can spell either.
+  // Skipping the other modules unparsed keeps each repo scan well under the test timeout.
+  if (!/producer|PRODUCER|\\/.test(source)) return { emissions: [], references: [] };
   const program = parseSync(file, source).program as unknown as AstNode;
   const constants = moduleConstants(program);
   const producerOf = (node: unknown) => {
