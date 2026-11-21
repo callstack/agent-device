@@ -11,7 +11,6 @@ import {
 } from '@agent-device/host-kit/host-file';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { PlatformHost } from 'agent-device/plugins';
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
 import type { WebCommandResult } from './command-host.ts';
 import {
@@ -23,7 +22,7 @@ import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,
 } from './agent-browser-lifecycle.ts';
-import type { WebToolbox } from './toolbox.ts';
+import type { WebMachine, WebToolbox } from './toolbox.ts';
 
 const MANAGED_AGENT_BROWSER_VERSION = '0.39.0';
 
@@ -144,11 +143,7 @@ function managedStatusOptions(options: { toolbox: WebToolbox; stateDir?: string 
  * asked of the host so the status names paths, and a Node, the process that spawns the backend can
  * actually use.
  */
-export type WebStatusHost = HostEnvironment &
-  Pick<
-    PlatformHost,
-    'hostOs' | 'nodeExecutablePath' | 'nodeVersion' | 'temporaryDirectory' | 'processId'
-  >;
+export type WebStatusHost = HostEnvironment & WebMachine;
 
 /**
  * Where the managed backend is on disk, and whether it is there. Reads only the host's environment
