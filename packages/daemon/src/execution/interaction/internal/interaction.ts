@@ -102,10 +102,11 @@ async function dispatchTypeViaRuntime(params: RoutedInteractionInput): Promise<D
   );
   // The optional leading target splits off before any validation, so a targeted request refuses
   // its text problems before the focus tap crosses to the device. `readTypeTextFromPositionals`
-  // keeps lookalike words such as `@elena` as text (#4360); a real ref with no text is the
-  // mistargeted `fill` it usually is and is refused below, still before any dispatch.
+  // leads a target only with a minted snapshot ref, so lookalike words, selector keys, and
+  // number pairs stay text (#4360); a real ref with no text is the mistargeted `fill` it usually
+  // is and is refused below, still before any dispatch.
   const decoded = readTypeTextFromPositionals(params.req.positionals ?? []);
-  if (decoded.target?.kind === 'ref' && decoded.textPositionals.length === 0) {
+  if (decoded.target !== undefined && decoded.textPositionals.length === 0) {
     return missingTypeTextResponse(decoded.target.ref);
   }
   // An invalid request is refused before binding, dialog recovery, and ref-frame expiry, so the
@@ -118,25 +119,9 @@ async function dispatchTypeViaRuntime(params: RoutedInteractionInput): Promise<D
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
-  // A targeted `type` is one command with two device effects: the press admission stack
-  // (resolution, AMBIGUOUS_MATCH, motion and keyboard guards) focuses the target first, then the
-  // bound text-entry operation appends. The leg dispatches and records as `press` — the command
-  // it performs — so the recorded script replays one tap and then the append, and the recorded
-  // type step carries the text-only positionals and never the target again.
-  let focusedTarget: Record<string, unknown> | undefined;
-  if (decoded.target) {
-    const focusResponse = await dispatchTargetedTouchViaRuntime(
-      {
-        ...params,
-        req: { ...params.req, command: 'press', positionals: decoded.targetPositionals },
-      },
-      'press',
-    );
-    if (!focusResponse.ok) return focusResponse;
-    focusedTarget = focusResponse.data;
-  }
   // R41: exact-owner facts admission replaces the capability bucket, and the one binding made
-  // here is the only way this request's text can reach a device.
+  // here is the only way this request's text can reach a device. It admits before the focus tap,
+  // so a refused targeted `type` never taps the device (#4870 review).
   const bound = await resolveBoundTypeTextRuntime({
     device: session.device,
     inspectFacts: params.inspectFacts,
@@ -149,12 +134,30 @@ async function dispatchTypeViaRuntime(params: RoutedInteractionInput): Promise<D
     params.androidObservation,
   );
   if (recordingRecovery.response) return recordingRecovery.response;
+  // A targeted `type` is one command with two device effects: the press admission stack
+  // (resolution, AMBIGUOUS_MATCH, motion and keyboard guards) focuses the target first, then the
+  // bound text-entry operation appends. The leg dispatches and records as `press` — the command
+  // it performs — so the recorded script replays one tap and then the append, and the recorded
+  // type step carries the text as one positional that replay cannot re-split into a target
+  // (#4870 review).
+  let focusedTarget: Record<string, unknown> | undefined;
+  if (decoded.target) {
+    const focusResponse = await dispatchTargetedTouchViaRuntime(
+      {
+        ...params,
+        req: { ...params.req, command: 'press', positionals: decoded.targetPositionals },
+      },
+      'press',
+    );
+    if (!focusResponse.ok) return focusResponse;
+    focusedTarget = focusResponse.data;
+  }
 
   return await runTypeTextViaRuntime(params, session, {
     typeText: () => bound.typeText(request, context),
     recordingRecoveryWarning: recordingRecovery.warning,
     focusedTarget,
-    positionals: decoded.textPositionals,
+    recordedPositionals: [decoded.textPositionals.join(' ')],
   });
 }
 
@@ -174,7 +177,6 @@ function typeTargetResponseFields(
   if (typeof data.targetKind === 'string') fields.targetKind = data.targetKind;
   if (typeof data.ref === 'string') fields.ref = data.ref;
   if (typeof data.refLabel === 'string') fields.refLabel = data.refLabel;
-  if (typeof data.selector === 'string') fields.selector = data.selector;
   return fields;
 }
 
@@ -216,14 +218,14 @@ async function runTypeTextViaRuntime(
     typeText,
     recordingRecoveryWarning,
     focusedTarget,
-    positionals,
+    recordedPositionals,
   }: {
     typeText: () => Promise<Record<string, unknown>>;
     recordingRecoveryWarning?: string;
     /** Target identity from the focus tap of a targeted `type`, reported with the text. */
     focusedTarget?: Record<string, unknown>;
-    /** The text-only positionals, so the recorded step replays without the focus tap. */
-    positionals?: string[];
+    /** The text as one positional, so a replayed step cannot re-split it into a target. */
+    recordedPositionals?: string[];
   },
 ): Promise<DaemonResponse> {
   const { req, sessionStore } = params;
@@ -255,7 +257,7 @@ async function runTypeTextViaRuntime(
       ref: params.sessionRef!,
       sessionStore,
       command: req.command,
-      positionals: positionals ?? req.positionals ?? [],
+      positionals: recordedPositionals ?? req.positionals ?? [],
       flags: req.flags,
       result: responseData,
       responseData,

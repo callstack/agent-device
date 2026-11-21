@@ -439,7 +439,7 @@ const interactionCliSchemas = {
     positionalArgs: ['x', 'y'],
   },
   type: {
-    usageOverride: 'type [<x y|@ref|selector>] <text>',
+    usageOverride: 'type [@ref] <text>',
     usageFlags: [],
     positionalArgs: ['target?', 'text'],
     allowsExtraPositionals: true,

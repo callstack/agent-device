@@ -16,7 +16,7 @@ import type {
 } from './scroll-gesture.ts';
 import type { SelectorSnapshotCommandOptions } from './client-capture.ts';
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
-import type { InteractionTarget } from './client-target.ts';
+import type { InteractionTarget, RefTarget } from './client-target.ts';
 
 export type RepeatedPressOptions = {
   count?: number;
@@ -128,7 +128,7 @@ export type FocusOptions = DeviceCommandBaseOptions & {
 };
 
 export type TypeTextOptions = DeviceCommandBaseOptions &
-  Partial<InteractionTarget> & {
+  Partial<Pick<RefTarget, 'ref' | 'label'>> & {
     text: string;
     delayMs?: number;
   };

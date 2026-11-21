@@ -1145,7 +1145,7 @@ Exact behavior: `agent-device help fill`.
 Append text to a target or the focused input.
 
 ```bash
-agent-device type [<x y|@ref|selector>] <text>
+agent-device type [@ref] <text>
 ```
 
 | Option | What it does |

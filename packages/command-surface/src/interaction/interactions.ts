@@ -82,13 +82,14 @@ export const interactionCliReaders = {
     y: Number(positionals[1]),
   }),
   type: (positionals, flags) => {
-    // The optional leading target splits off the text (`type @e12 "more"`); every input that
-    // decodes without a target keeps the focused-input text exactly as `positionals.join(' ')`.
+    // The optional leading target splits off the text (`type @e12 "more"`); only a minted
+    // snapshot ref leads a target, so every other input keeps the focused-input text exactly as
+    // `positionals.join(' ')` (#4870 review).
     const decoded = readTypeTextFromPositionals(positionals);
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
-      ...(decoded.target ?? {}),
+      ...(decoded.target === undefined ? {} : { ref: decoded.target.ref }),
       text: decoded.textPositionals.join(' '),
       delayMs: flags.delayMs,
     };
@@ -213,25 +214,13 @@ function longPressPositionals(input: LongPressOptions): string[] {
   return [...interactionTargetPositionals(input), ...optionalNumber(input.durationMs)];
 }
 
-function typePositionals(input: TypeTextOptions): string[] {
-  return [...typeTargetPositionals(input), input.text];
-}
-
 /**
- * The leading target positionals of a targeted `type`, or `[]` when the options carry no target,
- * so the daemon keeps the focused-input semantics for a plain `type "text"`.
+ * The validated options own the target decision, so the projection is exactly the daemon
+ * grammar: one optional minted ref, then the text as one positional. `label` never projects —
+ * it names the ref for humans, and letting it through would type it (#4870 review).
  */
-function typeTargetPositionals(input: TypeTextOptions): string[] {
-  const candidate = input as Partial<InteractionTarget>;
-  if (
-    candidate.ref !== undefined ||
-    candidate.selector !== undefined ||
-    candidate.x !== undefined ||
-    candidate.y !== undefined
-  ) {
-    return interactionTargetPositionals(input as InteractionTarget);
-  }
-  return [];
+function typePositionals(input: TypeTextOptions): string[] {
+  return input.ref === undefined ? [input.text] : [input.ref, input.text];
 }
 
 function fillPositionals(input: FillOptions): string[] {

@@ -109,22 +109,31 @@ test('readFillTargetFromPositionals treats every token after a ref as text', () 
   });
 });
 
-// `type <target> <text>` splits an optional leading target off the text, and every input that
-// does not decode as target + text keeps typing as pure text, exactly as it did before the
-// targeted form existed.
+// `type <target> <text>` splits an optional leading target off the text, and the target is only
+// a leading minted snapshot ref. Every positional base typed as text stays text, so unquoted
+// multi-word calls keep typing whole (#4870 review).
 
-test('readTypeTextFromPositionals leads with a real snapshot ref and keeps lookalike words as text', () => {
+test('readTypeTextFromPositionals leads with a minted snapshot ref and keeps lookalike words as text', () => {
   assert.deepEqual(readTypeTextFromPositionals(['@e12', 'more']), {
     target: { kind: 'ref', ref: '@e12' },
     targetPositionals: ['@e12'],
     textPositionals: ['more'],
   });
-  // #4360: only real refs (`@e<digits>`) are targets; a word that merely starts with @ types.
-  assert.deepEqual(readTypeTextFromPositionals(['@elena', 'hi']), {
-    target: undefined,
-    targetPositionals: [],
-    textPositionals: ['@elena', 'hi'],
+  // The pin suffix is part of the minted ref, so a pinned ref still leads a target.
+  assert.deepEqual(readTypeTextFromPositionals(['@e29~s317228', 'good', 'morning']), {
+    target: { kind: 'ref', ref: '@e29~s317228' },
+    targetPositionals: ['@e29~s317228'],
+    textPositionals: ['good', 'morning'],
   });
+  // #4360: only real refs (`@e<digits>`, optional `~s<digits>`) are targets; a word that merely
+  // starts with @ types, whatever follows it.
+  for (const lookalike of ['@elena', '@E5', '@e2e', '@e12~sX', '@e12~s3x']) {
+    assert.deepEqual(
+      readTypeTextFromPositionals([lookalike, 'hi']),
+      { target: undefined, targetPositionals: [], textPositionals: [lookalike, 'hi'] },
+      lookalike,
+    );
+  }
 });
 
 test('readTypeTextFromPositionals keeps a ref with no text out of the text slot', () => {
@@ -135,32 +144,29 @@ test('readTypeTextFromPositionals keeps a ref with no text out of the text slot'
   assert.deepEqual(decoded.textPositionals, []);
 });
 
-test('readTypeTextFromPositionals reads a selector target only when text follows it', () => {
-  assert.deepEqual(readTypeTextFromPositionals(['text="Sign in"', 'hello']), {
-    target: { kind: 'selector', selector: 'text="Sign in"' },
-    targetPositionals: ['text="Sign in"'],
-    textPositionals: ['hello'],
-  });
-  // A lone selector-shaped token was pure text before the targeted form existed, so it stays one.
-  assert.deepEqual(readTypeTextFromPositionals(['text=hello']), {
-    target: undefined,
-    targetPositionals: [],
-    textPositionals: ['text=hello'],
-  });
-});
-
-test('readTypeTextFromPositionals reads a point target only when a third positional follows', () => {
-  assert.deepEqual(readTypeTextFromPositionals(['100', '200', 'hello']), {
-    target: { kind: 'point', x: 100, y: 200 },
-    targetPositionals: ['100', '200'],
-    textPositionals: ['hello'],
-  });
-  // `type 100 200` typed "100 200" before the targeted form existed, so it still does.
-  assert.deepEqual(readTypeTextFromPositionals(['100', '200']), {
-    target: undefined,
-    targetPositionals: [],
-    textPositionals: ['100', '200'],
-  });
+test('readTypeTextFromPositionals never decodes base text as a selector or point target', () => {
+  // Each of these typed literally on base, so each must stay whole text that never taps
+  // (#4870 review). A selector key, a bare boolean key, and a phone-number number pair are the
+  // shapes the wider target vocabulary would have swallowed.
+  for (const positionals of [
+    ['text="Sign in"', 'hello'],
+    ['text=hello'],
+    ['selected', 'items', 'here'],
+    ['visible', 'soon'],
+    ['555', '123', '4567'],
+    ['1', '2', '3'],
+    ['100', '200'],
+    ['label="Deploy"', 'hi'],
+    // A ref quoted together with its text is one positional with a space, so it is not a
+    // leading minted ref and types whole, exactly as base did.
+    ['@e12 more'],
+  ] as const) {
+    assert.deepEqual(
+      readTypeTextFromPositionals([...positionals]),
+      { target: undefined, targetPositionals: [], textPositionals: [...positionals] },
+      positionals.join(' '),
+    );
+  }
 });
 
 test('readTypeTextFromPositionals keeps plain words as pure text', () => {

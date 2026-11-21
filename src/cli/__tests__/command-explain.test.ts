@@ -180,7 +180,7 @@ describe('explainCommand table-driven coverage', () => {
     const result = explainCommand('type', { fileExists });
     expect(result.found).toBe(true);
     if (!result.found) return;
-    expect(result.explanation.cli?.usage).toBe('type <text> [--delay-ms <ms>]');
+    expect(result.explanation.cli?.usage).toBe('type [@ref] <text>');
   });
 
   test.each([

@@ -61,7 +61,7 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /press\/fill\/click\/longpress <ref-or-selector> --settle/);
   assert.match(help, /A bare screenshot\/snapshot is not verification/);
   assert.match(help, /use fill <target> <text> --settle to replace/);
-  assert.match(help, /use type only to append to an already-focused field/);
+  assert.match(help, /use type to append: type @ref "text" focuses @ref first/);
   assert.match(help, /label="Email" editable=true/);
   assert.match(help, /press 'label="Follow"' --settle/);
   assert.match(help, /Do not use placeholders such as @ref/);
