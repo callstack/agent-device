@@ -1,5 +1,10 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { Deadline } from './host.ts';
+
+const RUNNER_PHASE_BUDGET_REASONS = {
+  // The Apple runner's budget ran out before the step in `details.phase` began; retry.
+  phaseBudgetExhausted: { reason: 'runner_phase_budget_exhausted' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 /**
  * Everything one runner phase may spend: the single clock every step of the phase reads,
@@ -48,7 +53,7 @@ export function requireRunnerPhaseRemainingMs(
 function runnerPhaseBudgetExhaustedError(phase: string): AppError {
   return new AppError('COMMAND_FAILED', 'The Apple runner budget ran out before this step began', {
     phase,
-    reason: 'runner_phase_budget_exhausted',
+    reason: RUNNER_PHASE_BUDGET_REASONS.phaseBudgetExhausted.reason,
     retriable: true,
   });
 }

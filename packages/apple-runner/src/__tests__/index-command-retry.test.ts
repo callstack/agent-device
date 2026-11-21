@@ -50,7 +50,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import { prepareIosRunner, runAppleRunnerCommand } from '../index.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
-import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
+import { RUNNER_EXCHANGE_REASONS } from '../runner-error-classification.ts';
 
 const requestCancellation = createTestRequestCancellation();
 const { markRequestCanceled, clearRequestCanceled, isRequestCanceled } = requestCancellation;
@@ -404,7 +404,7 @@ test('mutating commands keep invalidating when status recovery probe fails', asy
     () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       assert.equal(error.details?.transportError, 'fetch failed');
       return true;
     },
@@ -434,7 +434,7 @@ test('a mutation lost reply keeps the hint its transport error already carries',
     () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       assert.equal(error.details?.hint, 'Unlock the device and retry.');
       return true;
     },
@@ -920,7 +920,7 @@ test('sequence invalidates the session when the status probe fails', async () =>
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       assert.equal(error.details?.transportError, 'fetch failed');
       return true;
     },

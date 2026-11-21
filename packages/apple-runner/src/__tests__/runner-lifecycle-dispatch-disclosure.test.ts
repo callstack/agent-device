@@ -40,10 +40,7 @@ vi.mock('../runner-session.ts', async () => {
 });
 
 import { runAppleRunnerCommand } from '../index.ts';
-import {
-  isRetryableRunnerError,
-  RUNNER_REPLY_LOST_REASON,
-} from '../runner-error-classification.ts';
+import { isRetryableRunnerError, RUNNER_EXCHANGE_REASONS } from '../runner-error-classification.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import { waitForRunner } from '../runner-startup-transport.ts';
@@ -177,7 +174,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
       return await tap();
     } catch (error) {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       assert.equal(error.details?.recovery, 'status_probe_failed');
       assert.equal(error.details?.runnerRestarted, undefined, 'the runner is not restarted');
       throw error;
@@ -253,7 +250,7 @@ test('a mutation whose connect-loop POST timed out after writing is not restarte
     assert.ok(error instanceof AppError);
     assert.equal(error.details?.runnerRestarted, undefined);
     assert.equal(error.details?.dispatched, 'unknown');
-    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
     assert.equal(error.details?.recovery, 'status_probe_failed');
     return true;
   });
@@ -271,7 +268,7 @@ test('a mutation whose reply and status probe both fail on transport text is not
     .mockRejectedValue(new AppError('COMMAND_FAILED', 'connect ECONNREFUSED 127.0.0.1:8100'));
   await assert.rejects(tap(), (error: unknown) => {
     assert.ok(error instanceof AppError);
-    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
     assert.equal(error.details?.transportError, 'fetch failed');
     assert.equal(isRetryableRunnerError(error), false);
     return true;

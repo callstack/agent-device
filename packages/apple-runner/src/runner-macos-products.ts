@@ -1,8 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { runAppleToolCommand } from './host.ts';
+
+const RUNNER_MACOS_PRODUCT_REASONS = {
+  // The macOS runner's xctestrun file names no product to launch.
+  productMissing: { reason: 'RUNNER_PRODUCT_MISSING' },
+  // The signature of a macOS runner product could not be repaired.
+  productRepairFailed: { reason: 'RUNNER_PRODUCT_REPAIR_FAILED' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set([
   'RUNNER_PRODUCT_MISSING',
@@ -27,7 +34,7 @@ export async function repairMacOsRunnerProductsIfNeeded(
   }
   if (productPaths.length === 0) {
     throw new AppError('COMMAND_FAILED', 'Missing macOS runner product', {
-      reason: 'RUNNER_PRODUCT_MISSING',
+      reason: RUNNER_MACOS_PRODUCT_REASONS.productMissing.reason,
       xctestrunPath,
     });
   }
@@ -37,7 +44,7 @@ export async function repairMacOsRunnerProductsIfNeeded(
   for (const productPath of sortedProductPaths) {
     if (!fs.existsSync(productPath)) {
       throw new AppError('COMMAND_FAILED', 'Missing macOS runner product', {
-        reason: 'RUNNER_PRODUCT_MISSING',
+        reason: RUNNER_MACOS_PRODUCT_REASONS.productMissing.reason,
         productPath,
         xctestrunPath,
       });
@@ -86,7 +93,7 @@ function repairFailure(
   details?: unknown,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Failed to repair macOS runner product signature', {
-    reason: 'RUNNER_PRODUCT_REPAIR_FAILED',
+    reason: RUNNER_MACOS_PRODUCT_REASONS.productRepairFailed.reason,
     productPath,
     xctestrunPath,
     error,

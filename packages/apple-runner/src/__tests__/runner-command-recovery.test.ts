@@ -7,7 +7,7 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
-import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
+import { RUNNER_EXCHANGE_REASONS } from '../runner-error-classification.ts';
 import type { RunnerSession } from '../runner-session.ts';
 import {
   startFakeRunnerServer,
@@ -131,7 +131,7 @@ test('notAccepted from a restarted runner fails the lost command as unknown, nam
 
   await assert.rejects(result, (error: unknown) => {
     assert.ok(error instanceof AppError);
-    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
     assert.equal(error.details?.dispatched, 'unknown');
     return true;
   });
@@ -149,7 +149,7 @@ test('a failing status probe retains the invalidation and names the lost reply',
     assert.notEqual(error.message, transportError.message);
     assert.equal(error.details?.transportError, transportError.message);
     assert.equal(error.cause, transportError);
-    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
     assert.equal(error.details?.transportReason, 'socket_reset');
     assert.equal(error.details?.recovery, 'status_probe_failed');
     assert.equal(error.details?.dispatched, 'unknown');
@@ -167,7 +167,7 @@ test('a command without an id cannot be probed: invalidate and name the lost rep
   await assert.rejects(result, (error: unknown) => {
     assert.ok(error instanceof AppError);
     assert.equal(error.cause, transportError);
-    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
     assert.equal(error.details?.recovery, 'status_recovery_unavailable');
     return true;
   });

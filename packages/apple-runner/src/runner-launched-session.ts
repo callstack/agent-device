@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { randomUUID } from 'node:crypto';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { Deadline, emitDiagnostic } from './host.ts';
@@ -13,6 +13,15 @@ import {
   type RunnerSession,
 } from './runner-session-types.ts';
 import { resolveRunnerLaunchReadinessMs, type RunnerStartBudget } from './runner-start-budget.ts';
+
+const RUNNER_LAUNCH_REASONS = {
+  // The runner launcher exited before the runner accepted a connection.
+  processExited: { reason: 'runner_process_exited' },
+  // The runner launcher could not stop its runner process.
+  terminationFailed: { reason: 'runner_termination_failed' },
+  // Reading the runner's output failed while it was starting, so the runner was stopped.
+  outputFailed: { reason: 'runner_output_failed' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 export async function launchRunnerSession(
   device: DeviceInfo,
@@ -65,7 +74,7 @@ export async function launchRunnerSession(
         'COMMAND_FAILED',
         'Runner did not accept connection (launcher exited early)',
         {
-          reason: 'runner_process_exited',
+          reason: RUNNER_LAUNCH_REASONS.processExited.reason,
           port,
           logPath: logPath ?? requestedLogPath,
           output: observation.readLogTail(16_384),
@@ -82,7 +91,7 @@ export async function launchRunnerSession(
           'COMMAND_FAILED',
           'Runner launcher could not terminate its generation',
           {
-            reason: 'runner_termination_failed',
+            reason: RUNNER_LAUNCH_REASONS.terminationFailed.reason,
             deviceId: device.id,
           },
           error,
@@ -143,7 +152,7 @@ export async function refuseFailedRunnerPublication(session: RunnerSession): Pro
   throw new AppError(
     'COMMAND_FAILED',
     'Runner output failed during startup',
-    { reason: 'runner_output_failed', deviceId: session.deviceId },
+    { reason: RUNNER_LAUNCH_REASONS.outputFailed.reason, deviceId: session.deviceId },
     session.launch.failure,
   );
 }

@@ -4,6 +4,7 @@ import {
   type AppErrorCode,
   type AppErrorDetails,
   type DispatchDisclosure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from './host.ts';
 import type {
@@ -15,7 +16,7 @@ import {
   RUNNER_WEDGED_RUNNER_CODE,
   type RunnerTableErrorCode,
   type RunnerCommand,
-  RUNNER_TOKEN_UNSUPPORTED_REASON,
+  RUNNER_ERROR_REASONS,
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 
@@ -48,12 +49,12 @@ export function runnerConnectFailureDetails(reason: RunnerConnectFailureReason):
   return { runnerConnectFailureReason: reason };
 }
 
-/**
- * `details.reason` of a mutation whose reply stayed lost: status recovery found no result and no
- * runner answer, so nothing proves the command did not run. The command is not resent; the caller
- * observes the screen before acting again. A read never carries it, because it is resent.
- */
-export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
+export const RUNNER_EXCHANGE_REASONS = {
+  /** Not resent, and a read never carries it, because a read is resent. */
+  // A mutation's reply was lost and status recovery found no result, so it may have run;
+  // observe the screen before acting again.
+  replyLost: { reason: 'runner_reply_lost' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 type RunnerErrorMatch = {
   /** Required `AppError.code`; absent = any AppError. */
@@ -69,9 +70,9 @@ type RunnerErrorMatch = {
 };
 
 const hasRunnerReplyLostReason: RunnerErrorDetailsMatch = (details) =>
-  details.reason === RUNNER_REPLY_LOST_REASON;
+  details.reason === RUNNER_EXCHANGE_REASONS.replyLost.reason;
 const hasRunnerTokenUnsupportedReason: RunnerErrorDetailsMatch = (details) =>
-  details.reason === RUNNER_TOKEN_UNSUPPORTED_REASON;
+  details.reason === RUNNER_ERROR_REASONS.tokenUnsupported.reason;
 /**
  * The runner refused the command before running it while abandoned main-thread work drains (#1105).
  * The runner code owns the verdict — never `details.reason`, which a host path can publish for its
@@ -102,8 +103,8 @@ const hasRunnerConnectFailureReason =
  * Xcode's own wording cannot, on its own, mark a failure terminal.
  */
 const hasLaunchLogCauseFailure: RunnerErrorDetailsMatch = (details) =>
-  details.reason === SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON ||
-  details.reason === SIMULATOR_SET_DESTINATION_NOT_FOUND_REASON;
+  details.reason === RUNNER_STARTUP_FAILURE_REASONS.simulatorServiceHubUnavailable.reason ||
+  details.reason === RUNNER_STARTUP_FAILURE_REASONS.simulatorSetDestinationNotFound.reason;
 /**
  * The preflight marks whatever it was waiting on when it stopped, and one of the things it waits on
  * is a caller that stopped waiting. A canceled request is not a wedged runner: the restart this
@@ -126,24 +127,6 @@ type RunnerErrorVerdicts = {
 };
 
 /**
- * The two device-readiness members (#2683): what the iPhone itself reports through
- * `devicectl device info details`, not what another tool's output implies about it. They are listed
- * apart because they are the members {@link classifyRunnerStartupFailure} does NOT produce — no
- * xcodebuild or host-tool text establishes them, and the code that reads the device publishes them
- * with the hint beside it. The two reach the caller at different moments, which is the whole
- * asymmetry of #2683: a disabled Developer Mode toggle refuses the run up front, while an unavailable
- * developer disk image is published onto a build that named no cause of its own, because iOS 17+
- * mounts that image on demand during build and launch. A connect-stage failure always claims a cause
- * of its own (`IOS_RUNNER_CONNECT_TIMEOUT` unless a provisioning row matches first), so there the
- * image state travels only as `details.developerDiskImage`, and
- * `device_developer_disk_image_unavailable` is published only from the startup build catch.
- */
-export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [
-  'device_developer_mode_disabled',
-  'device_developer_disk_image_unavailable',
-] as const;
-
-/**
  * Why the Apple runner could not reach the point of serving a command (#2680). Published in
  * `details.reason` on the `COMMAND_FAILED` every one of these paths throws, so a caller branches
  * on the reason instead of matching prose; the hint that answers it travels with it in
@@ -160,40 +143,61 @@ export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [
  * Nothing outside this package publishes or consumes this enum, and one declaration is the only way
  * a row and its reason cannot disagree.
  */
-export const RUNNER_STARTUP_FAILURE_REASONS = [
-  'bundle_identifier_already_registered',
-  'signing_no_development_team',
-  'signing_provisioning_profile_missing',
-  'signing_unspecified',
-  'devtools_security_developer_mode_disabled',
-  'simulator_service_hub_unavailable',
-  'simulator_set_destination_not_found',
-  ...RUNNER_DEVICE_READINESS_FAILURE_REASONS,
-  'build_failed_unclassified',
+export const RUNNER_STARTUP_FAILURE_REASONS = {
+  // The runner's bundle identifier is taken; set AGENT_DEVICE_IOS_BUNDLE_ID to a unique value.
+  bundleIdentifierAlreadyRegistered: { reason: 'bundle_identifier_already_registered' },
+  // The runner build needs a development team for signing.
+  signingNoDevelopmentTeam: { reason: 'signing_no_development_team' },
+  // No installed provisioning profile covers the runner, or the one found is unusable.
+  signingProvisioningProfileMissing: { reason: 'signing_provisioning_profile_missing' },
+  // The runner build failed on code signing for a cause the output does not name.
+  signingUnspecified: { reason: 'signing_unspecified' },
+  // DevToolsSecurity is disabled on the host, so the UI test runner cannot be attached.
+  devToolsSecurityDeveloperModeDisabled: { reason: 'devtools_security_developer_mode_disabled' },
+  /**
+   * macOS gates `DTServiceHub` behind a version-restriction entitlement, so an Xcode older than the
+   * macOS it runs on cannot bless the simulator service at all: every launch fails the same way until
+   * the host selects an Xcode that supports its macOS. The launch output reports that refusal as a
+   * Code=1 localDeviceConnectionWithError failure; a bless warning alone can also precede a
+   * successful boot.
+   */
+  // macOS refused to load this Xcode's simulator service; select an Xcode that supports this macOS.
+  simulatorServiceHubUnavailable: { reason: 'simulator_service_hub_unavailable' },
+  /** The set is named on the command, so every retry fails the same way. */
+  // xcodebuild found no simulator with this id in the requested simulator set.
+  simulatorSetDestinationNotFound: { reason: 'simulator_set_destination_not_found' },
+  /**
+   * The two device-readiness members (#2683): what the iPhone itself reports through
+   * `devicectl device info details`, not what another tool's output implies about it. They are listed
+   * apart because they are the members {@link classifyRunnerStartupFailure} does NOT produce — no
+   * xcodebuild or host-tool text establishes them, and the code that reads the device publishes them
+   * with the hint beside it. The two reach the caller at different moments, which is the whole
+   * asymmetry of #2683: a disabled Developer Mode toggle refuses the run up front, while an unavailable
+   * developer disk image is published onto a build that named no cause of its own, because iOS 17+
+   * mounts that image on demand during build and launch. A connect-stage failure always claims a cause
+   * of its own (`IOS_RUNNER_CONNECT_TIMEOUT` unless a provisioning row matches first), so there the
+   * image state travels only as `details.developerDiskImage`, and
+   * `device_developer_disk_image_unavailable` is published only from the startup build catch.
+   */
+  // Developer Mode is off on the physical device, so it refuses the runner.
+  deviceDeveloperModeDisabled: { reason: 'device_developer_mode_disabled' },
+  // The physical device reports no developer disk image, and the runner build named no other cause.
+  deviceDeveloperDiskImageUnavailable: { reason: 'device_developer_disk_image_unavailable' },
+  /** An unclassified build is not evidence of a signing problem, so the hint names none. */
+  // The runner did not start and no rule proves a cause; the hint gives the cache-recovery steps.
+  buildFailedUnclassified: { reason: 'build_failed_unclassified' },
+} as const satisfies ReasonTable<'apple runner'>;
+
+export type RunnerStartupFailureReason =
+  (typeof RUNNER_STARTUP_FAILURE_REASONS)[keyof typeof RUNNER_STARTUP_FAILURE_REASONS]['reason'];
+
+export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [
+  RUNNER_STARTUP_FAILURE_REASONS.deviceDeveloperModeDisabled.reason,
+  RUNNER_STARTUP_FAILURE_REASONS.deviceDeveloperDiskImageUnavailable.reason,
 ] as const;
 
-export type RunnerStartupFailureReason = (typeof RUNNER_STARTUP_FAILURE_REASONS)[number];
-
-/** The device-readiness subset, typed from the one list above. */
 export type RunnerDeviceReadinessFailureReason =
   (typeof RUNNER_DEVICE_READINESS_FAILURE_REASONS)[number];
-
-/**
- * The reason for a simulator runner launch whose service hub the host macOS refused to load. macOS
- * gates `DTServiceHub` behind a version-restriction entitlement, so an Xcode older than the macOS it
- * runs on cannot bless the simulator service at all: every launch fails the same way until the host
- * selects an Xcode that supports its macOS. The launch output reports that refusal as a Code=1
- * localDeviceConnectionWithError failure; a bless warning alone can also precede a successful boot.
- */
-const SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON: RunnerStartupFailureReason =
-  'simulator_service_hub_unavailable';
-
-/**
- * The reason for a scoped-set launch whose simulator this Xcode cannot resolve. The set is named on the
- * command, so a launch that finds no matching destination fails identically on every retry.
- */
-const SIMULATOR_SET_DESTINATION_NOT_FOUND_REASON: RunnerStartupFailureReason =
-  'simulator_set_destination_not_found';
 
 /**
  * The bless sentence stays on one line, but its underlying Code=1 refusal can be on the next
@@ -203,14 +207,6 @@ const SIMULATOR_SERVICE_HUB_BLESS_MATCH = [
   'dtservicehubclient',
   'failed to bless service hub',
 ] as const;
-
-/**
- * The reason a startup failure carries when no rule proves a cause. Its hint is deliberately the
- * cache-recovery advice rather than anything about signing: an unclassified build is not evidence of
- * a signing problem.
- */
-export const RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON: RunnerStartupFailureReason =
-  'build_failed_unclassified';
 
 type RunnerErrorRule = {
   /** Stable rule name for tests and diagnostics. */
@@ -247,7 +243,7 @@ type RunnerErrorRule = {
  * different complaint cannot drift into three different fixes for one lever.
  */
 const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
-  reason: 'signing_provisioning_profile_missing',
+  reason: RUNNER_STARTUP_FAILURE_REASONS.signingProvisioningProfileMissing.reason,
   hint: 'Install/select a valid iOS provisioning profile, or set AGENT_DEVICE_IOS_PROVISIONING_PROFILE.',
 };
 
@@ -264,7 +260,7 @@ const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
 export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   {
     // A mutation that may have run: no axis may resend or restart it, whatever text it carries.
-    reason: RUNNER_REPLY_LOST_REASON,
+    reason: RUNNER_EXCHANGE_REASONS.replyLost.reason,
     match: { code: 'COMMAND_FAILED', details: hasRunnerReplyLostReason },
     verdicts: {
       retryable: false,
@@ -277,13 +273,13 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   {
     // The runner answered without requiring the listener token, so it predates the token and
     // listens to anyone: stop it, and never resend, restart into, or replay on it.
-    reason: RUNNER_TOKEN_UNSUPPORTED_REASON,
+    reason: RUNNER_ERROR_REASONS.tokenUnsupported.reason,
     match: { code: 'COMMAND_FAILED', details: hasRunnerTokenUnsupportedReason },
     verdicts: {
       retryable: false,
       drainResend: false,
       connectRetry: false,
-      sessionFatalReason: RUNNER_TOKEN_UNSUPPORTED_REASON,
+      sessionFatalReason: RUNNER_ERROR_REASONS.tokenUnsupported.reason,
       restartBeforeSend: false,
       restartAfterReadinessPreflight: false,
       artifactSuspect: false,
@@ -465,7 +461,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     },
     verdicts: {},
     buildFailure: {
-      reason: 'simulator_set_destination_not_found',
+      reason: RUNNER_STARTUP_FAILURE_REASONS.simulatorSetDestinationNotFound.reason,
       hint: 'Check that the simulator still exists in the --ios-simulator-device-set this error names (`xcrun simctl --set <set> list devices`). If it does, the Xcode this error names no longer honors -DVTSimulatorSetLocation, so use a simulator in the default set.',
       messageSuffix: (details) =>
         typeof details.simulatorSetPath === 'string' && typeof details.simulatorUdid === 'string'
@@ -486,7 +482,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     },
     verdicts: {},
     buildFailure: {
-      reason: SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON,
+      reason: RUNNER_STARTUP_FAILURE_REASONS.simulatorServiceHubUnavailable.reason,
       hint: 'This Xcode cannot start its simulator service on this macOS: macOS refuses to load its DTServiceHub. Select an Xcode that supports this macOS on the daemon host (`xcode-select -s /Applications/Xcode.app`, or DEVELOPER_DIR=/Applications/Xcode.app for the daemon process), then retry. Updating Xcode is the fix; restarting the runner or clearing derived data cannot change it.',
       messageSuffix: () => 'this Xcode cannot start its simulator service on this macOS',
     },
@@ -496,7 +492,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     match: { toolTextIncludesAll: ['failed registering bundle identifier'] },
     verdicts: {},
     buildFailure: {
-      reason: 'bundle_identifier_already_registered',
+      reason: RUNNER_STARTUP_FAILURE_REASONS.bundleIdentifierAlreadyRegistered.reason,
       hint: 'Set AGENT_DEVICE_IOS_BUNDLE_ID to a unique reverse-DNS value (for example, com.yourname.agentdevice.runner), then retry.',
     },
   },
@@ -508,7 +504,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     match: { toolTextLineIncludesAll: ['app identifier', 'not available'] },
     verdicts: {},
     buildFailure: {
-      reason: 'bundle_identifier_already_registered',
+      reason: RUNNER_STARTUP_FAILURE_REASONS.bundleIdentifierAlreadyRegistered.reason,
       hint: 'Set AGENT_DEVICE_IOS_BUNDLE_ID to a unique reverse-DNS value (for example, com.yourname.agentdevice.runner), then retry.',
     },
   },
@@ -517,7 +513,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     match: { toolTextIncludesAll: ['requires a development team'] },
     verdicts: {},
     buildFailure: {
-      reason: 'signing_no_development_team',
+      reason: RUNNER_STARTUP_FAILURE_REASONS.signingNoDevelopmentTeam.reason,
       hint: 'Configure signing in Xcode or set AGENT_DEVICE_IOS_TEAM_ID for physical-device runs.',
     },
   },
@@ -531,7 +527,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     match: { toolTextIncludesAll: ['conflicting provisioning settings'] },
     verdicts: {},
     buildFailure: {
-      reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
+      reason: RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
       hint: RUNNER_CACHE_RECOVERY_HINT,
     },
   },
@@ -583,7 +579,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     match: { toolTextIncludesAll: ['code signing'] },
     verdicts: {},
     buildFailure: {
-      reason: 'signing_unspecified',
+      reason: RUNNER_STARTUP_FAILURE_REASONS.signingUnspecified.reason,
       hint: 'Enable Automatic Signing in Xcode or provide AGENT_DEVICE_IOS_TEAM_ID and optional AGENT_DEVICE_IOS_SIGNING_IDENTITY.',
     },
   },
@@ -592,7 +588,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     match: { code: 'COMMAND_FAILED', details: hasDevToolsSecurityStatus },
     verdicts: {},
     buildFailure: {
-      reason: 'devtools_security_developer_mode_disabled',
+      reason: RUNNER_STARTUP_FAILURE_REASONS.devToolsSecurityDeveloperModeDisabled.reason,
       hint: 'Run `sudo DevToolsSecurity -enable`, then retry the iOS runner. UI test runners start suspended until Xcode/testmanagerd can attach.',
     },
   },
@@ -868,7 +864,7 @@ export function classifyRunnerStartupFailure(error: unknown): RunnerStartupClass
     }
   }
   return {
-    reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
+    reason: RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
     hint: RUNNER_CACHE_RECOVERY_HINT,
     matched: false,
   };
@@ -876,7 +872,7 @@ export function classifyRunnerStartupFailure(error: unknown): RunnerStartupClass
 
 /**
  * The verdict, the advice beside it, and whether a row reached either (#2690 review). `matched` is
- * half the answer rather than an implementation detail: {@link RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON}
+ * half the answer rather than an implementation detail: `build_failed_unclassified`
  * is also what a row that deliberately claims no cause publishes, so reading the reason alone cannot
  * tell "nothing spoke" from "a row spoke and declined to name a cause".
  */
@@ -943,7 +939,7 @@ export function enrichRunnerStartupFailureWithDeviceStates(
       ...(error.details ?? {}),
       ...(speaks
         ? {
-            reason: 'device_developer_disk_image_unavailable',
+            reason: RUNNER_STARTUP_FAILURE_REASONS.deviceDeveloperDiskImageUnavailable.reason,
             hint: states.developerDiskImageHint,
           }
         : {}),
@@ -960,7 +956,10 @@ export function enrichRunnerStartupFailureWithDeviceStates(
  */
 function claimedStartupFailureReason(error: AppError): RunnerStartupFailureReason | undefined {
   const reason = error.details?.reason;
-  if (typeof reason !== 'string' || reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) {
+  if (
+    typeof reason !== 'string' ||
+    reason === RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason
+  ) {
     return undefined;
   }
   return reason as RunnerStartupFailureReason;
