@@ -31,6 +31,7 @@ import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickabilit
 import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
 import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
+import { readAndroidHelperStderrDiagnostic } from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
@@ -738,9 +739,10 @@ function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
     return `${normalized.message}: ${helperMessage}`;
   }
   if (helperMessage) return helperMessage;
-  const stderr =
-    typeof normalized.details?.stderr === 'string' ? normalized.details.stderr.trim() : '';
-  const firstLine = stderr.split(/\r?\n/).find((line) => line.trim());
+  // The cause line comes from the same diagnostic the details carry: a helper stream can hold
+  // snapshot text, so an unfiltered line must not become the reason (#4026).
+  const stderr = readAndroidHelperStderrDiagnostic(normalized.details?.stderr)?.stderr;
+  const firstLine = stderr?.split('\n').find((line) => line !== '');
   return firstLine ? `${normalized.message}: ${firstLine}` : normalized.message;
 }
 

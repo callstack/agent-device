@@ -8,6 +8,7 @@ import {
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import {
   parseInstrumentationRecords,
+  readAndroidHelperStderrDiagnostic,
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
@@ -116,12 +117,31 @@ export async function captureAndroidSnapshotWithHelper(
       'COMMAND_FAILED',
       'Android snapshot helper failed',
       execFailureDetails(
-        { stdout: '', stderr: result.stderr, exitCode: result.exitCode },
-        { helper: output.metadata, instrumentation },
+        { stdout: '', stderr: '', exitCode: result.exitCode },
+        {
+          helper: output.metadata,
+          instrumentation,
+          ...androidHelperStderrDetails(result.stderr),
+        },
       ),
     );
   }
   return output;
+}
+
+/**
+ * The stderr fields a helper failure publishes on its details (#4026). The run's raw stderr can
+ * carry snapshot text, so only the bounded, snapshot-content-free diagnostic crosses the boundary;
+ * `stderrWithheldLines` records what was kept out.
+ */
+function androidHelperStderrDetails(stderr: string): Record<string, unknown> {
+  const diagnostic = readAndroidHelperStderrDiagnostic(stderr);
+  if (!diagnostic) return {};
+  const { stderr: kept, withheldLines } = diagnostic;
+  return {
+    ...(kept !== undefined ? { stderr: kept } : {}),
+    ...(withheldLines > 0 ? { stderrWithheldLines: withheldLines } : {}),
+  };
 }
 
 /**
@@ -134,20 +154,22 @@ export function isAndroidSnapshotHelperStartFailure(error: unknown): boolean {
 
 /**
  * An executor failure (a deadline, a spawn error) carries the helper's raw stdout, which can hold the
- * snapshot it was printing. It is replaced by the parsed instrumentation result; `stderr` and the
- * typed failure metadata stay.
+ * snapshot it was printing. It is replaced by the parsed instrumentation result, and the raw stderr
+ * is replaced by the bounded, snapshot-content-free diagnostic (#4026); the typed failure metadata
+ * stays.
  */
 function withoutRawStreams(error: unknown): unknown {
   if (!(error instanceof AppError) || error.details?.stdout === undefined) return error;
-  const { stdout, ...details } = error.details;
+  const { stdout, stderr, ...details } = error.details;
   return new AppError(
     error.code,
     error.message,
     {
       ...details,
+      ...androidHelperStderrDetails(typeof stderr === 'string' ? stderr : ''),
       instrumentation: readInstrumentationExitResult({
         stdout: typeof stdout === 'string' ? stdout : '',
-        stderr: typeof details.stderr === 'string' ? details.stderr : '',
+        stderr: typeof stderr === 'string' ? stderr : '',
         exitCode: typeof details.exitCode === 'number' ? details.exitCode : null,
       }),
     },
@@ -278,9 +300,11 @@ function readAndroidSnapshotHelperOutput(
       );
     }
     // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
-    // message already branches on the exit code.
+    // message already branches on the exit code, and the raw stderr trio is not
+    // spread because stderr crosses only as the filtered diagnostic below.
     // Stdout is not copied into the details: it can hold the snapshot the helper was printing.
-    // The new `instrumentation` detail is parsed fields only; `stderr` stays as it always was.
+    // The new `instrumentation` detail is parsed fields only; stderr is published only as the
+    // bounded, snapshot-content-free diagnostic (#4026).
     const instrumentation = readInstrumentationExitResult(result);
     throw new AppError(
       'COMMAND_FAILED',
@@ -288,9 +312,9 @@ function readAndroidSnapshotHelperOutput(
         ? 'Android snapshot helper output could not be parsed'
         : 'Android snapshot helper failed before returning parseable output',
       {
-        stderr: result.stderr,
         exitCode: result.exitCode,
         instrumentation,
+        ...androidHelperStderrDetails(result.stderr),
         // Read only here, where adb returned the run's own exit: a deadline or a host failure throws
         // before this point, so it can never read as a refused start.
         ...(isRefusedInstrumentationStart(result)

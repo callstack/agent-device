@@ -403,8 +403,8 @@ test('a sensitive value never reaches the instrumentation detail or the log wher
     assertPrivate(log);
   }
 
-  // The failure message and `stderr` detail are unchanged from before this diagnostic existed, so
-  // for stderr only the new `instrumentation` detail and its request-log entry are asserted.
+  // Helper stderr reaches the client only as the bounded, snapshot-content-free diagnostic (#4026),
+  // so every surface of the error and the request log is asserted, not just `instrumentation`.
   const onStderr = [
     `ret" text="${SECRET}" bounds="[0,0][1,1]" />`,
     `ret" role-description="${SECRET}" />`,
@@ -416,8 +416,8 @@ test('a sensitive value never reaches the instrumentation detail or the log wher
   for (const stderr of onStderr) {
     const run = { exitCode: 1, stdout: '', stderr: `${stderr}\nam: Killed` };
     const error = await captureError(run);
+    assertPrivate(JSON.stringify(normalizeError(error)));
     const instrumentation = exitResultOf(normalizeError(error).details ?? {});
-    assertPrivate(JSON.stringify(instrumentation));
     assert.equal(instrumentation.failed, undefined);
 
     const { log } = await withLog(async (logPath) => {
@@ -430,10 +430,69 @@ test('a sensitive value never reaches the instrumentation detail or the log wher
         );
       });
     });
-    assertPrivate(
-      JSON.stringify(diagnosticData(log, 'android_snapshot_helper_failed').instrumentation),
-    );
+    assertPrivate(log);
   }
+});
+
+test('helper stderr kept for the client is bounded and keeps the cause line visible', async () => {
+  // A provider must still see why the run died; a line carrying snapshot content must not be what
+  // it sees, wherever the error or the request log carries stderr.
+  const run = {
+    exitCode: 1,
+    stdout: '',
+    stderr: `ret" text="${SECRET}" bounds="[0,0][1,1]" />\nuiautomator unavailable\nam: Killed`,
+  };
+  const error = await captureError(run);
+  const wire = normalizeError(error);
+  assert.ok(!JSON.stringify(wire).includes(SECRET), JSON.stringify(wire).slice(-800));
+  assert.equal(wire.details?.stderr, 'uiautomator unavailable\nam: Killed');
+  assert.equal(wire.details?.stderrWithheldLines, 1);
+
+  const { log } = await withLog(async (logPath) => {
+    await inScope(logPath, async () => {
+      await assert.rejects(
+        snapshotAndroid(emulator, {
+          helperAdb: helperFailingWith(run),
+          helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+        }),
+      );
+    });
+  });
+  assertPrivate(log);
+  // The kept cause line is what the client error and the request-log reason carry.
+  await assert.rejects(
+    snapshotAndroid(emulator, {
+      helperAdb: helperFailingWith(run),
+      helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    }),
+    /uiautomator unavailable/,
+  );
+  assert.match(
+    JSON.stringify(diagnosticData(log, 'android_snapshot_helper_failed')),
+    /uiautomator unavailable/,
+  );
+});
+
+test('helper stderr beyond the kept budget is withheld whole, and so is a stream with only content', async () => {
+  const overBudget = await captureError({
+    exitCode: 1,
+    stdout: '',
+    stderr: `${'a'.repeat(3_000)}\n`,
+  });
+  const overBudgetWire = normalizeError(overBudget);
+  assert.ok(!JSON.stringify(overBudgetWire).includes(`${'a'.repeat(100)}`));
+  assert.equal(overBudgetWire.details?.stderr, undefined);
+  assert.equal(overBudgetWire.details?.stderrWithheldLines, 1);
+
+  const allContent = await captureError({
+    exitCode: 1,
+    stdout: '',
+    stderr: `ret" text="${SECRET}" />\n`,
+  });
+  const allContentWire = normalizeError(allContent);
+  assertPrivate(JSON.stringify(allContentWire));
+  assert.equal(allContentWire.details?.stderr, undefined);
+  assert.equal(allContentWire.details?.stderrWithheldLines, 1);
 });
 
 test('a session exit never leaks a sensitive value split across chunks', async () => {
@@ -532,7 +591,9 @@ test('a nonzero exit after parseable helper output keeps no raw stream in its de
 
   assertPrivate(JSON.stringify(normalizeError(error)));
   assert.equal(error.details?.stdout, '');
+  // A stderr that carries no snapshot content is kept as it is, with no withheld count.
   assert.equal(error.details?.stderr, 'am: Killed');
+  assert.equal(error.details?.stderrWithheldLines, undefined);
   assert.equal(error.details?.exitCode, 1);
 });
 
@@ -878,9 +939,11 @@ test('a helper that prints chunks and then times out in the executor leaks no st
 
   assert.ok(caught instanceof AppError);
   const wire = normalizeError(caught);
-  assertPrivate(JSON.stringify({ ...wire.details, stderr: undefined }));
+  // The raw stderr line held snapshot content, so it is withheld whole (#4026).
+  assertPrivate(JSON.stringify(wire.details));
+  assert.equal(caught.details?.stderr, undefined);
+  assert.equal(caught.details?.stderrWithheldLines, 1);
   assert.equal('stdout' in (caught.details ?? {}), false);
-  assert.ok(typeof caught.details?.stderr === 'string');
   assert.equal(caught.details?.timeoutMs, 600);
   assert.equal(exitResultOf(caught.details ?? {}).statusCode, 1);
 });
