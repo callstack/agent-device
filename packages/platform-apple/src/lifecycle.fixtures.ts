@@ -198,7 +198,13 @@ export function launchUrlSimulator(
 
 /** A Shutdown Simulator host whose boot and bootstatus calls run the given hooks before succeeding. */
 export function coldSimulatorLifecycleHost(
-  hooks: { onBoot?: () => void; onBootstatus?: () => void; bootstatusExitCode?: number } = {},
+  hooks: {
+    onBoot?: () => void;
+    onBootstatus?: () => void;
+    bootstatusExitCode?: number;
+    /** When set, `simctl boot` answers this instead of succeeding. */
+    bootFailure?: { stdout?: string; stderr: string; exitCode: number };
+  } = {},
 ) {
   const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
   let state = 'Shutdown';
@@ -213,6 +219,11 @@ export function coldSimulatorLifecycleHost(
     }
     if (request.args.includes('boot')) {
       hooks.onBoot?.();
+      if (hooks.bootFailure) {
+        // CoreSimulator's own refusal for a Simulator somebody else booted first (#4791).
+        state = 'Booted';
+        return { stdout: '', ...hooks.bootFailure };
+      }
       state = 'Booted';
     }
     if (request.args.includes('bootstatus')) {
