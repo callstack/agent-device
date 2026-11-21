@@ -200,13 +200,13 @@ export function finalizeParsedArgs(
   }
 
   const unread = findFlagsTheActionCannotRead(parsed);
-  if (unread.length > 0) {
-    const message = formatUnreadActionFlagMessage(parsed.command, parsed.positionals[0]!, unread);
+  if (unread !== undefined) {
+    const message = formatUnreadActionFlagMessage(parsed.command, unread.action, unread.flags);
     if (strictFlags) {
       throw new AppError('INVALID_ARGS', message);
     }
     warnings.push(message);
-    for (const entry of unread) {
+    for (const entry of unread.flags) {
       delete (flags as Record<string, unknown>)[entry.key];
     }
   }
@@ -425,22 +425,44 @@ function stripConfigSourcedGesturePanHold(parsed: RawParsedArgs, flags: CliFlags
  *
  * Only the options the table splits across actions are its business: a global flag such as `--json`
  * or `--no-record` is read by every action, and refusing one would refuse the command itself. A
- * command without the table, or an action it does not list, is left to the rest of the parser.
+ * command without the table, or positionals that select none of its actions, is left to the rest of
+ * the parser.
  *
  * Config, env, and remote-config defaults never appear in `providedFlags`, which is why
  * `AGENT_DEVICE_FPS=30` does not fail `record stop`: a default the action ignores was never requested.
  */
-function findFlagsTheActionCannotRead(parsed: RawParsedArgs): ParsedFlagRecord[] {
+function findFlagsTheActionCannotRead(
+  parsed: RawParsedArgs,
+): { action: string; flags: ParsedFlagRecord[] } | undefined {
   const flagsByAction = getCommandSchema(parsed.command)?.flagsByAction;
-  const action = parsed.positionals[0];
-  if (flagsByAction === undefined || action === undefined) return [];
-  if (!Object.hasOwn(flagsByAction, action)) return [];
-  const reads = flagsByAction[action];
-  if (reads === undefined) return [];
+  if (flagsByAction === undefined) return undefined;
+  const action = selectAction(Object.keys(flagsByAction), parsed.positionals);
+  const reads = action === undefined ? undefined : flagsByAction[action];
+  if (action === undefined || reads === undefined) return undefined;
   const actionScoped = new Set(Object.values(flagsByAction).flat());
-  return parsed.providedFlags.filter(
+  const flags = parsed.providedFlags.filter(
     (entry) => actionScoped.has(entry.key) && !reads.includes(entry.key),
   );
+  return flags.length > 0 ? { action, flags } : undefined;
+}
+
+/**
+ * The longest action whose words lead the positionals, so `perf cpu profile stop out.trace` selects
+ * `cpu profile stop` and `perf frames sample` selects `frames`.
+ */
+function selectAction(
+  actions: readonly string[],
+  positionals: readonly string[],
+): string | undefined {
+  let selected: { action: string; words: number } | undefined;
+  for (const action of actions) {
+    const words = action.split(' ');
+    if (selected !== undefined && words.length <= selected.words) continue;
+    if (words.every((word, index) => positionals[index] === word)) {
+      selected = { action, words: words.length };
+    }
+  }
+  return selected?.action;
 }
 
 function formatUnreadActionFlagMessage(

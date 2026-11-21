@@ -185,6 +185,25 @@ describe('shared options leave a command table for one line', () => {
     assert.deepEqual(facts.commonOptions, ['--settle']);
   });
 
+  test('an action of several words gets its own table under its full path', () => {
+    const scoped = {
+      text: { summary: 'Perf', description: 'Perf' },
+      allowedFlags: ['perfTemplate', 'out'] as FlagKey[],
+      flagsByAction: {
+        'cpu profile start': ['perfTemplate', 'out'],
+        'cpu profile stop': ['out'],
+      },
+    } as CommandSchema;
+    const facts = buildCommandFacts('perf', scoped, new Set<FlagKey>());
+    assert.deepEqual(
+      facts.actions.map((action) => [action.label, action.options.map((option) => option.label)]),
+      [
+        ['perf cpu profile start', ['--template <name>', '--out <path>']],
+        ['perf cpu profile stop', ['--out <path>']],
+      ],
+    );
+  });
+
   test('the threshold and overrides decide the shared list', () => {
     const surfaces = [
       ...Array.from({ length: 5 }, (_, index) => ({

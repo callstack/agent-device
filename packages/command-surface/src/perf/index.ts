@@ -1,6 +1,7 @@
 import type { PerfOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { enumField, requiredField, stringField } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -46,13 +47,29 @@ export const perfCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+/**
+ * Which `perf` action reads which option. A stop reads no `--template`: the capture keeps the template
+ * its start chose. `frames` and `memory sample` read no option.
+ */
+const PERF_FLAGS_BY_ACTION: Readonly<Record<string, readonly FlagKey[]>> = {
+  frames: [],
+  'memory sample': [],
+  'memory snapshot': ['kind', 'out'],
+  'cpu profile start': ['kind', 'perfTemplate', 'out'],
+  'cpu profile stop': ['kind', 'out'],
+  'cpu profile report': ['kind', 'perfTemplate', 'out'],
+  'trace start': ['kind', 'perfTemplate', 'out'],
+  'trace stop': ['kind', 'out'],
+};
+
 const perfCliSchema = {
   usageOverride:
-    'perf frames --json\n  agent-device perf memory sample --json\n  agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]\n  agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>\n  agent-device perf cpu profile stop --kind xctrace --out <profile.trace>\n  agent-device perf cpu profile report --kind xctrace --out <report.json>\n  agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>\n  agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>\n  agent-device perf cpu profile stop --kind simpleperf\n  agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>\n  agent-device perf trace start|stop --kind perfetto [--out <path>]\n\n  Aggregate perf was removed in 0.21. Use one of the explicit forms above.',
+    'perf frames --json\n  agent-device perf memory sample --json\n  agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]\n  agent-device perf cpu profile start --kind xctrace [--template <name>] --out <profile.trace>\n  agent-device perf cpu profile stop --kind xctrace --out <profile.trace>\n  agent-device perf cpu profile report --kind xctrace --out <report.json>\n  agent-device perf trace start --kind xctrace [--template <name>] --out <path>\n  agent-device perf trace stop --kind xctrace --out <path>\n  agent-device perf cpu profile start --kind simpleperf --out <cpu.perf.data>\n  agent-device perf cpu profile stop --kind simpleperf\n  agent-device perf cpu profile report --kind simpleperf --out <cpu-report.json>\n  agent-device perf trace start|stop --kind perfetto [--out <path>]\n\n  Aggregate perf was removed in 0.21. Use one of the explicit forms above.',
   usageFlags: [],
   listUsageOverride: 'perf',
   positionalArgs: ['area', 'subjectOrAction?', 'action?'],
-  allowedFlags: ['kind', 'perfTemplate', 'out'],
+  allowedFlags: [...new Set(Object.values(PERF_FLAGS_BY_ACTION).flat())],
+  flagsByAction: PERF_FLAGS_BY_ACTION,
 } as const satisfies CommandSchemaOverride;
 
 export const perfCliReader: CliReader = (positionals, flags) => ({

@@ -25,6 +25,7 @@ const sessionCliSchema = {
   listUsageOverride: 'session',
   positionalArgs: ['list|state-dir|save-script?', 'path?'],
   allowedFlags: ['force'],
+  flagsByAction: { list: [], 'state-dir': [], 'save-script': ['force'] },
 } as const satisfies CommandSchemaOverride;
 
 const sessionCliReader: CliReader = (positionals, flags) => ({
