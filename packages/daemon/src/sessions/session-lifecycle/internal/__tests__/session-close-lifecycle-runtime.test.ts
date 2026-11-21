@@ -432,3 +432,41 @@ test('a supported Android close clears admitted runtime hints exactly once', asy
     }),
   );
 });
+
+test('close without an app closes the session app, and a session with no app closes without one', async () => {
+  const sessionStore = makeSessionStore();
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const withApp = makeSession('close-session-app', device);
+  withApp.appBundleId = 'com.example.app';
+  sessionStore.publish(withApp.name, withApp);
+  sessionStore.publish('close-no-app', makeSession('close-no-app', device));
+  const closed: Array<readonly string[]> = [];
+  const bindDevice: Parameters<typeof close>[0]['bindDevice'] = async (boundDevice, use) => {
+    const binding = await mockBindDeviceRuntime(boundDevice, use);
+    return {
+      ...binding,
+      operations: {
+        ...binding.operations,
+        closeApplication: async (input: CloseApplicationInput) => {
+          closed.push(input.positionals);
+        },
+      },
+    };
+  };
+
+  const appClose = await close({ sessionName: withApp.name, sessionStore, bindDevice });
+  const noAppClose = await close({ sessionName: 'close-no-app', sessionStore, bindDevice });
+
+  expect(appClose?.ok).toBe(true);
+  expect(noAppClose?.ok).toBe(true);
+  expect(closed).toEqual([['com.example.app']]);
+  expect(sessionStore.get(withApp.name)).toBeUndefined();
+  expect(sessionStore.get('close-no-app')).toBeUndefined();
+});

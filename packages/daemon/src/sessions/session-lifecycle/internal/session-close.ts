@@ -76,8 +76,16 @@ type RepairClosePreparation =
   | { repairArmed: boolean; healedScriptPath?: string; aborted?: boolean }
   | { response: DaemonResponse };
 
-const shouldDispatchPlatformClose = (req: DaemonRequest, session: SessionState): boolean =>
-  (req.positionals?.length ?? 0) > 0 || isWebSession(session);
+/**
+ * The positionals the platform close receives. A close without an app closes the session app,
+ * the way `close <app>` does (#4684). A web session always dispatches, with no app. A native
+ * session that never opened an app has nothing to close.
+ */
+function platformCloseTarget(req: DaemonRequest, session: SessionState): string[] | undefined {
+  if (req.positionals && req.positionals.length > 0) return req.positionals;
+  if (isWebSession(session)) return [];
+  return session.appBundleId ? [session.appBundleId] : undefined;
+}
 
 async function prepareRepairClose(params: {
   req: DaemonRequest;
@@ -89,7 +97,7 @@ async function prepareRepairClose(params: {
   const { req, ref, logPath, sessionStore, lifecycle } = params;
   const session = sessionStore.requireCurrent(ref);
   const repairArmed = isRepairArmedSession(session);
-  const closeReceipt = JSON.stringify(req.positionals ?? []);
+  const closeReceipt = JSON.stringify(platformCloseTarget(req, session) ?? []);
   if (repairArmed && !hasRepairPlatformCloseReceipt(session, closeReceipt)) {
     const platformCloseError = await dispatchTargetedPlatformClose({
       req,
@@ -194,10 +202,11 @@ async function dispatchTargetedPlatformClose(params: {
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
 }): Promise<unknown> {
   const { req, session, logPath, lifecycle } = params;
-  if (!shouldDispatchPlatformClose(req, session)) return undefined;
+  const positionals = platformCloseTarget(req, session);
+  if (!positionals) return undefined;
   try {
     await lifecycle.operations.closeApplication({
-      positionals: req.positionals ?? [],
+      positionals,
       outPath: req.flags?.out,
       appBundleId: session.appBundleId,
       surface: session.surface ?? 'app',
