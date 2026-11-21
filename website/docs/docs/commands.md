@@ -2751,7 +2751,7 @@ agent-device disconnect [--shutdown]
 
 | Option | What it does |
 | --- | --- |
-| `--shutdown` | close: shutdown associated simulator/emulator after ending session |
+| `--shutdown` | close, disconnect: also shut down the session device where supported; a Limrun instance agent-device created is deleted with its data, an attached one keeps running. close also releases a lease or attachment kept on close |
 
 Exact behavior: `agent-device help disconnect`.
 
