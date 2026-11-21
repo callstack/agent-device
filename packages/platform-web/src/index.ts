@@ -107,6 +107,7 @@ function webPlatformPlugin() {
                 await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
                   env: bound.host.env,
                   emitDiagnostic: bound.host.emitDiagnostic,
+                  processes: bound.host.processes,
                   openWebSessionNames: openSessions,
                   ownedProcessRecords: bound.host.ownedProcessRecords,
                 });

@@ -50,7 +50,15 @@ async function startStore(env: HostEnvironment['env']) {
       },
       isFileExecutable: async () => false,
       isExecutableOnPath: async () => false,
-      listHostProcesses: async () => [],
+      processes: {
+        list: async () => [],
+        readIdentities: async () => new Map(),
+        readIdentityObservations: async () => new Map(),
+        readExecutablePaths: async () => new Map(),
+        reapOwnedRecords: async () => {
+          throw new Error('setup must not reap host processes');
+        },
+      },
       emitDiagnostic: () => {},
       withDiagnosticTimer: async (_phase, run) => await run(),
     },

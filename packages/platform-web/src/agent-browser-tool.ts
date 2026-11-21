@@ -15,7 +15,6 @@ import {
   hostNodeVersion,
   hostPlatform,
   hostProcessId,
-  readProcessStartTime,
 } from '@agent-device/host-kit/process';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -78,12 +77,18 @@ export async function setupManagedAgentBrowser(options: {
   const processId = hostProcessId();
 
   return await withProcessLock({
-    acquire: () =>
+    acquire: async () =>
       acquireProcessLock({
         lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
         owner: {
           pid: processId,
-          startTime: readProcessStartTime(processId),
+          // The host names this process's start time: the plugin's own copy of the process tool would
+          // read it outside the request's exec trace. A host that will not answer leaves `null`, which
+          // is the same unproven claim a failed local probe always left.
+          startTime:
+            (await options.toolbox.host.processes.readIdentityObservations([processId])).get(
+              processId,
+            )?.startTime ?? null,
           acquiredAtMs: Date.now(),
         },
         timeoutMs: SETUP_TIMEOUT_MS,
@@ -137,10 +142,6 @@ export async function doctorManagedAgentBrowser(options: {
   return { status, ...result };
 }
 
-/**
- * Where the managed backend is on disk, and whether it is there. Reads only the host's environment
- * and the filesystem, so it answers the same way whether or not anything is installed.
- */
 /** Reads a status for the host one of the toolbox-taking operations was set up with. */
 function managedStatusOptions(options: { toolbox: WebToolbox; stateDir?: string }): {
   host: HostEnvironment;
@@ -152,6 +153,10 @@ function managedStatusOptions(options: { toolbox: WebToolbox; stateDir?: string 
   };
 }
 
+/**
+ * Where the managed backend is on disk, and whether it is there. Reads only the host's environment
+ * and the filesystem, so it answers the same way whether or not anything is installed.
+ */
 export function getManagedAgentBrowserStatus(options: {
   /** Either the calling runtime's host or the plugin's own host; both answer the same way. */
   host: HostEnvironment;

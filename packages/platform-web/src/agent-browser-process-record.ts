@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformHost } from 'agent-device/plugins';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { hostFileStatSync, realHostPathSync } from '@agent-device/host-kit/host-file';
 import {
@@ -9,9 +10,6 @@ import {
   hostPlatform,
   isProcessAlive,
   processStartTimesDiffer,
-  readHostProcessIdentityObservationsAsync,
-  readProcessIdentities,
-  readProcessExecutablePaths,
   type HostProcessInfo,
   type OwnedProcessRecordStore,
 } from '@agent-device/host-kit/process';
@@ -142,10 +140,10 @@ export async function recordManagedAgentBrowserProcesses(
 ): Promise<AgentBrowserProcessSummary> {
   const initial = await listRealHostProcesses(toolbox);
   const pids = initial.map(({ pid }) => pid);
-  const before = await readProcessIdentities(pids);
+  const before = await toolbox.host.processes.readIdentities(pids);
   const scanned = await listRealHostProcesses(toolbox);
-  const executablePaths = await readProcessExecutablePaths(pids, toolbox.host);
-  const after = await readProcessIdentities(pids);
+  const executablePaths = await toolbox.host.processes.readExecutablePaths(pids);
+  const after = await toolbox.host.processes.readIdentities(pids);
   const initialPids = new Set(pids);
   const processes = scanned.filter(({ pid, command }) => {
     const first = before.get(pid);
@@ -202,8 +200,9 @@ export async function recordManagedAgentBrowserProcesses(
  */
 export async function managedWebBrowserProcessRecordIsLive(
   store: OwnedProcessRecordStore,
+  processes: PlatformHost['processes'],
 ): Promise<boolean> {
-  const liveness = await readRecordedProcessLiveness(store);
+  const liveness = await readRecordedProcessLiveness(store, processes);
   return liveness.length > 0 && liveness.every((state) => state === 'alive');
 }
 
@@ -215,8 +214,9 @@ export async function managedWebBrowserProcessRecordIsLive(
  */
 export async function managedWebBrowserProcessRecordIsDead(
   store: OwnedProcessRecordStore,
+  processes: PlatformHost['processes'],
 ): Promise<boolean> {
-  const liveness = await readRecordedProcessLiveness(store);
+  const liveness = await readRecordedProcessLiveness(store, processes);
   return liveness.length > 0 && liveness.every((state) => state === 'not-alive');
 }
 
@@ -224,10 +224,11 @@ type RecordedProcessLiveness = 'alive' | 'not-alive' | 'unobserved';
 
 async function readRecordedProcessLiveness(
   store: OwnedProcessRecordStore,
+  processes: PlatformHost['processes'],
 ): Promise<readonly RecordedProcessLiveness[]> {
   const records = readDaemonManagedWebBrowserRecords(store);
   if (records.length === 0) return [];
-  const observations = await readHostProcessIdentityObservationsAsync(
+  const observations = await processes.readIdentityObservations(
     records.map((record) => record.pid),
   );
   return records.map((record) => {
@@ -263,7 +264,7 @@ function readDaemonManagedWebBrowserRecords(store: OwnedProcessRecordStore): Own
 
 async function listRealHostProcesses(toolbox: WebToolbox): Promise<HostProcessInfo[]> {
   // The host reports the table; the fleet matchers below work on their own copies.
-  return [...(await toolbox.host.listHostProcesses({ timeoutMs: HOST_PROCESS_LIST_TIMEOUT_MS }))];
+  return [...(await toolbox.host.processes.list({ timeoutMs: HOST_PROCESS_LIST_TIMEOUT_MS }))];
 }
 
 function summarizeMatches(
