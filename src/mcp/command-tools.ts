@@ -1,4 +1,5 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
+import { suggestClosestKey } from '@agent-device/contracts/command';
 import {
   aliasInputRefusal,
   COMMON_INPUT_AUDIENCE,
@@ -444,36 +445,82 @@ function advertisedInputSchema(
   };
 }
 
-/** The first raw input key the advertised schema does not list, with guidance, or undefined. */
+/**
+ * The first raw input key the advertised schema does not list, with guidance, or
+ * undefined. Flat admission is canonical-only. Nested admission (`nested`) is
+ * the same scan with one widening: a key the command declares as an accepted
+ * alias (`out` for `path`) is admitted there, because the nested reader
+ * canonicalizes it exactly as the CLI and Node batch surfaces do; a flat call
+ * still answers with the canonical spelling.
+ */
 function findInadmissibleInput(
   name: CommandName,
   metadata: AdmissionMetadata,
   input: Record<string, unknown>,
+  options?: { nested?: boolean },
 ): AdmissionRejection | undefined {
   const advertised = advertisedInputSchema(name, metadata).properties;
   const audience = toolInputAudience(metadata);
   for (const key of Object.keys(input)) {
-    if (Object.hasOwn(advertised, key)) continue;
-    // `Object.hasOwn`, not a plain lookup: `key` is a raw tool argument name, so
-    // `__proto__`/`constructor`/`toString` would otherwise read a value off
-    // `Object.prototype` and classify against it.
-    const keyAudience = Object.hasOwn(audience, key) ? audience[key] : undefined;
-    // Retired keys are absent from the advertised schema but still recognized:
-    // admit them so the command's own reader answers with migration guidance
-    // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
-    if (keyAudience?.kind === 'retired') continue;
-    if (keyAudience?.kind === 'operator') {
-      return { message: operatorInputRefusal(key, keyAudience.source) };
-    }
-    if (keyAudience?.kind === 'alias') {
-      return { message: aliasInputRefusal(key, keyAudience.of) };
-    }
-    return {
-      message: `${key} is not an accepted argument for the ${name} tool.`,
-      hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
-    };
+    const rejection = inadmissibleKey(
+      name,
+      metadata,
+      key,
+      advertised,
+      audience,
+      options?.nested === true,
+    );
+    if (rejection !== undefined) return rejection;
   }
   return undefined;
+}
+
+/**
+ * The admission verdict for one raw input key. Flat admission is canonical-only
+ * and retired keys are admitted; nested admission additionally admits the
+ * alias spellings the nested reader canonicalizes.
+ */
+function inadmissibleKey(
+  name: CommandName,
+  metadata: AdmissionMetadata,
+  key: string,
+  advertised: Record<string, JsonSchema>,
+  audience: InputAudienceMap,
+  nested: boolean,
+): AdmissionRejection | undefined {
+  if (Object.hasOwn(advertised, key)) return undefined;
+  // `Object.hasOwn`, not a plain lookup: `key` is a raw tool argument name, so
+  // `__proto__`/`constructor`/`toString` would otherwise read a value off
+  // `Object.prototype` and classify against it.
+  const keyAudience = Object.hasOwn(audience, key) ? audience[key] : undefined;
+  if (keyAudience === undefined) return unknownKeyRejection(name, metadata, key, advertised);
+  // Retired keys are absent from the advertised schema but still recognized:
+  // admit them so the command's own reader answers with migration guidance
+  // (e.g. maxSize -> "use --scale") instead of a bare unknown-key rejection.
+  if (keyAudience.kind === 'retired') return undefined;
+  if (keyAudience.kind === 'operator') {
+    return { message: operatorInputRefusal(key, keyAudience.source) };
+  }
+  if (keyAudience.kind === 'alias') {
+    return nested ? undefined : { message: aliasInputRefusal(key, keyAudience.of) };
+  }
+  return unknownKeyRejection(name, metadata, key, advertised);
+}
+
+/** The refusal an undeclared key answers with, recovering through the nearest-key rule. */
+function unknownKeyRejection(
+  name: CommandName,
+  metadata: AdmissionMetadata,
+  key: string,
+  advertised: Record<string, JsonSchema>,
+): AdmissionRejection {
+  const suggestion = suggestClosestKey(key, Object.keys(advertised));
+  return {
+    message:
+      `${key} is not an accepted argument for the ${name} tool.` +
+      (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
+    hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
+  };
 }
 
 /**
@@ -497,8 +544,10 @@ function findInadmissibleInput(
  * sibling holding the command name) and this walks the tool's own schema against
  * the raw arguments, checking each one with {@link findInadmissibleInput}
  * against that command's advertised schema. Nested admission is the same
- * function, and returns the same answer, as flat admission: a step's input
- * accepts exactly what the nested command's own tool accepts, no more.
+ * function and the same answer as flat admission, widened by one rule: a step's
+ * input also accepts the alias spellings the nested command declares, because
+ * its reader canonicalizes them the way the CLI and Node batch surfaces do.
+ * Operator and undeclared keys are still refused.
  */
 function findInadmissibleNestedCommandInput(
   schema: JsonSchema | undefined,
@@ -547,7 +596,7 @@ function findInadmissibleNestedProperty(
   // bury the real error under a key complaint.
   if (command === undefined || !isRecord(nested)) return undefined;
   const metadata = findCommandMetadata(command);
-  const rejection = findInadmissibleInput(command, metadata, nested);
+  const rejection = findInadmissibleInput(command, metadata, nested, { nested: true });
   if (rejection === undefined) return undefined;
   const step = { [commandKey]: command, [key]: commandInputExample(metadata) };
   return {

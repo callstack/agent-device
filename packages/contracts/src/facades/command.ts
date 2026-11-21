@@ -1,4 +1,5 @@
 export {
+  BATCH_STEP_INPUT_REFUSALS,
   BATCH_STEP_SHAPE_HINT,
   DEFAULT_BATCH_MAX_STEPS,
   assertBatchStepCount,
@@ -6,6 +7,7 @@ export {
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
+  suggestClosestKey,
 } from '../batch-contract.ts';
 export type { DaemonBatchStep } from '../batch-step.ts';
 export type { CliFlags, DaemonExcludedCliFlag } from '../cli-flags.ts';

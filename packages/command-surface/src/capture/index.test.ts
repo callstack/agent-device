@@ -92,6 +92,28 @@ describe('capture command interface', () => {
     });
   });
 
+  // `--out` is the flag agents reach for, and a batch step used to lose its
+  // `{"out":...}` value without a trace because the field projection read
+  // `path` alone.
+  test('reads screenshot out as the structured spelling of path', () => {
+    expect(screenshotCommandFacet.metadata.readInput({ out: 'page.png' })).toMatchObject({
+      path: 'page.png',
+    });
+    expect(
+      screenshotCommandFacet.metadata.readInput({ path: 'page.png', out: 'page.png' }),
+    ).toMatchObject({ path: 'page.png' });
+    expectInvalidArgs(
+      () => screenshotCommandFacet.metadata.readInput({ path: 'a.png', out: 'b.png' }),
+      'Expected out to match path when both are set.',
+    );
+    // One key stays advertised: the alias declares itself, and model-facing
+    // schemas hide it by audience.
+    expect(screenshotCommandFacet.metadata.inputAudience.out).toEqual({
+      kind: 'alias',
+      of: 'path',
+    });
+  });
+
   test('reads and writes the screenshot capture backend', () => {
     const input = screenshotCliReader(['page.png'], flags({ screenshotCaptureBackend: 'runner' }));
     expect(input).toMatchObject({ path: 'page.png', captureBackend: 'runner' });

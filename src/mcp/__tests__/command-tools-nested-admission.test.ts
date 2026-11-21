@@ -15,7 +15,10 @@ import { createCommandToolExecutor } from '../command-tools.ts';
 // the Apple runner launches.
 //
 // The invariant these tests hold is a PARITY, not a key list: a batch step's
-// input admits exactly what the nested command's own tool admits. Stated that
+// input admits exactly what the nested command's own tool admits, widened by
+// one declared rule — an accepted alias spelling is admitted nested (the
+// nested reader canonicalizes it, as on the CLI and Node batch surfaces) while
+// flat admission stays canonical-only (the alias test below). Stated that
 // way, a key added to `OPERATOR_INPUT_GUIDANCE` — or a whole new operator
 // classification — is covered the day it lands, with nothing here to update.
 const OPERATOR_PROBES: Readonly<Record<string, string>> = {
@@ -102,6 +105,42 @@ test('nested admission leaves legitimate batch input untouched', async () => {
 
   assert.equal(result.isError, false, result.content[0]?.text);
   assert.deepEqual(calls[0]?.input.steps, steps);
+});
+
+// The alias widening: a step carrying the declared alias spelling reaches the
+// nested reader, which canonicalizes it exactly as the CLI and Node batch
+// surfaces do. Flat admission keeps answering with the canonical spelling.
+// Without the widening, a screenshot step carrying `out` was refused here
+// before the reader could read it.
+test('a nested step admits an accepted alias the flat tool keeps canonical-only', async () => {
+  const { calls, executor } = createProbeExecutor();
+
+  const nested = await executor.execute('batch', {
+    steps: [{ command: 'screenshot', input: { out: 'shot.png' } }],
+  });
+  assert.equal(nested.isError, false, nested.content[0]?.text);
+  assert.deepEqual(calls[0]?.input.steps, [{ command: 'screenshot', input: { out: 'shot.png' } }]);
+
+  const flat = await executor.execute('screenshot', { out: 'shot.png' });
+  assert.equal(flat.isError, true);
+  assert.match(flat.content[0]?.text ?? '', /out is not accepted as a tool argument\. Pass path\./);
+});
+
+// An unknown nested key still refuses, and recovers with the nearest accepted
+// spelling through the shared nearest-key helper.
+test('a nested unknown key refuses with the nearest accepted spelling', async () => {
+  const { calls, executor } = createProbeExecutor();
+
+  const result = await executor.execute('batch', {
+    steps: [{ command: 'press', input: { setle: true } }],
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(
+    result.content[0]?.text ?? '',
+    /batch\.steps\[0\]\.input: setle is not an accepted argument for the press tool\. Did you mean settle\?/,
+  );
+  assert.deepEqual(calls, [], 'a refused step must not be dispatched');
 });
 
 // A step is NORMALIZED before it runs (`resolveStructuredBatchCommandName`
