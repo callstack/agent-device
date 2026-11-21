@@ -236,10 +236,12 @@ test('packed core serves the Linux desktop only after the managed platform is in
       ['Stub Window', 'OK'],
       JSON.stringify(captured.data.nodes),
     );
-    // The capture runs the helper the plugin shipped, with the bridge's own tree limits.
+    // The capture runs the helper the plugin shipped, with the bridge's own tree limits, and it reads
+    // the frontmost app: the open above bound an app session, so the snapshot follows that surface
+    // rather than the whole desktop.
     expectedCalls.push([
       'python3',
-      '<script> --surface desktop --max-nodes 1500 --max-depth 12 --max-apps 24',
+      '<script> --surface frontmost-app --max-nodes 1500 --max-depth 12 --max-apps 24',
     ]);
 
     const shot = path.join(scratch, 'screen.png');
