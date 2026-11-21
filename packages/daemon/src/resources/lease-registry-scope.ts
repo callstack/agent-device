@@ -29,7 +29,7 @@ export type LeaseRegistryOptions = {
 export type AllocateLeaseRequest = {
   tenantId: string;
   runId: string;
-  /** A caller-chosen id for a new lease; without it the registry mints one. */
+  /** A caller-chosen id of at least 128 random bits for a new lease; without it the registry mints one. */
   leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
@@ -142,6 +142,30 @@ export function normalizeLeaseId(raw: string | undefined): string | undefined {
 export function normalizeRequiredLeaseId(raw: string | undefined): string {
   const leaseId = normalizeLeaseId(raw);
   if (!leaseId) throw new AppError('INVALID_ARGS', 'Invalid lease id.');
+  return leaseId;
+}
+
+/** 32 hex digits: the 128 bits a lease id needs to serve as the credential for its session. */
+const MIN_CALLER_CHOSEN_LEASE_ID_HEX_DIGITS = 32;
+
+/** The `error.details.reason` values a caller-chosen lease id refusal publishes. */
+const CALLER_CHOSEN_LEASE_ID_REASONS = {
+  tooShort: 'LEASE_ID_TOO_SHORT',
+} as const satisfies Record<string, string>;
+
+/**
+ * A caller-chosen lease id becomes the bearer credential for the lease, so an id shorter than the
+ * 128 bits the daemon mints is refused.
+ */
+export function normalizeCallerChosenLeaseId(raw: string): string {
+  const leaseId = normalizeRequiredLeaseId(raw);
+  if (leaseId.length < MIN_CALLER_CHOSEN_LEASE_ID_HEX_DIGITS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `A caller-chosen lease id needs at least ${MIN_CALLER_CHOSEN_LEASE_ID_HEX_DIGITS} random hex digits (128 bits).`,
+      { reason: CALLER_CHOSEN_LEASE_ID_REASONS.tooShort },
+    );
+  }
   return leaseId;
 }
 

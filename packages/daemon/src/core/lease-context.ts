@@ -1,4 +1,4 @@
-import type { DaemonRequest } from './daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from './daemon-request.ts';
 import { getRequestExecutionDeadlineMs } from '@agent-device/host-kit/request';
 import {
   AppError,
@@ -6,6 +6,7 @@ import {
 } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
+import { ignoresSessionLease } from './daemon-command-registry.ts';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
@@ -14,6 +15,7 @@ import {
   findMissingProxyLeaseFields,
   isProxyLeaseScope,
   leaseScopeFromRequest,
+  leaseScopeToRequestMeta,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
 
@@ -53,10 +55,12 @@ export type SessionLease = {
   expiresAt?: number;
 };
 
-type SessionLeaseSource = {
-  lease?: SessionLease | null;
-  deviceLease?: SessionLease | null;
-};
+/** The `error.details.reason` values a session-lease refusal publishes. */
+const SESSION_LEASE_REASONS = {
+  leaseSessionMismatch: 'LEASE_SESSION_MISMATCH',
+} as const satisfies Record<string, string>;
+
+type SessionLeaseHolder = { lease?: SessionLease | null };
 
 export function resolveLeaseScope(req: Pick<DaemonRequest, 'flags' | 'meta'>): LeaseScope {
   return leaseScopeFromRequest(req);
@@ -85,21 +89,83 @@ export function buildSessionLeaseFromRequest(
   });
 }
 
-export function resolveRequestOrSessionLeaseScope(
-  req: Pick<DaemonRequest, 'flags' | 'meta'>,
-  session?: SessionLeaseSource | null,
+/**
+ * The lease scope a request acts under on its session. A session that holds a lease admits only a
+ * request that presents that lease's id: the lease id is the credential. Tenant, run, provider,
+ * client and device key are labels. A label must match when present, and it never grants access
+ * (ADR 0007). A command that ignores the session lease acts under its own request scope.
+ */
+export function resolveSessionLeaseScope(
+  req: Pick<DaemonRequest, 'command' | 'flags' | 'meta'>,
+  session?: SessionLeaseHolder | null,
 ): LeaseScope {
   const requestScope = resolveLeaseScope(req);
-  const sessionLease = session?.lease ?? session?.deviceLease ?? undefined;
+  const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
+  if (!sessionLease) return requestScope;
+  assertRequestPresentsSessionLease(requestScope, sessionLease);
   return stripUndefined({
-    tenantId: requestScope.tenantId ?? sessionLease?.tenantId,
-    runId: requestScope.runId ?? sessionLease?.runId,
-    leaseId: requestScope.leaseId ?? sessionLease?.leaseId,
+    tenantId: sessionLease.tenantId,
+    runId: sessionLease.runId,
+    leaseId: sessionLease.leaseId,
     leaseTtlMs: requestScope.leaseTtlMs,
+    leaseBackend: requestScope.leaseBackend ?? sessionLease.leaseBackend,
+    leaseProvider: sessionLease.leaseProvider,
+    deviceKey: sessionLease.deviceKey,
+    clientId: sessionLease.clientId,
+  });
+}
+
+/**
+ * A request the daemon builds inside an admitted request acts for the same caller, so it carries the
+ * lease scope that the parent presented. Fields that the nested request names win.
+ */
+export function handDownRequestLeaseScope(
+  invoke: DaemonInvokeFn,
+  parent: Pick<DaemonRequest, 'flags' | 'meta'>,
+): DaemonInvokeFn {
+  const parentLeaseMeta = leaseScopeToRequestMeta(resolveLeaseScope(parent));
+  return async (req) => await invoke({ ...req, meta: { ...parentLeaseMeta, ...req.meta } });
+}
+
+/**
+ * The lease scope a refusal reads: the request scope, completed from the session lease. Use it only
+ * to refuse a request. Admission reads {@link resolveSessionLeaseScope}.
+ */
+export function resolveLeaseRefusalScope(
+  req: Pick<DaemonRequest, 'flags' | 'meta'>,
+  session?: SessionLeaseHolder | null,
+): LeaseScope {
+  const requestScope = resolveLeaseScope(req);
+  const sessionLease = session?.lease ?? undefined;
+  return stripUndefined({
+    ...requestScope,
+    leaseId: requestScope.leaseId ?? sessionLease?.leaseId,
     leaseBackend: requestScope.leaseBackend ?? sessionLease?.leaseBackend,
     leaseProvider: requestScope.leaseProvider ?? sessionLease?.leaseProvider,
-    deviceKey: requestScope.deviceKey ?? sessionLease?.deviceKey,
-    clientId: requestScope.clientId ?? sessionLease?.clientId,
+  });
+}
+
+function assertRequestPresentsSessionLease(requestScope: LeaseScope, sessionLease: SessionLease) {
+  if (!requestScope.leaseId) {
+    throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
+      reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
+      field: 'leaseId',
+      hint: 'Connect this session with connect proxy or connect --remote-config, then run commands with the same --session. Raw --tenant and --session flags do not send the lease id.',
+    });
+  }
+  assertMatchingLeaseField('leaseId', requestScope.leaseId, sessionLease.leaseId);
+  assertMatchingLeaseField('tenantId', requestScope.tenantId, sessionLease.tenantId);
+  assertMatchingLeaseField('runId', requestScope.runId, sessionLease.runId);
+  assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, sessionLease.leaseProvider);
+  assertMatchingLeaseField('clientId', requestScope.clientId, sessionLease.clientId);
+  assertMatchingLeaseField('deviceKey', requestScope.deviceKey, sessionLease.deviceKey);
+}
+
+function assertMatchingLeaseField(field: string, requestValue?: string, sessionValue?: string) {
+  if (!requestValue || !sessionValue || requestValue === sessionValue) return;
+  throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
+    reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
+    field,
   });
 }
 

@@ -365,7 +365,7 @@ test('an allocated proxy session keeps its emulator when multiple local devices 
           deviceKey: held.id,
         },
       },
-      req: requestWith({ platform: 'android' }),
+      req: requestWith({ platform: 'android', leaseId: 'proxy-lease' }),
       env: {},
       platformServices,
     }),

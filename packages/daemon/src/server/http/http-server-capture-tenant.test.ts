@@ -115,6 +115,7 @@ test.each([false, true])(
           session: sessionName,
           command: 'record',
           positionals: ['stop'],
+          meta: { leaseId: lease.leaseId },
         });
       const stopped = await stop();
       expect(stopped.ok, JSON.stringify(stopped)).toBe(true);

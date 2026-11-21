@@ -497,7 +497,7 @@ test.each([
     session: 'default',
     command: 'close',
     positionals: [],
-    meta: { requestId: 'req-close-lease' },
+    meta: { requestId: 'req-close-lease', leaseId: lease.leaseId },
   });
 
   expect(response.ok).toBe(true);
@@ -537,7 +537,7 @@ test.each([
     session: 'default',
     command: 'close',
     positionals,
-    meta: { requestId: 'req-close-retain-lease' },
+    meta: { requestId: 'req-close-retain-lease', leaseId: lease.leaseId },
   });
 
   expect(response.ok).toBe(true);

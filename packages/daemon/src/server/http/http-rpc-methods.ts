@@ -169,6 +169,8 @@ function toInstallFromSourceDaemonRequest(
     flags: { platform },
     meta: {
       requestId: readStringParam(params, 'requestId'),
+      // A leased session admits only a request that sends its lease id (ADR 0007).
+      leaseId: readStringParam(params, 'leaseId'),
       installSource: parseInstallSource(params),
       retainMaterializedPaths: readBooleanParam(params, 'retainPaths'),
       materializedPathRetentionMs:

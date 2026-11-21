@@ -16,6 +16,7 @@ import {
   type NormalizedAllocateLeaseRequest,
   createLeaseTtlResolver,
   normalizeAllocateLeaseRequest,
+  normalizeCallerChosenLeaseId,
   createDeviceLease,
   deviceLeaseBusyError,
   hasAllocatedScope,
@@ -162,7 +163,7 @@ export class LeaseRegistry {
     leaseTtlMs: number;
   } {
     const chosenLeaseId =
-      request.leaseId === undefined ? undefined : normalizeRequiredLeaseId(request.leaseId);
+      request.leaseId === undefined ? undefined : normalizeCallerChosenLeaseId(request.leaseId);
     const normalized = normalizeAllocateLeaseRequest(request);
     this.cleanupExpiredLeases();
     return { chosenLeaseId, normalized, leaseTtlMs: this.resolveLeaseTtlMs(normalized.ttlMs) };

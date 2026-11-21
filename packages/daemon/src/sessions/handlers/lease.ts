@@ -33,7 +33,7 @@ import type { SessionStore } from '../../core/session-store.ts';
 import {
   isProxyLeaseScope,
   resolveLeaseScope,
-  resolveRequestOrSessionLeaseScope,
+  resolveSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
   isProviderInstanceEndedError,
@@ -83,7 +83,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
     case PUBLIC_COMMANDS.artifacts: {
-      const artifactScope = resolveRequestOrSessionLeaseScope(req, sessionStore.get(sessionName));
+      const artifactScope = resolveSessionLeaseScope(req, sessionStore.get(sessionName));
       return {
         ok: true,
         data: (await listArtifactsForRequest(

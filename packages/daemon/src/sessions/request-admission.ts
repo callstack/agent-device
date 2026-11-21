@@ -13,8 +13,9 @@ import {
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
   findMissingProxyLeaseFields,
+  resolveLeaseRefusalScope,
   resolveLeaseScope,
-  resolveRequestOrSessionLeaseScope,
+  resolveSessionLeaseScope,
 } from '../core/lease-context.ts';
 import {
   leaseScopeToHeartbeatRequest,
@@ -88,6 +89,8 @@ export function assertRequestLeaseAdmission(
     daemonPolicy?: DaemonPolicy;
   }>,
 ): DeviceLease | undefined {
+  // An admission-exempt command still acts on its session: it presents the session's lease too.
+  resolveSessionLeaseScope(req, session);
   if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }
@@ -95,7 +98,7 @@ export function assertRequestLeaseAdmission(
   assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
   if (options.daemonPolicy?.requiredLeaseBackend) {
-    const leased = Boolean(resolveRequestOrSessionLeaseScope(req, session).leaseId);
+    const leased = Boolean(resolveSessionLeaseScope(req, session).leaseId);
     const lease = leased ? admitLease(req, leaseRegistry, session, options.env) : undefined;
     assertDaemonPolicyAdmitsLease(options.daemonPolicy, lease);
     return lease;
@@ -126,8 +129,7 @@ function admitLease(
   session: SessionState | undefined,
   env: HostEnvironment['env'],
 ): DeviceLease {
-  assertRequestSessionLeaseMatches(resolveLeaseScope(req), session?.lease);
-  const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
+  const leaseScope = resolveSessionLeaseScope(req, session);
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
   // Admission renews for the window the lease already carries, or the window this request named.
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
@@ -160,7 +162,7 @@ export function isConfinedToAppLease(
   daemonPolicy: DaemonPolicy | undefined,
 ): boolean {
   if (daemonPolicy?.requiredLeaseBackend) return true;
-  const scope = resolveRequestOrSessionLeaseScope(req, session);
+  const scope = resolveLeaseRefusalScope(req, session);
   if (scope.leaseBackend === 'macos-app') return true;
   return (
     scope.leaseId !== undefined && leaseRegistry.inspectLeaseBackend(scope.leaseId) === 'macos-app'
@@ -193,7 +195,7 @@ export function assertProviderLeaseRequestNamesSession(
   if (!req.internal?.sessionOmitted) return;
   const { leaseProvider, leaseId } = ignoresSessionLease(req.command)
     ? resolveLeaseScope(req)
-    : resolveRequestOrSessionLeaseScope(req, session);
+    : resolveLeaseRefusalScope(req, session);
   if (!leaseProvider) return;
   if (leaseId || req.command === 'lease_allocate') throw remoteSessionRequiredError(leaseProvider);
 }
@@ -215,33 +217,4 @@ function assertProxyOpenLeaseMetadata(
     'Proxy open requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.',
     { missing },
   );
-}
-
-function assertRequestSessionLeaseMatches(
-  requestLeaseScope: ReturnType<typeof resolveLeaseScope>,
-  sessionLease: SessionState['lease'] | undefined,
-): void {
-  if (!sessionLease) return;
-  assertMatchingLeaseField('leaseId', requestLeaseScope.leaseId, sessionLease.leaseId);
-  assertMatchingLeaseField('tenantId', requestLeaseScope.tenantId, sessionLease.tenantId);
-  assertMatchingLeaseField('runId', requestLeaseScope.runId, sessionLease.runId);
-  assertMatchingLeaseField(
-    'leaseProvider',
-    requestLeaseScope.leaseProvider,
-    sessionLease.leaseProvider,
-  );
-  assertMatchingLeaseField('clientId', requestLeaseScope.clientId, sessionLease.clientId);
-  assertMatchingLeaseField('deviceKey', requestLeaseScope.deviceKey, sessionLease.deviceKey);
-}
-
-function assertMatchingLeaseField(
-  field: string,
-  requestValue?: string,
-  sessionValue?: string,
-): void {
-  if (!requestValue || !sessionValue || requestValue === sessionValue) return;
-  throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
-    reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
-    field,
-  });
 }

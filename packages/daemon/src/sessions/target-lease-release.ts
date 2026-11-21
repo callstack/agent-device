@@ -7,7 +7,7 @@ import type { SessionState } from '../core/session-state.ts';
 import {
   isBoundedCompositeRequest,
   refuseBoundedCompositeResourceOperation,
-  resolveRequestOrSessionLeaseScope,
+  resolveSessionLeaseScope,
 } from '../core/lease-context.ts';
 import { recordEndedLease } from '../core/request-ended-leases.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
@@ -25,7 +25,7 @@ export async function releaseTargetLease(params: {
   if (isBoundedCompositeRequest(params.req)) {
     refuseBoundedCompositeResourceOperation(params.req, 'provider-lease');
   }
-  const scope = resolveRequestOrSessionLeaseScope(params.req, params.session);
+  const scope = resolveSessionLeaseScope(params.req, params.session);
   if (
     params.owner.kind !== 'provider-runtime' ||
     scope.leaseId !== params.leaseId ||
