@@ -152,18 +152,26 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testRegularSnapshotStillRepairsBackgroundAndDisclosesPriorState() throws {
+  private func bindRunnerHostAppInBackground() {
     app.launch()
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     XCUIDevice.shared.press(.home)
     XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
     pendingTargetActivation = nil
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      pendingTargetActivation = nil
-      app.terminate()
-    }
+  }
+
+  @MainActor
+  private func unbindRunnerHostApp() {
+    invalidateCachedTarget(reason: "unit_test_cleanup")
+    pendingTargetActivation = nil
+    app.terminate()
+  }
+
+  @MainActor
+  func testRegularSnapshotStillRepairsBackgroundAndDisclosesPriorState() throws {
+    bindRunnerHostAppInBackground()
+    defer { unbindRunnerHostApp() }
     let command = try runnerCommandFixture(
       "{\"command\":\"snapshot\",\"appBundleId\":\"com.callstack.agentdevice.runner\"}"
     )
@@ -181,17 +189,8 @@ extension RunnerTests {
   /// change what is under the point (#4655). A point the hit test does not answer keeps the repair.
   @MainActor
   func testCoordinateTapOverSpringboardRunsInPlaceWithoutActivatingTheSessionApp() throws {
-    app.launch()
-    mainOwned.app = app
-    mainOwned.bundleId = "com.callstack.agentdevice.runner"
-    XCUIDevice.shared.press(.home)
-    XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
-    pendingTargetActivation = nil
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      pendingTargetActivation = nil
-      app.terminate()
-    }
+    bindRunnerHostAppInBackground()
+    defer { unbindRunnerHostApp() }
     let overSpringboard = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-home","appBundleId":"com.callstack.agentdevice.runner","x":200,"y":400}"#
     )
