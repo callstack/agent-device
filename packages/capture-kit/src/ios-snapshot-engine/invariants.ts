@@ -7,7 +7,7 @@ import { containsPoint, rectContains, isPositiveFiniteRect } from '@agent-device
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { validateIosSnapshotGraph } from './graph.ts';
 import { IosSnapshotEngineError } from './types.ts';
-import type { IosSnapshotFoldPolicy } from './types.ts';
+import type { IosSnapshotFoldPolicy, IosSnapshotIndexTree } from './types.ts';
 
 const SCROLL_CONTAINER_TYPES = new Set(['collectionview', 'scrollview', 'table']);
 
@@ -35,29 +35,30 @@ export function resolveViewportEvidence(evidence: IosViewportEvidence): Rect {
 
 function validateIosRegularInvariant(
   nodes: readonly RawSnapshotNode[],
+  indexTree: IosSnapshotIndexTree,
   viewport: Rect,
   policy: IosSnapshotFoldPolicy,
   hittabilityAvailable = true,
 ): { parentClipLookups: number } {
-  validateIosSnapshotGraph(nodes);
+  validateIosSnapshotGraph(nodes, indexTree);
   const clipByIndex = new Map<number, Rect>();
   let parentClipLookups = 0;
 
   for (const node of nodes) {
-    const ancestorClip = resolveAncestorClip(node, clipByIndex, viewport, () => {
+    const ancestorClip = resolveAncestorClip(node, indexTree, clipByIndex, viewport, () => {
       parentClipLookups += 1;
     });
 
     const frame = normalizeRect(node.rect);
-    validateHittabilityEvidence(node, hittabilityAvailable);
+    validateHittabilityEvidence(node, indexTree, hittabilityAvailable);
     if (!frame || !isPositiveFiniteRect(frame)) {
-      validateDegenerateActionability(node, frame);
+      validateDegenerateActionability(node, indexTree, frame);
       clipByIndex.set(node.index, ancestorClip);
       continue;
     }
 
-    validateContainedFrame(node, frame, ancestorClip);
-    validateActionability(node, frame, viewport);
+    validateContainedFrame(node, indexTree, frame, ancestorClip);
+    validateActionability(node, indexTree, frame, viewport);
 
     clipByIndex.set(node.index, clipForNode(node, frame, ancestorClip, policy));
   }
@@ -66,6 +67,7 @@ function validateIosRegularInvariant(
 
 function resolveAncestorClip(
   node: RawSnapshotNode,
+  indexTree: IosSnapshotIndexTree,
   clipByIndex: ReadonlyMap<number, Rect>,
   viewport: Rect,
   onParentLookup: () => void,
@@ -77,40 +79,58 @@ function resolveAncestorClip(
     throw new IosSnapshotEngineError(
       'invalid-presented-payload',
       'regular iOS snapshot payload refers to a parent outside the payload',
-      { index: node.index, parentIndex: node.parentIndex },
+      { index: node.index, indexTree, parentIndex: node.parentIndex },
     );
   }
   return parentClip;
 }
 
-function validateHittabilityEvidence(node: RawSnapshotNode, available: boolean): void {
+function validateHittabilityEvidence(
+  node: RawSnapshotNode,
+  indexTree: IosSnapshotIndexTree,
+  available: boolean,
+): void {
   if (node.hittable !== true || available) return;
   throw new IosSnapshotEngineError(
     'invalid-presented-payload',
     'iOS snapshot payload marked a node actionable without hittability evidence',
-    { index: node.index },
+    { index: node.index, indexTree },
   );
 }
 
-function validateDegenerateActionability(node: RawSnapshotNode, frame: Rect | undefined): void {
+function validateDegenerateActionability(
+  node: RawSnapshotNode,
+  indexTree: IosSnapshotIndexTree,
+  frame: Rect | undefined,
+): void {
   if (node.hittable !== true) return;
   throw new IosSnapshotEngineError(
     'regular-degenerate-actionable-node',
     'regular iOS snapshot node with a missing or degenerate frame is actionable',
-    { index: node.index, frame: frame ?? node.rect },
+    { index: node.index, indexTree, frame: frame ?? node.rect },
   );
 }
 
-function validateContainedFrame(node: RawSnapshotNode, frame: Rect, clip: Rect): void {
+function validateContainedFrame(
+  node: RawSnapshotNode,
+  indexTree: IosSnapshotIndexTree,
+  frame: Rect,
+  clip: Rect,
+): void {
   if (containsWithTolerance(frame, clip)) return;
   throw new IosSnapshotEngineError(
     'regular-node-outside-cumulative-clip',
     'regular iOS snapshot node escaped its cumulative clip',
-    { index: node.index, frame, clip },
+    { index: node.index, indexTree, frame, clip },
   );
 }
 
-function validateActionability(node: RawSnapshotNode, frame: Rect, viewport: Rect): void {
+function validateActionability(
+  node: RawSnapshotNode,
+  indexTree: IosSnapshotIndexTree,
+  frame: Rect,
+  viewport: Rect,
+): void {
   if (
     node.hittable !== true ||
     (node.enabled !== false &&
@@ -121,7 +141,7 @@ function validateActionability(node: RawSnapshotNode, frame: Rect, viewport: Rec
   throw new IosSnapshotEngineError(
     'invalid-presented-payload',
     'regular iOS snapshot payload marked a disabled or off-viewport node actionable',
-    { index: node.index, frame },
+    { index: node.index, indexTree, frame },
   );
 }
 
@@ -136,15 +156,20 @@ function clipForNode(
     : ancestorClip;
 }
 
+/**
+ * @param indexTree the tree `nodes` is numbered in, carried onto every refusal this check raises so a
+ * reported `index` names the tree the reader has to open (#4701).
+ */
 export function validateIosPayload(
   nodes: readonly RawSnapshotNode[],
+  indexTree: IosSnapshotIndexTree,
   projection: 'regular' | 'raw',
   viewport: Rect | undefined,
   policy: IosSnapshotFoldPolicy,
   hittabilityAvailable = true,
 ): { parentClipLookups: number } {
   if (projection === 'raw') {
-    validateIosSnapshotGraph(nodes);
+    validateIosSnapshotGraph(nodes, indexTree);
     return { parentClipLookups: 0 };
   }
   if (!viewport) {
@@ -155,7 +180,7 @@ export function validateIosPayload(
     );
   }
   try {
-    return validateIosRegularInvariant(nodes, viewport, policy, hittabilityAvailable);
+    return validateIosRegularInvariant(nodes, indexTree, viewport, policy, hittabilityAvailable);
   } catch (error) {
     if (error instanceof IosSnapshotEngineError && error.code === 'IOS_SNAPSHOT_ENGINE_FAILED') {
       if (error.reason === 'malformed-graph') {

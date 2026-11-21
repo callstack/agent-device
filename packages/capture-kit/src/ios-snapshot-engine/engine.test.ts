@@ -13,6 +13,7 @@ import {
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { toIosSnapshotEngineErrorDetails } from './types.ts';
+import { validateIosPayload } from './invariants.ts';
 import {
   IosSnapshotEngineError,
   buildIosInteractiveSnapshotPresentation,
@@ -196,6 +197,7 @@ test('engine error details preserve typed public context', () => {
     field: 'viewport',
     index: 4,
     parentIndex: 2,
+    indexTree: 'acquired',
     frame: { x: 0, y: 0, width: 10, height: 10 },
     clip: { x: 1, y: 2, width: 3, height: 4 },
     projection: 'regular',
@@ -206,10 +208,126 @@ test('engine error details preserve typed public context', () => {
     field: 'viewport',
     index: 4,
     parentIndex: 2,
+    indexTree: 'acquired',
     frame: { x: 0, y: 0, width: 10, height: 10 },
     clip: { x: 1, y: 2, width: 3, height: 4 },
     projection: 'regular',
   });
+});
+
+// #4701: one capture is numbered several times over — the raw acquisition, the tree the Apple runner
+// published to the host, and the tree the host publishes after its own compaction — and every
+// renumbering shifts a node. A refusal that reported a bare `index` asked the reader to guess which
+// tree to open, while the recovery advice in the same message family points at a different tree than
+// the refusal was counted in. Every refusal that names a node now names its index space.
+test('a payload refusal names the runner payload as its index space, for either projection', () => {
+  for (const interactiveOnly of [false, true]) {
+    const request = createIosSnapshotRequest({ interactiveOnly });
+    const payload = escapedRowNodes();
+
+    assert.throws(
+      () => presentIosSnapshot(runnerPresentedInput(request, payload), request),
+      (error: unknown) => {
+        assert.ok(error instanceof IosSnapshotEngineError);
+        assert.equal(error.reason, 'regular-node-outside-cumulative-clip');
+        // The number is the payload's own: the escaping node sits at that index in the tree the
+        // producer published, which is the tree this refusal was counted in.
+        assert.equal(error.details.index, 3);
+        assert.equal(payload[error.details.index!]?.label, 'Escaping row');
+        assert.equal(error.details.indexTree, 'runner-payload');
+        return true;
+      },
+    );
+  }
+});
+
+test('a malformed acquired graph names the acquired tree the caller can list', () => {
+  const request = createIosSnapshotRequest();
+  const malformed = acquisition(request, [
+    node(0, 'Application', 'App', viewport),
+    { ...node(1, 'Button', 'Broken', { x: 1, y: 1, width: 10, height: 10 }, 0), parentIndex: 99 },
+  ]);
+
+  assert.throws(
+    () => publishIosSnapshot({ stage: 'acquired', acquisition: malformed }, request),
+    (error: unknown) => {
+      assert.ok(error instanceof IosSnapshotEngineError);
+      assert.equal(error.reason, 'malformed-graph');
+      // An unscoped `snapshot --raw` lists this very tree, so naming it makes both numbers usable.
+      assert.equal(error.details.indexTree, 'acquired');
+      assert.equal(error.details.index, 1);
+      assert.equal(error.details.parentIndex, 99);
+      return true;
+    },
+  );
+});
+
+test('each payload check reports an index that resolves inside the tree it names', () => {
+  // Every engine call site hands the check the tree it validated: `acquired` for the raw acquisition,
+  // `presented` for the tree about to be published, and the two runner payloads. Whichever it is, the
+  // reported index resolves to the refusing node in the named tree (#4701).
+  for (const indexTree of [
+    'acquired',
+    'presented',
+    'runner-payload',
+    'runner-quality-payload',
+  ] as const) {
+    const nodes = escapedRowNodes();
+    assert.throws(
+      () => validateIosPayload(nodes, indexTree, 'regular', viewport, 'cursor-projected'),
+      (error: unknown) => {
+        assert.ok(error instanceof IosSnapshotEngineError);
+        assert.equal(error.details.indexTree, indexTree);
+        assert.equal(nodes[error.details.index!]?.label, 'Escaping row');
+        return true;
+      },
+    );
+  }
+});
+
+test('a quality-payload refusal names the quality payload as its index space', () => {
+  const request = createIosSnapshotRequest();
+  const input: IosSnapshotInput = {
+    stage: 'presented',
+    presentation: {
+      producer: 'apple-runner',
+      intent: 'full',
+      payload: { nodes: ordinaryTreeNodes(), truncated: false },
+      qualityPayload: { nodes: escapedRowNodes(), truncated: false, scope: null },
+    },
+    validation: validationFacts(request),
+  };
+
+  // The quality payload is reindexed and listed by no projection, so the reason alone left the
+  // number pointing at a tree the reader could not name.
+  assert.throws(
+    () => presentIosSnapshot(input, request),
+    (error: unknown) => {
+      assert.ok(error instanceof IosSnapshotEngineError);
+      assert.equal(error.reason, 'invalid-quality-payload');
+      assert.equal(error.details.index, 3);
+      assert.equal(error.details.indexTree, 'runner-quality-payload');
+      return true;
+    },
+  );
+});
+
+test('a refusal that names no node carries no index space', () => {
+  const request = createIosSnapshotRequest();
+  const missingViewport: IosSnapshotAcquisition = {
+    ...acquisition(request, nestedNodes()),
+    viewport: { kind: 'missing', reason: 'not-provided' },
+  };
+
+  assert.throws(
+    () => publishIosSnapshot({ stage: 'acquired', acquisition: missingViewport }, request),
+    (error: unknown) => {
+      assert.ok(error instanceof IosSnapshotEngineError);
+      assert.equal(error.reason, 'missing-viewport');
+      assert.equal('indexTree' in error.details, false);
+      return true;
+    },
+  );
 });
 
 test('viewport evidence prefers reported application and window roots', () => {
@@ -472,6 +590,21 @@ function acquiredInput(request: IosSnapshotRequest, nodes: RawSnapshotNode[]): I
   return { stage: 'acquired', acquisition: acquisition(request, nodes) };
 }
 
+function runnerPresentedInput(
+  request: IosSnapshotRequest,
+  nodes: RawSnapshotNode[],
+): IosSnapshotInput {
+  return {
+    stage: 'presented',
+    presentation: {
+      producer: 'apple-runner',
+      intent: 'full',
+      payload: { nodes, truncated: false },
+    },
+    validation: validationFacts(request),
+  };
+}
+
 function validationFacts(request: IosSnapshotRequest): IosSnapshotValidationFacts {
   return {
     presentationKey: buildIosSnapshotPresentationKey(request),
@@ -489,6 +622,16 @@ function nestedNodes(): RawSnapshotNode[] {
     node(2, 'ScrollView', 'Inner', { x: 120, y: 40, width: 180, height: 160 }, 1, 2),
     node(3, 'Button', 'Partially visible', { x: 150, y: 80, width: 100, height: 40 }, 2, 3),
     node(4, 'Button', 'Escaped child', { x: 210, y: 80, width: 100, height: 40 }, 2, 3),
+  ];
+}
+
+/** A list whose last actionable row is inside the viewport but outside the list's clip (#4701). */
+function escapedRowNodes(): RawSnapshotNode[] {
+  return [
+    node(0, 'Application', 'App', viewport),
+    node(1, 'ScrollView', 'List', { x: 0, y: 40, width: 320, height: 160 }, 0, 1),
+    node(2, 'Button', 'First row', { x: 8, y: 48, width: 304, height: 32 }, 1, 2),
+    node(3, 'Button', 'Escaping row', { x: 8, y: 200, width: 304, height: 32 }, 1, 2),
   ];
 }
 

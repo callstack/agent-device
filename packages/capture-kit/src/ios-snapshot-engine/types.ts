@@ -39,6 +39,28 @@ export type IosSnapshotEnginePresentation = Readonly<{
   stats: IosSnapshotPresentationStats;
 }>;
 
+/**
+ * The tree whose node numbering an {@link IosSnapshotEngineFailureDetails} `index` and `parentIndex`
+ * count in. One capture is numbered several times over — the raw acquisition, the tree the Apple
+ * runner published to the host, and the tree the host publishes after its own compaction — and every
+ * renumbering shifts a node, so a refusal that names an index without its tree asks the reader to
+ * guess which tree to open (#4701).
+ *
+ * Each value says where to read the node:
+ * - `acquired` — the raw acquisition tree, the numbering an unscoped `snapshot --raw` lists.
+ * - `presented` — the tree this snapshot command publishes. A capture of the same screen that
+ *   passes lists the node at this index.
+ * - `runner-payload` — the tree the Apple runner published for this request. A passing plain
+ *   `snapshot` publishes that tree at these same numbers. `snapshot -i` compacts it and renumbers
+ *   what survives, and a refusal raised in that renumbered tree reads `presented` instead.
+ * - `runner-quality-payload` — the runner's unscoped quality payload, which no projection lists.
+ */
+export type IosSnapshotIndexTree =
+  | 'acquired'
+  | 'presented'
+  | 'runner-payload'
+  | 'runner-quality-payload';
+
 export type IosSnapshotEngineFailureReason =
   | 'projection-mismatch'
   | 'missing-viewport'
@@ -52,6 +74,8 @@ export type IosSnapshotEngineFailureReason =
 export type IosSnapshotEngineFailureDetails = Readonly<{
   index?: number;
   parentIndex?: number;
+  /** {@link IosSnapshotIndexTree} the `index` above counts in. Set on every refusal that names a node. */
+  indexTree?: IosSnapshotIndexTree;
   frame?: Rect;
   clip?: Rect;
   projection?: string;

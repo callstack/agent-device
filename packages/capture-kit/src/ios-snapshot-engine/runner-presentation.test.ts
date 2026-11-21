@@ -8,6 +8,7 @@ vi.mock('./invariants.ts', async (importOriginal) => {
 });
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
+  IosRunnerQualityPayloadFacts,
   IosSnapshotInput,
   IosSnapshotRequest,
   IosSnapshotValidationFacts,
@@ -172,13 +173,53 @@ test('a regular capture validates the runner payload once unless compaction chan
   assert.equal(validations.mock.calls.length, 2);
 });
 
-function runnerInput(request: IosSnapshotRequest, nodes: RawSnapshotNode[]): IosSnapshotInput {
+// #4701: a refusal prints the index of the array it checked, and this route checks two arrays that
+// hold the same nodes under different numbers. Each call has to name the tree it was handed.
+test('each runner validation names the tree it checked', () => {
+  const validations = vi.mocked(validateIosPayload);
+
+  const full = createIosSnapshotRequest({ interactiveOnly: false });
+  validations.mockClear();
+  presentIosSnapshot(runnerInput(full, runnerNodes()), full);
+  assert.deepEqual(
+    validations.mock.calls.map((call) => call[1]),
+    ['runner-payload'],
+  );
+
+  const interactive = createIosSnapshotRequest({ interactiveOnly: true });
+  validations.mockClear();
+  presentIosSnapshot(runnerInput(interactive, runnerNodes()), interactive);
+  assert.deepEqual(
+    validations.mock.calls.map((call) => call[1]),
+    ['runner-payload', 'presented'],
+    'the second check reads the tree compaction renumbered, which is what the command publishes',
+  );
+
+  const withQuality = runnerInput(full, runnerNodes(), {
+    nodes: runnerNodes(),
+    truncated: false,
+    scope: null,
+  });
+  validations.mockClear();
+  presentIosSnapshot(withQuality, full);
+  assert.deepEqual(
+    validations.mock.calls.map((call) => call[1]),
+    ['runner-payload', 'runner-quality-payload'],
+  );
+});
+
+function runnerInput(
+  request: IosSnapshotRequest,
+  nodes: RawSnapshotNode[],
+  qualityPayload?: IosRunnerQualityPayloadFacts,
+): Extract<IosSnapshotInput, { stage: 'presented' }> {
   return {
     stage: 'presented',
     presentation: {
       producer: 'apple-runner',
       intent: 'full',
       payload: { nodes, truncated: false },
+      ...(qualityPayload ? { qualityPayload } : {}),
     },
     validation: validationFacts(request),
   };
