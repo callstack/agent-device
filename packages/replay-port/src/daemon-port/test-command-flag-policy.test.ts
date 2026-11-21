@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ReplaySession, ReplayTestCommand } from './command-types.ts';
 import { runReplayTestCommand } from './test-command.ts';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 
 function rejectedTestCommand(flags: CommandFlags) {
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
@@ -64,3 +65,19 @@ test.each([
     expect(createSession).not.toHaveBeenCalled();
   },
 );
+
+// A config or env default (`agent-device.json`, `AGENT_DEVICE_HIDE_TOUCHES`) puts `hideTouches` on
+// every command. Without `--record-video` it is a no-op: `test` goes on to start the suite's attempt.
+test('test lets a hideTouches default through without --record-video', async () => {
+  const entry = '/suite/flow.ad';
+  const { command, createSession } = rejectedTestCommand({
+    hideTouches: true,
+    artifactsDir: mkdtempForTestSync('agent-device-hide-touches-default-'),
+    replayScriptSources: [{ entry, files: { [entry]: 'home\n' } }],
+  });
+
+  const response = await runReplayTestCommand(command);
+
+  if (!response.ok) expect(response.error.code).not.toBe('INVALID_ARGS');
+  expect(createSession).toHaveBeenCalled();
+});

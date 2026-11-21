@@ -81,7 +81,7 @@ type ReplayRequestContext = Readonly<{
 
 export type ReplayRecordVideoRequest = Readonly<
   { request: ReplayRequestContext; sessionName: string } & (
-    | { phase: 'start'; outputPath: string }
+    | { phase: 'start'; outputPath: string; hideTouches: boolean }
     | { phase: 'stop' }
   )
 >;

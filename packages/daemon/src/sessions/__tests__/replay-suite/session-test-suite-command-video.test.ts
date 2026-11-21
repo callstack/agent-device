@@ -175,6 +175,7 @@ async function stopMockRecording(params: {
 
 function expectRecordVideoCalls(params: {
   generatedSession: string;
+  startFlags: DaemonRequest['flags'];
   artifactsDir: string | undefined;
   admissionLedger: RecordRuntimeHandlerParams['admissionLedger'];
   requestScope: RecordRuntimeHandlerParams['requestScope'];
@@ -187,8 +188,10 @@ function expectRecordVideoCalls(params: {
     'start',
     path.join(artifactsDir ?? '', 'attempt-1', 'recording.mp4'),
   ]);
+  assert.deepEqual(startCall.req.flags, params.startFlags);
   expectRecordRuntimeCall(stopCall, params);
   assert.deepEqual(stopCall.req.positionals, ['stop']);
+  assert.deepEqual(stopCall.req.flags, {});
 }
 
 function requireRecordVideoCalls(): [RecordRuntimeHandlerParams, RecordRuntimeHandlerParams] {
@@ -216,10 +219,8 @@ function expectRecordRuntimeCall(
   assert.strictEqual(call.throwIfCanceled, expected.throwIfCanceled);
 }
 
-test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
-  vi.useFakeTimers({ now: 1_000 });
-  const { root, replayPath, sessionStore, nestedRequests, events } = createRecordVideoFixture();
-  const finish = vi.fn(async () => ({
+function completedRecordingFinish(root: string): ScreenRecordingLiveHandle['finish'] {
+  return vi.fn(async () => ({
     status: 'completed' as const,
     result: {
       backend: 'test',
@@ -231,10 +232,20 @@ test('test finalizes replay video exactly once when cancellation arrives after s
       recordOnlySession: false,
     },
   }));
+}
+
+/** Runs a one-script `test --record-video` suite against the mocked record runtime. */
+async function runRecordVideoSuite(params: {
+  fixture: RecordVideoFixture;
+  flags: DaemonRequest['flags'];
+  finish: ScreenRecordingLiveHandle['finish'];
+  throwIfCanceled: RecordRuntimeHandlerParams['throwIfCanceled'];
+}) {
+  const { root, replayPath, sessionStore, nestedRequests, events } = params.fixture;
   const recordingState: MockRecordingState = {
     recordingPath: '',
     events,
-    finish,
+    finish: params.finish,
     liveSlotCleared: false,
   };
   installMockRecordingHandler(sessionStore, recordingState);
@@ -244,24 +255,13 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     diagnostics: { emit: () => {} },
     progress: { report: () => {} },
   };
-  const cancellation = new Error('request canceled after recording start');
-  const throwIfCanceled = vi
-    .fn<() => void>()
-    .mockImplementationOnce(() => {})
-    .mockImplementation(() => {
-      throw cancellation;
-    });
-
   const request: DaemonRequest = {
     token: 'token',
     session: 'default',
     command: 'test',
     positionals: [replayPath],
     flags: {
-      recordVideo: true,
-      replayKeepSession: false,
-      saveScript: false,
-      force: false,
+      ...params.flags,
       artifactsDir: path.join(root, 'artifacts'),
       replayScriptSources: [replayScriptSourceBundleFor(replayPath)],
     },
@@ -275,7 +275,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     screenRecordingAdmissionLedger,
     requestScope,
     retainDeviceExecutionLock: async () => {},
-    throwIfCanceled,
+    throwIfCanceled: params.throwIfCanceled,
   });
   if (!video) throw new Error('Expected replay video owner');
 
@@ -312,29 +312,74 @@ test('test finalizes replay video exactly once when cancellation arrives after s
   const testResult = suite.tests?.[0] ?? {};
   const generatedSession = testResult.session;
   if (typeof generatedSession !== 'string') throw new Error('Expected generated test session');
-  expectRecordVideoCalls({
+  const timingPath = path.join(testResult.artifactsDir ?? '', 'attempt-1', 'replay-timing.ndjson');
+  const videoTimingEvents = fs
+    .readFileSync(timingPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { type?: string })
+    .filter((event) => event.type?.startsWith('video_'));
+  return {
+    recordingState,
     generatedSession,
     artifactsDir: testResult.artifactsDir,
     admissionLedger: screenRecordingAdmissionLedger,
     requestScope,
+    videoTimingEvents,
+  };
+}
+
+test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
+  vi.useFakeTimers({ now: 1_000 });
+  const fixture = createRecordVideoFixture();
+  const finish = completedRecordingFinish(fixture.root);
+  const cancellation = new Error('request canceled after recording start');
+  const throwIfCanceled = vi
+    .fn<() => void>()
+    .mockImplementationOnce(() => {})
+    .mockImplementation(() => {
+      throw cancellation;
+    });
+
+  const run = await runRecordVideoSuite({
+    fixture,
+    flags: { recordVideo: true, replayKeepSession: false, saveScript: false, force: false },
+    finish,
     throwIfCanceled,
   });
+
+  expectRecordVideoCalls({ ...run, startFlags: {}, throwIfCanceled });
   assert.equal(throwIfCanceled.mock.calls.length, 1);
-  assert.equal(finish.mock.calls.length, 1);
-  assert.equal(recordingState.liveSlotCleared, true);
-  assert.deepEqual(events, ['record:start', 'open:dispatch', 'record:stop']);
-  const timingPath = path.join(testResult.artifactsDir ?? '', 'attempt-1', 'replay-timing.ndjson');
-  const timingEvents = fs
-    .readFileSync(timingPath, 'utf8')
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as { type?: string });
+  assert.equal(vi.mocked(finish).mock.calls.length, 1);
+  assert.equal(run.recordingState.liveSlotCleared, true);
+  assert.deepEqual(fixture.events, ['record:start', 'open:dispatch', 'record:stop']);
   assert.deepEqual(
-    timingEvents.map((event) => event.type).filter((type) => type?.startsWith('video_')),
+    run.videoTimingEvents.map((event) => event.type),
     ['video_recording_start', 'video_preroll_done', 'video_tail_start', 'video_recording_stop'],
   );
   assert.equal(
-    nestedRequests.some((nestedReq) => nestedReq.flags?.recordVideo === true),
+    fixture.nestedRequests.some((nestedReq) => nestedReq.flags?.recordVideo === true),
+    false,
+  );
+});
+
+test('test --hide-touches starts each attempt recording without the touch overlay', async () => {
+  vi.useFakeTimers({ now: 1_000 });
+  const fixture = createRecordVideoFixture();
+  const throwIfCanceled = vi.fn<() => void>();
+
+  const run = await runRecordVideoSuite({
+    fixture,
+    flags: { recordVideo: true, hideTouches: true },
+    finish: completedRecordingFinish(fixture.root),
+    throwIfCanceled,
+  });
+
+  expectRecordVideoCalls({ ...run, startFlags: { hideTouches: true }, throwIfCanceled });
+  assert.equal(
+    fixture.nestedRequests.some(
+      (nestedReq) => nestedReq.flags?.recordVideo === true || nestedReq.flags?.hideTouches,
+    ),
     false,
   );
 });
