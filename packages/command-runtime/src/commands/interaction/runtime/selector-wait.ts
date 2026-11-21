@@ -179,7 +179,7 @@ async function waitForRef<Runtime extends SelectorWaitRuntime>(
   const node = findNodeByRef(capture.snapshot.nodes, ref);
   if (!node) {
     throw new AppError('COMMAND_FAILED', `Ref ${rawRef} not found`, {
-      reason: INTERACTION_ERROR_REASONS.refNotFound,
+      reason: INTERACTION_ERROR_REASONS.refNotFound.reason,
       ref,
       hint: STALE_REF_HINT,
     });
@@ -187,7 +187,7 @@ async function waitForRef<Runtime extends SelectorWaitRuntime>(
   const text = resolveRefLabel(node, capture.snapshot.nodes);
   if (!text) {
     throw new AppError('COMMAND_FAILED', `Ref ${rawRef} has no label to wait for`, {
-      reason: INTERACTION_ERROR_REASONS.refUnlabeled,
+      reason: INTERACTION_ERROR_REASONS.refUnlabeled.reason,
       ref,
     });
   }

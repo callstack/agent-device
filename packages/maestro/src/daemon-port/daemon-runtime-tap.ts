@@ -251,7 +251,7 @@ function isAtomicSelectorFallbackError(error: unknown): boolean {
     appError.code === 'AMBIGUOUS_MATCH' ||
     appError.code === 'ELEMENT_NOT_FOUND' ||
     appError.code === 'ELEMENT_OFFSCREEN' ||
-    appError.details?.reason === INTERACTION_ERROR_REASONS.selectorNotFound
+    appError.details?.reason === INTERACTION_ERROR_REASONS.selectorNotFound.reason
   );
 }
 

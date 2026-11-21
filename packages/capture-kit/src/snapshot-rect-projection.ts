@@ -32,7 +32,7 @@ export function resolveScreenshotRectSpace(backend: string | undefined): Screens
       throw new AppError(
         'UNSUPPORTED_OPERATION',
         `screenshot --crop-on does not accept snapshot backend "${backend ?? 'unknown'}"`,
-        { reason: SCREENSHOT_CROP_REASONS.targetNotAccepted },
+        { reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason },
       );
   }
 }

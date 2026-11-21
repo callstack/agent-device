@@ -157,7 +157,7 @@ export function resolveRefNode(
     (options.fallbackLabel.length > 0 ? findNodeByLabel(nodes, options.fallbackLabel) : null);
   if (!node) {
     throw new AppError('COMMAND_FAILED', options.notFoundMessage, {
-      reason: INTERACTION_ERROR_REASONS.refNotFound,
+      reason: INTERACTION_ERROR_REASONS.refNotFound.reason,
       ref,
       hint: STALE_REF_HINT,
     });
@@ -191,7 +191,7 @@ export function selectorNotFoundFailure(
     formatSelectorFailure(selectorExpression, diagnostics, { unique }),
     {
       ...details,
-      reason: INTERACTION_ERROR_REASONS.selectorNotFound,
+      reason: INTERACTION_ERROR_REASONS.selectorNotFound.reason,
       hint: selectorFailureHint(diagnostics),
     },
   );

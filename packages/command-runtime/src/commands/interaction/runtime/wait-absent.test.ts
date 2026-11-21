@@ -263,7 +263,7 @@ test('strict wait absent reports capture-stalled when every capture stalls', asy
     const pending = waitAbsent(device, 20);
     const failure = assert.rejects(pending, (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+      assert.equal(error.details?.reason, WAIT_REASONS.captureStalled.reason);
       assert.equal(error.details?.captureStalled, true);
       assert.equal(error.details?.readableCaptures, 0);
       return true;
@@ -287,7 +287,7 @@ test('strict wait absent keeps target-present evidence when a steady-state captu
     const pending = waitAbsent(device, 20);
     const failure = assert.rejects(pending, (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, WAIT_REASONS.targetPresent);
+      assert.equal(error.details?.reason, WAIT_REASONS.targetPresent.reason);
       assert.equal(error.details?.readableCaptures, 1);
       assert.equal(error.details?.readinessPhase, undefined);
       return true;
@@ -314,7 +314,7 @@ test('strict wait absent preserves runner-restart exhaustion over an earlier pre
     const pending = waitAbsent(device, 20);
     const failure = assert.rejects(pending, (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+      assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted.reason);
       assert.equal(error.details?.runnerRestarted, true);
       assert.equal(error.details?.readableCaptures, 1);
       assert.equal(error.details?.captureStalled, undefined);
@@ -341,7 +341,7 @@ test('strict wait absent keeps runner-restart exhaustion as the deadline reason'
     const pending = waitAbsent(device, 20);
     const failure = assert.rejects(pending, (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+      assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted.reason);
       assert.equal(error.details?.readableCaptures, 0);
       return true;
     });
@@ -366,7 +366,7 @@ test('strict wait absent preserves readiness exhaustion over an earlier present 
     const pending = waitAbsent(device, 20);
     const failure = assert.rejects(pending, (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, WAIT_REASONS.readinessExhausted);
+      assert.equal(error.details?.reason, WAIT_REASONS.readinessExhausted.reason);
       assert.equal(error.details?.readinessPhase, 'target-discovery');
       assert.equal(error.details?.readableCaptures, 1);
       return true;

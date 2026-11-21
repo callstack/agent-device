@@ -25,7 +25,7 @@ import type { SessionState } from '../core/session-state.ts';
 
 export type ScreenshotCropOutcome = Readonly<{ partialIntersection: boolean }>;
 
-const CROP_PARTIAL_INTERSECTION_WARNING = `${SCREENSHOT_CROP_REASONS.partialIntersection}: the selector frame extends past the captured image; the crop was clipped to the image frame`;
+const CROP_PARTIAL_INTERSECTION_WARNING = `${SCREENSHOT_CROP_REASONS.partialIntersection.reason}: the selector frame extends past the captured image; the crop was clipped to the image frame`;
 
 /** The single warning-composition owner: append-only, typed reason, stable text. */
 export function buildScreenshotCropWarnings(outcome: ScreenshotCropOutcome | undefined): string[] {
@@ -73,7 +73,7 @@ export async function cropScreenshotToSelector(params: {
     throw new AppError(
       'COMMAND_FAILED',
       'the snapshot taken for --crop-on was sparse and cannot be read as the screen',
-      { reason: SCREENSHOT_CROP_REASONS.captureUnreadable },
+      { reason: SCREENSHOT_CROP_REASONS.captureUnreadable.reason },
     );
   }
 
@@ -93,7 +93,7 @@ export async function cropScreenshotToSelector(params: {
     throw new AppError(
       'COMMAND_FAILED',
       `the frame resolved by --crop-on occupies no pixel of the capture`,
-      { reason: SCREENSHOT_CROP_REASONS.emptyIntersection },
+      { reason: SCREENSHOT_CROP_REASONS.emptyIntersection.reason },
     );
   }
   const partialIntersection =
@@ -123,7 +123,7 @@ async function resolveCropTargetNode(
       'COMMAND_FAILED',
       `--crop-on matched ${outcome.matchedNodes.length} nodes and must resolve to one`,
       {
-        reason: SCREENSHOT_CROP_REASONS.targetAmbiguous,
+        reason: SCREENSHOT_CROP_REASONS.targetAmbiguous.reason,
         candidates: outcome.matchedNodes.map((node) => node.label ?? node.ref),
         matches: outcome.matchedNodes.length,
       },
@@ -134,11 +134,11 @@ async function resolveCropTargetNode(
       throw new AppError(
         'COMMAND_FAILED',
         'the snapshot taken for --crop-on was truncated, so a missing match is not proven',
-        { reason: SCREENSHOT_CROP_REASONS.captureIncomplete },
+        { reason: SCREENSHOT_CROP_REASONS.captureIncomplete.reason },
       );
     }
     throw new AppError('COMMAND_FAILED', `--crop-on matched no node: ${cropOn}`, {
-      reason: SCREENSHOT_CROP_REASONS.targetNotFound,
+      reason: SCREENSHOT_CROP_REASONS.targetNotFound.reason,
       hint: `find ${cropOn} list`,
     });
   }

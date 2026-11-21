@@ -270,7 +270,7 @@ function notHittableRefusal(
       'COMMAND_FAILED',
       `"${name}" is not hittable: a tap would land on another element.`,
       {
-        reason: INTERACTION_ERROR_REASONS.targetNotHittable,
+        reason: INTERACTION_ERROR_REASONS.targetNotHittable.reason,
         ...(selector !== undefined ? { selector } : { ref }),
         ...(node.rect ? { rect: node.rect } : {}),
         hint: 'Reveal the control (for example swipe its row), then take a fresh snapshot -i.',

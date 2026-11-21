@@ -154,7 +154,7 @@ test.each(HELPER_ROWS)(
     ).rejects.toMatchObject({
       code: 'INVALID_ARGS',
       details: expect.objectContaining({
-        reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+        reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame.reason,
         surface,
       }),
     });

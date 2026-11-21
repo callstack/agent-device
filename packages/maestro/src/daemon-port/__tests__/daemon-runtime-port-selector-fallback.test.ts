@@ -62,7 +62,7 @@ test('falls back to fresh Maestro resolution when nested selector resolution mis
   const { port, requests } = makeSelectorDispatchPort({
     code: 'COMMAND_FAILED',
     message: 'Selector did not match: id="profile-button"',
-    details: { reason: INTERACTION_ERROR_REASONS.selectorNotFound },
+    details: { reason: INTERACTION_ERROR_REASONS.selectorNotFound.reason },
   });
 
   await tapProfileButton(port);

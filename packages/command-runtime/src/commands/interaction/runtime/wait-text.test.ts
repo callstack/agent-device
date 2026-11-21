@@ -64,7 +64,7 @@ test('runtime wait times out on text the polled snapshot does not carry', async 
     }),
     (error: AppError) => {
       assert.match(error.message, /wait timed out for text: Ready/);
-      assert.equal(error.details?.reason, WAIT_REASONS.targetAbsent);
+      assert.equal(error.details?.reason, WAIT_REASONS.targetAbsent.reason);
       assert.ok(Number(error.details?.readableCaptures) > 0);
       return true;
     },
@@ -260,7 +260,7 @@ test('a positive wait whose steady-state capture is cancelled reports the deadli
       target: { kind: 'text', text: 'Ready', timeoutMs: 20 },
     });
     const failure = assert.rejects(pending, (error: AppError) => {
-      assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded);
+      assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded.reason);
       assert.equal(error.details?.readableCaptures, 1);
       assert.equal(error.details?.readinessPhase, undefined);
       return true;
@@ -290,7 +290,7 @@ test('a stalled capture reports capture-stalled with no readable captures', asyn
       target: { kind: 'text', text: 'Ready', timeoutMs: 20 },
     });
     const failure = assert.rejects(pending, (error: AppError) => {
-      assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+      assert.equal(error.details?.reason, WAIT_REASONS.captureStalled.reason);
       assert.equal(error.details?.captureStalled, true);
       assert.equal(error.details?.readableCaptures, 0);
       return true;

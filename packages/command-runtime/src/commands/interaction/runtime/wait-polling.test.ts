@@ -297,7 +297,7 @@ test('runner restart exhaustion stays typed after an earlier readable poll', asy
     if (!result.timedOut) return;
     assert.equal(result.deadline, 'runner-restart-exhausted');
     const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
-    assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+    assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted.reason);
     assert.equal(error.details?.runnerRestarted, true);
     assert.equal(
       error.details?.runnerRestartReason,
@@ -332,7 +332,7 @@ test('runner restart exhaustion reports typed evidence without a readable poll',
     if (!result.timedOut) return;
     assert.equal(result.deadline, 'runner-restart-exhausted');
     const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
-    assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+    assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted.reason);
     assert.equal(error.details?.runnerRestarted, true);
     assert.equal(error.details?.readableCaptures, 0);
     assert.equal(error.details?.captureStalled, undefined);
@@ -362,7 +362,7 @@ test.each(['runner-start', 'target-discovery'] as const)(
       if (!result.timedOut) return;
       assert.equal(result.deadline, 'readiness-exhausted');
       const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
-      assert.equal(error.details?.reason, WAIT_REASONS.readinessExhausted);
+      assert.equal(error.details?.reason, WAIT_REASONS.readinessExhausted.reason);
       assert.equal(error.details?.readinessPhase, phase);
       assert.equal(error.details?.readableCaptures, 0);
       assert.equal(error.details?.captureStalled, undefined);
@@ -390,7 +390,7 @@ test('a steady-state cancelled poll after a readable capture is deadline-exceede
     if (!result.timedOut) return;
     assert.equal(result.deadline, 'capture-truncated');
     const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
-    assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded);
+    assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded.reason);
     assert.equal(error.details?.readableCaptures, 1);
     assert.equal(error.details?.readinessPhase, undefined);
   } finally {
@@ -459,7 +459,7 @@ test('a capture that never becomes readable reports capture-stalled', async () =
     if (!result.timedOut) return;
     assert.equal(result.deadline, 'capture-stalled');
     const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
-    assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+    assert.equal(error.details?.reason, WAIT_REASONS.captureStalled.reason);
     assert.equal(error.details?.captureStalled, true);
     assert.equal(error.details?.readableCaptures, 0);
   } finally {
@@ -502,7 +502,7 @@ test('a capture that answers after the cutoff is a timeout and not a readable ca
     // the target was absent. The late answer is not counted.
     assert.equal(late.deadline, undefined);
     const error = waitTimeoutError('wait timed out for text: Ready', polling, late.deadline);
-    assert.equal(error.details?.reason, WAIT_REASONS.targetAbsent);
+    assert.equal(error.details?.reason, WAIT_REASONS.targetAbsent.reason);
     assert.equal(error.details?.readableCaptures, 1);
     assert.equal(error.details?.captureTruncated, undefined);
   } finally {
@@ -526,7 +526,7 @@ test('a first capture that answers after the cutoff leaves the wait with no read
   if (!late.timedOut) return;
   assert.equal(late.deadline, undefined);
   const error = waitTimeoutError('wait timed out for text: Ready', polling, late.deadline);
-  assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+  assert.equal(error.details?.reason, WAIT_REASONS.captureStalled.reason);
   assert.equal(error.details?.readableCaptures, 0);
 });
 

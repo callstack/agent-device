@@ -150,7 +150,9 @@ test('settings clear-app-state rejects missing app id when no app session is bou
   if (response?.ok === false) {
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/requires an app id/i);
-    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired);
+    expect(response.error.details?.reason).toBe(
+      PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason,
+    );
     expect(response.error.details?.dispatched).toBe('no');
   }
   expect(fixtureSettingsMutations).toHaveLength(0);

@@ -1,5 +1,14 @@
 import type { FoldPose, FoldScreenCoordinateSpace, SetFoldPoseInput } from './device-rotation.ts';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
+
+/** The `fold` reasons that both the Android and the Apple owner raise. */
+export const FOLD_REASONS = {
+  // The device has one panel and no hinge, so there is no pose to set.
+  singlePanelDevice: { reason: 'single-panel-device' },
+  // The pose was sent, but the device still reports another pose.
+  poseUnverified: { reason: 'fold-pose-unverified' },
+} as const satisfies ReasonTable<'fold'>;
 
 /**
  * The panel the device lights after the pose settled, in that panel's own native points: its pixel

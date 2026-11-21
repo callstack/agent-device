@@ -313,7 +313,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
           | undefined;
         assert.equal(
           frontmostRefusalDetails?.reason,
-          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame.reason,
         );
         assert.equal(frontmostRefusalDetails?.surface, 'frontmost-app');
         assert.equal(
@@ -354,7 +354,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         const refusalDetails = refusalErrorData.details as Record<string, unknown> | undefined;
         assert.equal(
           refusalDetails?.reason,
-          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame.reason,
         );
         assert.equal(refusalDetails?.surface, 'desktop');
         assert.equal(

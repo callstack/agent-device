@@ -106,7 +106,7 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
       expect(cell).toEqual({
         target: cell.target,
         status: 'rejected',
-        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
       });
     }
   }
@@ -149,8 +149,8 @@ test('a provider TV crop is accepted only on the page tree the TV plugins captur
       message:
         'screenshot --crop-on is not accepted on provider-android-tv-non-cdp-snapshot targets',
       details: {
-        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
-        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
       },
     }),
   );
@@ -159,7 +159,7 @@ test('a provider TV crop is accepted only on the page tree the TV plugins captur
 test('a provider TV crop fails on a page that published no capture scale or no viewport', () => {
   const unreadable = expect.objectContaining({
     code: 'COMMAND_FAILED',
-    details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable },
+    details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable.reason },
   });
   expect(() =>
     assertScreenshotCropSnapshot(PROVIDER_TV, { ...TV_PAGE, captureScale: undefined }),
@@ -201,8 +201,8 @@ test('a physical iPhone on the XCTest backend is refused with the pending-eviden
       code: 'UNSUPPORTED_OPERATION',
       message: 'screenshot --crop-on is not accepted on ios-physical-xctest targets',
       details: {
-        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
-        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
       },
     }),
   );
@@ -222,8 +222,8 @@ test('a physical iPad is refused with the pending-evidence reason, naming its ow
       code: 'UNSUPPORTED_OPERATION',
       message: 'screenshot --crop-on is not accepted on ipados-physical targets',
       details: {
-        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
-        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
       },
     }),
   );
@@ -263,7 +263,7 @@ test('an apple device with an unpopulated reserved OS is a typed refusal, not a 
   }
   expect(refusal).toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
-    details: { reason: SCREENSHOT_CROP_REASONS.targetNotAccepted },
+    details: { reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason },
   });
 });
 
@@ -291,11 +291,11 @@ const POLICY_BASE = { cropOn: 'label="Save"', overlayRefs: false, fullscreen: fa
 test('combination refusals are answered before selector validation and the matrix', () => {
   expectPolicyRefusal(
     { device: MACOS_DEVICE, surface: 'app', ...POLICY_BASE, overlayRefs: true },
-    { code: 'INVALID_ARGS', details: { reason: SCREENSHOT_CROP_REASONS.frameMismatch } },
+    { code: 'INVALID_ARGS', details: { reason: SCREENSHOT_CROP_REASONS.frameMismatch.reason } },
   );
   expectPolicyRefusal(
     { device: ANDROID_EMULATOR, surface: undefined, ...POLICY_BASE, fullscreen: true },
-    { code: 'INVALID_ARGS', details: { reason: SCREENSHOT_CROP_REASONS.frameMismatch } },
+    { code: 'INVALID_ARGS', details: { reason: SCREENSHOT_CROP_REASONS.frameMismatch.reason } },
   );
 });
 
@@ -308,7 +308,7 @@ test('an invalid selector expression is refused with the selector reason', () =>
       overlayRefs: false,
       fullscreen: false,
     },
-    { code: 'INVALID_ARGS', details: { reason: SCREENSHOT_CROP_REASONS.selectorInvalid } },
+    { code: 'INVALID_ARGS', details: { reason: SCREENSHOT_CROP_REASONS.selectorInvalid.reason } },
   );
 });
 
@@ -318,8 +318,8 @@ test('a matrix-rejected target is refused with the pending-evidence reason', () 
     {
       code: 'UNSUPPORTED_OPERATION',
       details: {
-        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
-        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason,
       },
     },
   );

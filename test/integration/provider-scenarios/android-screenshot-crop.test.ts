@@ -46,7 +46,7 @@ for (const destinationExists of [true, false]) {
 
       assert.equal(
         response.json?.error?.data?.details?.reason,
-        SCREENSHOT_CROP_REASONS.targetNotFound,
+        SCREENSHOT_CROP_REASONS.targetNotFound.reason,
       );
       assert.equal(
         world.adbCalls.filter((args) => args.join(' ').includes('exec-out screencap -p')).length,
@@ -75,7 +75,7 @@ for (const destinationExists of [true, false]) {
         });
         assert.equal(
           response.json?.error?.data?.details?.reason,
-          SCREENSHOT_CROP_REASONS.targetAmbiguous,
+          SCREENSHOT_CROP_REASONS.targetAmbiguous.reason,
         );
         assert.equal(response.json?.error?.data?.details?.matches, 2);
         if (destinationExists) assert.deepEqual(fs.readFileSync(destination), sentinel);

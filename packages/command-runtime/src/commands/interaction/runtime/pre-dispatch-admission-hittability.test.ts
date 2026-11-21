@@ -64,7 +64,7 @@ test('a press on a control the platform reports not hittable is refused before a
   await assert.rejects(device.interactions.press(refOf('Delete Avocado')), (error: unknown) => {
     const { message, details } = error as { message: string; details?: Record<string, unknown> };
     assert.equal(message, '"Delete Avocado" is not hittable: a tap would land on another element.');
-    assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetNotHittable);
+    assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetNotHittable.reason);
     assert.equal(details?.dispatched, 'no');
     assert.equal(details?.coveredBy, undefined, 'no occlusion evidence is claimed');
     assert.equal(

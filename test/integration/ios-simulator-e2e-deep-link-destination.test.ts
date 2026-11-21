@@ -18,10 +18,10 @@ function miss(details: Record<string, unknown>): CliJsonResult {
 
 const LANDED = result(0, { success: true });
 const RUNNER_START_TIMEOUT = miss({
-  reason: WAIT_REASONS.readinessExhausted,
+  reason: WAIT_REASONS.readinessExhausted.reason,
   readinessPhase: 'runner-start',
 });
-const SLOW_FOREGROUND = miss({ reason: WAIT_REASONS.deadlineExceeded, readableCaptures: 5 });
+const SLOW_FOREGROUND = miss({ reason: WAIT_REASONS.deadlineExceeded.reason, readableCaptures: 5 });
 const INVALID_SELECTOR = result(1, { error: { code: 'INVALID_ARGS' } });
 
 /** Destination waits that answer in the order given; the final wait throws like `runStep`. */

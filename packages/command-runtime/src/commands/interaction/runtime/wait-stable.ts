@@ -24,7 +24,7 @@ export async function waitForStable<Runtime extends SelectorWaitRuntime>(
   if (outcome.failure) throw outcome.failure.error;
   if (!outcome.settled) {
     throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
-      reason: WAIT_REASONS.stableTimeout,
+      reason: WAIT_REASONS.stableTimeout.reason,
       ...(outcome.stalled ? { captureStalled: true } : {}),
       quietMs: quiet,
       timeoutMs: timeout,

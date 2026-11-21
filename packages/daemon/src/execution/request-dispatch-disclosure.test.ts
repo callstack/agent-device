@@ -296,7 +296,7 @@ async function namedSessionRefusedBeforeDeviceSelection(): Promise<unknown> {
   }).catch((error: unknown) => {
     assert.ok(error instanceof AppError);
     assert.equal(error.code, 'SESSION_NOT_FOUND');
-    assert.equal(error.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    assert.equal(error.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason);
     throw error;
   });
   assert.fail(`expected the named-session refusal, got ${String(failure)}`);

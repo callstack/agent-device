@@ -735,7 +735,9 @@ test('a named sessionless screenshot answers with the typed named-session refusa
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
   expect(response.error.message).toContain("agent-device open <app> --session 'qa run'");
-  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+  );
   expect(response.error.details?.dispatched).toBe('no');
   expect(response.error.details?.session).toBe('qa run');
 });

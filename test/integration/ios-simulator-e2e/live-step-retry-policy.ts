@@ -3,9 +3,9 @@ import type { CliJsonResult } from '../cli-json.ts';
 
 // These wait verdicts indicate that capture or readiness prevented observation.
 const OBSERVATION_PREVENTED_WAIT_REASONS: ReadonlySet<string> = new Set([
-  WAIT_REASONS.captureStalled,
-  WAIT_REASONS.runnerRestartExhausted,
-  WAIT_REASONS.readinessExhausted,
+  WAIT_REASONS.captureStalled.reason,
+  WAIT_REASONS.runnerRestartExhausted.reason,
+  WAIT_REASONS.readinessExhausted.reason,
 ]);
 
 /** Requires both a retriable verdict and a typed prevented-observation reason.

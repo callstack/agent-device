@@ -2,6 +2,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   isInactiveLeaseError,
   LEASE_DEVICE_SPEC_KEYS,
+  LEASE_REASONS,
   readLeaseAllocateProviderFlags,
   requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
@@ -11,7 +12,7 @@ import {
   narrowConnectionPlatform,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, asAppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { leaseBackendForPlatform, type LeaseBackend } from '@agent-device/kernel/contracts';
 import type { Lease } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -27,6 +28,12 @@ import { bindLeaseNamedDevice } from './proxy-lease-device.ts';
 type LeaseRelease = () => Promise<{ released: boolean }>;
 
 const LEASE_ROLLBACK_RELEASE_FAILED_REASON = 'LEASE_RELEASE_FAILED';
+
+const CONNECTION_LEASE_REASONS = {
+  // The CLI already tracks an allocated lease and must release or transfer it before it allocates
+  // another.
+  ledgerOverwrite: { reason: 'LEASE_LEDGER_OVERWRITE' },
+} as const satisfies ReasonTable<'leases'>;
 
 type TrackedLease = {
   leaseId: string;
@@ -82,7 +89,7 @@ export function createLeaseLedger(): LeaseLedger {
           'COMMAND_FAILED',
           'Release or transfer the tracked lease before another allocation.',
           {
-            reason: 'LEASE_LEDGER_OVERWRITE',
+            reason: CONNECTION_LEASE_REASONS.ledgerOverwrite.reason,
             leaseId: owned.leaseId,
             trackedLeaseId: lease.leaseId,
           },
@@ -371,7 +378,7 @@ async function allocateOrReuseLease(
   }
   if (leaseBackend === 'macos-app') {
     throw new AppError('UNAUTHORIZED', 'The host-allocated macos-app lease is no longer active.', {
-      reason: 'LEASE_NOT_FOUND',
+      reason: LEASE_REASONS.notFound.reason,
       leaseId: state.leaseId,
       hint: 'Ask the host for a new macos-app lease and update the remote config.',
     });

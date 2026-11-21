@@ -47,7 +47,7 @@ type CropTargetCell =
  * rejected with the pending-evidence reason, and the evidence itself lives in the completeness
  * gate, the geometry fixtures, and the PR history — never in this table.
  */
-const PENDING = SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence;
+const PENDING = SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence.reason;
 export const SCREENSHOT_CROP_TARGET_CELLS: readonly CropTargetCell[] = [
   { target: 'ios-simulator', status: 'accepted' },
   { target: 'android-emulator', status: 'accepted' },
@@ -130,7 +130,7 @@ function cropRefusal(target: string, rejectionReason?: ScreenshotCropReason): Ap
     'UNSUPPORTED_OPERATION',
     `screenshot --crop-on is not accepted on ${target} targets`,
     {
-      reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+      reason: SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
       ...(rejectionReason ? { rejectionReason } : {}),
     },
   );
@@ -151,7 +151,7 @@ export function assertScreenshotCropPolicy(params: {
     throw new AppError(
       'INVALID_ARGS',
       '--crop-on cannot be combined with --overlay-refs or --fullscreen: both move the captured frame away from the snapshot viewport the crop is measured against',
-      { reason: SCREENSHOT_CROP_REASONS.frameMismatch },
+      { reason: SCREENSHOT_CROP_REASONS.frameMismatch.reason },
     );
   }
   try {
@@ -160,7 +160,7 @@ export function assertScreenshotCropPolicy(params: {
     throw new AppError(
       'INVALID_ARGS',
       'screenshot --crop-on requires a valid selector expression',
-      { reason: SCREENSHOT_CROP_REASONS.selectorInvalid },
+      { reason: SCREENSHOT_CROP_REASONS.selectorInvalid.reason },
     );
   }
   const target = classifyScreenshotCropTarget(params.device, params.surface);
@@ -204,7 +204,7 @@ export function assertScreenshotCropSnapshot(
     throw new AppError(
       'COMMAND_FAILED',
       'the TV page published no capture scale or viewport, so --crop-on cannot place its rects in the capture: its browser has no visualViewport, or the visual viewport is panned',
-      { reason: SCREENSHOT_CROP_REASONS.captureUnreadable },
+      { reason: SCREENSHOT_CROP_REASONS.captureUnreadable.reason },
     );
   }
 }

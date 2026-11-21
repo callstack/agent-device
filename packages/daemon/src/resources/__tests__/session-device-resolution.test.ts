@@ -267,7 +267,7 @@ test('requireSessionOrExplicitSelector refuses with the published reason and dis
   if (!refusal || refusal.ok) return;
   expect(refusal.error.code).toBe('INVALID_ARGS');
   expect(refusal.error.details?.reason).toBe(
-    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
+    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired.reason,
   );
   expect(refusal.error.details?.dispatched).toBe('no');
 });

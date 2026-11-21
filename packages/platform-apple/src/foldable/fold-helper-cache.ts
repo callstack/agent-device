@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { findProjectRoot } from '@agent-device/host-kit/version';
@@ -21,6 +21,13 @@ const FOLD_HELPER_SOURCE_FILENAME = 'Fold.m';
 const FOLD_HELPER_BINARY_FILENAME = 'fold-helper';
 const FOLD_HELPER_SCHEMA_VERSION = 1 as const;
 const FOLD_HELPER_LOCK_DESCRIPTION = 'iOS Simulator fold helper cache';
+const FOLD_HELPER_BUILD_REASONS = {
+  // The iOS simulator fold helper could not be built with the selected Xcode.
+  buildFailed: {
+    reason: 'fold-helper-build-failed',
+    commands: ['orientation'],
+  },
+} as const satisfies ReasonTable<'fold'>;
 const FOLD_HELPER_BUILD_HINT =
   'Select an Xcode with the iOS simulator SDK and foldable HID support using DEVELOPER_DIR.';
 
@@ -151,7 +158,11 @@ function foldHelperBuildFailed(details: Readonly<Record<string, unknown>>, cause
   return new AppError(
     'COMMAND_FAILED',
     'Unable to build the simulator fold helper',
-    { hint: FOLD_HELPER_BUILD_HINT, ...details, reason: 'fold-helper-build-failed' },
+    {
+      hint: FOLD_HELPER_BUILD_HINT,
+      ...details,
+      reason: FOLD_HELPER_BUILD_REASONS.buildFailed.reason,
+    },
     cause,
   );
 }

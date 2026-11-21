@@ -9,23 +9,25 @@ import {
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo, DaemonTakeoverCause } from './daemon-client-metadata.ts';
 import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 
-// The ways an explicit lifecycle stops short of a usable daemon, whether this client judged it or the
-// daemon answered it: `busy` is the daemon's own refusal, carried through so one constant names it on
-// both sides. Callers branch on `details.reason`, so each reason is one constant here and the messages
-// are free to change.
+// The ways an explicit lifecycle stops short of a usable daemon, as this client judges it. A busy
+// daemon answers with its own `DAEMON_LIFECYCLE_REASONS.busy`, which this client carries through.
 const DAEMON_UNAVAILABLE_REASONS = {
-  notRunning: 'daemon-not-running',
-  incompatible: 'daemon-incompatible',
-  busy: DAEMON_LIFECYCLE_REASONS.busy,
-  drainTimeout: 'daemon-drain-timeout',
-} as const;
+  // An attaching client found no daemon to connect to.
+  notRunning: { reason: 'daemon-not-running' },
+  // The running daemon does not match the client; `details.daemon` and `details.client` hold both
+  // identities.
+  incompatible: { reason: 'daemon-incompatible' },
+  // A daemon accepted the request to leave but was still running 60 s later and could not be
+  // retired.
+  drainTimeout: { reason: 'daemon-drain-timeout' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
   return {
@@ -101,7 +103,7 @@ export function daemonContendedError(): AppError {
 
 export function daemonNotRunningError(stateDir: string, registered?: DaemonInfo): AppError {
   return new AppError('COMMAND_FAILED', 'No daemon is running for this state directory.', {
-    reason: DAEMON_UNAVAILABLE_REASONS.notRunning,
+    reason: DAEMON_UNAVAILABLE_REASONS.notRunning.reason,
     stateDir,
     ...(registered ? { daemon: daemonIdentityOf(registered) } : {}),
     hint: `Start one with a local agent-device command that uses the daemon (agent-device devices --state-dir ${shellQuoteIfNeeded(stateDir)}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer. ${registered.ownership === 'embedded' ? embeddedCloseHint(registered.pid) : `${daemonStopCommand(stateDir)} clears it.`}` : ''}`,
@@ -139,7 +141,8 @@ export function daemonTakeoverRetirementError(
 
 export function isDaemonNotRunningError(error: unknown): boolean {
   return (
-    error instanceof AppError && error.details?.reason === DAEMON_UNAVAILABLE_REASONS.notRunning
+    error instanceof AppError &&
+    error.details?.reason === DAEMON_UNAVAILABLE_REASONS.notRunning.reason
   );
 }
 
@@ -150,7 +153,7 @@ export async function daemonIncompatibleError(params: {
 }): Promise<AppError> {
   const { info, mismatch, stateDir } = params;
   return new AppError('COMMAND_FAILED', 'The running daemon cannot serve this client.', {
-    reason: DAEMON_UNAVAILABLE_REASONS.incompatible,
+    reason: DAEMON_UNAVAILABLE_REASONS.incompatible.reason,
     mismatch,
     stateDir,
     daemon: daemonIdentityOf(info),
@@ -171,7 +174,7 @@ export async function daemonDrainTimeoutError(
     'COMMAND_FAILED',
     'The daemon accepted the request to leave but is still running.',
     {
-      reason: DAEMON_UNAVAILABLE_REASONS.drainTimeout,
+      reason: DAEMON_UNAVAILABLE_REASONS.drainTimeout.reason,
       stateDir,
       daemon: daemonIdentityOf(info),
       hint: `It was not signaled. Retry once it has exited, or stop it deliberately with ${daemonStopCommand(stateDir)}.`,
@@ -185,7 +188,7 @@ export function daemonBusyError(
   census: DaemonLifecycleCensus | undefined,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'The running daemon is busy and was not replaced.', {
-    reason: DAEMON_UNAVAILABLE_REASONS.busy,
+    reason: DAEMON_LIFECYCLE_REASONS.busy.reason,
     stateDir,
     daemon: daemonIdentityOf(info),
     ...census,
@@ -223,7 +226,7 @@ export function daemonNotRetirableError(params: {
     'COMMAND_FAILED',
     'A host process owns this runtime, so it was not retired.',
     {
-      reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
+      reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded.reason,
       stateDir,
       daemon: daemonIdentityOf(info),
       hint: embeddedCloseHint(info.pid),

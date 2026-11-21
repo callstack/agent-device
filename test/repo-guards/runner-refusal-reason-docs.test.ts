@@ -31,14 +31,14 @@ const reasonTable = (
 
 const REASON_TABLES = [
   reasonTable('RUNNER_ERROR_CODES', 'packages/apple-runner/src/runner-contract.ts', 'rows'),
-  reasonTable('PRE_DISPATCH_REFUSAL_REASONS', 'packages/kernel/src/errors.ts', 'object'),
+  reasonTable('PRE_DISPATCH_REFUSAL_REASONS', 'packages/kernel/src/errors.ts', 'rows'),
   reasonTable('SCROLL_REASONS', 'packages/contracts/src/scroll-reasons.ts', 'rows'),
   reasonTable(
     'ANDROID_SCREEN_RECORDING_REASONS',
     'packages/contracts/src/screen-recording-runtime-host.ts',
     'rows',
   ),
-  reasonTable('WAIT_REASONS', 'packages/contracts/src/wait.ts', 'object', [
+  reasonTable('WAIT_REASONS', 'packages/contracts/src/wait.ts', 'rows', [
     commandsDoc,
     cliHelpWorkflows,
   ]),

@@ -119,7 +119,7 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
     // The field's label repeats its typed value (no editable fact: the EditText class decides),
     // so only its identifier satisfies `wait text`.
     const typedWait = await daemon.callCommand('wait', ['text', 'Network', '100'], selection);
-    assert.equal(typedWait.json?.error?.data?.details?.reason, WAIT_REASONS.targetAbsent);
+    assert.equal(typedWait.json?.error?.data?.details?.reason, WAIT_REASONS.targetAbsent.reason);
     assert.equal(
       assertRpcOk(await daemon.callCommand('wait', ['text', 'id/search', '100'], selection)).text,
       'id/search',

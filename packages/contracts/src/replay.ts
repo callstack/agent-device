@@ -45,7 +45,7 @@ export const REPLAY_TARGET_GUARD_MISMATCH_REASON = 'replay_target_guard_mismatch
  * identity-mismatch target-binding divergence; the wait never reports
  * success.
  */
-export const WAIT_LANDMARK_MISMATCH_REASON = WAIT_REASONS.landmarkIdentityMismatch;
+export const WAIT_LANDMARK_MISMATCH_REASON = WAIT_REASONS.landmarkIdentityMismatch.reason;
 
 /**
  * The compact evidence `wait` retains from its LAST poll whose capture

@@ -1,6 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AppError } from '@agent-device/kernel/errors';
-import type { CommandReasonRow } from './command-reasons.ts';
+import type { AppError, ReasonTable } from '@agent-device/kernel/errors';
 import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type {
   HostCommandResult,
@@ -164,14 +163,14 @@ export type AndroidScreenRecordingStopOutcome =
   | 'uncertain';
 
 /**
- * Every `details.reason` the Android screen recording host publishes, each with the command that
- * raises it. A recorder that exits before it produces frames is the device refusing the recording,
- * not a lost request, so the refusal names itself here rather than as an untyped `UNKNOWN`.
+ * Every `details.reason` the Android screen recording host publishes. A recorder that exits before
+ * it produces frames is the device refusing the recording, not a lost request, so the refusal names
+ * itself here rather than as an untyped `UNKNOWN`.
  */
 export const ANDROID_SCREEN_RECORDING_REASONS = {
-  // `screenrecord` exited before it began writing, and its own startup output says why.
-  startupFailed: { reason: 'android_screenrecord_startup_failed', command: 'record' },
-} as const satisfies Record<string, CommandReasonRow>;
+  // Android `screenrecord` exited before it began writing; its startup output says why.
+  startupFailed: { reason: 'android_screenrecord_startup_failed' },
+} as const satisfies ReasonTable<'record'>;
 
 export type AndroidScreenRecordingTransport = Readonly<{
   mode: 'local' | 'transport-composed';

@@ -1,7 +1,8 @@
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import type { HumanControlHold, HumanControlHoldScope } from '@agent-device/contracts/client';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   ProviderSessionOwnershipRegistry,
   type ProviderSessionOwnership,
@@ -41,6 +42,13 @@ import {
   cloneHumanControlHold,
   humanControlActiveError,
 } from './human-control-contract.ts';
+
+const LEASE_REGISTRY_REASONS = {
+  // The requested lease id already names a lease that this daemon issued.
+  idInUse: { reason: 'LEASE_ID_IN_USE' },
+  // Every iOS simulator lease slot is taken; retry after another lease is released.
+  capacityExceeded: { reason: 'LEASE_CAPACITY_EXCEEDED' },
+} as const satisfies ReasonTable<'leases'>;
 
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 
@@ -89,7 +97,7 @@ export class LeaseRegistry {
     if (requestedLease) return requestedLease;
     if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
       throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
-        reason: 'LEASE_ID_IN_USE',
+        reason: LEASE_REGISTRY_REASONS.idInUse.reason,
       });
     }
     this.assertHumanControlAdmission(normalized);
@@ -116,7 +124,7 @@ export class LeaseRegistry {
     if (existing) {
       if (!hasAllocatedScope(existing, normalized)) {
         throw new AppError('INVALID_ARGS', 'Lease id already names a lease with another scope.', {
-          reason: 'LEASE_SCOPE_MISMATCH',
+          reason: LEASE_REASONS.scopeMismatch.reason,
         });
       }
       this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
@@ -535,7 +543,7 @@ export class LeaseRegistry {
       throw new AppError(
         'UNAUTHORIZED',
         'Human-control hold does not belong to the admitted lease.',
-        { reason: 'LEASE_SCOPE_MISMATCH' },
+        { reason: LEASE_REASONS.scopeMismatch.reason },
       );
     }
   }
@@ -650,7 +658,7 @@ export class LeaseRegistry {
     ).length;
     if (activeSimulatorLeases < this.maxActiveSimulatorLeases) return;
     throw new AppError('DEVICE_IN_USE', 'No simulator lease capacity available', {
-      reason: 'LEASE_CAPACITY_EXCEEDED',
+      reason: LEASE_REGISTRY_REASONS.capacityExceeded.reason,
       activeLeases: activeSimulatorLeases,
       maxActiveLeases: this.maxActiveSimulatorLeases,
       backend,
@@ -662,7 +670,7 @@ export class LeaseRegistry {
     const lease = this.leases.get(leaseId);
     if (lease) return lease;
     throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-      reason: 'LEASE_NOT_FOUND',
+      reason: LEASE_REASONS.notFound.reason,
     });
   }
 

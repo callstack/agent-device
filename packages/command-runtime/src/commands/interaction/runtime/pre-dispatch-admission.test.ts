@@ -355,7 +355,7 @@ test('a missing ref keeps its resolution refusal ahead of a canceled request', a
       }),
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.refNotFound);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.refNotFound.reason);
       return true;
     },
   );

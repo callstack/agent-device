@@ -83,7 +83,9 @@ test('a command naming a session this daemon does not hold answers on the sessio
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
   expect(response.error.message).toContain(`No active session "${LOST_SESSION}"`);
-  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+  );
   expect(response.error.details?.dispatched).toBe('no');
   expect(response.error.details?.session).toBe(LOST_SESSION);
 });
@@ -109,7 +111,9 @@ test('a required-session command naming a missing session gets the typed refusal
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
-  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+  );
   expect(response.error.details?.session).toBe(LOST_SESSION);
   expect(listings.count).toBe(0);
 });
@@ -126,7 +130,9 @@ test('a record start naming a missing session answers on the session, not on app
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
-  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+  );
   expect(response.error.details?.session).toBe(LOST_SESSION);
   expect(listings.count).toBe(0);
 });
@@ -144,7 +150,9 @@ test('a record stop naming a missing session answers on the session, not on a ho
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
-  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+  );
   expect(response.error.details?.session).toBe(LOST_SESSION);
   expect(listings.count).toBe(0);
 });
@@ -184,7 +192,7 @@ test('a named session beside a device selector keeps honouring the device it nam
   expect(inspectedDeviceIds).not.toContain('SIM-B');
   if (!response.ok) {
     expect(response.error.details?.reason).not.toBe(
-      PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,
+      PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
     );
   }
   expect(listings.count).toBeGreaterThan(0);
@@ -203,7 +211,9 @@ test('a sessionless close naming a missing session answers on the session', asyn
   if (response.ok) return;
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
   expect(response.error.message).toContain(`No active session "${LOST_SESSION}"`);
-  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+  );
   expect(response.error.details?.dispatched).toBe('no');
   expect(response.error.details?.session).toBe(LOST_SESSION);
   expect(listings.count).toBe(0);

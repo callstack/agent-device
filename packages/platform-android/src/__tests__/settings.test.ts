@@ -73,7 +73,7 @@ test('setAndroidSetting clear-app-state refuses an appless session with the publ
     async ({ device }) => {
       await assertRejectsAppError(() => setAndroidSetting(device, 'clear-app-state', 'clear'), {
         code: 'INVALID_ARGS',
-        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason,
         dispatched: 'no',
       });
     },
@@ -167,7 +167,7 @@ test('setAndroidSetting permission refuses a name resolved earlier whose package
           setAndroidSetting(device, 'permission', 'grant', 'Chrome', {
             permissionTarget: 'camera',
           }),
-        { code: 'APP_NOT_INSTALLED', reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled },
+        { code: 'APP_NOT_INSTALLED', reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled.reason },
       );
       assert.deepEqual(calls, [CURRENT_USER, [...LIST_PACKAGES, '--user', '0']]);
     },
@@ -181,7 +181,7 @@ test('setAndroidSetting permission requires an app in session with the published
         setAndroidSetting(device, 'permission', 'deny', undefined, { permissionTarget: 'camera' }),
       {
         code: 'INVALID_ARGS',
-        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason,
         dispatched: 'no',
       },
     );
@@ -205,7 +205,7 @@ test.for([
           }),
         {
           code: 'APP_NOT_INSTALLED',
-          reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
+          reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled.reason,
           dispatched: 'no',
           hint: /apps --all/,
         },

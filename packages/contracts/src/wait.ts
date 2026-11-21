@@ -1,31 +1,35 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
+
 /**
- * Machine-readable wait failure taxonomy. These values are carried in
- * `error.details.reason`; callers should branch on them instead of parsing
- * wait error messages.
- *
- * `wait_capture_stalled` means no readable capture established an observation
- * before the deadline and is retriable. `wait_deadline_exceeded` means a later
- * capture consumed the remaining budget after at least one readable capture.
- * `wait_readiness_exhausted` means the deadline cancelled a poll that was still
- * making the target observable; `details.readinessPhase` names the work, and
- * `wait_runner_restart_exhausted` is the same verdict for a runner restart.
- * `wait_target_absent` is the ordinary timeout reason for a selector that was
- * never found. `wait_target_present` is the strict-absence timeout reason when
- * valid captures still contain matches. The remaining reasons describe
- * stability and replay-landmark refusals.
+ * Machine-readable wait failure taxonomy, carried in `error.details.reason`. Callers branch on
+ * these values instead of parsing wait error messages.
  */
 export const WAIT_REASONS = {
-  captureStalled: 'wait_capture_stalled',
-  deadlineExceeded: 'wait_deadline_exceeded',
-  runnerRestartExhausted: 'wait_runner_restart_exhausted',
-  readinessExhausted: 'wait_readiness_exhausted',
-  targetAbsent: 'wait_target_absent',
-  targetPresent: 'wait_target_present',
-  stableTimeout: 'wait_stable_timeout',
-  landmarkIdentityMismatch: 'wait_landmark_identity_mismatch',
-} as const;
+  // No readable capture arrived before the deadline, so a retry can succeed.
+  captureStalled: { reason: 'wait_capture_stalled' },
+  // A later capture used up the budget after an earlier readable capture.
+  deadlineExceeded: { reason: 'wait_deadline_exceeded' },
+  // The deadline ended while the runner restarted to recover a lost response, so a retry can
+  // succeed.
+  runnerRestartExhausted: { reason: 'wait_runner_restart_exhausted' },
+  // The deadline ended while the target was still being made observable; `details.readinessPhase`
+  // names the work.
+  readinessExhausted: { reason: 'wait_readiness_exhausted' },
+  // A positive wait never found a match.
+  targetAbsent: { reason: 'wait_target_absent' },
+  // Strict `wait absent` reached its deadline while valid captures still contained matches.
+  targetPresent: { reason: 'wait_target_present' },
+  // `wait stable` reached its deadline before the UI settled.
+  stableTimeout: { reason: 'wait_stable_timeout' },
+  // A replay destination guard refused the match because its identity differs from the recorded
+  // landmark.
+  landmarkIdentityMismatch: {
+    reason: 'wait_landmark_identity_mismatch',
+    commands: ['replay'],
+  },
+} as const satisfies ReasonTable<'wait'>;
 
-export type WaitReason = (typeof WAIT_REASONS)[keyof typeof WAIT_REASONS];
+export type WaitReason = (typeof WAIT_REASONS)[keyof typeof WAIT_REASONS]['reason'];
 
 /**
  * Work a platform does before it can observe the target at all: starting the Apple XCTest runner,

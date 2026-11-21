@@ -8,7 +8,7 @@ import {
   type PrivateRootAdmission,
 } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
@@ -83,8 +83,10 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
 const MOVE_STATE_DIR_FIX =
   'Point AGENT_DEVICE_STATE_DIR (or --state-dir) at a real private directory you own, such as "$HOME/.agent-device".';
 const DAEMON_STATE_ROOT_REASONS = {
-  unsafe: 'daemon_state_root_unsafe',
-} as const satisfies Record<string, string>;
+  // The state directory, or a directory above it, is not private to your account; `details.fix`
+  // says how to fix it.
+  unsafe: { reason: 'daemon_state_root_unsafe' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
 const STATE_ROOT_PROBLEMS = {
@@ -172,7 +174,14 @@ function unsafeStateRoot(
   return new AppError(
     'COMMAND_FAILED',
     `Refusing to use the daemon state directory ${stateDir}: ${component} ${cause}`,
-    { reason: DAEMON_STATE_ROOT_REASONS.unsafe, stateDir, component, problem, fix, hint: fix },
+    {
+      reason: DAEMON_STATE_ROOT_REASONS.unsafe.reason,
+      stateDir,
+      component,
+      problem,
+      fix,
+      hint: fix,
+    },
   );
 }
 
@@ -311,13 +320,13 @@ export const DAEMON_SHUTTING_DOWN_REASON = 'daemon_shutting_down';
 
 /** Why a daemon refuses a lifecycle request: one entry per rule the admission seam enforces. */
 export const DAEMON_LIFECYCLE_REASONS = {
-  /** A quiesce found the daemon holding work, so nothing was accepted. */
-  busy: 'daemon-busy',
-  /** The request names a different daemon instance than the one answering it. */
-  instanceMismatch: 'daemon-instance-mismatch',
-  /** A host owns this runtime and ends it through its own close. */
-  ownerEmbedded: 'daemon-owner-embedded',
-} as const;
+  // The daemon still holds work, so it refused to leave; `details` counts that work.
+  busy: { reason: 'daemon-busy' },
+  // The request names a different daemon instance than the one answering it.
+  instanceMismatch: { reason: 'daemon-instance-mismatch' },
+  // A live host process owns this daemon and ends it through its own `close()`.
+  ownerEmbedded: { reason: 'daemon-owner-embedded' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**
  * The refusal for a `daemon.json` whose owner field this build cannot place. No daemon answers it: a

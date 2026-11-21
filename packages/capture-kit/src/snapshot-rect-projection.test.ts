@@ -99,7 +99,7 @@ test('resolveScreenshotRectSpace maps each accepted backend to its projection sp
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'UNSUPPORTED_OPERATION' &&
-        error.details?.reason === SCREENSHOT_CROP_REASONS.targetNotAccepted,
+        error.details?.reason === SCREENSHOT_CROP_REASONS.targetNotAccepted.reason,
     );
   }
 });

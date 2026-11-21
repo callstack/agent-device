@@ -424,7 +424,7 @@ async function dispatchFocusForFindMatch(
       'COMMAND_FAILED',
       `Matched element @${focusTarget.node.ref} is a disabled text field and cannot be focused`,
       {
-        reason: INTERACTION_ERROR_REASONS.targetDisabled,
+        reason: INTERACTION_ERROR_REASONS.targetDisabled.reason,
         ref: `@${focusTarget.node.ref}`,
         hint: 'Enable the field first, or target a different one.',
       },

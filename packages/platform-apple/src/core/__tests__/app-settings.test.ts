@@ -344,7 +344,7 @@ test('setIosSetting clear-app-state refuses an appless session with the publishe
           ),
         {
           code: 'INVALID_ARGS',
-          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired.reason,
           dispatched: 'no',
         },
       );
@@ -713,7 +713,7 @@ test.for([
           ),
         {
           code: 'APP_NOT_INSTALLED',
-          reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
+          reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled.reason,
           dispatched: 'no',
           hint: /apps --all/,
         },
@@ -742,7 +742,7 @@ test('setIosSetting permission keeps a failed app listing distinct from a missin
       ).catch((error: unknown) => error);
       assert.ok(thrown instanceof AppError);
       assert.equal(thrown.code, 'COMMAND_FAILED');
-      assert.notEqual(thrown.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled);
+      assert.notEqual(thrown.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled.reason);
       assert.equal(thrown.details?.dispatched, 'no');
       assert.deepEqual(calls, [['simctl', 'listapps', 'sim-1']]);
     },

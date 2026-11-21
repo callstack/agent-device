@@ -277,7 +277,7 @@ test('a ref the second observation cannot re-measure is refused, never self-agre
     () => device.press('ref'),
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving.reason);
       assert.equal(details?.dispatched, 'no');
       // Nothing was measured, so nothing is reported: a caller reading `movedToRect` would take the
       // stale frame position for a fresh observation of where the target went.
@@ -318,7 +318,7 @@ test('a surface that arrives between the two looks is not rest', async () => {
     () => device.press('selector'),
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving.reason);
       assert.equal(details?.dispatched, 'no');
       // The sheet's rect is not somewhere the app's target moved to, so the refusal reports no
       // position rather than one measured on a presentation this press never asked about.
@@ -345,7 +345,7 @@ test('a target the wait loses is refused by resolution, not by a motion refusal'
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
       // Named, not merely "not the motion refusal": any unrelated rejection would pass otherwise.
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.refNotFound);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.refNotFound.reason);
       assert.equal(details?.dispatched, 'no');
       return true;
     },
@@ -393,7 +393,7 @@ test('a replacement that took the ref at the frame coordinates is refused, not a
     () => device.press('ref'),
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving.reason);
       // A look that measured no target reports no position: the frame rect is the value the whole
       // window exists to doubt, and publishing it as `movedToRect` would read as a fresh observation.
       assert.equal(details?.movedToRect, undefined);
@@ -442,7 +442,7 @@ test('the refused selector press publishes a wait that survives the shell', asyn
     () => device.pressSelector('label="It\'s moving"'),
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving.reason);
       assert.match(String(details?.hint), /wait 'label="It'\\''s moving"'/);
       return true;
     },
@@ -602,7 +602,7 @@ test('Android refuses to certify an identity duplicated in the new observation',
     (error: unknown) => {
       assert.equal(
         (error as AppError).details?.reason,
-        INTERACTION_ERROR_REASONS.targetStillMoving,
+        INTERACTION_ERROR_REASONS.targetStillMoving.reason,
       );
       return true;
     },
@@ -627,7 +627,7 @@ test('Android refuses to adopt matching identity from another application', asyn
     (error: unknown) => {
       assert.equal(
         (error as AppError).details?.reason,
-        INTERACTION_ERROR_REASONS.targetStillMoving,
+        INTERACTION_ERROR_REASONS.targetStillMoving.reason,
       );
       return true;
     },

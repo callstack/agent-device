@@ -19,7 +19,9 @@ test('the warning composition is the single owner: partial intersection and only
   expect(buildScreenshotCropWarnings({ partialIntersection: false })).toEqual([]);
   const warnings = buildScreenshotCropWarnings({ partialIntersection: true });
   expect(warnings).toHaveLength(1);
-  expect(warnings[0]).toMatch(new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection}: `));
+  expect(warnings[0]).toMatch(
+    new RegExp(`^${SCREENSHOT_CROP_REASONS.partialIntersection.reason}: `),
+  );
 });
 
 const ANDROID_ROOT: RawSnapshotNode = {
@@ -181,7 +183,7 @@ test('a frame that occupies no image pixel refuses without writing', async () =>
   try {
     await expect(seam.run()).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: SCREENSHOT_CROP_REASONS.emptyIntersection },
+      details: { reason: SCREENSHOT_CROP_REASONS.emptyIntersection.reason },
     });
     expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 100, height: 50 });
   } finally {
@@ -200,7 +202,7 @@ test('a sparse crop capture is an unreadable refusal, not a missing target', asy
   try {
     await expect(seam.run()).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable },
+      details: { reason: SCREENSHOT_CROP_REASONS.captureUnreadable.reason },
     });
     expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 100, height: 50 });
   } finally {
@@ -220,7 +222,7 @@ test('a truncated no-match cannot prove the target absent', async () => {
   try {
     await expect(seam.run()).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: SCREENSHOT_CROP_REASONS.captureIncomplete },
+      details: { reason: SCREENSHOT_CROP_REASONS.captureIncomplete.reason },
     });
   } finally {
     seam.dispose();
@@ -239,7 +241,7 @@ test('a complete no-match is a missing target with the find pointer', async () =
     await expect(seam.run()).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
       details: {
-        reason: SCREENSHOT_CROP_REASONS.targetNotFound,
+        reason: SCREENSHOT_CROP_REASONS.targetNotFound.reason,
         hint: 'find label="Missing" list',
       },
     });
@@ -277,7 +279,7 @@ test('an ambiguous match refuses with the candidates, not a first-wins crop', as
     await expect(seam.run()).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
       details: {
-        reason: SCREENSHOT_CROP_REASONS.targetAmbiguous,
+        reason: SCREENSHOT_CROP_REASONS.targetAmbiguous.reason,
         candidates: ['Save', 'Save'],
         matches: 2,
       },

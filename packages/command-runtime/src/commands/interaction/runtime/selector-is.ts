@@ -169,7 +169,7 @@ async function resolveAssertedPredicate(
       `is ${predicate} failed for selector ${outcome.selector}: ${result.details}`,
       {
         command: 'is',
-        reason: INTERACTION_ERROR_REASONS.predicateFailed,
+        reason: INTERACTION_ERROR_REASONS.predicateFailed.reason,
         predicate: predicate,
         selector: outcome.selector,
         predicateDetails: result.details,

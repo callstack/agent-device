@@ -31,7 +31,9 @@ test('appstate returns missing-session error for explicit session flag', async (
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
     expect(response.error.message).toMatch(/Run open with --session named first/i);
     // The same typed refusal every named-session seam answers with (#3674).
-    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.reason).toBe(
+      PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+    );
     expect(response.error.details?.dispatched).toBe('no');
     expect(response.error.details?.session).toBe('named');
   }
@@ -112,7 +114,9 @@ test('appstate --udid with no --platform resolves the stated device and THEN ans
     expect(response.ok).toBe(false);
     if (response.ok) return;
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
-    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.reason).toBe(
+      PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+    );
     expect(response.error.details?.session).toBe('lost');
     // Resolution ran, once, on the identity the request stated — the refusal is the device
     // runtime lane's, after the target was proven, not a guard that skipped the stated device.
@@ -212,7 +216,9 @@ test('appstate keeps the admission-time named-session verdict when the store cha
 
     expect(response.ok).toBe(false);
     if (response.ok) return;
-    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.reason).toBe(
+      PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
+    );
     expect(response.error.details?.session).toBe('lost');
   } finally {
     resolved.mockReset();
@@ -259,7 +265,7 @@ test('appstate with a named session and an identity device selector keeps the st
     expect(inspected).toEqual(['emulator-5554']);
     if (!response.ok) {
       expect(response.error.details?.reason).not.toBe(
-        PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,
+        PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound.reason,
       );
     }
   } finally {

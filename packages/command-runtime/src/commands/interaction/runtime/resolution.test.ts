@@ -89,7 +89,7 @@ test('runtime selector misses carry a structured reason for retrying adapters', 
     (error: unknown) => {
       assert.equal(
         (error as { details?: Record<string, unknown> }).details?.reason,
-        INTERACTION_ERROR_REASONS.selectorNotFound,
+        INTERACTION_ERROR_REASONS.selectorNotFound.reason,
       );
       return true;
     },

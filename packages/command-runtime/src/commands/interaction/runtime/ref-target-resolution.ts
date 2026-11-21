@@ -303,12 +303,12 @@ function refMissRefusal(
   const refusal =
     miss.kind === 'unusable'
       ? new AppError('COMMAND_FAILED', `Ref ${refInput} has no usable bounds`, {
-          reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
+          reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid.reason,
           ref,
           hint: STALE_REF_HINT,
         })
       : new AppError('COMMAND_FAILED', `Ref ${refInput} not found`, {
-          reason: INTERACTION_ERROR_REASONS.refNotFound,
+          reason: INTERACTION_ERROR_REASONS.refNotFound.reason,
           ref,
           hint: STALE_REF_HINT,
         });

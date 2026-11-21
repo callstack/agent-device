@@ -4,9 +4,13 @@ import {
   FOLD_SCREEN_COORDINATE_SPACE,
   type FoldPose,
 } from '@agent-device/contracts/device';
-import type { FoldScreenReport, SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
+import {
+  FOLD_REASONS,
+  type FoldScreenReport,
+  type SetFoldPoseResult,
+} from '@agent-device/contracts/fold-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import {
@@ -20,7 +24,16 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
-import { HINGE_ANGLE_NO_SAMPLE_REASON, createFoldHelper, type FoldHelper } from './fold-helper.ts';
+import { FOLD_HELPER_REASONS, createFoldHelper, type FoldHelper } from './fold-helper.ts';
+
+const APPLE_FOLD_POSE_REASONS = {
+  // The iOS simulator received the pose, but the first hinge read returned no sample to verify it.
+  dispatchedUnverified: { reason: 'fold-pose-dispatched-unverified' },
+  // The iOS simulator hinge did not reach the angle of the final keyframe.
+  angleUnverified: { reason: 'fold-angle-unverified' },
+  // The iOS simulator hinge reached the pose but never came to rest.
+  unsettled: { reason: 'fold-pose-unsettled' },
+} as const satisfies ReasonTable<'fold'>;
 
 const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
@@ -70,7 +83,10 @@ export async function setAppleFoldPose(
 }
 
 function isHingeNoSample(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === HINGE_ANGLE_NO_SAMPLE_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === FOLD_HELPER_REASONS.hingeAngleNoSample.reason
+  );
 }
 
 /**
@@ -95,7 +111,7 @@ async function dispatchedUnverifiedPoseError(
       deviceId: device.id,
       requestedPose: pose,
       ...(targetAngle === undefined ? {} : { targetAngleDegrees: targetAngle }),
-      reason: 'fold-pose-dispatched-unverified',
+      reason: APPLE_FOLD_POSE_REASONS.dispatchedUnverified.reason,
       ...(litPanel ? { screen: screenReport(litPanel) } : {}),
       ...(cause instanceof AppError ? { hingeReadFailure: cause.details } : {}),
       hint: DISPATCHED_UNVERIFIED_HINT,
@@ -115,7 +131,11 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `${device.name} is not a foldable simulator: fold requires more than one integrated panel`,
-      { deviceId: device.id, reason: 'single-panel-device', hint: FOLDABLE_REQUIRED_HINT },
+      {
+        deviceId: device.id,
+        reason: FOLD_REASONS.singlePanelDevice.reason,
+        hint: FOLDABLE_REQUIRED_HINT,
+      },
     );
   }
 }
@@ -203,7 +223,7 @@ function hingeVerificationError(
 ): AppError {
   if (!matchesTargetAngle(observed, targetAngle)) {
     return new AppError('COMMAND_FAILED', 'The hinge did not reach the final keyframe angle', {
-      reason: 'fold-angle-unverified',
+      reason: APPLE_FOLD_POSE_REASONS.angleUnverified.reason,
       targetAngleDegrees: targetAngle,
       hingeAngleDegrees: observed,
       deviceId: device.id,
@@ -245,7 +265,7 @@ function unverifiedPoseError(device: DeviceInfo, pose: FoldPose, observed: numbe
     `${device.name} did not reach the ${pose} pose: the simulator still reports a hinge angle of ${observed}°`,
     {
       ...hingePoseDetails(device, pose, observed),
-      reason: 'fold-pose-unverified',
+      reason: FOLD_REASONS.poseUnverified.reason,
       hint: 'The simulator HID command completed, but the hinge did not follow. Verify that the selected Xcode and simulator runtime support foldable HID control, then retry.',
     },
   );
@@ -263,7 +283,7 @@ function unsettledPoseError(
     `${device.name} was observed ${pose} at ${observed}° but did not settle: ${IOS_FOLD_POSE_SETTLE_ATTEMPTS} hinge reads never held two consecutive angles within ${IOS_FOLD_POSE_STABLE_DEGREES}° of each other`,
     {
       ...hingePoseDetails(device, pose, observed),
-      reason: 'fold-pose-unsettled',
+      reason: APPLE_FOLD_POSE_REASONS.unsettled.reason,
       ...(previous === undefined ? {} : { previousHingeAngleDegrees: previous }),
       hint: POSE_UNSETTLED_HINT,
     },

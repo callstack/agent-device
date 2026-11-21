@@ -117,7 +117,7 @@ function waitTargetPresentError(
     'COMMAND_FAILED',
     `wait absent timed out for selector ${selector}: ${observation.matches} match${multiple ? 'es' : ''} remain`,
     {
-      reason: WAIT_REASONS.targetPresent,
+      reason: WAIT_REASONS.targetPresent.reason,
       selector,
       ...evidence,
       matches: observation.matches,

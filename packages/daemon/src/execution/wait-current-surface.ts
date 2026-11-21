@@ -64,7 +64,9 @@ export async function maybeWaitTimeoutSurfaceResponse(
 }
 
 function canInspectWaitSurface(reason: unknown): boolean {
-  return reason === WAIT_REASONS.targetAbsent || reason === WAIT_REASONS.stableTimeout;
+  return (
+    reason === WAIT_REASONS.targetAbsent.reason || reason === WAIT_REASONS.stableTimeout.reason
+  );
 }
 
 async function inspectCurrentSurface(

@@ -119,7 +119,12 @@ export default defineConfig({
         ]),
         {
           label: 'Reference',
-          items: ['docs/security-trust', 'docs/known-limitations', 'docs/migrating-gestures'],
+          items: [
+            'docs/error-reasons',
+            'docs/security-trust',
+            'docs/known-limitations',
+            'docs/migrating-gestures',
+          ],
         },
       ],
       plugins: [
