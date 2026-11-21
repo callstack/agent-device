@@ -59,7 +59,12 @@ import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
-import { resolveRemoteAuthForCli, withCommandLogin } from './cli/auth-session.ts';
+import { resolveRemoteAuthForCli, withDeferredLogin } from './cli/auth-session.ts';
+import { exitBeforeCommand } from './cli/pre-command-failure.ts';
+import {
+  admitConnectProviderOrExit,
+  defersLoginUntilProviderAdmission,
+} from './cli/connect-preflight.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -166,6 +171,9 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
       debug: debugEnabled,
     },
     async () => {
+      // A provider this route cannot supply is refused here: before this run resolves an option that
+      // can carry a credential, and before any credential value is registered for redaction.
+      await admitConnectProviderOrExit(argv, host, { jsonRequested, debugEnabled });
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
         host,
         version,
@@ -204,38 +212,42 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
         });
-        // A login approved in here is stored when the command ends, unless a provider plugin is refused.
-        await withCommandLogin(async () => {
-          await resolveRemoteContext(ctx, transport);
-          registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
-          if (command === 'cdp') {
-            await exitAfterFlush(
-              await runAgentCdpCommand(positionals, {
+        // A `connect` that learns its provider from the profile it fetches holds a login it approves
+        // until that provider is admitted; every other command saves a login as soon as it is approved.
+        await withDeferredLogin(
+          { defersLogin: await defersLoginUntilProviderAdmission(ctx) },
+          async () => {
+            await resolveRemoteContext(ctx, transport);
+            registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
+            if (command === 'cdp') {
+              await exitAfterFlush(
+                await runAgentCdpCommand(positionals, {
+                  flags: ctx.effectiveFlags,
+                  runtime: ctx.resolvedRuntime,
+                  cwd: host.cwd,
+                  env: host.env,
+                }),
+              );
+              return;
+            }
+            logTail.stop = maybeStartDaemonLogTail(ctx);
+            const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
+            const commandProgress = createCommandProgressState();
+            const client = createAgentDeviceClient(buildClientConfig(ctx), {
+              host: ctx.host,
+              devicePin: ctx.devicePin,
+              transport: createCliDaemonTransport({
+                host,
+                command,
                 flags: ctx.effectiveFlags,
-                runtime: ctx.resolvedRuntime,
-                cwd: host.cwd,
-                env: host.env,
+                replayTestReporterRuntime,
+                commandProgress,
+                transport,
               }),
-            );
-            return;
-          }
-          logTail.stop = maybeStartDaemonLogTail(ctx);
-          const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
-          const commandProgress = createCommandProgressState();
-          const client = createAgentDeviceClient(buildClientConfig(ctx), {
-            host: ctx.host,
-            devicePin: ctx.devicePin,
-            transport: createCliDaemonTransport({
-              host,
-              command,
-              flags: ctx.effectiveFlags,
-              replayTestReporterRuntime,
-              commandProgress,
-              transport,
-            }),
-          });
-          await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
-        });
+            });
+            await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
+          },
+        );
       } catch (error) {
         await handleRunCliFailure(error, ctx, logTail.stop);
       } finally {
@@ -315,23 +327,7 @@ async function exitOnParseFailure(
   argv: string[],
   options: { jsonRequested: boolean; debugEnabled: boolean },
 ): Promise<never> {
-  emitDiagnostic({
-    level: 'error',
-    phase: 'cli_parse_failed',
-    data: {
-      error: error instanceof Error ? error.message : String(error),
-    },
-  });
-  const normalized = normalizeError(error, {
-    diagnosticId: getDiagnosticsMeta().diagnosticId,
-    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
-  });
-  if (options.jsonRequested) {
-    await printJson({ success: false, error: normalized });
-  } else {
-    await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
-  }
-  return await exitAfterFlush(1);
+  return await exitBeforeCommand(error, argv, options, 'cli_parse_failed');
 }
 
 type CliRunContext = {

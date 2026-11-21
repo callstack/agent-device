@@ -2,12 +2,17 @@ import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-sch
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { CLOUD_LEASE_PROVIDER } from '@agent-device/contracts/lease-scope';
+import { isProviderPluginRefusal } from '@agent-device/contracts/plugin-installation';
 import { type EnvMap } from '@agent-device/kernel/source-value';
-import { resolveCloudAccessForConnect } from '../auth-session.ts';
+import {
+  discardPendingLoginAtRefusal,
+  resolveCloudAccessForConnect,
+  savePendingLoginAtAdmission,
+} from '../auth-session.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { buildConnectClientId } from './client-id.ts';
-import { primeProviderConnection } from './provider-policy.ts';
+import { primeProviderConnection, requiresOwnProviderAdmission } from './provider-policy.ts';
 
 const CONNECTION_PROFILE_PATH = '/api/control-plane/connection-profile';
 const HTTP_TIMEOUT_MS = 15_000;
@@ -41,9 +46,10 @@ export async function resolveCloudConnectProfile(options: {
     accessToken: auth.accessToken,
     fetchImpl: options.fetchImpl,
   });
-  // The control plane chooses the provider. Its plugin is admitted before anything is written, so
-  // a missing plugin leaves no profile and no connection state behind.
-  await primeProviderConnection(profile.leaseProvider, options.env);
+  // The control plane chose the provider. It is admitted here, before this route generates or writes
+  // any profile or connection record, so a provider whose plugin is missing or broken leaves nothing
+  // behind, and so does a login this run approved but cannot save.
+  await admitDiscoveredProvider(profile.leaseProvider, options.env);
   const clientId = buildConnectClientId(
     options.stateDir,
     auth.cloudBaseUrl,
@@ -66,6 +72,28 @@ export async function resolveCloudConnectProfile(options: {
       daemonAuthToken: auth.accessToken,
     },
   });
+}
+
+/**
+ * Checks the provider the connection profile names, right after the control plane answers with it.
+ * Limrun is checked here: the core ships no Limrun runtime, so only its plugin can supply it, and a
+ * route that has no working plugin for it writes nothing. Any other provider name keeps the base
+ * behavior of this route, which saves the profile and verifies it as the cloud service does. A run
+ * that approved a login saves it at this point, before any profile or connection record is generated,
+ * so a login it cannot save stops the command there; a run whose Limrun plugin is refused keeps no
+ * auth state.
+ */
+async function admitDiscoveredProvider(
+  provider: string | undefined,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  try {
+    if (requiresOwnProviderAdmission(provider)) await primeProviderConnection(provider, env);
+  } catch (error) {
+    if (isProviderPluginRefusal(error)) discardPendingLoginAtRefusal();
+    throw error;
+  }
+  savePendingLoginAtAdmission();
 }
 
 async function fetchConnectionProfile(options: {

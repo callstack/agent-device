@@ -1,4 +1,5 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
+import type { CliFlags } from '@agent-device/contracts/command';
 import {
   pluginConnectionInventory,
   pluginConnectionCapabilities,
@@ -6,12 +7,16 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
-import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
+import {
+  PLUGIN_INSTALLATION_REASONS,
+  pluginInstallationHint,
+} from '@agent-device/contracts/plugin-installation';
 import { readVersion } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   getProviderPluginDeclaration,
   providerPluginRepairCommand,
+  LIMRUN,
 } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
@@ -80,6 +85,32 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
     : `${names}. Plugins that failed to load: ${failures.join('; ')}`;
 }
 
+/**
+ * The `connect` shortcut that connects straight to a named proxy daemon through its own proxy
+ * endpoint, instead of reading a connection profile from the cloud control plane.
+ */
+export function usesProxyConnectShortcut(flags: CliFlags): boolean {
+  if (!flags.daemonBaseUrl || flags.tenant || flags.runId || flags.leaseId || flags.leaseBackend) {
+    return false;
+  }
+  try {
+    const url = new URL(flags.daemonBaseUrl);
+    return url.pathname.replace(/\/+$/, '').endsWith('/agent-device');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a route admits `provider` itself before it authenticates or writes anything. The core ships
+ * no Limrun runtime, so only the plugin supplies that provider, and a route that selects it refuses
+ * it early. Every other provider name keeps this release's starting behavior: the connect handler
+ * admits a named provider, and the adapter that reads a profile verifies the provider it names.
+ */
+export function requiresOwnProviderAdmission(provider: string | undefined): boolean {
+  return provider === LIMRUN.provider;
+}
+
 export function unavailableConnectPluginError(
   provider: string,
   env: NodeJS.ProcessEnv,
@@ -95,7 +126,7 @@ export function unavailableConnectPluginError(
   );
   if (selected || failures.length > 0) {
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
-      reason: 'plugin-unavailable',
+      reason: PLUGIN_INSTALLATION_REASONS.unavailable,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),

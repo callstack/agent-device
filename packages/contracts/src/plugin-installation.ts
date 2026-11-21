@@ -137,7 +137,22 @@ export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
 /** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
 export const PLUGIN_INSTALLATION_REASONS = {
   notInstalled: 'plugin-not-installed',
+  /** The plugin is selected but cannot supply its provider, so its configuration is repaired. */
+  unavailable: 'plugin-unavailable',
 } as const satisfies Record<string, string>;
+
+/**
+ * Whether an error is one of the typed refusals a provider plugin admission answers with. A route
+ * that failed with either keeps no cloud auth state: the user installs or repairs the plugin first.
+ */
+export function isProviderPluginRefusal(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  const reason = error.details?.reason;
+  return (
+    reason === PLUGIN_INSTALLATION_REASONS.notInstalled ||
+    reason === PLUGIN_INSTALLATION_REASONS.unavailable
+  );
+}
 
 /**
  * The typed outcome for a platform family a composition does not have (ADR 0034). An optional family

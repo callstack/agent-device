@@ -77,37 +77,54 @@ type AuthIo = {
   openBrowser?: (url: string) => Promise<void>;
 };
 
-/** One command's login scope: a login approved inside it is pending until the command ends. */
-const commandLoginScope = new AsyncLocalStorage<{
-  pending?: { stateDir: string; session: CliSessionRecord };
-}>();
+/**
+ * A login of one `connect` run, held between its approval and the admission of the provider that run
+ * discovers.
+ */
+type PendingLogin = { stateDir: string; session: CliSessionRecord };
+
+const pendingLoginScope = new AsyncLocalStorage<{ pending?: PendingLogin }>();
 
 /**
- * Runs one command with its login pending. A command can approve a device login before it learns
- * which provider it uses. The login is stored when the command ends, on success or on failure,
- * except when the command ends with the provider-admission refusal `plugin-not-installed`: that
- * route writes no auth state. A login approved outside a scope is stored at once.
+ * Runs one command, holding a login it approves until that run's provider is admitted. Only
+ * `defersLogin` defers, and the CLI sets it for the one `connect` that learns its provider from the
+ * cloud control plane, which is the only route that can approve a login before it knows the provider.
+ * That route saves the pending login with {@link savePendingLoginAtAdmission} once the provider is
+ * admitted, or drops it with {@link discardPendingLoginAtRefusal} when the provider's plugin is
+ * refused. A run that ends with its login still pending, because discovery failed before any provider
+ * was named, saves it, so a failure unrelated to a provider does not cost the login. Every other
+ * route, including explicit `auth login`, saves a login as soon as it is approved.
  */
-export async function withCommandLogin<T>(run: () => Promise<T>): Promise<T> {
-  const scope: { pending?: { stateDir: string; session: CliSessionRecord } } = {};
-  let refused = false;
+export async function withDeferredLogin<T>(
+  options: { defersLogin: boolean },
+  run: () => Promise<T>,
+): Promise<T> {
+  if (!options.defersLogin) return await run();
+  const scope: { pending?: PendingLogin } = {};
   try {
-    return await commandLoginScope.run(scope, run);
-  } catch (error) {
-    refused = scope.pending !== undefined && (await isProviderAdmissionRefusal(error));
-    throw error;
+    return await pendingLoginScope.run(scope, run);
   } finally {
-    if (scope.pending && !refused) writeCliSession(scope.pending);
+    // Only a run that ended before it named a provider gets here with a pending login.
+    if (scope.pending) writeCliSession(scope.pending);
   }
 }
 
-/** Whether a command failed with the typed refusal for a provider plugin that is not installed. */
-async function isProviderAdmissionRefusal(error: unknown): Promise<boolean> {
-  if (!(error instanceof AppError)) return false;
-  // The reason table loads only for a failed command that holds a pending login.
-  const { PLUGIN_INSTALLATION_REASONS } =
-    await import('@agent-device/contracts/plugin-installation');
-  return error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled;
+/**
+ * Saves the login this run holds because its provider was just admitted. A route saves before it
+ * generates or publishes connection state, so a login it cannot save stops the command there.
+ */
+export function savePendingLoginAtAdmission(): void {
+  const scope = pendingLoginScope.getStore();
+  const pending = scope?.pending;
+  if (scope === undefined) return;
+  scope.pending = undefined;
+  if (pending) writeCliSession(pending);
+}
+
+/** Drops the login this run holds: its provider plugin was refused, so the route keeps no auth state. */
+export function discardPendingLoginAtRefusal(): void {
+  const scope = pendingLoginScope.getStore();
+  if (scope) scope.pending = undefined;
 }
 
 export async function resolveRemoteAuthForCli(options: {
@@ -299,7 +316,7 @@ export async function loginWithDeviceAuth(options: {
     createdAt: nowIso,
     expiresAt: approved.cliSession?.expiresAt,
   };
-  const scope = commandLoginScope.getStore();
+  const scope = pendingLoginScope.getStore();
   if (scope) scope.pending = { stateDir: options.stateDir, session };
   else writeCliSession({ stateDir: options.stateDir, session });
   return {
