@@ -170,6 +170,76 @@ test.each<[ScrollDirection, string, Rect]>([
   },
 );
 
+test('a zero reference origin matches a plan that omits it', () => {
+  const omitted = buildScrollGesturePlan({
+    direction: 'down',
+    amount: 0.75,
+    ...FRAME,
+    container: FOOTERED_CONTAINER,
+  });
+  const explicit = buildScrollGesturePlan({
+    direction: 'down',
+    amount: 0.75,
+    ...FRAME,
+    referenceOrigin: { x: 0, y: 0 },
+    container: FOOTERED_CONTAINER,
+  });
+
+  assert.deepEqual(explicit, omitted);
+});
+
+test('an offset reference origin returns absolute endpoints inside the absolute container', () => {
+  const origin = { x: 40, y: 80 };
+  const container: Rect = {
+    x: origin.x + FOOTERED_CONTAINER.x,
+    y: origin.y + FOOTERED_CONTAINER.y,
+    width: FOOTERED_CONTAINER.width,
+    height: FOOTERED_CONTAINER.height,
+  };
+  const local = buildScrollGesturePlan({
+    direction: 'up',
+    amount: 0.75,
+    ...FRAME,
+    container: FOOTERED_CONTAINER,
+  });
+  const plan = buildScrollGesturePlan({
+    direction: 'up',
+    amount: 0.75,
+    ...FRAME,
+    referenceOrigin: origin,
+    container,
+  });
+
+  assert.deepEqual(
+    [plan.x1, plan.y1, plan.x2, plan.y2],
+    [local.x1 + origin.x, local.y1 + origin.y, local.x2 + origin.x, local.y2 + origin.y],
+  );
+  assert.ok(strictlyInside(plan, container), JSON.stringify(plan));
+  assert.equal(plan.pixels, local.pixels);
+  assert.equal(plan.requestedPixels, local.requestedPixels);
+  assert.equal(plan.referenceWidth, FRAME.referenceWidth);
+  assert.equal(plan.referenceHeight, FRAME.referenceHeight);
+});
+
+test('an offset reference origin shifts an unclamped swipe into the dispatch frame', () => {
+  const origin = { x: 40, y: 80 };
+  const local = buildScrollGesturePlan({ direction: 'down', amount: 0.75, ...FRAME });
+  const plan = buildScrollGesturePlan({
+    direction: 'down',
+    amount: 0.75,
+    ...FRAME,
+    referenceOrigin: origin,
+  });
+
+  assert.deepEqual(plan, {
+    ...local,
+    x1: local.x1 + origin.x,
+    y1: local.y1 + origin.y,
+    x2: local.x2 + origin.x,
+    y2: local.y2 + origin.y,
+  });
+});
+
 test('a container lying wholly in the padding of the scrolled axis leaves the padded swipe as it was', () => {
   const statusBand: Rect = { x: 0, y: 0, width: 402, height: PADDED_TOP - 1 };
   const unclamped = buildScrollGesturePlan({ direction: 'up', ...FRAME });

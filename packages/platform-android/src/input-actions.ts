@@ -330,26 +330,21 @@ export async function scrollAndroid(
     helperSessionScope: options?.helperSessionScope,
   });
   const swipeSurface = resolveAndroidScrollSurface(direction, viewport, keyboard);
-  const relativePlan = buildScrollGesturePlan({
+  const plan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,
     pixels: options?.pixels,
     referenceWidth: swipeSurface.viewport.width,
     referenceHeight: swipeSurface.viewport.height,
-    ...(options?.containerRect === undefined
-      ? {}
-      : { container: relativeToViewport(options.containerRect, swipeSurface.viewport) }),
+    referenceOrigin: { x: swipeSurface.viewport.x, y: swipeSurface.viewport.y },
+    ...(options?.containerRect === undefined ? {} : { container: options.containerRect }),
   });
   const scrollPlan = {
-    ...relativePlan,
+    ...plan,
     // Injected coordinates are absolute, so their zero-origin reference frame
     // must include the viewport offset as well as its dimensions.
     referenceWidth: swipeSurface.viewport.x + swipeSurface.viewport.width,
     referenceHeight: swipeSurface.viewport.y + swipeSurface.viewport.height,
-    x1: swipeSurface.viewport.x + relativePlan.x1,
-    y1: swipeSurface.viewport.y + relativePlan.y1,
-    x2: swipeSurface.viewport.x + relativePlan.x2,
-    y2: swipeSurface.viewport.y + relativePlan.y2,
   };
   const durationMs = Math.max(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
@@ -378,11 +373,6 @@ export async function scrollAndroid(
     ...(options?.durationMs !== undefined ? { durationMs } : {}),
     ...backend,
   };
-}
-
-/** The planner works in the swipe surface's zero-origin frame; snapshot rects are absolute. */
-function relativeToViewport(rect: Rect, viewport: Rect): Rect {
-  return { ...rect, x: rect.x - viewport.x, y: rect.y - viewport.y };
 }
 
 /**

@@ -2,7 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { SCROLL_REASONS } from './scroll-reasons.ts';
 import { defineStringEnum } from './string-enum.ts';
 import { isViewportRootNode } from './snapshot-visibility.ts';
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // What a caller may ASK for, as opposed to `ScrollDirection` (what the gesture resolves to):
 // `top`/`bottom` are scroll-to-extreme requests with no direction of their own, and `refresh` is one
@@ -64,7 +64,14 @@ export type ScrollGestureOptions = {
   referenceWidth: number;
   referenceHeight: number;
   /**
-   * The scroll container the swipe is meant for, in the reference frame's own zero-origin space.
+   * Where the reference frame sits in the space the caller dispatches. The planner subtracts
+   * this from `container`, plans inside the zero-origin frame, then adds it to every endpoint.
+   * Omit it when that frame already starts at (0, 0).
+   */
+  referenceOrigin?: Point;
+  /**
+   * The scroll container the swipe is meant for, in the same space as `referenceOrigin`
+   * (the frame's own zero-origin space when the origin is omitted).
    * Both endpoints stay strictly inside its intersection with the padded frame (#2714): a span
    * that already fits is unchanged, one that leaves it is moved in, and one longer than it is
    * shortened. A container the padding leaves nothing of along the scrolled axis gets the padded
@@ -128,6 +135,16 @@ const SCROLL_CONTAINER_EDGE_INSET = 8;
 
 export function buildScrollGesturePlan(options: ScrollGestureOptions): ScrollGesturePlan {
   const direction = options.direction;
+  const originX = options.referenceOrigin?.x ?? 0;
+  const originY = options.referenceOrigin?.y ?? 0;
+  const container =
+    options.container === undefined
+      ? undefined
+      : {
+          ...options.container,
+          x: options.container.x - originX,
+          y: options.container.y - originY,
+        };
   const vertical = direction === 'up' || direction === 'down';
   const axisLength = vertical ? options.referenceHeight : options.referenceWidth;
   const crossLength = vertical ? options.referenceWidth : options.referenceHeight;
@@ -147,8 +164,8 @@ export function buildScrollGesturePlan(options: ScrollGestureOptions): ScrollGes
     cross: Math.round(crossLength / 2),
   };
   const crossPadding = scrollEdgePadding(crossLength);
-  const lane = options.container
-    ? keepSwipeInContainer(unclamped, options.container, vertical, {
+  const lane = container
+    ? keepSwipeInContainer(unclamped, container, vertical, {
         axis: { min: edgePadding, max: axisLength - edgePadding },
         cross: { min: crossPadding, max: crossLength - crossPadding },
         crossFrame: { min: 0, max: crossLength },
@@ -157,9 +174,13 @@ export function buildScrollGesturePlan(options: ScrollGestureOptions): ScrollGes
   const laneLength = lane.axisEnd - lane.axisStart;
   // Centring rounds an odd span up by one, so only a lane shorter than the travel itself is short.
   const shortened = laneLength < travelPixels;
+  const endpoints = laneEndpoints(direction, lane);
   return {
     direction,
-    ...laneEndpoints(direction, lane),
+    x1: endpoints.x1 + originX,
+    y1: endpoints.y1 + originY,
+    x2: endpoints.x2 + originX,
+    y2: endpoints.y2 + originY,
     referenceWidth: options.referenceWidth,
     referenceHeight: options.referenceHeight,
     amount: options.amount,
