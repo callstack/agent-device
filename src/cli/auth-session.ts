@@ -356,7 +356,7 @@ async function withCliSessionLock<Result>(
     throw error;
   }
   await release().catch(() => {
-    writeStderr(io, 'Warning: the CLI session file lock could not be released cleanly.\n');
+    warnBestEffort(io, 'Warning: the CLI session file lock could not be released cleanly.\n');
   });
   return result;
 }
@@ -691,6 +691,21 @@ async function openBrowser(url: string, io?: AuthIo): Promise<void> {
   const { openUrlInBrowser } = await import('./browser-launch.ts');
   if (!(await openUrlInBrowser(url))) {
     writeStderr(io, `Open this URL on your machine:\n${url}\n`);
+  }
+}
+
+/**
+ * Writes a warning that must not change the result of a change that already took effect. A
+ * closed stderr fails the write synchronously, or later with an EPIPE `error` event; both are
+ * dropped. The one-shot listener stays until that event, because it fires after the write callback.
+ */
+function warnBestEffort(io: AuthIo | undefined, text: string): void {
+  const stream = io?.stderr ?? process.stderr;
+  (stream as Partial<NodeJS.WriteStream>).once?.('error', () => {});
+  try {
+    stream.write(text);
+  } catch {
+    // A warning is optional output.
   }
 }
 
