@@ -39,9 +39,9 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep: vi.fn(async () => {}),
 }));
 // Reading the registration judges its lock owner, and one judgement runs one process-table snapshot.
-// The contention budget is 300 judgements of a registration that does not change under the client,
-// so its inspection is read once from the real host and replayed for the rest of the loop. The seam
-// answers only that one lock path, and `afterEach` clears it.
+// A contention budget judges a registration these cases keep alive and unchanged, so its inspection is
+// read once from the real host and replayed for the rest of the loop. The seam answers only that one
+// lock path, and `afterEach` clears it.
 let recordedRegistrationLock:
   | { readonly lockPath: string; readonly inspection: ProcessLockInspection }
   | undefined;
@@ -69,6 +69,10 @@ const spawn = vi.mocked(runCmdDetachedMonitored);
 const actualRetry = await vi.importActual<typeof import('@agent-device/host-kit/retry')>(
   '@agent-device/host-kit/retry',
 );
+// `JUDGE_AGAIN_DELAY_MS` in `daemon-client-ensure.ts`.
+const JUDGE_AGAIN_DELAY_MS = 250;
+// Held before any test replaces `performance.now`, so a moved clock still starts from real elapsed time.
+const realNow = performance.now.bind(performance);
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -83,8 +87,8 @@ afterEach(async () => {
 /**
  * Leaves the lock inspection of this registration at what the host really says right now. A daemon
  * that keeps changing under `ensureDaemon` is judged once per attempt and one judgement runs one
- * process-table snapshot, so a full budget is 300 snapshots of a registration these cases keep
- * alive and unchanged. The first snapshot is the host's own answer, taken here.
+ * process-table snapshot, so the whole budget is snapshots of a registration these cases keep alive
+ * and unchanged. The first snapshot is the host's own answer, taken here.
  */
 function registrationLockStaysAsRecorded(
   paths: ReturnType<typeof stateDirAndPaths>['paths'],
@@ -98,20 +102,43 @@ function registrationLockStaysAsRecorded(
 }
 
 /**
- * The attempt budget, through the waits it asks for: the judge-again waits must just cover the
- * teardown grace, so one fewer wait falls short of it. Halving the loop halves this total.
+ * The budget clock, moved by this file: every wait advances it by `stepMs` while the loop keeps asking
+ * for its own delay, so the teardown grace passes in a few judgements instead of the hundreds it costs
+ * at the real cadence. The loop reads `performance.now()`, the clock this package budgets on, and it is
+ * a per-test spy rather than `Date.now`: lock-guard ages are judged off real file mtimes and `Date.now`
+ * in the same window.
  */
-function assertJudgedAgainForTheFullBudget(): void {
+function judgeAgainBudgetOnMovedClock(stepMs: number): { waitedMs(): number } {
+  const startedAtMs = realNow();
+  let waitedMs = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => startedAtMs + waitedMs);
+  vi.mocked(sleep).mockImplementation(async () => {
+    waitedMs += stepMs;
+  });
+  return { waitedMs: () => waitedMs };
+}
+
+/**
+ * The budget, through the clock it counts: every wait is asked for at the production cadence, and the
+ * loop stopped once that cadence had covered the teardown grace on the clock it reads — one fewer wait
+ * falls short of it. Halving the grace or the cadence stops the loop earlier and fails this.
+ */
+function assertJudgedAgainForTheFullBudget(clock: { waitedMs(): number }, stepMs: number): void {
   const waits = vi.mocked(sleep).mock.calls.map(([ms]) => Number(ms));
   assert.ok(waits.length > 0, 'a contended ensure judged again at least once');
-  const delays = [...new Set(waits)];
-  assert.equal(delays.length, 1, `every attempt judged again with one delay, saw ${delays}`);
-  const [delay] = delays;
-  assert.ok(delay !== undefined && delay > 0, `a judge-again wait must be positive, saw ${delay}`);
-  const totalMs = waits.reduce((total, ms) => total + ms, 0);
+  assert.deepEqual(
+    [...new Set(waits)],
+    [JUDGE_AGAIN_DELAY_MS],
+    'every attempt judged again after one production wait, whatever the clock says since',
+  );
+  const { waitedMs } = clock;
   assert.ok(
-    totalMs >= DAEMON_TEARDOWN_GRACE_MS && totalMs - delay < DAEMON_TEARDOWN_GRACE_MS,
-    `${waits.length} judge-again waits of ${delay}ms must just cover the ${DAEMON_TEARDOWN_GRACE_MS}ms teardown grace (${totalMs}ms)`,
+    waitedMs() >= DAEMON_TEARDOWN_GRACE_MS && waitedMs() - stepMs < DAEMON_TEARDOWN_GRACE_MS,
+    `${waits.length} judge-again waits must just cover the ${DAEMON_TEARDOWN_GRACE_MS}ms teardown grace (${waitedMs()}ms)`,
+  );
+  assert.ok(
+    waits.length < Math.ceil(DAEMON_TEARDOWN_GRACE_MS / JUDGE_AGAIN_DELAY_MS),
+    `the clock, not the wait ceiling, ended the loop: ${waits.length} waits`,
   );
 }
 
@@ -608,6 +635,7 @@ test('ensureDaemon reports contention when the daemon keeps changing under it', 
     capabilities: ['quiesce'],
   });
   registrationLockStaysAsRecorded(paths);
+  const clock = judgeAgainBudgetOnMovedClock(15_000);
 
   try {
     const error = await failureOf(ensureDaemon({ stateDir, daemonTransport: 'http' }));
@@ -615,7 +643,7 @@ test('ensureDaemon reports contention when the daemon keeps changing under it', 
     assert.equal(error.details?.reason, 'daemon-lifecycle-contended');
     assert.equal(isProcessAlive(child.pid), true);
     assert.equal(spawn.mock.calls.length, 0);
-    assertJudgedAgainForTheFullBudget();
+    assertJudgedAgainForTheFullBudget(clock, 15_000);
   } finally {
     await closeLoopbackServer(stale.server);
   }
@@ -760,11 +788,12 @@ test('a quiesce the daemon never hears is judged again, not reported as a transp
     capabilities: ['quiesce'],
   });
   registrationLockStaysAsRecorded(paths);
+  const clock = judgeAgainBudgetOnMovedClock(15_000);
 
   const error = await failureOf(ensureDaemon({ stateDir, daemonTransport: 'http' }));
 
   assert.equal(error.details?.reason, 'daemon-lifecycle-contended');
   assert.equal(isProcessAlive(child.pid), true);
   assert.equal(spawn.mock.calls.length, 0);
-  assertJudgedAgainForTheFullBudget();
+  assertJudgedAgainForTheFullBudget(clock, 15_000);
 });
