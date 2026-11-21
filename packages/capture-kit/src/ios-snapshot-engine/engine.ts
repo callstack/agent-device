@@ -95,7 +95,7 @@ function presentAcquiredSnapshot(
   assertCaptureHintMatches(acquisition, expectedHint);
 
   if (request.projection === 'raw') {
-    validateIosSnapshotGraph(acquisition.nodes);
+    validateIosSnapshotGraph(acquisition.nodes, 'acquired');
     const sourceNodes = acquisition.nodes.map((raw) => ({ raw, sourceIndex: raw.index }));
     const projected = projectIosSnapshot({
       nodes: sourceNodes,
@@ -152,6 +152,7 @@ function presentAcquiredSnapshot(
       };
   const validation = validateIosPayload(
     compacted.nodes,
+    'presented',
     'regular',
     viewport,
     foldPolicy,

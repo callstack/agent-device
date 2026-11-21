@@ -80,6 +80,7 @@ function validateRunnerPayloads(
 ): { parentClipLookups: number } {
   const payloadValidation = validateIosPayload(
     input.presentation.payload.nodes,
+    'runner-payload',
     projection,
     viewport,
     foldPolicy,
@@ -89,6 +90,7 @@ function validateRunnerPayloads(
     try {
       validateIosPayload(
         input.presentation.qualityPayload.nodes,
+        'runner-quality-payload',
         projection,
         viewport,
         foldPolicy,
@@ -130,7 +132,15 @@ function validateRunnerOutput(
   payloadValidation: { parentClipLookups: number },
 ): { parentClipLookups: number } {
   if (projection !== 'regular' || !viewport) return payloadValidation;
-  return validateIosPayload(nodes, projection, viewport, foldPolicy, hittabilityAvailable);
+  // The compacted tree is what this command publishes, so a refusal raised here counts in it.
+  return validateIosPayload(
+    nodes,
+    'presented',
+    projection,
+    viewport,
+    foldPolicy,
+    hittabilityAvailable,
+  );
 }
 
 function presentationKeysEqual(

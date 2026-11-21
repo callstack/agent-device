@@ -26,7 +26,8 @@ export function foldIosSnapshot(
   stats: IosSnapshotPresentationStats;
   qualityNotes?: SnapshotQualityNote[];
 } {
-  validateIosSnapshotGraph(nodes);
+  // The fold interprets one acquisition's tree, so a refusal it raises counts in that tree.
+  validateIosSnapshotGraph(nodes, 'acquired');
   const modalContained = collectModalContainedIndexes(nodes);
   const presentable = nodes.filter((node) => !modalContained.has(node.index));
   const hasChildren = buildChildPresence(presentable);

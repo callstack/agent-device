@@ -265,6 +265,18 @@ outside it, including system alerts at large text sizes. With `--json`,
 and `droppedNodeCount`. You can continue using visible controls. Use `--raw` to inspect reported
 frames before clipping.
 
+A regular snapshot that can't present the screen fails with a typed `details.reason`, such as
+`regular-node-outside-cumulative-clip`, and `details.index` names the node it refused. One capture
+gets renumbered along the way, so `details.indexTree` tells you which numbering to read it in:
+
+- `presented` — the tree this command publishes. A passing capture asked the same way lists that node
+  at the same index.
+- `acquired` — the tree an unscoped `snapshot --raw` lists, before any clipping.
+- `runner-payload` — what the iOS capture published for the request. A passing plain `snapshot`
+  publishes that tree at the same numbers; a passing `snapshot -i` compacts and renumbers it.
+- `runner-quality-payload` — a quality-only tree no command lists. Match `details.frame` against a
+  `snapshot --raw` capture to find that node.
+
 iOS snapshots use XCTest on simulators and physical devices. You can't pick the capture backend. `--raw` switches between two strategies, and each strategy
 decides which backends it tries.
 
