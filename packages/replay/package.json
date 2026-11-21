@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/replay",
-  "version": "0.0.0",
+  "version": "0.22.0-dev",
   "engines": {
     "node": ">=22.12"
   },
@@ -8,7 +8,6 @@
     "apiVersion": 3,
     "replayExecution": true
   },
-  "private": true,
   "sideEffects": false,
   "type": "module",
   "description": "Optional native .ad replay and test-suite execution plugin for agent-device.",
@@ -40,5 +39,11 @@
       }
     },
     "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/replay"
   }
 }
