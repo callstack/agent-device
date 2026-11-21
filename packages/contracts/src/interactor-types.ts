@@ -111,13 +111,6 @@ export type PressPointOptions = Readonly<{
 }>;
 
 /**
- * Legacy success text retained for compatibility when the XCTest runner used
- * the Maestro non-hittable coordinate fallback. Usage itself is carried by
- * the structured `maestroNonHittableCoordinateFallbackUsed` runner field.
- */
-export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable coordinate fallback';
-
-/**
  * The channel the XCTest runner actually entered text through — the Swift
  * `TextEntryResult.textEntryRoute` (RunnerTests+TextTyping.swift,
  * RunnerTests+SynthesizedTextEntry.swift). Closed set, because the runner is
