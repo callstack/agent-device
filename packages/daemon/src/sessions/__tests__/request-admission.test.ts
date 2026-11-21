@@ -387,6 +387,37 @@ test('close still admits and heartbeats a real active lease', () => {
   assert.equal(result?.heartbeatAt, 2_000);
 });
 
+test('a request with the session lease id and another lease backend is refused', () => {
+  const registry = new LeaseRegistry();
+  const lease = hostMacOsAppLease(registry);
+  const session = makeMacOsSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: 'macos-app',
+      clientId: lease.clientId,
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'apps',
+          meta: { leaseId: lease.leaseId, leaseBackend: 'ios-simulator' },
+        }),
+        registry,
+        session,
+        { env: process.env },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'leaseBackend',
+  );
+});
+
 test.each(['close', 'snapshot', 'apps', 'artifacts'])(
   '%s on a leased session without its lease id is refused and renews nothing',
   (command) => {

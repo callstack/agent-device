@@ -75,7 +75,7 @@ A request on that session, including `close`, `artifacts`, and other admission-e
 Lease heartbeat and release name the lease id too.
 If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reason `LEASE_SESSION_MISMATCH`, and `field: 'leaseId'`.
 The daemon never fills a missing lease id from the session.
-Tenant, run id, client id, device key, and lease provider are labels.
+Tenant, run id, lease backend, client id, device key, and lease provider are labels.
 The daemon refuses a label that differs from the session lease. A missing label is not a refusal and grants nothing.
 A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
 Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.

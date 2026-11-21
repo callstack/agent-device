@@ -21,7 +21,7 @@ Runner and process locks remain separate backend guards.
 The proxy token authenticates the host, not the client: every client of one proxy can hold the same token.
 The lease id is the credential that proves ownership of a leased session.
 A request on a session that holds a lease must send that lease's id. The daemon refuses a request that omits it with `LEASE_SESSION_MISMATCH` and never fills it from the session.
-Tenant, run id, client id, device key, and lease provider are scope labels. The daemon checks a label when the request sends it. A label never grants access.
+Tenant, run id, lease backend, client id, device key, and lease provider are scope labels. The daemon checks a label when the request sends it. A label never grants access.
 A lease id that a client chooses on allocate needs at least 128 random bits. The daemon returns a lease id only to the caller that allocated the lease.
 A daemon that enforces this rule reports the `session-lease-id` capability.
 

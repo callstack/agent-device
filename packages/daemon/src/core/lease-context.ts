@@ -91,8 +91,8 @@ export function buildSessionLeaseFromRequest(
 
 /**
  * The lease scope a request acts under on its session. A session that holds a lease admits only a
- * request that presents that lease's id: the lease id is the credential. Tenant, run, provider,
- * client and device key are labels. A label must match when present, and it never grants access
+ * request that presents that lease's id: the lease id is the credential. Tenant, run, backend,
+ * provider, client and device key are labels. A label must match when present, and it never grants access
  * (ADR 0007). A command that ignores the session lease acts under its own request scope.
  */
 export function resolveSessionLeaseScope(
@@ -107,7 +107,7 @@ export function resolveSessionLeaseScope(
     runId: sessionLease.runId,
     leaseId: sessionLease.leaseId,
     leaseTtlMs: requestScope.leaseTtlMs,
-    leaseBackend: requestScope.leaseBackend ?? sessionLease.leaseBackend,
+    leaseBackend: sessionLease.leaseBackend ?? requestScope.leaseBackend,
     leaseProvider: sessionLease.leaseProvider,
     deviceKey: sessionLease.deviceKey,
     clientId: sessionLease.clientId,
@@ -182,6 +182,7 @@ export function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: str
 function assertRequestPresentsSessionLease(requestScope: LeaseScope, sessionLease: SessionLease) {
   assertRequestSendsLeaseId(requestScope, sessionLease.leaseId);
   assertMatchingLeaseField('tenantId', requestScope.tenantId, sessionLease.tenantId);
+  assertMatchingLeaseField('leaseBackend', requestScope.leaseBackend, sessionLease.leaseBackend);
   assertMatchingLeaseField('runId', requestScope.runId, sessionLease.runId);
   assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, sessionLease.leaseProvider);
   assertMatchingLeaseField('clientId', requestScope.clientId, sessionLease.clientId);
