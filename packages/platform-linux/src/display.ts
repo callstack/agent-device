@@ -9,7 +9,7 @@ export type LinuxDisplayConfig = Readonly<{
  * Reads the display server from one host's environment: the only display decision in the family.
  * A Wayland session is announced by its socket or by the session type, and anything else drives X11.
  */
-export function detectLinuxDisplayServer(
+function detectLinuxDisplayServer(
   env: Readonly<Record<string, string | undefined>>,
 ): LinuxDisplayServer {
   if (env['WAYLAND_DISPLAY']) return 'wayland';

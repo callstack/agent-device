@@ -115,11 +115,11 @@ export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family
         : Family extends 'linux'
           ? LinuxPlatformRegistration
           : Readonly<{
-            family: Family;
-            createInteractor: PlatformPlugin['createInteractor'];
-            inventoryModule: InventoryPlatformModule<Family>;
-            runtimeModule: PlatformRuntimeModule & { readonly family: Family };
-          }>
+              family: Family;
+              createInteractor: PlatformPlugin['createInteractor'];
+              inventoryModule: InventoryPlatformModule<Family>;
+              runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+            }>
   : never;
 
 export type PlatformContribution = {

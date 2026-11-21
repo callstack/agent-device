@@ -3,7 +3,10 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformHost } from 'agent-device/plugins';
-import type { LinuxCommandResult, LinuxDetachedExit } from '@agent-device/contracts/linux-tool-provider';
+import type {
+  LinuxCommandResult,
+  LinuxDetachedExit,
+} from '@agent-device/contracts/linux-tool-provider';
 import { createLinuxToolbox, type LinuxToolbox } from './toolbox.ts';
 
 /** One command this stubbed host was asked to run, plus the environment it was handed. */
@@ -81,6 +84,32 @@ export function createLinuxHostStub(
   const answers: LinuxCommandResult[] = [];
   const launchExits: LinuxDetachedExit[] = [];
   const diagnostics: LinuxHostDiagnostic[] = [];
+  function recordCommand(
+    executable: string,
+    args: readonly string[],
+    options: {
+      env?: Readonly<Record<string, string>>;
+      timeoutMs?: number;
+      allowFailure?: boolean;
+      stdin?: string;
+      signal?: AbortSignal;
+    },
+  ): void {
+    commands.push({
+      executable,
+      args,
+      env: options.env,
+      timeoutMs: options.timeoutMs,
+      allowFailure: options.allowFailure,
+      stdin: options.stdin,
+      signal: options.signal,
+    });
+  }
+  function nextAnswer(executable: string, args: readonly string[]): Promise<LinuxCommandResult> {
+    if (input.reject) throw input.reject(executable, args);
+    if (input.respond) return Promise.resolve(toResult(input.respond(executable, args)));
+    return Promise.resolve(answers.shift() ?? NO_ANSWER);
+  }
   const host = Object.freeze({
     env,
     cwd: '/host-cwd',
@@ -104,19 +133,9 @@ export function createLinuxHostStub(
         stdin?: string;
         signal?: AbortSignal;
       },
-    ): Promise<LinuxCommandResult> => {
-      commands.push({
-        executable,
-        args,
-        env: options.env,
-        timeoutMs: options.timeoutMs,
-        allowFailure: options.allowFailure,
-        stdin: options.stdin,
-        signal: options.signal,
-      });
-      if (input.reject) throw input.reject(executable, args);
-      if (input.respond) return toResult(input.respond(executable, args));
-      return answers.shift() ?? NO_ANSWER;
+    ) => {
+      recordCommand(executable, args, options);
+      return await nextAnswer(executable, args);
     },
     launchDetached: async (
       executable: string,
@@ -124,8 +143,8 @@ export function createLinuxHostStub(
       options: { env?: Readonly<Record<string, string>> },
     ) => {
       launches.push({ executable, args, env: options.env });
-      const queued =
-        input.launchExit?.(executable, args) ?? launchExits.shift() ?? { pid: 1, exitCode: 0 };
+      const queued = input.launchExit?.(executable, args) ??
+        launchExits.shift() ?? { pid: 1, exitCode: 0 };
       return { pid: queued.pid, exited: Promise.resolve(queued) };
     },
   }) as unknown as PlatformHost;
@@ -156,19 +175,14 @@ export function createLinuxToolboxWith(
  * A directory holding one executable stand-in tool, for the tests that need the host to resolve a
  * bare name through a real `PATH` rather than through a stated tool list.
  */
-export function createLinuxToolDirectory(
-  name: string,
-  contents = '#!/bin/sh\nexit 0\n',
-): string {
+export function createLinuxToolDirectory(name: string, contents = '#!/bin/sh\nexit 0\n'): string {
   const root = mkdtempForTestSync(`linux-tool-${name}-`);
   fs.writeFileSync(path.join(root, name), contents, { mode: 0o755 });
   return root;
 }
 
 /** One command the plugin asked the host to run, as `[executable, args]`. */
-export function linuxCommandTuple(
-  command: LinuxHostStubCommand,
-): [string, readonly string[]] {
+export function linuxCommandTuple(command: LinuxHostStubCommand): [string, readonly string[]] {
   return [command.executable, command.args];
 }
 

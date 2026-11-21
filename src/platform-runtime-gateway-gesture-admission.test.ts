@@ -12,11 +12,7 @@ bindTestCommandHost();
 const gateway = createPlatformRuntimeGateway({
   // The optional families this test probes are platform plugins, so the scenario supplies them.
   platforms: composePlatformPlugins(
-    [
-      webSelectionFixture().get(),
-      vegaSelectionFixture().get(),
-      linuxSelectionFixture().get(),
-    ],
+    [webSelectionFixture().get(), vegaSelectionFixture().get(), linuxSelectionFixture().get()],
     [],
   ),
   host: createLiveTestHostEnvironment(),

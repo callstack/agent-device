@@ -47,6 +47,12 @@ export type LinuxCommandRunner = Readonly<{
   sleep(milliseconds: number): Promise<void>;
 }>;
 
+/** Why the family refuses instead of opening an app: the host it was set up with cannot start a
+ * process that outlives the request. Published on the wire, so it is named here, not at the call. */
+const LINUX_LAUNCH_REFUSAL_REASONS = {
+  hostLaunchUnavailable: 'host-launch-unavailable',
+} as const satisfies Record<string, string>;
+
 export function createLinuxCommandRunner(host: PlatformHost): LinuxCommandRunner {
   const env = host.env;
   return Object.freeze({
@@ -58,7 +64,7 @@ export function createLinuxCommandRunner(host: PlatformHost): LinuxCommandRunner
       // refuses on the spot rather than approximating it with a blocking spawn.
       if (!host.launchDetached) {
         throw new AppError('UNSUPPORTED_OPERATION', `Cannot start ${cmd} on this host.`, {
-          reason: 'host-launch-unavailable',
+          reason: LINUX_LAUNCH_REFUSAL_REASONS.hostLaunchUnavailable,
           command: cmd,
         });
       }

@@ -10,9 +10,7 @@ import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provi
  * screenshot tool and the AT-SPI helper — so the row reports the tools it found and names the ones a
  * desktop session would be missing.
  */
-export async function linuxToolchainCheck(
-  provider: LinuxToolProvider,
-): Promise<DoctorCheck> {
+export async function linuxToolchainCheck(provider: LinuxToolProvider): Promise<DoctorCheck> {
   const display = provider.display.detectDisplayServer();
   const found: string[] = [];
   const missing: string[] = [];

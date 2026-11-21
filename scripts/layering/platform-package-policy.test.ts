@@ -631,10 +631,7 @@ test('the web interactor subpath is loaded only by the builtin registry, dynamic
       `import { x } from '@agent-device/platform-${family}/interactor';`,
     ],
     ['src/core/interactors.ts', `void import('@agent-device/platform-${family}/interactor');`],
-    [
-      'packages/daemon/src/probe.ts',
-      `void import('@agent-device/platform-${family}/interactor');`,
-    ],
+    ['packages/daemon/src/probe.ts', `void import('@agent-device/platform-${family}/interactor');`],
     [
       'src/core/interactors/register-builtins.ts',
       `void import('@agent-device/platform-${family}/snapshot');`,

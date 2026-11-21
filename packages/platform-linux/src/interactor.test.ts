@@ -86,7 +86,10 @@ test('the Linux interactor routes lifecycle and clipboard intents to the desktop
     stub.launches.map((launch) => [launch.executable, [...launch.args]]),
     [['demo-app', []]],
   );
-  assert.deepEqual(spawned.map(([executable]) => executable), ['wmctrl', 'xclip', 'xclip']);
+  assert.deepEqual(
+    spawned.map(([executable]) => executable),
+    ['wmctrl', 'xclip', 'xclip'],
+  );
   assert.equal(spawned[0]![1][0], '-c');
   assert.equal(spawned[1]![1].includes('-o'), false);
   assert.equal(spawned[2]![1].includes('-o'), true);
@@ -104,7 +107,7 @@ test('the Linux interactor reports the unsupported device intents rather than ap
 test('the Linux interactor reports a capture through the plugin producer', async () => {
   const { interactor } = host(['xdotool'], {
     accessibility: {
-      captureTree: async surface => ({ nodes: [], truncated: false, surface }),
+      captureTree: async (surface) => ({ nodes: [], truncated: false, surface }),
     },
   });
 
@@ -118,7 +121,7 @@ test('the Linux interactor reports a capture through the plugin producer', async
 test('the Linux interactor reads text at a point from the captured tree', async () => {
   const { interactor } = host(['xdotool'], {
     accessibility: {
-      captureTree: async surface => ({
+      captureTree: async (surface) => ({
         nodes: [
           {
             index: 0,

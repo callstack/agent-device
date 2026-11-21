@@ -118,7 +118,13 @@ test('packed core serves the Linux desktop only after the managed platform is in
       execFileSync(
         process.execPath,
         ['node_modules/agent-device/bin/agent-device.mjs', ...args, '--json'],
-        { cwd: scratch, env: environment, encoding: 'utf8', timeout: 120_000, maxBuffer: 32 * 1024 * 1024 },
+        {
+          cwd: scratch,
+          env: environment,
+          encoding: 'utf8',
+          timeout: 120_000,
+          maxBuffer: 32 * 1024 * 1024,
+        },
       );
     try {
       const reply = JSON.parse(invoke());
@@ -197,7 +203,6 @@ test('packed core serves the Linux desktop only after the managed platform is in
       JSON.stringify(plugins),
     );
 
-
     // An X11 session with the desktop tools on PATH, and a display nobody else's window manager owns.
     const desktopEnv = { ...cliEnv, DISPLAY: ':77', XDG_SESSION_TYPE: 'x11' };
     const toolCalls = path.join(scratch, 'desktop-calls.log');
@@ -213,12 +218,7 @@ test('packed core serves the Linux desktop only after the managed platform is in
     const installed = runCliWith(desktopEnv, 0, 'doctor', '--platform', 'linux');
     const installedToolchain = installed.data.checks.find((check) => check.id === 'toolchain');
     assert.equal(installedToolchain.status, 'pass', JSON.stringify(installedToolchain));
-    assert.deepEqual(installedToolchain.evidence.tools, [
-      'xdotool',
-      'xclip',
-      'scrot',
-      'python3',
-    ]);
+    assert.deepEqual(installedToolchain.evidence.tools, ['xdotool', 'xclip', 'scrot', 'python3']);
 
     const opened = runCliWith(desktopEnv, 0, 'open', 'stub-desktop', '--platform', 'linux');
     assert.equal(opened.data.message, 'Opened: stub-desktop');
@@ -250,7 +250,9 @@ test('packed core serves the Linux desktop only after the managed platform is in
     assert.equal(tools.length, invoked.length, 'every recorded call names its tool');
     assert.equal(paths.length, invoked.length, 'every recorded call names the PATH it ran with');
     assert.deepEqual(
-      tools.map((line, index) => `${line.slice('TOOL: '.length)} ${invoked[index].slice('ARGS: '.length)}`),
+      tools.map(
+        (line, index) => `${line.slice('TOOL: '.length)} ${invoked[index].slice('ARGS: '.length)}`,
+      ),
       [
         'xdotool getmouselocation --shell',
         'xdotool mousemove --sync 42 84',
@@ -269,7 +271,9 @@ test('packed core serves the Linux desktop only after the managed platform is in
     // The capture runs the helper the plugin shipped, and each spawn got the host environment the CLI
     // was started with: both facts come from the host, not from the bundle's own process.
     assert.ok(
-      invoked.includes('ARGS: <script> --surface desktop --max-nodes 1500 --max-depth 12 --max-apps 24'),
+      invoked.includes(
+        'ARGS: <script> --surface desktop --max-nodes 1500 --max-depth 12 --max-apps 24',
+      ),
       `the snapshot never ran the plugin's own AT-SPI helper: ${invoked.join(' | ')}`,
     );
     assert.ok(
@@ -286,7 +290,8 @@ test('packed core serves the Linux desktop only after the managed platform is in
     );
   } finally {
     try {
-      if (fs.existsSync(path.join(scratch, 'node_modules/agent-device'))) runCli(0, 'daemon', 'stop');
+      if (fs.existsSync(path.join(scratch, 'node_modules/agent-device')))
+        runCli(0, 'daemon', 'stop');
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });
     }
