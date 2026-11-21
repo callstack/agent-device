@@ -83,9 +83,9 @@ export function checkUntypedReasonLiterals(
         line: site.line,
         message:
           `${file}:${site.line} publishes reason: '${site.value}' as an untyped literal, and the ` +
-          'merge-base for this file declares no such reason. Publish it from the owning typed ' +
-          'table (an `as const satisfies …` declaration whose reasons the docs guards require in ' +
-          'the user docs) instead of writing it at the call site.',
+          'merge-base for this file declares no such reason. Declare it in a `ReasonTable` beside ' +
+          'the code that classifies the failure, run `pnpm generate:reasons`, and read ' +
+          '`TABLE.member.reason` at the call site.',
       });
     }
   }
