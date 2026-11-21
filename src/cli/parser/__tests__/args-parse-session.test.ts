@@ -472,23 +472,6 @@ test('parseArgs accepts open --launch-args with double-dash-prefixed values', ()
   assert.deepEqual(parsed.flags.launchArgs, ['--es', 'EXTRA_CONFIG', '{"mode":"debug"}']);
 });
 
-test('parseArgs accepts install-from-source GitHub Actions artifact flag', () => {
-  const parsed = parseArgs(
-    [
-      'install-from-source',
-      '--github-actions-artifact',
-      'thymikee/RNCLI83:6635342232',
-      '--platform',
-      'android',
-    ],
-    { strictFlags: true },
-  );
-  assert.equal(parsed.command, 'install-from-source');
-  assert.deepEqual(parsed.positionals, []);
-  assert.equal(parsed.flags.githubActionsArtifact, 'thymikee/RNCLI83:6635342232');
-  assert.equal(parsed.flags.platform, 'android');
-});
-
 test('parseArgs accepts metro prepare arguments', () => {
   const parsed = parseArgs(
     [

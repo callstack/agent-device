@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { LocalInstallSource } from '@agent-device/kernel/contracts';
+import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
 import { readIosBundleInfo } from './bundle-info.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -47,7 +47,7 @@ export type PreparedIosInstallArtifact = {
 };
 
 export async function prepareIosInstallArtifact(
-  source: LocalInstallSource,
+  source: DaemonInstallSource,
   options: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
   return await withInstallArtifactArchiveScope(
@@ -56,7 +56,7 @@ export async function prepareIosInstallArtifact(
 }
 
 async function prepareIosInstallArtifactInScope(
-  source: LocalInstallSource,
+  source: DaemonInstallSource,
   options: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
   const materialized = await materializeInstallablePath({

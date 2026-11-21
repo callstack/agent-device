@@ -62,7 +62,7 @@ test('resolveInstallSource leaves URL sources unchanged even when upload metadat
   resolved.cleanup();
 });
 
-test('resolveInstallSource rejects GitHub Actions artifact sources on the local daemon', () => {
+test('resolveInstallSource rejects a source kind it cannot materialize', () => {
   expect(() =>
     resolveInstallSource(
       makeRequest({
@@ -71,10 +71,10 @@ test('resolveInstallSource rejects GitHub Actions artifact sources on the local 
           owner: 'acme',
           repo: 'mobile',
           artifactId: 1234567890,
-        },
+        } as never,
       }),
     ),
-  ).toThrow(/compatible remote daemon/i);
+  ).toThrow(/must be "url" or "path"/);
 });
 
 test('resolveInstallSource refuses an unknown upload id rather than reading the wire path', () => {

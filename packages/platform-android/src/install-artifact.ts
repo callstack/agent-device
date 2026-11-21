@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { LocalInstallSource } from '@agent-device/kernel/contracts';
+import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
 import { materializeInstallablePath } from '@agent-device/provision-kit/install-source';
 import * as manifest from './manifest.ts';
 
@@ -11,7 +11,7 @@ export type PreparedAndroidInstallArtifact = {
 };
 
 export async function prepareAndroidInstallArtifact(
-  source: LocalInstallSource,
+  source: DaemonInstallSource,
   options: {
     signal?: AbortSignal;
     resolveIdentity?: boolean;

@@ -139,46 +139,6 @@ test('config can set appsFilter through canonical enum values', async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('user config can provide install-from-source GitHub Actions artifact source', async () => {
-  const { root, home, project } = makeTempWorkspace();
-  fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
-  fs.writeFileSync(
-    path.join(home, '.agent-device', 'config.json'),
-    JSON.stringify({
-      platform: 'android',
-      installSource: {
-        type: 'github-actions-artifact',
-        repo: 'thymikee/RNCLI83',
-        artifact: 'rn-android-emulator-debug-pr-19',
-      },
-    }),
-    'utf8',
-  );
-
-  const result = await runCliCapture(['install-from-source', '--json'], {
-    cwd: project,
-    env: { HOME: home },
-    sendToDaemon: async () => ({
-      ok: true,
-      data: {
-        packageName: 'com.example.demo',
-      },
-    }),
-  });
-
-  assert.equal(result.code, null);
-  assert.equal(result.calls.length, 1);
-  assert.equal(result.calls[0]?.flags?.platform, 'android');
-  assert.deepEqual(result.calls[0]?.meta?.installSource, {
-    kind: 'github-actions-artifact',
-    owner: 'thymikee',
-    repo: 'RNCLI83',
-    artifactName: 'rn-android-emulator-debug-pr-19',
-  });
-
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
 test('command-specific config defaults are ignored for commands that do not support them', async () => {
   const { root, home, project } = makeTempWorkspace();
   fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
@@ -1277,6 +1237,30 @@ test('invalid config key returns parse error before daemon dispatch', async () =
   assert.equal(result.code, 1);
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /Unknown config key "notARealFlag"/);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('config names the removal of installSource and the URL replacement', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, '.agent-device', 'config.json'),
+    JSON.stringify({
+      installSource: { type: 'github-actions-artifact', repo: 'acme/mobile', artifact: 1 },
+    }),
+    'utf8',
+  );
+
+  const result = await runCliCapture(['install-from-source', 'https://example.com/app.apk'], {
+    cwd: project,
+    env: { HOME: home },
+    sendToDaemon: async () => ({ ok: true, data: {} }),
+  });
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Config key "installSource" .* was removed; pass a download URL/);
 
   fs.rmSync(root, { recursive: true, force: true });
 });

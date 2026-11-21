@@ -6,7 +6,6 @@ import type { SwipePattern } from './scroll-gesture.ts';
 import type { BootPickPolicy, DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type {
-  DaemonInstallSource,
   DaemonServerMode,
   DaemonTransportPreference,
   LeaseBackend,
@@ -137,8 +136,6 @@ export type CliFlags = CloudProviderProfileFields &
     launchConsole?: string;
     launchArgs?: string[];
     header?: string[];
-    githubActionsArtifact?: string;
-    installSource?: DaemonInstallSource;
     saveScript?: boolean | string;
     shutdown?: boolean;
     relaunch?: boolean;

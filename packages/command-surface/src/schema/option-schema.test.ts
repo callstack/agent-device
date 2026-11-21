@@ -94,8 +94,6 @@ test('configurable option specs are filtered by command support', () => {
     getConfigurableOptionSpecs('install-from-source').map((spec) => spec.key),
   );
   assert.equal(installFromSourceSpecs.has('header'), true);
-  assert.equal(installFromSourceSpecs.has('installSource'), true);
-  assert.equal(installFromSourceSpecs.has('githubActionsArtifact'), false);
 });
 
 test('isFlagSupportedForCommand consults option schema support map', () => {

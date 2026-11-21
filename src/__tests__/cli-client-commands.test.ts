@@ -72,115 +72,6 @@ test('install-from-source forwards URL and repeated headers to client.apps.insta
   });
 });
 
-test('install-from-source forwards GitHub Actions artifact flag to client.apps.installFromSource', async () => {
-  let observed: AppInstallFromSourceOptions | undefined;
-  const client = createStubClient({
-    installFromSource: async (options) => {
-      observed = options;
-      return {
-        launchTarget: 'com.example.demo',
-        packageName: 'com.example.demo',
-        identifiers: { appId: 'com.example.demo', package: 'com.example.demo' },
-      };
-    },
-  });
-
-  const handled = await tryRunClientBackedCommand({
-    command: 'install-from-source',
-    positionals: [],
-    flags: {
-      json: false,
-      help: false,
-      version: false,
-      platform: 'android',
-      githubActionsArtifact: 'thymikee/RNCLI83:6635342232',
-    },
-    client,
-  });
-
-  assert.equal(handled, true);
-  assert.equal(observed?.platform, 'android');
-  assert.deepEqual(observed?.source, {
-    kind: 'github-actions-artifact',
-    owner: 'thymikee',
-    repo: 'RNCLI83',
-    artifactId: 6635342232,
-  });
-});
-
-test('install-from-source preserves colons in GitHub Actions artifact names', async () => {
-  let observed: AppInstallFromSourceOptions | undefined;
-  const client = createStubClient({
-    installFromSource: async (options) => {
-      observed = options;
-      return {
-        launchTarget: 'com.example.demo',
-        packageName: 'com.example.demo',
-        identifiers: { appId: 'com.example.demo', package: 'com.example.demo' },
-      };
-    },
-  });
-
-  await tryRunClientBackedCommand({
-    command: 'install-from-source',
-    positionals: [],
-    flags: {
-      json: false,
-      help: false,
-      version: false,
-      githubActionsArtifact: 'thymikee/RNCLI83:app:debug:pr-19',
-    },
-    client,
-  });
-
-  assert.deepEqual(observed?.source, {
-    kind: 'github-actions-artifact',
-    owner: 'thymikee',
-    repo: 'RNCLI83',
-    artifactName: 'app:debug:pr-19',
-  });
-});
-
-test('install-from-source forwards configured GitHub Actions artifact name to client.apps.installFromSource', async () => {
-  let observed: AppInstallFromSourceOptions | undefined;
-  const client = createStubClient({
-    installFromSource: async (options) => {
-      observed = options;
-      return {
-        launchTarget: 'com.example.demo',
-        packageName: 'com.example.demo',
-        identifiers: { appId: 'com.example.demo', package: 'com.example.demo' },
-      };
-    },
-  });
-
-  const handled = await tryRunClientBackedCommand({
-    command: 'install-from-source',
-    positionals: [],
-    flags: {
-      json: false,
-      help: false,
-      version: false,
-      platform: 'android',
-      installSource: {
-        kind: 'github-actions-artifact',
-        owner: 'thymikee',
-        repo: 'RNCLI83',
-        artifactName: 'rn-android-emulator-debug-pr-19',
-      },
-    },
-    client,
-  });
-
-  assert.equal(handled, true);
-  assert.deepEqual(observed?.source, {
-    kind: 'github-actions-artifact',
-    owner: 'thymikee',
-    repo: 'RNCLI83',
-    artifactName: 'rn-android-emulator-debug-pr-19',
-  });
-});
-
 test('install-from-source rejects malformed header syntax', async () => {
   const client = createStubClient({
     installFromSource: async () => {
@@ -208,7 +99,7 @@ test('install-from-source rejects malformed header syntax', async () => {
   );
 });
 
-test('install-from-source rejects headers with GitHub Actions artifact sources', async () => {
+test('install-from-source requires a URL', async () => {
   const client = createStubClient({
     installFromSource: async () => {
       throw new Error('unexpected call');
@@ -220,19 +111,13 @@ test('install-from-source rejects headers with GitHub Actions artifact sources',
       tryRunClientBackedCommand({
         command: 'install-from-source',
         positionals: [],
-        flags: {
-          json: false,
-          help: false,
-          version: false,
-          githubActionsArtifact: 'thymikee/RNCLI83:6635342232',
-          header: ['authorization: Bearer token'],
-        },
+        flags: { json: false, help: false, version: false },
         client,
       }),
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      error.message.includes('--header is only supported for URL sources'),
+      error.message.includes('requires exactly one <url>'),
   );
 });
 

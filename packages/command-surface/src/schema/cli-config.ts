@@ -13,7 +13,6 @@ import {
   getOptionSpec,
   parseOptionValueFromSource,
 } from './option-schema.ts';
-import { parseInstallSourceConfig } from '@agent-device/provision-kit/install-source-config';
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
@@ -131,6 +130,15 @@ const RETIRED_RECORD_CONFIG_KEY = {
     '--record is per-invocation only: pass --record on the command, or record: true in the SDK/MCP call, to keep a corrective read in a healed script',
 } as const;
 
+// Removed config keys, each with the guidance that replaces it.
+const RETIRED_CONFIG_KEY_MIGRATIONS: Readonly<Record<string, string>> = {
+  [RETIRED_RECORD_CONFIG_KEY.flagKey]: `${RETIRED_RECORD_CONFIG_KEY.migration}.`,
+  [RETIRED_SCREENSHOT_MAX_SIZE.flagKey]:
+    'use "screenshotScale" (0.01-1) to downscale screenshots. Recordings capture at native resolution.',
+  installSource:
+    'pass a download URL to install-from-source <url>. For a GitHub Actions artifact, see agent-device help remote.',
+};
+
 function parseConfigObject(
   source: Record<string, unknown>,
   origin: { source: ConfigFileSource; label: string },
@@ -140,21 +148,18 @@ function parseConfigObject(
     ([key]) => key !== 'plugins' || origin.source !== 'user',
   );
   for (const [rawKey, rawValue] of entries) {
-    if (rawKey === RETIRED_RECORD_CONFIG_KEY.flagKey) {
+    const migration = Object.hasOwn(RETIRED_CONFIG_KEY_MIGRATIONS, rawKey)
+      ? RETIRED_CONFIG_KEY_MIGRATIONS[rawKey]
+      : undefined;
+    if (migration) {
       throw new AppError(
         'INVALID_ARGS',
-        `Config key "${rawKey}" in ${origin.label} was removed; ${RETIRED_RECORD_CONFIG_KEY.migration}.`,
+        `Config key "${rawKey}" in ${origin.label} was removed; ${migration}`,
       );
     }
     const key = rawKey as FlagKey;
     const spec = getOptionSpec(key);
     if (!spec) {
-      if (rawKey === RETIRED_SCREENSHOT_MAX_SIZE.flagKey) {
-        throw new AppError(
-          'INVALID_ARGS',
-          `Config key "${rawKey}" in ${origin.label} was removed; use "screenshotScale" (0.01-1) to downscale screenshots. Recordings capture at native resolution.`,
-        );
-      }
       throw new AppError('INVALID_ARGS', `Unknown config key "${rawKey}" in ${origin.label}.`);
     }
     if (!spec.configurable) {
@@ -168,10 +173,6 @@ function parseConfigObject(
         'INVALID_ARGS',
         `Config key "${rawKey}" is not allowed in ${origin.label}. Move it to ~/.agent-device/config.json, pass it with --config or AGENT_DEVICE_CONFIG, or provide it through CLI flags/environment variables.`,
       );
-    }
-    if (key === 'installSource') {
-      flags.installSource = parseInstallSourceConfig(rawValue, origin.label);
-      continue;
     }
     (flags as Record<string, unknown>)[key] = parseOptionValueFromSource(
       spec,
@@ -214,7 +215,6 @@ function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFl
   }
   const flags: Partial<CliFlags> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
-    if (spec.key === 'installSource') continue;
     const envValue = spec.env.names
       .map((name) => ({ name, value: env[name] }))
       .find((entry) => typeof entry.value === 'string' && entry.value.trim().length > 0);

@@ -461,23 +461,6 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
-    key: 'githubActionsArtifact',
-    names: ['--github-actions-artifact'],
-    type: 'string',
-    usageLabel: '--github-actions-artifact <owner/repo:artifact>',
-    usageDescription: 'install-from-source: GitHub Actions artifact resolved by a remote daemon',
-    projectConfig: false,
-    recorded: false,
-  },
-  {
-    key: 'installSource',
-    // Config-only virtual option; parsed explicitly from JSON before generic string options.
-    names: [],
-    type: 'string',
-    projectConfig: false,
-    recorded: false,
-  },
-  {
     key: 'session',
     names: ['--session'],
     type: 'string',

@@ -222,21 +222,6 @@ test('install_from_source still admits url sources', async (t) => {
   }, t);
 });
 
-test('install_from_source still admits github-actions-artifact sources', async (t) => {
-  await withInstallFromSourceRpcServer(async (post) => {
-    const { status, dispatched } = await post({
-      kind: 'github-actions-artifact',
-      owner: 'callstack',
-      repo: 'agent-device',
-      artifactId: 42,
-    });
-
-    assert.equal(status, 200);
-    assert.equal(dispatched.length, 1);
-    assert.equal(dispatched[0]?.meta?.installSource?.kind, 'github-actions-artifact');
-  }, t);
-});
-
 test('remote HTTP rejects host path install sources in the command RPC used by the CLI', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 

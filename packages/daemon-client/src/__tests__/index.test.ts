@@ -1037,37 +1037,6 @@ test('sendToDaemon preserves install_source payload metadata for remote HTTP RPC
       });
       assert.equal((rpcRequest as any)?.params?.meta?.retainMaterializedPaths, true);
       assert.equal((rpcRequest as any)?.params?.meta?.materializedPathRetentionMs, 60_000);
-
-      seenPaths.length = 0;
-      rpcRequest = null;
-
-      const githubArtifactResponse = await sendToDaemon({
-        session: 'default',
-        command: 'install_source',
-        positionals: [],
-        flags: { platform: 'android' },
-        meta: {
-          requestId: 'req-install-source-gh',
-          installSource: {
-            kind: 'github-actions-artifact',
-            owner: 'acme',
-            repo: 'mobile',
-            runId: 1234567890,
-            artifactName: 'app-debug',
-          },
-        },
-      });
-
-      assert.equal(githubArtifactResponse.ok, true);
-      assert.deepEqual(seenPaths, ['/agent-device/health', '/agent-device/rpc']);
-      assert.deepEqual((rpcRequest as any)?.params?.meta?.installSource, {
-        kind: 'github-actions-artifact',
-        owner: 'acme',
-        repo: 'mobile',
-        runId: 1234567890,
-        artifactName: 'app-debug',
-      });
-      assert.equal((rpcRequest as any)?.params?.meta?.uploadedArtifactId, undefined);
     });
   } finally {
     restoreHttpRequest();

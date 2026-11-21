@@ -14,7 +14,7 @@ function flagDefinitionsForKey(key: FlagKey): FlagDefinition[] {
 
 /**
  * An option's synopsis token is its `usageLabel`, else its first CLI name: nothing for a
- * `usageHidden` option, or one with no CLI name at all (a config-only virtual option).
+ * `usageHidden` option.
  */
 function usageToken(definition: FlagDefinition): string | undefined {
   if (definition.usageHidden) return undefined;

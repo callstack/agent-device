@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { LocalInstallSource } from '@agent-device/kernel/contracts';
+import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { ArchiveBudget } from '@agent-device/host-kit/archive';
 import { expandUserHomePath } from '@agent-device/host-kit/file';
@@ -15,7 +15,7 @@ import { approveDownloadSourceUrl } from './install-source-network.ts';
 import { downloadInstallSource, invalidSourceUrlError } from './install-source-download.ts';
 
 export type MaterializeInstallableOptions = {
-  source: LocalInstallSource;
+  source: DaemonInstallSource;
   isInstallablePath: (
     candidatePath: string,
     stat: { isFile(): boolean; isDirectory(): boolean },
@@ -183,7 +183,7 @@ function expandSourcePath(inputPath: string, env: NodeJS.ProcessEnv): string {
 }
 
 async function materializeLocalSource(
-  source: LocalInstallSource,
+  source: DaemonInstallSource,
   options: {
     signal: AbortSignal;
     environment: NodeJS.ProcessEnv;

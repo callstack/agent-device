@@ -4,7 +4,6 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { LEASE_DEVICE_SPEC_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseGitHubActionsArtifactInstallSourceSpec } from '@agent-device/provision-kit/install-source-config';
 import {
   booleanField,
   jsonSchemaField,
@@ -57,7 +56,7 @@ const uninstallCommandMetadata = defineFieldCommandMetadata(
 
 const installFromSourceCommandMetadata = defineFieldCommandMetadata(
   'install-from-source',
-  'Install app builds from URLs, remote source specs, or CI artifacts resolved by a remote daemon. The command allows 600s, including up to 120s for the download; local Android and iOS install steps time out after 120s.',
+  'Install app builds from URLs, including signed CI artifact download URLs. The command allows 600s, including up to 120s for the download; local Android and iOS install steps time out after 120s.',
   {
     source: requiredField(
       jsonSchemaField<DaemonInstallSource>(looseObjectSchema('Install source object.')),
@@ -85,12 +84,11 @@ const uninstallCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const installFromSourceCliSchema = {
-  usageOverride:
-    'install-from-source <url> | install-from-source --github-actions-artifact <owner/repo:artifact>',
+  usageOverride: 'install-from-source <url>',
   usageFlags: [],
   listUsageOverride: 'install-from-source',
   positionalArgs: ['url?'],
-  allowedFlags: ['header', 'githubActionsArtifact', 'installSource', 'retainPaths', 'retentionMs'],
+  allowedFlags: ['header', 'retainPaths', 'retentionMs'],
 } as const satisfies CommandSchemaOverride;
 
 const installCliReader: CliReader = (positionals, flags) => installInputFromCli(positionals, flags);
@@ -179,7 +177,7 @@ const installFromSourceCommandFacet = defineCommandFacet({
   name: 'install-from-source',
   effect: 'destructive',
   text: {
-    summary: 'Install app builds from URLs or CI artifacts',
+    summary: 'Install app builds from URLs',
     searchHint: 'fetch link hosted',
   },
   metadata: installFromSourceCommandMetadata,
@@ -228,42 +226,19 @@ function requiredPair(first: unknown, second: unknown): string[] {
   ];
 }
 
-// fallow-ignore-next-line complexity
 function resolveInstallSource(positionals: string[], flags: CliFlags) {
   const url = positionals[0]?.trim();
-  if (positionals.length > 1) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'install-from-source accepts either one <url> positional or --github-actions-artifact',
-    );
+  if (!url || positionals.length > 1) {
+    throw new AppError('INVALID_ARGS', 'install-from-source requires exactly one <url>');
   }
-  const githubArtifactSource = flags.githubActionsArtifact
-    ? parseGitHubActionsArtifactInstallSourceSpec(flags.githubActionsArtifact)
-    : undefined;
-  const configuredSource = flags.installSource;
-  const sourceCount = (url ? 1 : 0) + (githubArtifactSource ? 1 : 0) + (configuredSource ? 1 : 0);
-  if (sourceCount !== 1) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'install-from-source requires exactly one source: <url>, --github-actions-artifact, or config installSource',
-    );
-  }
-  if (!url && flags.header && flags.header.length > 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'install-from-source --header is only supported for URL sources',
-    );
-  }
-  if (githubArtifactSource) return githubArtifactSource;
-  if (configuredSource) return configuredSource;
-  if (!isHttpUrl(url!)) {
+  if (!isHttpUrl(url)) {
     throw new AppError('INVALID_ARGS', `install-from-source <url> must be an http(s) URL: ${url}`, {
       hint: 'Install a local build with install <app> <path>.',
     });
   }
   return {
     kind: 'url' as const,
-    url: url!,
+    url,
     headers: parseInstallSourceHeaders(flags.header),
   };
 }

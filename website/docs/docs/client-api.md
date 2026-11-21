@@ -471,20 +471,6 @@ If the daemon cannot determine the installed app's identity, the request fails i
 - URL sources from any public host may point directly to an installable, including a bare iOS `.ipa`, or to a `.zip`, `.tar`, `.tar.gz`, or `.tgz` archive containing exactly one.
 - For existing reachable artifact URLs, use `source: { kind: 'url', url: ... }`.
 - For local artifacts, use `source: { kind: 'path', path: ... }` or the CLI `install`/`reinstall` commands.
-- When a remote daemon resolves CI artifacts server-side, pass a GitHub Actions artifact source:
-
-```ts
-await client.apps.installFromSource({
-  platform: 'android',
-  source: {
-    kind: 'github-actions-artifact',
-    owner: 'acme',
-    repo: 'mobile',
-    artifactId: 1234567890,
-  },
-});
-```
-
-Remote daemons may also support `{ kind: 'github-actions-artifact', owner, repo, artifactName }` or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The local client passes these payloads through unchanged; it does not authenticate with GitHub or download the artifact.
+- For a GitHub Actions artifact, pass its signed download URL as a `url` source. See [Install a GitHub Actions artifact](/docs/commands#install-a-github-actions-artifact).
 
 Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.

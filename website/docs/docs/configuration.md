@@ -90,27 +90,12 @@ explicit config:
 - `leaseBackend`
 - provider/cloud fields (`provider*`, `aws*`)
 - Metro endpoint/token fields (`metro*`, `bundleUrl`)
-- request headers and structured install sources
+- request headers
 - local code and write destinations (`reporter`, `reportJunit`, `saveScript`, `launchConsole`)
 - `postGestureStabilization: false`, which skips the directional scroll `movement` check and the wait that keeps the first read after a scroll or swipe from a tree still in motion, and the first-screen wait after `open` on a local iOS simulator; see [Scroll](/docs/commands#scroll)
 
 Project config can also set `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local paths and executable modules, such as `stepsFile` and `reporter`, are allowed only in user or explicit config.
 The `record` config key and `AGENT_DEVICE_RECORD` were removed. `--record` is per-invocation only: pass it on the command, or set `record: true` in an SDK/MCP call, to keep a corrective read in a healed script.
-
-`install-from-source` can read a GitHub Actions artifact source from user or explicit config when the remote daemon supports resolving CI artifacts. Repository config rejects this key:
-
-```json
-{
-  "platform": "android",
-  "installSource": {
-    "type": "github-actions-artifact",
-    "repo": "thymikee/RNCLI83",
-    "artifact": "rn-android-emulator-debug-pr-19"
-  }
-}
-```
-
-Use a numeric `artifact` value for an artifact ID. Use a string `artifact` value for an artifact name.
 
 Project config can set a default lock mode for named sessions with `sessionLock`
 (`AGENT_DEVICE_SESSION_LOCK`). See [Lock a named session to a device](/docs/sessions#lock-a-named-session-to-a-device).

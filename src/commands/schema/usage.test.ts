@@ -41,9 +41,8 @@ test('synopsis names each tailed option with its declared label, aliases include
   );
 });
 
-test('synopsis omits a hidden option and an option with no CLI token', () => {
+test('synopsis omits a hidden option', () => {
   assert.equal(synopsisFor({ allowedFlags: ['snapshotDiff', 'record'] }), 'sample [--diff]');
-  assert.equal(synopsisFor({ allowedFlags: ['snapshotDiff', 'installSource'] }), 'sample [--diff]');
 });
 
 test('synopsis renders positionals before the flag tail', () => {

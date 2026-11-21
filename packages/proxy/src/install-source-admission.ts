@@ -12,7 +12,7 @@ export function hostPathInstallSourceRefusedResponse(rpcId: unknown): Response {
   const error = new AppError(
     'INVALID_ARGS',
     'Invalid params: an install source of kind "path" names a file on the daemon host and is not accepted through the proxy',
-    { hint: 'Upload the artifact, or use a "url" or "github-actions-artifact" source.' },
+    { hint: 'Upload the artifact, or use a "url" source.' },
   );
   return Response.json(
     {

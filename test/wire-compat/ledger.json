@@ -20,7 +20,7 @@
     "packages/kernel/src/contracts.ts#DaemonArtifactKnownType": "sha256:4a55e654d15d4719a579df4aa1929dda1d52a4acf4c71e9ff78814ad09d6d233",
     "packages/kernel/src/contracts.ts#ScriptDeliveryFailure": "sha256:186881f8b2e6a0227a6d1a2c802d8f7356fee39d4137800a0c9fa65401aa2765",
     "packages/kernel/src/contracts.ts#DaemonArtifactType": "sha256:5e5017276fefe880b8ab32001888011d2e02a8670f0978afdb9b56a77ab37f09",
-    "packages/kernel/src/contracts.ts#DaemonInstallSource": "sha256:fe26e202e62d997cdd3855fd96002511783a6c26a9ce27210d7c6cc084c66e4e",
+    "packages/kernel/src/contracts.ts#DaemonInstallSource": "sha256:adfde90c81de72009bf0e092b95fcb41cece2ecd44e936dcb1f6beb220287f02",
     "packages/kernel/src/contracts.ts#DaemonLockPolicy": "sha256:f33d0ce7200a7d97c11e91bd2889b5d9bc7f35935a5370a29930118d091468f4",
     "packages/kernel/src/contracts.ts#DaemonRequest": "sha256:911d93245b8dc557db897c4cac051030db673711bf3af51baa8b82248d509c57",
     "packages/kernel/src/contracts.ts#DaemonRequestMeta": "sha256:c2b14225388041f3a6e708c898c512f91b9b20e51a2656a1fa0d5bfa5989fa30",
@@ -305,7 +305,7 @@
     {
       "declaration": "packages/daemon/src/server/http/http-authorization.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:be2f3a9965bb6fe456ab8b1f0a696cf80ffcc8016262a4aee28dee25d18650d0",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. The route also passes its ingress signal to the authorizer, so a held auth hook stops at the same deadline or disconnect; the request, response and status framing are unchanged. An auth-hook or tenant-trust refusal answered after the hook now goes through the request owner's commit gate, so a deadline that passed first answers with its own typed expiry; refusal status and body shapes are unchanged."
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -646,6 +646,11 @@
       "declaration": "packages/remote/src/daemon-artifacts.ts#downloadResponseArtifacts",
       "digest": "sha256:aa3ea996bdd1329d88570ba87c03026946dd33f34172c0eccd5a6ac3d38e9884",
       "rationale": "#4518 client-side only. Remote record stop downloads to a current request destination or reports a local cwd fallback after publishing. Released daemons supply the same artifact fields, and chunk downloads use the existing artifact order. The request, headers, and response framing are unchanged."
+    },
+    {
+      "declaration": "packages/kernel/src/contracts.ts#DaemonInstallSource",
+      "digest": "sha256:adfde90c81de72009bf0e092b95fcb41cece2ecd44e936dcb1f6beb220287f02",
+      "rationale": "Removes the github-actions-artifact variant. A new client never sends it. A released client that sends it to a new daemon gets a normal INVALID_ARGS error (source.kind must be \"url\"), not a misread payload. No local daemon ever materialized it: it always failed with UNSUPPORTED_OPERATION. The url and path variants are unchanged."
     }
   ]
 }

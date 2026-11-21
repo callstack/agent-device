@@ -231,8 +231,7 @@ function listSupportedFlagNames(command: string | null): string[] {
   const names = new Set<string>();
   for (const definition of getFlagDefinitions()) {
     if (!isFlagSupportedForCommand(definition.key, command)) continue;
-    const primary = definition.names[0];
-    if (primary) names.add(primary);
+    names.add(definition.names[0]);
   }
   return [...names];
 }
