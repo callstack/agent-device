@@ -72,7 +72,7 @@ beforeEach(() => {
 // `readPreparePhaseTimeoutMs` raises when the boot ate the budget: "prepare ios-runner timed out"
 // with reason `prepare_deadline_expired`. That indicts the boot, not the derived data it was
 // launched from, so the artifact stays and prepare retries with a fresh session. The artifact is
-// only wiped by the rules that indict it, such as a runner that refused the connection.
+// only wiped by the rules that indict it, such as an exhausted endpoint probe.
 
 test('a prepare deadline spent during boot keeps the restored artifact and retries', async () => {
   vi.useFakeTimers();
@@ -112,7 +112,41 @@ test('a prepare deadline spent during boot keeps the restored artifact and retri
   }
 });
 
-// The bad-cache recovery decision: a restored artifact whose runner refuses the connection is
+// A startup deadline that expires while xcodebuild is alive is a slow boot on a loaded host. The
+// restored artifact lives in the shared cache that concurrent first opens read, so prepare retries
+// with a fresh session and never cleans that cache for it (#4689).
+
+test('a startup deadline on a restored artifact retries without rebuilding the shared cache', async () => {
+  const fixtures = makeBadCacheRecoveryFixtures();
+  const retrySession = makeRunnerSession({
+    port: 8101,
+    xctestrunPath: fixtures.restoredArtifact.xctestrunPath,
+    xctestrunArtifact: fixtures.restoredArtifact,
+  });
+
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(fixtures.restoredSession)
+    .mockResolvedValueOnce(retrySession);
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockResolvedValueOnce({ uptimeMs: 42 });
+
+  const result = await prepareIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 90_000 });
+
+  assert.equal(result.xctestrunPath, '/tmp/restored.xctestrun');
+  assert.equal(result.recoveryReason, 'Runner did not accept connection');
+  assert.equal(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls.length, 0);
+  assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
+    [fixtures.restoredSession, 'prepare_runner_health_retry'],
+  ]);
+  const retryOptions = mockEnsureRunnerSession.mock.calls[1]?.[1] as
+    | Record<string, unknown>
+    | undefined;
+  assert.equal(retryOptions?.forceRunnerXctestrunRebuild, undefined);
+  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], retrySession);
+});
+
+// The bad-cache recovery decision: a restored artifact whose endpoints all failed to answer is
 // indicted, wiped for the run, and replaced by one forced rebuild — under one admission token
 // owned by the prepare loop, so the rebuild is the retry a fence governs rather than a fresh
 // start that slips past it (#3220).
@@ -124,7 +158,7 @@ test('prepareIosRunner marks a bad restored artifact and rebuilds once after hea
     .mockResolvedValueOnce(fixtures.restoredSession)
     .mockResolvedValueOnce(fixtures.rebuiltSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(runnerConnectFailure('runner_endpoint_probe_exhausted'))
     .mockResolvedValueOnce({ uptimeMs: 42 });
 
   const result = await prepareIosRunner(IOS_SIMULATOR, {
@@ -224,7 +258,7 @@ function assertRecoveredPrepareResult(result: Awaited<ReturnType<typeof prepareI
     connectMs: result.connectMs,
     healthCheckMs: result.healthCheckMs,
     xctestrunPath: '/tmp/rebuilt.xctestrun',
-    recoveryReason: 'Runner did not accept connection',
+    recoveryReason: 'Runner endpoint probe failed',
   });
   assert.equal(result.failureReason, undefined);
   assert.equal(result.connectMs >= 0, true);
@@ -240,7 +274,7 @@ function assertBadCacheRecoverySideEffects(
   ]);
   assert.deepEqual(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls[0], [
     fixtures.restoredArtifact,
-    'Runner did not accept connection',
+    'Runner endpoint probe failed',
   ]);
   const firstCallOptions = mockEnsureRunnerSession.mock.calls[0]?.[1] as
     | { startAdmission?: unknown }
@@ -278,7 +312,7 @@ function assertRecoveredPrepareDiagnostics(): void {
   assert.equal(prepareDiagnostic.data?.cache, 'miss');
   assert.equal(prepareDiagnostic.data?.artifact, 'rebuilt');
   assert.equal(prepareDiagnostic.data?.xctestrunPath, '/tmp/rebuilt.xctestrun');
-  assert.equal(prepareDiagnostic.data?.recoveryReason, 'Runner did not accept connection');
+  assert.equal(prepareDiagnostic.data?.recoveryReason, 'Runner endpoint probe failed');
   assert.equal(prepareDiagnostic.data?.failureReason, undefined);
   assert.deepEqual(prepareDiagnostic.data?.timingContainment, {
     connectMs: ['buildMs'],
