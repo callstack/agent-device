@@ -126,7 +126,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 10_000,
     usageLabel: '--duration-ms <ms>',
-    usageDescription: 'Scroll: pace the gesture over this duration when supported',
+    usageDescription:
+      'Scroll: pace the gesture over this duration when supported; tv-remote: hold the button this long (Android TV long-presses on any positive value)',
     projectConfig: true,
     recorded: false,
   },
@@ -393,7 +394,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--shutdown'],
     type: 'boolean',
     usageLabel: '--shutdown',
-    usageDescription: 'close: shutdown associated simulator/emulator after ending session',
+    usageDescription:
+      'close, disconnect: also shut down the session device where supported; a Limrun instance agent-device created is deleted with its data, an attached one keeps running. close also releases a lease or attachment kept on close',
     projectConfig: true,
     recorded: false,
   },

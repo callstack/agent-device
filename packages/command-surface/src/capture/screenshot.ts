@@ -39,9 +39,10 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
       'Selector expression; the capture is cropped to the frame the selector resolves on the same screen.',
     ),
     overlayRefs: booleanField(),
-    pixelDensity: integerField('Output screenshot pixel density in pixels per logical point.', {
-      min: 1,
-    }),
+    pixelDensity: integerField(
+      'Output screenshot pixel density in pixels per logical point. iOS-family simulators only; other targets refuse it.',
+      { min: 1 },
+    ),
     screenMask: enumField(
       SCREENSHOT_SCREEN_MASKS,
       'Fill the iOS simulator screen outline with black for this capture. Requires simctl; omit for the default image.',
