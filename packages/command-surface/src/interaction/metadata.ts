@@ -74,7 +74,7 @@ const interactionCommandDescriptions = {
     'Quick coordinate fling with optional repeat pattern; the contact starts moving immediately, with no pause on the start point.',
   focus:
     'Move input focus to explicit screen coordinates without entering text. This command changes focus only and does not enter or replace text.',
-  type: 'Append text to the currently focused input. This requires an active input and preserves its existing text.',
+  type: 'Append text to a text field. Pass a target to focus that field first; omit the target to append to the focused input. The existing text is preserved. To replace the text, use fill.',
   scroll:
     'Scroll in a direction, or toward the top/bottom edge of scrollable content. The until input scrolls to an off-screen selector in one command. refresh is pull-to-refresh: one slow pull down, refused with scroll_refresh_not_at_top while content is hidden above. The optional amount is the finger-path fraction of the viewport axis, honored up to 0.8 of it; directional scrolls reduce release momentum, while app scroll physics determine the final content offset. A visible keyboard shortens the swiped band instead of being dismissed; when too little is left, the command refuses with scroll_keyboard_occludes_surface. A directional scroll also reports the movement it observed as movement: moved, at-edge, unchanged, or unobserved when the two reads could not back a claim either way; an unchanged surface inside a container that still hides content in that direction refuses with scroll_no_progress rather than repeating the requested distance. The movement field is absent where a tier verifies per pass (top/bottom, until), where the runtime cannot read a screen, where a settle observation or a replay already owns that observation, or where the operator opted out of it.',
   get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. The text format returns visible content; attrs returns the element attribute map.',
@@ -153,6 +153,10 @@ const focusFields = {
 };
 
 const typeFields = {
+  // The target is optional: `type "text"` appends to the focused input, while
+  // `type <target> "text"` focuses the target first. The command description
+  // owns that optionality, the same way fill's fields stay silent about it.
+  ...interactionTargetFields(),
   text: requiredField(stringField('Text to type.')),
   delayMs: integerField('Delay between typed characters.', { min: 0 }),
 };

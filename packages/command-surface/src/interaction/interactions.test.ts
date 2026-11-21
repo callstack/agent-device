@@ -3,6 +3,7 @@ import { interactionCliReaders, interactionDaemonWriters } from './interactions.
 import { selectorCliReaders } from './selectors.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { TypeTextOptions } from '@agent-device/contracts/client';
 
 const BASE_FLAGS: CliFlags = { json: false, help: false, version: false };
 
@@ -159,4 +160,58 @@ test('find fill reads an empty value as the clear request and refuses a missing 
   expect(() => selectorCliReaders.find(['text', 'Save', 'fill'], BASE_FLAGS)).toThrow(
     /find fill requires text \(use "" to clear the field\)/,
   );
+});
+
+// `type` takes an optional leading target, aligned with fill's target vocabulary. Every input
+// that does not decode as target + text must reach the daemon as the same single text positional
+// it always produced, so the focused-input semantics are unchanged. Assertions read the reader's
+// union through `toHaveProperty`/`toMatchObject`, never direct key access.
+
+test('type reads a leading snapshot ref as the target and the rest as text', () => {
+  const input = interactionCliReaders.type(['@e12', 'more'], BASE_FLAGS);
+  expect(input).toMatchObject({ ref: '@e12', text: 'more' });
+  const request = interactionDaemonWriters.type(input as TypeTextOptions);
+  expect(request.positionals).toEqual(['@e12', 'more']);
+});
+
+test('type reads a selector target only when text follows it', () => {
+  const input = interactionCliReaders.type(['text="Sign in"', 'hello'], BASE_FLAGS);
+  expect(input).toMatchObject({ selector: 'text="Sign in"', text: 'hello' });
+  // A lone selector-shaped word was pure text before the targeted form existed, so it stays one.
+  const lone = interactionCliReaders.type(['text=hello'], BASE_FLAGS);
+  expect(lone).not.toHaveProperty('selector');
+  expect(lone).toMatchObject({ text: 'text=hello' });
+});
+
+test('type reads a point target only when a third positional follows', () => {
+  const targeted = interactionCliReaders.type(['100', '200', 'hello'], BASE_FLAGS);
+  expect(targeted).toMatchObject({ x: 100, y: 200, text: 'hello' });
+
+  const numeric = interactionCliReaders.type(['100', '200'], BASE_FLAGS);
+  expect(numeric).not.toHaveProperty('x');
+  expect(numeric).toMatchObject({ text: '100 200' });
+  expect(interactionDaemonWriters.type(numeric as TypeTextOptions).positionals).toEqual([
+    '100 200',
+  ]);
+});
+
+test('type keeps lookalike ref words and plain words as pure text', () => {
+  for (const positionals of [
+    ['@elena', 'hi'],
+    ['hello', 'world'],
+  ] as const) {
+    const input = interactionCliReaders.type([...positionals], BASE_FLAGS);
+    expect(input, positionals.join(' ')).not.toHaveProperty('ref');
+    expect(input, positionals.join(' ')).toMatchObject({ text: positionals.join(' ') });
+    expect(interactionDaemonWriters.type(input as TypeTextOptions).positionals).toEqual([
+      positionals.join(' '),
+    ]);
+  }
+});
+
+test('type projects a targeted request as target positionals followed by the text', () => {
+  const request = interactionDaemonWriters.type({ ref: '@e12', text: 'more' });
+  expect(request.positionals).toEqual(['@e12', 'more']);
+  const pointRequest = interactionDaemonWriters.type({ x: 100, y: 200, text: 'hello' });
+  expect(pointRequest.positionals).toEqual(['100', '200', 'hello']);
 });

@@ -1142,23 +1142,25 @@ Exact behavior: `agent-device help fill`.
 
 <!-- generated:command type -->
 
-Append text to the focused input.
+Append text to a target or the focused input.
 
 ```bash
-agent-device type <text> [--delay-ms <ms>]
+agent-device type [<x y|@ref|selector>] <text>
 ```
 
 | Option | What it does |
 | --- | --- |
 | `--delay-ms <ms>` | Delay between typed characters |
 
-Supported targets: [Type into the focused field](/docs/capabilities#interact-with-the-app).
+Also accepts: [common options](#common-options): `--depth, -d <depth>`, `--scope, -s <scope>`, `--raw`.
+
+Supported targets: [Type into a target or the focused field](/docs/capabilities#interact-with-the-app).
 
 Exact behavior: `agent-device help type`.
 
 <!-- /generated -->
 
-- `fill` replaces the field value. `type` appends to the focused field and accepts text only: use `fill @ref "text"` to target a field, or `press @ref` then `type "text"`.
+- `fill` replaces the field value. `type` appends text: pass a target to focus that field first (`type @ref "text"`), or omit it to append to the focused field.
 - iOS, including Limrun, `fill` avoids another focus tap when the current command identifies the target input, reads its keyboard focus, and finds no other input under its point. For readable focused inputs, clearing tries select-all/delete and reads the result before moving the caret for delete-burst fallback. Newly focused inputs retain caret preparation. A masked input, such as a secure field, is not cleared when it shows nothing or a placeholder that is not a mask. Otherwise it gets deletes with read-back first, and the caret tap at the field's right edge, where a show/hide control often sits, runs only when the read-back shows neither an empty value nor a masked placeholder. If the deletes can't reach the text, for example after the caret was moved off the end, and that text shows as many bullets as the placeholder, the read-back can't tell it from empty, so the new text is typed at the caret, next to the old text.
 - Use plain `fill` or `type` first. Add `--delay-ms` only when a debounced or search-as-you-type field misses characters, or the app must receive each incremental update; delayed typing enters characters one at a time instead of using a clipboard-style fallback.
 - `fill --text-stdin` reads the text from stdin so a secret never appears in process arguments. Pipe it with `printf %s`. It reads at most 64 KiB, removes one trailing newline, and refuses a terminal, empty input, invalid UTF-8, or an extra text argument. Output shows the value as `${VAR}` with `--record-as <VAR>` and as `[REDACTED]` otherwise, including in error messages and details, and in the `requested`, `before`, and `after` read-back of an unconfirmed fill, which can hold a reformatted form of the value. With `--settle`, the diff line text and tail labels are replaced whole, so text around the value in the field is not shown either; refs and counts stay. While script recording is armed, pass `--record-as <VAR>` or `--no-record`; passing neither is an error. Batch steps don't accept it.

@@ -69,7 +69,7 @@ What a **Yes** does not claim:
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes |
+| [Type into a target or the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes |
@@ -83,7 +83,7 @@ What a **Yes** does not claim:
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
-| [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
+| [Type into a target or the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | No |
 | [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | No |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | No |
@@ -97,7 +97,7 @@ What a **Yes** does not claim:
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes |
-| [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes |
+| [Type into a target or the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | No |
 | [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | No |
@@ -111,7 +111,7 @@ What a **Yes** does not claim:
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android | Revyl iOS | Revyl Android |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [Tap, press, and fill](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| [Type into the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
+| [Type into a target or the focused field](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
 | [Long press](/docs/commands#interactions) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Scroll](/docs/commands#scroll) | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Gesture plans and swipes](/docs/commands#pointer-and-gestures) | Yes | Yes | Yes | Yes | Yes | Yes | No | No |
@@ -123,7 +123,7 @@ What a **Yes** does not claim:
 What a **Yes** does not claim:
 
 - **Tap, press, and fill**: Android types non-ASCII text through the test input method: automatically on emulators, and on physical devices only with `open --test-ime`.
-- **Type into the focused field**: Revyl enters text only at a point, so it refuses `type`; use `fill` on the field instead.
+- **Type into a target or the focused field**: Revyl enters text only at a point, so it refuses `type`; use `fill` on the field instead.
 - **Gesture plans and swipes**: Multi-touch plans are part of `gesture` where the target runs them; a plan using an operation the target lacks fails at that step.
 - **Keyboard dismiss, enter, and status**: For a visible keyboard, the Apple runner uses a recognized accessibility identifier to report the Return action as `returnKey` and the key's localized wording as `returnKeyLabel`. For example, the identifier `Search` gives `returnKey: "search"` even when the label is `"szukaj"`. If the runner cannot identify the action, it reports `unknown`. Only Android can report `none`.
 - **React Native overlay dismissal**: The command runs wherever tapping runs; it answers `detected: false` on a surface with no React Native overlay. Only iOS and Android apps present dismissable development overlays.

@@ -102,7 +102,7 @@ Selectors:
   hittable: false on a resolved element does not block dispatch (iOS AX flags are unreliable on deep RN trees); press/fill/click return targetHittable: false plus a hint -- verify or re-target, not a failure.
 
 Text entry:
-  fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80
+  fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80; type @e12 "more" focuses @e12 first (@elena stays text)
   fill <target> "" clears the field (replace with nothing); the empty argument must be present -- fill <target> alone is a missing argument.
   For dropped iOS text, retry with --delay-ms before clipboard paste (also Limrun iOS).
   Keyboard covers the target (tap_keyboard_occludes_target): on iOS, press a visible Hide Keyboard key or app dismissal control. In apps with drag dismissal, use gesture pan. Android: keyboard dismiss. Use keyboard enter to send Return.

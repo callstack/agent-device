@@ -127,10 +127,11 @@ export type FocusOptions = DeviceCommandBaseOptions & {
   y: number;
 };
 
-export type TypeTextOptions = DeviceCommandBaseOptions & {
-  text: string;
-  delayMs?: number;
-};
+export type TypeTextOptions = DeviceCommandBaseOptions &
+  Partial<InteractionTarget> & {
+    text: string;
+    delayMs?: number;
+  };
 
 export type FillOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &

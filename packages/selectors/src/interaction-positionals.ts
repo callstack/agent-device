@@ -29,6 +29,13 @@ export type DecodedFillTarget =
 
 const BARE_SNAPSHOT_REF_PATTERN = /^e\d+$/;
 
+/**
+ * The leading-target test for `type`: snapshot refs are minted only as `e<n>`, so `@e12` is a
+ * target while lookalike words such as `@elena` or `@john99` stay text (#4360). Case-insensitive,
+ * matching the mistargeted-ref guard the daemon keeps for the text slot.
+ */
+const TYPE_TARGET_REF_PATTERN = /^@e\d/i;
+
 export function readInteractionTargetFromPositionals(
   positionals: string[],
 ): PositionalInteractionTarget {
@@ -86,6 +93,65 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
     target: readPointTarget(positionals.slice(0, 2)),
     text: pointText.length === 0 ? undefined : pointText.join(' '),
   };
+}
+
+/** The optional leading target of `type`, in the vocabulary `fill` accepts. */
+export type DecodedTypeTextTarget =
+  | { kind: 'ref'; ref: string }
+  | { kind: 'selector'; selector: string }
+  | { kind: 'point'; x: number; y: number };
+
+export type DecodedTypeText = {
+  /** `undefined` when every positional is text and `type` keeps its focused-input semantics. */
+  target: DecodedTypeTextTarget | undefined;
+  /** The raw leading target tokens; `[]` when there is no target. */
+  targetPositionals: string[];
+  /** The raw text tokens; the caller joins them with spaces. */
+  textPositionals: string[];
+};
+
+/**
+ * Splits `type`'s positionals into an optional leading target and the text. A target is detected
+ * only when the text after it is present, so every input that was pure text keeps typing as text:
+ * a real snapshot ref (`@e12`) leads a target while `@elena` stays text (#4360); a selector chain
+ * counts only when text follows it, so a lone selector-shaped word still types; two coordinates
+ * count only when a third positional follows, so `type 100 200` still types "100 200". A ref with
+ * no text is NOT folded into text: the caller refuses it as the mistargeted `fill` it usually is.
+ */
+export function readTypeTextFromPositionals(positionals: string[]): DecodedTypeText {
+  const firstPositional = positionals[0];
+  if (firstPositional !== undefined && TYPE_TARGET_REF_PATTERN.test(firstPositional)) {
+    return {
+      target: { kind: 'ref', ref: firstPositional },
+      targetPositionals: [firstPositional],
+      textPositionals: positionals.slice(1),
+    };
+  }
+  const selectorArgs = splitSelectorFromArgs(positionals, { preferTrailingValue: true });
+  if (selectorArgs && selectorArgs.rest.length > 0) {
+    return {
+      target: { kind: 'selector', selector: selectorArgs.selectorExpression },
+      targetPositionals: positionals.slice(0, positionals.length - selectorArgs.rest.length),
+      textPositionals: selectorArgs.rest,
+    };
+  }
+  if (
+    positionals.length > 2 &&
+    isTypeTargetNumber(positionals[0]) &&
+    isTypeTargetNumber(positionals[1])
+  ) {
+    return {
+      target: { kind: 'point', x: Number(positionals[0]), y: Number(positionals[1]) },
+      targetPositionals: positionals.slice(0, 2),
+      textPositionals: positionals.slice(2),
+    };
+  }
+  return { target: undefined, targetPositionals: [], textPositionals: positionals };
+}
+
+function isTypeTargetNumber(value: string | undefined): boolean {
+  if (value === undefined || value.trim() === '') return false;
+  return Number.isFinite(Number(value));
 }
 
 function readPointTarget(positionals: string[]): { x: number; y: number } {
