@@ -16,15 +16,6 @@ const androidPlugin = {
   },
 } as const satisfies PlatformPlugin;
 
-const harmonyosPlugin = {
-  id: 'harmonyos',
-  platforms: ['harmonyos'],
-  createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
-    const { createHarmonyInteractor } = await import('@agent-device/platform-harmonyos/interactor');
-    return createHarmonyInteractor(device, runner);
-  },
-} as const satisfies PlatformPlugin;
-
 const linuxPlugin = {
   id: 'linux',
   platforms: ['linux'],
@@ -44,7 +35,6 @@ const linuxPlugin = {
 export const BUILTIN_PLATFORM_PLUGINS = [
   applePlugin,
   androidPlugin,
-  harmonyosPlugin,
   linuxPlugin,
 ] as const satisfies readonly PlatformPlugin[];
 

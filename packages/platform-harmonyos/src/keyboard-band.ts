@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
-import { runHarmonyShell } from './hdc.ts';
+import type { HarmonyHdcRunner } from './hdc.ts';
 
 /**
  * The system window that hosts the on-screen keyboard. HarmonyOS keeps this SceneBoard panel
@@ -23,11 +23,12 @@ const KEYBOARD_BAND_PROBE_TIMEOUT_MS = 5_000;
  * derivation and its fail-open verdict exactly as they were before this probe existed.
  */
 export async function readHarmonyKeyboardBand(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
 ): Promise<SnapshotKeyboardBandFact> {
   let stdout: string;
   try {
-    const result = await runHarmonyShell(
+    const result = await hdc.runShell(
       device,
       ['hidumper', '-s', 'WindowManagerService', '-a', '-a'],
       { timeoutMs: KEYBOARD_BAND_PROBE_TIMEOUT_MS },

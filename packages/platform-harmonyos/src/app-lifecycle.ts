@@ -8,8 +8,9 @@ import type {
   OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import { runHarmonyShell } from './hdc.ts';
 import { parseHarmonyForegroundRead } from './app-state.ts';
+import type { HarmonyCommandRunner } from './command-host.ts';
+import type { HarmonyHdcRunner } from './hdc.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
 export function parseHarmonyBundleList(rawOutput: string): string[] {
@@ -44,6 +45,27 @@ interface HarmonyAppListOptions {
   signal?: AbortSignal;
 }
 
+/** Reads the bundle identity embedded in a signed HAP archive. */
+export async function resolveHarmonyArchiveBundleName(
+  commands: HarmonyCommandRunner,
+  archivePath: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const result = await commands.run('unzip', ['-p', archivePath, 'module.json'], {
+    allowFailure: true,
+    timeoutMs: 15_000,
+    signal,
+  });
+  if (result.exitCode !== 0 || result.stdout.trim().length === 0) return undefined;
+  try {
+    const manifest = JSON.parse(result.stdout) as HarmonyArchiveModule;
+    const bundleName = manifest.app?.bundleName?.trim();
+    return bundleName || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Extracts the launchable page ability from `bm dump -n <bundle>`. */
 export function parseHarmonyLaunchTarget(rawOutput: string): HarmonyLaunchTarget | undefined {
   const dump = parseHarmonyBundleDump(rawOutput);
@@ -71,12 +93,13 @@ function parseHarmonyBundleDump(rawOutput: string): HarmonyBundleDump | undefine
 }
 
 export async function listHarmonyApps(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   filter: 'all' | 'user-installed',
   options: HarmonyAppListOptions = {},
 ): Promise<Array<{ package: string; name: string }>> {
   if (filter === 'all') {
-    const result = await runHarmonyShell(device, ['bm', 'dump', '-a'], {
+    const result = await hdc.runShell(device, ['bm', 'dump', '-a'], {
       timeoutMs: 15_000,
       signal: options.signal,
     });
@@ -90,12 +113,17 @@ export async function listHarmonyApps(
   );
   const signal = combineHarmonySignals(options.signal, deadlineController.signal);
   try {
-    const result = await runHarmonyShell(device, ['bm', 'dump', '-a'], {
+    const result = await hdc.runShell(device, ['bm', 'dump', '-a'], {
       timeoutMs: 15_000,
       signal,
     });
     const packages = parseHarmonyBundleList(result.stdout);
-    const userInstalledPackages = await listHarmonyUserInstalledPackages(device, packages, signal);
+    const userInstalledPackages = await listHarmonyUserInstalledPackages(
+      hdc,
+      device,
+      packages,
+      signal,
+    );
     return harmonyAppEntries(userInstalledPackages);
   } catch (error) {
     if (deadlineController.signal.aborted) {
@@ -121,6 +149,7 @@ function harmonyAppEntries(packages: string[]): Array<{ package: string; name: s
 }
 
 async function listHarmonyUserInstalledPackages(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   packages: string[],
   parentSignal: AbortSignal | undefined,
@@ -140,7 +169,7 @@ async function listHarmonyUserInstalledPackages(
         if (packageIndex >= packages.length) return;
         const bundleName = packages[packageIndex];
         if (!bundleName) return;
-        const result = await runHarmonyShell(device, ['bm', 'dump', '-n', bundleName], {
+        const result = await hdc.runShell(device, ['bm', 'dump', '-n', bundleName], {
           timeoutMs: 15_000,
           signal,
         });
@@ -216,6 +245,7 @@ function requireHarmonyAbilityName(ability: string): void {
 }
 
 export async function openHarmonyApp(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   bundleId: string,
   options?: { activity?: string; signal?: AbortSignal },
@@ -225,7 +255,7 @@ export async function openHarmonyApp(
     ? { ability: options.activity }
     : parseHarmonyLaunchTarget(
         (
-          await runHarmonyShell(device, ['bm', 'dump', '-n', bundleId], {
+          await hdc.runShell(device, ['bm', 'dump', '-n', bundleId], {
             signal: options?.signal,
             timeoutMs: 15_000,
           })
@@ -242,7 +272,7 @@ export async function openHarmonyApp(
   }
   const words: ShellWord[] = ['aa', 'start', '-a', launchTarget.ability, '-b', bundleId];
   if (launchTarget.module) words.push('-m', launchTarget.module);
-  const result = await runHarmonyShell(device, words, { signal: options?.signal });
+  const result = await hdc.runShell(device, words, { signal: options?.signal });
   if (!result.stdout.includes('start ability successfully')) {
     if (HARMONY_LOCKED_SCREEN_LAUNCH_ERROR.test(result.stdout)) {
       throw new AppError(
@@ -275,6 +305,7 @@ const HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS = 5_000;
  * budget closed unconfirmed, and `undefined` when the launched bundle held the foreground.
  */
 export async function pollHarmonyOpenForeground(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   bundleId: string,
   options: Readonly<{
@@ -295,6 +326,7 @@ export async function pollHarmonyOpenForeground(
     const remainingMs = deadlineAtMs - Date.now();
     if (remainingMs <= 0) break;
     const missionRead = await readHarmonyForegroundMission(
+      hdc,
       device,
       options.signal,
       Math.min(remainingMs, HARMONY_OPEN_FOREGROUND_READ_TIMEOUT_MS),
@@ -332,12 +364,13 @@ type HarmonyForegroundMissionRead =
   | { kind: 'failed' };
 
 async function readHarmonyForegroundMission(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   signal: AbortSignal | undefined,
   timeoutMs: number,
 ): Promise<HarmonyForegroundMissionRead> {
   try {
-    const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
+    const result = await hdc.runShell(device, ['aa', 'dump', '-l'], {
       signal,
       timeoutMs,
     });
@@ -358,6 +391,7 @@ async function readHarmonyForegroundMission(
  * --foreground` fails this open and a plain open carries the read beside its warning.
  */
 export async function verifyHarmonyOpenForeground(
+  hdc: HarmonyHdcRunner,
   input: OpenApplicationInput,
   outcome: OpenApplicationOutcome,
   device: DeviceInfo,
@@ -378,7 +412,7 @@ export async function verifyHarmonyOpenForeground(
           HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS,
           Math.max(0, requestDeadlineAtMs - Date.now()),
         );
-  const verification = await pollHarmonyOpenForeground(device, bundleId, { signal, pollBudgetMs });
+  const verification = await pollHarmonyOpenForeground(hdc, device, bundleId, { signal, pollBudgetMs });
   if (verification === undefined) return outcome;
   if (input.execution.foreground !== true) {
     return { ...outcome, timing: { ...outcome.timing, foregroundVerification: verification } };
@@ -435,7 +469,11 @@ function openForegroundHardFailure(
   );
 }
 
-export async function closeHarmonyApp(device: DeviceInfo, bundleId: string): Promise<void> {
-  await runHarmonyShell(device, ['aa', 'force-stop', bundleId]);
+export async function closeHarmonyApp(
+  hdc: HarmonyHdcRunner,
+  device: DeviceInfo,
+  bundleId: string,
+): Promise<void> {
+  await hdc.runShell(device, ['aa', 'force-stop', bundleId]);
   invalidateHarmonyGestureViewport(device);
 }

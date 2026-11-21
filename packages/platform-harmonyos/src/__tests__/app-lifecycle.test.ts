@@ -1,11 +1,9 @@
+import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { HarmonyHdcRunner } from '../hdc.ts';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn() };
-});
+import { createHarmonyHdcRunnerStub, createHarmonyHostStub } from '../toolbox.fixtures.ts';
 
 const { invalidateHarmonyGestureViewport } = vi.hoisted(() => ({
   invalidateHarmonyGestureViewport: vi.fn(),
@@ -25,12 +23,12 @@ import {
   parseHarmonyBundleList,
   parseHarmonyLaunchTarget,
   pollHarmonyOpenForeground,
+  resolveHarmonyArchiveBundleName,
   verifyHarmonyOpenForeground,
 } from '../app-lifecycle.ts';
-import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
-import { runCmd } from '@agent-device/host-kit/command';
 
-const mockRunCmd = vi.mocked(runCmd);
+const mockRunShell = vi.fn<HarmonyHdcRunner['runShell']>();
+const foregroundHdc = { ...createHarmonyHdcRunnerStub(), runShell: mockRunShell };
 
 const DEVICE = {
   platform: 'harmonyos' as const,
@@ -43,8 +41,8 @@ const DEVICE = {
 
 beforeEach(() => {
   vi.useRealTimers();
-  mockRunCmd.mockReset();
   invalidateHarmonyGestureViewport.mockReset();
+  mockRunShell.mockReset();
 });
 
 afterEach(() => {
@@ -82,43 +80,73 @@ test('parseHarmonyIsSystemApp reads Bundle Manager application metadata', () => 
   assert.equal(parseHarmonyIsSystemApp('bundle metadata unavailable'), undefined);
 });
 
-test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async () => {
-  mockRunCmd
-    .mockResolvedValueOnce({ exitCode: 0, stdout: 'com.example.application\n', stderr: '' })
-    .mockResolvedValueOnce({ exitCode: 0, stdout: 'start ability successfully', stderr: '' })
-    .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+test('resolveHarmonyArchiveBundleName reads module metadata through unzip on the host', async () => {
+  const stub = createHarmonyHostStub();
+  stub.answer({
+    stdout: JSON.stringify({ app: { bundleName: 'com.example.application' } }),
+  });
 
-  assert.deepEqual(await listHarmonyApps(DEVICE, 'all'), [
+  assert.equal(
+    await resolveHarmonyArchiveBundleName(stub.toolbox.commands, '/tmp/example.hap'),
+    'com.example.application',
+  );
+  assert.deepEqual(stub.commands[0], {
+    executable: 'unzip',
+    args: ['-p', '/tmp/example.hap', 'module.json'],
+    env: { PATH: '/usr/bin' },
+    timeoutMs: 15_000,
+    allowFailure: true,
+    signal: undefined,
+  });
+});
+
+test('resolveHarmonyArchiveBundleName forwards the binding signal to in-flight unzip', async () => {
+  const controller = new AbortController();
+  const stub = createHarmonyHostStub();
+
+  const pending = resolveHarmonyArchiveBundleName(
+    stub.toolbox.commands,
+    '/tmp/example.hap',
+    controller.signal,
+  );
+  await pending;
+
+  assert.equal(stub.commands[0]?.signal, controller.signal);
+});
+
+test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async () => {
+  const hdc = createHarmonyHdcRunnerStub([
+    { stdout: 'com.example.application\n' },
+    { stdout: 'start ability successfully' },
+    { stdout: '' },
+  ]);
+
+  assert.deepEqual(await listHarmonyApps(hdc, DEVICE, 'all'), [
     { package: 'com.example.application', name: 'application' },
   ]);
-  await openHarmonyApp(DEVICE, 'com.example.application', { activity: 'EntryAbility' });
-  await closeHarmonyApp(DEVICE, 'com.example.application');
+  await openHarmonyApp(hdc, DEVICE, 'com.example.application', { activity: 'EntryAbility' });
+  await closeHarmonyApp(hdc, DEVICE, 'com.example.application');
 
   assert.deepEqual(
-    mockRunCmd.mock.calls.map(([, args]) => args),
+    hdc.calls.map((call) => [call.kind, call.target, call.args]),
     [
-      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-a'],
+      ['runShell', 'harmony-1', ['bm', 'dump', '-a']],
       [
-        '-t',
+        'runShell',
         'harmony-1',
-        'shell',
-        'aa',
-        'start',
-        '-a',
-        'EntryAbility',
-        '-b',
-        'com.example.application',
+        ['aa', 'start', '-a', 'EntryAbility', '-b', 'com.example.application'],
       ],
-      ['-t', 'harmony-1', 'shell', 'aa', 'force-stop', 'com.example.application'],
+      ['runShell', 'harmony-1', ['aa', 'force-stop', 'com.example.application']],
     ],
   );
   assert.deepEqual(invalidateHarmonyGestureViewport.mock.calls, [[DEVICE], [DEVICE]]);
 });
 
 test('openHarmonyApp refuses an ability name outside the module grammar before any hdc call', async () => {
+  const hdc = createHarmonyHdcRunnerStub();
   for (const activity of ['Entry$(id)', 'Entry;reboot', 'Entry Ability', '1Entry', 'Entry"x', '']) {
     await assert.rejects(
-      () => openHarmonyApp(DEVICE, 'com.example.application', { activity }),
+      () => openHarmonyApp(hdc, DEVICE, 'com.example.application', { activity }),
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'INVALID_ARGS' &&
@@ -126,72 +154,52 @@ test('openHarmonyApp refuses an ability name outside the module grammar before a
         error.details?.ability === activity,
     );
   }
-  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(hdc.calls.length, 0);
 });
 
 test('HarmonyOS app listing filters user-installed bundles through Bundle Manager metadata', async () => {
-  mockRunCmd
-    .mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: 'com.example.application\ncom.ohos.settings\n',
-      stderr: '',
-    })
-    .mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: JSON.stringify({ applicationInfo: { isSystemApp: false } }),
-      stderr: '',
-    })
-    .mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: JSON.stringify({ applicationInfo: { isSystemApp: true } }),
-      stderr: '',
-    });
+  const hdc = createHarmonyHdcRunnerStub([
+    { stdout: 'com.example.application\ncom.ohos.settings\n' },
+    { stdout: JSON.stringify({ applicationInfo: { isSystemApp: false } }) },
+    { stdout: JSON.stringify({ applicationInfo: { isSystemApp: true } }) },
+  ]);
 
-  assert.deepEqual(await listHarmonyApps(DEVICE, 'user-installed'), [
+  assert.deepEqual(await listHarmonyApps(hdc, DEVICE, 'user-installed'), [
     { package: 'com.example.application', name: 'application' },
   ]);
   assert.deepEqual(
-    mockRunCmd.mock.calls.map(([, args]) => args),
+    hdc.calls.map((call) => call.args),
     [
-      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-a'],
-      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-n', 'com.example.application'],
-      ['-t', 'harmony-1', 'shell', 'bm', 'dump', '-n', 'com.ohos.settings'],
+      ['bm', 'dump', '-a'],
+      ['bm', 'dump', '-n', 'com.example.application'],
+      ['bm', 'dump', '-n', 'com.ohos.settings'],
     ],
   );
 });
 
 test('HarmonyOS app listing preserves the complete inventory for the all filter', async () => {
-  mockRunCmd.mockResolvedValueOnce({
-    exitCode: 0,
-    stdout: 'com.example.application\ncom.ohos.settings\n',
-    stderr: '',
-  });
+  const hdc = createHarmonyHdcRunnerStub([
+    { stdout: 'com.example.application\ncom.ohos.settings\n' },
+  ]);
 
-  assert.deepEqual(await listHarmonyApps(DEVICE, 'all'), [
+  assert.deepEqual(await listHarmonyApps(hdc, DEVICE, 'all'), [
     { package: 'com.example.application', name: 'application' },
     { package: 'com.ohos.settings', name: 'settings' },
   ]);
   assert.deepEqual(
-    mockRunCmd.mock.calls.map(([, args]) => args),
-    [['-t', 'harmony-1', 'shell', 'bm', 'dump', '-a']],
+    hdc.calls.map((call) => call.args),
+    [['bm', 'dump', '-a']],
   );
 });
 
 test('HarmonyOS user-installed app listing rejects bundles without a system-app classification', async () => {
-  mockRunCmd
-    .mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: 'com.example.application\n',
-      stderr: '',
-    })
-    .mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: JSON.stringify({ applicationInfo: {} }),
-      stderr: '',
-    });
+  const hdc = createHarmonyHdcRunnerStub([
+    { stdout: 'com.example.application\n' },
+    { stdout: JSON.stringify({ applicationInfo: {} }) },
+  ]);
 
   await assert.rejects(
-    () => listHarmonyApps(DEVICE, 'user-installed'),
+    () => listHarmonyApps(hdc, DEVICE, 'user-installed'),
     (error: unknown) => {
       assert(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -203,34 +211,30 @@ test('HarmonyOS user-installed app listing rejects bundles without a system-app 
 
 test('HarmonyOS user-installed app listing bounds metadata work and cancels queued work on failure', async () => {
   const packages = Array.from({ length: 6 }, (_, index) => `com.example.app${index + 1}`);
+  const hdc = createHarmonyHdcRunnerStub();
+  const metadataSignals: AbortSignal[] = [];
   let metadataCalls = 0;
-  const abortedSignals: AbortSignal[] = [];
-  mockRunCmd.mockImplementation(async (_command, args, options) => {
-    if (args.at(-1) === '-a') {
-      return { exitCode: 0, stdout: `${packages.join('\n')}\n`, stderr: '' } as Awaited<
-        ReturnType<typeof runCmd>
-      >;
+  hdc.runShell = async (_device, words, options) => {
+    if (words.at(-1) === '-a') {
+      return { stdout: `${packages.join('\n')}\n`, stderr: '', exitCode: 0 };
     }
-    metadataCalls++;
-    if (args.at(-1) === 'com.example.app4') {
-      return {
-        exitCode: 0,
-        stdout: JSON.stringify({ applicationInfo: {} }),
-        stderr: '',
-      } as Awaited<ReturnType<typeof runCmd>>;
+    metadataCalls += 1;
+    const bundle = words.at(-1);
+    if (bundle === 'com.example.app4') {
+      return { stdout: JSON.stringify({ applicationInfo: {} }), stderr: '', exitCode: 0 };
     }
     const signal = options?.signal;
     assert(signal);
-    abortedSignals.push(signal);
-    return await new Promise<Awaited<ReturnType<typeof runCmd>>>((_, reject) => {
+    metadataSignals.push(signal);
+    return await new Promise((_, reject) => {
       signal.addEventListener('abort', () => reject(new Error('metadata request aborted')), {
         once: true,
       });
     });
-  });
+  };
 
   await assert.rejects(
-    () => listHarmonyApps(DEVICE, 'user-installed'),
+    () => listHarmonyApps(hdc, DEVICE, 'user-installed'),
     (error: unknown) => {
       assert(error instanceof AppError);
       assert.match(
@@ -243,33 +247,39 @@ test('HarmonyOS user-installed app listing bounds metadata work and cancels queu
   );
 
   assert.equal(metadataCalls, 4);
-  assert.equal(abortedSignals.length, 3);
-  assert(abortedSignals.every((signal) => signal.aborted));
+  assert.equal(metadataSignals.length, 3);
+  assert(metadataSignals.every((signal) => signal.aborted));
 });
 
 test('HarmonyOS user-installed app listing aborts all metadata reads at its aggregate deadline', async () => {
   vi.useFakeTimers();
   const packages = Array.from({ length: 6 }, (_, index) => `com.example.app${index + 1}`);
-  let metadataCalls = 0;
+  const hdc = createHarmonyHdcRunnerStub();
   const metadataSignals: AbortSignal[] = [];
-  mockRunCmd.mockImplementation(async (_command, args, options) => {
-    if (args.at(-1) === '-a') {
-      return { exitCode: 0, stdout: `${packages.join('\n')}\n`, stderr: '' } as Awaited<
-        ReturnType<typeof runCmd>
-      >;
-    }
-    metadataCalls++;
+  let metadataCalls = 0;
+  hdc.runShell = async (_device, _words, options) => {
+    metadataCalls += 1;
     const signal = options?.signal;
     assert(signal);
     metadataSignals.push(signal);
-    return await new Promise<Awaited<ReturnType<typeof runCmd>>>((_, reject) => {
+    return await new Promise<never>((_, reject) => {
       signal.addEventListener('abort', () => reject(new Error('metadata request aborted')), {
         once: true,
       });
     });
-  });
+  };
+  // The bundle list itself is the first shell read; answer it and let the metadata reads hang.
+  const originalRunShell = hdc.runShell;
+  let first = true;
+  hdc.runShell = async (device, words, options) => {
+    if (first && words.at(-1) === '-a') {
+      first = false;
+      return { stdout: `${packages.join('\n')}\n`, stderr: '', exitCode: 0 };
+    }
+    return await originalRunShell(device, words, options);
+  };
 
-  const listing = listHarmonyApps(DEVICE, 'user-installed');
+  const listing = listHarmonyApps(hdc, DEVICE, 'user-installed');
   const listingError = listing.catch((error: unknown) => error);
   await vi.advanceTimersByTimeAsync(0);
   assert.equal(metadataCalls, 4);
@@ -285,21 +295,17 @@ test('HarmonyOS user-installed app listing aborts all metadata reads at its aggr
 });
 
 test('HarmonyOS launch resolves module metadata and reports missing launch data', async () => {
-  mockRunCmd
-    .mockResolvedValueOnce({
-      exitCode: 0,
+  const hdc = createHarmonyHdcRunnerStub([
+    {
       stdout: JSON.stringify({
         hapModuleInfos: [{ mainElementName: 'EntryAbility', moduleName: 'entry' }],
       }),
-      stderr: '',
-    })
-    .mockResolvedValueOnce({ exitCode: 0, stdout: 'start ability successfully', stderr: '' });
+    },
+    { stdout: 'start ability successfully' },
+  ]);
 
-  await openHarmonyApp(DEVICE, 'com.example.application');
-  assert.deepEqual(mockRunCmd.mock.calls[1]?.[1], [
-    '-t',
-    'harmony-1',
-    'shell',
+  await openHarmonyApp(hdc, DEVICE, 'com.example.application');
+  assert.deepEqual(hdc.calls[1]?.args, [
     'aa',
     'start',
     '-a',
@@ -310,12 +316,15 @@ test('HarmonyOS launch resolves module metadata and reports missing launch data'
     'entry',
   ]);
 
-  mockRunCmd.mockResolvedValueOnce({ exitCode: 0, stdout: 'not installed', stderr: '' });
-  await assert.rejects(() => openHarmonyApp(DEVICE, 'com.example.missing'), /launchable ability/);
+  hdc.answer({ stdout: 'not installed' });
+  await assert.rejects(
+    () => openHarmonyApp(hdc, DEVICE, 'com.example.missing'),
+    /launchable ability/,
+  );
 });
 
 test('openHarmonyApp classifies the locked-screen launch refusal as open-not-foreground', async () => {
-  mockRunCmd.mockResolvedValueOnce({
+  mockRunShell.mockResolvedValueOnce({
     exitCode: 0,
     stdout: [
       'error: failed to start ability.',
@@ -325,7 +334,7 @@ test('openHarmonyApp classifies the locked-screen launch refusal as open-not-for
   });
 
   await assert.rejects(
-    () => openHarmonyApp(DEVICE, 'com.example.application', { activity: 'EntryAbility' }),
+    () => openHarmonyApp(foregroundHdc, DEVICE, 'com.example.application', { activity: 'EntryAbility' }),
     (error: unknown) => {
       assert(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -347,20 +356,20 @@ function missionDump(packageName: string, state: string): string {
 }
 
 test('pollHarmonyOpenForeground confirms the launched bundle on the first foreground read', async () => {
-  mockRunCmd.mockResolvedValueOnce({
+  mockRunShell.mockResolvedValueOnce({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'FOREGROUND'),
     stderr: '',
   });
 
-  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application');
+  const read = await pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application');
 
   assert.equal(read, undefined);
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], ['-t', 'harmony-1', 'shell', 'aa', 'dump', '-l']);
+  assert.deepEqual(mockRunShell.mock.calls[0]?.[1], ['aa', 'dump', '-l']);
 });
 
 test('pollHarmonyOpenForeground keeps polling until the launched bundle holds the foreground', async () => {
-  mockRunCmd
+  mockRunShell
     .mockResolvedValueOnce({
       exitCode: 0,
       stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
@@ -373,22 +382,22 @@ test('pollHarmonyOpenForeground keeps polling until the launched bundle holds th
       stderr: '',
     });
 
-  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+  const read = await pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application', {
     pollIntervalMs: 1,
   });
 
   assert.equal(read, undefined);
-  assert.equal(mockRunCmd.mock.calls.length, 3);
+  assert.equal(mockRunShell.mock.calls.length, 3);
 });
 
 test('pollHarmonyOpenForeground names the app that kept the foreground when the launch never surfaces', async () => {
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
     stderr: '',
   });
 
-  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+  const read = await pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application', {
     pollBudgetMs: 60,
     pollIntervalMs: 10,
   });
@@ -397,13 +406,13 @@ test('pollHarmonyOpenForeground names the app that kept the foreground when the 
 });
 
 test('pollHarmonyOpenForeground classifies a mission list with no foreground mission as no-foreground', async () => {
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'BACKGROUND'),
     stderr: '',
   });
 
-  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+  const read = await pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application', {
     pollBudgetMs: 40,
     pollIntervalMs: 10,
   });
@@ -415,16 +424,16 @@ test('pollHarmonyOpenForeground classifies a mission list with no foreground mis
 
 test('a mission-less keyguard dump reads as no-foreground, not as a dead probe', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: 'User ID #100\n', stderr: '' });
-  const pending = pollHarmonyOpenForeground(DEVICE, 'com.example.application');
+  mockRunShell.mockResolvedValue({ exitCode: 0, stdout: 'User ID #100\n', stderr: '' });
+  const pending = pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application');
   await vi.advanceTimersByTimeAsync(HARMONY_OPEN_FOREGROUND_POLL_BUDGET_MS + 1_000);
   assert.deepEqual(await pending, { state: 'no-foreground' });
 });
 
 test('pollHarmonyOpenForeground reports probe-failed when every read fails', async () => {
-  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  mockRunShell.mockRejectedValue(new Error('hdc died mid-read'));
 
-  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+  const read = await pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application', {
     pollBudgetMs: 40,
     pollIntervalMs: 10,
   });
@@ -434,13 +443,13 @@ test('pollHarmonyOpenForeground reports probe-failed when every read fails', asy
 });
 
 test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps polling', async () => {
-  mockRunCmd.mockRejectedValueOnce(new Error('hdc died mid-read')).mockResolvedValueOnce({
+  mockRunShell.mockRejectedValueOnce(new Error('hdc died mid-read')).mockResolvedValueOnce({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'FOREGROUND'),
     stderr: '',
   });
 
-  const read = await pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+  const read = await pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application', {
     pollIntervalMs: 1,
   });
 
@@ -450,13 +459,13 @@ test('pollHarmonyOpenForeground treats a failed read as unconfirmed and keeps po
 test('pollHarmonyOpenForeground rejects when the request signal aborts mid-poll', async () => {
   const controller = new AbortController();
   const abortReason = new Error('request cancelled during the open foreground poll');
-  mockRunCmd.mockImplementation(async (_command, _args, options) => {
+  mockRunShell.mockImplementation(async (_device, _args, options) => {
     return await new Promise((_resolve, reject) => {
       options?.signal?.addEventListener('abort', () => reject(abortReason), { once: true });
     });
   });
 
-  const pending = pollHarmonyOpenForeground(DEVICE, 'com.example.application', {
+  const pending = pollHarmonyOpenForeground(foregroundHdc, DEVICE, 'com.example.application', {
     signal: controller.signal,
   });
   controller.abort(abortReason);
@@ -481,7 +490,7 @@ function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicati
 }
 
 test('verifyHarmonyOpenForeground passes a confirmed foreground outcome through unchanged', async () => {
-  mockRunCmd.mockResolvedValueOnce({
+  mockRunShell.mockResolvedValueOnce({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'FOREGROUND'),
     stderr: '',
@@ -489,6 +498,7 @@ test('verifyHarmonyOpenForeground passes a confirmed foreground outcome through 
   const outcome = { timing: {} };
 
   const verified = await verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput(),
     outcome,
     DEVICE,
@@ -500,12 +510,13 @@ test('verifyHarmonyOpenForeground passes a confirmed foreground outcome through 
 
 test('verifyHarmonyOpenForeground attaches the foreground read when the launch never surfaces', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
     stderr: '',
   });
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput(),
     { timing: {} },
     DEVICE,
@@ -522,12 +533,13 @@ test('verifyHarmonyOpenForeground attaches the foreground read when the launch n
 
 test('verifyHarmonyOpenForeground attaches no-foreground when a read answered with no foreground mission', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'BACKGROUND'),
     stderr: '',
   });
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput(),
     { timing: {} },
     DEVICE,
@@ -541,8 +553,9 @@ test('verifyHarmonyOpenForeground attaches no-foreground when a read answered wi
 
 test('verifyHarmonyOpenForeground fails --foreground with the unreadable reason when every read fails', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  mockRunShell.mockRejectedValue(new Error('hdc died mid-read'));
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { foreground: true } }),
     { timing: {} },
     DEVICE,
@@ -563,7 +576,7 @@ test('verifyHarmonyOpenForeground fails --foreground with the unreadable reason 
 });
 
 test('verifyHarmonyOpenForeground reports probe-failed without reading when the request deadline has no room left', async () => {
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'FOREGROUND'),
     stderr: '',
@@ -572,6 +585,7 @@ test('verifyHarmonyOpenForeground reports probe-failed without reading when the 
   // A deadline already in the past leaves the budget no room for one read:
   // the poll answers probe-failed at once instead of outliving the request.
   const verification = await verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { requestDeadlineAtMs: Date.now() - 1_000 } }),
     { timing: {} },
     DEVICE,
@@ -579,13 +593,14 @@ test('verifyHarmonyOpenForeground reports probe-failed without reading when the 
   );
 
   assert.deepEqual(verification.timing.foregroundVerification, { state: 'probe-failed' });
-  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(mockRunShell.mock.calls.length, 0);
 });
 
 test('a far deadline keeps the 5s window and the connection hint when every read fails', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  mockRunShell.mockRejectedValue(new Error('hdc died mid-read'));
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 60_000 } }),
     { timing: {} },
     DEVICE,
@@ -609,8 +624,9 @@ test('a far deadline keeps the 5s window and the connection hint when every read
 
 test('a partly clamped deadline keeps the computed window when every read fails', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  mockRunShell.mockRejectedValue(new Error('hdc died mid-read'));
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 2_000 } }),
     { timing: {} },
     DEVICE,
@@ -638,12 +654,13 @@ test('a partly clamped deadline keeps the computed window when every read fails'
 
 test('a partly clamped deadline names the deadline window on open-not-foreground', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.example.application', 'BACKGROUND'),
     stderr: '',
   });
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() + 2_000 } }),
     { timing: {} },
     DEVICE,
@@ -666,8 +683,9 @@ test('a partly clamped deadline names the deadline window on open-not-foreground
 });
 
 test('verifyHarmonyOpenForeground names the deadline, not the connection, when the clamp spent the budget', async () => {
-  mockRunCmd.mockRejectedValue(new Error('hdc died mid-read'));
+  mockRunShell.mockRejectedValue(new Error('hdc died mid-read'));
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { foreground: true, requestDeadlineAtMs: Date.now() - 1_000 } }),
     { timing: {} },
     DEVICE,
@@ -688,12 +706,13 @@ test('verifyHarmonyOpenForeground names the deadline, not the connection, when t
 
 test('verifyHarmonyOpenForeground fails the open when --foreground demands the foreground and the launch never surfaces', async () => {
   vi.useFakeTimers();
-  mockRunCmd.mockResolvedValue({
+  mockRunShell.mockResolvedValue({
     exitCode: 0,
     stdout: missionDump('com.ohos.launcher', 'FOREGROUND'),
     stderr: '',
   });
   const pending = verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ execution: { foreground: true } }),
     { timing: {} },
     DEVICE,
@@ -716,17 +735,19 @@ test('verifyHarmonyOpenForeground fails the open when --foreground demands the f
 
 test('verifyHarmonyOpenForeground skips verification without a bundle identity to verify', async () => {
   await verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ appBundleId: undefined }),
     { timing: {} },
     DEVICE,
     new AbortController().signal,
   );
   await verifyHarmonyOpenForeground(
+    foregroundHdc,
     openInput({ appBundleId: 'https://example.com' }),
     { timing: {} },
     DEVICE,
     new AbortController().signal,
   );
 
-  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(mockRunShell.mock.calls.length, 0);
 });
