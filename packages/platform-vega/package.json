@@ -1,7 +1,6 @@
 {
   "name": "@agent-device/vega",
   "version": "0.22.0-dev",
-  "private": true,
   "type": "module",
   "description": "Managed Vega platform plugin for agent-device.",
   "exports": {
