@@ -57,6 +57,9 @@ function createPluginHost(
       reapOwnedRecords: async () => {
         throw new Error('the Vega family never reaps host processes');
       },
+      withLock: async () => {
+        throw new Error('the Vega family takes no host lock');
+      },
     } satisfies PlatformHost['processes'],
     emitDiagnostic,
     withDiagnosticTimer,

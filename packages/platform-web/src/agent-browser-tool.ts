@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   createHostDirectoryLinkSync,
   ensureHostDirectorySync,
@@ -14,7 +13,6 @@ import {
   hostNodeExecutablePath,
   hostNodeVersion,
   hostPlatform,
-  hostProcessId,
 } from '@agent-device/host-kit/process';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -74,26 +72,15 @@ export async function setupManagedAgentBrowser(options: {
 }): Promise<AgentBrowserToolStatus> {
   const status = getManagedAgentBrowserStatus(managedStatusOptions(options));
   assertWebNodeSupported(status.nodeMajor);
-  const processId = hostProcessId();
 
-  return await withProcessLock({
-    acquire: async () =>
-      acquireProcessLock({
-        lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
-        owner: {
-          pid: processId,
-          // The host names this process's start time: the plugin's own copy of the process tool would
-          // read it outside the request's exec trace. A host that will not answer leaves `null`, which
-          // is the same unproven claim a failed local probe always left.
-          startTime:
-            (await options.toolbox.host.processes.readIdentityObservations([processId])).get(
-              processId,
-            )?.startTime ?? null,
-          acquiredAtMs: Date.now(),
-        },
-        timeoutMs: SETUP_TIMEOUT_MS,
-        description: 'managed agent-browser setup',
-      }),
+  // The install lock goes through the host: claiming it names this process's identity with a `ps`
+  // read, and every poll of a held or stale lock re-proves the recorded owner and the guard holder
+  // with another. Answered from the plugin's bundled copy those reads run with the daemon
+  // environment and trace into the bundle's own store, so the request that waited shows no wait.
+  return await options.toolbox.host.processes.withLock({
+    lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
+    timeoutMs: SETUP_TIMEOUT_MS,
+    description: 'managed agent-browser setup',
     task: async () => {
       const freshStatus = getManagedAgentBrowserStatus(managedStatusOptions(options));
       if (freshStatus.installed) return freshStatus;

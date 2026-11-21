@@ -38,6 +38,9 @@ function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
       reapOwnedRecords: async () => {
         throw new Error('this suite stands the reap in for');
       },
+      withLock: async () => {
+        throw new Error('this suite stands the install lock in for');
+      },
     } satisfies PlatformHost['processes'],
     emitDiagnostic,
     withDiagnosticTimer,

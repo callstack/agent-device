@@ -61,6 +61,7 @@ export {
   ownerIdentityMatches,
   type OwnerLiveness,
   readCurrentOwnerIdentity,
+  readCurrentOwnerIdentityAsync,
 } from './internal/owner-identity.ts';
 
 /** Observes actual executable paths. Missing entries are unknown, not proof of exit. */

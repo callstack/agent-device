@@ -100,6 +100,9 @@ function createHostProcessPort(): PlatformHost['processes'] {
     readExecutablePaths: async (pids) => await executablePathsMock([...pids], testHost),
     reapOwnedRecords: async (store, options) =>
       await reapOwnedProcessRecordsAtStartup(store, options),
+    withLock: async () => {
+      throw new Error('the lifecycle suite takes no host lock');
+    },
   };
 }
 

@@ -42,6 +42,9 @@ function createProcessPort(): PlatformHost['processes'] {
     reapOwnedRecords: async () => {
       throw new Error('the record probe never reaps');
     },
+    withLock: async () => {
+      throw new Error('the record probe takes no host lock');
+    },
   };
 }
 

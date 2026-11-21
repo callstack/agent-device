@@ -306,6 +306,44 @@ test('managed agent-browser setup gives the install lock back on every path out'
   }
 });
 
+test('managed agent-browser setup asks its host to hold the install lock', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-setup-host-lock-');
+  vi.stubEnv('npm_execpath', writeFakeNpmCliScript(stateDir));
+  try {
+    await withNodeRuntime({ version: '24.13.0' }, async () => {
+      const stub = createWebHostStub({ stateDir });
+      await withCommandExecutorOverride(
+        async (_cmd: string, args: readonly string[]) => {
+          if (args.includes('install') && args.includes('--prefix')) {
+            writeFakeManagedAgentBrowserPackage(stateDir);
+          }
+          return { stdout: '', stderr: '', exitCode: 0 };
+        },
+        async () =>
+          await setupManagedAgentBrowser({
+            stateDir,
+            toolbox: stub.toolbox,
+          }),
+      );
+
+      // One lock request, naming the install lock beside the managed package. Nothing here proves a
+      // `ps` was spawned: the plugin carries no process tool at all, so the only identity read a
+      // claim can make is the one the host answers inside the request.
+      const lockReads = stub.processReads.filter((read) => read.kind === 'lock');
+      assert.equal(lockReads.length, 1);
+      assert.deepEqual(lockReads[0], {
+        kind: 'lock',
+        pids: [],
+        lockDirPath: path.join(stateDir, 'tools', 'agent-browser', '.agent-browser-install.lock'),
+        timeoutMs: 5 * 60_000,
+        description: 'managed agent-browser setup',
+      });
+    });
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 function lockPathsUnder(directory: string): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name);

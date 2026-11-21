@@ -58,6 +58,7 @@ async function startStore(env: HostEnvironment['env']) {
         reapOwnedRecords: async () => {
           throw new Error('setup must not reap host processes');
         },
+        withLock: async (params) => await params.task(),
       },
       emitDiagnostic: () => {},
       withDiagnosticTimer: async (_phase, run) => await run(),

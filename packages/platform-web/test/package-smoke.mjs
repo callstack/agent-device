@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,6 +32,50 @@ function managedBackendEntrySource(logFile) {
     String.raw`process.stdout.write(JSON.stringify({ success: true, data: {} }) + "\n");`,
   ].join('\n');
 }
+
+/**
+ * A stand-in for npm on `PATH`. It answers only the managed-backend install — the plugin's own
+ * `npm install --prefix <root> agent-browser@<version>` — by writing the package tree that install
+ * leaves behind, and defers every other npm call to the real npm, so installing the packed plugin
+ * through the CLI keeps working.
+ */
+function npmFixtureSource(realNpm) {
+  return [
+    '#!/bin/sh',
+    'managed=0',
+    'for a in "$@"; do',
+    '  case "$a" in agent-browser@*) managed=1 ;; esac',
+    'done',
+    `if [ "$managed" != 1 ]; then exec ${JSON.stringify(realNpm)} "$@"; fi`,
+    'prefix=""',
+    'next=0',
+    'for a in "$@"; do',
+    '  if [ "$next" = 1 ]; then prefix="$a"; next=0; fi',
+    '  if [ "$a" = "--prefix" ]; then next=1; fi',
+    'done',
+    'if [ -z "$prefix" ]; then exit 1; fi',
+    'mkdir -p "$prefix/node_modules/agent-browser/dist" "$prefix/node_modules/.bin"',
+    String.raw`printf 'process.exit(0)\n' > "$prefix/node_modules/agent-browser/dist/cli.js"`,
+    String.raw`printf '#!/bin/sh\nexit 0\n' > "$prefix/node_modules/.bin/agent-browser"`,
+    'chmod 755 "$prefix/node_modules/.bin/agent-browser"',
+    'printf \'{"name":"agent-browser","version":"0.39.0","bin":{"agent-browser":"./dist/cli.js"}}\' > "$prefix/node_modules/agent-browser/package.json"',
+    'exit 0',
+  ].join('\n');
+}
+
+/**
+ * The `--debug` records one CLI run printed to its own stderr: `--json` keeps stdout as the reply
+ * alone. A run the CLI answers in process never reaches the daemon's request files, so this stream is
+ * that request's whole trace.
+ */
+function debugRecordsOf(stderr) {
+  return stderr
+    .split('\n')
+    .filter((line) => line.startsWith(DEBUG_RECORD_PREFIX))
+    .map((line) => JSON.parse(line.slice(DEBUG_RECORD_PREFIX.length)));
+}
+
+const DEBUG_RECORD_PREFIX = '[agent-device][diag] ';
 
 /**
  * The records one `--debug` request wrote, read back from the request records the daemon keeps under
@@ -136,6 +180,70 @@ test('packed core discovers web only after the managed platform is installed', (
     );
     const plugins = runCli(0, 'daemon', 'status').data.plugins;
     assert.ok(plugins.some((plugin) => plugin.platform === 'web' && plugin.state === 'active'));
+
+    // The install lock, on the state dir a managed install has not yet touched. Claiming the lock
+    // names this process's identity with a process-tool read, and the packed plugin carries no
+    // process tool to make that read with (asserted below), so the host has to answer it — and the
+    // `--debug` reply proves the host traced it into the request that asked for the install.
+    // POSIX only: the npm stand-in below is a shell script.
+    if (process.platform !== 'win32') {
+      const bundleDir = path.join(
+        env.AGENT_DEVICE_HOME,
+        'plugins',
+        runCli(0, 'plugins', 'list').data.plugins[0].installation,
+        'node_modules',
+        '@agent-device',
+        'web',
+        'dist',
+      );
+      const bundle = fs
+        .readdirSync(bundleDir)
+        .filter((file) => file.endsWith('.mjs'))
+        .map((file) => [file, fs.readFileSync(path.join(bundleDir, file), 'utf8')]);
+      assert.ok(bundle.length > 0, `no packed plugin chunks under ${bundleDir}`);
+      assert.deepEqual(
+        bundle.filter(([, source]) => source.includes('node:child_process')).map(([file]) => file),
+        [],
+        'the packed web plugin must carry no process tool of its own',
+      );
+
+      const binDir = path.join(scratch, 'bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(binDir, 'npm'),
+        npmFixtureSource(execFileSync('which', ['npm'], { env, encoding: 'utf8' }).trim()),
+        { mode: 0o755 },
+      );
+      // `--debug` with no log file streams the request's records to stderr, `--json` keeping stdout
+      // as the reply alone. A managed install is answered in the CLI's own process, so this stream is
+      // that request's whole exec trace.
+      const setup = spawnSync(
+        process.execPath,
+        ['node_modules/agent-device/bin/agent-device.mjs', 'web', 'setup', '--json', '--debug'],
+        {
+          cwd: scratch,
+          env: { ...env, PATH: `${binDir}:${env.PATH}` },
+          encoding: 'utf8',
+          timeout: 300_000,
+        },
+      );
+      const setupRecords = debugRecordsOf(String(setup.stderr ?? ''));
+      assert.equal(setup.status, 0, `web setup failed: ${String(setup.stdout).slice(0, 400)}`);
+      const setupSpawns = setupRecords
+        .filter((record) => record.phase === 'exec_command' && record.data?.event === 'spawn')
+        .map((record) => record.data.command);
+      assert.ok(
+        setupSpawns.includes('ps'),
+        `the setup request traced no process-tool read out of ${setupRecords.length} records: ${JSON.stringify(
+          setupSpawns,
+        )}`,
+      );
+      assert.ok(
+        setupSpawns.some((command) => command === 'npm' || command === 'node'),
+        `the setup request traced no managed-backend install: ${JSON.stringify(setupSpawns)}`,
+      );
+    }
+
     const install = installFakeManagedAgentBrowser(storeRoot);
     assert.equal(runCli(0, 'web', 'doctor').data.status.installed, true);
 

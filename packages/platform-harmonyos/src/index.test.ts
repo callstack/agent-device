@@ -51,6 +51,9 @@ function createPluginHost(
       reapOwnedRecords: async () => {
         throw new Error('the HarmonyOS family never reaps host processes');
       },
+      withLock: async () => {
+        throw new Error('the HarmonyOS family takes no host lock');
+      },
     } satisfies PlatformHost['processes'],
     emitDiagnostic,
     withDiagnosticTimer,

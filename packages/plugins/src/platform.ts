@@ -190,6 +190,26 @@ export type PlatformHostProcesses = Readonly<{
       killTimeoutMs?: number;
     },
   ): Promise<OwnedProcessReapSummary>;
+  /**
+   * Runs `task` while the host holds the process lock at `lockDirPath`, and answers the lock's own
+   * questions — which process owns the claim, and whether that owner is still that process — from the
+   * host's copy of the lock mechanics.
+   *
+   * A lock is not a file write: claiming one names this process's identity with a process-tool read,
+   * and every poll of a held or stale lock re-proves the recorded owner and the guard holder with
+   * another. Run from the plugin's bundled copy, those reads answer with the daemon process
+   * environment and trace into the bundle's own store, so the request that waited shows no wait. The
+   * host is the process that takes the claim, so it names its own identity rather than being told it.
+   */
+  withLock<T>(params: {
+    /** The lock directory the host creates, holds and removes. */
+    lockDirPath: string;
+    /** How long the plugin will wait for a claim it cannot take; the host owns the poll. */
+    timeoutMs: number;
+    /** Names this lock in a timeout or an unverified release, in the request's log. */
+    description?: string;
+    task: () => Promise<T>;
+  }): Promise<T>;
 }>;
 
 export type PlatformSetup<Family extends Platform = Platform> = Family extends Platform

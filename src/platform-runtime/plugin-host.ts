@@ -107,6 +107,25 @@ function createPlatformPluginProcessPort(host: HostEnvironment): PlatformHost['p
       const { reapOwnedProcessRecordsAtStartup } = await import('@agent-device/host-kit/process');
       return await reapOwnedProcessRecordsAtStartup(store, options);
     },
+    // The claim is this process's own, so the lock names this process's identity itself: a plugin
+    // that brought its own copy would read that identity with its own process tool and trace the
+    // wait into its own store, which is where a held install lock goes missing from `--debug`.
+    // The async form is the one the request sees: it runs `ps` through the command host, which is
+    // what traces the identity read, where the synchronous probe's `spawnSync` never appears.
+    withLock: async (params) => {
+      const { acquireProcessLock, withProcessLock } = await import('@agent-device/host-kit/file');
+      const { readCurrentOwnerIdentityAsync } = await import('@agent-device/host-kit/process');
+      return await withProcessLock({
+        acquire: async () =>
+          await acquireProcessLock({
+            lockDirPath: params.lockDirPath,
+            owner: { ...(await readCurrentOwnerIdentityAsync()), acquiredAtMs: Date.now() },
+            timeoutMs: params.timeoutMs,
+            ...(params.description === undefined ? {} : { description: params.description }),
+          }),
+        task: params.task,
+      });
+    },
   });
 }
 

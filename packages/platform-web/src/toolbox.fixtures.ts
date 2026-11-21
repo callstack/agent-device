@@ -36,6 +36,13 @@ export type WebHostStubProcessRead = Readonly<
       store: OwnedProcessRecordStore;
       options: Parameters<PlatformHost['processes']['reapOwnedRecords']>[1];
     }
+  | {
+      kind: 'lock';
+      pids: [];
+      lockDirPath: string;
+      timeoutMs: number;
+      description: string | undefined;
+    }
 >;
 
 /** Every process read the plugin asked its host to make, in order. */
@@ -129,6 +136,18 @@ export function createWebHostStub(
     reapOwnedRecords: async (store, options) => {
       processReads.push({ kind: 'reap', pids: [], store, options });
       return answered.reap ?? EMPTY_REAP_SUMMARY;
+    },
+    // The stub runs the task inline: one test process cannot contend with itself for a lock, and what a
+    // test needs to see is that the plugin asked its host to hold it.
+    withLock: async (params) => {
+      processReads.push({
+        kind: 'lock',
+        pids: [],
+        lockDirPath: params.lockDirPath,
+        timeoutMs: params.timeoutMs,
+        description: params.description,
+      });
+      return await params.task();
     },
   };
   const host = Object.freeze({

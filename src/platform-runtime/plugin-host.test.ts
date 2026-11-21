@@ -182,6 +182,43 @@ test('the platform plugin host stops a recorded process it is asked to reap', as
   expect(tracedCommands(logPath)).toContain('ps');
 });
 
+// The managed web install lock is the other place a plugin would otherwise take a claim with its own
+// copy of the lock mechanics: naming an owner reads this process's birth time through the process tool,
+// and every poll of a held lock re-proves the recorded owner and the guard holder with another. Answered
+// here, both the claim and the wait land in the request's exec trace.
+test('the platform plugin host holds a lock and names this process as its owner', async () => {
+  const root = mkdtempForTestSync('plugin-host-lock-');
+  const logPath = path.join(root, 'events.ndjson');
+  const lockDirPath = path.join(root, 'install', '.agent-browser-install.lock');
+  const host = createPlatformPluginHost(createLiveTestHostEnvironment(), root);
+
+  let ownerWhileHeld: { pid: number; startTime: string | null } | undefined;
+  const result = await withDiagnosticsScope(
+    { command: 'open', debug: true, logPath },
+    async () =>
+      await host.processes.withLock({
+        lockDirPath,
+        timeoutMs: 5_000,
+        description: 'managed agent-browser setup',
+        task: async () => {
+          // The claim is standing, and it names this process by the identity only a host read gives.
+          ownerWhileHeld = JSON.parse(
+            fs.readFileSync(path.join(lockDirPath, 'owner.json'), 'utf8'),
+          ) as { pid: number; startTime: string | null };
+          return 'task result';
+        },
+      }),
+  );
+
+  expect(result).toBe('task result');
+  expect(ownerWhileHeld?.pid).toBe(process.pid);
+  expect(ownerWhileHeld?.startTime).toBeTruthy();
+  // A released lock leaves no claim standing for the next caller to wait on.
+  expect(fs.existsSync(lockDirPath)).toBe(false);
+  // The owner identity read is a `ps`, traced by the host that took the claim.
+  expect(tracedCommands(logPath)).toContain('ps');
+});
+
 /** The commands one debug run traced, in the order the request saw them. */
 function tracedCommands(logPath: string): string[] {
   if (!fs.existsSync(logPath)) return [];
