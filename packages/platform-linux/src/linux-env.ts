@@ -12,9 +12,7 @@ import type {
   LinuxToolProvider,
 } from '@agent-device/contracts/linux-tool-provider';
 
-export async function ensureInputTool(
-  provider: LinuxToolProvider,
-): Promise<LinuxInputSelection> {
+export async function ensureInputTool(provider: LinuxToolProvider): Promise<LinuxInputSelection> {
   const display = provider.display.detectDisplayServer();
 
   if (display === 'wayland') {

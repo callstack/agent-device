@@ -127,11 +127,7 @@ async function clickLinuxButton(
   await clickButton(provider, x, y, xdoBtn, ydoCode);
 }
 
-export async function pressLinux(
-  provider: LinuxToolProvider,
-  x: number,
-  y: number,
-): Promise<void> {
+export async function pressLinux(provider: LinuxToolProvider, x: number, y: number): Promise<void> {
   await clickLinuxButton(provider, x, y, 'primary', '1', '0xC0');
 }
 
@@ -196,11 +192,7 @@ export async function longPressLinux(
   }
 }
 
-export async function focusLinux(
-  provider: LinuxToolProvider,
-  x: number,
-  y: number,
-): Promise<void> {
+export async function focusLinux(provider: LinuxToolProvider, x: number, y: number): Promise<void> {
   await pressLinux(provider, x, y);
 }
 

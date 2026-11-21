@@ -52,7 +52,10 @@ test('fillLinux deletes the select-all selection for an empty text', async () =>
 
   const args = calls(stub).map(([, a]) => a as string[]);
   assert.ok(args.some((a) => a.includes('BackSpace')));
-  assert.equal(args.some((a) => a.includes('type')), false);
+  assert.equal(
+    args.some((a) => a.includes('type')),
+    false,
+  );
 });
 
 test('scrollLinux preserves the xdotool repeat count for non-paced scroll', async () => {
@@ -87,7 +90,10 @@ test('sendKey uses ydotool with scancodes', async () => {
 
   assert.ok(
     calls(stub).some(
-      ([cmd, args]) => cmd === 'ydotool' && (args as string[]).includes('key') && (args as string[]).includes('56:1'),
+      ([cmd, args]) =>
+        cmd === 'ydotool' &&
+        (args as string[]).includes('key') &&
+        (args as string[]).includes('56:1'),
     ),
   );
 });
@@ -98,7 +104,10 @@ test('typeLinux uses ydotool type', async () => {
 
   assert.ok(
     calls(stub).some(
-      ([cmd, args]) => cmd === 'ydotool' && (args as string[]).includes('type') && (args as string[]).includes('hello'),
+      ([cmd, args]) =>
+        cmd === 'ydotool' &&
+        (args as string[]).includes('type') &&
+        (args as string[]).includes('hello'),
     ),
   );
 });

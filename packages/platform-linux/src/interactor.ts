@@ -44,10 +44,7 @@ export function createLinuxInteractor(
   );
 }
 
-function createLinuxInteractorBody(
-  toolbox: LinuxToolbox,
-  own: LinuxToolProvider,
-): Interactor {
+function createLinuxInteractorBody(toolbox: LinuxToolbox, own: LinuxToolProvider): Interactor {
   // Resolved per method rather than once at construction: the request scope is entered for the
   // method, and its provider is the one that must answer.
   const running = () => resolveLinuxToolProvider(own);

@@ -146,7 +146,10 @@ test('the toolchain check probes the host the plugin was set up with', async () 
   assert.equal(check.id, 'toolchain');
   assert.equal(check.status, 'pass');
   // The probe is the host's, over the host PATH, for the tools the X11 session needs.
-  assert.deepEqual(probed, tools.map((tool) => `/opt/tools/${tool}`));
+  assert.deepEqual(
+    probed,
+    tools.map((tool) => `/opt/tools/${tool}`),
+  );
 });
 
 test('the toolchain check reports the tools the host is missing', async () => {

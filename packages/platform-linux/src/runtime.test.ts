@@ -62,7 +62,12 @@ test.each([
   },
   {
     name: 'synthetic emulator',
-    device: { ...LINUX_DEVICE, id: 'linux-emulator', name: 'Linux emulator', kind: 'emulator' as const },
+    device: {
+      ...LINUX_DEVICE,
+      id: 'linux-emulator',
+      name: 'Linux emulator',
+      kind: 'emulator' as const,
+    },
     legacy: {
       openTarget: false,
       prepareAppleRunner: false,
@@ -73,7 +78,12 @@ test.each([
   },
   {
     name: 'synthetic simulator',
-    device: { ...LINUX_DEVICE, id: 'linux-simulator', name: 'Linux simulator', kind: 'simulator' as const },
+    device: {
+      ...LINUX_DEVICE,
+      id: 'linux-simulator',
+      name: 'Linux simulator',
+      kind: 'simulator' as const,
+    },
     legacy: {
       openTarget: false,
       prepareAppleRunner: false,

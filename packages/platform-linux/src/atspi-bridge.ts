@@ -11,10 +11,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { hostPlatform } from '@agent-device/host-kit/process';
-import type {
-  LinuxAccessibilityProvider,
-  LinuxSnapshotSurface,
-} from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxAccessibilityProvider } from '@agent-device/contracts/linux-tool-provider';
 import { normalizeAtspiRole } from './role-map.ts';
 import type { LinuxCommandRunner } from './command-runner.ts';
 import { resolveLinuxAtspiScriptPath } from './atspi-script.ts';
@@ -46,12 +43,6 @@ type PythonResult = {
   truncated: boolean;
   surface: string;
   error?: string;
-};
-
-export type LinuxAccessibilityTree = {
-  nodes: RawSnapshotNode[];
-  truncated: boolean;
-  surface: LinuxSnapshotSurface;
 };
 
 export function createLinuxAccessibilityProvider(

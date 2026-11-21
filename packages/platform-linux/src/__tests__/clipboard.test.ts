@@ -25,7 +25,10 @@ const WAYLAND_CLIPBOARD = ['wl-paste', 'wl-copy'];
 test('readLinuxClipboard uses xclip on X11', async () => {
   const stub = stubFor('x11', ['xclip']);
 
-  assert.equal(await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)), 'clipboard content');
+  assert.equal(
+    await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)),
+    'clipboard content',
+  );
   const command = stub.commands[0]!;
   assert.equal(command.executable, 'xclip');
   assert.deepEqual(command.args, ['-selection', 'clipboard', '-o']);
@@ -35,7 +38,10 @@ test('readLinuxClipboard uses xclip on X11', async () => {
 test('readLinuxClipboard falls back to xsel on X11', async () => {
   const stub = stubFor('x11', ['xsel']);
 
-  assert.equal(await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)), 'clipboard content');
+  assert.equal(
+    await readLinuxClipboard(createLinuxToolProvider(stub.toolbox)),
+    'clipboard content',
+  );
   assert.equal(stub.commands[0]?.executable, 'xsel');
 });
 

@@ -86,9 +86,7 @@ export async function withLinuxToolProvider<T>(
   return await linuxToolProviderScope.run(provider, fn);
 }
 
-export function createLinuxDesktopProvider(
-  commands: LinuxToolbox['commands'],
-): LinuxDesktopProvider {
+function createLinuxDesktopProvider(commands: LinuxToolbox['commands']): LinuxDesktopProvider {
   return {
     async openTarget(target) {
       if (target.includes('://') || target.startsWith('/')) {
@@ -125,7 +123,7 @@ export function createLinuxDesktopProvider(
   };
 }
 
-export function createLinuxClipboardProvider(
+function createLinuxClipboardProvider(
   commands: LinuxToolbox['commands'],
   display: LinuxToolProvider['display'],
 ): LinuxClipboardProvider {
@@ -143,7 +141,7 @@ export function createLinuxClipboardProvider(
   };
 }
 
-export function createLinuxScreenshotProvider(
+function createLinuxScreenshotProvider(
   commands: LinuxToolbox['commands'],
   display: LinuxToolProvider['display'],
 ): LinuxScreenshotProvider {

@@ -48,7 +48,10 @@ test('snapshotLinux falls back to desktop for the unsupported menubar surface', 
 
   await snapshotLinux(stub.toolbox, provider, 'menubar');
 
-  assert.deepEqual(captures.map(([surface]) => surface), ['desktop']);
+  assert.deepEqual(
+    captures.map(([surface]) => surface),
+    ['desktop'],
+  );
   // The fallback is reported through the host, so `--debug` says why the capture is the whole desktop.
   assert.deepEqual(stub.diagnostics, [
     {
