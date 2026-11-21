@@ -154,3 +154,33 @@ async function xcodebuildIntoSymroot(_command: string, args: string[]): Promise<
   );
   return { exitCode: 0, stdout: '', stderr: '' };
 }
+
+test('a reuse whose tree is gone when it is stamped builds a fresh tree', async () => {
+  withoutRunnerDerivedPathEnv();
+  const cached = removeCacheEntryAfterTest(await ensureXctestrunArtifact(IOS_SIMULATOR, {}));
+  failNextTreeStamp('ENOENT');
+
+  const next = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
+
+  assert.equal(next.artifact, 'rebuilt');
+  assert.notEqual(path.dirname(next.xctestrunPath), path.dirname(cached.xctestrunPath));
+});
+
+test('a reuse whose tree another user owns is still reused', async () => {
+  withoutRunnerDerivedPathEnv();
+  const cached = removeCacheEntryAfterTest(await ensureXctestrunArtifact(IOS_SIMULATOR, {}));
+  failNextTreeStamp('EPERM');
+
+  const next = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
+
+  assert.equal(next.artifact, 'valid');
+  assert.equal(next.xctestrunPath, cached.xctestrunPath);
+});
+
+/** The next resolution stamp fails with `code`, as `utimes` does on a gone or foreign tree. */
+function failNextTreeStamp(code: string): void {
+  const stamp = vi.spyOn(fs, 'utimesSync').mockImplementationOnce(() => {
+    throw Object.assign(new Error(`${code}: utimes`), { code });
+  });
+  onTestFinished(() => stamp.mockRestore());
+}

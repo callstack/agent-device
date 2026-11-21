@@ -32,7 +32,7 @@ import {
   assertSafeDerivedCleanup,
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
-  markRunnerTreeResolved,
+  stampRunnerTreeResolved,
   emitRunnerXctestrunDecision,
   emitRunnerXctestrunRebuildDecision,
   evaluateExistingXctestrun,
@@ -608,7 +608,7 @@ async function ensureXctestrunUnderCacheLock(params: {
     existing,
     cache,
   });
-  if (reusable) return markRunnerTreeResolved(reusable);
+  if (reusable) return reusable;
   if (existing.reason !== 'reuse_ready') {
     emitRunnerXctestrunRebuildDecision(existing, derived);
   }
@@ -619,17 +619,15 @@ async function ensureXctestrunUnderCacheLock(params: {
     assertSafeDerivedCleanup(derived);
     await cleanRunnerDerivedArtifacts(derived);
   }
-  return markRunnerTreeResolved(
-    await buildXctestrunArtifact({
-      device,
-      options,
-      projectRoot,
-      expectedCacheMetadata,
-      derived,
-      cache,
-      reason: existing.reason,
-    }),
-  );
+  return await buildXctestrunArtifact({
+    device,
+    options,
+    projectRoot,
+    expectedCacheMetadata,
+    derived,
+    cache,
+    reason: existing.reason,
+  });
 }
 
 async function resolveReusableXctestrunArtifact(params: {
@@ -720,6 +718,7 @@ async function buildXctestrunArtifact(params: {
     derived,
     [built, ...builtProductPaths],
   );
+  stampRunnerTreeResolved(built);
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -773,6 +772,13 @@ async function tryReuseExistingXctestrun(
       ),
       derived,
     );
+    if (!stampRunnerTreeResolved(existing.xctestrunPath)) {
+      emitRunnerXctestrunDecision('rebuild', 'tree_missing', {
+        derived,
+        xctestrunPath: existing.xctestrunPath,
+      });
+      return null;
+    }
     emitRunnerXctestrunDecision('reuse', 'reuse_ready', {
       derived,
       xctestrunPath: existing.xctestrunPath,
