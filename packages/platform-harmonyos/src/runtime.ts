@@ -46,10 +46,12 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
 import { createHarmonyPerfOperations } from './perf/runtime.ts';
 import {
+  createHarmonyRecordingHost,
   createHarmonyScreenRecordingOperations,
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
 import { readHarmonyAppState } from './app-state.ts';
+import type { HarmonyToolbox } from './toolbox.ts';
 import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 import {
   createHarmonyAppDeploymentOperations,
@@ -178,8 +180,11 @@ const audioProbeUnavailable = unavailableFact(
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
 
-export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
-  const appLogs = createHarmonyAppLogRuntime(host);
+export function createHarmonyPlatformRuntime(
+  host: PlatformRuntimeHost,
+  toolbox: HarmonyToolbox,
+): PlatformRuntimeOwner {
+  const appLogs = createHarmonyAppLogRuntime(host, toolbox);
   const inspectFacts = async (device: Parameters<typeof appLogs.inspectFacts>[0]) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = harmonyAppDeploymentFacts(device);
@@ -314,20 +319,20 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         operations: Object.freeze({
           ...logs.operations,
           ...createHarmonyAppDeploymentOperations({
-            commands: host.commands,
+            toolbox,
             device: request.device,
             signal: request.scope.signal,
           }),
           ...(facts.operations.appState.available
             ? {
                 appState: async () =>
-                  await readHarmonyAppState(request.device, request.scope.signal),
+                  await readHarmonyAppState(toolbox.hdc, request.device, request.scope.signal),
               }
             : {}),
           ensureReady: async () => ({ ...request.device, booted: true }),
           ...(recordingFacts.available
             ? createHarmonyScreenRecordingOperations({
-                host,
+                host: createHarmonyRecordingHost(host, toolbox),
                 device: request.device,
                 owner,
                 signal: request.scope.signal,
@@ -351,7 +356,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           }),
           ...whenAdmitted(facts.operations.perfFrames, () =>
             createHarmonyPerfOperations({
-              resolveHost: () => host.perf.harmony,
+              hdc: toolbox.hdc,
               device: request.device,
             }),
           ),
@@ -359,7 +364,9 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             request.scope.signal.throwIfAborted();
             const { listHarmonyApps } = await import('./app-lifecycle.ts');
             return (
-              await listHarmonyApps(input.device, input.filter, { signal: request.scope.signal })
+              await listHarmonyApps(toolbox.hdc, input.device, input.filter, {
+                signal: request.scope.signal,
+              })
             ).map((app) => ({ id: app.package, name: app.name }));
           },
           ...availableApplicationLifecycleOperations(

@@ -59,6 +59,15 @@ const EXCLUDED_IMPLEMENTATIONS = [
     paths: [/(?:^|\/)platform-vega\//, /^dist\/src\/vega-.*\.js$/],
     markers: ['vega-adapter-host-unbound', 'Install Vega Developer Tools'],
   },
+  {
+    owner: 'harmonyos platform',
+    paths: [/(?:^|\/)platform-harmonyos\//],
+    markers: [
+      'Install HarmonyOS Command Line Tools',
+      'hdc not found in PATH',
+      'harmony-screen-recorder',
+    ],
+  },
 ] as const;
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

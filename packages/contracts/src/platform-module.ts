@@ -186,11 +186,15 @@ export type AppDeviceResolver = (
 ) => Promise<DeviceInfo | undefined>;
 
 /** A family module gains this interface only with an honest package-owned source. */
-/** A family module receives only the host authority its inventory mechanics need. */
+/**
+ * A family module receives only the host authority its inventory mechanics need. A family whose
+ * authority is `never` owns its host — a plugin that runs its own tools through the host it was set
+ * up with — and so loads with nothing from the core.
+ */
 export type InventoryPlatformModule<Family extends Platform = Platform> = Family extends Platform
   ? PlatformModuleMetadata &
       Readonly<
-        Family extends 'web'
+        [DeviceInventoryHostFor<Family>] extends [never]
           ? {
               family: Family;
               loadInventory(): Promise<DeviceInventorySource>;

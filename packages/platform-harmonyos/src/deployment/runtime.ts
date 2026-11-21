@@ -5,14 +5,18 @@ import type {
   AppUninstallInput,
   AppUninstallResult,
 } from '@agent-device/contracts/app-deployment-runtime';
-import type { HostCommandRunner } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/command';
-import { parseHarmonyBundleList, parseHarmonyLaunchTarget } from '../app-lifecycle.ts';
+import {
+  parseHarmonyBundleList,
+  parseHarmonyLaunchTarget,
+  resolveHarmonyArchiveBundleName,
+} from '../app-lifecycle.ts';
 import { setTimeout as sleep } from 'node:timers/promises';
+import type { HarmonyToolbox } from '../toolbox.ts';
+import type { HarmonyHdcRunner } from '../hdc.ts';
+import type { HarmonyCommandResult } from '../command-host.ts';
 
 const available = Object.freeze({ available: true } as const);
 const unsupportedKind = Object.freeze({
@@ -43,29 +47,30 @@ export function harmonyAppDeploymentFacts(device: DeviceInfo): Readonly<{
 }
 
 export function createHarmonyAppDeploymentOperations(params: {
-  commands: HostCommandRunner;
+  toolbox: HarmonyToolbox;
   device: DeviceInfo;
   signal: AbortSignal;
 }): Partial<AppDeploymentRuntimeOperations> {
   const facts = harmonyAppDeploymentFacts(params.device);
+  const { toolbox, device, signal } = params;
   return Object.freeze({
     ...(facts.deployApp.available
       ? {
           deployApp: async (input: AppDeploymentInput) =>
-            await deployHarmonyApp(params.commands, params.device, input, params.signal),
+            await deployHarmonyApp(toolbox, device, input, signal),
         }
       : {}),
     ...(facts.uninstallApp.available
       ? {
           uninstallApp: async (input: AppUninstallInput) =>
-            await uninstallHarmonyApp(params.commands, params.device, input, params.signal),
+            await uninstallHarmonyApp(toolbox.hdc, device, input, signal),
         }
       : {}),
   });
 }
 
 async function uninstallHarmonyApp(
-  commands: HostCommandRunner,
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   input: AppUninstallInput,
   signal: AbortSignal,
@@ -76,16 +81,11 @@ async function uninstallHarmonyApp(
       hint: 'Pass the bundle name reported by bm dump, such as com.example.app.',
     });
   }
-  if (!(await readBundleInventory(commands, device, signal)).includes(bundleId)) {
+  if (!(await readBundleInventory(hdc, device, signal)).includes(bundleId)) {
     return { wasInstalled: false };
   }
-  const uninstall = await runHdcShell(
-    commands,
-    device,
-    ['bm', 'uninstall', '-n', bundleId],
-    signal,
-  );
-  const remaining = await readBundleInventory(commands, device, signal);
+  const uninstall = await hdc.runShell(device, ['bm', 'uninstall', '-n', bundleId], { signal });
+  const remaining = await readBundleInventory(hdc, device, signal);
   if (remaining.includes(bundleId)) {
     // bm prints its verdict into stdout at exit code 0, so only an inventory that no
     // longer lists the bundle proves the removal.
@@ -109,19 +109,20 @@ async function uninstallHarmonyApp(
  * system bundles.
  */
 async function readBundleInventory(
-  commands: HostCommandRunner,
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<string[]> {
-  const inventory = await runHdcShell(commands, device, ['bm', 'dump', '-a'], signal, {
+  const inventory = await hdc.runShell(device, ['bm', 'dump', '-a'], {
     allowFailure: true,
     timeoutMs: 15_000,
+    signal,
   });
   if (inventory.exitCode !== 0) {
     throw new AppError(
       'COMMAND_FAILED',
       'Could not read the installed bundle inventory',
-      execFailureDetails(inventory),
+      commandFailureDetails(inventory),
     );
   }
   const bundles = parseHarmonyBundleList(inventory.stdout);
@@ -141,56 +142,38 @@ async function readBundleInventory(
 }
 
 async function deployHarmonyApp(
-  commands: HostCommandRunner,
+  toolbox: HarmonyToolbox,
   device: DeviceInfo,
   input: AppDeploymentInput,
   signal: AbortSignal,
 ): Promise<AppDeploymentResult> {
-  const bundleId = (await resolveBundleName(commands, input.appPath, signal)) ?? input.app.trim();
+  const bundleId =
+    (await resolveHarmonyArchiveBundleName(toolbox.commands, input.appPath, signal)) ??
+    input.app.trim();
   if (!bundleId) {
     throw new AppError('INVALID_ARGS', 'Could not determine the bundle name from the HAP archive', {
       hint: 'Pass the HarmonyOS bundle name before the HAP path, or provide a valid HAP containing module.json.',
     });
   }
-  await runHdc(commands, device, ['install', '-r', input.appPath], signal, 180_000);
+  await toolbox.hdc.run(device, ['install', '-r', input.appPath], {
+    timeoutMs: 180_000,
+    signal,
+  });
   if (input.replaceExisting) {
     // HDC returns after transfer; physical devices can still be replacing the running bundle.
     await sleep(1_000, undefined, { signal });
-    await openHarmonyApp(commands, device, bundleId, signal);
+    await openHarmonyApp(toolbox.hdc, device, bundleId, signal);
   }
   return { packageName: bundleId, launchTarget: bundleId };
 }
 
-async function resolveBundleName(
-  commands: HostCommandRunner,
-  archivePath: string,
-  signal: AbortSignal,
-): Promise<string | undefined> {
-  const result = await commands.run(
-    {
-      executable: 'unzip',
-      args: ['-p', archivePath, 'module.json'],
-      allowFailure: true,
-      timeoutMs: 15_000,
-    },
-    signal,
-  );
-  if (result.exitCode !== 0 || result.stdout.trim().length === 0) return undefined;
-  try {
-    const manifest = JSON.parse(result.stdout) as { app?: { bundleName?: string } };
-    return manifest.app?.bundleName?.trim() || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 async function openHarmonyApp(
-  commands: HostCommandRunner,
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   bundleId: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const dump = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal);
+  const dump = await hdc.runShell(device, ['bm', 'dump', '-n', bundleId], { signal });
   const target = parseHarmonyLaunchTarget(dump.stdout);
   if (!target) {
     throw new AppError(
@@ -201,8 +184,7 @@ async function openHarmonyApp(
       },
     );
   }
-  await runHdcShell(
-    commands,
+  await hdc.runShell(
     device,
     [
       'aa',
@@ -213,37 +195,21 @@ async function openHarmonyApp(
       '-a',
       target.ability,
     ],
-    signal,
+    { signal },
   );
 }
 
-async function runHdc(
-  commands: HostCommandRunner,
-  device: DeviceInfo,
-  args: readonly string[],
-  signal: AbortSignal,
-  timeoutMs = 15_000,
-) {
-  return await commands.run(
-    { executable: 'hdc', args: ['-t', device.id, ...args], timeoutMs },
-    signal,
-  );
-}
-
-async function runHdcShell(
-  commands: HostCommandRunner,
-  device: DeviceInfo,
-  words: readonly ShellWord[],
-  signal: AbortSignal,
-  options: Readonly<{ allowFailure?: boolean; timeoutMs?: number }> = {},
-) {
-  return await commands.run(
-    {
-      executable: 'hdc',
-      args: deviceShellArgv('hdc', 'shell', words, ['-t', device.id]),
-      timeoutMs: options.timeoutMs ?? 15_000,
-      allowFailure: options.allowFailure,
-    },
-    signal,
-  );
+/**
+ * The host-kit's exec failure details, shaped for the host command result this plugin's runs answer
+ * with: `processExitError` is what makes `normalizeError` append the stderr excerpt. The plugin
+ * keeps the flag rather than the host kit's helper, because importing the host kit's command module
+ * at runtime would give the bundle a second, unscoped command scope.
+ */
+function commandFailureDetails(result: HarmonyCommandResult): Readonly<Record<string, unknown>> {
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    processExitError: true,
+  };
 }

@@ -89,7 +89,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-screen-recording-apple-simulator-host.ts',
     'src/platform-runtime-screen-recording-apple-transport.ts',
     'src/platform-runtime-screen-recording-finalizer-host.ts',
-    'src/platform-runtime-screen-recording-harmony-host.ts',
     'src/platform-runtime-screen-recording-host.ts',
     'src/platform-runtime-screen-recording-output-host.ts',
     'src/platform-runtime-screen-recording-process-host.ts',

@@ -2,6 +2,7 @@ import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppLogProcessCommand,
+  AppLogProcessStart,
   AppLogProcessTransport,
   AppLogRuntimeHost,
   AppLogRuntimeOperations,
@@ -54,7 +55,18 @@ export type PidScopedAppLogStartContext = PidScopedAppLogRuntimeContext &
 
 export type PidScopedAppLogProcessPlan = Readonly<{
   resolvePid(signal?: AbortSignal): Promise<string>;
-  command(pid: string): AppLogProcessCommand;
+  /**
+   * The command for one application PID. Async so a family can resolve the executable it names on the
+   * same per-call route it spawns with, rather than caching a resolution made when start began.
+   */
+  command(pid: string): AppLogProcessCommand | Promise<AppLogProcessCommand>;
+  /**
+   * Routes this family's stream somewhere other than the runtime host's own process transport, and
+   * runs the `command` this plan mints there. A family whose command needs a toolchain environment
+   * the host does not name (a managed platform's setup host, which prepares its documented roots)
+   * names its own route. Availability still comes from the selected transport.
+   */
+  start?: AppLogProcessStart;
 }>;
 
 type PidScopedAppLogEnvelopeInput<Descriptor extends PidScopedDescriptorPaths> = Readonly<{
@@ -94,8 +106,16 @@ export async function resolveFirstNumericAppLogPid(
   request: HostCommandRequest,
   signal?: AbortSignal,
 ): Promise<string> {
-  const result = await host.commands.run(request, signal);
-  const pid = result.stdout.trim().split(/\s+/)[0] ?? '';
+  return firstNumericAppLogPid((await host.commands.run(request, signal)).stdout);
+}
+
+/**
+ * The first PID a device answers to an app lookup, or empty when the answer is not one. A family that
+ * runs the lookup on its own command route reads its answer through this so both routes judge a
+ * blank, a truncated, or an error-text answer the same way.
+ */
+export function firstNumericAppLogPid(stdout: string): string {
+  const pid = stdout.trim().split(/\s+/)[0] ?? '';
   return /^\d+$/.test(pid) ? pid : '';
 }
 
@@ -236,17 +256,18 @@ async function startPidScopedAppLogs<
   const context = { host, device, signal, input, artifacts, transport } as const;
   options.validateStart?.(context);
   signal.throwIfAborted();
-  const process = await options.process(context);
+  const plan = await options.process(context);
   signal.throwIfAborted();
   const handle = await createPidScopedAppLogProcess({
     host,
     backend: options.backend,
     outputPath: artifacts.outputPath,
     pidPath: artifacts.pidPath,
-    processStart: transport.start,
+    // The plan owns its route when its commands need an environment the runtime host does not name.
+    processStart: plan.start ?? transport.start,
     setupSignal: signal,
-    resolvePid: process.resolvePid,
-    command: process.command,
+    resolvePid: plan.resolvePid,
+    command: plan.command,
     cleanupFailureMessage: options.cleanupFailureMessage,
   });
   const descriptor = options.descriptor({ artifacts, transport });

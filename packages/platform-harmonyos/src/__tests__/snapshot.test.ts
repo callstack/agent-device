@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { beforeEach, test, vi } from 'vitest';
-
-const { runHarmonyHdc, runHarmonyShell } = vi.hoisted(() => ({
-  runHarmonyHdc: vi.fn(),
-  runHarmonyShell: vi.fn(),
-}));
-
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc, runHarmonyShell }));
+import { beforeEach, test } from 'vitest';
+import { createHarmonyHdcRunnerStub, type HarmonyHdcRunnerStub } from '../toolbox.fixtures.ts';
 
 import {
   collectArkUiNodes,
@@ -27,20 +21,24 @@ const DEVICE = {
 
 const UNBOUNDED = { maxDepth: Number.POSITIVE_INFINITY, interactiveOnly: false };
 
+let hdc: HarmonyHdcRunnerStub;
+
 beforeEach(() => {
-  runHarmonyHdc.mockReset();
-  runHarmonyShell.mockReset();
-  runHarmonyShell.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  hdc = createHarmonyHdcRunnerStub();
 });
 
-/** Scripts `uitest dumpLayout` + `file recv` so the pulled layout is `layout`. */
-function scriptHarmonyLayoutDump(layout: unknown): void {
-  runHarmonyHdc.mockImplementation(async (_device: unknown, args: string[]) => {
+/**
+ * Answers the layout pull so the file the transport receives at its local path is `layout`, which
+ * is what `snapshotHarmony` reads back.
+ */
+function scriptHarmonyLayoutDump(stub: HarmonyHdcRunnerStub, layout: unknown): void {
+  const pull = stub.run;
+  stub.run = async (device, args, options) => {
     if (args[0] === 'file' && args[1] === 'recv') {
-      fs.writeFileSync(args[3] as string, JSON.stringify(layout), 'utf8');
+      fs.writeFileSync(String(args[3]), JSON.stringify(layout), 'utf8');
     }
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
+    return await pull(device, args, options);
+  };
 }
 
 test('parseArkUiBounds converts API 24 layout bounds into a rectangle', () => {
@@ -115,12 +113,12 @@ test('collectArkUiNodes keeps counting the tree below a node the limit omitted',
 });
 
 test('snapshotHarmony pulls a uitest layout and reports its analysis', async () => {
-  scriptHarmonyLayoutDump({
+  scriptHarmonyLayoutDump(hdc, {
     attributes: { type: 'root', bounds: '[0,0][1080,2340]' },
     children: [{ attributes: { type: 'Button', text: 'first', clickable: 'true' } }],
   });
 
-  const snapshot = await snapshotHarmony(DEVICE);
+  const snapshot = await snapshotHarmony(hdc, DEVICE);
 
   assert.equal(snapshot.truncated, undefined);
   assert.deepEqual(
@@ -128,4 +126,14 @@ test('snapshotHarmony pulls a uitest layout and reports its analysis', async () 
     ['Application', 'first'],
   );
   assert.deepEqual(snapshot.analysis, { rawNodeCount: 2, maxDepth: 1 });
+  // Dump, pull, then cleanup: all three on the one target.
+  assert.deepEqual(
+    hdc.calls.map((call) => [call.kind, call.target, call.args[0]]),
+    [
+      ['runShell', 'harmony-1', 'uitest'],
+      ['run', 'harmony-1', 'file'],
+      ['runShell', 'harmony-1', 'rm'],
+      ['runShell', 'harmony-1', 'hidumper'],
+    ],
+  );
 });

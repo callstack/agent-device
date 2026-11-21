@@ -17,7 +17,7 @@ Install `agent-device` on the machine where your coding agent runs terminal comm
   daemon is already running; without it, the daemon uses the environment it started in. Set
   `DEVELOPER_DIR=""` to use the daemon host's `xcode-select` selection instead.
 - Android SDK and ADB for Android, Android TV, and Fire TV devices running Fire OS
-- HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`)
+- HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`), plus the HarmonyOS platform plugin (see [HarmonyOS prerequisites](#harmonyos-prerequisites))
 - Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
 - Swift 5.9 or newer (Xcode command-line tools) for macOS desktop targets. `agent-device` builds its local macOS helper on first use
 
@@ -62,6 +62,19 @@ npx agent-device@nightly-0.22 open Settings --platform ios
 ```
 
 One-off `npx` use is fine for you and for scripts that intentionally fetch from npm. For agents, use a global install, a project-local install, or a version pinned by you or your project config, so repeated commands resolve to a known CLI.
+
+## HarmonyOS prerequisites
+
+Install the HarmonyOS Command Line Tools so `hdc` resolves, then install the HarmonyOS platform plugin:
+
+```bash
+agent-device plugins add @agent-device/harmonyos
+agent-device devices --platform harmonyos
+```
+
+- The plugin reads `hdc` from the daemon host's `PATH`, or from a toolchain root named by `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`. Set the variable you use in the environment that starts the daemon.
+- Without the plugin, a command that names `--platform harmonyos` fails with `details.reason: "plugin-not-installed"` and the install command. Commands that name no platform skip HarmonyOS.
+- For what HarmonyOS supports, see [HarmonyOS command boundary](/docs/commands#harmonyos-command-boundary).
 
 ## Vega OS TV prerequisites
 
