@@ -378,6 +378,10 @@ async function openDirectApplication(
 
 /** The plain app target a foreground read can compare against, when the open has one. */
 function probeableOpenTarget(input: OpenApplicationInput): string | undefined {
+  // An open that stops or replaces the running app re-activates nothing: --clear-app-state
+  // force-stops and cleans first, and --activity can start a different ability than the one
+  // running, so the read has no same-app fact to compare (#4860 review).
+  if (input.execution.clearAppState || input.execution.activity) return undefined;
   if (input.positionals.length !== 1) return undefined;
   const target = input.positionals[0];
   return target !== undefined && !isDeepLinkTarget(target) ? target : undefined;
@@ -385,9 +389,10 @@ function probeableOpenTarget(input: OpenApplicationInput): string | undefined {
 
 /**
  * Whether the open's app target already held the foreground, read before the dispatch through the
- * owner's probe. Only a plain app target answers: a relaunch intends a restart, and a URL pair or
- * a deep link has no foreground fact to compare. A read that fails or names another app claims
- * nothing, so it cannot fail the open.
+ * owner's probe. Only a plain app target answers: a relaunch intends a restart, --clear-app-state
+ * and --activity can each replace the running app, and a URL pair or a deep link has no foreground
+ * fact to compare. A read that fails or names another app claims nothing, so it cannot fail the
+ * open.
  */
 async function resolveAlreadyForeground(
   params: DirectApplicationLifecycleParams,

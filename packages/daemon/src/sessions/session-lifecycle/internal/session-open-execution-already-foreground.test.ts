@@ -115,7 +115,7 @@ test('open says the app was already foreground when the platform reports the pas
 
   const warnings = (data.warnings as string[] | undefined) ?? [];
   expect(warnings).toContain(
-    'App already foreground; dispatch skipped. Use --relaunch to restart.',
+    'App was already foreground; open re-activated it without restarting. Use --relaunch to restart.',
   );
 });
 
