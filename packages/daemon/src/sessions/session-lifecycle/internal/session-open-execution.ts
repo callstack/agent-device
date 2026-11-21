@@ -176,6 +176,11 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
   );
 }
 
+/** What the caller's `open` output says when the app already held the foreground at open time. */
+function alreadyForegroundWarning(): string {
+  return 'App already foreground; dispatch skipped. Use --relaunch to restart.';
+}
+
 // Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
 function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): boolean {
   if (device.platform !== 'android') return false;
@@ -386,6 +391,9 @@ export async function completeOpenCommand(params: {
   }
   if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
     appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
+  }
+  if (outcome.alreadyForeground) {
+    appendResponseWarning(openResult, alreadyForegroundWarning());
   }
   const nextRef = publishOpenSession({
     req,

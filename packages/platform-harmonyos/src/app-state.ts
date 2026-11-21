@@ -34,3 +34,24 @@ export function parseHarmonyForegroundApp(rawOutput: string): AppStateRuntimeRes
   }
   return undefined;
 }
+
+/**
+ * Reads which bundle holds the foreground at open time, or `undefined` when no read answers. The
+ * open-time probe is advisory: an unreadable read claims nothing and never fails the open it
+ * informs.
+ */
+export async function probeHarmonyForegroundBundle(
+  device: DeviceInfo,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  try {
+    const { runHarmonyShell } = await import('./hdc.ts');
+    const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
+      timeoutMs: 15_000,
+      signal,
+    });
+    return parseHarmonyForegroundApp(result.stdout)?.package;
+  } catch {
+    return undefined;
+  }
+}
