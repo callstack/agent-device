@@ -246,8 +246,15 @@ export function readRemoteConnectionState(options: {
     return null;
   }
   if (parsed.session !== options.session) {
+    // Path resolution already sends a session whose name is taken by another session's record to its
+    // own hashed path, so reaching here means the record changed between resolving and reading it.
+    // Nothing is read, written, or removed under a name another session owns; the file is named so a
+    // caller can see what it is standing on.
     throw new AppError('COMMAND_FAILED', 'The saved connection belongs to a different session.', {
       reason: REMOTE_CONNECTION_STATE_REASONS.sessionMismatch.reason,
+      session: options.session,
+      recordPath: statePath,
+      hint: `Run disconnect --session ${parsed.session} to release that connection, or remove ${statePath}.`,
     });
   }
   return parsed;
@@ -532,28 +539,61 @@ export function hashRemoteConfigFile(configPath: string): string {
 /** The pointer to the machine-wide active session. It is not a session record and never names one. */
 const ACTIVE_SESSION_FILE_NAME = '.active-session.json';
 
+/**
+ * Where a session's saved connection lives.
+ *
+ * Contents decide who owns a record; its file name never does. On a case-insensitive filesystem the
+ * file an older build wrote for `Demo` opens when `demo` asks for its own name, and trusting it would
+ * have `demo` read, overwrite, or delete a connection it does not own. So a session never resolves to
+ * a record that proves it belongs to another session: it resolves to the next path its own name
+ * answers for, finds no record there, and writes its own. The other session's file is left alone.
+ *
+ * A name that is a filename on its own belongs to that name, and to its hashed path when a record
+ * there names another session. Any other name belongs to its hashed path, and to the sanitized path
+ * older builds used only while a record there names this session.
+ */
 function remoteConnectionStatePath(options: { stateDir: string; session: string }): string {
-  const dir = path.join(options.stateDir, 'remote-connections');
+  const recordsDir = path.join(options.stateDir, 'remote-connections');
+
   // A name that cannot be a filename on its own — anything starting with `.`, or holding a
   // separator — is stored by hash, so it can never take the active-session pointer's file either.
   if (/^[a-z0-9_-][a-z0-9._-]*$/.test(options.session)) {
-    return path.join(dir, `${options.session}.json`);
+    const plain = path.join(recordsDir, `${options.session}.json`);
+    const recorded = sessionNamedBy(plain);
+    return recorded !== undefined && recorded !== options.session
+      ? hashedRemoteConnectionStatePath(recordsDir, options.session)
+      : plain;
   }
 
-  const canonical = path.join(dir, `~${connectionSessionIdentity(options.session)}.json`);
+  const canonical = hashedRemoteConnectionStatePath(recordsDir, options.session);
   if (fs.existsSync(canonical)) return canonical;
 
   // Older records were named by sanitizing the session, so two names that differ only in case could
-  // share one file on a case-insensitive filesystem. Trust such a file only when its contents prove
-  // they name this session; otherwise this session's record belongs to the hashed path.
-  const legacy = legacyRemoteConnectionStatePath({ recordsDir: dir, session: options.session });
-  if (!legacy) return canonical;
+  // share one file. Trust such a file only when its contents prove they name this session.
+  const legacy = legacyRemoteConnectionStatePath({ recordsDir, session: options.session });
+  return legacy !== undefined && sessionNamedBy(legacy) === options.session ? legacy : canonical;
+}
+
+function hashedRemoteConnectionStatePath(recordsDir: string, session: string): string {
+  return path.join(recordsDir, `~${connectionSessionIdentity(session)}.json`);
+}
+
+/**
+ * The session the record at `statePath` names, or `undefined` when it is absent, unreadable, does not
+ * parse, or names none. Absence and an unreadable file answer alike: neither proves the record belongs
+ * to another session, so neither moves a session off the path its own name answers for.
+ */
+function sessionNamedBy(statePath: string | undefined): string | undefined {
+  if (statePath === undefined) return undefined;
+  let parsed: unknown;
   try {
-    const state: unknown = JSON.parse(fs.readFileSync(legacy, 'utf8'));
-    return isRemoteConnectionState(state) && state.session === options.session ? legacy : canonical;
+    parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
   } catch {
-    return canonical;
+    return undefined;
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+  const session = (parsed as { session?: unknown }).session;
+  return typeof session === 'string' ? session : undefined;
 }
 
 /**

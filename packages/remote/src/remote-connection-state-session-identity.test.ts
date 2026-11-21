@@ -57,6 +57,32 @@ function sanitizedFileName(session: string): string {
   return safe === session ? `${safe}.json` : `${safe}-${sha256(session).slice(0, 8)}.json`;
 }
 
+/**
+ * Leaves one legacy record reachable under the names of both `session` and its case-variant, which is
+ * what a case-insensitive filesystem does by itself. On such a volume the name an older build wrote
+ * for `Demo` already IS the name `demo` opens; on a case-sensitive one, a hard link stands in for that
+ * fold so both names open the same bytes.
+ */
+function plantRecordSharedByCaseVariants(stateDir: string, session: string): string {
+  const recordsDir = path.join(stateDir, RECORDS_DIR);
+  fs.mkdirSync(recordsDir, { recursive: true });
+  const written = path.join(recordsDir, `${session}.json`);
+  fs.writeFileSync(written, `${JSON.stringify(recordFor(session), null, 2)}\n`, 'utf8');
+  const aliased = path.join(recordsDir, `${session.toLowerCase()}.json`);
+  try {
+    fs.linkSync(written, aliased);
+  } catch (error) {
+    // EEXIST: the volume folds the two names onto the file that is already there.
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    assert.equal(
+      fs.readFileSync(aliased, 'utf8'),
+      fs.readFileSync(written, 'utf8'),
+      'the case-variant name must open the record it shares',
+    );
+  }
+  return written;
+}
+
 function captureRefusal(run: () => unknown): AppError {
   try {
     run();
@@ -155,20 +181,73 @@ test('a record left on the active-session pointer path is not read as a session 
   );
 });
 
-test('a saved connection naming another session is refused rather than reused', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-mismatch-');
-  const statePath = writeRecordFile(stateDir, 'demo.json', 'Demo');
+test('a record an older build shared with a case-variant session does not lock that session out', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-upgrade-');
+  const sharedPath = plantRecordSharedByCaseVariants(stateDir, 'Demo');
+  const planted = fs.readFileSync(sharedPath, 'utf8');
 
-  const read = captureRefusal(() => readRemoteConnectionState({ stateDir, session: 'demo' }));
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'demo' }),
+    null,
+    'the record an older build named for Demo proves it is not the demo session connection',
+  );
+  assert.equal(fs.readFileSync(sharedPath, 'utf8'), planted);
+
+  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
+
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' })?.runId, 'run-demo');
+  assert.equal(
+    fs.existsSync(path.join(stateDir, RECORDS_DIR, hashedFileName('demo'))),
+    true,
+    'a session whose plain name is taken by another session writes under its hash',
+  );
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId,
+    'run-Demo',
+    'the aliased record still serves the session it names',
+  );
+  assert.equal(
+    fs.readFileSync(sharedPath, 'utf8'),
+    planted,
+    'writing this session record never rewrites the file the other session owns',
+  );
+
+  removeRemoteConnectionState({ stateDir, session: 'demo' });
+
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' }), null);
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId,
+    'run-Demo',
+    'removing one session still must not reach the record the other one owns',
+  );
+  assert.equal(fs.existsSync(sharedPath), true);
+});
+
+test('the last guard names the record it refused and how to clear it', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-mismatch-');
+  // A record that reached a session's own path while naming another session — a foreign record someone
+  // planted there, or one that changed under a command in flight. Resolution takes the path the hash
+  // answers for, so only the contents check can refuse it.
+  const session = 'team/dev#1';
+  const statePath = writeRecordFile(stateDir, hashedFileName(session), 'team:dev#1');
+
+  const read = captureRefusal(() => readRemoteConnectionState({ stateDir, session }));
   assert.equal(read.code, 'COMMAND_FAILED');
   assert.equal(read.details?.reason, 'connection_session_mismatch');
+  assert.equal(read.details?.session, session);
+  assert.equal(read.details?.recordPath, statePath);
+  assert.match(String(read.details?.hint), /disconnect --session team:dev#1/);
+  assert.ok(
+    String(read.details?.hint).includes(statePath),
+    'the recovery names the file it wants removed',
+  );
 
   const write = captureRefusal(() =>
-    writeRemoteConnectionState({ stateDir, state: recordFor('demo') }),
+    writeRemoteConnectionState({ stateDir, state: recordFor(session) }),
   );
   assert.equal(write.details?.reason, 'connection_session_mismatch');
 
-  const remove = captureRefusal(() => removeRemoteConnectionState({ stateDir, session: 'demo' }));
+  const remove = captureRefusal(() => removeRemoteConnectionState({ stateDir, session }));
   assert.equal(remove.details?.reason, 'connection_session_mismatch');
   assert.equal(
     fs.existsSync(statePath),
