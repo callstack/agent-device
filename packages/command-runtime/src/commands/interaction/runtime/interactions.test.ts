@@ -923,7 +923,7 @@ test('runtime press plan refuses --verify instead of dropping the pixel pair', a
     }),
     (error: AppError) => {
       assert.equal(error.code, 'INVALID_ARGS');
-      assert.equal(error.details?.reason, 'verify-unsupported-on-ref-plan');
+      assert.equal(error.details?.reason, 'verify_unsupported_on_ref_plan');
       return true;
     },
   );

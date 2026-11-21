@@ -49,6 +49,7 @@ export const INTERACTION_ERROR_REASONS = {
    * `packages/command-runtime/src/commands/interaction/runtime/moving-target-gate.ts`, which raises the reason beside the
    * hint that names that recovery.
    */
+  targetStillMoving: 'target_still_moving',
   /**
    * A comma-separated ref plan cannot carry `--verify`: the pixel fallback behind `--verify`
    * answers one point the pre-action tree cannot see, and the plan's members are tree-visible
@@ -56,8 +57,7 @@ export const INTERACTION_ERROR_REASONS = {
    * crossed to the device. The owner is
    * `packages/command-runtime/src/commands/interaction/runtime/interactions.ts` (`tapRefPlanCommand`).
    */
-  verifyUnsupportedOnRefPlan: 'verify-unsupported-on-ref-plan',
-  targetStillMoving: 'target_still_moving',
+  verifyUnsupportedOnRefPlan: 'verify_unsupported_on_ref_plan',
 } as const;
 
 /** The part of a covered node a refusal reports. */
