@@ -7,7 +7,7 @@ import {
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import { ignoresSessionLease } from './daemon-command-registry.ts';
-import type { LeaseBackend } from '@agent-device/kernel/contracts';
+import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import { stripUndefined } from '@agent-device/kernel/record';
@@ -163,12 +163,12 @@ export function assertRequestHoldsSessionLease(
 ): SessionLease | undefined {
   const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
   if (!sessionLease) return undefined;
-  assertRequestPresentsSessionLease(resolveLeaseScope(req), sessionLease);
+  assertRequestPresentsLease(resolveLeaseScope(req), sessionLease);
   return sessionLease;
 }
 
 /** Refuses a request that does not send `leaseId`, the credential of the lease it acts on. */
-export function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): void {
+function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): void {
   if (!requestScope.leaseId) {
     throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
       reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
@@ -179,19 +179,37 @@ export function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: str
   assertMatchingLeaseField('leaseId', requestScope.leaseId, leaseId);
 }
 
-function assertRequestPresentsSessionLease(requestScope: LeaseScope, sessionLease: SessionLease) {
-  assertRequestSendsLeaseId(requestScope, sessionLease.leaseId);
-  assertMatchingLeaseField('tenantId', requestScope.tenantId, sessionLease.tenantId);
-  assertMatchingLeaseField('leaseBackend', requestScope.leaseBackend, sessionLease.leaseBackend);
-  assertMatchingLeaseField('runId', requestScope.runId, sessionLease.runId);
-  assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, sessionLease.leaseProvider);
-  assertMatchingLeaseField('clientId', requestScope.clientId, sessionLease.clientId);
-  assertMatchingLeaseField('deviceKey', requestScope.deviceKey, sessionLease.deviceKey);
+/**
+ * Refuses a request that does not send the lease's id, or sends a label that differs from the
+ * lease. A label the lease does not carry differs from any value the request sends.
+ */
+export function assertRequestPresentsLease(
+  requestScope: LeaseScope,
+  lease: Omit<SessionLease, 'expiresAt'>,
+): void {
+  assertRequestSendsLeaseId(requestScope, lease.leaseId);
+  assertMatchingLeaseField('tenantId', requestScope.tenantId, lease.tenantId);
+  assertMatchingLeaseBackend(requestScope.leaseBackend, lease.leaseBackend);
+  assertMatchingLeaseField('runId', requestScope.runId, lease.runId);
+  assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, lease.leaseProvider);
+  assertMatchingLeaseField('clientId', requestScope.clientId, lease.clientId);
+  assertMatchingLeaseField('deviceKey', requestScope.deviceKey, lease.deviceKey);
 }
 
-function assertMatchingLeaseField(field: string, requestValue?: string, sessionValue?: string) {
-  if (!requestValue || !sessionValue || requestValue === sessionValue) return;
-  throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
+function assertMatchingLeaseBackend(requestValue?: string, leaseValue?: string) {
+  if (!requestValue) return;
+  const requested = readLeaseBackend(requestValue);
+  if (requested !== undefined && requested === readLeaseBackend(leaseValue)) return;
+  throw leaseFieldMismatchError('leaseBackend');
+}
+
+function assertMatchingLeaseField(field: string, requestValue?: string, leaseValue?: string) {
+  if (!requestValue || requestValue === leaseValue) return;
+  throw leaseFieldMismatchError(field);
+}
+
+function leaseFieldMismatchError(field: string): AppError {
+  return new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
     reason: SESSION_LEASE_REASONS.leaseSessionMismatch,
     field,
   });

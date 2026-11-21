@@ -6,7 +6,7 @@ import {
   leaseScopeToReleaseRequest,
   leaseProviderRequiringRuntime,
 } from '@agent-device/contracts/lease-scope';
-import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
+import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 
@@ -170,9 +170,8 @@ export function normalizeCallerChosenLeaseId(raw: string): string {
 }
 
 export function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
-  const value = (raw ?? '').trim().toLowerCase();
-  if (!value) return 'ios-simulator';
-  const backend = LEASE_BACKENDS.find((entry) => entry === value);
+  if (!(raw ?? '').trim()) return 'ios-simulator';
+  const backend = readLeaseBackend(raw);
   if (backend) return backend;
   throw new AppError('INVALID_ARGS', `Unsupported lease backend: ${raw ?? ''}`);
 }

@@ -31,7 +31,7 @@ import {
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import {
-  assertRequestSendsLeaseId,
+  assertRequestPresentsLease,
   isProxyLeaseScope,
   resolveLeaseScope,
   resolveSessionLeaseScope,
@@ -588,7 +588,7 @@ function resolveProviderSession(
 
 /**
  * While its lease is active, a provider session belongs to the client that holds that lease: the
- * lookup needs the lease id, as any request on the leased session does (ADR 0007). A released
+ * lookup needs the lease id and matching labels, as any request on the leased session does (ADR 0007). A released
  * provider session keeps its tenant-scoped retention lookup.
  */
 function assertRequestHoldsActiveProviderLease(
@@ -596,8 +596,9 @@ function assertRequestHoldsActiveProviderLease(
   leaseScope: ReturnType<typeof resolveLeaseScope>,
   leaseId: string,
 ): void {
-  if (leaseRegistry.inspectLeaseBackend(leaseId) === undefined) return;
-  assertRequestSendsLeaseId(leaseScope, leaseId);
+  const lease = leaseRegistry.inspectActiveLease(leaseId);
+  if (!lease) return;
+  assertRequestPresentsLease(leaseScope, { ...lease, leaseBackend: lease.backend });
 }
 
 function readFlagString(

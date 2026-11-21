@@ -148,3 +148,21 @@ test('a batch step that names another lease id is refused even when the batch se
   expect(response.ok, JSON.stringify(response)).toBe(false);
   expect(JSON.stringify(response)).toContain('LEASE_SESSION_MISMATCH');
 });
+
+test('a batch step that names another lease id is refused when the batch sends the right one in meta', async () => {
+  const { handler, leaseId } = leasedRouter();
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'batch',
+    positionals: [],
+    flags: {
+      batchSteps: [{ command: 'snapshot', positionals: [], flags: { leaseId: OTHER_LEASE_ID } }],
+    },
+    meta: { leaseId },
+  });
+
+  expect(response.ok, JSON.stringify(response)).toBe(false);
+  expect(JSON.stringify(response)).toContain('LEASE_SESSION_MISMATCH');
+});

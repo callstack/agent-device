@@ -89,6 +89,33 @@ test('artifacts lists an owned active and recently released provider session', a
   ]);
 });
 
+test.each([
+  ['runId', { runId: 'run-other' }],
+  ['leaseBackend', { leaseBackend: 'macos-app' }],
+] as const)(
+  'artifacts refuses an active provider session lookup whose %s differs from the lease',
+  async (field, label) => {
+    const world = createWorld();
+    const lease = await allocateLease(world, 'tenant-a', 'run-a');
+
+    await assert.rejects(
+      () =>
+        listArtifacts(world, {
+          tenantId: 'tenant-a',
+          runId: 'run-a',
+          providerSessionId: 'session-tenant-a',
+          leaseId: lease.leaseId,
+          ...label,
+        }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+        error.details?.field === field,
+    );
+    assert.deepEqual(world.providerCalls, []);
+  },
+);
+
 test('artifacts refuses a released provider session after the retention window', async () => {
   let now = 1_000;
   const world = createWorld({
@@ -309,6 +336,7 @@ async function listArtifacts(
     providerSessionId: string;
     leaseProvider?: string;
     leaseId?: string;
+    leaseBackend?: string;
   },
 ): Promise<DaemonResponse> {
   return (await handleLeaseCommands({
@@ -320,6 +348,7 @@ async function listArtifacts(
         runId: scope.runId,
         leaseProvider: scope.leaseProvider ?? CLOUD_PROVIDER,
         ...(scope.leaseId ? { leaseId: scope.leaseId } : {}),
+        ...(scope.leaseBackend ? { leaseBackend: scope.leaseBackend as never } : {}),
       },
       { providerSessionId: scope.providerSessionId },
     ),

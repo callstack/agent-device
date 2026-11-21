@@ -325,9 +325,14 @@ export class LeaseRegistry {
 
   /** Read active backend without sweeping another lease or mutating owner state. */
   inspectLeaseBackend(leaseId: string): LeaseBackend | undefined {
+    return this.inspectActiveLease(leaseId)?.backend;
+  }
+
+  /** Read an active lease without sweeping another lease or mutating owner state. */
+  inspectActiveLease(leaseId: string): DeviceLease | undefined {
     const id = normalizeLeaseId(leaseId);
     const lease = id ? this.leases.get(id) : undefined;
-    return lease && !this.wouldConsumeExpiredLease(lease, this.now()) ? lease.backend : undefined;
+    return lease && !this.wouldConsumeExpiredLease(lease, this.now()) ? { ...lease } : undefined;
   }
 
   /**

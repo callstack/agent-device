@@ -41,6 +41,12 @@ export const LEASE_BACKENDS = [
 ] as const;
 export type LeaseBackend = (typeof LEASE_BACKENDS)[number];
 
+/** The lease backend `raw` names, ignoring case and surrounding space; `undefined` for none. */
+export function readLeaseBackend(raw: string | undefined): LeaseBackend | undefined {
+  const value = (raw ?? '').trim().toLowerCase();
+  return LEASE_BACKENDS.find((entry) => entry === value);
+}
+
 // Which lease backend rents a device on each platform the remote lease layer can hold. `ios-simulator`
 // is a backend-specific runner guard rather than something a platform selector names, and the
 // platforms with no remote lease backend (`vega`, `linux`, `web`) — and the macOS desktop host — map

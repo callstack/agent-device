@@ -387,6 +387,67 @@ test('close still admits and heartbeats a real active lease', () => {
   assert.equal(result?.heartbeatAt, 2_000);
 });
 
+function iosLeasedSession(registry: LeaseRegistry) {
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+    },
+  });
+  return { lease, session };
+}
+
+test.each([
+  ['clientId', { meta: { clientId: 'client-b' } }],
+  ['deviceKey', { meta: { deviceKey: 'ios:SIM-002' } }],
+  ['leaseProvider', { meta: { leaseProvider: 'proxy' } }],
+  ['leaseBackend', { flags: { leaseBackend: 'android-instance' } }],
+] as const)(
+  'a request with the lease id and a %s the session lease does not match is refused',
+  (field, extra) => {
+    const registry = new LeaseRegistry();
+    const { lease, session } = iosLeasedSession(registry);
+
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({
+            command: 'snapshot',
+            flags: { ...('flags' in extra ? extra.flags : {}) },
+            meta: { leaseId: lease.leaseId, ...('meta' in extra ? extra.meta : {}) },
+          }),
+          registry,
+          session,
+          { env: process.env },
+        ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+        error.details?.field === field,
+    );
+  },
+);
+
+test('a lease backend that differs only in case and space matches the session lease', () => {
+  const registry = new LeaseRegistry();
+  const { lease, session } = iosLeasedSession(registry);
+
+  const admitted = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'snapshot',
+      meta: { leaseId: lease.leaseId, leaseBackend: ' IOS-SIMULATOR ' as never },
+    }),
+    registry,
+    session,
+    { env: process.env },
+  );
+
+  assert.equal(admitted?.leaseId, lease.leaseId);
+});
+
 test('a request with the session lease id and another lease backend is refused', () => {
   const registry = new LeaseRegistry();
   const lease = hostMacOsAppLease(registry);
