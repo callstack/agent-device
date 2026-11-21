@@ -25,6 +25,6 @@ async function lookupVegaExecutable(host: VegaExecutableHost): Promise<string | 
 }
 
 /** The default install the resolver probes, in the order the plugin's own guidance names it. */
-export function vegaDefaultInstallPath(homeDirectory: string): string {
+function vegaDefaultInstallPath(homeDirectory: string): string {
   return path.join(homeDirectory, 'vega', 'bin', 'vega');
 }

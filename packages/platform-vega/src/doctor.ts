@@ -3,7 +3,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
 import { firstOutputLine, TOOLCHAIN_TIMEOUT_MS } from '@agent-device/provision-kit/toolchain-probe';
-import { vegaDefaultInstallPath } from './vega-executable.ts';
 import {
   createVegaToolProvider,
   hasScopedVegaToolProvider,
@@ -34,7 +33,7 @@ export async function vegaToolchainCheck(
       id: 'toolchain',
       status: 'info',
       summary: 'Vega toolchain: Vega CLI not found.',
-      hint: `Install Vega Developer Tools or ensure ${vegaDefaultInstallPath('~')} is executable.`,
+      hint: 'Install Vega Developer Tools or ensure ~/vega/bin/vega is executable.',
       command: 'vega --version',
     };
   }
