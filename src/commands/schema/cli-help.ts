@@ -646,12 +646,7 @@ Rules:
     summary: 'macOS desktop, frontmost-app, and menu bar surfaces',
     body: `agent-device help macos
 
-Use macOS only when the task targets desktop apps, desktop surfaces, or menu bar extras.
-
-Dependency:
-  macOS desktop automation comes from the @agent-device/macos plugin. Before first use:
-    agent-device plugins add @agent-device/macos
-  Without it, a command that names --platform macos fails with details.reason plugin-not-installed and the install command.
+Use macOS only when the task targets desktop apps, desktop surfaces, or menu bar extras. It needs the macOS plugin; install it once with: agent-device plugins add @agent-device/macos
 
 Open and inspect:
   agent-device open TextEdit --platform macos
