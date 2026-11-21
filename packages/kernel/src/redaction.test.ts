@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { redactDiagnosticData } from './redaction.ts';
+import { escapeTerminalText, redactDiagnosticData, redactSecretLikeText } from './redaction.ts';
 
 test('stderr retains nested command failure details beyond 400 characters', () => {
   const stderr = `Launch request denied\n${'Context line\n'.repeat(50)}Underlying reason: device locked`;
@@ -70,4 +70,81 @@ test('a diamond chain redacts each shared node once, not once per path', () => {
   }
   assert.deepEqual(node, { token: '[REDACTED]', note: 'leaf' });
   assert.equal(reads, 1);
+});
+
+// --- display-line scrub of secret-like tokens (INVALID_ARGS argv echoes) ---
+
+test.each([
+  [
+    'a password typed as an extra positional keeps only its length',
+    'fill accepts at most 2 positional argument(s), received 3: @e1 Sup3rSecretPass!2026 extra',
+    'fill accepts at most 2 positional argument(s), received 3: @e1 <redacted len=20> extra',
+  ],
+  [
+    'a quoted password is replaced with its whole token, quotes included',
+    'Unknown command: "Sup3rSecretPass!2026"',
+    'Unknown command: <redacted len=22>',
+  ],
+  [
+    'a mixed-case token with an inner symbol but no digit is a secret too',
+    'Flag --token requires a value: SuperSecret_Pass!',
+    'Flag --token requires a value: <redacted len=17>',
+  ],
+  [
+    'a short credential-shaped token stays below the length bar',
+    'Invalid password: P4ss!word',
+    'Invalid password: P4ss!word',
+  ],
+  [
+    'a lowercase path or app id keeps its text',
+    'push /data/local/tmp/myapp.apk onto com.example.app',
+    'push /data/local/tmp/myapp.apk onto com.example.app',
+  ],
+  [
+    'an uppercase-and-digit token without lowercase keeps its text',
+    'received 1: A1B2C3D4E5F6G7H8',
+    'received 1: A1B2C3D4E5F6G7H8',
+  ],
+  [
+    'an instruction identifier with sentence punctuation keeps its text',
+    'target is not accepted as a tool argument. Pass deviceTarget.',
+    'target is not accepted as a tool argument. Pass deviceTarget.',
+  ],
+  [
+    'a capitalized media path names a location the reader opens, so it keeps its text',
+    'pull /storage/emulated/0/Download/recording-2026.m4a',
+    'pull /storage/emulated/0/Download/recording-2026.m4a',
+  ],
+  [
+    'the project config path in a device-pin conflict names the file the reader fixes',
+    'Batch step 1: device "iPhone 16" conflicts with the device pin from project config file /private/tmp/agent-device-test-run-59442-ELNJ5D/agent-device-config-ArPrB8/project/agent-device.json.',
+    'Batch step 1: device "iPhone 16" conflicts with the device pin from project config file /private/tmp/agent-device-test-run-59442-ELNJ5D/agent-device-config-ArPrB8/project/agent-device.json.',
+  ],
+  [
+    'a standard base64 credential carries a slash and still redacts',
+    'received 3: aB3dEfGh1jKlMn/oPqRsTuVw+xYz==',
+    'received 3: <redacted len=30>',
+  ],
+  [
+    'a URL whose query carries a credential redacts',
+    'Invalid platform: https://api.example.com/v1/verify?key=aB3dEfGh1jKlMn',
+    'Invalid platform: <redacted len=52>',
+  ],
+  [
+    'ordinary short arguments display unchanged',
+    'press accepts at most 2 positional argument(s), received 3: @e1 hello world',
+    'press accepts at most 2 positional argument(s), received 3: @e1 hello world',
+  ],
+])('redactSecretLikeText: %s', (_name, input, expected) => {
+  assert.equal(redactSecretLikeText(input), expected);
+});
+
+test('redactSecretLikeText keeps whitespace and untouched tokens in place', () => {
+  assert.equal(redactSecretLikeText('a  b\tSup3rSecretPass!2026\nc'), 'a  b\t<redacted len=20>\nc');
+});
+
+test('redactSecretLikeText output passes the terminal escape unchanged and round trips through JSON', () => {
+  const scrubbed = redactSecretLikeText('received 3: @e1 Sup3rSecretPass!2026 extra');
+  assert.equal(escapeTerminalText(scrubbed), scrubbed);
+  assert.equal(JSON.parse(JSON.stringify({ message: scrubbed })).message, scrubbed);
 });

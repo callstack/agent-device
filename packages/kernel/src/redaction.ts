@@ -173,3 +173,37 @@ function replaceCodes(
 export function escapeTerminalText(text: string): string {
   return replaceCodes(text, isEscapedControl, (code) => `\\u${code.toString(16).padStart(4, '0')}`);
 }
+
+// A display line that embeds a rejected argv value can echo a credential the caller typed into
+// the wrong slot. A token whose word is past 12 characters and mixes upper and lower case with
+// a digit or a symbol reads as that credential; ordinary arguments (refs, paths, ids, lowercase
+// names) do not. The word is the token without punctuation attached to its edges, so a sentence
+// period or quotes never make an identifier like `deviceTarget` read as a secret. A separator
+// inside path characters only (letters, digits, `.`, `:`, `/`, `\`, `-`, `~`) marks a location,
+// not a credential: an INVALID_ARGS message names a config file or an artifact so the reader
+// can open or fix it, and the scrub keeps that text. A separator next to any other character
+// is the base64 or query shape of a credential, and the word test decides.
+
+const SECRET_LIKE_MIN_LENGTH = 12;
+const TOKEN_EDGE_PUNCTUATION = /^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g;
+const PATH_TOKEN_CHARACTERS = /^[\w.:/\\~-]+$/;
+
+/** True when `token` is long and varied enough to read as a credential rather than an argument. */
+function isSecretLikeToken(token: string): boolean {
+  if (/[/\\]/.test(token) && PATH_TOKEN_CHARACTERS.test(token)) return false;
+  const word = token.replaceAll(TOKEN_EDGE_PUNCTUATION, '');
+  if (word.length <= SECRET_LIKE_MIN_LENGTH) return false;
+  return /[a-z]/.test(word) && /[A-Z]/.test(word) && /[^a-zA-Z]/.test(word);
+}
+
+/**
+ * Replaces each secret-like token in a display line with `<redacted len=N>`, and keeps every
+ * other token and all whitespace as is. N counts the raw token, so punctuation attached to it
+ * is part of N. The output carries no control character, so it passes `escapeTerminalText`
+ * unchanged and stays a valid JSON string value.
+ */
+export function redactSecretLikeText(text: string): string {
+  return text.replaceAll(/\S+/g, (token) =>
+    isSecretLikeToken(token) ? `<redacted len=${token.length}>` : token,
+  );
+}

@@ -40,6 +40,7 @@ import {
 } from './tool-control-fields.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { redactSecretLikeText } from '@agent-device/kernel/redaction';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';
@@ -300,9 +301,19 @@ async function buildErrorToolResult(
 ): Promise<ToolResult> {
   const normalized = normalizeToolError(error);
   refPins.mergeErrorDetails(normalized.details, stateDir, session);
+  // The structured result reaches the transcript like the text line does. An INVALID_ARGS
+  // message embeds the raw argv the parse refused, so its message gets the display scrub
+  // the text view applies. Every other code keeps the typed message.
+  let structuredContent: typeof normalized | undefined;
+  if (mode) {
+    structuredContent =
+      normalized.code === 'INVALID_ARGS'
+        ? { ...normalized, message: redactSecretLikeText(normalized.message) }
+        : normalized;
+  }
   return {
     isError: true,
-    ...(mode ? { structuredContent: normalized } : {}),
+    ...(structuredContent ? { structuredContent } : {}),
     content: [{ type: 'text', text: formatToolErrorText(normalized) }],
   };
 }
