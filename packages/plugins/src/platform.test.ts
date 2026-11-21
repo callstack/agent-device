@@ -2,7 +2,11 @@ import { expect, test } from 'vitest';
 import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { storePluginCandidates } from './store.ts';
-import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
+import {
+  resolveProviderPlugins,
+  startProviderRegistry,
+  type PluginCandidate,
+} from './registry.ts';
 
 const WEB_PACKAGE = '@agent-device/web';
 const stateDir = '/fixture-state';
@@ -37,10 +41,18 @@ function selectWeb(home: string, opts: Parameters<typeof selectPlugin>[3] = {}) 
   );
 }
 
-async function startStore(env: HostEnvironment['env']) {
+/** The bundled Apple owner's reserved family claim, as the composition root declares it. */
+const builtinApple = {
+  source: 'builtin',
+  dormant: true,
+  declaredClaims: [{ kind: 'platform', id: 'apple' }],
+  load: () => undefined,
+} as const;
+
+async function startStore(env: HostEnvironment['env'], builtins: readonly PluginCandidate[] = []) {
   const candidates = await storePluginCandidates(env);
   const host = { env, cwd: '/' };
-  const resolved = await resolveProviderPlugins(candidates);
+  const resolved = await resolveProviderPlugins([...builtins, ...candidates]);
   return await startProviderRegistry(resolved, host, {
     platformHost: {
       ...host,
@@ -180,5 +192,94 @@ test('platform and replay claims in one package activate independently', async (
     { backend: 'fixture', state: 'failed', error: { reason: 'plugin_setup_failed' } },
   ]);
   expect(registry.platforms.map(({ family }) => family)).toEqual(['web']);
+  await registry.close();
+});
+
+const MACOS_PACKAGE = '@agent-device/macos';
+const macOsLeafClaim = `{
+  kind: 'platform',
+  family: 'apple',
+  appleOs: 'macos',
+  setup: host => ({ family: 'apple', appleOs: 'macos', bind: () => ({ stateDir: host.stateDir }) }),
+}`;
+
+function selectMacOsLeaf(home: string, name = MACOS_PACKAGE) {
+  selectPlugin(
+    home,
+    name,
+    `export default () => ({ apiVersion: 3, contributes: [${macOsLeafClaim}] });`,
+    { claims: { apiVersion: 3, platform: 'apple', appleOs: 'macos' } },
+  );
+}
+
+test('a macOS leaf claim coexists with the bundled apple family claim and registers no family', async () => {
+  const { home, env } = pluginHome();
+  selectMacOsLeaf(home);
+  const registry = await startStore(env, [builtinApple]);
+  expect(registry.inventory).toMatchObject([
+    { source: 'store', package: MACOS_PACKAGE, platform: 'apple', appleOs: 'macos', state: 'active' },
+  ]);
+  expect(registry.platforms).toEqual([]);
+  expect(registry.platformLeaves.map(({ family, appleOs }) => `${family}:${appleOs}`)).toEqual([
+    'apple:macos',
+  ]);
+  await expect(registry.close()).resolves.toMatchObject([
+    { platform: 'apple', appleOs: 'macos', source: 'store' },
+  ]);
+});
+
+test('a second package loses the macOS leaf, and a package cannot take the apple family', async () => {
+  const { home, env } = pluginHome();
+  selectMacOsLeaf(home);
+  selectMacOsLeaf(home, 'later-macos');
+  selectPlugin(home, 'whole-apple', "throw new Error('must never import');", {
+    claims: { apiVersion: 3, platform: 'apple' },
+  });
+  const registry = await startStore(env, [builtinApple]);
+  expect(
+    registry.inventory.map((entry) => [
+      entry.package,
+      entry.appleOs,
+      entry.state === 'failed' ? entry.error.reason : entry.state,
+    ]),
+  ).toEqual([
+    [MACOS_PACKAGE, 'macos', 'active'],
+    ['later-macos', 'macos', 'duplicate_platform'],
+    ['whole-apple', undefined, 'duplicate_platform'],
+  ]);
+  expect(registry.platformLeaves).toHaveLength(1);
+  await registry.close();
+});
+
+test.each([
+  ['another family', { apiVersion: 3, platform: 'web', appleOs: 'macos' }],
+  ['an Apple OS the owner keeps', { apiVersion: 3, platform: 'apple', appleOs: 'ios' }],
+])('a leaf declared for %s is refused before its entry is imported', async (_name, claims) => {
+  const { home, env } = pluginHome();
+  selectPlugin(home, 'bad-leaf', "throw new Error('must never import');", { claims });
+  const registry = await startStore(env, [builtinApple]);
+  expect(registry.inventory).toMatchObject([
+    { package: 'bad-leaf', state: 'failed', error: { reason: 'invalid_plugin' } },
+  ]);
+  expect(registry.platformLeaves).toEqual([]);
+  await registry.close();
+});
+
+test('a leaf setup that binds nothing is recorded as failed', async () => {
+  const { home, env } = pluginHome();
+  selectPlugin(
+    home,
+    MACOS_PACKAGE,
+    `export default () => ({ apiVersion: 3, contributes: [{
+      kind: 'platform', family: 'apple', appleOs: 'macos',
+      setup: () => ({ family: 'apple', appleOs: 'macos' }),
+    }] });`,
+    { claims: { apiVersion: 3, platform: 'apple', appleOs: 'macos' } },
+  );
+  const registry = await startStore(env, [builtinApple]);
+  expect(registry.inventory).toMatchObject([
+    { appleOs: 'macos', state: 'failed', error: { reason: 'invalid_plugin' } },
+  ]);
+  expect(registry.platformLeaves).toEqual([]);
   await registry.close();
 });

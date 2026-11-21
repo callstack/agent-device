@@ -1,4 +1,5 @@
 import type { PlatformHost, RegisteredPlatformSetup } from './platform.ts';
+import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   NATIVE_REPLAY_BACKEND,
@@ -105,8 +106,17 @@ export type ProviderRegistration = Readonly<{
   dispose?: () => Promise<void> | void;
 }>;
 
-/** Every id held in one claim space. */
+/** Every claim held in one claim space, keyed so a leaf claim is a different holding than its id. */
 type ClaimedClaims = Map<ClaimKind, Set<string>>;
+
+/**
+ * What one claim occupies in its space: the id, with the leaf appended when the claim narrows. The
+ * spaces compare this rather than the bare id, so the `apple` family claim and a package's macOS leaf
+ * holding coexist and two packages cannot both hold the same leaf.
+ */
+function claimHolding(claim: PluggedClaim): string {
+  return claim.appleOs === undefined ? claim.id : `${claim.id}:${claim.appleOs}`;
+}
 
 type Claim = PluggedClaim & {
   slot: Slot;
@@ -114,6 +124,7 @@ type Claim = PluggedClaim & {
   failure?: AppError;
   registration?: ProviderRegistration;
   platformSetup?: RegisteredPlatformSetup;
+  platformLeaf?: MacOsPlatformLeafRegistration;
   replaySetup?: ReplayBackendSetup | ReplayExecutionSetup;
   replayLoading?: Promise<ReplayBackend>;
   executionLoading?: Promise<ReplayExecution>;
@@ -144,6 +155,8 @@ export type ResolvedProviderPlugins = Readonly<{
 export type ProviderRegistry = Readonly<{
   registrations: readonly ProviderRegistration[];
   platforms: readonly RegisteredPlatformSetup[];
+  /** The leaf setups: operations a bundled family's owner delegates to an installed package. */
+  platformLeaves: readonly MacOsPlatformLeafRegistration[];
   resolveReplayBackend: ReplayBackendResolver;
   resolveReplayExecution: ReplayExecutionResolver;
   claimedProviders: readonly string[];
@@ -224,8 +237,9 @@ function claimObstacle(claimed: ClaimedClaims, claim: PluggedClaim): AppError | 
 function reserveClaim(claimed: ClaimedClaims, claim: PluggedClaim): boolean {
   let ids = claimed.get(claim.kind);
   if (ids === undefined) claimed.set(claim.kind, (ids = new Set()));
-  if (ids.has(claim.id)) return false;
-  ids.add(claim.id);
+  const holding = claimHolding(claim);
+  if (ids.has(holding)) return false;
+  ids.add(holding);
   return true;
 }
 
@@ -328,6 +342,9 @@ export async function startProviderRegistry(
     platforms: Object.freeze(
       claims.flatMap(({ platformSetup }) => (platformSetup ? [platformSetup] : [])),
     ),
+    platformLeaves: Object.freeze(
+      claims.flatMap(({ platformLeaf }) => (platformLeaf ? [platformLeaf] : [])),
+    ),
     claimedProviders: resolved.claimedProviders,
     inventory,
     resolveReplayBackend: async (id, host, packageName) => {
@@ -362,7 +379,8 @@ export async function startProviderRegistry(
     close: once(async () => {
       closed = true;
       const activated = claims.filter(
-        (claim) => claim.registration || claim.replaySetup || claim.platformSetup,
+        (claim) =>
+          claim.registration || claim.replaySetup || claim.platformSetup || claim.platformLeaf,
       );
       return await Promise.all([...activated].reverse().map((claim) => cleanUpClaim(claim)));
     }),
@@ -383,6 +401,7 @@ async function setUpClaims(
       claim.registration = undefined;
       claim.replaySetup = undefined;
       claim.platformSetup = undefined;
+      claim.platformLeaf = undefined;
     }
   }
 }
@@ -405,9 +424,14 @@ async function setUpClaim(
         reason: PLUGIN_REASONS.platformHostMissing,
       });
     const result = await contribution.setup(policy.platformHost);
-    claim.platformSetup = Object.freeze(
-      validateClaimSetup({ kind: contribution.kind, id: contribution.family }, result),
+    const setup = Object.freeze(
+      validateClaimSetup(
+        { kind: contribution.kind, id: contribution.family, appleOs: claim.appleOs },
+        result,
+      ),
     );
+    if ('bind' in setup) claim.platformLeaf = setup;
+    else claim.platformSetup = setup;
     return;
   }
   if (scope === 'platforms') return;

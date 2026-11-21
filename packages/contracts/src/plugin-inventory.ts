@@ -18,6 +18,8 @@ type PluginInventoryIdentity = Readonly<{
   provider?: string;
   backend?: string;
   platform?: string;
+  /** The leaf an `apple` platform claim narrows to: the macOS desktop mechanics. */
+  appleOs?: 'macos';
   source: PluginSource;
   package?: string;
   version?: string;
@@ -88,6 +90,10 @@ function readEntry(value: unknown): PluginInventoryEntry | undefined {
     ...(typeof value.provider === 'string' ? { provider: value.provider } : {}),
     ...(typeof value.backend === 'string' ? { backend: value.backend } : {}),
     ...(typeof value.platform === 'string' ? { platform: value.platform } : {}),
+    // A leaf is read only beside the family it narrows: macOS under `apple`.
+    ...(value.platform === 'apple' && value.appleOs === 'macos'
+      ? { appleOs: 'macos' as const }
+      : {}),
     source: value.source,
     ...(typeof value.package === 'string' ? { package: value.package } : {}),
     ...(typeof value.version === 'string' ? { version: value.version } : {}),

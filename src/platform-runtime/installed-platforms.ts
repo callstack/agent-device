@@ -42,7 +42,9 @@ export async function startInstalledPlatforms(
     (candidate) =>
       packages.has(candidate.package) ||
       candidate.declaredClaims?.some(
-        ({ kind, id }) => kind === 'platform' && (family === undefined || id === family),
+        ({ kind, id, appleOs }) =>
+          kind === 'platform' &&
+          (family === undefined || (id === family && appleOs === undefined)),
       ),
   );
   const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
@@ -66,6 +68,7 @@ export async function startInstalledPlatforms(
         registry.platforms,
         registry.inventory,
         assertSelectionCurrent,
+        registry.platformLeaves,
       ),
       close: async () => {
         await registry.close();
