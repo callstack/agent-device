@@ -1,9 +1,7 @@
-import { expect, test, vi } from 'vitest';
-import type {
-  HostCommandRunner,
-  HostCommandResult,
-} from '@agent-device/contracts/platform-runtime-host';
+import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createHarmonyHostStub } from '../toolbox.fixtures.ts';
+import type { HarmonyCommandResult } from '../command-host.ts';
 import { createHarmonyAppDeploymentOperations, harmonyAppDeploymentFacts } from './runtime.ts';
 
 const device: DeviceInfo = {
@@ -40,19 +38,22 @@ test.each([
 );
 
 test('exposes HarmonyOS deployApp and uninstallApp after fact admission', async () => {
-  const run = vi.fn(async (request: { executable: string; args: readonly string[] }) => ({
-    stdout:
-      request.executable === 'unzip'
-        ? '{"app":{"bundleName":"com.example.app"}}'
-        : request.args.includes('dump')
-          ? '{"hapModuleInfos":[{"mainElementName":"MainAbility","moduleName":"entry"}]}'
-          : '',
-    stderr: '',
-    exitCode: 0,
-  }));
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub({
+    respond: (executable, args) => ({
+      stdout:
+        executable === 'unzip'
+          ? '{"app":{"bundleName":"com.example.app"}}'
+          : args.includes('dump')
+            ? '{"hapModuleInfos":[{"mainElementName":"MainAbility","moduleName":"entry"}]}'
+            : '',
+    }),
+  });
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
   await operations.deployApp?.({
     app: 'com.example.app',
     appPath: '/tmp/app.hap',
@@ -63,17 +64,18 @@ test('exposes HarmonyOS deployApp and uninstallApp after fact admission', async 
     appPath: '/tmp/app.hap',
     replaceExisting: true,
   });
-  expect(run).toHaveBeenCalledWith(
-    expect.objectContaining({
-      executable: 'hdc',
-      args: ['-t', device.id, 'install', '-r', '/tmp/app.hap'],
-    }),
-    signal,
-  );
-  expect(run).toHaveBeenCalledWith(
-    expect.objectContaining({
-      executable: 'hdc',
-      args: [
+
+  // Every spawn names the executable and argv the plugin built, on the host it was set up with.
+  // The second deploy replaces an existing bundle, which additionally resolves the launch target.
+  expect(stub.commands.map((command) => [command.executable, command.args])).toEqual([
+    ['unzip', ['-p', '/tmp/app.hap', 'module.json']],
+    ['hdc', ['-t', device.id, 'install', '-r', '/tmp/app.hap']],
+    ['unzip', ['-p', '/tmp/app.hap', 'module.json']],
+    ['hdc', ['-t', device.id, 'install', '-r', '/tmp/app.hap']],
+    ['hdc', ['-t', device.id, 'shell', 'bm', 'dump', '-n', 'com.example.app']],
+    [
+      'hdc',
+      [
         '-t',
         device.id,
         'shell',
@@ -86,162 +88,178 @@ test('exposes HarmonyOS deployApp and uninstallApp after fact admission', async 
         '-a',
         'MainAbility',
       ],
-    }),
-    signal,
-  );
+    ],
+  ]);
+  expect(stub.commands.every((command) => command.signal === signal)).toBe(true);
   expect(operations).not.toHaveProperty('materializeAppSource');
   expect(
     createHarmonyAppDeploymentOperations({
-      commands,
+      toolbox: stub.toolbox,
       device: { ...device, kind: 'simulator' },
       signal,
     }),
   ).toEqual({});
 });
 
-/** Answers each call in order; the last answer repeats when a script runs past its end. */
-function scriptAnswers(answers: readonly HostCommandResult[]) {
-  let next = 0;
-  return async (): Promise<HostCommandResult> => answers[Math.min(next++, answers.length - 1)]!;
+/** The answers the uninstall tests need, keyed by what the plugin asked the device. */
+/**
+ * Answers each inventory read in order; the last answer repeats when the script runs past its end,
+ * which is how a test keeps the bundle present after the uninstall attempt.
+ */
+function uninstallResponder(answers: {
+  inventories?: readonly (string | Partial<HarmonyCommandResult>)[];
+  uninstall?: Partial<HarmonyCommandResult>;
+}) {
+  const inventories = [...(answers.inventories ?? [])];
+  let reads = 0;
+  return (_executable: string, args: readonly string[]) => {
+    if (args.includes('dump')) {
+      const inventory = inventories[Math.min(reads++, inventories.length - 1)] ?? '';
+      return typeof inventory === 'string' ? { stdout: inventory } : inventory;
+    }
+    if (args.includes('uninstall')) return answers.uninstall ?? {};
+    return {};
+  };
 }
 
-const bundleInventory = (entries: string[]): HostCommandResult => ({
-  stdout: [...entries, ''].join('\n'),
-  stderr: '',
-  exitCode: 0,
-});
-
-const uninstallAnswer: HostCommandResult = {
-  stdout: 'uninstall bundle successfully.',
-  stderr: '',
-  exitCode: 0,
-};
-
 /** `bm dump -a` inventory answers: one bundle name per line, the shared parseHarmonyBundleList shape. */
-const installedInventory = bundleInventory(['com.example.other', 'com.example.app']);
-const absentInventory = bundleInventory(['com.example.other']);
+const installedInventory = 'com.example.other\ncom.example.app\n';
+const absentInventory = 'com.example.other\n';
 
 /**
  * Shapes recorded on physical hardware: bm prints its per-bundle failures into
  * stdout while the host exit code stays 0, so this answer is an unknown read,
  * never a proof of absence.
  */
-const unknownInventoryRead: HostCommandResult = {
+const unknownInventoryRead = {
   stdout: 'error: failed to get information and the parameters may be wrong.',
   stderr: '',
   exitCode: 0,
 };
 
 test('uninstall removes an installed HarmonyOS bundle through bm uninstall', async () => {
-  const run = vi.fn(scriptAnswers([installedInventory, uninstallAnswer, absentInventory]));
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub({
+    respond: uninstallResponder({
+      inventories: [installedInventory, absentInventory],
+      uninstall: { stdout: 'uninstall bundle successfully.' },
+    }),
+  });
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
 
   await expect(operations.uninstallApp?.({ app: 'com.example.app' })).resolves.toEqual({
     wasInstalled: true,
     packageName: 'com.example.app',
   });
-  expect(run).toHaveBeenCalledTimes(3);
-  expect(run).toHaveBeenNthCalledWith(
-    1,
-    expect.objectContaining({
-      executable: 'hdc',
-      args: ['-t', device.id, 'shell', 'bm', 'dump', '-a'],
-    }),
-    signal,
-  );
-  expect(run).toHaveBeenNthCalledWith(
-    2,
-    expect.objectContaining({
-      executable: 'hdc',
-      args: ['-t', device.id, 'shell', 'bm', 'uninstall', '-n', 'com.example.app'],
-    }),
-    signal,
-  );
-  expect(run).toHaveBeenNthCalledWith(
-    3,
-    expect.objectContaining({
-      executable: 'hdc',
-      args: ['-t', device.id, 'shell', 'bm', 'dump', '-a'],
-    }),
-    signal,
-  );
+  expect(stub.commands.map((command) => command.args)).toEqual([
+    ['-t', device.id, 'shell', 'bm', 'dump', '-a'],
+    ['-t', device.id, 'shell', 'bm', 'uninstall', '-n', 'com.example.app'],
+    ['-t', device.id, 'shell', 'bm', 'dump', '-a'],
+  ]);
 });
 
 test('uninstall reports an absent bundle without uninstalling', async () => {
-  const run = vi.fn(scriptAnswers([absentInventory]));
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub({
+    respond: uninstallResponder({ inventories: [absentInventory] }),
+  });
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
 
   await expect(operations.uninstallApp?.({ app: 'com.example.app' })).resolves.toEqual({
     wasInstalled: false,
   });
-  expect(run).toHaveBeenCalledTimes(1);
-  expect(run).not.toHaveBeenCalledWith(
-    expect.objectContaining({ args: expect.arrayContaining(['uninstall']) }),
-    signal,
-  );
+  expect(stub.commands.map((command) => command.args)).toEqual([
+    ['-t', device.id, 'shell', 'bm', 'dump', '-a'],
+  ]);
 });
 
 test('uninstall refuses to claim removal when the inventory still lists the bundle', async () => {
-  const run = vi.fn(scriptAnswers([installedInventory, uninstallAnswer, installedInventory]));
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub({
+    respond: uninstallResponder({
+      inventories: [installedInventory],
+      uninstall: { stdout: 'uninstall bundle successfully.' },
+    }),
+  });
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
 
   await expect(operations.uninstallApp?.({ app: 'com.example.app' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'com.example.app is still installed after bm uninstall',
     details: { stdout: 'uninstall bundle successfully.' },
   });
-  expect(run).toHaveBeenCalledTimes(3);
+  expect(stub.commands.length).toBe(3);
 });
 
 test('uninstall refuses an inventory read it cannot interpret', async () => {
-  const run = vi.fn(scriptAnswers([unknownInventoryRead]));
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub({
+    respond: uninstallResponder({ inventories: [unknownInventoryRead] }),
+  });
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
 
   await expect(operations.uninstallApp?.({ app: 'com.example.app' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Could not read the installed bundle inventory',
   });
-  expect(run).toHaveBeenCalledTimes(1);
-  expect(run).not.toHaveBeenCalledWith(
-    expect.objectContaining({ args: expect.arrayContaining(['uninstall']) }),
-    signal,
-  );
+  expect(stub.commands.length).toBe(1);
+  expect(stub.commands.some((command) => command.args.includes('uninstall'))).toBe(false);
 });
 
 test('uninstall refuses to claim removal when the inventory probe exits non-zero', async () => {
-  const run = vi.fn(
-    scriptAnswers([
-      { stdout: '[Fail]Device not connected', stderr: '[Fail]Device not connected', exitCode: 1 },
-    ]),
-  );
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub({
+    respond: uninstallResponder({
+      inventories: [
+        {
+          stdout: '[Fail]Device not connected',
+          stderr: '[Fail]Device not connected',
+          exitCode: 1,
+        },
+      ],
+    }),
+  });
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
 
   await expect(operations.uninstallApp?.({ app: 'com.example.app' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Could not read the installed bundle inventory',
     details: { processExitError: true, exitCode: 1 },
   });
-  expect(run).toHaveBeenCalledTimes(1);
+  expect(stub.commands.length).toBe(1);
 });
 
 test('uninstall refuses a blank bundle name', async () => {
-  const run = vi.fn();
-  const commands = { which: async () => undefined, run } as HostCommandRunner;
+  const stub = createHarmonyHostStub();
   const signal = new AbortController().signal;
-  const operations = createHarmonyAppDeploymentOperations({ commands, device, signal });
+  const operations = createHarmonyAppDeploymentOperations({
+    toolbox: stub.toolbox,
+    device,
+    signal,
+  });
 
   await expect(operations.uninstallApp?.({ app: '   ' })).rejects.toMatchObject({
     code: 'INVALID_ARGS',
   });
-  expect(run).not.toHaveBeenCalled();
+  expect(stub.commands.length).toBe(0);
 });

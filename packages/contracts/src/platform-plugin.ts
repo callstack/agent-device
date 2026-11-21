@@ -113,6 +113,35 @@ export type VegaPlatformSelection = Readonly<{
   get(): VegaPlatformRegistration;
 }>;
 
+/**
+ * What the core asks of the HarmonyOS plugin: the toolchain probe that answers `doctor --platform
+ * harmonyos`. Every other HarmonyOS operation — HDC discovery, probing, interaction, capture,
+ * recording, performance, and the plugin's own toolchain `PATH` — the package owns, because it runs
+ * them through the host it was set up with.
+ */
+export type HarmonyPlatformOperations = Readonly<{
+  toolchainCheck(): Promise<DoctorCheck>;
+}>;
+
+export type HarmonyPlatformRegistration = Readonly<{
+  family: 'harmonyos';
+  inventoryModule: InventoryPlatformModule<'harmonyos'>;
+  runtimeModule: PlatformRuntimeModule & { readonly family: 'harmonyos' };
+  createInteractor: PlatformPlugin['createInteractor'];
+  operations: HarmonyPlatformOperations;
+}>;
+
+/**
+ * How the running process answers for the HarmonyOS family, installed or not. `get()` raises the
+ * selection's own typed outcome when the plugin is absent or failed to load, and `toolchainCheck`
+ * of the toolchain row comes from it either way: `doctor --platform harmonyos` names the install
+ * command rather than reporting nothing.
+ */
+export type HarmonyPlatformSelection = Readonly<{
+  active?: HarmonyPlatformRegistration;
+  get(): HarmonyPlatformRegistration;
+}>;
+
 export type PlatformPluginSet<Plugin extends PlatformPlugin = PlatformPlugin> =
   PlatformModuleRegistry<{ family: Platform; plugin: Plugin }>;
 
@@ -120,6 +149,7 @@ export type PlatformModuleSelection = Readonly<{
   interactors: PlatformPluginSet;
   web: WebPlatformSelection;
   vega: VegaPlatformSelection;
+  harmony: HarmonyPlatformSelection;
   inventoryModules: readonly InventoryPlatformModule[];
   runtimeModules: readonly PlatformRuntimeModule[];
   reportAbsent(family: Platform): AppError;

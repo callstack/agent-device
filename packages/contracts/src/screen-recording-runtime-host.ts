@@ -223,33 +223,6 @@ export type AndroidScreenRecordingHost = Readonly<{
   resolve(device: DeviceInfo): Promise<AndroidScreenRecordingTransport>;
 }>;
 
-export type HarmonyScreenRecordingHost = Readonly<{
-  start(device: DeviceInfo, fileName: string, signal?: AbortSignal): Promise<HostCommandResult>;
-  stop(device: DeviceInfo, signal?: AbortSignal): Promise<HostCommandResult>;
-  findMedia(
-    device: DeviceInfo,
-    fileName: string,
-    signal?: AbortSignal,
-  ): Promise<string | undefined>;
-  stageMedia(
-    device: DeviceInfo,
-    input: Readonly<{ mediaUri: string; remotePath: string }>,
-    signal?: AbortSignal,
-  ): Promise<boolean>;
-  stagedFileSize(
-    device: DeviceInfo,
-    remotePath: string,
-    signal?: AbortSignal,
-  ): Promise<number | undefined>;
-  pull(
-    device: DeviceInfo,
-    input: Readonly<{ remotePath: string; outputPath: string }>,
-    signal?: AbortSignal,
-  ): Promise<HostCommandResult>;
-  remove(device: DeviceInfo, remotePath: string, signal?: AbortSignal): Promise<boolean>;
-  removeMedia(device: DeviceInfo, mediaUri: string, signal?: AbortSignal): Promise<boolean>;
-}>;
-
 export type WebScreenRecordingTransport = Readonly<{
   start(outputPath: string, signal?: AbortSignal): Promise<void>;
   stop(signal?: AbortSignal): Promise<void>;
@@ -303,7 +276,6 @@ export type ScreenRecordingOutputHost = Readonly<{
 export type ScreenRecordingRuntimeHost = Readonly<{
   apple: AppleScreenRecordingHost;
   android: AndroidScreenRecordingHost;
-  harmony: HarmonyScreenRecordingHost;
   web: WebScreenRecordingHost;
   outputs: ScreenRecordingOutputHost;
   finalize: ScreenRecordingFinalizer;

@@ -1,152 +1,239 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, test, vi } from 'vitest';
-
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn() };
-});
-
-import { runCmd } from '@agent-device/host-kit/command';
+import { test } from 'vitest';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { AppError, asAppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
-  DEFAULT_HARMONY_HDC_TIMEOUT_MS,
-  ensureHarmonyToolchainPathConfigured,
-  runHarmonyHdc,
-  runHarmonyShell,
-} from '../hdc.ts';
-import { mkdtempForTestSync } from './tmp-dir.ts';
+  createHarmonyHostStub,
+  createHarmonyToolchainRoot,
+  harmonyCommandPath,
+} from '../toolbox.fixtures.ts';
+import { createHarmonyCommandRunner } from '../command-host.ts';
+import { DEFAULT_HARMONY_HDC_TIMEOUT_MS } from '../hdc.ts';
 
-bindTestCommandHost();
+const DEVICE = { id: 'target-1' };
 
-const mockRunCmd = vi.mocked(runCmd);
-const device = { id: '127.0.0.1:5555' };
+test('the HDC route bounds ordinary commands with its default timeout', async () => {
+  const stub = createHarmonyHostStub();
+  await stub.toolbox.hdc.runShell(DEVICE, ['uitest', 'uiInput', 'click', '10', '20']);
 
-beforeEach(() => {
-  mockRunCmd.mockReset();
-  mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  assert.deepEqual(stub.commands[0], {
+    executable: 'hdc',
+    args: ['-t', 'target-1', 'shell', 'uitest', 'uiInput', 'click', '10', '20'],
+    env: { PATH: '/usr/bin' },
+    timeoutMs: DEFAULT_HARMONY_HDC_TIMEOUT_MS,
+    allowFailure: undefined,
+    signal: undefined,
+  });
 });
 
-test('runHarmonyHdc bounds ordinary HDC commands by a default timeout', async () => {
-  await runHarmonyShell(device, ['uitest', 'uiInput', 'click', '10', '20']);
+test('the HDC route preserves an operation-specific timeout', async () => {
+  const stub = createHarmonyHostStub();
+  await stub.toolbox.hdc.run(DEVICE, ['install', '-r', '/tmp/example.hap'], {
+    timeoutMs: 180_000,
+  });
 
-  assert.deepEqual(mockRunCmd.mock.calls[0], [
-    'hdc',
-    ['-t', '127.0.0.1:5555', 'shell', 'uitest', 'uiInput', 'click', '10', '20'],
-    { timeoutMs: DEFAULT_HARMONY_HDC_TIMEOUT_MS },
-  ]);
+  assert.equal(stub.commands[0]?.timeoutMs, 180_000);
 });
 
-test('runHarmonyHdc preserves an operation-specific timeout', async () => {
-  await runHarmonyHdc(device, ['install', '-r', '/tmp/example.hap'], { timeoutMs: 180_000 });
-
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.[2], { timeoutMs: 180_000 });
-});
-
-test('runHarmonyHdc forwards a binding abort signal to an in-flight HDC command', async () => {
+test('the HDC route forwards a binding abort signal to an in-flight command', async () => {
   const controller = new AbortController();
-  const aborted = new Error('request aborted');
-  mockRunCmd.mockImplementation(
-    async (_cmd, _args, options) =>
-      await new Promise<never>((_resolve, reject) => {
-        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
-          once: true,
-        });
-      }),
-  );
+  const stub = createHarmonyHostStub();
 
-  const pending = runHarmonyHdc(device, ['install', '-r', '/tmp/example.hap'], {
+  await stub.toolbox.hdc.run(DEVICE, ['install', '-r', '/tmp/example.hap'], {
     signal: controller.signal,
   });
-  controller.abort(aborted);
 
-  await assert.rejects(pending, (error: unknown) => error === aborted);
-  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.signal, controller.signal);
+  // The host owns the child, so the plugin's job is to hand the signal over with the request.
+  assert.equal(stub.commands[0]?.signal, controller.signal);
 });
 
-/** HDC_SDK_PATH names the toolchains directory itself, so `HDC_SDK_PATH/hdc` must exist. */
-async function seedDirectToolchain(root: string): Promise<string> {
-  await fs.mkdir(root, { recursive: true });
-  const hdc = path.join(root, 'hdc');
-  await fs.writeFile(hdc, '#!/bin/sh\nexit 0\n', 'utf8');
-  await fs.chmod(hdc, 0o755);
-  return root;
-}
+test('the HDC route escapes shell words for HDC quoting', async () => {
+  const stub = createHarmonyHostStub();
+  await stub.toolbox.hdc.runShell(DEVICE, ['uitest', 'uiInput', 'text', 'hello; reboot']);
+  await stub.toolbox.hdc.runShell(DEVICE, [
+    'uitest',
+    'uiInput',
+    'inputText',
+    307,
+    1334,
+    '$(id) "x" `y`',
+  ]);
+  await stub.toolbox.hdc.run(DEVICE, ['file', 'recv', '/data/a.png', '/tmp/a.png']);
 
-/** DevEco's home joins `default/openharmony/toolchains`; the command-line-tools root adds `sdk` first. */
-async function seedNestedToolchain(root: string, ...segments: string[]): Promise<string> {
-  const toolchains = path.join(root, ...segments, 'default', 'openharmony', 'toolchains');
-  await fs.mkdir(toolchains, { recursive: true });
-  const hdc = path.join(toolchains, 'hdc');
-  await fs.writeFile(hdc, '#!/bin/sh\nexit 0\n', 'utf8');
-  await fs.chmod(hdc, 0o755);
-  return root;
-}
+  assert.deepEqual(
+    stub.commands.map((command) => [command.executable, command.args]),
+    [
+      ['hdc', ['-t', 'target-1', 'shell', 'uitest', 'uiInput', 'text', 'hello; reboot']],
+      [
+        'hdc',
+        [
+          '-t',
+          'target-1',
+          'shell',
+          'uitest',
+          'uiInput',
+          'inputText',
+          '307',
+          '1334',
+          '\\$(id) \\"x\\" \\`y\\`',
+        ],
+      ],
+      ['hdc', ['-t', 'target-1', 'file', 'recv', '/data/a.png', '/tmp/a.png']],
+    ],
+  );
+});
 
-test('ensureHarmonyToolchainPathConfigured prepends every root holding an hdc binary', async () => {
-  const hdcSdkRoot = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-sdk-'));
-  const devecoRoot = await seedNestedToolchain(mkdtempForTestSync('agent-device-hdc-deveco-'));
-  const cmdlineRoot = await seedNestedToolchain(
-    mkdtempForTestSync('agent-device-hdc-cmdline-'),
-    'sdk',
+test('the HDC route refuses a raw shell argv before asking the host', async () => {
+  const stub = createHarmonyHostStub();
+
+  await assert.rejects(
+    stub.toolbox.hdc.run(DEVICE, ['shell', 'uitest', 'uiInput', 'text', 'x']),
+    (error: unknown) =>
+      error instanceof Error &&
+      'details' in error &&
+      (error as { details?: { reason?: string } }).details?.reason ===
+        'unguarded-device-shell-argv',
+  );
+  assert.equal(stub.commands.length, 0);
+});
+
+test('the HDC route spawns the HDC a documented root carries and puts that root on PATH', async () => {
+  const root = createHarmonyToolchainRoot();
+  const stub = createHarmonyHostStub({ env: { HDC_SDK_PATH: root, PATH: '/usr/bin' } });
+
+  assert.equal(await stub.toolbox.hdc.executable(), path.join(root, 'hdc'));
+  await stub.toolbox.hdc.launch(['list', 'targets']);
+
+  assert.equal(stub.commands[0]?.executable, path.join(root, 'hdc'));
+  assert.deepEqual(harmonyCommandPath(stub.commands[0]!), [root, '/usr/bin']);
+});
+
+test('the HDC route answers a host spawn refusal with the curated toolchain error', async () => {
+  // The host refused a spawn of the bare name it could not resolve from PATH.
+  const stub = createHarmonyHostStub({
+    reject: () => new AppError('TOOL_MISSING', 'hdc not found in PATH', { cmd: 'hdc' }),
+  });
+
+  await assert.rejects(
+    // Any command, not only the discovery probe, gets the curated error.
+    stub.toolbox.hdc.run(DEVICE, ['bm', 'dump', '-a']),
+    (error: unknown) => {
+      const failure = asAppError(error);
+      assert.equal(failure.code, 'TOOL_MISSING');
+      assert.equal(failure.message, 'hdc not found in PATH');
+      assert.equal(
+        failure.details?.hint,
+        'Install HarmonyOS Command Line Tools, then add its sdk/default/openharmony/toolchains directory to PATH or set HDC_SDK_PATH.',
+      );
+      return true;
+    },
+  );
+});
+
+test('the HDC route names the resolved path when the host refuses an absolute HDC', async () => {
+  const root = createHarmonyToolchainRoot();
+  const stub = createHarmonyHostStub({
+    env: { HDC_SDK_PATH: root, PATH: '/usr/bin' },
+    reject: () => new AppError('TOOL_MISSING', 'hdc not found in PATH', { cmd: 'hdc' }),
+  });
+
+  await assert.rejects(stub.toolbox.hdc.launch(['list', 'targets']), (error: unknown) => {
+    const failure = asAppError(error);
+    // The plugin resolved a documented root, so the message names where it looked.
+    assert.equal(failure.message, `hdc not found at ${path.join(root, 'hdc')}`);
+    return true;
+  });
+});
+
+test('the HDC route leaves another host rejection as the host reported it', async () => {
+  const canceled = createRequestCanceledError({ cmd: 'hdc' });
+  const stub = createHarmonyHostStub({ reject: () => canceled });
+
+  await assert.rejects(stub.toolbox.hdc.launch(['list', 'targets']), (error: unknown) =>
+    Object.is(error, canceled),
+  );
+});
+
+test('the command runner prefers the roots in the documented order', async () => {
+  const hdcSdk = createHarmonyToolchainRoot();
+  const deveco = createHarmonyToolchainRoot();
+  const commands = createHarmonyCommandRunner(
+    createHarmonyHostStub({ env: { HDC_SDK_PATH: hdcSdk, DEVECO_SDK_HOME: deveco } }).host,
   );
 
-  const env: NodeJS.ProcessEnv = {
-    PATH: '/usr/bin',
-    HDC_SDK_PATH: hdcSdkRoot,
-    DEVECO_SDK_HOME: devecoRoot,
-    HARMONYOS_COMMAND_LINE_TOOLS: cmdlineRoot,
-  };
-
-  await ensureHarmonyToolchainPathConfigured(env);
-
-  assert.deepEqual((env.PATH ?? '').split(path.delimiter), [
-    hdcSdkRoot,
-    path.join(devecoRoot, 'default', 'openharmony', 'toolchains'),
-    path.join(cmdlineRoot, 'sdk', 'default', 'openharmony', 'toolchains'),
-    '/usr/bin',
-  ]);
+  assert.equal(await commands.resolveHdc(), path.join(hdcSdk, 'hdc'));
 });
 
-test('ensureHarmonyToolchainPathConfigured leaves PATH untouched when no root holds hdc', async () => {
-  const env: NodeJS.ProcessEnv = {
-    PATH: '/usr/bin',
-    HDC_SDK_PATH: '   ',
-    DEVECO_SDK_HOME: mkdtempForTestSync('agent-device-hdc-none-'),
-    HARMONYOS_COMMAND_LINE_TOOLS: mkdtempForTestSync('agent-device-hdc-none-'),
-  };
+test('the command runner derives the toolchains directory from the DevEco SDK layout', async () => {
+  // The documented layout is <DEVECO_SDK_HOME>/default/openharmony/toolchains/hdc.
+  const home = mkdtempForTestSync('harmony-deveco-');
+  const toolchains = path.join(home, 'default', 'openharmony', 'toolchains');
+  fs.mkdirSync(toolchains, { recursive: true });
+  fs.writeFileSync(path.join(toolchains, 'hdc'), '#!/bin/sh\necho stub\n', { mode: 0o755 });
+  const commands = createHarmonyCommandRunner(
+    createHarmonyHostStub({ env: { DEVECO_SDK_HOME: home } }).host,
+  );
 
-  await ensureHarmonyToolchainPathConfigured(env);
-
-  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(await commands.resolveHdc(), path.join(toolchains, 'hdc'));
 });
 
-test('ensureHarmonyToolchainPathConfigured creates PATH and dedupes a root already on it', async () => {
-  const toolchains = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-dup-'));
+test('the command runner ignores a root whose hdc is not executable', async () => {
+  const root = createHarmonyToolchainRoot();
+  const commands = createHarmonyCommandRunner(
+    createHarmonyHostStub({ env: { HDC_SDK_PATH: `${root}/missing`, PATH: '/bin' } }).host,
+  );
 
-  const env: NodeJS.ProcessEnv = {
-    PATH: `/usr/bin${path.delimiter}${toolchains}`,
-    HDC_SDK_PATH: toolchains,
-  };
-  await ensureHarmonyToolchainPathConfigured(env);
-
-  // The toolchain root moves to the front instead of appearing twice.
-  assert.equal(env.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
-
-  const missingPath: NodeJS.ProcessEnv = { HDC_SDK_PATH: toolchains };
-  await ensureHarmonyToolchainPathConfigured(missingPath);
-  assert.equal(missingPath.PATH, toolchains);
+  assert.equal(await commands.toolchainHdc(), undefined);
+  assert.equal(await commands.resolveHdc(), 'hdc');
 });
 
-test('ensureHarmonyToolchainPathConfigured defaults to the host environment', async () => {
-  const toolchains = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-host-'));
-  vi.stubEnv('PATH', '/usr/bin');
-  vi.stubEnv('HDC_SDK_PATH', toolchains);
-  vi.stubEnv('DEVECO_SDK_HOME', undefined);
-  vi.stubEnv('HARMONYOS_COMMAND_LINE_TOOLS', undefined);
+test('the command runner dedupes a root already on PATH', async () => {
+  const root = createHarmonyToolchainRoot();
+  const stub = createHarmonyHostStub({
+    env: { HDC_SDK_PATH: root, PATH: ['/usr/bin', root].join(path.delimiter) },
+  });
 
-  await ensureHarmonyToolchainPathConfigured(process.env);
+  await stub.toolbox.hdc.launch(['list', 'targets']);
 
-  assert.equal(process.env.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
+  assert.deepEqual(harmonyCommandPath(stub.commands[0]!), [root, '/usr/bin']);
+});
+
+test('the command runner streams with the same toolchain environment it runs with', async () => {
+  // One root, one PATH preparation: a toolchain whose HDC needs a sibling executable on `PATH` has
+  // to serve the streamed `hilog` as well as it serves a one-shot command.
+  const root = createHarmonyToolchainRoot();
+  const stub = createHarmonyHostStub({ env: { HDC_SDK_PATH: root, PATH: '/usr/bin' } });
+  const commands = createHarmonyCommandRunner(stub.host);
+
+  const stream = await commands.start(
+    await commands.resolveHdc(),
+    ['-t', 'target-1', 'shell', 'hilog', '-P', '456'],
+    {
+      output: { write: async () => {}, [Symbol.asyncDispose]: async () => {} },
+      markerPath: '/sessions/s1/app-log.pid',
+      allowFailure: true,
+    },
+  );
+
+  assert.equal(stub.streams[0]?.executable, path.join(root, 'hdc'));
+  assert.deepEqual(stub.streams[0]?.args, ['-t', 'target-1', 'shell', 'hilog', '-P', '456']);
+  assert.deepEqual(harmonyCommandPath(stub.streams[0]!), [root, '/usr/bin']);
+  assert.equal(stub.streams[0]?.markerPath, '/sessions/s1/app-log.pid');
+  assert.equal(stub.streams[0]?.allowFailure, true);
+  await stream.terminate();
+  assert.equal((await stream.wait).exitCode, 0);
+});
+
+test('the command runner refuses to stream on a host with no managed process service', async () => {
+  const host = { ...createHarmonyHostStub().host, startBackgroundCommand: undefined };
+  const commands = createHarmonyCommandRunner(host);
+
+  await assert.rejects(
+    commands.start('hdc', ['shell', 'hilog'], {
+      output: { write: async () => {}, [Symbol.asyncDispose]: async () => {} },
+    }),
+    (error: unknown) => asAppError(error).code === 'UNSUPPORTED_OPERATION',
+  );
 });

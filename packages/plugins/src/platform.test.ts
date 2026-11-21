@@ -48,6 +48,7 @@ async function startStore(env: HostEnvironment['env']) {
       runCommand: async () => {
         throw new Error('setup must not start a process');
       },
+      isFileExecutable: async () => false,
       emitDiagnostic: () => {},
       withDiagnosticTimer: async (_phase, run) => await run(),
     },

@@ -15,8 +15,11 @@ export type {
 } from '@agent-device/plugins/host';
 export type {
   Contribution,
+  PlatformBackgroundCommand,
+  PlatformBackgroundProcess,
   PlatformContribution,
   PlatformHost,
+  PlatformOutputSink,
   PlatformSetup,
   PluginConnection,
   PluginConnectionContext,

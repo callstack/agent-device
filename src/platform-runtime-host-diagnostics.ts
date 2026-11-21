@@ -1,4 +1,5 @@
 import type {
+  HarmonyPlatformSelection,
   VegaPlatformSelection,
   WebPlatformSelection,
 } from '@agent-device/contracts/platform-plugin';
@@ -21,6 +22,7 @@ export function createHostDiagnostics(
   host: HostEnvironment,
   web?: WebPlatformSelection,
   vega?: VegaPlatformSelection,
+  harmony?: HarmonyPlatformSelection,
 ): HostDiagnostics {
   const { env } = host;
   return Object.freeze({
@@ -35,11 +37,12 @@ export function createHostDiagnostics(
       if (platform === 'vega') {
         const { active } = vega ?? {};
         if (active) return await active.operations.toolchainCheck(context);
-        return await vegaAbsenceCheck(vega);
+        return await pluginAbsenceCheck('Vega', vega);
       }
       if (platform === 'harmonyos') {
-        const { harmonyToolchainCheck } = await import('@agent-device/platform-harmonyos');
-        return await harmonyToolchainCheck();
+        const { active } = harmony ?? {};
+        if (active) return await active.operations.toolchainCheck();
+        return await pluginAbsenceCheck('HarmonyOS', harmony);
       }
       if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
         const { appleToolchainCheck } = await import('@agent-device/platform-apple/doctor');
@@ -70,17 +73,18 @@ export function createHostDiagnostics(
   });
 }
 
-// Doctor reaches this only for a run whose selector named Vega, so an inactive selection is the
-// user's blocker rather than one family among many. The selection's own lookup owns the answer: an
-// uninstalled plugin raises the typed plugin-not-installed outcome and a plugin whose load failed
-// raises its own error, both through the composition's one absence reporter. The check reports that
-// outcome's own fields; it never re-derives them.
-async function vegaAbsenceCheck(
-  vega: VegaPlatformSelection | undefined,
+// Doctor reaches this only for a run whose selector named the family, so an inactive selection is
+// the user's blocker rather than one family among many. The selection's own lookup owns the answer:
+// an uninstalled plugin raises the typed plugin-not-installed outcome and a plugin whose load
+// failed raises its own error, both through the composition's one absence reporter. The check
+// reports that outcome's own fields; it never re-derives them.
+async function pluginAbsenceCheck(
+  label: string,
+  selection: Readonly<{ get(): unknown }> | undefined,
 ): Promise<DoctorCheck | undefined> {
-  if (!vega) return undefined;
+  if (!selection) return undefined;
   try {
-    vega.get();
+    selection.get();
     return undefined;
   } catch (error) {
     const report = normalizeError(error);
@@ -88,7 +92,7 @@ async function vegaAbsenceCheck(
     return {
       id: 'toolchain',
       status: 'fail',
-      summary: `Vega toolchain: ${report.message}`,
+      summary: `${label} toolchain: ${report.message}`,
       hint: report.hint,
       ...(typeof installCommand === 'string' ? { command: installCommand } : {}),
       evidence: { code: report.code, ...report.details },

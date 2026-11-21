@@ -1,14 +1,15 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HarmonyHdcRunner } from './hdc.ts';
 
 export async function readHarmonyAppState(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   signal.throwIfAborted();
-  const { runHarmonyShell } = await import('./hdc.ts');
-  const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
+  const result = await hdc.runShell(device, ['aa', 'dump', '-l'], {
     timeoutMs: 15_000,
     signal,
   });
