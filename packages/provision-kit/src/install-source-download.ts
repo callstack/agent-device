@@ -9,14 +9,14 @@ import {
 } from '@agent-device/host-kit/archive';
 import type { TransferPhaseWatchdog } from '@agent-device/host-kit/transport';
 
+import { approveDownloadSourceUrl } from './install-source-network.ts';
+import * as networkTransport from './install-source-network-transport.ts';
+
 /** Why a download of an app source refuses the bytes it is handed. */
 const INSTALL_SOURCE_DOWNLOAD_REASONS = {
   // The response declared or carried more bytes than the artifact budget allows.
   byteLimit: { reason: 'ARTIFACT_BYTE_LIMIT' },
 } as const satisfies ReasonTable<'install-from-source'>;
-
-import { approveDownloadSourceUrl } from './install-source-network.ts';
-import * as networkTransport from './install-source-network-transport.ts';
 
 /**
  * The transfer phase tools one download uses, loaded on demand: this module sits in the CLI's

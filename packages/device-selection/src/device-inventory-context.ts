@@ -8,8 +8,8 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-/** Why the device-selection rule refuses to answer at all. */
-const DEVICE_SELECTION_REASONS = {
+/** Why the request-scoped inventory context rule refuses to answer at all. */
+const INVENTORY_CONTEXT_REASONS = {
   // Inventory was reached outside a request, so no request scope carries its gateways.
   contextUnavailable: { reason: 'device_inventory_context_unavailable' },
 } as const satisfies ReasonTable<'device selection'>;
@@ -76,7 +76,7 @@ function requiredContext(): DeviceInventoryContext {
     throw new AppError(
       'COMMAND_FAILED',
       'Device inventory gateway is unavailable outside request execution',
-      { reason: DEVICE_SELECTION_REASONS.contextUnavailable.reason },
+      { reason: INVENTORY_CONTEXT_REASONS.contextUnavailable.reason },
     );
   }
   return context;
@@ -87,7 +87,7 @@ export function shouldPropagateDeviceInventoryProbeError(error: unknown): boolea
   if (
     error instanceof AppError &&
     error.code === 'COMMAND_FAILED' &&
-    error.details?.reason === DEVICE_SELECTION_REASONS.contextUnavailable.reason
+    error.details?.reason === INVENTORY_CONTEXT_REASONS.contextUnavailable.reason
   ) {
     return true;
   }

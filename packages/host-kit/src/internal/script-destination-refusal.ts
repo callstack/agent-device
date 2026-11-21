@@ -57,12 +57,8 @@ export type ScriptAncestryReason =
 export function scriptAncestryReason(error: unknown): ScriptAncestryReason | undefined {
   if (!(error instanceof AppError)) return undefined;
   const reason = error.details?.reason;
-  return typeof reason === 'string' &&
-    (Object.values(SCRIPT_ANCESTRY_REASONS) as ReadonlyArray<{ reason: string }>).some(
-      (row) => row.reason === reason,
-    )
-    ? (reason as ScriptAncestryReason)
-    : undefined;
+  if (typeof reason !== 'string') return undefined;
+  return Object.values(SCRIPT_ANCESTRY_REASONS).find((row) => row.reason === reason)?.reason;
 }
 
 export function scriptAncestryFailure(

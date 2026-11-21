@@ -230,8 +230,8 @@ function assertSourceFamily(family: Platform, devices: readonly DeviceInfo[]): v
   );
 }
 
-/** Why the device-selection rule refuses to answer at all. */
-const DEVICE_SELECTION_REASONS = {
+/** Why the provider-outcome rule refuses to answer at all. */
+const PROVIDER_OUTCOME_REASONS = {
   // A provider's inventory answer was shaped outside the contract it registers under.
   providerContractViolation: { reason: 'provider_inventory_contract_violation' },
 } as const satisfies ReasonTable<'device selection'>;
@@ -247,7 +247,7 @@ function assertProviderOutcome(
     if (outcome.kind === 'inventory' && Array.isArray(outcome.devices)) return;
   }
   throw new AppError('COMMAND_FAILED', 'Provider device inventory returned an invalid outcome.', {
-    reason: DEVICE_SELECTION_REASONS.providerContractViolation.reason,
+    reason: PROVIDER_OUTCOME_REASONS.providerContractViolation.reason,
   });
 }
 

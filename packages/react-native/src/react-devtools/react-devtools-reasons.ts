@@ -1,13 +1,11 @@
 import type { ReasonTable } from '@agent-device/kernel/errors';
 
 /**
- * Why a React DevTools command stops at the app runtime. The in-app runtime answers with these
+ * Why a React DevTools command answers with an error. The in-app runtime answers with these
  * spellings; the injected ES5 source cannot import this table, and its literals are checked
  * against it by `react-devtools-runtime.test.ts`.
  */
 export const REACT_DEVTOOLS_REASONS = {
-  // The app runtime already records a React profile.
-  alreadyProfiling: { reason: 'already-profiling' },
   // The DevTools backend attached to no renderer interface.
   backendAttachFailed: { reason: 'backend-attach-failed' },
   // The DevTools backend could not export the recorded profile.
@@ -30,6 +28,13 @@ export const REACT_DEVTOOLS_REASONS = {
   treeUnavailable: { reason: 'tree-unavailable' },
 } as const satisfies ReasonTable<'react-devtools'>;
 
-/** One {@link REACT_DEVTOOLS_REASONS} spelling a runtime answer may carry. */
+/** One {@link REACT_DEVTOOLS_REASONS} spelling a failing runtime answer may carry. */
 export type ReactDevtoolsFailureReason =
   (typeof REACT_DEVTOOLS_REASONS)[keyof typeof REACT_DEVTOOLS_REASONS]['reason'];
+
+/**
+ * What the runtime answers when `profile start` finds a recording already running. The command
+ * reports that as a success result, so the spelling is not a published error reason and has no
+ * {@link REACT_DEVTOOLS_REASONS} row.
+ */
+export const REACT_DEVTOOLS_ALREADY_PROFILING = 'already-profiling' as const;

@@ -18,6 +18,7 @@ import type {
   ExecDetachedProcess,
 } from './exec-types.ts';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type {
   CommandExecutorOverride,
@@ -36,7 +37,6 @@ const HOST_COMMAND_REASONS = {
   // `xcrun` reported that the tool a command asked for is not in the selected developer dir.
   xcrunToolNotFound: { reason: 'xcrun-tool-not-found' },
 } as const satisfies ReasonTable<'host commands'>;
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
   stdout: string;
@@ -81,6 +81,12 @@ export type ExecStreamOptions = ExecOptions & {
   onSpawn?: (child: ReturnType<typeof spawn>) => void;
 };
 
+export type ExecBackgroundResult = {
+  child: ReturnType<typeof spawn>;
+  /** A background run reports no `signal`: its caller owns the child and reads its exit directly. */
+  wait: Promise<Omit<ExecResult, 'signal'>>;
+};
+
 type ExecDetachedOptions = ExecOptions & {
   stdio?: StdioOptions;
 };
@@ -93,12 +99,6 @@ type ExecDetachedOptions = ExecOptions & {
  * `signal`; a caller that kills the child directly still waits for the streams to
  * drain, exactly as before.
  */
-export type ExecBackgroundResult = {
-  child: ReturnType<typeof spawn>;
-  /** A background run reports no `signal`: its caller owns the child and reads its exit directly. */
-  wait: Promise<Omit<ExecResult, 'signal'>>;
-};
-
 export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
   /**
    * Capture stdout/stderr into the wait result when the child has piped stdio.

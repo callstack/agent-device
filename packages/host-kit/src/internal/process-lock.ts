@@ -1,8 +1,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import type { ReasonTable } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { publishFileSync } from './atomic-publish.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {

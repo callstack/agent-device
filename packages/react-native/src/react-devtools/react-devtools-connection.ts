@@ -1,7 +1,11 @@
 import { parseArgs } from 'node:util';
 import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ReactDevtoolsFailureReason } from './react-devtools-reasons.ts';
+import {
+  REACT_DEVTOOLS_ALREADY_PROFILING,
+  REACT_DEVTOOLS_REASONS,
+  type ReactDevtoolsFailureReason,
+} from './react-devtools-reasons.ts';
 import {
   debuggerUrlOn,
   InspectorSession,
@@ -152,18 +156,38 @@ export async function callRuntime<T>(
   return JSON.parse(value) as T;
 }
 
+/**
+ * The answer the injected runtime gave to a command. It states its own reason, so `reason` is
+ * whatever text that runtime sent — this build's table rows only decide how it gets reported.
+ */
 export type RuntimeFailure = {
   ok: false;
-  reason: ReactDevtoolsFailureReason;
-  elapsedMs?: number;
+  reason: string;
   detail?: string;
 };
 
-/** The message and recovery each runtime answer carries. */
-const RUNTIME_FAILURES: Record<
-  Exclude<ReactDevtoolsFailureReason, 'already-profiling'>,
-  { message: string; hint: string }
-> = {
+/**
+ * The answer `profile start` gets while a recording is already running: `ok: false` in shape, and a
+ * success result to the caller, which reads the elapsed time measured on the device clock.
+ */
+export type AlreadyRecordingResult = {
+  ok: false;
+  reason: typeof REACT_DEVTOOLS_ALREADY_PROFILING;
+  elapsedMs?: number;
+};
+
+/**
+ * Whether the answer to `profile start` reports an already-running recording. The reason is untrusted
+ * text until this says so, which is what lets the caller read `elapsedMs` from it.
+ */
+export function isAlreadyRecording(
+  result: AlreadyRecordingResult | RuntimeFailure,
+): result is AlreadyRecordingResult {
+  return result.reason === REACT_DEVTOOLS_ALREADY_PROFILING;
+}
+
+/** The message and recovery each runtime failure reason carries. */
+const RUNTIME_FAILURES: Record<ReactDevtoolsFailureReason, { message: string; hint: string }> = {
   'no-devtools-hook': {
     message: 'The app runtime has no React DevTools hook.',
     hint: 'Use a development build; release builds do not include React DevTools.',
@@ -207,31 +231,38 @@ const RUNTIME_FAILURES: Record<
 };
 
 /**
+ * The table row for one answer from the injected runtime, or `undefined` for a spelling this build
+ * does not declare. The runtime states its own reason, so it is untrusted text until a row confirms
+ * it.
+ */
+function declaredRuntimeReason(reason: string): ReactDevtoolsFailureReason | undefined {
+  return Object.values(REACT_DEVTOOLS_REASONS).find((row) => row.reason === reason)?.reason;
+}
+
+/**
  * The error for one runtime answer. Every spelling the injected runtime can send has its own row
- * in `REACT_DEVTOOLS_REASONS` and its own wording here. A spelling this build does not know
- * (a stale injected runtime) never becomes the published reason: it travels as
- * `details.runtimeReason` in the message instead.
+ * in `REACT_DEVTOOLS_REASONS` and its own wording here. A spelling this build does not declare is
+ * never published as `details.reason`, whatever the runtime meant by it: the answer stays readable
+ * through `details.runtimeReason` and the message, and a caller branching on a reason sees none.
  */
 export function runtimeFailure(result: RuntimeFailure): AppError {
-  const known = RUNTIME_FAILURES[result.reason as keyof typeof RUNTIME_FAILURES] as
-    | { message: string; hint: string }
-    | undefined;
+  const known = declaredRuntimeReason(result.reason);
   if (known) {
+    const wording = RUNTIME_FAILURES[known];
     return new AppError(
       'COMMAND_FAILED',
-      result.detail ? `${known.message} ${result.detail}` : known.message,
-      { reason: result.reason, hint: known.hint },
+      result.detail ? `${wording.message} ${result.detail}` : wording.message,
+      { reason: known, hint: wording.hint },
     );
   }
-  const raw = String(result.reason);
   return new AppError(
     'COMMAND_FAILED',
-    `The React DevTools runtime reported an unknown failure (${raw}).${
+    `The React DevTools runtime reported an unknown failure (${result.reason}).${
       result.detail ? ` ${result.detail}` : ''
     }`,
     {
-      runtimeReason: raw,
-      hint: 'Update agent-device; this app runtime is newer than this build.',
+      runtimeReason: result.reason,
+      hint: 'The injected runtime returned a reason this version does not declare, so this error reports none and the raw text is in details.runtimeReason. Reload the app, or update agent-device if it keeps happening.',
     },
   );
 }

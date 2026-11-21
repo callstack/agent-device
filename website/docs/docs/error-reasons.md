@@ -102,7 +102,6 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `already-profiling` | The app runtime already records a React profile. |
 | `backend-attach-failed` | The DevTools backend attached to no renderer interface. |
 | `collect-failed` | The DevTools backend could not export the recorded profile. |
 | `element-not-found` | No mounted component has the ref the command named. |

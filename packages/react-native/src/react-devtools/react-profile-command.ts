@@ -11,12 +11,13 @@ import {
   runtimeFailure,
   RUNTIME_OPTIONS,
   withAppRuntime,
+  type AlreadyRecordingResult,
+  isAlreadyRecording,
   type CommandForm,
   type DevtoolsArgs,
   type ReactDevtoolsCommandOptions,
   type RuntimeFailure,
 } from './react-devtools-connection.ts';
-import { REACT_DEVTOOLS_REASONS } from './react-devtools-reasons.ts';
 import {
   analyzeReactProfile,
   isFindingFor,
@@ -63,7 +64,7 @@ type SavedReactProfile = {
   notes: string[];
 };
 
-type StartResult = { ok: true; attach: string } | RuntimeFailure;
+type StartResult = { ok: true; attach: string } | AlreadyRecordingResult | RuntimeFailure;
 type StopResult = ({ ok: true; failures: string[] } & RawReactProfile) | RuntimeFailure;
 
 function isReactProfileSubcommand(value: string | undefined): value is ReactProfileSubcommand {
@@ -153,7 +154,7 @@ async function startProfile(
   return await withAppRuntime(args, options, async (session, target) => {
     const result = await callRuntime<StartResult>(session, 'start');
     const app = targetAppId(target);
-    if (!result.ok && result.reason === REACT_DEVTOOLS_REASONS.alreadyProfiling.reason) {
+    if (!result.ok && isAlreadyRecording(result)) {
       return {
         app,
         alreadyProfiling: true,
