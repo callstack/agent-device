@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/maestro",
-  "version": "0.0.0",
+  "version": "0.22.0-dev",
   "engines": {
     "node": ">=22.12"
   },
@@ -8,7 +8,6 @@
     "apiVersion": 3,
     "replayBackend": "maestro"
   },
-  "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",

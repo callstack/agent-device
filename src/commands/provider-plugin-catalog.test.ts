@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   getProviderPluginDeclaration,
+  providerPluginDeclarations,
   providerPluginHelp,
   providerPluginInstallCommand,
 } from './provider-plugin-catalog.ts';
@@ -54,6 +55,18 @@ test('a plugin that ships every release ignores the channel of the core', () => 
       providerPluginInstallCommand(declaration(provider), '0.21.39'),
       `agent-device plugins add @agent-device/${provider}`,
     );
+  }
+});
+
+test('the catalog exposes every row, so the release check sees every install hint', () => {
+  const declarations = providerPluginDeclarations();
+  assert.deepEqual(
+    declarations.map((plugin) => plugin.package),
+    declarations.map((plugin) => `@agent-device/${plugin.provider}`),
+  );
+  // The release install-hint check reads this list, so a lookup answers for every row it names.
+  for (const plugin of declarations) {
+    assert.equal(getProviderPluginDeclaration(plugin.provider), plugin);
   }
 });
 

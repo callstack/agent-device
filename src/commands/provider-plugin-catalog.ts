@@ -35,6 +35,11 @@ const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   { provider: 'tizen', package: '@agent-device/tizen', label: 'Samsung Tizen' },
 ];
 
+/** Every catalog row, so the release check can compare each row's package with what it publishes. */
+export function providerPluginDeclarations(): readonly ProviderPluginDeclaration[] {
+  return PROVIDER_PLUGIN_CATALOG;
+}
+
 export function getProviderPluginDeclaration(
   provider: string,
 ): ProviderPluginDeclaration | undefined {
