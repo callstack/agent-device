@@ -2271,7 +2271,7 @@ Exact behavior: `agent-device help record`.
 
 <!-- /generated -->
 
-- `record start` records the session app and needs a session from `open <app>`. Use `--scope device` or `--scope system` for the whole screen, such as several apps or the home screen.
+- `record start` defaults to app scope, which needs an active app session from `open <app>`; the backend decides what is captured. A local iOS simulator recording always captures the whole display, even at app scope. Use `--scope device` or `--scope system` for whole-screen capture (several apps, settings, the home screen) where the backend supports it.
 - On physical iOS devices, a recording is a series of runner screenshots: no audio, about 15 FPS by default, and dropped frames are expected.
 - Burned-in touch overlays export only on macOS hosts. Elsewhere, or when the export takes too long, `record stop` returns the raw video with `overlayWarning`.
 - Android splits long recordings into MP4 chunks. A clip can end early when the screen stops changing; `capturedDurationMs` and a warning report how much the video covers.
