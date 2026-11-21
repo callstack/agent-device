@@ -36,10 +36,6 @@ import {
 // a daemon this call quiesced can still be leaving. A judgement that went stale is made again after
 // a short wait, for as long as a drain can take.
 const JUDGE_AGAIN_DELAY_MS = 250;
-// The budget is counted in waits, not on a clock: each attempt that judges again waits once, so the
-// waits alone add up to the teardown grace. The work inside an attempt is not counted, so a state
-// directory that another process keeps replacing can hold this call for longer.
-const ENSURE_ATTEMPTS = Math.ceil(DAEMON_TEARDOWN_GRACE_MS / JUDGE_AGAIN_DELAY_MS);
 const DRAIN_POLL_MS = 250;
 
 type EnsureStep =
@@ -61,18 +57,27 @@ export async function ensureDaemon(
   host: HostEnvironment = captureHostEnvironment(process),
 ): Promise<DaemonConnection> {
   const settings = resolveLocalDaemonSettings(options, host);
-  for (let attempt = 1; attempt <= ENSURE_ATTEMPTS; attempt += 1) {
+  // The budget is one teardown grace of elapsed time: a state directory another process keeps
+  // replacing holds this call for the grace, not for a grace of judgements plus what each judgement
+  // cost. `maxWaits` backstops the deadline, which cannot end the loop on a clock that stops. The
+  // deadline is monotonic, like the transport and lifecycle budgets: a wall-clock step would shorten
+  // the grace, and `sleep` itself counts waiting monotonically.
+  const deadlineAtMs = performance.now() + DAEMON_TEARDOWN_GRACE_MS;
+  const maxWaits = Math.ceil(DAEMON_TEARDOWN_GRACE_MS / JUDGE_AGAIN_DELAY_MS);
+  for (let waits = 0; ; waits += 1) {
     const step = await ensureOnce(settings, options.onStart);
-    if (step.kind === 'judge-again') {
-      await sleep(JUDGE_AGAIN_DELAY_MS);
-      continue;
+    if (step.kind === 'connected') {
+      await assertDaemonPolicyMatches(step.daemon.info, settings.paths.baseDir, host);
+      return {
+        stateDir: settings.paths.baseDir,
+        daemon: daemonIdentityOf(step.daemon.info),
+        started: step.started,
+      };
     }
-    await assertDaemonPolicyMatches(step.daemon.info, settings.paths.baseDir, host);
-    return {
-      stateDir: settings.paths.baseDir,
-      daemon: daemonIdentityOf(step.daemon.info),
-      started: step.started,
-    };
+    if (waits >= maxWaits) break;
+    const remainingMs = deadlineAtMs - performance.now();
+    if (remainingMs <= 0) break;
+    await sleep(Math.min(JUDGE_AGAIN_DELAY_MS, remainingMs));
   }
   throw new AppError('COMMAND_FAILED', 'The daemon kept changing while it was being ensured.', {
     reason: 'daemon-lifecycle-contended',
