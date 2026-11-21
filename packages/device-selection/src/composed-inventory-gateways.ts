@@ -159,7 +159,8 @@ async function loadFamilyInventory(
       // The HarmonyOS plugin holds the host it was set up with, so it loads with nothing.
       return await module.loadInventory();
     case 'vega':
-      return await module.loadInventory(vegaInventoryHost(await requiredHost()));
+      // The Vega plugin holds the host it was set up with, so it loads with nothing.
+      return await module.loadInventory();
     case 'linux':
       return await module.loadInventory(linuxInventoryHost(await requiredHost()));
     case 'web':
@@ -183,14 +184,6 @@ function androidInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor
     files: host.files,
     homeDirectory: host.homeDirectory,
     toolchains: host.toolchains,
-  });
-}
-
-function vegaInventoryHost(host: DeviceInventoryHost): DeviceInventoryHostFor<'vega'> {
-  return Object.freeze({
-    commands: host.commands,
-    files: host.files,
-    homeDirectory: host.homeDirectory,
   });
 }
 

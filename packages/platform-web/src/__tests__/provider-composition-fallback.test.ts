@@ -2,7 +2,11 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
-import { resolveRequestScopedWebProvider, resolveWebProviderForHost } from '../resolve-provider.ts';
+import {
+  resolveRequestScopedWebProvider,
+  resolveWebProviderForToolbox,
+} from '../resolve-provider.ts';
+import { createWebHostStub } from '../toolbox.fixtures.ts';
 import { resolveWebProvider, withWebProvider } from '../provider.ts';
 import { makeWebProvider } from './test-utils.ts';
 
@@ -47,12 +51,13 @@ test('a composed request provider answers instead of the fallback refusal', asyn
 
 test('the request-scoped resolver answers only inside a composed request, and the host resolver falls back', async () => {
   const provider = makeWebProvider();
-  const host = createTestHostEnvironment();
+  createTestHostEnvironment();
+  const toolbox = createWebHostStub().toolbox;
   assert.equal(await resolveRequestScopedWebProvider(), undefined);
-  assert.notEqual(await resolveWebProviderForHost(host), provider);
+  assert.notEqual(await resolveWebProviderForToolbox(toolbox), provider);
   await withWebProvider(provider, async () => {
     assert.equal(await resolveRequestScopedWebProvider(), provider);
-    assert.equal(await resolveWebProviderForHost(host), provider);
+    assert.equal(await resolveWebProviderForToolbox(toolbox), provider);
   });
-  assert.equal(await resolveWebProviderForHost(host, provider), provider);
+  assert.equal(await resolveWebProviderForToolbox(toolbox, provider), provider);
 });
