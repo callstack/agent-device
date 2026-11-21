@@ -1,9 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPathInsideDirectory } from './runner-artifact-manifest.ts';
-import { RUNNER_CACHE_READER_GRACE_MS } from './runner-cache.ts';
 import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
 import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
+
+/**
+ * How long a cache key or a runner tree outlives its last resolution without a runner lease naming
+ * it. A session writes its lease only once its runner answers, so through the whole launch this
+ * window is all that marks the files in use.
+ */
+// CONSERVATIVE: a day, so a launch that resolved its runner but has not written its lease cannot
+// lose its products. Revisit if start no longer leaves that gap.
+export const RUNNER_CACHE_READER_GRACE_MS = 24 * 60 * 60_000;
 
 // A build's products directory sits at `Build/<products>`, so a tree is never deeper than this.
 const RUNNER_TREE_MAX_DEPTH = 2;

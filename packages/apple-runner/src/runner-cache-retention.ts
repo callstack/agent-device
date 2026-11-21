@@ -3,11 +3,11 @@ import path from 'node:path';
 import { resolveRunnerDerivedOverride } from './apple-runner-platform.ts';
 import { hostEnvironment, emitDiagnostic } from './host.ts';
 import {
-  RUNNER_CACHE_READER_GRACE_MS,
   acquireRunnerXctestrunCacheLock,
   emitRunnerXctestrunDecision,
   resolveRunnerCacheMetadataPath,
 } from './runner-cache.ts';
+import { RUNNER_CACHE_READER_GRACE_MS } from './runner-cache-trim.ts';
 import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
 
 const DEFAULT_RUNNER_CACHE_KEEP = 3;

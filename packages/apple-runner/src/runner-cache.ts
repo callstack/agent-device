@@ -46,15 +46,6 @@ export { requireRunnerPhaseRemainingMs, type RunnerPhaseBudget } from './runner-
 const RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS = 10 * 60_000;
 const RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS = 100;
 
-/**
- * How long a cache key or a runner tree outlives its last resolution without a runner lease naming
- * it. A session writes its lease only once its runner answers, so through the whole launch this
- * window is all that marks the files in use.
- */
-// CONSERVATIVE: a day, so a launch that resolved its runner but has not written its lease cannot
-// lose its products. Revisit if start no longer leaves that gap.
-export const RUNNER_CACHE_READER_GRACE_MS = 24 * 60 * 60_000;
-
 const BAD_ARTIFACTS_SLOT = Symbol('apple-runner-bad-artifacts');
 const badRunnerArtifactsForRun = () =>
   runnerRuntimeSlot(BAD_ARTIFACTS_SLOT, () => new Set<string>());
@@ -174,7 +165,7 @@ export async function cleanRunnerDerivedBeforeEvaluation(
 
 /**
  * Stamps the tree that holds the artifact's `.xctestrun` as resolved now. Runs under the cache lock,
- * so a clean that follows sees the stamp and keeps the tree for {@link RUNNER_CACHE_READER_GRACE_MS}.
+ * so a clean that follows sees the stamp and keeps the tree for `RUNNER_CACHE_READER_GRACE_MS`.
  */
 export function markRunnerTreeResolved<T extends { xctestrunPath: string }>(artifact: T): T {
   const now = new Date();
