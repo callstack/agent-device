@@ -120,7 +120,7 @@ type RunnerErrorVerdicts = {
   sessionFatalReason?: string; // Invalidate cached runner session with this reason.
   restartBeforeSend?: boolean; // Restart session and replay before command was sent.
   restartAfterReadinessPreflight?: boolean; // Readiness preflight gave up before command was written.
-  artifactSuspect?: boolean; // No route had a runner; restored artifact is suspect.
+  artifactSuspect?: boolean; // Runner never accepted connection; restored artifact is suspect.
   retainSession?: boolean; // Transport outage leaves current generation owned for next command.
   postSendRecovery?: boolean; // Status recovery can reach runner after lost response.
 };
@@ -378,9 +378,6 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: { restartAfterReadinessPreflight: true },
   },
   {
-    // Says `artifactSuspect: false` on purpose: the startup deadline expired while xcodebuild was
-    // alive, which a loaded host produces with a sound artifact. A rebuild cleans the shared cache
-    // that concurrent sessions read (#4689).
     reason: 'runner_connect_refused',
     match: {
       code: 'COMMAND_FAILED',
@@ -390,7 +387,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
       retryable: true,
       connectRetry: true,
       restartBeforeSend: true,
-      artifactSuspect: false,
+      artifactSuspect: true,
     },
   },
   {
@@ -771,10 +768,10 @@ export function shouldRestartRunnerAfterReadinessPreflight(error: unknown): bool
 }
 
 /**
- * No route had a runner, which is what a restored artifact that cannot boot looks like.
- * Deliberately narrow: the recovery it authorises is a clean `xcodebuild` rebuild of a cache
- * that other sessions read, so a slow boot that outlives the startup deadline, a busy device
- * or a transport failure partway through a command must not pay that price.
+ * The runner refused or never answered on every route, which is what a restored artifact
+ * that cannot boot looks like. Deliberately narrow: the recovery it authorises is a clean
+ * `xcodebuild` rebuild, so a slow boot, a busy device or a transport failure partway
+ * through a command must not pay that price.
  */
 export function shouldRebuildCachedRunnerArtifact(error: unknown): boolean {
   return runnerErrorVerdict(error, 'artifactSuspect') ?? false;

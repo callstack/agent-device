@@ -81,6 +81,7 @@ export async function prepareLocalIosRunner(
   // runner the loop's killed child was building meets a closed gate instead (#3220).
   const startAdmission = openRunnerStartLoopAdmission(device.id);
   let recoveryReason: string | undefined;
+  let cachedArtifactSuspect = false;
   try {
     for (let attempt = 1; attempt <= PREPARE_RUNNER_HEALTH_MAX_SESSION_ATTEMPTS; attempt += 1) {
       const result = await runPrepareAttempt({
@@ -90,9 +91,11 @@ export async function prepareLocalIosRunner(
         signal,
         attempt,
         recoveryReason,
+        cachedArtifactSuspect,
       });
       if (result.kind === 'prepared') return result.result;
       recoveryReason = result.recoveryReason;
+      cachedArtifactSuspect = result.cachedArtifactSuspect;
     }
   } finally {
     finishRunnerStartAdmission(startAdmission);
@@ -104,7 +107,12 @@ export async function prepareLocalIosRunner(
 
 type PrepareAttemptResult =
   | { kind: 'prepared'; result: PrepareIosRunnerResult }
-  | { kind: 'retry'; recoveryReason: string };
+  | {
+      kind: 'retry';
+      recoveryReason: string;
+      /** The failed attempt ran a restored artifact and its failure indicts that artifact. */
+      cachedArtifactSuspect: boolean;
+    };
 
 async function runPrepareAttempt(params: {
   device: DeviceInfo;
@@ -113,6 +121,7 @@ async function runPrepareAttempt(params: {
   signal: AbortSignal | undefined;
   attempt: number;
   recoveryReason: string | undefined;
+  cachedArtifactSuspect: boolean;
 }): Promise<PrepareAttemptResult> {
   const { device, command, options, signal, attempt, recoveryReason } = params;
   const connectStartedAt = Date.now();
@@ -146,6 +155,7 @@ async function runPrepareAttempt(params: {
       signal,
       attempt,
       error,
+      cachedArtifactSuspect: params.cachedArtifactSuspect,
     });
   }
 }
@@ -158,6 +168,7 @@ async function handlePrepareHealthFailure(params: {
   signal: AbortSignal | undefined;
   attempt: number;
   error: unknown;
+  cachedArtifactSuspect: boolean;
 }): Promise<PrepareAttemptResult> {
   const { device, session, command, options, signal, attempt, error } = params;
   assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
@@ -168,7 +179,9 @@ async function handlePrepareHealthFailure(params: {
     throw error;
   }
   if (shouldRetainRunnerSession(appErr)) throw error;
-  if (attempt === 1 && shouldRecoverBadCachedRunnerArtifact(appErr, session)) {
+  // A slow boot on a loaded host fails the same way as a corrupt artifact, and the rebuild cleans
+  // a cache that concurrent sessions read. Only a failure that repeats on the retry rebuilds (#4689).
+  if (params.cachedArtifactSuspect && shouldRecoverBadCachedRunnerArtifact(appErr, session)) {
     return {
       kind: 'prepared',
       result: await recoverBadCachedRunnerArtifact({
@@ -204,7 +217,11 @@ async function handlePrepareHealthFailure(params: {
       reason,
     },
   });
-  return { kind: 'retry', recoveryReason: reason };
+  return {
+    kind: 'retry',
+    recoveryReason: reason,
+    cachedArtifactSuspect: shouldRecoverBadCachedRunnerArtifact(appErr, session),
+  };
 }
 
 async function recoverBadCachedRunnerArtifact(params: {
