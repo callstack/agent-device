@@ -78,7 +78,15 @@ function requireClaimLeaf(
   source: Record<string, unknown>,
   id: string,
 ): ClaimLeaf | undefined {
-  const declared = field === undefined ? undefined : source[field];
+  return field === undefined ? undefined : requireDeclaredLeaf(source[field], field, id);
+}
+
+/**
+ * The leaf one declared value names, refusing it the same way whichever reader reached it: a leaf
+ * that is present but cannot narrow its id would widen the claim to the whole id, which is a
+ * declaration no claim space admits.
+ */
+function requireDeclaredLeaf(declared: unknown, field: string, id: string): ClaimLeaf | undefined {
   if (declared === undefined) return undefined;
   const leaf = readClaimLeaf(declared, id);
   if (leaf === undefined) {
@@ -116,7 +124,7 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
       ...(appleOs === undefined ? {} : { appleOs }),
     }),
     readMetadata: (value) => readableClaimId(value, 'platform'),
-    readLeaf: (value, family) => readClaimLeaf(value, family),
+    readLeaf: (declaredLeaf, id) => requireDeclaredLeaf(declaredLeaf, 'appleOs', id),
     readContribution: (value) => {
       const id = readableClaimId(value.family, 'family');
       if (typeof value.setup !== 'function') {
@@ -217,8 +225,12 @@ type ClaimKindSpec<Kind extends ClaimKind = ClaimKind> = Readonly<{
   identityFor(id: string, leaf?: ClaimLeaf): ClaimIdentity;
   /** Reads the id out of the `agent-device` field. */
   readMetadata(value: unknown): string;
-  /** Reads the leaf part of this space's claim, answering none for an id that cannot narrow. */
-  readLeaf?(value: unknown, id: string): ClaimLeaf | undefined;
+  /**
+   * Reads the leaf part this space's claim declares, refusing a declared leaf the id cannot narrow:
+   * answering no leaf would silently widen the claim to the whole id. Only the `platform` space
+   * declares a leaf, and only an `apple` id has one to name.
+   */
+  readLeaf?(declaredLeaf: unknown, id: string): ClaimLeaf | undefined;
   /** Validates one contribution of this kind and answers its claim. */
   readContribution(value: Record<string, unknown>): PluggedClaim;
   /** Reads the name of a malformed contribution for failure reporting. */
@@ -292,9 +304,11 @@ function assertClaimAvailable(claim: PluggedClaim): void {
 }
 
 /**
- * The claims a returned value already names, read through the same table without validating it. Only
- * a slot that failed before its claims were readable uses this, so the inventory and the plugin that
- * selected it can still say what it was meant to provide.
+ * The claims a returned value already names, read through the same table without validating the rest
+ * of it. Only a slot that failed before its claims were readable uses this, so the inventory and the
+ * plugin that selected it can still say what it was meant to provide. A leaf an id cannot narrow is
+ * refused here exactly as the validating readers refuse it: answering no leaf would widen the claim to
+ * the whole id, and a widened claim would deny that id to a package that really holds it.
  */
 export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
   if (!isRecord(value)) return [];
@@ -320,8 +334,8 @@ function namedContributionClaims(contributions: unknown, kind: ClaimKind): reado
     if (!isRecord(contribution) || contribution.kind !== kind) return [];
     const id = readNamedId(contribution[contributionIdField]);
     if (id === undefined) return [];
-    const leaf = leafField === undefined ? undefined : readNamedId(contribution[leafField]);
-    const appleOs = leaf === undefined ? undefined : readLeaf?.(leaf, id);
+    const declaredLeaf = leafField === undefined ? undefined : contribution[leafField];
+    const appleOs = readLeaf?.(declaredLeaf, id);
     return [appleOs === undefined ? { kind, id } : { kind, id, appleOs }];
   });
 }

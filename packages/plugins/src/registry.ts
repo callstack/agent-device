@@ -287,7 +287,16 @@ function failedLoadClaims(
       failure: reservationFailure ?? failure,
     }));
   }
-  return readableClaimsOfValue(raw).map((claim) => {
+  let readable: readonly PluggedClaim[];
+  try {
+    readable = readableClaimsOfValue(raw);
+  } catch {
+    // The declaration names a leaf its id cannot narrow, so it owns no claim: recording it against
+    // the widened id would deny that id to a package that really holds it. The slot reports the
+    // refusal the load raised.
+    return [];
+  }
+  return readable.map((claim) => {
     reserveClaim(claimed, claim);
     return { ...claim, slot, failure };
   });

@@ -267,6 +267,44 @@ test.each([
   await registry.close();
 });
 
+test('a bad leaf in a returned plugin neither widens to the apple family nor denies it to the next package', async () => {
+  // A candidate with no package metadata claims what its factory returns. Before its claims are
+  // readable, the registry reads them off the returned value, and that read must refuse a leaf the
+  // family cannot narrow: reading it as the whole `apple` claim would deny that claim to the next
+  // package, which is the one that really holds it.
+  const badLeaf = {
+    source: 'embedder',
+    package: 'bad-leaf',
+    load: () => ({
+      apiVersion: 3,
+      contributes: [{ kind: 'platform', family: 'apple', appleOs: 'ios', setup: () => undefined }],
+    }),
+  } as const;
+  const wholeApple = {
+    source: 'embedder',
+    package: 'whole-apple',
+    declaredClaims: [{ kind: 'platform', id: 'apple' }],
+    load: () => {
+      throw new Error('must never import');
+    },
+  } as const;
+
+  const resolved = await resolveProviderPlugins([badLeaf, wholeApple]);
+  expect(
+    resolved
+      .inventory()
+      .map((entry) => [
+        entry.package,
+        entry.platform,
+        entry.appleOs,
+        entry.state === 'failed' ? entry.error.reason : entry.state,
+      ]),
+  ).toEqual([
+    ['bad-leaf', undefined, undefined, 'invalid_plugin'],
+    ['whole-apple', 'apple', undefined, 'plugin_load_failed'],
+  ]);
+});
+
 test('a leaf setup that binds nothing is recorded as failed', async () => {
   const { home, env } = pluginHome();
   selectPlugin(
