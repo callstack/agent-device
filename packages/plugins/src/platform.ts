@@ -1,6 +1,8 @@
 import type { InventoryPlatformModule } from '@agent-device/contracts/platform-module';
 import type { Platform } from '@agent-device/kernel/device';
 import type {
+  HarmonyPlatformOperations,
+  HarmonyPlatformRegistration,
   PlatformPlugin,
   VegaPlatformOperations,
   VegaPlatformRegistration,
@@ -31,6 +33,12 @@ export type PlatformHost = HostEnvironment &
         stdin?: string;
       },
     ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    /**
+     * True when `path` is a file the host can execute. A plugin that resolves a tool from a
+     * directory it was configured with asks the host rather than reading the filesystem itself, so
+     * the probe uses the same host authority as the spawn it authorizes.
+     */
+    isFileExecutable(path: string): Promise<boolean>;
     emitDiagnostic(event: DiagnosticEventInput): void;
     withDiagnosticTimer: typeof withDiagnosticTimer;
   }>;
@@ -61,7 +69,9 @@ export type PlatformSetup<Family extends Platform = Platform> = Family extends P
               ): Promise<T>;
               operations: VegaPlatformOperations;
             }>
-          : unknown)
+          : Family extends 'harmonyos'
+            ? Readonly<{ operations: HarmonyPlatformOperations }>
+            : unknown)
   : never;
 
 export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family extends Platform
@@ -69,12 +79,14 @@ export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family
     ? WebPlatformRegistration
     : Family extends 'vega'
       ? VegaPlatformRegistration
-      : Readonly<{
-          family: Family;
-          createInteractor: PlatformPlugin['createInteractor'];
-          inventoryModule: InventoryPlatformModule<Family>;
-          runtimeModule: PlatformRuntimeModule & { readonly family: Family };
-        }>
+      : Family extends 'harmonyos'
+        ? HarmonyPlatformRegistration
+        : Readonly<{
+            family: Family;
+            createInteractor: PlatformPlugin['createInteractor'];
+            inventoryModule: InventoryPlatformModule<Family>;
+            runtimeModule: PlatformRuntimeModule & { readonly family: Family };
+          }>
   : never;
 
 export type PlatformContribution = {

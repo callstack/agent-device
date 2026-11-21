@@ -211,7 +211,7 @@ test('R65 follows common createRequire and require aliases', () => {
     "loadAlias('@agent-device/platform-linux');",
     "module.require('@agent-device/platform-vega');",
     "const { createRequire: fromCjs } = require('node:module');",
-    "fromCjs(import.meta.url)('@agent-device/platform-harmonyos');",
+    "fromCjs(import.meta.url)('@agent-device/platform-apple');",
   ].join('\n');
 
   assert.deepEqual(
@@ -223,7 +223,7 @@ test('R65 follows common createRequire and require aliases', () => {
       { spec: '@agent-device/platform-web', line: 9 },
       { spec: '@agent-device/platform-linux', line: 11 },
       { spec: '@agent-device/platform-vega', line: 12 },
-      { spec: '@agent-device/platform-harmonyos', line: 14 },
+      { spec: '@agent-device/platform-apple', line: 14 },
     ],
   );
 });

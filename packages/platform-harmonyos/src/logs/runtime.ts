@@ -5,12 +5,17 @@ import {
   createPidScopedAppLogRuntimeOwner,
   resolveFirstNumericAppLogPid,
 } from '@agent-device/capture-kit';
+import type { HarmonyToolbox } from '../toolbox.ts';
 import { createHarmonyAppLogEnvelope, harmonyAppLogDescriptorCodec } from './descriptor.ts';
 
 const START_UNAVAILABLE_HINT =
   'The selected HarmonyOS transport cannot start a background hilog stream.';
 
-export function createHarmonyAppLogRuntime(host: AppLogRuntimeHost) {
+/**
+ * HarmonyOS app logs. The `hdc` the two host-minted commands name is resolved by the plugin, because
+ * the core builds those commands' environment without this family's documented toolchain roots.
+ */
+export function createHarmonyAppLogRuntime(host: AppLogRuntimeHost, toolbox: HarmonyToolbox) {
   return createPidScopedAppLogRuntimeOwner(host, {
     family: 'harmonyos',
     backend: 'harmonyos',
@@ -26,7 +31,7 @@ export function createHarmonyAppLogRuntime(host: AppLogRuntimeHost) {
         : ['No app bundle is tracked in this session. Run open <app> first for app-scoped logs.'],
     }),
     process: async ({ host: runtimeHost, device, input, signal }) => {
-      const hdc = await prepareHarmonyLogs(runtimeHost, signal);
+      const hdc = await resolveHarmonyLogsHdc(host, toolbox, signal);
       return {
         resolvePid: async (pidSignal) =>
           await resolveFirstNumericAppLogPid(
@@ -66,21 +71,34 @@ export function createHarmonyAppLogRuntime(host: AppLogRuntimeHost) {
   });
 }
 
-async function prepareHarmonyLogs(host: AppLogRuntimeHost, signal: AbortSignal): Promise<string> {
+/**
+ * HDC for the host-minted hilog commands: the binary a documented toolchain root carries, else the
+ * host's own `PATH`. Both answers keep a cancellation a cancellation: an aborted request aborts the
+ * log stream rather than surfacing a probe failure.
+ */
+async function resolveHarmonyLogsHdc(
+  host: AppLogRuntimeHost,
+  toolbox: HarmonyToolbox,
+  signal: AbortSignal,
+): Promise<string> {
   signal.throwIfAborted();
-  await preserveHarmonyCancellation(async () => await host.toolchains.prepare('harmonyos'), signal);
+  const fromToolchain = await preserveHarmonyCancellation(
+    async () => await toolbox.commands.toolchainHdc(),
+    signal,
+  );
+  if (fromToolchain) return fromToolchain;
   signal.throwIfAborted();
-  const hdc = await preserveHarmonyCancellation(
+  const fromPath = await preserveHarmonyCancellation(
     async () => await host.commands.which('hdc'),
     signal,
   );
   signal.throwIfAborted();
-  if (!hdc) {
+  if (!fromPath) {
     throw new AppError('TOOL_MISSING', 'hdc not found in PATH', {
       hint: 'Install HarmonyOS Command Line Tools, then add its sdk/default/openharmony/toolchains directory to PATH.',
     });
   }
-  return hdc;
+  return fromPath;
 }
 
 async function preserveHarmonyCancellation<T>(

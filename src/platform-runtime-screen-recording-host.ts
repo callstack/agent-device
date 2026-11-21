@@ -66,7 +66,6 @@ export function createScreenRecordingRuntimeHost(options: {
   return Object.freeze({
     apple: createLazyAppleHost(host),
     android,
-    harmony: createLazyHarmonyHost(),
     web,
     outputs,
     finalize,
@@ -95,28 +94,5 @@ function createLazyAppleHost(host: HostEnvironment): ScreenRecordingRuntimeHost[
     captureClockAnchor: async (device, appBundleId, signal, requestId) =>
       await (await load()).captureClockAnchor(device, appBundleId, signal, requestId),
     isRunnerBundleId: async (bundleId) => await (await load()).isRunnerBundleId(bundleId),
-  });
-}
-
-function createLazyHarmonyHost(): ScreenRecordingRuntimeHost['harmony'] {
-  const load = async () => {
-    const { createHarmonyScreenRecordingHost } =
-      await import('./platform-runtime-screen-recording-harmony-host.ts');
-    return createHarmonyScreenRecordingHost();
-  };
-  return Object.freeze({
-    start: async (device, fileName, signal) => await (await load()).start(device, fileName, signal),
-    stop: async (device, signal) => await (await load()).stop(device, signal),
-    findMedia: async (device, fileName, signal) =>
-      await (await load()).findMedia(device, fileName, signal),
-    stageMedia: async (device, input, signal) =>
-      await (await load()).stageMedia(device, input, signal),
-    stagedFileSize: async (device, remotePath, signal) =>
-      await (await load()).stagedFileSize(device, remotePath, signal),
-    pull: async (device, input, signal) => await (await load()).pull(device, input, signal),
-    remove: async (device, remotePath, signal) =>
-      await (await load()).remove(device, remotePath, signal),
-    removeMedia: async (device, mediaUri, signal) =>
-      await (await load()).removeMedia(device, mediaUri, signal),
   });
 }

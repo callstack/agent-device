@@ -14,7 +14,7 @@ import {
   readHostTextFile,
   removeHostDirectory,
 } from '@agent-device/host-kit/host-file';
-import { runHarmonyHdc, runHarmonyShell } from './hdc.ts';
+import type { HarmonyHdcRunner } from './hdc.ts';
 import { readHarmonyKeyboardBand } from './keyboard-band.ts';
 
 const MAX_NODES = 5_000;
@@ -41,6 +41,7 @@ type ArkUiLayoutNode = {
 };
 
 export async function snapshotHarmony(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   options: SnapshotOptions = {},
 ): Promise<{
@@ -49,13 +50,14 @@ export async function snapshotHarmony(
   analysis: { rawNodeCount: number; maxDepth: number };
   keyboard: SnapshotKeyboardBandFact;
 }> {
-  const snapshot = await captureHarmonyLayout(device, options);
+  const snapshot = await captureHarmonyLayout(hdc, device, options);
   // Measured after the tree so the band answers for a screen at least as new as the nodes.
-  const keyboard = await readHarmonyKeyboardBand(device);
+  const keyboard = await readHarmonyKeyboardBand(hdc, device);
   return { ...snapshot, keyboard };
 }
 
 async function captureHarmonyLayout(
+  hdc: HarmonyHdcRunner,
   device: DeviceInfo,
   options: SnapshotOptions,
 ): Promise<{
@@ -68,26 +70,29 @@ async function captureHarmonyLayout(
   const localDirectory = await makeHostTemporaryDirectory('agent-device-harmony-layout-');
   const localPath = path.join(localDirectory, 'layout.json');
   try {
-    await runHarmonyShell(device, ['uitest', 'dumpLayout', '-p', remotePath], {
+    await hdc.runShell(device, ['uitest', 'dumpLayout', '-p', remotePath], {
       timeoutMs: 30_000,
     });
-    await runHarmonyHdc(device, ['file', 'recv', remotePath, localPath], { timeoutMs: 15_000 });
+    await hdc.run(device, ['file', 'recv', remotePath, localPath], { timeoutMs: 15_000 });
     const raw = await readHostTextFile(localPath);
     return buildHarmonySnapshot(parseHarmonyLayout(raw), options);
   } finally {
-    await runHarmonyShell(device, ['rm', '-f', remotePath], { allowFailure: true }).catch(() => {});
+    await hdc.runShell(device, ['rm', '-f', remotePath], { allowFailure: true }).catch(() => {});
     await removeHostDirectory(localDirectory);
   }
 }
 
 /** Returns the current ArkUI application viewport for coordinate gestures. */
-export async function readHarmonyGestureViewport(device: DeviceInfo): Promise<Rect> {
+export async function readHarmonyGestureViewport(
+  hdc: HarmonyHdcRunner,
+  device: DeviceInfo,
+): Promise<Rect> {
   const memoKey = device.id;
   const cached = harmonyGestureViewportMemo.get(memoKey);
   if (cached) return cached;
   // Gesture planning reads geometry only, so this capture skips the keyboard-band probe the
   // snapshot command carries.
-  const snapshot = await captureHarmonyLayout(device, {});
+  const snapshot = await captureHarmonyLayout(hdc, device, {});
   const viewport = snapshot.nodes.find((node) => node.type === 'Application' && node.rect)?.rect;
   if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
     throw new AppError(
@@ -125,7 +130,6 @@ export function parseHarmonyLayout(raw: string): ArkUiLayoutNode {
     );
   }
 }
-
 function buildHarmonySnapshot(
   root: ArkUiLayoutNode,
   options: SnapshotOptions,

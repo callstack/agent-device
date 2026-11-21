@@ -2,50 +2,53 @@ import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producer
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import type { HarmonyToolbox } from './toolbox.ts';
+import { closeHarmonyApp, openHarmonyApp } from './app-lifecycle.ts';
 import {
   appSwitcherHarmony,
   backHarmony,
-  closeHarmonyApp,
   doubleClickHarmony,
   fillHarmony,
   homeHarmony,
   longPressHarmony,
-  openHarmonyApp,
   performHarmonyGesture,
   pressHarmony,
   pressHarmonyKeyboardKey,
-  readHarmonyGestureViewport,
-  screenshotHarmony,
   scrollHarmony,
   setHarmonyOrientation,
-  setHarmonySetting,
-  snapshotHarmony,
   typeHarmony,
-} from './index.ts';
+} from './input-actions.ts';
+import { screenshotHarmony } from './screenshot.ts';
+import { setHarmonySetting } from './settings.ts';
+import { readHarmonyGestureViewport, snapshotHarmony } from './snapshot.ts';
 
-export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor {
+export function createHarmonyInteractor(
+  toolbox: HarmonyToolbox,
+  device: DeviceInfo,
+  _runner?: RunnerContext,
+): Interactor {
+  const { hdc } = toolbox;
   const unsupported = (name: string) => async (): Promise<never> => {
     throw new AppError('UNSUPPORTED_OPERATION', `${name} is not supported on HarmonyOS`);
   };
   return {
-    open: (app, options) => openHarmonyApp(device, app, { activity: options?.activity }),
-    openDevice: () => homeHarmony(device),
-    close: (app) => closeHarmonyApp(device, app),
-    tap: (x, y) => pressHarmony(device, x, y),
-    doubleTap: (x, y) => doubleClickHarmony(device, x, y),
-    longPress: (x, y, durationMs) => longPressHarmony(device, x, y, durationMs),
-    focus: (x, y) => pressHarmony(device, x, y),
-    type: (text, delayMs) => typeHarmony(device, text, delayMs),
-    fill: (x, y, text, delayMs) => fillHarmony(device, x, y, text, delayMs),
-    scroll: (direction, options) => scrollHarmony(device, direction, options),
-    performGesture: (plan) => performHarmonyGesture(device, plan),
-    gestureViewport: () => readHarmonyGestureViewport(device),
-    screenshot: (outPath) => screenshotHarmony(device, outPath),
+    open: (app, options) => openHarmonyApp(hdc, device, app, { activity: options?.activity }),
+    openDevice: () => homeHarmony(hdc, device),
+    close: (app) => closeHarmonyApp(hdc, device, app),
+    tap: (x, y) => pressHarmony(hdc, device, x, y),
+    doubleTap: (x, y) => doubleClickHarmony(hdc, device, x, y),
+    longPress: (x, y, durationMs) => longPressHarmony(hdc, device, x, y, durationMs),
+    focus: (x, y) => pressHarmony(hdc, device, x, y),
+    type: (text, delayMs) => typeHarmony(hdc, device, text, delayMs),
+    fill: (x, y, text, delayMs) => fillHarmony(hdc, device, x, y, text, delayMs),
+    scroll: (direction, options) => scrollHarmony(hdc, device, direction, options),
+    performGesture: (plan) => performHarmonyGesture(hdc, device, plan),
+    gestureViewport: () => readHarmonyGestureViewport(hdc, device),
+    screenshot: (outPath) => screenshotHarmony(hdc, device, outPath),
     snapshot: async (options) => {
-      const result = await withDiagnosticTimer(
+      const result = await toolbox.withDiagnosticTimer(
         'snapshot_capture',
-        async () => await snapshotHarmony(device, options),
+        async () => await snapshotHarmony(hdc, device, options),
         { backend: 'harmonyos-arkui' },
       );
       return stampSnapshotIdentity(result, {
@@ -53,21 +56,21 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
         producer: 'harmonyos-uitest',
       });
     },
-    back: () => backHarmony(device),
-    home: () => homeHarmony(device),
+    back: () => backHarmony(hdc, device),
+    home: () => homeHarmony(hdc, device),
     setOrientation: (orientation) => setHarmonyOrientation(device, orientation),
-    appSwitcher: () => appSwitcherHarmony(device),
+    appSwitcher: () => appSwitcherHarmony(hdc, device),
     tvRemote: unsupported('tv-remote'),
     keyboardDismiss: async () => {
-      await pressHarmonyKeyboardKey(device, 'Back');
+      await pressHarmonyKeyboardKey(hdc, device, 'Back');
       return { kind: 'acknowledged' };
     },
     keyboardEnter: async () => {
-      await pressHarmonyKeyboardKey(device, 'Enter');
+      await pressHarmonyKeyboardKey(hdc, device, 'Enter');
       return { kind: 'harmonyos-acknowledged' };
     },
     readClipboard: unsupported('clipboard'),
     writeClipboard: unsupported('clipboard'),
-    setSetting: (setting, state, appId) => setHarmonySetting(device, setting, state, appId),
+    setSetting: (setting, state, appId) => setHarmonySetting(hdc, device, setting, state, appId),
   };
 }
