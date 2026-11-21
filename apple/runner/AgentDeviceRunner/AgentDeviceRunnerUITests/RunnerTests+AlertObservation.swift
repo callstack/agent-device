@@ -49,24 +49,16 @@ extension RunnerTests {
     return Date() < deadline ? observation : .deadlineExceeded
   }
 
-  /// The tree the alert rules read. Snapshot output has no names for alerts and sheets, so the
-  /// rules name them here.
+  /// The tree the alert rules read. The shared element-type table names an alert and a sheet, so the
+  /// rules read the same name a snapshot publishes for the same node (#4657).
   func alertSurfaceNode(_ snapshot: XCUIElementSnapshot) -> AlertSurfaceNode {
     AlertSurfaceNode(
-      type: alertSurfaceTypeName(snapshot.elementType),
+      type: elementTypeName(snapshot.elementType),
       identifier: snapshot.identifier,
       label: snapshot.label,
       frame: snapshot.frame,
       children: snapshot.children.map { alertSurfaceNode($0) }
     )
-  }
-
-  func alertSurfaceTypeName(_ type: XCUIElement.ElementType) -> String {
-    switch type {
-    case .alert: return "Alert"
-    case .sheet: return "Sheet"
-    default: return elementTypeName(type)
-    }
   }
 
   func alertVerificationResponse(

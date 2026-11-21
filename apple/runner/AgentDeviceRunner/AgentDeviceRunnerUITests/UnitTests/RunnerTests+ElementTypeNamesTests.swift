@@ -15,7 +15,7 @@ private struct ElementTypeNamesTable: Decodable {
   let unnamedTypeSpelling: String
   let types: [Row]
 
-  struct Row: Equatable {
+  struct Row: Decodable {
     let rawValue: Int
     let sdkCase: String?
     let name: String
@@ -153,8 +153,12 @@ extension RunnerTests {
       "the shared table declares the fallback spelling both producers must keep"
     )
     let unnamed = try XCTUnwrap(table.types.map(\.rawValue).max()) + 1
+    let unnamedType = try XCTUnwrap(
+      XCUIElement.ElementType(rawValue: UInt(unnamed)),
+      "the runner reads raw value \(unnamed) as an element type"
+    )
     XCTAssertEqual(
-      elementTypeName(XCUIElement.ElementType(rawValue: UInt(unnamed))),
+      elementTypeName(unnamedType),
       "Element(\(unnamed))",
       "the runner must spell an unnamed raw value the way the shared table declares"
     )
@@ -210,8 +214,12 @@ extension RunnerTests {
       file: file,
       line: line
     )
+    guard let raw = UInt(exactly: rawValue), let type = XCUIElement.ElementType(rawValue: raw) else {
+      XCTFail("the runner reads raw value \(rawValue) as an element type", file: file, line: line)
+      return
+    }
     XCTAssertEqual(
-      elementTypeName(XCUIElement.ElementType(rawValue: UInt(rawValue))),
+      elementTypeName(type),
       row.name,
       "raw value \(rawValue) is named differently by the runner and by the shared table",
       file: file,
