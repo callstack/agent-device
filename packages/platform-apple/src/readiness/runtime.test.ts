@@ -322,7 +322,7 @@ test('a boot refused as already booted reports no boot and says why', async () =
   const { host } = coldSimulatorHost({
     bootFailure: {
       exitCode: 149,
-      stderr: 'Unable to boot device in current state: Booted\nCurrent device state: Booted',
+      stderr: 'Unable to boot device in current state: Booted',
     },
   });
   const reports: DeviceBootPerformance[] = [];

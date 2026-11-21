@@ -31,9 +31,10 @@ export type AppleReadinessOptions = Readonly<{
   onColdBootStart?: () => void;
   /**
    * Reports what this call's own boot step did with its boot: `performed: true` when it started the
-   * boot, `already-booted` when `simctl` refused a Simulator that was up before the call, and
-   * `no-boot-attempt` when readiness settled the Simulator without reaching one. #4791: this is the
-   * positive proof `open` needs to own the boot, and it is the only report a boot attempt makes —
+   * boot, `already-booted` when the Simulator was up before the call — a fresh Booted listing, a
+   * recent boot observation, or `simctl` refusing the boot — and `no-boot-attempt` for a target this
+   * call readies without a simulator boot: macOS, a physical device, or another kind. #4791: this is
+   * the positive proof `open` needs to own the boot, and it is the only report a boot attempt makes —
    * an option the caller leaves unset costs it nothing.
    */
   onSimulatorBoot?: (performance: DeviceBootPerformance) => void;
