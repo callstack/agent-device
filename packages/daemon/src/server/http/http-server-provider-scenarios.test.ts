@@ -148,24 +148,6 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
     });
     assert.equal(installFromUrl.status, 200);
 
-    const installFromGitHub = await callRpc(port, {
-      jsonrpc: '2.0',
-      id: 'rpc-install-github',
-      method: 'agent_device.install_from_source',
-      params: {
-        session: 'bootstrap',
-        platform: 'ios',
-        source: {
-          kind: 'github-actions-artifact',
-          owner: 'acme',
-          repo: 'mobile',
-          runId: '1234567890',
-          artifactName: 'ios-debug',
-        },
-      },
-    });
-    assert.equal(installFromGitHub.status, 200);
-
     const lease = await callRpc(port, {
       jsonrpc: '2.0',
       id: 'rpc-lease',
@@ -228,17 +210,6 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
       kind: 'url',
       url: 'https://example.com/app.apk',
       headers: { authorization: 'Bearer signed-token' },
-    });
-
-    const githubRequest = observedRequests.find(
-      (req) => req.command === 'install_source' && req.flags?.platform === 'ios',
-    );
-    assert.deepEqual(githubRequest?.meta?.installSource, {
-      kind: 'github-actions-artifact',
-      owner: 'acme',
-      repo: 'mobile',
-      runId: 1234567890,
-      artifactName: 'ios-debug',
     });
 
     const leaseRequest = observedRequests.find((req) => req.command === 'lease_allocate');

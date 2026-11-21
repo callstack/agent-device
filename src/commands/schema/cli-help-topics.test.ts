@@ -5,7 +5,7 @@ import { usage, usageForCommand } from '../../cli/parser/args.ts';
 test('commands topic includes concise command catalog entries', async () => {
   const usageText = await usageForCommand('commands');
   if (usageText === null) throw new Error('Expected commands help text');
-  assert.match(usageText, /install-from-source\s{2,}Install app builds from URLs or CI artifacts/);
+  assert.match(usageText, /install-from-source\s{2,}Install app builds from URLs$/m);
   assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers before automation/);
   assert.match(usageText, /metro\s{2,}Prepare the dev server or reload apps/);
   assert.match(usageText, /batch --steps <json> \| --steps-file <path>/);
@@ -16,10 +16,6 @@ test('commands topic includes concise command catalog entries', async () => {
   assert.match(
     usageText,
     /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform\|tap\|drag> \.\.\./,
-  );
-  assert.doesNotMatch(
-    usageText,
-    /install-from-source <url> \| install-from-source --github-actions-artifact/,
   );
   assert.doesNotMatch(usageText, /prepare ios-runner --platform ios\|macos/);
   assert.doesNotMatch(usageText, /metro prepare --public-base-url <url>/);
@@ -477,7 +473,7 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /local\/proxy iOS reports that the runner is already owned/);
   assert.match(help, /same --remote-config to every operational command/);
   assert.match(help, /Do not use --config as a remote profile flag/);
-  assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
+  assert.match(help, /GitHub Actions artifact, pass its signed download URL/);
 });
 
 test('usageForCommand resolves physical-device help topic', async () => {

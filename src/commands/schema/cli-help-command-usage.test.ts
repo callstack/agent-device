@@ -208,10 +208,10 @@ test('connect command help lists lease id in usage and flags', async () => {
   assert.doesNotMatch(help, /--launch-url <url>/);
 });
 
-test('install-from-source command help describes all source types', async () => {
+test('install-from-source command help names signed CI artifact URLs', async () => {
   const help = await usageForCommand('install-from-source');
   if (help === null) throw new Error('Expected command help text');
-  assert.match(help, /Install app builds from URLs, remote source specs, or CI artifacts/);
+  assert.match(help, /Install app builds from URLs, including signed CI artifact download URLs/);
 });
 
 test('session command help includes daemon state directory discovery', async () => {

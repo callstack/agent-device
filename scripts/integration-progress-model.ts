@@ -343,7 +343,6 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: [
         'artifact',
         'dsym',
-        'githubActionsArtifact',
         'snapshotDiff',
         'snapshotForceFull',
         'baseline',

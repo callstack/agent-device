@@ -46,7 +46,7 @@ test('help commands preserves the complete reference displaced from root help', 
 
   assert.match(help, /^agent-device \S+ — commands/);
   assert.match(help, /^Commands:/m);
-  assert.match(help, /install-from-source\s{2,}Install app builds from URLs or CI artifacts/);
+  assert.match(help, /install-from-source\s{2,}Install app builds from URLs$/m);
   assert.match(help, /^Global Flags:/m);
   assert.match(help, /^Configuration:/m);
   assert.match(help, /^Environment:/m);

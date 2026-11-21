@@ -1,19 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonInstallSource, LocalInstallSource } from '@agent-device/kernel/contracts';
+import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
 import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
 } from '../resources/artifact-tracking.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 
-function assertUnsupportedInstallSource(source: never): never {
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    `install_from_source ${String((source as DaemonInstallSource).kind)} sources require a compatible remote daemon`,
-  );
-}
-
-function requireInstallSource(req: DaemonRequest): LocalInstallSource {
+function requireInstallSource(req: DaemonRequest): DaemonInstallSource {
   const source = req.meta?.installSource;
   if (!source) {
     throw new AppError('INVALID_ARGS', 'install_from_source requires a source payload');
@@ -35,18 +28,16 @@ function requireInstallSource(req: DaemonRequest): LocalInstallSource {
         );
       }
       return source;
-    case 'github-actions-artifact':
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'install_from_source github-actions-artifact sources require a compatible remote daemon',
-      );
     default:
-      assertUnsupportedInstallSource(source);
+      throw new AppError(
+        'INVALID_ARGS',
+        `install_from_source source kind must be "url" or "path": ${String((source as { kind?: unknown }).kind)}`,
+      );
   }
 }
 
 export function resolveInstallSource(req: DaemonRequest): {
-  source: LocalInstallSource;
+  source: DaemonInstallSource;
   cleanup: () => void;
 } {
   const source = requireInstallSource(req);

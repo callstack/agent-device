@@ -434,31 +434,3 @@ test('apps.installFromSource derives Android launchTarget from packageName when 
     },
   });
 });
-
-test('apps.installFromSource forwards GitHub Actions artifact sources unchanged', async () => {
-  const setup = createClientTransport(async () => ({
-    ok: true,
-    data: {
-      packageName: 'com.example.ci',
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  await client.apps.installFromSource({
-    platform: 'android',
-    source: {
-      kind: 'github-actions-artifact',
-      owner: 'acme',
-      repo: 'mobile',
-      artifactId: 1234567890,
-    },
-  });
-
-  assert.equal(setup.calls.length, 1);
-  assert.deepEqual(setup.calls[0]?.meta?.installSource, {
-    kind: 'github-actions-artifact',
-    owner: 'acme',
-    repo: 'mobile',
-    artifactId: 1234567890,
-  });
-});

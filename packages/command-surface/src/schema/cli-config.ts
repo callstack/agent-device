@@ -13,7 +13,6 @@ import {
   getOptionSpec,
   parseOptionValueFromSource,
 } from './option-schema.ts';
-import { parseInstallSourceConfig } from '@agent-device/provision-kit/install-source-config';
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonLockPolicy } from '@agent-device/kernel/contracts';
@@ -169,10 +168,6 @@ function parseConfigObject(
         `Config key "${rawKey}" is not allowed in ${origin.label}. Move it to ~/.agent-device/config.json, pass it with --config or AGENT_DEVICE_CONFIG, or provide it through CLI flags/environment variables.`,
       );
     }
-    if (key === 'installSource') {
-      flags.installSource = parseInstallSourceConfig(rawValue, origin.label);
-      continue;
-    }
     (flags as Record<string, unknown>)[key] = parseOptionValueFromSource(
       spec,
       rawValue,
@@ -214,7 +209,6 @@ function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFl
   }
   const flags: Partial<CliFlags> = {};
   for (const spec of getConfigurableOptionSpecs(command)) {
-    if (spec.key === 'installSource') continue;
     const envValue = spec.env.names
       .map((name) => ({ name, value: env[name] }))
       .find((entry) => typeof entry.value === 'string' && entry.value.trim().length > 0);

@@ -21,7 +21,6 @@ const CONFIG_EXCLUDED_FLAG_KEYS = new Set<FlagKey>([
   'help',
   'version',
   'batchSteps',
-  'githubActionsArtifact',
   // A default must never switch a fill to waiting on stdin.
   'textStdin',
 ]);

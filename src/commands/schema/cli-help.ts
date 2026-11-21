@@ -619,7 +619,7 @@ Rules:
   If local/proxy iOS reports that the runner is already owned by another agent-device daemon after lease admission, retry after the owning session closes or after lease expiry. If the conflict repeats, clean stale daemon state on the machine with simulator access.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
-  For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.
+  For remote artifact installs, use install-from-source <url>; do not download CI artifacts locally first. For a GitHub Actions artifact, pass its signed download URL: the Location header of GET https://api.github.com/repos/<owner>/<repo>/actions/artifacts/<id>/zip. The URL expires after about one minute.
   After connect, let the active remote connection supply runtime hints.
   For connected phone/tablet setup and iOS signing prerequisites, read agent-device help physical-device.
   Use --debug when remote connection or transport errors need diagnostic ids and remote log hints.`,
