@@ -448,7 +448,7 @@ async function storeRotatedCredential(options: {
       options.io,
     );
   } catch {
-    writeStderr(
+    warnBestEffort(
       options.io,
       'Warning: the renewed CLI session could not be saved. ' +
         'If the next command is not authenticated, run agent-device auth login.\n',
