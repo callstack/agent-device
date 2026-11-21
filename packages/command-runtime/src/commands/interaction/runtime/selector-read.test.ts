@@ -5,7 +5,8 @@ import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifac
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
-import { FIND_READ_REASONS, selector } from './selector-read-utils.ts';
+import { FIND_READ_REASONS } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { selector } from './selector-read-utils.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   createFakeClock,

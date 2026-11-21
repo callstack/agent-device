@@ -3,16 +3,11 @@ import type {
   InteractionRefTarget,
   InteractionSelectorTarget,
 } from '@agent-device/contracts/interaction';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
+import { FIND_READ_REASONS } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { FindLocator } from '@agent-device/selectors';
 
 export { findNodeByLabel, resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
-
-/** Why `find` refuses a capture that cannot be read as the screen. */
-export const FIND_READ_REASONS = {
-  // The capture came back sparse, so no selector could be resolved against it.
-  snapshotUnreadable: { reason: 'find_snapshot_unreadable' },
-} as const satisfies ReasonTable<'find'>;
 
 function shouldScopeFind(locator: string): boolean {
   return locator === 'text' || locator === 'label' || locator === 'any';
