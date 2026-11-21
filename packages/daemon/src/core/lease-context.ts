@@ -100,9 +100,8 @@ export function resolveSessionLeaseScope(
   session?: SessionLeaseHolder | null,
 ): LeaseScope {
   const requestScope = resolveLeaseScope(req);
-  const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
+  const sessionLease = assertRequestHoldsSessionLease(req, session);
   if (!sessionLease) return requestScope;
-  assertRequestPresentsSessionLease(requestScope, sessionLease);
   return stripUndefined({
     tenantId: sessionLease.tenantId,
     runId: sessionLease.runId,
@@ -143,6 +142,20 @@ export function resolveLeaseRefusalScope(
     leaseBackend: requestScope.leaseBackend ?? sessionLease?.leaseBackend,
     leaseProvider: requestScope.leaseProvider ?? sessionLease?.leaseProvider,
   });
+}
+
+/**
+ * Refuses a request on a leased session that does not send that lease's id, or sends a label that
+ * differs from the lease. Returns the session lease the request may act under.
+ */
+export function assertRequestHoldsSessionLease(
+  req: Pick<DaemonRequest, 'command' | 'flags' | 'meta'>,
+  session?: SessionLeaseHolder | null,
+): SessionLease | undefined {
+  const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
+  if (!sessionLease) return undefined;
+  assertRequestPresentsSessionLease(resolveLeaseScope(req), sessionLease);
+  return sessionLease;
 }
 
 function assertRequestPresentsSessionLease(requestScope: LeaseScope, sessionLease: SessionLease) {

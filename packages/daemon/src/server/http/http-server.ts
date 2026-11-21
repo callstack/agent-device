@@ -38,6 +38,7 @@ import {
 import { readVersion } from '@agent-device/host-kit/version';
 import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { shouldStreamRequestProgress } from '@agent-device/daemon-contracts/request-progress-protocol';
+import type { DaemonCapability } from '@agent-device/daemon-contracts/daemon-resolution';
 import { statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import {
@@ -81,6 +82,12 @@ import {
   type TenantTrustDecision,
 } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
+
+/** The capabilities this daemon serves over HTTP: `quiesce` is a local-only `daemon.json` fact. */
+const HTTP_DAEMON_CAPABILITIES: readonly DaemonCapability[] = [
+  'script-artifacts',
+  'session-lease-id',
+];
 
 const MAX_HTTP_RPC_BODY_BYTES = DAEMON_REQUEST_MAX_BYTES;
 
@@ -143,7 +150,7 @@ export async function createDaemonHttpServer(options: {
         JSON.stringify(
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
-            capabilities: ['script-artifacts', 'session-lease-id'],
+            capabilities: HTTP_DAEMON_CAPABILITIES,
             hostArch,
             leaseBackends,
           }),

@@ -12,6 +12,7 @@ import {
 } from '../core/daemon-command-registry.ts';
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
+  assertRequestHoldsSessionLease,
   findMissingProxyLeaseFields,
   resolveLeaseRefusalScope,
   resolveLeaseScope,
@@ -89,8 +90,8 @@ export function assertRequestLeaseAdmission(
     daemonPolicy?: DaemonPolicy;
   }>,
 ): DeviceLease | undefined {
-  // An admission-exempt command still acts on its session: it presents the session's lease too.
-  resolveSessionLeaseScope(req, session);
+  // An admission-exempt command still acts on its session, so it must hold the session lease too.
+  assertRequestHoldsSessionLease(req, session);
   if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }
