@@ -15,6 +15,19 @@ function hintOf(read: () => unknown): string | undefined {
   throw new Error('Expected the read to refuse');
 }
 
+// A client tells this refusal apart from every other INVALID_ARGS by its typed
+// reason and keys, never by message text: the unknown keys and the nearest
+// accepted spelling travel as data alongside the message.
+function refusalOf(read: () => unknown): AppError {
+  try {
+    read();
+  } catch (error) {
+    if (error instanceof AppError) return error;
+    throw error;
+  }
+  throw new Error('Expected the read to refuse');
+}
+
 // This module validates batch steps for the Node client and the MCP tools as well as the CLI, so
 // a terminal recovery step here would be unrunnable advice on two of the three surfaces (#2062).
 test('the shared step-shape hint names the shape without naming a surface', () => {
@@ -40,39 +53,55 @@ describe('input key admission', () => {
   // exercised here through the reader's "Did you mean" suffix: a one-edit typo
   // or a prefix names the single closest key, and a short or distant token
   // earns no suggestion at all. A declared key never reaches the rule: the
-  // read accepts it untouched (see the pass-through test below).
+  // read accepts it untouched (see the pass-through test below). Each refusal
+  // asserts `batch_step_unknown_input_key` and the keys as data, so the typed
+  // reason, not the message, is what a client branches on.
   test.each([
-    ['fullscren', 'Batch step 1 input has unknown field(s): fullscren. Did you mean fullscreen?'],
-    ['scal', 'Batch step 1 input has unknown field(s): scal. Did you mean scale?'],
-    ['full', 'Batch step 1 input has unknown field(s): full. Did you mean fullscreen?'],
-    ['pa', 'Batch step 1 input has unknown field(s): pa.'],
-    ['output', 'Batch step 1 input has unknown field(s): output.'],
-  ])('the unknown key %s recovers with the nearest accepted key, or none', (token, message) => {
-    expect(() =>
+    ['fullscren', 'fullscreen'],
+    ['scal', 'scale'],
+    ['full', 'fullscreen'],
+    ['pa', undefined],
+    ['output', undefined],
+  ])('the unknown key %s recovers with the nearest accepted key, or none', (token, suggestion) => {
+    const refusal = refusalOf(() =>
       readBatchStepInputObject(
         { command: 'screenshot', input: { [token]: true } },
         1,
         BATCH_STEP_SHAPE_HINT,
         ['path', 'fullscreen', 'cropOn', 'scale'],
       ),
-    ).toThrow(expect.objectContaining({ code: 'INVALID_ARGS', message }));
+    );
+    expect(refusal.code).toBe('INVALID_ARGS');
+    expect(refusal.message).toBe(
+      suggestion === undefined
+        ? `Batch step 1 input has unknown field(s): ${token}.`
+        : `Batch step 1 input has unknown field(s): ${token}. Did you mean ${suggestion}?`,
+    );
+    expect(refusal.details).toMatchObject({
+      hint: BATCH_STEP_SHAPE_HINT,
+      reason: 'batch_step_unknown_input_key',
+      unknownKeys: [token],
+    });
+    expect(refusal.details?.suggestion).toBe(suggestion);
   });
 
   test('distance ties are answered with the whole set, in order', () => {
-    expect(() =>
+    const refusal = refusalOf(() =>
       readBatchStepInputObject(
         { command: 'screenshot', input: { pathh: true } },
         1,
         BATCH_STEP_SHAPE_HINT,
         ['path', 'patch', 'pause'],
       ),
-    ).toThrow(
-      expect.objectContaining({
-        code: 'INVALID_ARGS',
-        message:
-          'Batch step 1 input has unknown field(s): pathh. Did you mean one of: patch, path?',
-      }),
     );
+    expect(refusal.message).toBe(
+      'Batch step 1 input has unknown field(s): pathh. Did you mean one of: patch, path?',
+    );
+    expect(refusal.details).toMatchObject({
+      reason: 'batch_step_unknown_input_key',
+      unknownKeys: ['pathh'],
+      suggestion: 'one of: patch, path',
+    });
   });
 
   test('an undeclared key refusal still carries the caller-supplied hint', () => {

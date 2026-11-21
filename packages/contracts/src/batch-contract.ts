@@ -61,8 +61,10 @@ export function readBatchStepInputObject(
  * command's field reader does not declare was silently dropped, so a step like
  * `{"command":"screenshot","input":{"out":...}}` ran without its output path
  * and reported success. When the caller passes the nested command's accepted
- * keys, every undeclared key is refused with the closest accepted key, and the
- * refusal still carries the step-shape hint.
+ * keys, every undeclared key is refused with the closest accepted key, the
+ * refusal still carries the step-shape hint, and `details.reason` plus the
+ * unknown keys travel as data (`batch_step_unknown_input_key`), so a client can
+ * branch on the refusal without matching message text.
  */
 function assertBatchStepInputKeys(
   input: Record<string, unknown>,
@@ -78,21 +80,29 @@ function assertBatchStepInputKeys(
     'INVALID_ARGS',
     `Batch step ${stepNumber} input has unknown field(s): ${unknownKeys.join(', ')}.` +
       (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
-    { hint },
+    {
+      hint,
+      reason: 'batch_step_unknown_input_key',
+      unknownKeys,
+      ...(suggestion === undefined ? {} : { suggestion }),
+    },
   );
 }
 
 const NEAREST_SUGGESTION_LIMIT = 3;
 
 /**
- * The nearest-name rule behind the "Did you mean ...?" suffix above. It is the
- * CLI parser's rule for command and flag refusals
- * (`src/cli/parser/command-suggestions.ts`), inlined so both surfaces answer
+ * The nearest-name rule behind the "Did you mean ...?" suffixes. It is the CLI
+ * parser's rule for command and flag refusals
+ * (`src/cli/parser/command-suggestions.ts`), so every surface answers
  * identically: 1-2 character tokens earn no suggestion, exact prefix matches
  * win, only ties at the minimum edit distance are kept, within a
  * length-derived threshold, capped at three and ordered deterministically.
  */
-function suggestClosestKey(token: string, candidates: readonly string[]): string | undefined {
+export function suggestClosestKey(
+  token: string,
+  candidates: readonly string[],
+): string | undefined {
   if (token.length <= 2) return undefined;
   const prefixMatches = candidates.filter((name) => name.startsWith(token));
   if (prefixMatches.length > 0) {

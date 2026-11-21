@@ -115,17 +115,28 @@ export function assertAllowedKeys(
   // A step-level refusal only guides when it says where the field belongs: a
   // key that the step's own command accepts as structured input was written at
   // the step's top level (`--settle` spelled as a step field), and naming the
-  // destination beats the bare unknown-field list (#2062 follow-up).
+  // destination beats the bare unknown-field list (#2062 follow-up). The
+  // misplaced keys travel as data too (`batch_step_misplaced_input_key`), so a
+  // client can branch on the refusal without matching message text.
   const nestedInputKeys =
     options?.nestedInputKeys === undefined ? undefined : new Set(options.nestedInputKeys);
   const misplacedKeys =
     nestedInputKeys === undefined ? [] : unknownKeys.filter((key) => nestedInputKeys.has(key));
   const misplacedGuidance =
     misplacedKeys.length === 0 ? '' : ` Pass ${misplacedKeys.join(', ')} inside the step's input.`;
+  const details =
+    hint === undefined && misplacedKeys.length === 0
+      ? undefined
+      : {
+          ...(hint === undefined ? {} : { hint }),
+          ...(misplacedKeys.length === 0
+            ? {}
+            : { reason: 'batch_step_misplaced_input_key', keys: misplacedKeys }),
+        };
   throw new AppError(
     'INVALID_ARGS',
     `${label} has unknown field(s): ${unknownKeys.join(', ')}.${misplacedGuidance}`,
-    hint === undefined ? undefined : { hint },
+    details,
   );
 }
 

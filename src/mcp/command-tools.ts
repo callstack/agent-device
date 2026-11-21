@@ -1,4 +1,5 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
+import { suggestClosestKey } from '@agent-device/contracts/command';
 import {
   aliasInputRefusal,
   COMMON_INPUT_AUDIENCE,
@@ -444,11 +445,19 @@ function advertisedInputSchema(
   };
 }
 
-/** The first raw input key the advertised schema does not list, with guidance, or undefined. */
+/**
+ * The first raw input key the advertised schema does not list, with guidance, or
+ * undefined. Flat admission is canonical-only. Nested admission (`nested`) is
+ * the same scan with one widening: a key the command declares as an accepted
+ * alias (`out` for `path`) is admitted there, because the nested reader
+ * canonicalizes it exactly as the CLI and Node batch surfaces do; a flat call
+ * still answers with the canonical spelling.
+ */
 function findInadmissibleInput(
   name: CommandName,
   metadata: AdmissionMetadata,
   input: Record<string, unknown>,
+  options?: { nested?: boolean },
 ): AdmissionRejection | undefined {
   const advertised = advertisedInputSchema(name, metadata).properties;
   const audience = toolInputAudience(metadata);
@@ -466,10 +475,14 @@ function findInadmissibleInput(
       return { message: operatorInputRefusal(key, keyAudience.source) };
     }
     if (keyAudience?.kind === 'alias') {
+      if (options?.nested === true) continue;
       return { message: aliasInputRefusal(key, keyAudience.of) };
     }
+    const suggestion = suggestClosestKey(key, Object.keys(advertised));
     return {
-      message: `${key} is not an accepted argument for the ${name} tool.`,
+      message:
+        `${key} is not an accepted argument for the ${name} tool.` +
+        (suggestion === undefined ? '' : ` Did you mean ${suggestion}?`),
       hint: `Example call: ${name} ${JSON.stringify(commandInputExample(metadata))}`,
     };
   }
@@ -497,8 +510,10 @@ function findInadmissibleInput(
  * sibling holding the command name) and this walks the tool's own schema against
  * the raw arguments, checking each one with {@link findInadmissibleInput}
  * against that command's advertised schema. Nested admission is the same
- * function, and returns the same answer, as flat admission: a step's input
- * accepts exactly what the nested command's own tool accepts, no more.
+ * function and the same answer as flat admission, widened by one rule: a step's
+ * input also accepts the alias spellings the nested command declares, because
+ * its reader canonicalizes them the way the CLI and Node batch surfaces do.
+ * Operator and undeclared keys are still refused.
  */
 function findInadmissibleNestedCommandInput(
   schema: JsonSchema | undefined,
@@ -547,7 +562,7 @@ function findInadmissibleNestedProperty(
   // bury the real error under a key complaint.
   if (command === undefined || !isRecord(nested)) return undefined;
   const metadata = findCommandMetadata(command);
-  const rejection = findInadmissibleInput(command, metadata, nested);
+  const rejection = findInadmissibleInput(command, metadata, nested, { nested: true });
   if (rejection === undefined) return undefined;
   const step = { [commandKey]: command, [key]: commandInputExample(metadata) };
   return {

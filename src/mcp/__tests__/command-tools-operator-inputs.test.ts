@@ -240,6 +240,23 @@ test('MCP refuses any argument the advertised schema does not list', async () =>
   assert.deepEqual(calls, [], 'an unadvertised key must never reach the command route');
 });
 
+// Deny-by-default still recovers: an unadvertised key close to an advertised
+// one names it, through the same nearest-key rule the batch step readers use.
+test('MCP unknown-argument refusals recover with the nearest advertised key', async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => ({}),
+  });
+
+  const result = await executor.execute('screenshot', { fullscren: 'shot.png' });
+
+  assert.equal(result.isError, true);
+  assert.match(
+    result.content[0]?.text ?? '',
+    /fullscren is not an accepted argument for the screenshot tool\. Did you mean fullscreen\?/,
+  );
+});
+
 // The refusal covers the model-writable surface only: operator values from
 // the environment must still merge as config-backed defaults and reach the
 // command route (or the MCP client config, for stateDir) unchanged.

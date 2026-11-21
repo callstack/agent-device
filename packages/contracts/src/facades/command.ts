@@ -6,6 +6,7 @@ export {
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
+  suggestClosestKey,
 } from '../batch-contract.ts';
 export type { DaemonBatchStep } from '../batch-step.ts';
 export type { CliFlags, DaemonExcludedCliFlag } from '../cli-flags.ts';
