@@ -60,6 +60,14 @@ export const INTERACTION_ERROR_REASONS = {
    */
   // The target did not come to rest before the press; wait for the screen, then retry.
   targetStillMoving: { reason: 'target_still_moving' },
+  /**
+   * Every tappable region of the target belongs to one of its interactive children, so a press on
+   * the parent would land on a child control. `details.competitorRefs` names up to five of those
+   * children and `details.competitorCount` counts them. The owner is
+   * `packages/selectors/src/node-touch-point.ts`.
+   */
+  // Every tappable region of the target belongs to one of its interactive children.
+  coveredByInteractiveDescendants: { reason: 'covered_by_interactive_descendants' },
 } as const satisfies ReasonTable<'interaction'>;
 
 /** The part of a covered node a refusal reports. */

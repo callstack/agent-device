@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { decode as decodeJpeg } from 'jpeg-js';
-import { decodePng, hasPngSignature, PNG } from './png.ts';
+import { decodePng, hasPngSignature, IMAGE_DECODE_REASONS, PNG } from './png.ts';
 import { validateScreenshotImagePixels } from './screenshot-image-size.ts';
 
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
@@ -30,7 +30,7 @@ export function decodeScreenshotImage(bytes: Buffer, label: string, maxPixels?: 
   throw unsupportedContainer(label, bytes);
 }
 
-/** A JPEG signature does not prove a decodable body; a failure keeps the label and the decoder's reason. */
+/** A JPEG signature does not prove a decodable body; a failure keeps the label and the decoder's message. */
 function decodeJpegImage(bytes: Buffer, label: string, maxPixels?: number): PNG {
   try {
     const decoded = decodeJpeg(bytes, {
@@ -48,7 +48,8 @@ function decodeJpegImage(bytes: Buffer, label: string, maxPixels?: number): PNG 
   } catch (error) {
     throw new AppError('COMMAND_FAILED', `Failed to decode ${label} as JPEG`, {
       label,
-      reason: error instanceof Error ? error.message : String(error),
+      reason: IMAGE_DECODE_REASONS.jpegDecodeFailed.reason,
+      decoderError: error instanceof Error ? error.message : String(error),
     });
   }
 }

@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import {
@@ -32,6 +32,20 @@ import type {
 
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;
+
+/** Why a `gesture` input cannot be planned into an executable trajectory. */
+const GESTURE_PLAN_REFUSAL_REASONS = {
+  // Two tap contacts share coordinates, so one contact would press where another already rests.
+  tapDuplicatePoint: { reason: 'GESTURE_TAP_DUPLICATE_POINT' },
+  // The gesture path has fewer usable samples than any recognizable motion needs.
+  pathTooShort: { reason: 'GESTURE_PATH_TOO_SHORT' },
+  // The path's sample timeline is not ordered and finite, so no clock can play it back.
+  pathInvalidTimeline: { reason: 'GESTURE_PATH_INVALID_TIMELINE' },
+  // A trajectory sample carries a non-finite coordinate.
+  trajectoryNonFinite: { reason: 'GESTURE_TRAJECTORY_NON_FINITE' },
+  // A trajectory sample leaves the viewport, so the contact would press outside the screen.
+  trajectoryOutOfBounds: { reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS' },
+} as const satisfies ReasonTable<'gesture'>;
 const GESTURE_FLING_DEFAULT_DISTANCE = 180;
 
 const GESTURE_INITIAL_SPAN_RATIO = 0.25;
@@ -452,7 +466,7 @@ function tapContactPoints(points: readonly Point[]): Point[] {
     const earlier = finite.findIndex((other) => other.x === point.x && other.y === point.y);
     if (earlier !== index) {
       throw new AppError('INVALID_ARGS', 'gesture tap points must be distinct', {
-        reason: 'GESTURE_TAP_DUPLICATE_POINT',
+        reason: GESTURE_PLAN_REFUSAL_REASONS.tapDuplicatePoint.reason,
         point,
         hint: 'Give each contact its own coordinates.',
       });
@@ -495,7 +509,7 @@ export function densifyGesturePath(
   const durationMs = canonical.at(-1)?.offsetMs ?? 0;
   if (canonical.length < 2 || !Number.isFinite(durationMs) || durationMs <= 0) {
     throw new AppError('INVALID_ARGS', 'gesture path needs at least two timed samples', {
-      reason: 'GESTURE_PATH_TOO_SHORT',
+      reason: GESTURE_PLAN_REFUSAL_REASONS.pathTooShort.reason,
     });
   }
   if (
@@ -509,7 +523,7 @@ export function densifyGesturePath(
       'INVALID_ARGS',
       'gesture path needs a strictly increasing timeline from zero',
       {
-        reason: 'GESTURE_PATH_INVALID_TIMELINE',
+        reason: GESTURE_PLAN_REFUSAL_REASONS.pathInvalidTimeline.reason,
       },
     );
   }
@@ -562,7 +576,7 @@ function assertSamplesInViewport(
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       throw new AppError('INVALID_ARGS', 'Gesture motion produces non-finite pointer coordinates', {
         ...details,
-        reason: 'GESTURE_TRAJECTORY_NON_FINITE',
+        reason: GESTURE_PLAN_REFUSAL_REASONS.trajectoryNonFinite.reason,
         hint: 'Reduce the requested rotation, translation, or scale.',
       });
     }
@@ -580,7 +594,7 @@ function assertSamplesInViewport(
 function trajectoryOutOfBounds(details: Record<string, unknown>): AppError {
   return new AppError('INVALID_ARGS', 'Gesture trajectory does not fit inside the viewport', {
     ...details,
-    reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS',
+    reason: GESTURE_PLAN_REFUSAL_REASONS.trajectoryOutOfBounds.reason,
     hint: 'Move the gesture away from the edge or reduce its translation, scale, or rotation.',
   });
 }

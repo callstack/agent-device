@@ -1,5 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, createRuntimeContractInvalidError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRuntimeContractInvalidError,
+  INTERACTOR_BINDING_REFUSAL_REASONS,
+} from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
 /**
@@ -57,7 +61,10 @@ export function providerInteractorSource(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       `Provider-owned ${params.operation} operation has no bound provider interactor.`,
-      { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
+      {
+        reason: INTERACTOR_BINDING_REFUSAL_REASONS.providerInteractorMissing.reason,
+        deviceId: params.device.id,
+      },
     );
   };
 }

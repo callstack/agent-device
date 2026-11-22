@@ -7,7 +7,7 @@ import {
   type DurableCaptureRecoveryControl,
 } from './recovery-authority.ts';
 import { allowsDurableCaptureDescriptorCleanup } from './recovery.ts';
-import { withDurableCaptureResourceFence } from './fence.ts';
+import { DURABLE_CAPTURE_REFUSAL_REASONS, withDurableCaptureResourceFence } from './fence.ts';
 import type { DurableCaptureRecordDefinition } from './definition.ts';
 import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 import {
@@ -96,7 +96,7 @@ export async function finishRecoveredDurableCapture<
           'COMMAND_FAILED',
           `${capitalizeDurableCaptureLabel(definition.displayName)} is missing`,
           {
-            reason: 'resource-missing',
+            reason: DURABLE_CAPTURE_REFUSAL_REASONS.missing.reason,
             hint: definition.messages.cleanupPendingHint,
           },
         );

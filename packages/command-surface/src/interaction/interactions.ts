@@ -9,7 +9,7 @@ import {
   assertNoRemovedSwipeInput,
   swipePayloadFromPositionals,
 } from '@agent-device/gestures/gesture-normalization';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
@@ -161,6 +161,14 @@ export const interactionDaemonWriters = {
   ]),
 } satisfies Record<string, DaemonWriter>;
 
+/** What `fill --text-stdin` refuses in the caller's arguments before it reads anything. */
+const FILL_TEXT_STDIN_REFUSAL_REASONS = {
+  // The stdin text mode's positional list does not decode to exactly one target.
+  stdinTargetInvalid: { reason: 'fill_text_stdin_target_invalid' },
+  // The stdin text mode was also given a text argument, so the two sources disagree.
+  textSourceConflict: { reason: 'fill_text_source_conflict' },
+} as const satisfies ReasonTable<'fill'>;
+
 /**
  * Reads only the target for `fill --text-stdin`. A stray positional may be the secret itself
  * (`fill --text-stdin "$PASSWORD"`), so neither a parse failure nor the conflict echoes any of them.
@@ -174,7 +182,7 @@ function readStdinFillTarget(
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     throw new AppError('INVALID_ARGS', 'fill --text-stdin could not read the target.', {
-      reason: 'fill_text_stdin_target_invalid',
+      reason: FILL_TEXT_STDIN_REFUSAL_REASONS.stdinTargetInvalid.reason,
       hint: 'Pass only the target: an @ref, a quoted selector, or x y coordinates. The text itself goes to stdin.',
     });
   }
@@ -183,7 +191,7 @@ function readStdinFillTarget(
       'INVALID_ARGS',
       'fill --text-stdin reads the text from stdin, so it cannot also take a text argument.',
       {
-        reason: 'fill_text_source_conflict',
+        reason: FILL_TEXT_STDIN_REFUSAL_REASONS.textSourceConflict.reason,
         hint: 'Pass only the target, for example: printf %s "$PASSWORD" | agent-device fill @e3 --text-stdin. Quote a multi-word selector so no part of it is read as text.',
       },
     );

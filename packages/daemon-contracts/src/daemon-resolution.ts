@@ -73,7 +73,7 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
       'INVALID_ARGS',
       `State dir "${value}" is relative and no working directory was given.`,
       {
-        reason: 'relative_state_dir_without_cwd',
+        reason: DAEMON_STATE_ROOT_REASONS.relativeWithoutCwd.reason,
       },
     );
   }
@@ -86,6 +86,14 @@ const DAEMON_STATE_ROOT_REASONS = {
   // The state directory, or a directory above it, is not private to your account; `details.fix`
   // says how to fix it.
   unsafe: { reason: 'daemon_state_root_unsafe' },
+  // The state dir is a relative path and the caller gave no working directory to resolve it from.
+  relativeWithoutCwd: { reason: 'relative_state_dir_without_cwd' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
+/** Why this build refuses to send a request whose delivery the answering daemon cannot promise. */
+const DAEMON_CAPABILITY_REFUSAL_REASONS = {
+  // The remote daemon reports no script-artifacts capability, so it would record to its own disk.
+  scriptArtifactsUnsupported: { reason: 'remote_script_artifacts_unsupported' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** What the operator is told, per problem: how the component fails, and what ends it. */
@@ -390,7 +398,7 @@ export function readDaemonLifecycleFence(input: unknown): DaemonLifecycleFence |
 export function assertScriptArtifactsCapability(capabilities: readonly string[] | undefined): void {
   if (capabilities?.includes('script-artifacts')) return;
   throw new AppError('INVALID_ARGS', 'The remote daemon cannot deliver session scripts.', {
-    reason: 'remote_script_artifacts_unsupported',
+    reason: DAEMON_CAPABILITY_REFUSAL_REASONS.scriptArtifactsUnsupported.reason,
     daemonRequestSent: false,
     hint: 'Upgrade the daemon that owns the session. Through a proxy, the upstream daemon must report the script-artifacts capability in its /health response.',
   });

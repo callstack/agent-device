@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
-import {
-  CONTACT_SHEET_EXTRACTION_REASON,
-  CONTACT_SHEET_NO_FRAMES_REASON,
-  CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
-} from './contact-sheet-report.ts';
+import { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { solidPng } from '../png-pixels.fixtures.ts';
@@ -72,7 +68,7 @@ describe('extractRecordingFrames', () => {
           hostPlatform: 'linux',
         }),
       ),
-    ).toBe(CONTACT_SHEET_UNSUPPORTED_HOST_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.unsupportedHost.reason);
     // Refused before the compiler or the decoder ran, so a Linux host never pays for a spawn.
     expect(mockRunCmd).not.toHaveBeenCalled();
   });
@@ -203,7 +199,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.frameExtractionFailed.reason);
   });
 
   test('refuses a frame entry that cannot say which frame it is', async () => {
@@ -225,7 +221,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.frameExtractionFailed.reason);
   });
 
   test('counts samples the manifest neither answered nor declared skipped', async () => {
@@ -257,7 +253,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.frameExtractionFailed.reason);
   });
 
   test('keeps the extraction reason when the decoder never started', async () => {
@@ -272,7 +268,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.frameExtractionFailed.reason);
   });
 
   test('hands the decoder the cancellation of the request it serves', async () => {
@@ -331,7 +327,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.frameExtractionFailed.reason);
   });
 
   test('reports an unreadable manifest as an extraction failure', async () => {
@@ -346,7 +342,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_EXTRACTION_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.frameExtractionFailed.reason);
   });
 
   test('reports a clip that returned nothing usable', async () => {
@@ -361,7 +357,7 @@ describe('extractRecordingFrames', () => {
           timesMs: [0],
         }),
       ),
-    ).toBe(CONTACT_SHEET_NO_FRAMES_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.noFrames.reason);
   });
 
   test('refuses to spawn a decoder for an empty grid', async () => {
@@ -369,7 +365,7 @@ describe('extractRecordingFrames', () => {
       await reasonOf(() =>
         extract({ videoPath: VIDEO, scratchDir, maxWidth: CELL_WIDTH, timesMs: [] }),
       ),
-    ).toBe(CONTACT_SHEET_NO_FRAMES_REASON);
+    ).toBe(CONTACT_SHEET_REASONS.noFrames.reason);
     expect(mockRunCmd).not.toHaveBeenCalled();
   });
 });

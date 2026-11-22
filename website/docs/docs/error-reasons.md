@@ -15,6 +15,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `alert_button_undecided` | The sheet's buttons name no single choice for the asked-for action. |
+| `alert_capture_undecided` | The capture is alert-shaped but resolves to no single alert. |
+| `alert-window-expired` | A press went out but the confirm window never settled whether the alert is gone. |
 | `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; the command refuses it before running and never shortens it. `details.maxWaitWindowMs` names the limit. |
 
 ### `audit`
@@ -91,6 +94,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `no_text_input_at_point` | A coordinate `fill` point identified no text input, so nothing was tapped or typed. |
 | `text_input_probe_unavailable` | The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped. |
+| `fill_text_stdin_target_invalid` | The stdin text mode's positional list does not decode to exactly one target. |
+| `fill_text_source_conflict` | The stdin text mode was also given a text argument, so the two sources disagree. |
 | `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
 | `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
 | `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
@@ -126,6 +131,16 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fold-angle-unverified` | The iOS simulator hinge did not reach the angle of the final keyframe. |
 | `fold-pose-unsettled` | The iOS simulator hinge reached the pose but never came to rest. |
 
+### `gesture`
+
+| Reason | Meaning |
+| --- | --- |
+| `GESTURE_TAP_DUPLICATE_POINT` | Two tap contacts share coordinates, so one contact would press where another already rests. |
+| `GESTURE_PATH_TOO_SHORT` | The gesture path has fewer usable samples than any recognizable motion needs. |
+| `GESTURE_PATH_INVALID_TIMELINE` | The path's sample timeline is not ordered and finite, so no clock can play it back. |
+| `GESTURE_TRAJECTORY_NON_FINITE` | A trajectory sample carries a non-finite coordinate. |
+| `GESTURE_TRAJECTORY_OUT_OF_BOUNDS` | A trajectory sample leaves the viewport, so the contact would press outside the screen. |
+
 ### `install-from-source`
 
 | Reason | Meaning |
@@ -144,6 +159,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `launch-console-owner-unadmitted` | --launch-console was asked for on an app-launch owner that cannot stream a console. |
 | `claim-lost-during-open` | The device lost the claim this open was made with; close the session and open the device again. |
 | `runtime-hints-operation-missing` | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them. |
 | `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
@@ -155,6 +171,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
 | `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
+| `invalid-harmony-ability-name` | --activity is not an ability name the module.json5 format can carry. |
 | `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
 | `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 
@@ -225,6 +242,17 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `contact_sheet_unsupported_host` | The host cannot decode frames at all: frame decoding is Apple AVFoundation tooling. |
+| `contact_sheet_duration_unknown` | The MP4 timeline could not be read, so no bounded sample grid can be planned. |
+| `contact_sheet_frame_extraction_failed` | The contact sheet could not obtain usable extracted frames: the extractor failed to start, run, or return frames the sheet can use. |
+| `contact_sheet_no_frames` | Extraction returned nothing usable, so there is no sheet to draw. |
+| `contact_sheet_pixel_budget_exceeded` | The sheet would exceed the caller's image pixel budget even at the smallest cell. |
+| `contact_sheet_container_unsupported` | The file is present but is not a container this feature decodes, such as a WebM recording. |
+| `contact_sheet_output_write_failed` | The sheet could not be written where it was asked to land. |
+| `contact_sheet_output_collides_with_input` | The output resolves to the recording itself, which a sheet must never replace. |
+| `contact_sheet_threshold_invalid` | The change threshold is not a finite share between 0 and 1. |
+| `video_validator_compile_timeout` | The Swift compile is still running past the caller's wait; try the stop again. |
+| `video_validator_unavailable` | The validator could not be built or run at all, so playability stays unverified. |
 | `android_screenrecord_startup_failed` | Android `screenrecord` exited before it began writing; its startup output says why. |
 | `recording-output-unplayable` | The recording's file is not a playable video, which only a recorder still finalizing it can undo. |
 | `native_recovery_evidence_unavailable` | The marker exists but the device could not be read, so it cannot be classified. |
@@ -242,16 +270,22 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `replay_target_guard_mismatch` | Dispatch resolved a different node than the replay plan verified for this step. |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
 | `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
+| `maestro-test-failure` | A Maestro assertion or condition failed, so the replayed flow does not match the recording. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
 | `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
+| `timeout` | The cooperative deadline ended the attempt while the abandoned replay may still run. |
+| `timeout_cleanup_pending` | Cleanup of an abandoned replay is still pending, so the suite stops instead of retrying. |
 
 ### `screenshot`
 
 | Reason | Meaning |
 | --- | --- |
+| `screenshot-capture-backend-unsupported` | `--capture-backend` names a backend the selected capture owner does not declare. |
+| `screenshot-screen-mask-unsupported` | `--screen-mask` was asked for on a device whose capture path cannot read the screen mask. |
 | `CROP_SELECTOR_INVALID` | The `--crop-on` value is not a valid selector expression. |
 | `CROP_TARGET_NOT_FOUND` | No element matches the `--crop-on` selector. |
 | `CROP_TARGET_AMBIGUOUS` | More than one element matches the `--crop-on` selector. |
@@ -295,6 +329,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `setting_app_not_consumed` | The asked-for setting applies to the target itself, so the named app consumes nothing. |
 | `android_bluetooth_adapter_missing` | The device declares no Bluetooth adapter, so there is nothing to turn on or off. |
 | `android_bluetooth_command_unavailable` | The build predates `svc bluetooth`, so the adapter cannot be switched from the shell. |
 | `bluetooth-not-applied` | The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request. |
@@ -321,6 +356,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `window-origin-unknown` | The capture never established where its window sits on screen, so coordinates are unverifiable. |
+| `ios-snapshot-presenter-missing` | An acquired iOS snapshot reached a host with no presentation owner to publish it through. |
 | `observation-unavailable` | The runner answered an observe-only snapshot request without an observe-only snapshot. |
 | `empty-snapshot` | XCTest returned a snapshot with no nodes on an iOS simulator. |
 
@@ -370,6 +407,12 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `swift_cache_untrusted` | The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a trusted path that only this user or root can change. |
+
+### Vega CLI adapter
+
+| Reason | Meaning |
+| --- | --- |
+| `vega-adapter-host-unbound` | A Vega CLI call reached the scope default: no caller composed a host-bound adapter first. |
 
 ### Android adb port reverse
 
@@ -505,11 +548,18 @@ These reasons can come from more than one command.
 | `startup-stalled` | The daemon stayed registered and reachable but never reported the startup phase that follows. |
 | `startup-ceiling` | Startup passed the ceiling its own startup budget allows, so this client stopped waiting. |
 | `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer "which daemon" two different ways. |
+| `daemon_startup_admission_closed` | Replay's admission gate is closed, so no new daemon startup is allowed. |
+| `daemon_private_state_unowned` | The private replay state dir does not resolve to the one this host sealed for that capability. |
+| `daemon_private_startup_unowned` | The observed process is not one of the startups this host launched and tracks. |
 | `daemon_state_root_unsafe` | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it. |
+| `relative_state_dir_without_cwd` | The state dir is a relative path and the caller gave no working directory to resolve it from. |
+| `remote_script_artifacts_unsupported` | The remote daemon reports no script-artifacts capability, so it would record to its own disk. |
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
 | `daemon_shutting_down` | The daemon has begun to leave, so it refuses every new request; retry against a new daemon. |
+| `daemon_exit_unconfirmed` | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified. |
+| `repair_evidence_invalid` | The repair tombstone file exists but does not parse into a valid marker. |
 | `daemon_registration_refused` | Another daemon holds this state directory, or its registration could not be proven free, so this daemon did not start; `details.status` says which. |
 | `daemon-clean-not-detached` | The record does not prove the process is a daemon of its own, so its process tree may be someone else's work. |
 
@@ -553,6 +603,13 @@ These reasons can come from more than one command.
 | `DEVICE_CLAIM_RECOVERY_PENDING` | The recorded owner is gone and its resources still need settling before the claim is released. |
 | `DEVICE_CLAIM_OWNER_UNCERTAIN` | A claim exists, but its owner cannot be verified as live or gone. |
 
+### Device inventory
+
+| Reason | Meaning |
+| --- | --- |
+| `invalid_device_pin` | A device-pin selector names a platform, device, udid, or serial the request cannot carry. |
+| `provider_instance_unallocated` | The provider connection has no allocated instance to route to. |
+
 ### Device selection
 
 | Reason | Meaning |
@@ -568,6 +625,13 @@ These reasons can come from more than one command.
 | `hdc-empty-word-unsupported` | `hdc` drops an empty element, so the device command would lose an operand. |
 | `hdc-shell-fragment-unsupported` | `hdc` double-quotes every element, so a shell fragment cannot reach the device as a script. |
 | `unguarded-device-shell-argv` | A `shell`/`exec-out` command the device-shell builder did not build was refused before dispatch. |
+
+### Durable capture
+
+| Reason | Meaning |
+| --- | --- |
+| `resource-already-completed` | The record is already committed, so a finish, cleanup, or late progress write is refused. |
+| `resource-missing` | The record the caller holds a descriptor for no longer exists on disk. |
 
 ### Foldable panels
 
@@ -603,6 +667,13 @@ These reasons can come from more than one command.
 | --- | --- |
 | `human_control_active` | A human holds the device, so state-changing commands are refused while the hold is active; retry after it is released. |
 
+### Image decoding
+
+| Reason | Meaning |
+| --- | --- |
+| `png_decode_failed` | The input could not be decoded as PNG: its signature is missing or its body is corrupt. |
+| `jpeg_decode_failed` | The bytes carry a JPEG signature but the JPEG decoder could not read them. |
+
 ### Interaction
 
 | Reason | Meaning |
@@ -616,14 +687,26 @@ These reasons can come from more than one command.
 | `target_not_hittable` | The platform reports the target as not hittable, so nothing was pressed. |
 | `target_disabled` | `find focus` or `find type` resolved to a disabled text field. |
 | `target_still_moving` | The target did not come to rest before the press; wait for the screen, then retry. |
+| `covered_by_interactive_descendants` | Every tappable region of the target belongs to one of its interactive children. |
+| `offscreen_selector` | A selector resolved to an element outside the screen, so nothing was pressed. |
+| `offscreen_ref` | An @ref resolved to an element outside the screen, so nothing was pressed. |
+
+### Interactor binding
+
+| Reason | Meaning |
+| --- | --- |
+| `provider-runtime-interactor-missing` | The selected provider owns this operation but exposes no bound interactor for it. |
 
 ### Leases
 
 | Reason | Meaning |
 | --- | --- |
+| `INVALID_LEASE_RESPONSE` | The daemon's lease answer is missing an identity field the client must key on. |
 | `LEASE_NOT_FOUND` | The lease that the request names is not active. |
 | `LEASE_SCOPE_MISMATCH` | The lease does not match the tenant, run, backend, provider, device, or client of the request. |
 | `LEASE_SCOPE_REQUIRED` | The lease was allocated with an owner scope that the request does not repeat. |
+| `device-spec-unsupported` | The request picks a device by OS version, image tag, device mode, baseline, or class, and nothing on its path honours a spec. |
+| `device-spec-invalid` | A device-spec key was given a value of the wrong type. |
 | `provider-instance-ended` | The device instance behind the lease ended outside the daemon, which ends the lease with it. |
 | `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
@@ -844,6 +927,24 @@ These reasons can come from more than one command.
 | `UPLOAD_FINALIZE_CLEANUP_FAILED` | Finalizing the upload failed, and removing its staged files failed too; `details.originalError` holds the first failure. |
 | `transfer_ingress_deadline_exceeded` | The upload request exceeded its aggregate deadline (`details.timeoutMs`), which also covers processing after the body arrived. |
 | `upload_canceled` | The client disconnected or canceled before the upload finished. |
+
+### Web backend
+
+| Reason | Meaning |
+| --- | --- |
+| `text-entry-result-unusable` | The batch call for a text entry answered with something other than its one echoed entry. |
+| `text-entry-failed` | The backend ran the fill or type entry and the page refused it. |
+| `snapshot-refs-unmeasurable` | Every snapshot ref failed to measure, so the capture's refs belong to no live nodes. |
+| `batch-result-not-a-list` | The batch call answered with something that is not an entry list. |
+| `entry-count` | The batch answer has a different entry count than the commands that were sent. |
+| `entry-shape` | A batch answer entry is not an entry shape this backend publishes. |
+| `entry-command` | A batch answer entry echoes a different command than the one that was sent. |
+
+### Web provider
+
+| Reason | Meaning |
+| --- | --- |
+| `web-provider-missing` | A web-device request arrived with no composed provider for it. |
 
 ### Web session naming
 

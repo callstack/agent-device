@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type {
   DurableResourceEnvelope,
   DurableResourceLifecycleState,
@@ -7,6 +7,18 @@ import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-ru
 import type { DurableCaptureResourceRecord, DurableCaptureResourceStore } from './store.ts';
 
 const resourceFenceTails = new Map<string, Promise<void>>();
+
+/**
+ * What the durable-capture record store answers when a caller arrives at a record that can no
+ * longer carry its work. `ownership-fence-lost` itself belongs to contracts' durable-resource
+ * outcome union, so it is not declared here.
+ */
+export const DURABLE_CAPTURE_REFUSAL_REASONS = {
+  // The record is already committed, so a finish, cleanup, or late progress write is refused.
+  alreadyCompleted: { reason: 'resource-already-completed' },
+  // The record the caller holds a descriptor for no longer exists on disk.
+  missing: { reason: 'resource-missing' },
+} as const satisfies ReasonTable<'durable capture'>;
 
 /** The lease over a record this fence found open; it is the only way a run may write that record. */
 export type DurableCaptureOpenResourceFenceLease<K extends string> = Readonly<{
@@ -156,7 +168,10 @@ function releasedLeaseError(store: DurableCaptureResourceStore<string>): AppErro
  * settled: the record is committed, so the resource is released, whatever the record could replay.
  */
 export function isCompletedDurableCaptureError(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'resource-already-completed';
+  return (
+    error instanceof AppError &&
+    error.details?.reason === DURABLE_CAPTURE_REFUSAL_REASONS.alreadyCompleted.reason
+  );
 }
 
 /**
@@ -169,7 +184,7 @@ export function completedDurableCaptureError(store: DurableCaptureResourceStore<
     'COMMAND_FAILED',
     `${store.displayName} resource record is already completed`,
     {
-      reason: 'resource-already-completed',
+      reason: DURABLE_CAPTURE_REFUSAL_REASONS.alreadyCompleted.reason,
       retriable: false,
       hint: `Read the completed ${store.displayName.toLowerCase()} record instead of finishing or cleaning it again.`,
     },

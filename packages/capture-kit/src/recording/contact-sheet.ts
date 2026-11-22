@@ -3,10 +3,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  CONTACT_SHEET_CONTAINER_REASON,
-  CONTACT_SHEET_EXTRACTION_REASON,
-  CONTACT_SHEET_OUTPUT_COLLISION_REASON,
-  CONTACT_SHEET_OUTPUT_WRITE_REASON,
+  CONTACT_SHEET_REASONS,
   type RecordingContactSheetCell,
   type RecordingContactSheetResult,
 } from './contact-sheet-report.ts';
@@ -39,7 +36,7 @@ export { recordingContactSheetPath };
  * travels on the error the pipeline threw, so it stays in the module that raises it until some surface
  * asks for it by name.
  */
-export { CONTACT_SHEET_THRESHOLD_REASON } from './contact-sheet-report.ts';
+export { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 export type { RecordingContactSheetResult } from './contact-sheet-report.ts';
 
 /**
@@ -73,7 +70,7 @@ export async function buildRecordingContactSheet(
         ? `Contact sheets need an MP4 recording; ${videoPath} is WebM, whose frames this decoder does not read`
         : `Contact sheets need an MP4 recording; ${videoPath} is not a readable MP4`,
       {
-        reason: CONTACT_SHEET_CONTAINER_REASON,
+        reason: CONTACT_SHEET_REASONS.containerUnsupported.reason,
         videoPath,
         container: container ?? 'unknown',
         hint: 'Re-record on a backend that exports MP4, or pass the MP4 artifact the recording produced.',
@@ -137,7 +134,7 @@ async function decodeFrameSamples(
         'COMMAND_FAILED',
         `Frame extraction returned a ${size.width}px-wide frame when the sheet asked for ${CONTACT_SHEET_FRAME_WIDTH}px cells`,
         {
-          reason: CONTACT_SHEET_EXTRACTION_REASON,
+          reason: CONTACT_SHEET_REASONS.frameExtractionFailed.reason,
           framePath: frame.path,
           frameWidth: size.width,
           frameWidthLimit: CONTACT_SHEET_FRAME_WIDTH,
@@ -149,7 +146,7 @@ async function decodeFrameSamples(
         'COMMAND_FAILED',
         `Frame extraction returned a ${size.width}x${size.height} frame, above the ${maxPixels}-pixel budget for the whole sheet`,
         {
-          reason: CONTACT_SHEET_EXTRACTION_REASON,
+          reason: CONTACT_SHEET_REASONS.frameExtractionFailed.reason,
           framePath: frame.path,
           framePixels: size.width * size.height,
           maxPixels,
@@ -183,7 +180,7 @@ function assertOutputDoesNotReplaceRecording(videoPath: string, outputPath: stri
     'INVALID_ARGS',
     `A contact sheet cannot be written over the recording it describes: ${outputPath}`,
     {
-      reason: CONTACT_SHEET_OUTPUT_COLLISION_REASON,
+      reason: CONTACT_SHEET_REASONS.outputCollidesWithInput.reason,
       videoPath,
       outputPath,
       hint: 'Choose a different --out path, or omit it to write beside the recording.',
@@ -250,7 +247,7 @@ function writeContactSheetFile(outputPath: string, bytes: Buffer): void {
     throw new AppError(
       'COMMAND_FAILED',
       `Failed to write the contact sheet to ${outputPath}: ${error instanceof Error ? error.message : String(error)}`,
-      { reason: CONTACT_SHEET_OUTPUT_WRITE_REASON, outputPath },
+      { reason: CONTACT_SHEET_REASONS.outputWriteFailed.reason, outputPath },
     );
   }
 }

@@ -1,5 +1,5 @@
 import { shellQuote } from '@agent-device/kernel/device-shell';
-import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeRef, type Rect, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {
@@ -7,6 +7,23 @@ import {
   type OffscreenScrollDirection,
 } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import type { InteractionAction } from './interaction-action.ts';
+
+const OFFSCREEN_REFUSAL_REASONS = {
+  /**
+   * The acting pipeline's off-screen stage refused a target named by selector: the resolved node
+   * sits outside the screen, so nothing was pressed and `details.selector` names the target. The
+   * owner is `packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts`.
+   */
+  // A selector resolved to an element outside the screen, so nothing was pressed.
+  offscreenSelector: { reason: 'offscreen_selector' },
+  /**
+   * The acting pipeline's off-screen stage refused a target named by `@ref`: the resolved node sits
+   * outside the screen, so nothing was pressed and `details.ref` names it. The owner is
+   * `packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts`.
+   */
+  // An @ref resolved to an element outside the screen, so nothing was pressed.
+  offscreenRef: { reason: 'offscreen_ref' },
+} as const satisfies ReasonTable<'interaction'>;
 
 /**
  * The one off-screen rule every element-targeted dispatch applies: the acting runtime paths through
@@ -72,7 +89,7 @@ export function offscreenSelectorFailure(
 ): Parameters<typeof throwIfOffscreenTarget>[2] {
   return {
     message: `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
-    details: { reason: 'offscreen_selector', selector },
+    details: { reason: OFFSCREEN_REFUSAL_REASONS.offscreenSelector.reason, selector },
     // A selector re-resolves against a fresh snapshot on every attempt, so the
     // recovery is: move the named direction, then retry THIS selector - no
     // separate snapshot step, and no @ref (a scroll expires the ref frame,
@@ -90,7 +107,7 @@ export function offscreenRefFailure(
 ): Parameters<typeof throwIfOffscreenTarget>[2] {
   return {
     message: `Ref ${refInput} is off-screen and not safe to ${action}`,
-    details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
+    details: { reason: OFFSCREEN_REFUSAL_REASONS.offscreenRef.reason, ref: normalizeRef(refInput) },
     // The scroll that reveals the target expires the ref frame (#1366, ADR
     // 0014), so retrying this @ref would be rejected next. Steer to a selector,
     // which re-resolves against a fresh snapshot and bypasses the ref-frame guard

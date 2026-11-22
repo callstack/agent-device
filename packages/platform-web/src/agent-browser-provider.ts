@@ -29,9 +29,11 @@ import {
 } from './json-utils.ts';
 import type { WebProvider, WebSnapshotOptions, WebSnapshotResult } from './provider.ts';
 import {
+  AGENT_BROWSER_REFUSAL_REASONS,
   getManagedAgentBrowserStatus,
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
+  type AgentBrowserBatchRefusal,
 } from './agent-browser-tool.ts';
 import { agentBrowserFleetOf, type AgentBrowserFleet } from './agent-browser-fleet.ts';
 import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
@@ -227,7 +229,7 @@ async function sendTextEntry(
       cmd: AGENT_BROWSER,
       args: ['batch'],
       command: commandName,
-      reason: 'text-entry-result-unusable',
+      reason: AGENT_BROWSER_REFUSAL_REASONS.textEntryResultUnusable.reason,
       hint: AGENT_BROWSER_DOCTOR_HINT,
     });
   }
@@ -238,7 +240,7 @@ async function sendTextEntry(
     cmd: AGENT_BROWSER,
     args: ['batch'],
     command: commandName,
-    reason: 'text-entry-failed',
+    reason: AGENT_BROWSER_REFUSAL_REASONS.textEntryFailed.reason,
     // The backend ran and refused this entry, so its install is not the suspect.
     hint:
       userCommand === 'fill'
@@ -424,7 +426,7 @@ async function fetchRefRects(
       {
         cmd: AGENT_BROWSER,
         args: ['batch'],
-        reason: 'snapshot-refs-unmeasurable',
+        reason: AGENT_BROWSER_REFUSAL_REASONS.snapshotRefsUnmeasurable.reason,
         requestedRefs: refs.length,
         measuredRects: 0,
         hint: AGENT_BROWSER_DOCTOR_HINT,
@@ -486,7 +488,7 @@ function parseBatchEntries(
   commands: readonly (readonly string[])[],
   captureRefs: number,
 ): AgentBrowserBatchEntry[] {
-  const unusable = (reason: string): AppError =>
+  const unusable = (reason: AgentBrowserBatchRefusal): AppError =>
     new AppError(
       'COMMAND_FAILED',
       `agent-browser returned an unusable batch result for snapshot geometry (${reason})`,
@@ -499,12 +501,15 @@ function parseBatchEntries(
         hint: AGENT_BROWSER_DOCTOR_HINT,
       },
     );
-  if (!Array.isArray(data)) throw unusable('batch-result-not-a-list');
-  if (data.length !== commands.length) throw unusable('entry-count');
-  if (!data.every(isBatchEntry)) throw unusable('entry-shape');
+  if (!Array.isArray(data))
+    throw unusable(AGENT_BROWSER_REFUSAL_REASONS.batchResultNotAList.reason);
+  if (data.length !== commands.length)
+    throw unusable(AGENT_BROWSER_REFUSAL_REASONS.entryCount.reason);
+  if (!data.every(isBatchEntry)) throw unusable(AGENT_BROWSER_REFUSAL_REASONS.entryShape.reason);
   const entries = data;
   for (const [index, entry] of entries.entries()) {
-    if (!sameBatchCommand(entry.command, commands[index])) throw unusable('entry-command');
+    if (!sameBatchCommand(entry.command, commands[index]))
+      throw unusable(AGENT_BROWSER_REFUSAL_REASONS.entryCommand.reason);
   }
   return entries;
 }

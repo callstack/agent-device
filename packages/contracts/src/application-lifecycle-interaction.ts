@@ -5,7 +5,11 @@ import {
 } from './launch-console.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isIosFamily } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  INTERACTOR_BINDING_REFUSAL_REASONS,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { ApplicationLaunchReport, Interactor, RunnerContext } from './interactor-types.ts';
 import type {
   ApplicationLifecycleExecution,
@@ -16,6 +20,12 @@ import type {
   OpenTargetResolution,
   OpenTargetResolutionInput,
 } from './application-lifecycle-runtime.ts';
+
+/** Why `open` refuses before it resolves an interactor for the chosen owner. */
+const APPLICATION_LIFECYCLE_ADMISSION_REFUSAL_REASONS = {
+  // --launch-console was asked for on an app-launch owner that cannot stream a console.
+  launchConsoleUnadmitted: { reason: 'launch-console-owner-unadmitted' },
+} as const satisfies ReasonTable<'open'>;
 
 /**
  * The exact request-bound interactor authority for a lifecycle operation.  It is deliberately
@@ -92,7 +102,7 @@ function bindApplicationLifecycleInteractor(
           'UNSUPPORTED_OPERATION',
           '--launch-console is supported only for a local or Limrun iOS simulator app launch',
           {
-            reason: 'launch-console-owner-unadmitted',
+            reason: APPLICATION_LIFECYCLE_ADMISSION_REFUSAL_REASONS.launchConsoleUnadmitted.reason,
             deviceId: device.id,
             hint: 'Remove --launch-console, or use a local or Limrun iOS simulator for launch output.',
           },
@@ -103,7 +113,10 @@ function bindApplicationLifecycleInteractor(
       throw new AppError(
         'UNSUPPORTED_OPERATION',
         'Provider-owned application lifecycle operation has no bound provider interactor.',
-        { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
+        {
+          reason: INTERACTOR_BINDING_REFUSAL_REASONS.providerInteractorMissing.reason,
+          deviceId: device.id,
+        },
       );
     },
   });

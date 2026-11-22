@@ -1,6 +1,6 @@
 import type { HumanControlHold, Lease } from '@agent-device/contracts/client';
 import type { InternalRequestOptions } from '@agent-device/contracts/command';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';
 import { readLeaseDevice } from '@agent-device/contracts/lease-scope';
@@ -77,6 +77,12 @@ function normalizeHumanControlHold(value: unknown): HumanControlHold {
   };
 }
 
+/** Why this client refuses a daemon answer it cannot turn into a lease. */
+const LEASE_CLIENT_REFUSAL_REASONS = {
+  // The daemon's lease answer is missing an identity field the client must key on.
+  invalidResponse: { reason: 'INVALID_LEASE_RESPONSE' },
+} as const satisfies ReasonTable<'leases'>;
+
 function normalizeLease(data: Record<string, unknown>): Lease {
   const rawLease = data.lease;
   const leaseId = isRecord(rawLease) ? readOptionalString(rawLease, 'leaseId') : undefined;
@@ -85,7 +91,7 @@ function normalizeLease(data: Record<string, unknown>): Lease {
   const backend = isRecord(rawLease) ? readOptionalString(rawLease, 'backend') : undefined;
   if (!isRecord(rawLease) || !leaseId || !tenantId || !runId || !backend) {
     throw new AppError('COMMAND_FAILED', 'Invalid lease response from daemon', {
-      reason: 'INVALID_LEASE_RESPONSE',
+      reason: LEASE_CLIENT_REFUSAL_REASONS.invalidResponse.reason,
       response: data,
     });
   }

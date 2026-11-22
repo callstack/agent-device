@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CONTACT_SHEET_DURATION_REASON } from './contact-sheet-report.ts';
+import { CONTACT_SHEET_REASONS } from './contact-sheet-report.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   CONTACT_SHEET_SAMPLE_INTERVAL_MS,
@@ -57,13 +57,13 @@ describe('planContactSheetSampleTimes', () => {
 
   test('refuses to plan over a timeline the container cannot name', () => {
     expect(reasonOf(() => planContactSheetSampleTimes(undefined, VIDEO))).toBe(
-      CONTACT_SHEET_DURATION_REASON,
+      CONTACT_SHEET_REASONS.durationUnknown.reason,
     );
     expect(reasonOf(() => planContactSheetSampleTimes(Number.NaN, VIDEO))).toBe(
-      CONTACT_SHEET_DURATION_REASON,
+      CONTACT_SHEET_REASONS.durationUnknown.reason,
     );
     expect(reasonOf(() => planContactSheetSampleTimes(-1, VIDEO))).toBe(
-      CONTACT_SHEET_DURATION_REASON,
+      CONTACT_SHEET_REASONS.durationUnknown.reason,
     );
   });
 });

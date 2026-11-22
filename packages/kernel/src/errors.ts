@@ -407,7 +407,7 @@ export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
  * cancellation through untouched (retry loops, provider adapters, runner
  * transports) dispatches on the same typed reason.
  */
-const REQUEST_CANCELED_REASON = 'request_canceled';
+export const REQUEST_CANCELED_REASON = 'request_canceled';
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
 /**
  * A runtime owner whose facts advertised an operation it cannot actually perform: a contract bug,
@@ -421,6 +421,17 @@ export function createRuntimeContractInvalidError(message: string): AppError {
     hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
   });
 }
+
+/**
+ * The provider fail-closed refusal every interactor binder answers with when the selected provider
+ * no longer exposes its interactor. Facts advertised the operation, so this names an ownership
+ * bug, and each binder pairs it with its own message. Declared beside the error factories because
+ * the binders in contracts raise it from modules that must not grow their eager closure.
+ */
+export const INTERACTOR_BINDING_REFUSAL_REASONS = {
+  // The selected provider owns this operation but exposes no bound interactor for it.
+  providerInteractorMissing: { reason: 'provider-runtime-interactor-missing' },
+} as const satisfies ReasonTable<'interactor binding'>;
 
 const REQUEST_CANCELED_HINT =
   'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';

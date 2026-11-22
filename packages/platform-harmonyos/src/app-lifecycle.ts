@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { runHarmonyShell } from './hdc.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
@@ -177,10 +177,16 @@ function combineHarmonySignals(
 /** A module.json5 ability name: a letter, then letters, digits, `_`, or `.`. */
 const HARMONY_ABILITY_NAME = /^[A-Za-z][A-Za-z0-9_.]*$/;
 
+/** Why a HarmonyOS app-open argument is refused before any device is touched. */
+const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
+  // --activity is not an ability name the module.json5 format can carry.
+  invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
+} as const satisfies ReasonTable<'open'>;
+
 function requireHarmonyAbilityName(ability: string): void {
   if (HARMONY_ABILITY_NAME.test(ability)) return;
   throw new AppError('INVALID_ARGS', `Invalid HarmonyOS ability name: ${ability}`, {
-    reason: 'invalid-harmony-ability-name',
+    reason: HARMONY_LIFECYCLE_REFUSAL_REASONS.invalidAbilityName.reason,
     ability,
     hint: 'Pass --activity as the ability name from module.json5, such as EntryAbility.',
   });

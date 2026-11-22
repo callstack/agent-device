@@ -1,7 +1,7 @@
 import path from 'node:path';
 import {
   buildRecordingContactSheet,
-  CONTACT_SHEET_THRESHOLD_REASON,
+  CONTACT_SHEET_REASONS,
   recordingContactSheetPath,
   type RecordingContactSheetResult,
 } from '@agent-device/capture-kit/recording-contact-sheet';
@@ -122,7 +122,7 @@ function assertContactSheetThreshold(threshold: number | undefined): void {
       'INVALID_ARGS',
       `record contact-sheet needs a changedPixelThreshold between 0 and 1, got ${threshold}`,
       {
-        reason: CONTACT_SHEET_THRESHOLD_REASON,
+        reason: CONTACT_SHEET_REASONS.thresholdInvalid.reason,
         changedPixelThreshold: threshold,
         hint: 'Omit it to use the calibrated default, or pass a share of the frame between 0 and 1.',
       },
