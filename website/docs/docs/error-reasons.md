@@ -261,12 +261,12 @@ These reasons can come from more than one command.
 | `provider-viewport-unavailable` | The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by. |
 | `provider-invalid-response` | Revyl answered a worker action with a value outside the field's own range. |
 | `provider-refused` | Revyl refused the request or the action it carries. |
-| `provider-unreachable` | Revyl never answered the request, or the connection to its backend failed. |
 | `provider-response-invalid` | Revyl answered in a way agent-device cannot read, such as a body that is not JSON. |
+| `provider-unconfirmed` | agent-device could not confirm the outcome of the request; check the session before retrying. |
+| `provider-unreachable` | Revyl never answered the request, or the connection to its backend failed. |
 | `provider-auth-rejected` | Revyl rejected the credentials on the request. |
 | `provider-session-gone` | The session the request addresses no longer exists at Revyl. |
 | `provider-conflict` | Revyl rejected the request because its state conflicts with what it asks for. |
-| `provider-unconfirmed` | Revyl took the request but left its outcome unconfirmed; check the session before retrying. |
 | `provider-request-failed` | Revyl refused a request it never routed, with a status that settles the failure. |
 | `request_timeout` | Revyl gave no response before the request's own deadline passed. |
 | `invalid_provider_url` | `REVYL_API_URL` is not an origin Revyl's API can be addressed at. |

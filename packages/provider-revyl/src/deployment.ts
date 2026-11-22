@@ -8,7 +8,7 @@ import { Deadline, type DeadlineClock, pollUntilSettled } from '@agent-device/ho
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
-  REVYL_PROVIDER_REASONS,
+  REVYL_OUTCOME_REASONS,
   type RevylClient,
   type RevylProviderReason,
 } from './revyl-client.ts';
@@ -60,7 +60,7 @@ export async function deployRevylApp(
   const scoped = AbortSignal.any([signal, budget]);
   const timedOut = (cause?: unknown) =>
     installStopped(
-      REVYL_PROVIDER_REASONS.unconfirmed.reason,
+      REVYL_OUTCOME_REASONS.unconfirmed.reason,
       `Revyl did not finish the install within ${budgetMs / 1000} s.`,
       cause,
     );
@@ -196,7 +196,7 @@ async function installAndWait(
   const installId = accepted.install_id?.trim();
   if (accepted.status !== 'accepted' || !installId) {
     throw new AppError('COMMAND_FAILED', 'Revyl did not accept the app install.', {
-      reason: REVYL_PROVIDER_REASONS.refused.reason,
+      reason: REVYL_OUTCOME_REASONS.refused.reason,
       ...(accepted.status === undefined ? {} : { providerDetail: accepted.status }),
     });
   }
@@ -212,7 +212,7 @@ async function installAndWait(
     return requireInstalled(value.status, value.result ?? undefined);
   }
   throw new AppError('COMMAND_FAILED', `Revyl reported install status "${value.status}".`, {
-    reason: REVYL_PROVIDER_REASONS.refused.reason,
+    reason: REVYL_OUTCOME_REASONS.refused.reason,
     installId,
   });
 }
@@ -229,7 +229,7 @@ function requireInstalled(
     'COMMAND_FAILED',
     `Revyl could not install the app${error === undefined ? '' : `: ${error}`}`,
     {
-      reason: REVYL_PROVIDER_REASONS.refused.reason,
+      reason: REVYL_OUTCOME_REASONS.refused.reason,
       installStatus: status,
       ...(error === undefined ? {} : { providerDetail: error }),
     },
