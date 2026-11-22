@@ -1,5 +1,4 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import { readLeaseProvider } from '@agent-device/kernel/contracts';
 import {
   pluginConnectionInventory,
   pluginConnectionCapabilities,
@@ -109,7 +108,7 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
  * a profile verifies the provider it names.
  */
 export function requiresOwnProviderAdmission(provider: string | undefined): boolean {
-  return providerPluginAdmission(readLeaseProvider(provider)) === 'provider';
+  return providerPluginAdmission(provider) === 'provider';
 }
 
 /**
@@ -129,8 +128,7 @@ export async function admitProviderForRoute(
 ): Promise<void> {
   if (provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(provider)) return;
   await primePluginConnections(env);
-  if (route === 'dispatches-to-remote-daemon') return;
-  if (route === 'reads-connection-record' && declaredConnectionCapabilities(provider, env)) return;
+  if (route !== 'drives-connection') return;
   if (pluginConnectionCapabilities(provider, env) !== undefined) return;
   const unavailable = unavailableConnectPluginError(provider, env);
   if (unavailable) throw unavailable;

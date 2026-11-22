@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
-import { isRemoteConfigReferenced } from '@agent-device/remote/remote-connection-state';
+import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
+import {
+  isRemoteConfigReferenced,
+  readRemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
 import type {
   RemoteConfigProfile,
   ResolvedRemoteConfigProfile,
@@ -19,9 +23,12 @@ export function writeGeneratedRemoteConfig(options: {
   stateDir: string;
   provider: string;
   profile: RemoteConfigProfile;
+  session?: string;
 }): string {
-  const normalized = normalizeJson(stripGeneratedProfileSecrets(options.profile));
+  const normalized = normalizedGeneratedProfile(stripGeneratedProfileSecrets(options.profile));
   const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
+  const saved = findMatchingGeneratedProfile(options, configDir, normalized);
+  if (saved) return saved;
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const configPath = path.join(
     configDir,
@@ -83,6 +90,7 @@ export function persistAndResolveGeneratedProfile(options: {
     stateDir: options.stateDir,
     provider: options.provider,
     profile: options.profile,
+    session: options.flags.session ?? 'default',
   });
   const remoteConfig = resolveGeneratedRemoteConfigProfile({
     configPath: remoteConfigPath,
@@ -99,6 +107,42 @@ export function persistAndResolveGeneratedProfile(options: {
     },
     remoteConfigPath: remoteConfig.resolvedPath,
   };
+}
+
+function findMatchingGeneratedProfile(
+  options: { stateDir: string; provider: string; session?: string },
+  configDir: string,
+  normalized: unknown,
+): string | undefined {
+  if (options.session === undefined) return undefined;
+  const state = readRemoteConnectionState({ stateDir: options.stateDir, session: options.session });
+  if (!state) return undefined;
+  const candidate = path.resolve(state.remoteConfigPath);
+  if (path.dirname(candidate) !== path.resolve(configDir)) return undefined;
+  const prefix = `${safeProviderName(options.provider)}-`;
+  const name = path.basename(candidate);
+  if (!name.startsWith(prefix) || !/^[a-f0-9]{16}\.json$/.test(name.slice(prefix.length))) {
+    return undefined;
+  }
+  try {
+    const raw = fs.readFileSync(candidate, 'utf8');
+    if (crypto.createHash('sha256').update(raw).digest('hex') !== state.remoteConfigHash) {
+      return undefined;
+    }
+    const previous = normalizedGeneratedProfile(JSON.parse(raw) as RemoteConfigProfile);
+    return JSON.stringify(previous) === JSON.stringify(normalized)
+      ? state.remoteConfigPath
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizedGeneratedProfile(profile: RemoteConfigProfile): unknown {
+  return normalizeJson({
+    ...profile,
+    leaseProvider: canonicalLeaseProvider(profile.leaseProvider),
+  });
 }
 
 function stripGeneratedProfileSecrets(profile: RemoteConfigProfile): RemoteConfigProfile {

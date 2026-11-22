@@ -19,8 +19,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import {
-  readLeaseProvider,
-  normalizeLeaseProvider,
+  canonicalLeaseProvider,
   leaseBackendForPlatform,
   platformForLeaseBackend,
   type LeaseBackend,
@@ -243,7 +242,7 @@ export function readRemoteConnectionState(options: {
     return null;
   }
   if (parsed.leaseProvider !== undefined) {
-    parsed.leaseProvider = readLeaseProvider(parsed.leaseProvider) ?? parsed.leaseProvider;
+    parsed.leaseProvider = canonicalLeaseProvider(parsed.leaseProvider);
   }
   return parsed;
 }
@@ -265,7 +264,7 @@ export function writeRemoteConnectionState(options: {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   writeJsonFile(statePath, {
     ...options.state,
-    leaseProvider: normalizeLeaseProvider(options.state.leaseProvider),
+    leaseProvider: canonicalLeaseProvider(options.state.leaseProvider),
   });
   options.onSessionRecordCommitted?.();
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });

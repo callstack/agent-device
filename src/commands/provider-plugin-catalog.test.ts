@@ -19,7 +19,7 @@ function declaration(provider: string) {
 test.each([NIGHTLY_0_22, MAIN_NIGHTLY_0_22])(
   '0.22 nightly core %s names the plugin release built with it',
   (coreVersion) => {
-    for (const provider of ['browserstack', 'aws-device-farm']) {
+    for (const { provider } of providerPluginDeclarations()) {
       assert.equal(
         providerPluginInstallCommand(declaration(provider), coreVersion),
         `agent-device plugins add @agent-device/${provider}@${coreVersion}`,
@@ -45,12 +45,8 @@ test('a core outside the 0.22 nightlies keeps the plain package selector', () =>
   }
 });
 
-test('a plugin that ships every release ignores the channel of the core', () => {
+test('stable cores use the stable provider packages', () => {
   for (const provider of ['testmu', 'revyl', 'webos', 'tizen']) {
-    assert.equal(
-      providerPluginInstallCommand(declaration(provider), NIGHTLY_0_22),
-      `agent-device plugins add @agent-device/${provider}`,
-    );
     assert.equal(
       providerPluginInstallCommand(declaration(provider), '0.21.39'),
       `agent-device plugins add @agent-device/${provider}`,
@@ -88,5 +84,5 @@ test('help gives nightly and stable users the same plugin selectors as recovery'
     assert.ok(nightly.includes(`connect ${provider}; @agent-device/${provider}@${NIGHTLY_0_22})`));
     assert.ok(stable.includes(`connect ${provider}; @agent-device/${provider})`));
   }
-  assert.match(nightly, /TestMu AI \(connect testmu; @agent-device\/testmu\)/);
+  assert.ok(nightly.includes(`TestMu AI (connect testmu; @agent-device/testmu@${NIGHTLY_0_22})`));
 });

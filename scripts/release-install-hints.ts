@@ -1,4 +1,3 @@
-import { providerPluginDeclarations } from '@agent-device/contracts/provider-plugin-catalog';
 /**
  * Lists, one name per line, every plugin package the checked-out core tells a user to install.
  *
@@ -13,6 +12,7 @@ import { providerPluginDeclarations } from '@agent-device/contracts/provider-plu
  * Run from the repository root, where the workspace links resolve:
  *   node --experimental-strip-types scripts/release-install-hints.ts
  */
+import { providerPluginDeclarations } from '@agent-device/contracts/provider-plugin-catalog';
 import { getReplayPluginInstallation, type ReplayFormat } from '@agent-device/ad-script';
 import { OPTIONAL_PLATFORMS } from '@agent-device/contracts/platform-module';
 import {

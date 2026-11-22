@@ -56,16 +56,16 @@ test.each(['missing', 'failed'] as const)(
         updatedAt: now,
       },
     });
-    for (const argv of [
+    const status = await runCliCapture(
       ['connection', 'status', '--state-dir', stateDir, '--json'],
-      ['snapshot', '--state-dir', stateDir, '--json'],
-    ]) {
-      const result = await runCliCapture(argv, opts);
-      assert.equal(result.code, 1, result.stdout);
-      assert.equal(JSON.parse(result.stdout).error?.code, 'UNSUPPORTED_OPERATION', result.stdout);
-      assert.equal(JSON.parse(result.stdout).error?.details?.reason, expected, result.stdout);
-      assert.deepEqual(result.calls, []);
-      assert.doesNotMatch(result.stdout, /install-from-source|leaseId.*pending/);
-    }
+      opts,
+    );
+    assert.equal(status.code, null, status.stdout);
+    assert.deepEqual(status.calls, []);
+    const snapshot = await runCliCapture(['snapshot', '--state-dir', stateDir, '--json'], opts);
+    assert.equal(snapshot.code, 1, snapshot.stdout);
+    assert.equal(JSON.parse(snapshot.stdout).error?.code, 'UNSUPPORTED_OPERATION', snapshot.stdout);
+    assert.equal(JSON.parse(snapshot.stdout).error?.details?.reason, expected, snapshot.stdout);
+    assert.deepEqual(snapshot.calls, []);
   },
 );

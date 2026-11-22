@@ -11,6 +11,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { makeTempWorkspace } from '@agent-device/test-kit';
 import { runCliCapture } from '../../__tests__/cli-capture.ts';
+import { buildConnectClientId } from './client-id.ts';
 import { resolveCloudAccessForConnect, resolveRemoteAuthForCli } from '../auth-session.ts';
 
 // No plugin is installed in this file. Authentication is the seam: a refusal that precedes it never
@@ -76,6 +77,9 @@ test.each([
     const { root, home, project } = makeTempWorkspace();
     const stateDir = path.join(root, 'state');
     const remoteConfig = limrunProfile(project, ' limrun ');
+    const profile = JSON.parse(fs.readFileSync(remoteConfig, 'utf8'));
+    delete profile.daemonBaseUrl;
+    fs.writeFileSync(remoteConfig, JSON.stringify(profile));
 
     const result = await runCliCapture(
       ['connect', '--remote-config', remoteConfig, '--session', 'ci', ...extra, '--json'],
@@ -414,4 +418,60 @@ test('connect cloud refuses a Limrun profile from the control plane before anyth
   assert.equal(readActiveConnectionState({ stateDir })?.session, 'active-b');
   assert.deepEqual(snapshotTree(stateDir), before);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('cloud reconnect reuses an equivalent legacy profile on a remote daemon without the plugin', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const session = 'cloud-limrun';
+  const cloudBaseUrl = 'https://cloud.example';
+  const accessToken = 'adc_agent_cloud';
+  const clientId = buildConnectClientId(stateDir, cloudBaseUrl, CLOUD_DAEMON, session);
+  const profile = {
+    daemonBaseUrl: CLOUD_DAEMON,
+    tenant: 'acme',
+    runId: 'run-1',
+    leaseProvider: ' limrun ',
+    clientId,
+  };
+  const configDir = path.join(stateDir, 'remote-connections', 'generated');
+  const configPath = path.join(configDir, 'cloud-0123456789abcdef.json');
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(profile));
+  const now = new Date().toISOString();
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session,
+      remoteConfigPath: configPath,
+      remoteConfigHash: hashRemoteConfigFile(configPath),
+      tenant: profile.tenant,
+      runId: profile.runId,
+      clientId,
+      leaseProvider: 'limrun',
+      connectedAt: now,
+      updatedAt: now,
+      daemon: { baseUrl: CLOUD_DAEMON },
+    },
+  });
+  const { clientId: _clientId, ...cloudProfile } = profile;
+  vi.mocked(resolveCloudAccessForConnect).mockResolvedValue({ accessToken, cloudBaseUrl });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({ ok: true, connection: { remoteConfigProfile: cloudProfile } }),
+    ),
+  );
+
+  const result = await runCliCapture(
+    ['connect', 'cloud', '--session', session, '--state-dir', stateDir, '--json'],
+    { cwd: project, env: { HOME: home } },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  const state = readRemoteConnectionState({ stateDir, session });
+  assert.equal(state?.leaseProvider, 'limrun');
+  assert.equal(state?.remoteConfigPath, configPath);
+  assert.deepEqual(fs.readdirSync(configDir), ['cloud-0123456789abcdef.json']);
 });

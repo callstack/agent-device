@@ -152,7 +152,10 @@ test('provider lease allocation names the missing plugin before issuing a lease'
     assert.equal(details.provider, 'testmu');
     assert.deepEqual(details.registeredProviders, [FAKE_PROVIDER]);
     assert.equal(details.package, '@agent-device/testmu');
-    assert.equal(details.installCommand, 'agent-device plugins add @agent-device/testmu');
+    assert.equal(
+      details.installCommand,
+      'agent-device plugins add @agent-device/testmu@nightly-0.22',
+    );
     assert.match(String(error.hint), /daemon stop/);
     const retried = await daemon.callCommand(
       'lease_allocate',

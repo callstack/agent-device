@@ -887,7 +887,8 @@ test('lease_allocate names the plugin that failed to register when it could have
       providerRuntimeIds: ['browserstack'],
       failedPlugins: [
         failed('testmu', '@agent-device/testmu'),
-        failed(undefined, 'unloadable-plugin'),
+        failed(undefined, '@agent-device/testmu'),
+        failed(undefined, 'unrelated-package'),
         failed('other', 'other-plugin'),
         { ...failed(undefined, '@agent-device/maestro'), backend: 'maestro' },
       ],
@@ -905,10 +906,10 @@ test('lease_allocate names the plugin that failed to register when it could have
           message: '@agent-device/testmu is broken',
         },
         {
-          package: 'unloadable-plugin',
+          package: '@agent-device/testmu',
           code: 'INVALID_ARGS',
           reason: 'invalid_plugin',
-          message: 'unloadable-plugin is broken',
+          message: '@agent-device/testmu is broken',
         },
       ]);
       return true;

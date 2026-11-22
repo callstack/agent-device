@@ -1,4 +1,4 @@
-import { normalizeLeaseProvider } from '@agent-device/kernel/contracts';
+import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -8,7 +8,7 @@ import { resolveCloudAccessForConnect } from '../auth-session.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { buildConnectClientId } from './client-id.ts';
-import { primeProviderConnection, requiresOwnProviderAdmission } from './provider-policy.ts';
+import { admitConnectProfileProvider } from './provider-admission.ts';
 
 const CONNECTION_PROFILE_PATH = '/api/control-plane/connection-profile';
 const HTTP_TIMEOUT_MS = 15_000;
@@ -45,8 +45,12 @@ export async function resolveCloudConnectProfile(options: {
   // The control plane chose the provider. It is admitted here, before this route generates or writes
   // any profile or connection record, so a provider whose plugin is missing or broken leaves no
   // connection state behind.
-  const leaseProvider = normalizeLeaseProvider(profile.leaseProvider);
-  await admitDiscoveredProvider(leaseProvider, options.env);
+  const leaseProvider = canonicalLeaseProvider(profile.leaseProvider);
+  await admitConnectProfileProvider(
+    leaseProvider,
+    options.flags.daemonBaseUrl ?? profile.daemonBaseUrl,
+    options,
+  );
   const clientId = buildConnectClientId(
     options.stateDir,
     auth.cloudBaseUrl,
@@ -69,19 +73,6 @@ export async function resolveCloudConnectProfile(options: {
       daemonAuthToken: auth.accessToken,
     },
   });
-}
-
-/**
- * Checks the provider the connection profile names, right after the control plane answers with it.
- * Limrun is checked here: the core ships no Limrun runtime, so only its plugin can supply it, and a
- * route that has no working plugin for it writes nothing. Any other provider name keeps the base
- * behavior of this route, which saves the profile and verifies it as the cloud service does.
- */
-async function admitDiscoveredProvider(
-  provider: string | undefined,
-  env: NodeJS.ProcessEnv,
-): Promise<void> {
-  if (requiresOwnProviderAdmission(provider)) await primeProviderConnection(provider, env);
 }
 
 async function fetchConnectionProfile(options: {

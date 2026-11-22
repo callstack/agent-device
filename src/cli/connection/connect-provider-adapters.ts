@@ -9,8 +9,9 @@ import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
+  admitProviderForRoute,
   isConnectProviderName,
-  primeProviderConnection,
+  providerRouteForConnection,
   type ConnectProvider,
 } from './provider-policy.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
@@ -100,16 +101,19 @@ export async function resolveConnectProviderProfile(options: {
       env,
     });
     const leaseProvider = resolved.profile.leaseProvider;
-    await primeProviderConnection(leaseProvider, env);
-    return {
-      flags: {
-        ...profileToCliFlags(resolved.profile),
-        ...options.flags,
-        remoteConfig: resolved.resolvedPath,
-      },
-      remoteConfigPath: resolved.resolvedPath,
-      ...(isConnectProviderName(leaseProvider, env) ? { provider: leaseProvider } : {}),
+    const flags = {
+      ...profileToCliFlags(resolved.profile),
+      ...options.flags,
+      remoteConfig: resolved.resolvedPath,
     };
+    const route = providerRouteForConnection({ daemonBaseUrl: flags.daemonBaseUrl, env });
+    await admitProviderForRoute(leaseProvider, route, env);
+    const provider =
+      isConnectProviderName(leaseProvider, env) &&
+      (route === 'drives-connection' || builtinConnectAdapter(leaseProvider))
+        ? leaseProvider
+        : undefined;
+    return { flags, remoteConfigPath: resolved.resolvedPath, provider };
   }
   const provider =
     options.provider ?? (shouldUseProxyConnectShortcut(options.flags) ? 'proxy' : 'cloud');

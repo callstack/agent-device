@@ -1,7 +1,7 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { RemoteConnectionRequestMetadata } from '@agent-device/remote/remote-connection-state';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
+import { canonicalLeaseProvider } from '@agent-device/kernel/contracts';
 import { parseRawArgs } from '../parser/args.ts';
 import {
   admitProviderForRoute,
@@ -47,26 +47,17 @@ export async function admitConnectionProvider(context: AdmissionContext): Promis
   );
 }
 
-/**
- * Admits the provider `connect` names in its own arguments: its positional, or the provider its
- * explicit profile file declares. The CLI calls this before it resolves any option that can carry a
- * credential, so a route that cannot supply that provider refuses without reading or registering one.
- * The command line and that file are read directly, with no flag, config, or environment defaults.
- * An arity violation, such as two positionals, is left to the ordinary parse.
- */
+/** Admits a provider named as a connect positional before credential handling. */
 export async function admitConnectProviderNamedInArguments(
   argv: readonly string[],
   host: HostEnvironment,
 ): Promise<void> {
-  const provider = connectProviderNamedInArguments(argv, host);
+  const provider = connectProviderNamedInArguments(argv);
   if (!requiresOwnProviderAdmission(provider)) return;
   await primeProviderConnection(provider, host.env);
 }
 
-function connectProviderNamedInArguments(
-  argv: readonly string[],
-  host: HostEnvironment,
-): string | undefined {
+function connectProviderNamedInArguments(argv: readonly string[]): string | undefined {
   let parsed: ReturnType<typeof parseRawArgs>;
   try {
     parsed = parseRawArgs([...argv]);
@@ -77,19 +68,19 @@ function connectProviderNamedInArguments(
   if (parsed.command !== 'connect') return undefined;
   // Help and version answer from the command line alone and load no plugin.
   if (parsed.flags.help || parsed.flags.version) return undefined;
-  const profilePath = parsed.flags.remoteConfig;
-  if (typeof profilePath === 'string') return providerOfProfileFile(profilePath, host);
-  return parsed.positionals[0];
+  if (parsed.flags.remoteConfig || parsed.positionals.length > 1) return undefined;
+  return canonicalLeaseProvider(parsed.positionals[0]);
 }
 
-/** The provider an explicit profile file declares, or undefined when it cannot be read yet. */
-function providerOfProfileFile(configPath: string, host: HostEnvironment): string | undefined {
-  try {
-    // `readRemoteConfigFile`, not the env-merged resolver: only what the file itself declares is read.
-    const { profile } = readRemoteConfigFile({ configPath, cwd: host.cwd, env: host.env });
-    return profile.leaseProvider;
-  } catch {
-    // An unreadable profile is answered by the ordinary read of it, which names the file.
-    return undefined;
-  }
+export async function admitConnectProfileProvider(
+  provider: string | undefined,
+  daemonBaseUrl: string | undefined,
+  host: HostEnvironment,
+): Promise<void> {
+  if (!requiresOwnProviderAdmission(provider)) return;
+  await admitProviderForRoute(
+    provider,
+    providerRouteForConnection({ daemonBaseUrl, env: host.env }),
+    host.env,
+  );
 }

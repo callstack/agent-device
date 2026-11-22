@@ -47,8 +47,12 @@ export function readLeaseBackend(raw: string | undefined): LeaseBackend | undefi
   return LEASE_BACKENDS.find((entry) => entry === value);
 }
 
+export function canonicalLeaseProvider(raw: string | undefined): string | undefined {
+  return raw?.trim();
+}
+
 export function readLeaseProvider(raw: unknown): string | undefined {
-  const value = typeof raw === 'string' ? raw.trim() : '';
+  const value = canonicalLeaseProvider(typeof raw === 'string' ? raw : undefined) ?? '';
   return /^[a-zA-Z0-9._-]{1,64}$/.test(value) ? value : undefined;
 }
 

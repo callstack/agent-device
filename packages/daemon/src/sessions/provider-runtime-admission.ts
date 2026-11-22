@@ -22,12 +22,15 @@ export function providerRuntimeAdmissionError(
   failedPlugins: readonly PluginInventoryEntry[] = [],
 ): AppError | undefined {
   if (registeredProviders.includes(provider)) return undefined;
-  // A plugin that failed before its provider id was known could have been this provider.
+  const declaration = getProviderPluginDeclaration(provider);
   const failures = failedPlugins.flatMap((plugin) =>
     plugin.state === 'failed' &&
     plugin.backend === undefined &&
     plugin.platform === undefined &&
-    (plugin.provider === provider || plugin.provider === undefined)
+    (plugin.provider === provider ||
+      (declaration !== undefined && plugin.package === declaration.package) ||
+      (plugin.provider === undefined &&
+        (declaration === undefined || plugin.package === undefined)))
       ? [
           {
             ...(plugin.provider === undefined ? {} : { provider: plugin.provider }),
@@ -39,13 +42,12 @@ export function providerRuntimeAdmissionError(
         ]
       : [],
   );
-  const declaration = failures.length === 0 ? getProviderPluginDeclaration(provider) : undefined;
   const details = {
     reason: PROVIDER_RUNTIME_REASONS.notRegistered.reason,
     provider,
     registeredProviders: [...registeredProviders],
   };
-  if (declaration) {
+  if (declaration && failures.length === 0) {
     const { hint, installCommand } = pluginInstallationHint(declaration, readVersion());
     return new AppError(
       'UNSUPPORTED_OPERATION',
@@ -87,5 +89,7 @@ export function enrichProviderCatalogError(
     registeredProviders,
     failedPlugins,
   );
-  return missing ? normalizeError(missing) : error;
+  if (!missing) return error;
+  const { code, message, hint, details } = normalizeError(missing);
+  return { ...error, code, message, hint, details: { ...error.details, ...details } };
 }

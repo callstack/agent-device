@@ -62,10 +62,25 @@ const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   AWS_DEVICE_FARM,
   BROWSERSTACK,
   LIMRUN,
-  { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl' },
-  { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
-  { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },
-  { provider: 'tizen', package: '@agent-device/tizen', label: 'Samsung Tizen' },
+  { provider: 'revyl', package: '@agent-device/revyl', label: 'Revyl', nightlyTag: 'nightly-0.22' },
+  {
+    provider: 'testmu',
+    package: '@agent-device/testmu',
+    label: 'TestMu AI',
+    nightlyTag: 'nightly-0.22',
+  },
+  {
+    provider: 'webos',
+    package: '@agent-device/webos',
+    label: 'LG webOS',
+    nightlyTag: 'nightly-0.22',
+  },
+  {
+    provider: 'tizen',
+    package: '@agent-device/tizen',
+    label: 'Samsung Tizen',
+    nightlyTag: 'nightly-0.22',
+  },
 ];
 
 /** Every catalog row, so the release check can compare each row's package with what it publishes. */

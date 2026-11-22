@@ -376,6 +376,15 @@ async function resolveRunContextOrExit(
             configuredPlatform: parsed.flags.platform,
             configuredSession: parsed.flags.session,
           });
+    if (base.command === 'connect' && flags.remoteConfig) {
+      const { admitConnectProfileProvider } =
+        await import('./cli/connection/provider-admission.ts');
+      await admitConnectProfileProvider(
+        parsed.remoteConfigLeaseProvider,
+        flags.daemonBaseUrl,
+        base.host,
+      );
+    }
     // A leased remote config, or a connect without one (it always leases through a provider), needs
     // an explicit session before anything is resolved or leased (#3931).
     const leasedRemoteConfig =
