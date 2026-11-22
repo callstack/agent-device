@@ -37,7 +37,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
+| `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
 
 ### `clipboard`
 
@@ -226,7 +226,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
-| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
+| `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
 | `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
@@ -317,7 +317,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
+| `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
 | `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |

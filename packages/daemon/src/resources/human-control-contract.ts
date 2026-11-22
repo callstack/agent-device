@@ -10,7 +10,7 @@ import {
   normalizeLeaseProvider,
 } from './lease-registry-scope.ts';
 
-const HUMAN_CONTROL_REASONS = {
+export const HUMAN_CONTROL_REASONS = {
   // A human holds the device, so state-changing commands are refused while the hold is active;
   // retry after it is released.
   active: { reason: 'human_control_active' },
