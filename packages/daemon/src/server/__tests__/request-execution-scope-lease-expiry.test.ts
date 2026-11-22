@@ -12,6 +12,7 @@ import {
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
   platformRequestScopeFixture,
@@ -63,7 +64,7 @@ test('expired leases remove owned sessions before the next command and free capa
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: platformRequestScopeFixture(),
-    req: makeRequest({ command: 'snapshot' }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -121,15 +122,25 @@ test.each(['rebuild', 'retire'] as const)(
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
       platformRequestScope: platformRequestScopeFixture(),
-      req: makeRequest({ session: address, flags: { session: address } }),
+      req: makeRequest({
+        session: address,
+        flags: { session: address },
+        meta: { leaseId: lease.leaseId },
+      }),
       sessionStore: store,
       leaseRegistry: leases,
-      platformResourceCleanup: {
-        stopSnapshotHelper,
-        closeManagedBrowser: async () => {},
-        cleanupSessionlessExecutionHost: async () => {},
-        retainExecutionHostAfterClose: () => false,
-      },
+      settleExpiredSession: async (ref) =>
+        await teardownSessionResources({
+          appLog: 'run',
+          ref,
+          sessionStore: store,
+          platformCleanup: {
+            stopSnapshotHelper,
+            closeManagedBrowser: async () => {},
+            cleanupSessionlessExecutionHost: async () => {},
+            retainExecutionHostAfterClose: () => false,
+          },
+        }),
     });
     expect(scope.sessionName).toBe(address);
     const running = scope.runLocked(async () => 'ran');

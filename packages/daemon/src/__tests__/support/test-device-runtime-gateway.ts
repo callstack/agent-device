@@ -20,6 +20,7 @@ import {
 } from '../../server/request-router.ts';
 import type { BindDeviceRuntime } from '../../core/request-runtime-binding.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { SessionRef } from '../../core/session-state.ts';
 import {
   applicationLifecycleRuntimeFixture,
   type LifecycleOperationsLoader,
@@ -33,6 +34,7 @@ import {
   daemonPlatformServicesFixture,
 } from './platform-services-fixture.ts';
 import { platformResourceCleanupFixture } from './platform-resource-cleanup-fixture.ts';
+import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { providerCredentialsFixture } from './provider-credentials-fixture.ts';
 import {
   unavailableBinding,
@@ -218,6 +220,7 @@ export function createRequestHandler(
     | 'claimRecoveryGateway'
     | 'androidObservation'
     | 'platformResourceCleanup'
+    | 'settleExpiredSession'
   > &
     Partial<
       Pick<
@@ -228,6 +231,7 @@ export function createRequestHandler(
         | 'claimRecoveryGateway'
         | 'androidObservation'
         | 'platformResourceCleanup'
+        | 'settleExpiredSession'
       >
     >,
 ) {
@@ -238,10 +242,19 @@ export function createRequestHandler(
     claimRecoveryGateway = daemonClaimRecoveryGatewayFixture(),
     androidObservation = clearAndroidObservationFixture,
     platformResourceCleanup = platformResourceCleanupFixture(),
+    // The resource half of the daemon-owned settle, over this handler's cleanup fixture.
+    settleExpiredSession = async (ref: SessionRef) =>
+      await teardownSessionResources({
+        appLog: 'run',
+        ref,
+        sessionStore: deps.sessionStore,
+        platformCleanup: platformResourceCleanup,
+      }),
     ...rest
   } = deps;
   const handle = createProductionRequestHandler({
     ...rest,
+    settleExpiredSession,
     androidObservation,
     platformResourceCleanup,
     platformServices,

@@ -156,7 +156,7 @@ function resolveExplicitDeviceLock(req: DaemonRequest, env: EnvMap) {
     : undefined;
 }
 
-function sessionExecutionLockKey(sessionName: string): RequestExecutionLockKey {
+export function sessionExecutionLockKey(sessionName: string): RequestExecutionLockKey {
   return `session:${sessionName}`;
 }
 

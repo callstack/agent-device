@@ -42,6 +42,7 @@ export function createHumanControlHarness() {
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     androidObservation: clearAndroidObservationFixture,
     platformResourceCleanup: platformResourceCleanupFixture(),
+    settleExpiredSession: async () => {},
     trackDownloadableArtifact: () => 'artifact-1',
   });
   return { registry, lease, sessionStore, sessionName, handleRequest };

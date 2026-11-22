@@ -32,6 +32,10 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
+import {
+  resolveRequestSessionRef,
+  type ResolveRequestSessionRef,
+} from '../../request-admission.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -50,6 +54,7 @@ export type SessionObservabilityCommandInput = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  resolveSessionRef?: ResolveRequestSessionRef;
   bindDevice?: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -134,9 +139,11 @@ export async function handleSessionObservabilityCommands(
 }
 
 async function handleEventsCommand(params: ObservabilityInput): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore } = params;
+  const { req, sessionName, sessionStore, resolveSessionRef = resolveRequestSessionRef } = params;
   try {
     await sessionStore.flushEvents(sessionName);
+    // `events` holds no session lock, so a leased session can open here after admission.
+    resolveSessionRef(req, sessionStore.lookup(sessionName));
     return {
       ok: true,
       data: sessionStore.readEvents(sessionName, {

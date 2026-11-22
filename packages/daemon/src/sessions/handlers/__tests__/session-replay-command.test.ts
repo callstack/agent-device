@@ -87,7 +87,7 @@ test.each([false, true])(
       command: 'test',
       positionals: [scriptPath],
       flags: {},
-      meta: { cwd: root, requestId: 'replay-handler-ended-lease' },
+      meta: { cwd: root, requestId: 'replay-handler-ended-lease', leaseId: lease.leaseId },
     });
     const params: SessionCommandParams = {
       host,

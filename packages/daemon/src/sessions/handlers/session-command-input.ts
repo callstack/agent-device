@@ -19,6 +19,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../core/session-store.ts';
+import type { ResolveRequestSessionRef } from '../request-admission.ts';
 
 export type SessionCommandInput = {
   host: HostEnvironment;
@@ -42,6 +43,7 @@ export type SessionCommandInput = {
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
+  resolveSessionRef?: ResolveRequestSessionRef;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
