@@ -2,7 +2,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import path from 'node:path';
-import { statSync } from 'node:fs';
+import { statSync, type Stats } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { cp, rename, rm } from 'node:fs/promises';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
@@ -38,11 +38,13 @@ import type {
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { requestCwd } from '../../../core/context.ts';
+import { LEASE_FIELD_NORMALIZERS, resolveLeaseScope } from '../../../core/lease-context.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
 import { withCaptureOutputOwnership } from '../../../core/capture-output-ownership.ts';
 import {
   admittedOutputLeaseVerifier,
+  assertPerformanceArtifactLease,
   leasedOutputRefusal,
 } from '../../../resources/artifact-tracking.ts';
 import { recordSessionAction } from '../../../core/session-action-recorder.ts';
@@ -175,17 +177,18 @@ async function executeAdmittedPerfPlan(
       return await startPerfCapture(params, session, runtime, plan.request);
     }
     case 'profile-report': {
-      const cwd = requestCwd(params.req, params.host);
-      const explicitPath = plan.request.tracePath && expandSessionPath(plan.request.tracePath, cwd);
+      const explicit = plan.request.tracePath
+        ? resolveExplicitPerfSource(params, plan.request.tracePath)
+        : undefined;
       const saved = session.lastPerfProfile;
       const retained =
         plan.request.kind === 'xctrace' &&
-        explicitPath &&
+        explicit &&
         saved &&
-        !samePerfSource(explicitPath, saved.profile.outPath)
+        !samePerfSource(explicit.path, explicit.stat, saved.profile.outPath)
           ? undefined
           : saved;
-      const tracePath = explicitPath || retained?.profile.outPath;
+      const tracePath = explicit?.path ?? retained?.profile.outPath;
       assertPerfOutputOwner(params.req, retained?.leaseVerifier);
       const last = retained?.profile;
       if (!tracePath) {
@@ -200,6 +203,8 @@ async function executeAdmittedPerfPlan(
           'perf cpu profile report requires a stopped profile trace; stop the active capture first.',
         );
       }
+      const source = explicit?.stat ?? readPerfSourceStat(tracePath);
+      if (source) assertPerfSourceLease(params, tracePath, source);
       const runtime = await bindDevice(device, plan.use);
       const outPath = resolveNativeOutPath(params, plan.request.outPath, 'cpu-report.json');
       const data = await runtime.operations.perfProfileReport({
@@ -215,7 +220,8 @@ async function executeAdmittedPerfPlan(
         data: withCaptureOutputOwnership(
           { perf: 'reported', ...data },
           params.req.internal?.publicNetworkOnly ? 'daemon' : 'caller',
-          params.req.internal?.admittedLease?.tenantId,
+          params.req.internal?.admittedLease?.tenantId ??
+            LEASE_FIELD_NORMALIZERS.tenantId(resolveLeaseScope(params.req).tenantId),
         ),
       };
     }
@@ -356,11 +362,56 @@ async function stopPerfCapture(
   };
 }
 
-function samePerfSource(explicitPath: string, retainedPath: string): boolean {
-  if (explicitPath === retainedPath) return true;
-  const explicit = statSync(explicitPath, { throwIfNoEntry: false });
-  const retained = statSync(retainedPath, { throwIfNoEntry: false });
-  return !!explicit && !!retained && explicit.dev === retained.dev && explicit.ino === retained.ino;
+function resolveExplicitPerfSource(params: PerfRuntimeHandlerParams, requestedPath: string) {
+  const tracePath = expandSessionPath(requestedPath, requestCwd(params.req, params.host));
+  const source = readPerfSourceStat(tracePath);
+  if (!source) {
+    throw new AppError('INVALID_ARGS', 'tracePath must name a readable stopped profile trace.', {
+      field: 'tracePath',
+    });
+  }
+  return { path: tracePath, stat: source };
+}
+
+function samePerfSource(tracePath: string, source: Stats, otherPath: string): boolean {
+  if (tracePath === otherPath) return true;
+  const other = readPerfSourceStat(otherPath);
+  return other?.dev === source.dev && other.ino === source.ino;
+}
+
+function assertPerfSourceLease(
+  params: PerfRuntimeHandlerParams,
+  tracePath: string,
+  source: Stats,
+): void {
+  const owner = admittedOutputLeaseVerifier(params.req);
+  for (const session of params.sessionStore.values()) {
+    const retained = session.lastPerfProfile;
+    if (
+      retained?.leaseVerifier &&
+      retained.leaseVerifier !== owner &&
+      samePerfSource(tracePath, source, retained.profile.outPath)
+    ) {
+      throw leasedOutputRefusal('Performance capture');
+    }
+    const capture = session.perfCapture;
+    const captureOwner = readString(capture?.envelope.metadata?.remoteCaptureLease);
+    if (capture && captureOwner && captureOwner !== owner) {
+      const capturePath = readString(capture.handle.inspect().outPath);
+      if (capturePath && samePerfSource(tracePath, source, capturePath)) {
+        throw leasedOutputRefusal('Performance capture');
+      }
+    }
+  }
+  assertPerformanceArtifactLease(source, owner);
+}
+
+function readPerfSourceStat(tracePath: string) {
+  try {
+    return statSync(tracePath);
+  } catch {
+    return undefined;
+  }
 }
 
 function assertPerfOutputOwner(req: DaemonRequest, owner: string | null | undefined): void {

@@ -320,6 +320,21 @@ function readOutputIdentity(artifactPath: string): string | undefined {
   }
 }
 
+/** Checks source identity because a local report can reach the same file through another path. */
+export function assertPerformanceArtifactLease(source: fs.Stats, caller: string | null): void {
+  const identity = outputIdentity(source);
+  for (const entry of pendingArtifacts().values()) {
+    if (
+      entry.artifactType === 'performance' &&
+      entry.leaseVerifier &&
+      entry.leaseVerifier !== caller &&
+      entry.output === identity
+    ) {
+      throw leasedOutputRefusal('Performance capture');
+    }
+  }
+}
+
 export async function openDownloadableArtifact(
   artifactId: string,
   reader: DownloadableArtifactReader,
