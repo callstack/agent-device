@@ -15,7 +15,17 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `native_audit_blocked_by_alert` | Apple's audit failed while a system alert covered the app; answer the alert, then retry. |
 | `native-audit-invalid-result` | The runner answered the native audit with a missing or malformed result. |
+
+### `back`
+
+| Reason | Meaning |
+| --- | --- |
+| `back_swipe_no_change` | The back swipe ran and left the app's screen unchanged. |
+| `back_swipe_unverified` | The back swipe ran, but the screen was already changing or could not be sampled afterwards. |
+| `back_swipe_not_dispatched` | The back swipe was refused before it reached the device. |
+| `in_app_back_control_unavailable` | On macOS, the app's accessibility tree exposes no in-app back control. |
 
 ### `clipboard`
 
@@ -50,6 +60,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `no_text_input_at_point` | A coordinate `fill` point identified no text input, so nothing was tapped or typed. |
+| `text_input_probe_unavailable` | The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped. |
 | `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
 | `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
 | `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
@@ -126,6 +138,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `plugin_load_failed` | The plugin's manifest or code could not be read, resolved, or loaded. |
 | `plugin_setup_failed` | The plugin's `setup(host)` threw, or registering what it returned failed. |
 | `reserved_provider` | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`. |
+
+### `prepare`
+
+| Reason | Meaning |
+| --- | --- |
+| `prepare_deadline_expired` | `prepare ios-runner` ran out of its deadline before the named `details.phase` began. |
+| `prepare_rebuilt_runner_unhealthy` | The cached runner failed its health check, and the rebuilt runner failed it too; `details.rebuiltFailureMessage` says how. |
 
 ### `proxy`
 
@@ -340,6 +359,45 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `runner_build_settings_mismatch` | The runner build used settings other than those its cache identity records. |
+| `runner_cache_uncertifiable` | The runner build products cannot be certified for cache reuse; `details.refusalReason` says why. |
+| `runner_busy` | The runner was still busy with an earlier command and refused this one; retry it. |
+| `runner_main_thread_timeout` | The command's work on the app's main thread did not finish in time, so it may have run. |
+| `no_text_input_at_point` | A coordinate `fill` point identified no text input, so nothing was tapped or typed. |
+| `text_input_probe_unavailable` | The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped. |
+| `synthesized_gesture_not_dispatched` | The runner refused the gesture before its events reached XCTest, so nothing was sent. |
+| `synthesized_gesture_outcome_unknown` | The gesture failed after its events reached XCTest, so it may have run. |
+| `back_swipe_no_change` | The back swipe ran and left the app's screen unchanged. |
+| `back_swipe_unverified` | The back swipe ran, but the screen was already changing or could not be sampled afterwards. |
+| `back_swipe_not_dispatched` | The back swipe was refused before it reached the device. |
+| `keyboard_return_unavailable` | A Return on the focused input could not be confirmed; a tap on the field may have landed. |
+| `hardware_control_unavailable` | The target has no such hardware control, such as an Action Button, so nothing was pressed. |
+| `in_app_back_control_unavailable` | On macOS, the app's accessibility tree exposes no in-app back control. |
+| `native_audit_blocked_by_alert` | Apple's audit failed while a system alert covered the app; answer the alert, then retry. |
+| `runner_token_unsupported` | The runner build does not require a listener token; rebuild it with this agent-device version. |
+| `runner_sequence_invalid` | The daemon refused a runner action sequence before sending it, so nothing reached the device. |
+| `runner_session_ownership_changed` | Another request took over the Apple runner session before this command was sent. |
+| `runner_reply_lost` | A mutation's reply was lost and status recovery found no result, so it may have run; observe the screen before acting again. |
+| `runner_forwarding_unavailable` | The HTTP forwarder in front of the runner answered 502, 503 or 504. |
+| `bundle_identifier_already_registered` | The runner's bundle identifier is taken; set AGENT_DEVICE_IOS_BUNDLE_ID to a unique value. |
+| `signing_no_development_team` | The runner build needs a development team for signing. |
+| `signing_provisioning_profile_missing` | No installed provisioning profile covers the runner, or the one found is unusable. |
+| `signing_unspecified` | The runner build failed on code signing for a cause the output does not name. |
+| `devtools_security_developer_mode_disabled` | DevToolsSecurity is disabled on the host, so the UI test runner cannot be attached. |
+| `simulator_service_hub_unavailable` | macOS refused to load this Xcode's simulator service; select an Xcode that supports this macOS. |
+| `simulator_set_destination_not_found` | xcodebuild found no simulator with this id in the requested simulator set. |
+| `device_developer_mode_disabled` | Developer Mode is off on the physical device, so it refuses the runner. |
+| `device_developer_disk_image_unavailable` | The physical device reports no developer disk image, and the runner build named no other cause. |
+| `build_failed_unclassified` | The runner did not start and no rule proves a cause; the hint gives the cache-recovery steps. |
+| `runner_process_exited` | The runner launcher exited before the runner accepted a connection. |
+| `runner_termination_failed` | The runner launcher could not stop its runner process. |
+| `runner_output_failed` | Reading the runner's output failed while it was starting, so the runner was stopped. |
+| `RUNNER_PRODUCT_MISSING` | The macOS runner's xctestrun file names no product to launch. |
+| `RUNNER_PRODUCT_REPAIR_FAILED` | The signature of a macOS runner product could not be repaired. |
+| `runner_phase_budget_exhausted` | The Apple runner's budget ran out before the step in `details.phase` began; retry. |
+| `runner_sequence_orientation_unavailable` | The runner did not report the orientation of a press series; inspect the screen before continuing. |
+| `runner_start_budget_exhausted` | Starting the Apple runner took longer than its start budget; the next request starts over. |
+| `apple_toolchain_unreadable` | The Xcode toolchain version files the runner cache is keyed on could not be read. |
 | `apple_runner_host_unbound` | The Apple runner was asked for its host before the daemon bound one. |
 
 ### Artifact extraction

@@ -37,6 +37,7 @@ import {
   type RunnerCommand,
   mintRunnerToken,
   runnerListenerEnv,
+  RUNNER_ERROR_REASONS,
   type RunnerEndpoint,
 } from './runner-contract.ts';
 import { enrichRunnerStartupFailureWithDeviceStates } from './runner-error-classification.ts';
@@ -435,7 +436,7 @@ function runnerSessionOwnershipChanged(): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'Apple runner session ownership changed before command dispatch',
-    { reason: 'runner_session_ownership_changed' },
+    { reason: RUNNER_ERROR_REASONS.sessionOwnershipChanged.reason },
   );
 }
 

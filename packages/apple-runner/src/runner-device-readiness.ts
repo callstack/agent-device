@@ -3,6 +3,7 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from './host.ts';
 import type { IosDeviceReadiness } from './runner-physical-device.ts';
 import {
+  RUNNER_STARTUP_FAILURE_REASONS,
   type IosRunnerDeviceStates,
   type RunnerDeviceReadinessFailureReason,
 } from './runner-error-classification.ts';
@@ -71,7 +72,7 @@ function namePreBuildDeviceObstacle(
   | undefined {
   if (readiness.developerMode !== 'disabled') return undefined;
   return {
-    reason: 'device_developer_mode_disabled',
+    reason: RUNNER_STARTUP_FAILURE_REASONS.deviceDeveloperModeDisabled.reason,
     message: DEVICE_MODE_OFF_MESSAGE,
     hint: readiness.remedies.developerModeOff,
   };

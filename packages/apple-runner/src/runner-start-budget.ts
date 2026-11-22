@@ -3,6 +3,7 @@ import {
   AppError,
   createRequestCanceledError,
   isRequestCanceledError,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './host.ts';
 import { isCallerDeadlineAbortReason, resolveRunnerStartupSignal } from './runner-contract.ts';
@@ -19,6 +20,11 @@ import {
 import { stopRunnerPrepProcessesWithoutLiveOwner } from './runner-disposal.ts';
 import { normalizeRunnerStartupTimeoutMs, type RunnerSession } from './runner-session-types.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
+
+const RUNNER_START_BUDGET_REASONS = {
+  // Starting the Apple runner took longer than its start budget; the next request starts over.
+  startBudgetExhausted: { reason: 'runner_start_budget_exhausted' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 type RunnerSessionOptions = AppleRunnerLifecycleOptions;
 
@@ -81,7 +87,7 @@ function runnerStartBudgetExhaustedError(timeoutMs: number, explicit: boolean): 
     'COMMAND_FAILED',
     `Apple runner start exceeded its ${explicit ? 'startup timeout' : 'default start budget'} of ${timeoutMs}ms`,
     {
-      reason: 'runner_start_budget_exhausted',
+      reason: RUNNER_START_BUDGET_REASONS.startBudgetExhausted.reason,
       timeoutMs,
       retriable: true,
       hint: explicit

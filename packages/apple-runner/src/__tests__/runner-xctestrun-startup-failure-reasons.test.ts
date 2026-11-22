@@ -14,7 +14,6 @@ import {
   RUNNER_ERROR_RULES,
   classifyRunnerStartupFailure,
   RUNNER_STARTUP_FAILURE_REASONS,
-  RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
   type RunnerStartupFailureReason,
 } from '../runner-error-classification.ts';
 import { assertDevToolsSecurityForIosRunner } from '../runner-dev-tools-security.ts';
@@ -151,7 +150,7 @@ test('the device speaking for a failure keeps the error that caused it', () => {
   const caused = new AppError(
     'COMMAND_FAILED',
     'xcodebuild build-for-testing failed',
-    { reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON },
+    { reason: RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason },
     new Error('xcodebuild was killed by the host'),
   );
 
@@ -218,11 +217,15 @@ function assertToolOutputReachable(
   assert.match(String(nestedDetails?.stdout), /AgentDeviceRunner/);
 }
 
+const STARTUP_FAILURE_REASONS = Object.values(RUNNER_STARTUP_FAILURE_REASONS).map(
+  (row) => row.reason,
+);
+
 test('every startup failure reason has a recorded fixture', () => {
   const reasonsWithFixtures = new Set(RUNNER_STARTUP_FAILURE_FIXTURES.map((f) => f.reason));
 
-  assert.equal(reasonsWithFixtures.size, RUNNER_STARTUP_FAILURE_REASONS.length);
-  for (const reason of RUNNER_STARTUP_FAILURE_REASONS) {
+  assert.equal(reasonsWithFixtures.size, STARTUP_FAILURE_REASONS.length);
+  for (const reason of STARTUP_FAILURE_REASONS) {
     assert.ok(reasonsWithFixtures.has(reason), `no fixture records the ${reason} reason`);
   }
 });
@@ -232,9 +235,9 @@ test('every reason the classifier can name is produced by a rule row', () => {
     RUNNER_ERROR_RULES.flatMap((rule) => (rule.buildFailure ? [rule.buildFailure.reason] : [])),
   );
 
-  for (const reason of RUNNER_STARTUP_FAILURE_REASONS) {
+  for (const reason of STARTUP_FAILURE_REASONS) {
     // The catch-all is the classifier's own answer when no row matched, so it names no row.
-    if (reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) continue;
+    if (reason === RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason) continue;
     // The device-readiness members are named by the device's own states in
     // `runner-device-readiness.ts`, not by a rule row: no amount of tool text establishes them,
     // which is exactly why they are declared as a subset (#2683).
@@ -258,7 +261,10 @@ test('a scoped-set simulator xcodebuild cannot find names its set and the Xcode'
 test('a default-set simulator xcodebuild cannot find names no simulator set', async () => {
   const envelope = await driveBuildFailure(buildFixtureById('default-set-destination-not-found'));
 
-  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(
+    envelope.details?.reason,
+    RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
+  );
   assert.equal(envelope.details?.simulatorSetPath, undefined);
   assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
   assert.doesNotMatch(String(envelope.hint), /DVTSimulatorSetLocation/);
@@ -277,7 +283,10 @@ test('an argv that names a provisioning profile is not evidence of a signing fai
 
   const envelope = await driveBuildFailure(argvFixture);
 
-  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(
+    envelope.details?.reason,
+    RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
+  );
   assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
   assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/);
 });
@@ -301,7 +310,7 @@ test('the failure the build catch publishes does not classify itself', async () 
 
   const reclassified = classifyRunnerStartupFailure(published);
 
-  assert.equal(reclassified.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(reclassified.reason, RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason);
   assert.match(reclassified.hint, CACHE_RECOVERY_HINT);
 });
 
@@ -318,7 +327,10 @@ test('an identical message without the typed host fact is not read as a DevTools
 
   const envelope = await driveBuildRejection(withoutFact);
 
-  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(
+    envelope.details?.reason,
+    RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
+  );
   assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
   assert.doesNotMatch(String(envelope.hint), /DevToolsSecurity/);
 });
@@ -332,7 +344,10 @@ test('an app identifier named without the availability fact is not read as a tak
 
   const envelope = await driveBuildFailure(nearMiss);
 
-  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(
+    envelope.details?.reason,
+    RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
+  );
   assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
   assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_BUNDLE_ID/);
 });
@@ -344,7 +359,10 @@ test('a conflicting-settings failure is not answered with missing-profile advice
 
   const envelope = await driveBuildFailure(conflict);
 
-  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(
+    envelope.details?.reason,
+    RUNNER_STARTUP_FAILURE_REASONS.buildFailedUnclassified.reason,
+  );
   assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
   assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/);
 });
