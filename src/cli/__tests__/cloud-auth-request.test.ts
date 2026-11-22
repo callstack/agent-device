@@ -8,7 +8,8 @@ import { postCloudAuthJson } from '../cloud-auth-request.ts';
 // followed by fetch itself and that a refused target never receives a request.
 
 type Received = { method?: string; path?: string; body: string; contentType?: string };
-type Route = (res: http.ServerResponse) => void;
+/** A canned response. Routes are data, so no handler is ever chosen by the request path. */
+type Route = { status: number; headers: Record<string, string>; body: string };
 
 const servers: http.Server[] = [];
 
@@ -39,8 +40,8 @@ async function listen() {
         contentType: req.headers['content-type'],
       });
       const route = routes.get(req.url ?? '');
-      if (route !== undefined) return route(res);
-      res.writeHead(404).end();
+      if (route === undefined) return void res.writeHead(404).end();
+      res.writeHead(route.status, route.headers).end(route.body);
     });
   });
   servers.push(server);
@@ -49,12 +50,16 @@ async function listen() {
   return { origin: `http://127.0.0.1:${port}`, received, routes };
 }
 
-const redirect =
-  (status: number, location?: string): Route =>
-  (res) =>
-    res.writeHead(status, location ? { location } : {}).end();
-const answer: Route = (res) =>
-  res.writeHead(200, { 'content-type': 'application/json' }).end('{"accessToken":"adc_agent"}');
+const redirect = (status: number, location?: string): Route => ({
+  status,
+  headers: location ? { location } : {},
+  body: '',
+});
+const answer: Route = {
+  status: 200,
+  headers: { 'content-type': 'application/json' },
+  body: '{"accessToken":"adc_agent"}',
+};
 
 const BODY = { deviceCode: 'device-secret' };
 const post = (origin: string) =>
