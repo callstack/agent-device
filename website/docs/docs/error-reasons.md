@@ -30,6 +30,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
+| `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text. |
 
 ### `connect`
 
@@ -104,7 +105,6 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
 | `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
 | `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
-| `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text. |
 | `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 
 ### `orientation`
