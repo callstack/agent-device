@@ -1,10 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  normalizeAppleScrollResultWithResolvedFrame,
-  withAppleScrollKeyboardOcclusion,
-} from '../scroll.ts';
+import { normalizeAppleScrollResultWithResolvedFrame } from '@agent-device/contracts/scroll-gesture';
+import { withAppleScrollKeyboardOcclusion } from '../scroll.ts';
 
 test('a clipped runner frame yields travel and evidence for the band actually swiped', () => {
   // The runner clips the interaction frame above the keyboard and reports the clipped axis, so the

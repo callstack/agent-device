@@ -20,7 +20,7 @@ Install `agent-device` on the machine where your coding agent runs terminal comm
 - HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`), plus the HarmonyOS platform plugin (see [HarmonyOS prerequisites](#harmonyos-prerequisites))
 - Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
 - Linux desktop tools (`xdotool` or `ydotool`, a clipboard tool, a screenshot tool, and `python3` with `python3-gi`) plus the Linux platform plugin for Linux desktop targets (see [Linux prerequisites](#linux-prerequisites))
-- Swift 5.9 or newer (Xcode command-line tools) for macOS desktop targets. `agent-device` builds its local macOS helper on first use
+- Swift 5.9 or newer (Xcode command-line tools) plus the macOS platform plugin for macOS desktop targets (see [macOS desktop notes](#macos-desktop-notes)). The plugin builds its local macOS helper on first use
 
 ## Global install
 
@@ -126,8 +126,18 @@ agent-device devices --platform linux
 
 ## macOS desktop notes
 
+Install the macOS platform plugin before you use a macOS desktop target:
+
+```bash
+agent-device plugins add @agent-device/macos
+agent-device devices --platform macos
+```
+
+- The plugin holds macOS desktop automation and its Swift helper. iOS and tvOS targets do not need it.
+- Without the plugin, a command such as `devices` or `open` that names `--platform macos` fails with `details.reason: "plugin-not-installed"` and the install command. Commands that name no platform leave the Mac out.
+- `audio probe` samples host system audio through the helper, so it needs the plugin for iOS simulator and Android emulator sessions too.
 - macOS desktop automation uses a local `agent-device-macos-helper` for permission checks (`settings permission ...`), alert handling, and the `frontmost-app`, `desktop`, and `menubar` snapshot surfaces.
-- `agent-device` builds the helper on first use and after updates, and caches it under `~/.agent-device/macos-helper/current/`.
+- The plugin builds the helper on first use and after updates, and caches it under `~/.agent-device/macos-helper/current/`.
 - To use your own helper build, set `AGENT_DEVICE_MACOS_HELPER_BIN` to its absolute executable path.
 
 ## iOS physical device prerequisites

@@ -4,8 +4,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createAppleInventorySource } from './inventory.ts';
 import { commandResult, createInventoryHost, inventoryScope } from './inventory.fixtures.ts';
 import { inventoryModule } from './index.ts';
+import {
+  bindAbsentMacOsLeafFixture,
+  bindMacOsLeafFixture,
+} from './__tests__/macos-leaf.fixtures.ts';
 
 test('Apple inventory projects the host Mac without loading native tools', async () => {
+  bindMacOsLeafFixture();
   let commands = 0;
   const host = createInventoryHost({
     which: async () => {
@@ -117,39 +122,47 @@ test('simulator-only inventory avoids physical discovery and observes fresh boot
   assert.deepEqual(calls, [['simctl', 'list', '-j']]);
 });
 
-test('simulator-set inventory remains scoped while retaining the host Mac', async () => {
-  const calls: string[][] = [];
-  const host = createInventoryHost({
-    run: async (request) => {
-      calls.push([request.tool, ...request.args]);
-      return commandResult(
-        JSON.stringify({
-          devices: {
-            'com.apple.CoreSimulator.SimRuntime.tvOS-18-0': [
-              {
-                name: 'Apple TV 4K',
-                udid: 'tv-1',
-                state: 'Shutdown',
-                isAvailable: true,
-              },
-            ],
-          },
-        }),
-      );
-    },
-  });
+test.each([
+  ['retaining the host Mac the installed macOS package serves', true, ['tv-1', 'host-macos-local']],
+  ['omitting the host Mac without the macOS package', false, ['tv-1']],
+] as const)(
+  'simulator-set inventory remains scoped while %s',
+  async (_name, installed, expected) => {
+    if (installed) bindMacOsLeafFixture();
+    else bindAbsentMacOsLeafFixture();
+    const calls: string[][] = [];
+    const host = createInventoryHost({
+      run: async (request) => {
+        calls.push([request.tool, ...request.args]);
+        return commandResult(
+          JSON.stringify({
+            devices: {
+              'com.apple.CoreSimulator.SimRuntime.tvOS-18-0': [
+                {
+                  name: 'Apple TV 4K',
+                  udid: 'tv-1',
+                  state: 'Shutdown',
+                  isAvailable: true,
+                },
+              ],
+            },
+          }),
+        );
+      },
+    });
 
-  const devices = await createAppleInventorySource(host).discover(
-    { iosSimulatorSetPath: '/tmp/custom-set' },
-    inventoryScope,
-  );
+    const devices = await createAppleInventorySource(host).discover(
+      { iosSimulatorSetPath: '/tmp/custom-set' },
+      inventoryScope,
+    );
 
-  assert.deepEqual(
-    devices.map((device) => device.id),
-    ['tv-1', 'host-macos-local'],
-  );
-  assert.deepEqual(calls, [['simctl', '--set', '/tmp/custom-set', 'list', '-j']]);
-});
+    assert.deepEqual(
+      devices.map((device) => device.id),
+      [...expected],
+    );
+    assert.deepEqual(calls, [['simctl', '--set', '/tmp/custom-set', 'list', '-j']]);
+  },
+);
 
 test('unscoped Apple inventory starts simulator and physical discovery concurrently', async () => {
   const calls: string[] = [];
@@ -175,4 +188,24 @@ test('unscoped Apple inventory starts simulator and physical discovery concurren
   assert.ok(calls.includes('xctrace'));
   releaseSimulators();
   await discovery;
+});
+
+test('a macOS request without the macOS package answers plugin-not-installed with its install command', async () => {
+  bindAbsentMacOsLeafFixture();
+  const host = createInventoryHost({ which: async () => undefined });
+
+  for (const request of [
+    { platform: 'macos' },
+    { platform: 'apple', target: 'desktop' },
+  ] as const) {
+    await assert.rejects(
+      async () => await createAppleInventorySource(host).discover(request, inventoryScope),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'UNSUPPORTED_PLATFORM' &&
+        error.details?.reason === 'plugin-not-installed' &&
+        error.details.package === '@agent-device/macos' &&
+        String(error.details.hint).includes('agent-device plugins add @agent-device/macos'),
+    );
+  }
 });

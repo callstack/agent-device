@@ -63,9 +63,13 @@ import { createAppleSystemOperations } from './system/runtime.ts';
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
-import { macOsHelperSurface, type MacOsAppBackend } from '@agent-device/contracts/session';
-import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
-import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
+import {
+  macOsHelperSurface,
+  readMacOsAppBackend,
+  type MacOsAppBackend,
+} from '@agent-device/contracts/session';
+import { macOsDesktop } from './core/macos-desktop.ts';
+import { isMacOsLeafInstalled } from './macos-leaf.ts';
 import { applyWatchOsOperationFacts, bindWatchOsOperations } from './os/watchos/facts.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
@@ -182,7 +186,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
   let resolvedMacOsAppBackend: MacOsAppBackend | undefined;
   const macOsAppBackend = (device: DeviceInfo): MacOsAppBackend =>
     isMacOs(device)
-      ? (resolvedMacOsAppBackend ??= hostMacOsAppBackend(host.hostEnvironment.env))
+      ? (resolvedMacOsAppBackend ??= readMacOsAppBackend((name) => host.hostEnvironment.env[name]))
       : 'xctest';
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
@@ -228,7 +232,12 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),
         shutdownTarget: shutdownFact(device),
-        ...macOsNativeBackendFacts(device, macOsAppBackend(device)),
+        // Under the native backend the installed macOS leaf names what only the runner serves. With
+        // no package installed there is nothing to ask: the facts answer no native refusal, and the
+        // typed `plugin-not-installed` outcome stays with the commands that need the leaf.
+        ...(isMacOs(device) && macOsAppBackend(device) === 'native' && isMacOsLeafInstalled()
+          ? await macOsDesktop().nativeBackendFacts()
+          : {}),
       }),
     });
   };

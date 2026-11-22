@@ -254,11 +254,6 @@
       "exports": ["refMutationAdmissionResponse", "handleFindCommands", "handleInteractionCommands"]
     },
     {
-      // The macOS façade members are read off the memoized loadMacOs() loader in src/platform-runtime-apple-application-tools.ts. Fallow cannot connect that dynamic member read to the re-exports.
-      "file": "packages/platform-apple/src/macos-facade.ts",
-      "exports": ["resolveFrontmostMacOsApp", "runMacOsAlertAction"]
-    },
-    {
       // answerSimulatorLaunchConfirmation is called from packages/platform-apple/src/lifecycle.ts through the lazy loadLaunchConfirmation() import; Fallow cannot connect the dynamic member read.
       "file": "packages/platform-apple/src/launch-confirmation.ts",
       "exports": ["answerSimulatorLaunchConfirmation"]

@@ -130,6 +130,8 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   // The Apple-family runner engine: composed by platform-apple, below it in the package graph.
   'apple-runner',
   ...PLATFORMS.map((family) => `platform-${family}`),
+  // The managed macOS leaf of the Apple family: a platform package that holds no family.
+  'platform-macos',
   'provider-webdriver',
   'provider-aws-device-farm',
   'provider-browserstack',

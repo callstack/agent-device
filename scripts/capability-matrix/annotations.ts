@@ -365,7 +365,7 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         commands: ['audio'],
         link: docs('debugging-profiling', 'audio-probes'),
         advertises: ['audioProbeStart', 'audioProbeReattach', 'audioProbeCleanup'],
-        note: 'A simulator, emulator, or macOS desktop session samples host system audio, which works on a macOS agent host and needs Screen Recording permission there.',
+        note: 'A simulator, emulator, or macOS desktop session samples host system audio, which works on a macOS agent host and needs Screen Recording permission there. The sampler is the `@agent-device/macos` plugin, so every one of those sessions needs the plugin installed.',
         cells: {
           'web-browser': {
             text: 'Page media probe only; host capture unsupported',

@@ -180,6 +180,7 @@ function createPlatformPluginProcessPort(host: HostEnvironment): PlatformHost['p
             owner: { ...(await readCurrentOwnerIdentityAsync()), acquiredAtMs: Date.now() },
             timeoutMs: params.timeoutMs,
             ...(params.description === undefined ? {} : { description: params.description }),
+            ...(params.signal === undefined ? {} : { signal: params.signal }),
           }),
         task: params.task,
       });

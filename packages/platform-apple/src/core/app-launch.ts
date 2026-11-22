@@ -33,7 +33,7 @@ import {
 import { ensureBootedSimulator } from './simulator.ts';
 import { runXcrun, type ScopedSimctlCommand } from './tool-provider.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { closeMacOsApp, openMacOsApp } from '../os/macos/apps.ts';
+import { macOsDesktop } from './macos-desktop.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 
@@ -80,7 +80,7 @@ export async function openIosApp(
         '--launch-args is not supported on macOS; launch arguments are currently iOS-only.',
       );
     }
-    await openMacOsApp(device, app, options);
+    await macOsDesktop().openApp(device, app, options);
     return;
   }
   const explicitUrl = options?.url?.trim();
@@ -213,7 +213,7 @@ export async function closeIosApp(
   env: Readonly<EnvMap>,
 ): Promise<void> {
   if (isMacOs(device)) {
-    await closeMacOsApp(device, app, env);
+    await macOsDesktop().closeApp(device, app, env);
     return;
   }
   const bundleId = await resolveIosApp(device, app);

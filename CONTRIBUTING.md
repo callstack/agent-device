@@ -61,7 +61,9 @@ project's `.tmp/`. The scripts refuse other override paths. They clean build out
 directory for every platform and keep other entries. Without an override, they clean the default
 directory under `~/.agent-device/apple-runner/derived`.
 
-Android and macOS helper builds remain separate because they require their native toolchains:
+Android and macOS helper builds remain separate because they require their native toolchains.
+The macOS helper is part of the `@agent-device/macos` plugin and lives in
+`packages/platform-macos/macos-helper`:
 
 ```bash
 pnpm build:android

@@ -270,7 +270,7 @@ export function renderPage(data: MatrixData): string {
     '',
     'Physical iOS devices discovered only through `xctrace` use the XCTest backend rather than CoreDevice: they support open/close, interactions, snapshots, and screenshots, while app inventory, installation, logs, performance sampling, recording, deep links, and launch arguments need CoreDevice.',
     '',
-    'One capability depends on the agent machine rather than the target: system audio sampling works only when the daemon runs on macOS, which is what this page assumes.',
+    'One capability depends on the agent machine rather than the target: system audio sampling works only when the daemon runs on macOS, which is what this page assumes, and it needs the `@agent-device/macos` plugin on that host — the sampler lives there — for a macOS, iOS simulator, or Android emulator session.',
     '',
     'Check the device in front of you rather than trusting a table:',
     '',

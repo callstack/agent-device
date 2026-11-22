@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { openIosApp } from '../app-launch.ts';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
+import { bindMacOsLeafFixture } from '../../__tests__/macos-leaf.fixtures.ts';
 import {
   IOS_TEST_DEVICE,
   IOS_TEST_SIMULATOR,
@@ -97,6 +98,8 @@ for (const device of [
   { ...IOS_TEST_SIMULATOR, appleOs: 'visionos' },
 ] as DeviceInfo[]) {
   test(`does not write accessibility for ${device.kind}/${device.appleOs}`, async () => {
+    // A macOS open goes to the installed leaf, which starts no Apple tool of this owner.
+    bindMacOsLeafFixture({ openApp: async () => {} });
     await withFakeAppleTool(
       () => '',
       async ({ calls }) => {

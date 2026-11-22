@@ -15,6 +15,7 @@ export type {
 } from '@agent-device/plugins/host';
 export type {
   Contribution,
+  MacOsPlatformLeafContribution,
   PlatformBackgroundCommand,
   PlatformBackgroundProcess,
   PlatformContribution,

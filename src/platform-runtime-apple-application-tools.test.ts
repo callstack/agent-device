@@ -1,16 +1,16 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { resolveFrontmostMacOsApp } from '@agent-device/platform-apple/macos';
+import { macOsDesktop } from '@agent-device/platform-apple/macos-desktop';
 import {
   prepareIosRunner,
   prewarmIosRunnerSession,
 } from '@agent-device/platform-apple/runner/operations';
 import { createAppleApplicationTools } from './platform-runtime-apple-application-tools.ts';
 
-vi.mock('@agent-device/platform-apple/macos', () => ({
-  resolveFrontmostMacOsApp: vi.fn(),
-  runMacOsAlertAction: vi.fn(),
-}));
+vi.mock('@agent-device/platform-apple/macos-desktop', () => {
+  const operations = { frontmostApp: vi.fn(), runAlertAction: vi.fn() };
+  return { macOsDesktop: async () => operations };
+});
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   prepareIosRunner: vi.fn(async () => ({
     runner: { currentUptimeMs: 42 },
@@ -20,7 +20,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   prewarmIosRunnerSession: vi.fn(async () => {}),
 }));
 
-const mockResolveFrontmostMacOsApp = vi.mocked(resolveFrontmostMacOsApp);
+const mockResolveFrontmostMacOsApp = vi.mocked((await macOsDesktop()).frontmostApp);
 const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
 

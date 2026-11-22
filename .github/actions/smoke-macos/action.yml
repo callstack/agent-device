@@ -72,6 +72,30 @@ runs:
       uses: ./.github/actions/run-gate
       with:
         gate: macos-helper
+    # macOS desktop automation is a managed plugin, so the replay lane serves it from the plugin
+    # store built here. The plugin is installed once and then answers the visible reply below and
+    # the macOS gate, which is the evidence that a user's `plugins add` install drives this Mac. The
+    # store is the one the gate action stages the replay pair into: that step merges its selections
+    # into the same config, so the daemon the gate starts carries all three packages.
+    - name: Install the macOS platform plugin
+      shell: bash
+      run: |
+        set -euo pipefail
+        # The steps below drive the packed entry point, which refuses to run without the build it
+        # ships beside it, and `plugins add` is a CLI command.
+        pnpm build
+        pnpm --filter @agent-device/macos pack --out "$RUNNER_TEMP/macos-plugin.tgz"
+        mkdir -p "$RUNNER_TEMP/agent-device-replay-plugins"
+        export AGENT_DEVICE_HOME="$RUNNER_TEMP/agent-device-replay-plugins"
+        echo "AGENT_DEVICE_HOME=$AGENT_DEVICE_HOME" >> "$GITHUB_ENV"
+        node bin/agent-device.mjs plugins add "$RUNNER_TEMP/macos-plugin.tgz" --json
+        node bin/agent-device.mjs plugins list --json
+        # The store is read when a daemon starts, so the first macOS command below must not reach a
+        # daemon that was already running without this entry.
+        pnpm clean:daemon
+        printf '\n$ agent-device devices --platform macos\n'
+        node bin/agent-device.mjs devices --platform macos --json
+        pnpm clean:daemon
     - name: Run macOS integration test
       uses: ./.github/actions/run-gate
       with:

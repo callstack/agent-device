@@ -312,6 +312,10 @@
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
     },
+    "./macos-platform-leaf": {
+      "types": "./src/macos-platform-leaf.ts",
+      "default": "./src/macos-platform-leaf.ts"
+    },
     "./linux-tool-provider": {
       "types": "./src/linux-tool-provider.ts",
       "default": "./src/linux-tool-provider.ts"

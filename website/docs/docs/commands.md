@@ -788,6 +788,7 @@ agent-device open --platform macos --surface desktop
 agent-device snapshot -i --platform apple --target desktop
 ```
 
+- macOS desktop automation runs through the optional `@agent-device/macos` plugin (`agent-device plugins add @agent-device/macos`; see [Installation](/docs/installation#macos-desktop-notes)). Without the plugin, a command such as `devices` or `open` that names `--platform macos` answers `UNSUPPORTED_PLATFORM` with `error.details.reason: plugin-not-installed`, the package name, and the install command. A `devices` call that names no platform leaves the Mac out. iOS and tvOS targets do not need the plugin.
 - `--platform macos`, or `--platform apple --target desktop`, selects the host Mac as a `desktop` target.
 - agent-device automates Electron and other Chromium-based macOS apps through the macOS accessibility tree. On the native backend, `snapshot` turns the app's Chromium accessibility tree on before reading it; once on, the tree stays on for the app's lifetime, so other surfaces see it too. See the Chromium note under the native backend below.
 - Use an `app` session for normal app control: `open`, `snapshot`, `click`, `fill`, `press`, `scroll`, `back`, `screenshot`, `record`. In app sessions, `screenshot` captures the app window, not the whole desktop.

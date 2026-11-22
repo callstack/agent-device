@@ -16,6 +16,7 @@ import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   platforms: ProviderRegistry['platforms'];
+  platformLeaves: ProviderRegistry['platformLeaves'];
   assertSelectionCurrent?: PluginRegistryPolicy['assertSelectionCurrent'];
   resolveReplayBackend: import('@agent-device/plugins/replay-backend').ReplayBackendResolver;
   resolveReplayExecution: import('@agent-device/contracts/replay-execution').ReplayExecutionResolver;
@@ -73,6 +74,7 @@ async function composeProviderRuntime(
   const registry = await startProviderRegistry(resolved, host, policy);
   return Object.freeze({
     platforms: registry.platforms,
+    platformLeaves: registry.platformLeaves,
     assertSelectionCurrent: policy.assertSelectionCurrent,
     runtimes: Object.freeze(registry.registrations.map(({ runtime }) => runtime)),
     platformModules: Object.freeze(

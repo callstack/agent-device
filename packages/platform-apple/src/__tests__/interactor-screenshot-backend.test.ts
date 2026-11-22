@@ -10,14 +10,16 @@ vi.mock('../core/screenshot.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('../os/macos/helper.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../os/macos/helper.ts')>()),
-  runMacOsScreenshotAction: vi.fn(),
-}));
+vi.mock('../core/macos-desktop.ts', () => {
+  const operations = { screenshot: vi.fn() };
+  return { macOsDesktop: () => operations };
+});
 
 import { createAppleInteractor } from '../interactor.ts';
-import { runMacOsScreenshotAction } from '../os/macos/helper.ts';
+import { macOsDesktop } from '../core/macos-desktop.ts';
 import { captureScreenshotViaRunner, screenshotIos } from '../core/screenshot.ts';
+
+const runMacOsScreenshotAction = macOsDesktop().screenshot;
 
 const device: DeviceInfo = {
   platform: 'apple',

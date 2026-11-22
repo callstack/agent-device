@@ -3,6 +3,7 @@ import type { DoctorCheck } from './doctor.ts';
 import type { HostDiagnosticsContext } from './host-diagnostics.ts';
 import type { InventoryPlatformModule, PlatformModuleRegistry } from './platform-module.ts';
 import type { LinuxToolProvider } from './linux-tool-provider.ts';
+import type { MacOsPlatformLeafSelection } from './macos-platform-leaf.ts';
 import type { PlatformRuntimeModule } from './platform-runtime-operations.ts';
 import type { WebProvider } from './web-provider.ts';
 import type { VegaToolProvider } from './vega-tool-provider.ts';
@@ -181,6 +182,8 @@ export type PlatformModuleSelection = Readonly<{
   vega: VegaPlatformSelection;
   harmony: HarmonyPlatformSelection;
   linux: LinuxPlatformSelection;
+  /** The macOS leaf of the bundled Apple family, which a managed package supplies. */
+  macos: MacOsPlatformLeafSelection;
   inventoryModules: readonly InventoryPlatformModule[];
   runtimeModules: readonly PlatformRuntimeModule[];
   reportAbsent(family: Platform): AppError;

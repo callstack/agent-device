@@ -9,7 +9,8 @@ import {
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
-import { createDaemonRuntimeDeps } from './daemon-composition.ts';
+import { composeDaemonRuntimeDeps, createDaemonRuntimeDeps } from './daemon-composition.ts';
+import { macOsPluginCandidateFixture } from './platform-runtime-macos-leaf.fixtures.ts';
 import { createRuntimeStateHandle, runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import { resolveRunnerAppBundleId } from '@agent-device/platform-apple/runner/operations';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
@@ -193,23 +194,27 @@ test('the composed daemon route configures interactors from its host, not from t
     const baseDir = mkdtempForTestSync(`agent-device-daemon-composition-host-config-${name}-`);
     // The snapshot disagrees with the process on purpose: it is written before the stub below
     // lands in some orders and after in others, so pin the host value explicitly after the spread.
-    return await createDaemonRuntimeDeps({
-      host: createTestHostEnvironment({
-        env: {
-          ...process.env,
-          AGENT_DEVICE_STATE_DIR: baseDir,
-          AGENT_DEVICE_MACOS_APP_BACKEND: backend,
+    // macOS desktop automation is the managed macOS package's, so the composition receives it.
+    return await composeDaemonRuntimeDeps(
+      {
+        host: createTestHostEnvironment({
+          env: {
+            ...process.env,
+            AGENT_DEVICE_STATE_DIR: baseDir,
+            AGENT_DEVICE_MACOS_APP_BACKEND: backend,
+          },
+        }),
+        baseDir,
+        sessionsDir: `${baseDir}/sessions`,
+        assertShutdownAllowed: undefined,
+        resolveSessionDir: (sessionId) => `${baseDir}/sessions/${sessionId}`,
+        resolveSessionArtifacts: () => {
+          throw new Error('unused');
         },
-      }),
-      baseDir,
-      sessionsDir: `${baseDir}/sessions`,
-      assertShutdownAllowed: undefined,
-      resolveSessionDir: (sessionId) => `${baseDir}/sessions/${sessionId}`,
-      resolveSessionArtifacts: () => {
-        throw new Error('unused');
+        openWebSessionNames: () => [],
       },
-      openWebSessionNames: () => [],
-    });
+      [macOsPluginCandidateFixture()],
+    );
   };
 
   // The process claims the native backend for everyone. The runtime host says otherwise; only an
