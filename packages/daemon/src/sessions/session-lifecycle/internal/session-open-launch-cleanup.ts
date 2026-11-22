@@ -156,6 +156,45 @@ async function stopLaunch(
   return confirmation === 'stopped' ? { outcome: 'stopped' } : { outcome: 'not_confirmed' };
 }
 
+/**
+ * Whether somebody else already holds `device` as far as this open can see: a session published under
+ * another address, or a claim whose acquisition this open would refuse.
+ */
+async function openSeesDeviceHeldByOther(params: OpenDeviceOwnership): Promise<boolean> {
+  return holdsDeviceInAnotherSession(params) || (await claimHeldByAnotherOwner(params));
+}
+
+/**
+ * Asks {@link openSeesDeviceHeldByOther} under the device's claim lock — the lock `acquireDeviceClaim`
+ * writes a claim under — so a claim being written for this device right now answers the same as one
+ * already written. A lock this open cannot take belongs to that claim in flight, which is ownership.
+ * A boot in progress asks this before it stops its own launch (#4867).
+ */
+export async function openSeesDeviceHeldByOtherUnderClaimLock(
+  params: OpenDeviceOwnership,
+): Promise<boolean> {
+  const settled = await withDeviceClaimLockHeld(
+    canonicalLocalDeviceKey(deviceClaimIdentity(params.device)),
+    params.sessionStore.host.env,
+    async () => await openSeesDeviceHeldByOther(params),
+  );
+  return settled.status === 'ran' ? settled.result : true;
+}
+
+function holdsDeviceInAnotherSession(params: OpenDeviceOwnership): boolean {
+  return (
+    findSessionHoldingDevice(params.sessionStore, params.device.id, params.sessionName) !==
+    undefined
+  );
+}
+
+type OpenDeviceOwnership = Readonly<{
+  sessionStore: SessionStore;
+  sessionName: string;
+  workspace: string;
+  device: DeviceInfo;
+}>;
+
 /** The one report for a launch kept because the device has an owner this open must not disturb. */
 function keepLaunchForDeviceInUse(): FailedOpenLaunchCleanup {
   emitLaunchProcessMiss('open-kept-device-in-use', {});

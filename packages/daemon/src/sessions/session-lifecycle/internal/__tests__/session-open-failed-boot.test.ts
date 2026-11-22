@@ -52,7 +52,10 @@ import {
   mockEnsureReadyRuntime,
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
-import { withFailedOpenLaunchCleanup } from '../session-open-launch-cleanup.ts';
+import {
+  openSeesDeviceHeldByOtherUnderClaimLock,
+  withFailedOpenLaunchCleanup,
+} from '../session-open-launch-cleanup.ts';
 import { makeSession } from '../../../../__tests__/support/session-factories.ts';
 import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
 import { deviceIdentity } from '@agent-device/kernel/device';
@@ -212,6 +215,58 @@ beforeEach(() => {
   mockEnsureReadyRuntime.mockResolvedValue(undefined);
   emitDiagnostic.mockClear();
   resetLaunchedProcessOwnerAnswers();
+});
+
+test('a cold open hands readiness the answer for who holds the device it is booting', async () => {
+  const runs = createRoutedSession();
+  // The boot runs before any session or claim of this open exists, so the only owner readiness can
+  // hear about is somebody else's (#4867).
+  runs.sessionStore.publish(
+    'other-holder',
+    makeSession('other-holder', { device: BOOTED_EMULATOR }),
+  );
+
+  await runs.runColdOpen({});
+
+  const input = mockEnsureReadyRuntime.mock.calls[0]?.[0];
+  await expect(input?.isAndroidEmulatorHeldByOther?.(BOOTED_EMULATOR)).resolves.toBe(true);
+  // The AVD nobody holds is a different answer, so readiness is never told a boot is owned at large.
+  await expect(input?.isAndroidEmulatorHeldByOther?.(STOPPED_AVD)).resolves.toBe(false);
+});
+
+test('a claim being written for a booting device answers as ownership', async () => {
+  const runs = createRoutedSession();
+  // Somebody is recording a claim for this device right now, which is the same answer a claim that
+  // refuses this open gives; a boot may not stop the emulator that claim is for. The whole open would
+  // wait behind this lock for its own claim, so the readiness question is asked directly.
+  const release = await acquireProcessLock({
+    lockDirPath: deviceClaimLockPath(runs.claimsDir, BOOTED_EMULATOR),
+    owner: { pid: process.ppid, startTime: null, acquiredAtMs: Date.now() },
+    timeoutMs: 5_000,
+    description: 'test-held device claim lock',
+  });
+
+  try {
+    await expect(
+      openSeesDeviceHeldByOtherUnderClaimLock({
+        sessionStore: runs.sessionStore,
+        sessionName: SESSION,
+        workspace: process.cwd(),
+        device: BOOTED_EMULATOR,
+      }),
+    ).resolves.toBe(true);
+  } finally {
+    await release();
+  }
+
+  await expect(
+    openSeesDeviceHeldByOtherUnderClaimLock({
+      sessionStore: runs.sessionStore,
+      sessionName: SESSION,
+      workspace: process.cwd(),
+      device: BOOTED_EMULATOR,
+    }),
+  ).resolves.toBe(false);
 });
 
 test('a cold open whose later step fails stops the emulator it launched and keeps its own error', async () => {
