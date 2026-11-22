@@ -1,4 +1,4 @@
-import type { HumanControlHold, HumanControlHoldScope } from '@agent-device/contracts/client';
+import type { HumanControlHoldScope } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { AllocateLeaseRequest } from '../../resources/lease-registry-scope.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -17,16 +17,6 @@ export const HUMAN_CONTROL_LEASE_REQUEST: AllocateLeaseRequest = {
   leaseBackend: HUMAN_CONTROL_SCOPE.backend,
   leaseProvider: HUMAN_CONTROL_SCOPE.leaseProvider,
   deviceKey: HUMAN_CONTROL_SCOPE.deviceKey,
-};
-
-export const HUMAN_CONTROL_HOLD: HumanControlHold = {
-  id: 'operator-1',
-  scope: HUMAN_CONTROL_SCOPE,
-  state: 'active',
-  reason: 'Manual inspection',
-  createdAt: 1_000,
-  updatedAt: 1_000,
-  expiresAt: 16_000,
 };
 
 export function humanControlRequest(

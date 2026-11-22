@@ -83,7 +83,7 @@ test('usageForCommand explains focused perf evidence', async () => {
   const help = await usageForCommand('perf');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device perf frames/);
-  assert.match(help ?? '', /report --kind xctrace --out <report\.json>/);
+  assert.match(help ?? '', /report --kind xctrace \[--template <name>\] --out <report\.json>/);
   assert.match(help ?? '', /profile report --kind simpleperf --out <cpu-report\.json>/);
   assert.match(help ?? '', /report produces bounded agent-readable evidence/);
   assert.match(help ?? '', /raw artifacts on disk/);

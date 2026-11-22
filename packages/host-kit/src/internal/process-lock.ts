@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { publishFileSync } from './atomic-publish.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {
@@ -21,6 +26,14 @@ import {
   type OwnerLiveness,
 } from './owner-identity.ts';
 import { sleep } from './retry.ts';
+
+/** The refusals the process-lock rule answers with, beside the rule. */
+export const PROCESS_LOCK_REASONS = {
+  // The guard that serialises lock-directory mutations could not confirm its own release.
+  guardReleaseFailed: { reason: 'process_lock_guard_release_failed' },
+  // The caller gave up waiting for a lock another owner held.
+  timeout: { reason: 'process_lock_timeout' },
+} as const satisfies ReasonTable<'process lock'>;
 
 const OWNER_FILE_NAME = 'owner.json';
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
@@ -438,7 +451,7 @@ async function processLockTimeoutError(params: ProcessLockOptions): Promise<AppE
     `Timed out waiting for ${params.description ?? 'process lock'}`,
     {
       lockDirPath: params.lockDirPath,
-      reason: 'process_lock_timeout',
+      reason: PROCESS_LOCK_REASONS.timeout.reason,
       ...readProcessLockDiagnostics(params.lockDirPath, reading, ownerLiveness),
       inspection: inspectProcessLockWith(
         params.lockDirPath,
@@ -825,7 +838,7 @@ function releaseReclaimMutex(lockDirPath: string): void {
       'COMMAND_FAILED',
       'Process lock mutation guard release could not be confirmed.',
       {
-        reason: 'process_lock_guard_release_failed',
+        reason: PROCESS_LOCK_REASONS.guardReleaseFailed.reason,
         lockDirPath,
         hint: staleLockHint(lockDirPath),
       },

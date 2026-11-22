@@ -124,8 +124,6 @@ const DAEMON_ROUTE_HANDLERS = {
   }
 >;
 
-export type { DaemonCommandRoute };
-
 export async function runRequestHandlerChain(
   params: RequestHandlerChainParams,
 ): Promise<DaemonResponse | null> {

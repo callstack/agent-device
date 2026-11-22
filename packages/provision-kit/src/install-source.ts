@@ -2,7 +2,11 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { ArchiveBudget } from '@agent-device/host-kit/archive';
 import { expandUserHomePath } from '@agent-device/host-kit/file';
 
@@ -57,7 +61,11 @@ export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS]
  */
 export const SOURCE_MATERIALIZATION_AGGREGATE_TIMEOUT_MS = 600_000;
 
-const SOURCE_MATERIALIZATION_DEADLINE_REASON = 'source_materialization_deadline_exceeded';
+/** Why a standalone source-materialization call gives up. */
+const INSTALL_SOURCE_REASONS = {
+  // The aggregate or handed-down materialization budget ran out before the source was ready.
+  materializationDeadline: { reason: 'source_materialization_deadline_exceeded' },
+} as const satisfies ReasonTable<'install-from-source'>;
 
 /** The error of an expired materialization deadline, labeled with the timeout actually armed. */
 function sourceMaterializationDeadlineError(timeoutMs: number, cause?: unknown): AppError {
@@ -65,7 +73,7 @@ function sourceMaterializationDeadlineError(timeoutMs: number, cause?: unknown):
     'COMMAND_FAILED',
     `App source materialization timed out after ${timeoutMs}ms`,
     {
-      reason: SOURCE_MATERIALIZATION_DEADLINE_REASON,
+      reason: INSTALL_SOURCE_REASONS.materializationDeadline.reason,
       transferPhase: 'materialization',
       timeoutMs,
     },
