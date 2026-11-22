@@ -13,7 +13,7 @@ import {
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { REMOTE_DAEMON_UNAVAILABLE_REASON } from '../daemon-lifecycle-errors.ts';
+import { DAEMON_UNAVAILABLE_REASONS } from '../daemon-lifecycle-errors.ts';
 import { sendToDaemon } from '../index.ts';
 import { cachedRemoteDaemonHealth } from '../daemon-client-transport.ts';
 
@@ -66,7 +66,7 @@ test('a remote press whose health probe answers 5xx re-probes, then is sent exac
       (error: unknown) => {
         assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
         assert.equal(error.code, 'COMMAND_FAILED');
-        assert.notEqual(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+        assert.notEqual(error.details?.reason, DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason);
         assert.notEqual(error.details?.dispatched, 'no', 'the press left the client');
         return true;
       },
@@ -90,7 +90,7 @@ test('a remote press whose health probe is refused is refused at once with the t
   await assert.rejects(sendToDaemon(remotePress(baseUrl)), (error: unknown) => {
     assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
     assert.equal(error.code, 'COMMAND_FAILED');
-    assert.equal(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+    assert.equal(error.details?.reason, DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason);
     assert.equal(error.details?.dispatched, 'no');
     assert.equal(error.details?.daemonBaseUrl, baseUrl);
     assert.equal(error.details?.attempts, 1);
@@ -115,7 +115,7 @@ test('a remote press re-probing after 5xx stops at the first refused connection'
       sendToDaemon(remotePress(`http://127.0.0.1:${port}`)),
       (error: unknown) => {
         assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
-        assert.equal(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+        assert.equal(error.details?.reason, DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason);
         assert.equal(error.details?.dispatched, 'no');
         assert.equal(error.details?.attempts, 2);
         assert.equal(error.details?.healthRecoveryBudgetMs, undefined, 'the budget was not spent');
@@ -138,7 +138,7 @@ test('a remote press whose health probe answers 4xx is sent and is not the unava
       sendToDaemon(remotePress(`http://127.0.0.1:${port}`)),
       (error: unknown) => {
         assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
-        assert.notEqual(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+        assert.notEqual(error.details?.reason, DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason);
         return true;
       },
     );

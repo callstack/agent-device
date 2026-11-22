@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
+import { SCREEN_RECORDING_OUTPUT_REASONS } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { Deadline } from '@agent-device/host-kit/retry';
 import {
@@ -80,7 +80,7 @@ function unplayableRecording(outputPath: string): AppError {
     'COMMAND_FAILED',
     `recording was not finalized into a playable video: ${outputPath}`,
     {
-      reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
+      reason: SCREEN_RECORDING_OUTPUT_REASONS.unplayable.reason,
       retriable: true,
       hint:
         'Run record stop again: a recorder that is still finalizing its file is playable on the ' +

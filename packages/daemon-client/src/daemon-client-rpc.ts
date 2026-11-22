@@ -18,6 +18,7 @@ import {
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
@@ -42,7 +43,7 @@ export function handleDaemonHttpResponseBody(
       reject(
         new AppError('COMMAND_FAILED', 'Invalid daemon RPC response', {
           requestId: req.meta?.requestId,
-          reason: 'daemon_response_invalid',
+          reason: DAEMON_TRANSPORT_REASONS.replyInvalid.reason,
         }),
       );
       return;
@@ -55,7 +56,7 @@ export function handleDaemonHttpResponseBody(
         'Invalid daemon response',
         {
           requestId: req.meta?.requestId,
-          reason: 'daemon_response_invalid',
+          reason: DAEMON_TRANSPORT_REASONS.replyInvalid.reason,
           line: body,
         },
         err instanceof Error ? err : undefined,
@@ -233,7 +234,7 @@ export function refuseOversizedDaemonRequest(payload: string, requestId: string 
   const requestBytes = Buffer.byteLength(payload, 'utf8');
   if (requestBytes <= DAEMON_REQUEST_MAX_BYTES) return;
   throw new AppError('INVALID_ARGS', 'Daemon request exceeds the size limit', {
-    reason: 'daemon_request_too_large',
+    reason: DAEMON_TRANSPORT_REASONS.requestTooLarge.reason,
     requestBytes,
     maxBytes: DAEMON_REQUEST_MAX_BYTES,
     requestId,

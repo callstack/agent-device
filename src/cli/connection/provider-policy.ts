@@ -6,7 +6,7 @@ import {
   pluginConnectionNames,
   primePluginConnections,
 } from '@agent-device/plugins/connection';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { getProviderPluginDeclaration } from '../../commands/provider-plugin-catalog.ts';
 import {
   BUILTIN_CONNECT_PROVIDER_IDS,
@@ -65,6 +65,14 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
     : `${names}. Plugins that failed to load: ${failures.join('; ')}`;
 }
 
+// Why a connect provider cannot be served from the plugins this host has.
+const CONNECTION_PLUGIN_REASONS = {
+  // The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke.
+  unavailable: { reason: 'plugin-unavailable' },
+  // No plugin declares this provider; `details.installCommand` is the command that adds it.
+  notInstalled: { reason: 'plugin-not-installed' },
+} as const satisfies ReasonTable<'connect'>;
+
 export function unavailableConnectPluginError(
   provider: string,
   env: NodeJS.ProcessEnv,
@@ -80,7 +88,7 @@ export function unavailableConnectPluginError(
   );
   if (selected || failures.length > 0) {
     return new AppError('UNSUPPORTED_OPERATION', `${declaration.label} plugin is unavailable.`, {
-      reason: 'plugin-unavailable',
+      reason: CONNECTION_PLUGIN_REASONS.unavailable.reason,
       provider,
       package: declaration.package,
       ...(failures.length > 0 ? { failedPlugins: failures } : {}),
@@ -92,7 +100,7 @@ export function unavailableConnectPluginError(
     'UNSUPPORTED_OPERATION',
     `${declaration.label} requires the ${declaration.package} plugin.`,
     {
-      reason: 'plugin-not-installed',
+      reason: CONNECTION_PLUGIN_REASONS.notInstalled.reason,
       provider,
       package: declaration.package,
       installCommand,

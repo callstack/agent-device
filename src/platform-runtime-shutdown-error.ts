@@ -1,4 +1,9 @@
-import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  type NormalizedError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 
 type PlatformRuntimeShutdownFailure = Readonly<{
@@ -6,8 +11,14 @@ type PlatformRuntimeShutdownFailure = Readonly<{
   error: NormalizedError;
 }>;
 
+// Why the platform runtime gateway could not end every owner it holds.
+const PLATFORM_RUNTIME_SHUTDOWN_REASONS = {
+  // One or more runtime owners failed to shut down; `details.failures` keeps each owner's error and cleanup stays unconfirmed.
+  ownerShutdownFailed: { reason: 'platform-owner-shutdown-failed' },
+} as const satisfies ReasonTable<'platform runtime'>;
+
 type PlatformRuntimeShutdownErrorDetails = Readonly<{
-  reason: 'platform-owner-shutdown-failed';
+  reason: typeof PLATFORM_RUNTIME_SHUTDOWN_REASONS.ownerShutdownFailed.reason;
   failures: readonly PlatformRuntimeShutdownFailure[];
 }>;
 
@@ -18,7 +29,7 @@ export function createPlatformRuntimeShutdownError(
   failures: readonly [OwnerShutdownFailure, ...OwnerShutdownFailure[]],
 ): AppError {
   const details: PlatformRuntimeShutdownErrorDetails = {
-    reason: 'platform-owner-shutdown-failed',
+    reason: PLATFORM_RUNTIME_SHUTDOWN_REASONS.ownerShutdownFailed.reason,
     failures: failures.map(({ owner, error }) => ({ owner, error: normalizeError(error) })),
   };
   const message = `Platform runtime owner shutdown failed: ${details.failures

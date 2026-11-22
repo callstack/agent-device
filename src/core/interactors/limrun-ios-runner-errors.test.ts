@@ -58,11 +58,21 @@ test('shared startup failures retain their reason with a remote toolchain recove
 
 test('retains product-specific recovery instructions over the default hint', () => {
   expect(
-    limrunRunnerError('limrun_runner_products_invalid', 'Invalid runner', {
+    limrunRunnerError('productsInvalid', 'Invalid runner', {
       hint: 'Use the simulator product from this build.',
     }).details?.hint,
   ).toBe('Use the simulator product from this build.');
-  expect(
-    limrunRunnerError('limrun_runner_products_invalid', 'Invalid runner').details?.hint,
-  ).toContain('AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP');
+  expect(limrunRunnerError('productsInvalid', 'Invalid runner').details?.hint).toContain(
+    'AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP',
+  );
+});
+
+test('publishes each runner failure from its row, never from a caller spelling', () => {
+  expect(limrunRunnerError('productsInvalid', 'Invalid runner').details?.reason).toBe(
+    'limrun_runner_products_invalid',
+  );
+  // @ts-expect-error A call site names a LIMRUN_RUNNER_REASONS row, not its published spelling.
+  expect(() => limrunRunnerError('limrun_runner_products_invalid', 'Invalid runner')).toThrow(
+    TypeError,
+  );
 });

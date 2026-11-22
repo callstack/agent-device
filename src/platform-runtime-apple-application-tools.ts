@@ -8,7 +8,7 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 /**
  * One memoized loader per lazily imported module, and the only way the ports below reach one.
@@ -124,6 +124,12 @@ export function createAppleApplicationTools(env: Readonly<EnvMap>): AppleApplica
   });
 }
 
+// Why an Apple `open` cannot name the app it should bring up.
+const APPLE_OPEN_TARGET_REASONS = {
+  // `open --foreground` found no single running app to bring forward on the selected simulator.
+  foregroundAmbiguous: { reason: 'foreground_app_ambiguous' },
+} as const satisfies ReasonTable<'open'>;
+
 async function resolveAppleOpenTarget(
   device: DeviceInfo,
   input: OpenTargetResolutionInput,
@@ -136,7 +142,7 @@ async function resolveAppleOpenTarget(
       'AMBIGUOUS_MATCH',
       'open --foreground requires exactly one running app on the selected iOS simulator.',
       {
-        reason: 'foreground_app_ambiguous',
+        reason: APPLE_OPEN_TARGET_REASONS.foregroundAmbiguous.reason,
         hint: 'Pass an explicit app instead: agent-device open <app> --platform ios.',
       },
     );

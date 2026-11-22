@@ -75,7 +75,7 @@ export async function createLimrunIosRunner(
       if (bindSignal.aborted) bindCommand.stop();
     });
     if (bind.code !== 0)
-      throw limrunRunnerError('limrun_runner_bind_address_missing', 'Limrun did not expose USE_IP');
+      throw limrunRunnerError('bindAddressMissing', 'Limrun did not expose USE_IP');
     const directory = await prepareLimrunRunnerProducts({
       directory: staging,
       version: readVersion(),
@@ -179,7 +179,7 @@ export async function createLimrunIosRunner(
           );
           if (!result.ok) {
             const failure = limrunRunnerError(
-              result.status === 409 ? 'limrun_xctest_slot_occupied' : 'limrun_runner_launch_failed',
+              result.status === 409 ? 'xctestSlotOccupied' : 'launchFailed',
               `Limrun XCTest launch failed (${result.status})`,
               {
                 status: result.status,
@@ -206,10 +206,7 @@ export async function createLimrunIosRunner(
         },
       );
       if (!response.body)
-        throw limrunRunnerError(
-          'limrun_runner_launch_failed',
-          'Limrun XCTest launch returned no stream',
-        );
+        throw limrunRunnerError('launchFailed', 'Limrun XCTest launch returned no stream');
       canceledRunMayHoldSlot = false;
     } catch (error) {
       // An interrupted HTTP request can reach the server before it returns the run stream.

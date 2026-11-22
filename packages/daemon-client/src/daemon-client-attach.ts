@@ -7,7 +7,11 @@ import type {
   RemoteHealthRecovery,
 } from './daemon-client-lifecycle.ts';
 import { daemonBindingMismatchError } from './daemon-client-binding.ts';
-import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
+import {
+  DAEMON_UNAVAILABLE_REASONS,
+  daemonIncompatibleError,
+  daemonNotRunningError,
+} from './daemon-lifecycle-errors.ts';
 
 /** Resolves a managed daemon, or observes and verifies the one an attach client may use. */
 export async function connectToDaemon(
@@ -23,7 +27,7 @@ export async function connectToDaemon(
       if (
         settings.daemonBinding &&
         error instanceof AppError &&
-        error.details?.reason === 'daemon-record-unreadable'
+        error.details?.reason === DAEMON_UNAVAILABLE_REASONS.recordUnreadable.reason
       ) {
         throw daemonBindingMismatchError(settings.daemonBinding, null, stateDir);
       }

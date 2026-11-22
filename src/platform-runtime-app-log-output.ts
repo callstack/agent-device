@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   ensureAppLogPath,
   resolveAppLogRotationConfig,
@@ -145,6 +145,12 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
   });
 }
 
+// Why the app-log output refuses to open or read a session's `app.log`.
+const APP_LOG_OUTPUT_REASONS = {
+  // A redaction pattern in `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` does not compile; `details.patternIndex` names the field and the pattern text is not echoed.
+  redactPatternInvalid: { reason: 'app_log_redact_pattern_invalid' },
+} as const satisfies ReasonTable<'logs'>;
+
 /**
  * Splits `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` on commas outside groups, character classes, and
  * `{m,n}` quantifiers. Write `\,` for any other literal comma.
@@ -162,7 +168,7 @@ function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
         throw new AppError(
           'INVALID_ARGS',
           `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS entry ${patternIndex + 1} is not a valid regular expression`,
-          { reason: 'app_log_redact_pattern_invalid', patternIndex },
+          { reason: APP_LOG_OUTPUT_REASONS.redactPatternInvalid.reason, patternIndex },
         );
       }
     });

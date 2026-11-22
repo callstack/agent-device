@@ -24,10 +24,7 @@ export async function prepareLimrunRunnerProducts(input: {
   signal: AbortSignal;
 }): Promise<string> {
   if (isIP(input.bindAddress) !== 4 || input.bindAddress === '0.0.0.0') {
-    throw limrunRunnerError(
-      'limrun_runner_products_invalid',
-      'Limrun USE_IP must be a concrete IPv4 address',
-    );
+    throw limrunRunnerError('productsInvalid', 'Limrun USE_IP must be a concrete IPv4 address');
   }
   const products = path.join(input.directory, `runner-${randomUUID()}`);
   await fs.mkdir(products);
@@ -35,7 +32,7 @@ export async function prepareLimrunRunnerProducts(input: {
   if (!appPath) {
     if (!/^\d+\.\d+\.\d+$/.test(input.version)) {
       throw limrunRunnerError(
-        'limrun_runner_products_invalid',
+        'productsInvalid',
         'Nightly and development builds require AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP',
         {
           hint: 'Point it at the simulator runner .app built from this agent-device checkout.',
@@ -60,10 +57,7 @@ export async function prepareLimrunRunnerProducts(input: {
       typeof manifest.sha256 !== 'string' ||
       !/^[a-f0-9]{64}$/.test(manifest.sha256)
     ) {
-      throw limrunRunnerError(
-        'limrun_runner_products_invalid',
-        'Invalid iOS runner release manifest',
-      );
+      throw limrunRunnerError('productsInvalid', 'Invalid iOS runner release manifest');
     }
     const archivePath = path.join(input.directory, 'runner.tar.gz');
     await downloadLimrunFile({
@@ -78,7 +72,7 @@ export async function prepareLimrunRunnerProducts(input: {
       .update(await fs.readFile(archivePath, { signal: input.signal }))
       .digest('hex');
     if (digest !== manifest.sha256)
-      throw limrunRunnerError('limrun_runner_products_invalid', 'iOS runner checksum mismatch');
+      throw limrunRunnerError('productsInvalid', 'iOS runner checksum mismatch');
     const extracted = path.join(input.directory, 'extracted');
     await extractArchiveSafely({
       archivePath,
@@ -99,7 +93,7 @@ export async function prepareLimrunRunnerProducts(input: {
     )?.isDirectory()
   ) {
     throw limrunRunnerError(
-      'limrun_runner_products_invalid',
+      'productsInvalid',
       'The Limrun XCTest runner must be an iOS simulator .app',
       {},
       'INVALID_ARGS',
@@ -113,7 +107,7 @@ export async function prepareLimrunRunnerProducts(input: {
     });
   if (!plugins.includes('AgentDeviceRunnerUITests.xctest')) {
     throw limrunRunnerError(
-      'limrun_runner_products_invalid',
+      'productsInvalid',
       'The app does not contain AgentDeviceRunnerUITests.xctest',
       {},
       'INVALID_ARGS',
@@ -127,7 +121,7 @@ export async function prepareLimrunRunnerProducts(input: {
     .catch(() => null);
   if (embeddedXctest?.isDirectory()) {
     throw limrunRunnerError(
-      'limrun_runner_products_invalid',
+      'productsInvalid',
       'The Limrun XCTest runner embeds XCTest.framework from an Xcode older than 27',
       {
         hint: 'Build and package the simulator runner with Xcode 27, for example with DEVELOPER_DIR set to an Xcode 27 install.',
@@ -190,7 +184,7 @@ export async function uploadLimrunRunnerProducts(
       }
       if (!entry.isFile())
         throw limrunRunnerError(
-          'limrun_runner_products_invalid',
+          'productsInvalid',
           'Runner products must contain regular files',
           {},
           'INVALID_ARGS',
@@ -210,13 +204,9 @@ export async function uploadLimrunRunnerProducts(
     const result = await upload(attempt === 0 ? selected : files);
     if (result.ok === true && !result.needFull?.length) return;
     if (!result.needFull?.length || attempt === 1) {
-      throw limrunRunnerError(
-        'limrun_runner_upload_failed',
-        'Limrun runner products could not be synchronized',
-        {
-          needFull: result.needFull,
-        },
-      );
+      throw limrunRunnerError('uploadFailed', 'Limrun runner products could not be synchronized', {
+        needFull: result.needFull,
+      });
     }
   }
 
@@ -261,7 +251,7 @@ export async function uploadLimrunRunnerProducts(
       if (!response.ok) {
         await response.body?.cancel();
         throw limrunRunnerError(
-          'limrun_runner_upload_failed',
+          'uploadFailed',
           `Limrun runner upload failed (${response.status})`,
           {
             status: response.status,

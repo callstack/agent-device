@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { settleWithin } from '@agent-device/host-kit/settle-within';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type {
   HostCommandResult,
   ManagedProcessIdentity,
@@ -256,6 +256,12 @@ function observeSimulatorExit(wait: Promise<HostCommandResult>): Promise<AppleSi
   );
 }
 
+// Why an iOS simulator's host recording lock refuses a new `record start`.
+const APPLE_SIMULATOR_RECORDING_REASONS = {
+  // Another recorder holds the CoreSimulator host lock; `details.exitCode` is the `simctl` verdict.
+  busy: { reason: 'apple_simulator_recording_busy' },
+} as const satisfies ReasonTable<'record'>;
+
 function startError(outcome: AppleSimulatorExit): Error {
   if (outcome.kind === 'failed') {
     return outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
@@ -268,7 +274,7 @@ function startError(outcome: AppleSimulatorExit): Error {
       execFailureDetails(
         { ...outcome.result, exitCode },
         {
-          reason: 'apple_simulator_recording_busy',
+          reason: APPLE_SIMULATOR_RECORDING_REASONS.busy.reason,
           retriable: false,
           hint: 'Stop the active recording with record stop in its owning session. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.',
         },

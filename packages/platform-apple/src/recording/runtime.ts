@@ -10,7 +10,7 @@ import type { HostCommandResult } from '@agent-device/contracts/platform-runtime
 import { type RuntimeOwnerRef, unavailableFact } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
-  RECORDING_OUTPUT_UNPLAYABLE_REASON,
+  SCREEN_RECORDING_OUTPUT_REASONS,
   type ScreenRecordingCompletion,
   type ScreenRecordingLiveHandle,
   type ScreenRecordingLiveSnapshot,
@@ -409,7 +409,8 @@ function recorderExitEndedTheRecording(
 ): unknown {
   const original = asAppError(exportError, 'COMMAND_FAILED');
   if (exit === undefined || result === undefined) return exportError;
-  if (original.details?.reason !== RECORDING_OUTPUT_UNPLAYABLE_REASON) return exportError;
+  if (original.details?.reason !== SCREEN_RECORDING_OUTPUT_REASONS.unplayable.reason)
+    return exportError;
   return new AppError(
     original.code,
     `${original.message}; ${exit}`,
