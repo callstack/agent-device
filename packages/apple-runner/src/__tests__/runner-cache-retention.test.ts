@@ -12,6 +12,8 @@ import { evictStaleRunnerCaches, resolveRunnerCacheKeepCount } from '../runner-c
 import { ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import {
   cleanupRunnerLeasesForOwner,
+  holdRunnerTreeForLaunch,
+  withRunnerLeaseLock,
   writeRunnerLease,
   type RunnerLease,
 } from '../runner-lease.ts';
@@ -371,13 +373,16 @@ test('keeps a key that a runner reused after the listing, found fresh under the 
   assert.deepEqual(remaining(), [key(1), key(3)]);
 });
 
-test('keeps a key whose indicted metadata is gone while a launch from its tree is unleased', async () => {
+test('keeps a key whose indicted metadata is gone while a launch holds its tree', async () => {
   process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '1';
   const current = seedKey(key(1), 0);
-  seedResolvedTree(seedKey(key(2), null), NOW_MS - 60_000);
-  seedResolvedTree(seedKey(key(3), null), NOW_MS - DAY_MS);
+  const held = seedTree(seedKey(key(2), null));
+  seedTree(seedKey(key(3), null));
 
-  const evicted = await evictStaleRunnerCaches(current, process.env, NOW_MS);
+  const evicted = await withRunnerLeaseLock('SIM-LAUNCHING', async () => {
+    holdRunnerTreeForLaunch('SIM-LAUNCHING', held);
+    return await evictStaleRunnerCaches(current, process.env, NOW_MS);
+  });
 
   assert.deepEqual(remaining(), [key(1), key(2)]);
   assert.deepEqual(
@@ -386,11 +391,10 @@ test('keeps a key whose indicted metadata is gone while a launch from its tree i
   );
 });
 
-/** A build's products directory holding its `.xctestrun`, last resolved at `resolvedAtMs`. */
-function seedResolvedTree(derived: string, resolvedAtMs: number): void {
-  const tree = path.join(derived, 'Build', 'Products-0a1b2c3d');
-  fs.mkdirSync(tree, { recursive: true });
-  fs.writeFileSync(path.join(tree, 'Runner.xctestrun'), '<plist/>');
-  const resolvedAt = new Date(resolvedAtMs);
-  fs.utimesSync(tree, resolvedAt, resolvedAt);
+/** A build's products directory holding its `.xctestrun`; returns that `.xctestrun`. */
+function seedTree(derived: string): string {
+  const xctestrunPath = path.join(derived, 'Build', 'Products-0a1b2c3d', 'Runner.xctestrun');
+  fs.mkdirSync(path.dirname(xctestrunPath), { recursive: true });
+  fs.writeFileSync(xctestrunPath, '<plist/>');
+  return xctestrunPath;
 }

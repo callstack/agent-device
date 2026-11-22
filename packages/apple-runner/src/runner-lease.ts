@@ -198,6 +198,12 @@ export function buildRunnerLease(params: {
   };
 }
 
+/**
+ * Runs `task` under the device's runner lease lock. A start holds this lock from its cache decision
+ * until its runner lease is published, so a runner tree resolved under it
+ * ({@link holdRunnerTreeForLaunch}) stays held until the lock is released, whether the start
+ * published its lease or failed.
+ */
 export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promise<T>): Promise<T> {
   return await withProcessLock({
     acquire: () =>
@@ -212,7 +218,16 @@ export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promi
         pollMs: RUNNER_LEASE_LOCK_POLL_MS,
         description: `iOS runner lease for ${deviceId}`,
       }),
-    task,
+    task: async () => {
+      const holds = createPendingRunnerTreeHolds();
+      pendingRunnerTreeHolds.set(deviceId, holds);
+      try {
+        return await task();
+      } finally {
+        pendingRunnerTreeHolds.delete(deviceId);
+        holds.releaseAll();
+      }
+    },
   });
 }
 
@@ -566,17 +581,101 @@ function readOptionalSync<T>(read: () => T): T | null {
   }
 }
 
+type PendingRunnerTreeRecord = {
+  ownerPid: number;
+  ownerStartTime: string | null;
+  xctestrunPath: string;
+};
+
+type PendingRunnerTreeHolds = { hold(xctestrunPath: string): void; releaseAll(): void };
+
+/** The hold scope of each device whose runner lease lock this process holds. */
+const pendingRunnerTreeHolds = new Map<string, PendingRunnerTreeHolds>();
+
 /**
- * The `.xctestrun` path and cache key of every lease that is not proven dead, for cache eviction.
- * A lease is proven dead only when its owner process is gone (dead or recycled) and its leased runner
- * is absent, gone or recycled. An owner whose state directory is gone is still a live process, and a
- * runner whose start time cannot be read is treated as live. Throws when the leases cannot be listed,
- * so a caller never mistakes an unreadable lease directory for an empty one.
+ * Holds the runner tree a launch on `deviceId` resolved, from the cache decision (under the key lock)
+ * until this process releases the device's runner lease lock; by then the published runner lease has
+ * taken over, or the start failed. A crashed owner's hold lapses with its process. Cache cleanup
+ * reads holds with the leases ({@link listActiveRunnerLeaseArtifacts}). A resolution outside the
+ * lease lock, such as a cache prewarm, launches nothing and holds nothing.
+ */
+export function holdRunnerTreeForLaunch(deviceId: string, xctestrunPath: string): void {
+  pendingRunnerTreeHolds.get(deviceId)?.hold(xctestrunPath);
+}
+
+function createPendingRunnerTreeHolds(): PendingRunnerTreeHolds {
+  const recordPaths: string[] = [];
+  return {
+    hold(xctestrunPath) {
+      const recordPath = path.join(
+        resolvePendingRunnerTreeRoot(),
+        `${RUNNER_OWNER_PID}-${crypto.randomUUID()}.json`,
+      );
+      fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+      const record: PendingRunnerTreeRecord = {
+        ownerPid: RUNNER_OWNER_PID,
+        ownerStartTime: runnerOwnerStartTime(),
+        xctestrunPath,
+      };
+      publishFileSync({ destination: recordPath, contents: JSON.stringify(record), mode: 0o600 });
+      recordPaths.push(recordPath);
+    },
+    releaseAll() {
+      for (const recordPath of recordPaths.splice(0)) fs.rmSync(recordPath, { force: true });
+    },
+  };
+}
+
+function resolvePendingRunnerTreeRoot(): string {
+  return path.join(resolveRunnerLeaseRoot(), 'pending');
+}
+
+/**
+ * The `.xctestrun` path and cache key of every lease and pending tree hold that is not proven dead,
+ * for cache cleanup. A lease is proven dead only when its owner process is gone (dead or recycled)
+ * and its leased runner is absent, gone or recycled; a hold, when its owner process is. An owner whose
+ * state directory is gone is still a live process, and a runner whose start time cannot be read is
+ * treated as live. Throws when either can not be listed, so a caller never mistakes an unreadable
+ * directory for an empty one.
  */
 export function listActiveRunnerLeaseArtifacts(): { xctestrunPath: string; cacheKey?: string }[] {
-  return readAllRunnerLeases({ strict: true })
-    .filter((lease) => !isLeaseProvenDead(lease))
-    .map(({ xctestrunPath, cacheKey }) => ({ xctestrunPath, cacheKey }));
+  return [
+    ...readAllRunnerLeases({ strict: true })
+      .filter((lease) => !isLeaseProvenDead(lease))
+      .map(({ xctestrunPath, cacheKey }) => ({ xctestrunPath, cacheKey })),
+    ...listLivePendingRunnerTrees().map(({ xctestrunPath }) => ({ xctestrunPath })),
+  ];
+}
+
+/** Pending holds whose owner is not proven dead. A proven-dead owner's record is removed. */
+function listLivePendingRunnerTrees(): PendingRunnerTreeRecord[] {
+  const root = resolvePendingRunnerTreeRoot();
+  const names = readOptionalSync(() => fs.readdirSync(root)) ?? [];
+  return names.flatMap((name) => {
+    const recordPath = path.join(root, name);
+    const contents = readOptionalSync(() => fs.readFileSync(recordPath, 'utf8'));
+    const record = contents === null ? null : parsePendingRunnerTreeRecord(contents);
+    if (!record) return [];
+    const liveness = classifyOwnerLiveness({
+      owner: { pid: record.ownerPid, startTime: record.ownerStartTime },
+    });
+    if (liveness === 'owner-process-dead' || liveness === 'owner-process-reused') {
+      fs.rmSync(recordPath, { force: true });
+      return [];
+    }
+    return [record];
+  });
+}
+
+function parsePendingRunnerTreeRecord(contents: string): PendingRunnerTreeRecord | null {
+  try {
+    const raw = JSON.parse(contents) as Partial<PendingRunnerTreeRecord>;
+    if (typeof raw.ownerPid !== 'number' || typeof raw.xctestrunPath !== 'string') return null;
+    const ownerStartTime = typeof raw.ownerStartTime === 'string' ? raw.ownerStartTime : null;
+    return { ownerPid: raw.ownerPid, ownerStartTime, xctestrunPath: raw.xctestrunPath };
+  } catch {
+    return null;
+  }
 }
 
 function isLeaseProvenDead(lease: RunnerLease): boolean {

@@ -19,6 +19,7 @@ import {
   runnerRuntimeSlot,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
+import { holdRunnerTreeForLaunch } from './runner-lease.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
@@ -32,7 +33,6 @@ import {
   assertSafeDerivedCleanup,
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
-  stampRunnerTreeResolved,
   unlinkSymlinkedManagedRunnerKey,
   emitRunnerXctestrunDecision,
   emitRunnerXctestrunRebuildDecision,
@@ -610,7 +610,7 @@ async function ensureXctestrunUnderCacheLock(params: {
     existing,
     cache,
   });
-  if (reusable) return reusable;
+  if (reusable) return holdForLaunch(device, reusable);
   if (existing.reason !== 'reuse_ready') {
     emitRunnerXctestrunRebuildDecision(existing, derived);
   }
@@ -621,15 +621,27 @@ async function ensureXctestrunUnderCacheLock(params: {
     assertSafeDerivedCleanup(derived);
     await cleanRunnerDerivedArtifacts(derived);
   }
-  return await buildXctestrunArtifact({
+  return holdForLaunch(
     device,
-    options,
-    projectRoot,
-    expectedCacheMetadata,
-    derived,
-    cache,
-    reason: existing.reason,
-  });
+    await buildXctestrunArtifact({
+      device,
+      options,
+      projectRoot,
+      expectedCacheMetadata,
+      derived,
+      cache,
+      reason: existing.reason,
+    }),
+  );
+}
+
+/** Takes the launch's hold on the resolved tree while the key lock still keeps every cleanup out. */
+function holdForLaunch(
+  device: DeviceInfo,
+  artifact: RunnerXctestrunArtifact,
+): RunnerXctestrunArtifact {
+  holdRunnerTreeForLaunch(device.id, artifact.xctestrunPath);
+  return artifact;
 }
 
 async function resolveReusableXctestrunArtifact(params: {
@@ -720,7 +732,6 @@ async function buildXctestrunArtifact(params: {
     derived,
     [built, ...builtProductPaths],
   );
-  stampRunnerTreeResolved(built);
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -774,13 +785,6 @@ async function tryReuseExistingXctestrun(
       ),
       derived,
     );
-    if (!stampRunnerTreeResolved(existing.xctestrunPath)) {
-      emitRunnerXctestrunDecision('rebuild', 'tree_missing', {
-        derived,
-        xctestrunPath: existing.xctestrunPath,
-      });
-      return null;
-    }
     emitRunnerXctestrunDecision('reuse', 'reuse_ready', {
       derived,
       xctestrunPath: existing.xctestrunPath,

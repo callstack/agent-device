@@ -164,28 +164,6 @@ export async function cleanRunnerDerivedBeforeEvaluation(
 }
 
 /**
- * Stamps the tree that holds `xctestrunPath` as resolved now. Runs under the cache lock, so a clean
- * that follows sees the stamp and keeps the tree through its launch. Returns false when the tree is
- * gone, so the caller builds instead. A tree that cannot be stamped otherwise (another user owns it)
- * is still reused: the session's own `.xctestrun`, written into it next, moves its mtime anyway.
- */
-export function stampRunnerTreeResolved(xctestrunPath: string): boolean {
-  const tree = path.dirname(xctestrunPath);
-  const now = new Date();
-  try {
-    fs.utimesSync(tree, now, now);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'runner_xctestrun_tree_stamp_failed',
-      data: { tree, code: (error as NodeJS.ErrnoException).code },
-    });
-  }
-  return true;
-}
-
-/**
  * Publishes cache metadata whose `artifacts` manifest digests the exact bytes of the `.xctestrun`
  * and every file and symlink under the referenced product paths, keyed relative to the cache root.
  * Reuse is authorized from this manifest alone.
@@ -435,7 +413,6 @@ export function emitRunnerXctestrunDecision(
     | 'cache_metadata_missing'
     | 'cache_metadata_mismatch'
     | 'repair_failed'
-    | 'tree_missing'
     | 'reuse_ready'
     | 'forced_rebuild'
     | 'bad_artifact'

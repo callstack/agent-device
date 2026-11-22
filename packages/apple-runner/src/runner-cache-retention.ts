@@ -7,7 +7,6 @@ import {
   emitRunnerXctestrunDecision,
   resolveRunnerCacheMetadataPath,
 } from './runner-cache.ts';
-import { listLiveRunnerTrees } from './runner-cache-trim.ts';
 import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
 
 const DEFAULT_RUNNER_CACHE_KEEP = 3;
@@ -28,8 +27,8 @@ export function resolveRunnerCacheKeepCount(
 
 /**
  * Removes the keyed runner caches beside `currentDerived` that no runner can use any more: not the
- * current key, not among the most recently used, idle for a day, not held by a build, not named
- * by a live runner lease, and holding no tree a launch may still read (`listLiveRunnerTrees`). Keys only multiply, because a runner source change or an Xcode update
+ * current key, not among the most recently used, idle for a day, not held by a build, and not named
+ * by a live runner lease or a launch's pending tree hold. Keys only multiply, because a runner source change or an Xcode update
  * mints a new one and the old one can never match again.
  *
  * Returns the evicted cache roots. Nothing is evicted when `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`
@@ -112,8 +111,6 @@ async function evictIfUnused(derived: string, nowMs: number): Promise<boolean> {
         cacheKey === key || xctestrunPath.startsWith(`${derived}${path.sep}`),
     );
     if (leased) return false;
-    // An indictment removes the metadata but keeps a tree a launch resolved and has not leased yet.
-    if (listLiveRunnerTrees(derived, nowMs).length > 0) return false;
     // Without its metadata a half-deleted key is never a hit; the next build for this key overwrites it.
     await fs.promises.rm(resolveRunnerCacheMetadataPath(derived), { force: true });
     await fs.promises.rm(derived, { recursive: true, force: true });
