@@ -22,38 +22,34 @@ const LIMRUN_RUNNER_REASONS = {
   snapshotUnavailable: { reason: 'limrun_runner_snapshot_unavailable' },
 } as const satisfies ReasonTable<'limrun'>;
 
-/** How each {@link LIMRUN_RUNNER_REASONS} reason is recovered; a caller may replace it per error. */
-const DEFAULT_HINTS: Readonly<
-  Record<(typeof LIMRUN_RUNNER_REASONS)[keyof typeof LIMRUN_RUNNER_REASONS]['reason'], string>
-> = {
-  limrun_xctest_slot_occupied:
+/** A {@link LIMRUN_RUNNER_REASONS} row; the error reads its published spelling and default hint. */
+type LimrunRunnerFailure = keyof typeof LIMRUN_RUNNER_REASONS;
+
+/** How each {@link LIMRUN_RUNNER_REASONS} row is recovered; a caller may replace it per error. */
+const DEFAULT_HINTS: Readonly<Record<LimrunRunnerFailure, string>> = {
+  xctestSlotOccupied:
     'Another XCTest run owns this simulator. Stop its agent-device or Appium session, wait for its run stream to close, then retry. If the previous client died and the slot stays occupied, recreate the Limrun instance.',
-  limrun_runner_launch_failed:
+  launchFailed:
     'Inspect runner.log and the Limrun XCTest stream. Use a simulator runner built for this instance’s Xcode and iOS runtime.',
-  limrun_runner_products_invalid:
+  productsInvalid:
     'Set AGENT_DEVICE_LIMRUN_IOS_RUNNER_APP to the simulator runner .app built for this instance’s Xcode and iOS runtime, or use a matching release runner.',
-  limrun_runner_upload_failed:
-    'Check the Limrun instance connection and retry preparing the runner.',
-  limrun_runner_bind_address_missing:
+  uploadFailed: 'Check the Limrun instance connection and retry preparing the runner.',
+  bindAddressMissing:
     'The simulator must expose USE_IP for HTTP forwarding. Check the instance connection and simulator configuration.',
-  limrun_runner_snapshot_unavailable:
+  snapshotUnavailable:
     'Close and reopen the agent-device session to restart its XCTest runner. If snapshots still fail on this reused simulator, recreate the Limrun instance. Use a screenshot and coordinate actions to inspect its current screen; do not reuse snapshot refs.',
 };
 
-/** The published reasons of {@link LIMRUN_RUNNER_REASONS}, which is what a call site names. */
-export type LimrunRunnerFailure =
-  (typeof LIMRUN_RUNNER_REASONS)[keyof typeof LIMRUN_RUNNER_REASONS]['reason'];
-
 export function limrunRunnerError(
-  reason: LimrunRunnerFailure,
+  failure: LimrunRunnerFailure,
   message: string,
   details: AppErrorDetails = {},
   code: AppErrorCode = 'COMMAND_FAILED',
 ): AppError {
   return new AppError(code, message, {
     ...details,
-    reason,
-    hint: details.hint ?? DEFAULT_HINTS[reason],
+    reason: LIMRUN_RUNNER_REASONS[failure].reason,
+    hint: details.hint ?? DEFAULT_HINTS[failure],
   });
 }
 
@@ -69,7 +65,7 @@ export async function withLimrunRunnerErrors<T>(task: () => Promise<T>): Promise
         error.message,
         {
           ...error.details,
-          hint: DEFAULT_HINTS[LIMRUN_RUNNER_REASONS.launchFailed.reason],
+          hint: DEFAULT_HINTS.launchFailed,
         },
         error,
       );
@@ -90,7 +86,7 @@ export async function withLimrunRunnerErrors<T>(task: () => Promise<T>): Promise
         {
           ...error.details,
           reason: LIMRUN_RUNNER_REASONS.snapshotUnavailable.reason,
-          hint: DEFAULT_HINTS[LIMRUN_RUNNER_REASONS.snapshotUnavailable.reason],
+          hint: DEFAULT_HINTS.snapshotUnavailable,
         },
         error,
       );
