@@ -1,14 +1,15 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS, leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
+import { assertLeaseScopeMatch, leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
   ProviderAppCatalog,
 } from '@agent-device/contracts/device';
+import { resolveLeaseScope } from '../core/lease-context.ts';
 import { assertRequestLeaseAdmission } from './request-admission.ts';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
@@ -124,6 +125,42 @@ export async function endLeasedSession(
   });
   sessionStore.finalizeRepairTeardown(ref);
   sessionStore.retire(ref);
+}
+
+/**
+ * Ends the session of a lease that is over, for a request that presents another active lease. A
+ * new owner can then open the address before the lease sweep runs. Any other request ends nothing.
+ */
+export async function endExpiredSessionForSuccessor(params: {
+  env: HostEnvironment['env'];
+  req: Pick<DaemonRequest, 'flags' | 'meta'>;
+  ref: SessionRef;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  holdDeviceLock: (deviceId: string) => Promise<void>;
+  teardownSession: SessionTeardown;
+}): Promise<boolean> {
+  const { ref, leaseRegistry } = params;
+  const sessionLease = ref.session.lease;
+  const successorScope = resolveLeaseScope(params.req);
+  const successorLease = successorScope.leaseId
+    ? leaseRegistry.inspectActiveLease(successorScope.leaseId)
+    : undefined;
+  if (!sessionLease || !successorLease) return false;
+  if (leaseRegistry.inspectActiveLease(sessionLease.leaseId)) return false;
+  assertLeaseScopeMatch(successorLease, leaseScopeToHeartbeatRequest(successorScope));
+  await params.holdDeviceLock(ref.session.device.id);
+  await endLeasedSession(
+    ref,
+    params.sessionStore,
+    params.teardownSession,
+    'LEASE_EXPIRED',
+    params.env,
+  );
+  // An inactive lease never becomes active again. The registry notes the expiry only now, so the
+  // lease-end owner that it starts finds no session to end a second time.
+  leaseRegistry.consumeExpiredLease(sessionLease.leaseId);
+  return true;
 }
 
 export function admitRequestLeaseForLockedScope(params: {

@@ -20,6 +20,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { hostDiagnosticsFixture } from '../../__tests__/support/host-diagnostics-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import type { SessionRef } from '../../core/session-state.ts';
@@ -103,8 +104,10 @@ async function startDaemon() {
   };
   const observeRunnerSession = vi.fn(async () => ({ alive: true, sessionId: 'runner-1' }));
   const hostDiagnostics = hostDiagnosticsFixture();
+  // A request that ends an expired session itself stops the snapshot helper of that session.
+  const requestTeardown = platformResourceCleanupFixture();
   const runtime = createLifecycleDeviceRuntimeGatewaySpies();
-  const hooks: { beforeDispatch?: () => void } = {};
+  const hooks: { beforeDispatch?: () => void; duringDeviceSelection?: () => void } = {};
   const handleRequest = createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
@@ -113,11 +116,15 @@ async function startDaemon() {
     sessionStore,
     leaseRegistry,
     deviceInventoryGateways: createTestDeviceInventoryGateways({
-      local: async () => [IOS_SIMULATOR],
+      local: async () => {
+        hooks.duringDeviceSelection?.();
+        return [IOS_SIMULATOR];
+      },
     }),
     deviceRuntimeGateway: runtime.gateway,
     trackDownloadableArtifact: () => 'artifact-id',
     hostDiagnostics,
+    platformResourceCleanup: requestTeardown,
     platformServices: daemonPlatformServicesFixture({
       appleSessionObservation: {
         observeRunnerSession,
@@ -173,7 +180,8 @@ async function startDaemon() {
         deviceKey,
         leaseBackend: 'ios-instance',
       } as const;
-      return { ...scope, leaseId: leaseRegistry.allocateLease(scope).leaseId };
+      const { leaseId } = leaseRegistry.allocateLease({ ...scope, ttlMs: 10 * LEASE_TTL_MS });
+      return { ...scope, leaseId };
     },
     leaseId: lease.leaseId,
     sessionName,
@@ -183,6 +191,7 @@ async function startDaemon() {
     expiryTeardown,
     observeRunnerSession,
     hostDiagnostics,
+    requestTeardown,
     runtime,
     hooks,
     send,
@@ -227,33 +236,63 @@ test('a refused request writes no event into the leased session, and the owner r
   ]);
 });
 
-test('a request with no lease id does not end an expired leased session', async () => {
+test.each([
+  ['no lease id', {}],
+  ['a lease id that is not active', { leaseId: 'f'.repeat(32) }],
+])('a close with %s does not end an expired leased session', async (_name, scope) => {
   if (!world) return;
   const ref = world.publishLeasedSession(world.sessionName);
   world.passLeaseDeadline();
 
-  expectLeaseIdRefusal(await world.send('close', [], {}));
+  const closed = await world.send('close', [], scope);
 
+  expect(closed.error?.data, JSON.stringify(closed)).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_SESSION_MISMATCH' },
+  });
+  expect(JSON.stringify(closed)).not.toContain(world.leaseId);
+  expect(JSON.stringify(closed)).not.toContain('endedLeases');
   expect(world.sessionStore.lookup(world.sessionName)?.lifetime).toBe(ref.lifetime);
   expect(world.expiryTeardown).not.toHaveBeenCalled();
+  expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
   expect(world.runtime.inspectFacts).not.toHaveBeenCalled();
   expect(await world.requestEvents(world.sessionName)).toEqual([]);
 });
 
-test('a new owner opens the session after the expiry owner ended the expired one', async () => {
+test('a new owner opens the session right after the lease deadline, before the sweep', async () => {
   if (!world) return;
-  const ref = world.publishLeasedSession(world.sessionName);
+  world.publishLeasedSession(world.sessionName);
+  // Allocated before the deadline, so no registry call has noticed the expiry yet.
+  const successor = world.allocateOtherClient('ios:mobile:SIM-002');
   world.passLeaseDeadline();
-  // Allocation sweeps the registry, which hands the expired lease to the expiry owner.
-  const successor = world.allocateOtherClient();
-  await world.expiryOwnerSettled();
-  expect(world.expiryTeardown).toHaveBeenCalledTimes(1);
-  expect(world.expiryTeardown.mock.calls[0]?.[0].lifetime).toBe(ref.lifetime);
 
   const opened = await world.send('open', ['com.example.app'], successor);
 
   expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
   expect(world.sessionStore.get(world.sessionName)?.lease?.leaseId).toBe(successor.leaseId);
+  expect(JSON.stringify(opened)).not.toContain(world.leaseId);
+  expect(JSON.stringify(opened)).not.toContain('endedLeases');
+  expect(await world.requestEvents(world.sessionName)).toEqual([
+    'request.started',
+    'request.finished',
+  ]);
+  // The open ended the expired session under its own locks, so the lease-end owner found none.
+  expect(world.requestTeardown.stopSnapshotHelper).toHaveBeenCalledTimes(1);
+  await world.expiryOwnerSettled();
+  expect(world.expiryTeardown).not.toHaveBeenCalled();
+});
+
+test('doctor with the lease id after the deadline leaves the session to the lease-end owner', async () => {
+  if (!world) return;
+  const ref = world.publishLeasedSession(world.sessionName);
+  world.passLeaseDeadline();
+
+  await world.send('doctor', [], world.owner);
+
+  expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
+  await world.expiryOwnerSettled();
+  expect(world.expiryTeardown).toHaveBeenCalledTimes(1);
+  expect(world.expiryTeardown.mock.calls[0]?.[0].lifetime).toBe(ref.lifetime);
 });
 
 test('the owner request after the deadline ends its own expired session', async () => {
@@ -306,6 +345,31 @@ test.each(['doctor', 'events'])(
     expect(world.runtime.inspectFacts).not.toHaveBeenCalled();
   },
 );
+
+test('capabilities with no lease id reads nothing from a leased session opened during its device selection', async () => {
+  if (!world) return;
+  const { hooks, publishLeasedSession, sessionName } = world;
+  hooks.duringDeviceSelection = () => {
+    publishLeasedSession(sessionName);
+  };
+  // The runtime cannot read the foreground app here, so only a session app would list `appstate`.
+  const inspectFacts = world.runtime.inspectFacts.getMockImplementation()!;
+  world.runtime.inspectFacts.mockImplementation(async (device) => {
+    const facts = await inspectFacts(device);
+    const unavailable = { available: false, reason: 'unsupported-device-kind' } as const;
+    return {
+      ...facts,
+      operations: { ...facts.operations, ensureReady: { available: true }, appState: unavailable },
+    };
+  });
+
+  const capabilities = await world.send('capabilities', [], {}, { flags: { platform: 'ios' } });
+
+  expect(capabilities.result?.ok, JSON.stringify(capabilities)).toBe(true);
+  expect(world.sessionStore.get(sessionName)).toBeDefined();
+  // `appstate` is available only through the app of the session.
+  expect(JSON.stringify(capabilities.result?.data)).not.toContain('appstate');
+});
 
 test('doctor with the lease id reports its leased session', async () => {
   if (!world) return;

@@ -66,7 +66,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
-import { resolveLeaseScope } from '../../../core/lease-context.ts';
+import { assertRequestHoldsSessionLease, resolveLeaseScope } from '../../../core/lease-context.ts';
 import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
@@ -283,12 +283,15 @@ async function capabilitiesInventoryResponse(params: {
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
-  const resolution = await resolveInventoryCommandDevice(params);
+  // `capabilities` holds no session lock, so a leased session can open here after admission.
+  const session = params.sessionStore.get(params.sessionName);
+  assertRequestHoldsSessionLease(params.req, session);
+  const resolution = await resolveInventoryCommandDevice({ ...params, session });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
   const sessionOwnedAppStateAvailable = isSessionOwnedAppStateAvailable(
     device,
-    params.sessionStore.get(params.sessionName),
+    session,
     params.req.flags,
   );
   const facts = await inspectCapabilityFacts(device, params.inspectFacts);
@@ -372,7 +375,7 @@ async function handleAppsInventory(params: {
   if (providerCatalogResponse) return providerCatalogResponse;
   const resolution = await resolveInventoryCommandDevice({
     req,
-    sessionName,
+    session: sessionStore.get(sessionName),
     sessionStore,
     platformServices,
   });
@@ -464,12 +467,11 @@ function appsInventoryResponse(apps: readonly { id: string; name: string }[]): D
 
 async function resolveInventoryCommandDevice(params: {
   req: DaemonRequest;
-  sessionName: string;
+  session: ReturnType<SessionStore['get']>;
   sessionStore: SessionStore;
   platformServices: DaemonPlatformServices;
 }): Promise<{ device: DeviceInfo } | { response: DaemonResponse }> {
-  const { req, sessionName, sessionStore, platformServices } = params;
-  const session = sessionStore.get(sessionName);
+  const { req, session, sessionStore, platformServices } = params;
   const flags = req.flags ?? {};
   const response = requireSessionOrExplicitSelector(req.command, session, flags);
   if (response) return { response };
