@@ -382,11 +382,11 @@ export function mayNameSession(req: DaemonRequest, session: SessionState): boole
 /**
  * Whether a reply may name the session a host-global device claim records as its owner.
  *
- * The claim names the state dir of the daemon that wrote it. A claim this daemon wrote is verified
- * only when its session label still resolves in the store and may be named to the request; an
- * expired tenant's unresolvable label gets the generic refusal (#4923). A claim another daemon on
- * this host wrote names a session that is not in this store at all, and naming its recorded owner
- * and workspace is the documented cross-worktree recovery this refusal exists for, so it stays.
+ * A claim of another daemon on this host keeps its owner: that is the documented cross-worktree
+ * recovery. A claim of this daemon whose label resolves follows `mayNameSession`. A label that names
+ * no stored session, such as a transient command's claim or a claim that outlived its session, is
+ * named to a local request as before and hidden from a tenant-scoped one: on a proxy shared under
+ * one token, the tenant prefix does not tell one client's ended session from another's (#4923).
  */
 export function claimOwnerVisible(
   req: DaemonRequest,
@@ -395,7 +395,8 @@ export function claimOwnerVisible(
 ): boolean {
   if (!isSameDaemonStateDir(owner.stateDir, sessionStore.resolveDaemonStateDir())) return true;
   const ref = sessionStore.lookup(owner.session);
-  return ref !== undefined && mayNameSession(req, ref.session);
+  if (ref) return mayNameSession(req, ref.session);
+  return resolveSessionScope(req).kind !== 'tenant';
 }
 
 /**

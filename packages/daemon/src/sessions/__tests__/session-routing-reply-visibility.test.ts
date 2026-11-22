@@ -111,6 +111,20 @@ test('a claim of this daemon whose session no longer resolves is not named', () 
   expect(response.error.details?.owner).toBeUndefined();
 });
 
+test('a local request keeps the owner of a transient claim of this daemon', () => {
+  const store = storeWithLeasedSession();
+
+  const response = dropInvisibleClaimOwner(
+    request({ tenantId: undefined, sessionIsolation: undefined }),
+    store,
+    claimConflictResponse('transient:install', store.resolveDaemonStateDir()),
+  );
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.details?.owner).toMatchObject({ session: 'transient:install' });
+});
+
 test('a claim another daemon on this host wrote keeps its recorded owner', () => {
   const store = storeWithLeasedSession();
   const peerStateDir = mkdtempForTestSync('agent-device-reply-visibility-peer-');
