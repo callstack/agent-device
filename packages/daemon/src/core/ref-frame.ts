@@ -43,7 +43,8 @@ export const REF_FRAME_REASONS = {
   frameExpired: { reason: 'ref_frame_expired' },
   // The pinned ref was minted from a snapshot generation that a newer one superseded.
   generationMismatch: { reason: 'ref_generation_mismatch' },
-  // A plain ref needs a complete frame; retry with the pinned ref in `details.suggestedRef`.
+  // A plain ref needs a complete frame. Retry with the pinned ref in `details.suggestedRef` when
+  // present; otherwise capture a fresh interactive snapshot or use a stable selector.
   plainRefRequiresCompleteFrame: { reason: 'plain_ref_requires_complete_frame' },
   // The current ref frame did not issue this ref, so it no longer names a node.
   notIssued: { reason: 'ref_not_issued' },
