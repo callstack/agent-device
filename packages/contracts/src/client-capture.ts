@@ -145,7 +145,6 @@ export type CaptureScreenshotResult = ScreenshotResultData & {
 export type CaptureDiffOptions = DeviceCommandBaseOptions &
   Pick<CaptureSnapshotOptions, 'interactiveOnly' | 'depth' | 'scope' | 'raw'> & {
     kind: 'snapshot';
-    out?: string;
   };
 
 export type CaptureAuditOptions = DeviceCommandBaseOptions;

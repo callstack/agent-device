@@ -69,7 +69,6 @@ const diffCommandDescription =
 
 const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCommandDescription, {
   kind: requiredField(jsonSchemaField<'snapshot'>({ type: 'string', const: 'snapshot' })),
-  out: stringField(),
   interactiveOnly: booleanField(),
   depth: integerField(),
   scope: stringField(),
@@ -101,7 +100,6 @@ export const diffCliReader: CliReader = (positionals, flags) => {
   return {
     ...commonInputFromFlags(flags),
     kind: 'snapshot',
-    out: flags.out,
     interactiveOnly: flags.snapshotInteractiveOnly,
     depth: flags.snapshotDepth,
     scope: flags.snapshotScope,
@@ -120,7 +118,7 @@ export const diffCommandFacet = defineCommandFacet({
     summary: 'Diff snapshot or screenshot',
     searchHint: 'visual regression baseline',
     cliDetail:
-      'Screenshot --threshold is a per-pixel RGB tolerance: 0 requires exact colors and 1 ignores color differences; the current image scales proportionally to the baseline width and aligns top-left. Scaled height rounds to the nearest pixel (minimum 1). Extra or missing bottom rows always count as differences, even at threshold 1. The originals remain unchanged. When dimensions differ, normalization metadata reports original, scaled and compared sizes; region coordinates use comparison pixels. Both screenshot inputs are decoded from their bytes, so a baseline or current image may be PNG or JPEG, and the diff image is always PNG. JPEG is lossy, so keep --threshold above 0 whenever either input is JPEG. Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines. Use --screen-mask black for a live iOS simulator capture with a black screen outline, and use the same option when creating its baseline. --screen-mask is refused when current.png is supplied; saved images are compared unchanged.',
+      'Snapshot comparisons report text only: --out is the diff PNG path screenshot comparisons write, and `diff snapshot` never writes a file. Screenshot --threshold is a per-pixel RGB tolerance: 0 requires exact colors and 1 ignores color differences; the current image scales proportionally to the baseline width and aligns top-left. Scaled height rounds to the nearest pixel (minimum 1). Extra or missing bottom rows always count as differences, even at threshold 1. The originals remain unchanged. When dimensions differ, normalization metadata reports original, scaled and compared sizes; region coordinates use comparison pixels. Both screenshot inputs are decoded from their bytes, so a baseline or current image may be PNG or JPEG, and the diff image is always PNG. JPEG is lossy, so keep --threshold above 0 whenever either input is JPEG. Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines. Use --screen-mask black for a live iOS simulator capture with a black screen outline, and use the same option when creating its baseline. --screen-mask is refused when current.png is supplied; saved images are compared unchanged.',
   },
   metadata: diffCommandMetadata,
   run: (client, input) => client.capture.diff(input),
