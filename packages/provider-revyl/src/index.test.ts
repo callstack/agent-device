@@ -32,6 +32,7 @@ function host(env: Readonly<Record<string, string | undefined>>): ProviderPlugin
     env,
     cwd: '/tmp',
     clientVersion: '0.0.0-test',
+    diagnostics: { emit: () => {} },
     createError: (code: string, message: string) => new Error(`${code}: ${message}`),
   } as unknown as ProviderPluginHost;
 }
@@ -119,7 +120,6 @@ test('setup builds the runtime and owner from the credential options, not the en
   // The environment holds neither variable, so only the options can reach the runtime it builds.
   const plugin = revyl({ apiKey: 'option-key', apiUrl: fixture.backendUrl });
   const setup = await providerOf(plugin).setup(host({}));
-  if (!('runtime' in setup)) throw new Error('Revyl sets up a runtime, not a WebDriver descriptor');
 
   // The owner identity hashes the key and the origin together, so this equality says both came from
   // the options. A runtime built from another credential would be a second owner for one account,

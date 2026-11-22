@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
-import { createPluginHost } from '@agent-device/plugins/host';
+import { createReplaySetupHost } from '@agent-device/plugins/host';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import replayPlugin from './plugin.ts';
 import type {
@@ -24,11 +24,7 @@ test('the first-party factory uses the managed registry and preserves native scr
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([{ source: 'embedder', load: replayPlugin }]),
     { env: {}, cwd: '/' },
-    {
-      adaptWebDriver: async () => {
-        throw new Error('Replay cannot create providers');
-      },
-    },
+    {},
   );
   try {
     const execution = await registry.resolveReplayExecution();
@@ -83,7 +79,7 @@ test('the first-party factory uses the managed registry and preserves native scr
 });
 
 test.each(['0.23.0', '0.21.39-dev'])('the package rejects unverified core %s', (clientVersion) => {
-  const host = { ...createPluginHost({ env: {}, cwd: '/' }, undefined), clientVersion };
+  const host = { ...createReplaySetupHost(), clientVersion };
   expect(() => contributionOf(replayPlugin()).setup(host)).toThrow(
     expect.objectContaining({
       details: expect.objectContaining({ reason: 'incompatible_plugin' }),
@@ -96,7 +92,7 @@ test.each(['0.21.38-dev', '0.22.0-beta.1', '0.22.0'])(
   (clientVersion) => {
     expect(
       contributionOf(replayPlugin()).setup({
-        ...createPluginHost({ env: {}, cwd: '/' }, undefined),
+        ...createReplaySetupHost(),
         clientVersion,
       }),
     ).toMatchObject({ execution: { create: expect.any(Function) } });

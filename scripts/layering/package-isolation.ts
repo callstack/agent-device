@@ -56,7 +56,7 @@ export const PLUGIN_FRAMEWORK_ISOLATION: PackageIsolationPolicy = {
   forbiddenManifests: /^packages\/provider-[^/]+\/package\.json$/,
   forbidsRoot: false,
   forbids: 'a concrete provider package',
-  remedy: 'Provider knowledge reaches the loader as a policy from the composing root.',
+  remedy: 'Build provider runtimes inside their plugins.',
 };
 
 export type DependencyManifest = {

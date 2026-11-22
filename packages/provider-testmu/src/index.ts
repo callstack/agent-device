@@ -56,11 +56,8 @@ function testmu(options: TestmuOptions = {}): ProviderAgentDevicePlugin {
           verify: async (context) =>
             await (await loadTestMuConnection(context.host)).verify(context),
         },
-        setup: async (host) => ({
-          webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
-            withCredentials(host),
-          ),
-        }),
+        setup: async (host) =>
+          (await import('./testmu-webdriver.ts')).setupTestMu(withCredentials(host)),
       },
     ],
   };

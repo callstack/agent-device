@@ -34,9 +34,8 @@ const supportedSubpaths = [
   './finders',
   './ai-sdk',
   './plugins',
-  './plugins/webdriver',
 ];
-const typeOnlySubpaths = new Set(['./remote-config', './plugins', './plugins/webdriver']);
+const typeOnlySubpaths = new Set(['./remote-config', './plugins']);
 
 function exportTarget(subpath: string): { import: string; types: string } {
   const target = pkg.exports[subpath];

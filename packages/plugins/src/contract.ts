@@ -74,36 +74,16 @@ export type PluginRuntimeSetup = Readonly<{
   dispose?(): Promise<void> | void;
 }>;
 
-/** What the registry reads of a WebDriver descriptor; the composing root owns the rest. */
-export type WebDriverDescriptor = Readonly<{ provider: string }>;
-
-/**
- * A hosted WebDriver service. The host interprets the descriptor and builds the runtime; the
- * descriptor's type belongs to the composing root, so this package never names a provider.
- */
-export type PluginWebDriverSetup<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
-  Readonly<{
-    webDriver: WebDriver;
-    dispose?(): Promise<void> | void;
-  }>;
-
-export type PluginSetupResult<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
-  | PluginRuntimeSetup
-  | PluginWebDriverSetup<WebDriver>;
-
-/** A `provider` contribution: the current provider declaration plus setup with a provider host. */
-export type ProviderContribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
-  Readonly<{
-    kind: 'provider';
-    /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
-    provider: string;
-    credentials: PluginCredentials;
-    connection?: PluginConnection;
-    /** Builds the runtime. Keep it free of network I/O and device allocation. */
-    setup(
-      host: ProviderPluginHost,
-    ): Promise<PluginSetupResult<WebDriver>> | PluginSetupResult<WebDriver>;
-  }>;
+/** A `provider` contribution declares an id and builds a runtime with a provider host. */
+export type ProviderContribution = Readonly<{
+  kind: 'provider';
+  /** Lowercase id; `cloud` and `proxy` are reserved routing identities. */
+  provider: string;
+  credentials: PluginCredentials;
+  connection?: PluginConnection;
+  /** Builds the runtime. Keep it free of network I/O and device allocation. */
+  setup(host: ProviderPluginHost): Promise<PluginRuntimeSetup> | PluginRuntimeSetup;
+}>;
 
 export type {
   MacOsPlatformLeafContribution,
@@ -116,8 +96,8 @@ export type {
 } from './platform.ts';
 
 /** One independently activated claim a plugin declares. New kinds need an explicit decision. */
-export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
-  | ProviderContribution<WebDriver>
+export type Contribution =
+  | ProviderContribution
   | PlatformContribution
   | ReplayBackendContribution
   | ReplayExecutionContribution;
@@ -128,10 +108,7 @@ export type Contribution<WebDriver extends WebDriverDescriptor = WebDriverDescri
  * declares a single kind may narrow `C` (e.g. to `ProviderContribution`) so its published types
  * stay within that kind's branch of the union.
  */
-export type AgentDevicePlugin<
-  WebDriver extends WebDriverDescriptor = WebDriverDescriptor,
-  C extends Contribution<WebDriver> = Contribution<WebDriver>,
-> = Readonly<{
+export type AgentDevicePlugin<C extends Contribution = Contribution> = Readonly<{
   apiVersion: typeof PLUGIN_API_VERSION;
   contributes: readonly [C, ...C[]];
 }>;
@@ -141,14 +118,12 @@ export type AgentDevicePlugin<
  * factory return type so their published declarations stay within the provider branch of the
  * union.
  */
-export type ProviderOnlyPlugin<WebDriver extends WebDriverDescriptor = WebDriverDescriptor> =
-  AgentDevicePlugin<WebDriver, ProviderContribution<WebDriver>>;
+export type ProviderOnlyPlugin = AgentDevicePlugin<ProviderContribution>;
 
 /**
  * The default export of a plugin package's `./agent-device` entry. The store calls it with
  * `config.json` `plugins[name].options`; a JS host calls it directly.
  */
-export type AgentDevicePluginFactory<
-  Options = Record<string, unknown>,
-  WebDriver extends WebDriverDescriptor = WebDriverDescriptor,
-> = (options?: Options) => AgentDevicePlugin<WebDriver> | Promise<AgentDevicePlugin<WebDriver>>;
+export type AgentDevicePluginFactory<Options = Record<string, unknown>> = (
+  options?: Options,
+) => AgentDevicePlugin | Promise<AgentDevicePlugin>;

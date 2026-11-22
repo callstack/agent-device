@@ -1,8 +1,4 @@
-import {
-  BROWSERSTACK_PROVIDER,
-  browserStackWebDriver,
-  createBrowserStackRuntime,
-} from './browserstack-runtime.ts';
+import { BROWSERSTACK_PROVIDER, createBrowserStackRuntime } from './browserstack-runtime.ts';
 import { AWS_DEVICE_FARM_PROVIDER, createAwsDeviceFarmRuntime } from './aws-runtime.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,8 +6,16 @@ import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import type {
+  DeviceLease,
+  LeaseLifecycleContext,
+  ProviderDeviceRuntime,
+} from '@agent-device/contracts/device';
+import type {
+  PlatformRuntimeHost,
+  PlatformRuntimeProviderModule,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
 import {
@@ -24,7 +28,6 @@ import {
 
 import testmu from '@agent-device/testmu';
 import { createPluginHost, type RunHostCommand } from '@agent-device/plugins/host';
-import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 
 const CLIENT_VERSION = '0.20.3-test';
 
@@ -79,6 +82,48 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
     });
   });
 }, 15_000);
+
+test('BrowserStack lease allocation records a driver diagnostic in the active request log', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    server.sessionRouteUnsupported = true;
+    await withProviderScenarioTempDir('agent-device-webdriver-diagnostics-', async (tempDir) => {
+      const logPath = path.join(tempDir, 'request.ndjson');
+      const runtime = await createBrowserStackRuntime({
+        env: {
+          BROWSERSTACK_USERNAME: 'user',
+          BROWSERSTACK_ACCESS_KEY: 'key',
+          BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        },
+        clientVersion: CLIENT_VERSION,
+      });
+      const lease = makeLease(BROWSERSTACK_PROVIDER);
+      try {
+        await withDiagnosticsScope(
+          { command: 'lease_allocate', requestId: 'request-1', debug: true, logPath },
+          async () => {
+            await assert.rejects(
+              runtime.leaseLifecycle.allocate!(lease, browserStackContext(lease)),
+              (error: unknown) =>
+                error instanceof AppError &&
+                error.details?.reason === 'webdriver_route_unsupported',
+            );
+          },
+        );
+        const line = JSON.parse(fs.readFileSync(logPath, 'utf8'));
+        assert.deepEqual(
+          { phase: line.phase, requestId: line.requestId, data: line.data },
+          {
+            phase: 'webdriver_route_unsupported',
+            requestId: 'request-1',
+            data: { method: 'POST', path: '/session', status: 404, code: 'unknown command' },
+          },
+        );
+      } finally {
+        await runtime.shutdown();
+      }
+    });
+  });
+});
 
 test('BrowserStack facade nests device-feature capabilities inside bstack:options', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
@@ -179,26 +224,26 @@ test('AWS Device Farm facade rejects device features it does not read at session
   });
 }, 15_000);
 
-async function testMuWebDriver(env: Record<string, string>) {
+async function setupTestMuRuntime(env: Record<string, string>) {
   const [contribution] = testmu().contributes;
-  if (contribution.kind !== 'provider') throw new Error('TestMu AI sets up a provider');
-  const setup = await contribution.setup(createPluginHost({ env, cwd: '/' }, undefined));
-  if (!('webDriver' in setup)) throw new Error('TestMu AI sets up a WebDriver descriptor');
-  return setup.webDriver;
+  const { runtime, platformModule } = await contribution.setup({
+    ...(await createPluginHost({ env, cwd: '/' }, undefined)),
+    clientVersion: CLIENT_VERSION,
+  });
+  return {
+    runtime: runtime as ProviderDeviceRuntime,
+    platformModule: platformModule as PlatformRuntimeProviderModule,
+  };
 }
 
 test('TestMu facade routes a real-device session to the real pool and its upload API', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const webDriver = await testMuWebDriver({
+    const { runtime } = await setupTestMuRuntime({
       LT_USERNAME: 'user',
       LT_ACCESS_KEY: 'key',
       TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
       TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
       TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
-    });
-    const runtime = await createCloudWebDriverRuntime({
-      ...webDriver,
-      clientVersion: CLIENT_VERSION,
     });
     const lease = makeLease('testmu');
     try {
@@ -237,15 +282,11 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
       const installablePath = path.join(tempDir, 'extracted', 'App.app');
       fs.writeFileSync(archivePath, 'zip bytes');
       fs.mkdirSync(installablePath, { recursive: true });
-      const webDriver = await testMuWebDriver({
+      const { runtime, platformModule } = await setupTestMuRuntime({
         LT_USERNAME: 'user',
         LT_ACCESS_KEY: 'key',
         TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
         TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
-      });
-      const runtime = await createCloudWebDriverRuntime({
-        ...webDriver,
-        clientVersion: CLIENT_VERSION,
       });
       const lease = makeLease('testmu');
       try {
@@ -264,7 +305,7 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
             platform: 'ios',
           })) ?? [];
         assert.ok(device);
-        const owner = await runtime.platformRuntimeModule.loadRuntime({
+        const owner = await platformModule.loadRuntime({
           snapshot: {
             presentIosAcquisition: async () => {
               throw new Error('Unexpected snapshot');
@@ -443,25 +484,36 @@ test('AWS Device Farm facade uses the injected host-command capability for its f
   });
 }, 15_000);
 
-test('BrowserStack artifact lookup uses the released provider id without allocating a runtime', async () => {
+test('BrowserStack artifact lookup reuses the released provider session id', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const webDriver = await browserStackWebDriver(
-      {
+    const runtime = await createBrowserStackRuntime({
+      env: {
         BROWSERSTACK_USERNAME: 'user',
         BROWSERSTACK_ACCESS_KEY: 'key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
         BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
       },
-      CLIENT_VERSION,
-    );
-    const result = await webDriver.listArtifacts?.({
-      provider: BROWSERSTACK_PROVIDER,
-      providerSessionId: 'wd-1',
+      clientVersion: CLIENT_VERSION,
     });
-    assert.deepEqual(
-      result?.cloudArtifacts.map((artifact) => artifact.kind),
-      ['video', 'appium-log', 'device-log', 'provider-session', 'provider-session'],
-    );
-    assertAgentDeviceHeaders(server.calls[0]?.headers);
+    const lease = makeLease(BROWSERSTACK_PROVIDER);
+    try {
+      await runtime.leaseLifecycle.allocate!(lease, browserStackContext(lease));
+      await runtime.leaseLifecycle.release!(lease);
+      const beforeLookup = server.calls.length;
+      const result = await runtime.cloudArtifacts!.listCloudArtifacts!({
+        provider: BROWSERSTACK_PROVIDER,
+        leaseId: lease.leaseId,
+        providerSessionId: 'wd-1',
+      });
+      assert.deepEqual(
+        result?.cloudArtifacts.map((artifact) => artifact.kind),
+        ['video', 'appium-log', 'device-log', 'provider-session', 'provider-session'],
+      );
+      assert.equal(server.calls.length, beforeLookup + 1);
+      assertCallPathAndHeaders(server.calls, beforeLookup, '/app-automate/sessions/wd-1.json');
+    } finally {
+      await runtime.shutdown();
+    }
   });
 });
 
@@ -649,6 +701,8 @@ class FakeAwsHostCommand {
 }
 
 class FakeCloudProviderServer extends CloudWebDriverTestServer {
+  sessionRouteUnsupported = false;
+
   static async start(): Promise<StartedCloudWebDriverTestServer<FakeCloudProviderServer>> {
     return await startCloudWebDriverTestServer(new FakeCloudProviderServer());
   }
@@ -656,6 +710,9 @@ class FakeCloudProviderServer extends CloudWebDriverTestServer {
   protected respond(call: CloudWebDriverHttpCall) {
     switch (`${call.method} ${call.path}`) {
       case 'POST /wd/hub/session':
+        if (this.sessionRouteUnsupported) {
+          return cloudWebDriverTestJson({ value: { error: 'unknown command' } }, 404);
+        }
         return cloudWebDriverTestJson({
           value: { sessionId: 'wd-1', capabilities: { platformName: 'Android' } },
         });

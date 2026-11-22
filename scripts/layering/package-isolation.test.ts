@@ -229,10 +229,10 @@ test('a static, type-only, dynamic, re-export, inline-type or mocked import of a
     const entry = "'@agent-device/provider-webdriver/plugin'";
     for (const text of [
       `import { createCloudWebDriverRuntime } from ${entry};`,
-      `import type { CloudWebDriverProviderOptions } from ${entry};`,
+      `import type { CloudWebDriverRuntimeOptions } from ${entry};`,
       `const { createCloudWebDriverRuntime } = await import(${entry});`,
       `export { createCloudWebDriverRuntime } from ${entry};`,
-      `type Options = import(${entry}).CloudWebDriverProviderOptions;`,
+      `type Options = import(${entry}).CloudWebDriverRuntimeOptions;`,
       `import '@agent-device/testmu';`,
       `vi.mock(${entry}, () => ({}));`,
       `vi.mock(${entry.replaceAll("'", '`')}, () => ({}));`,
@@ -338,10 +338,10 @@ test('test-kit also refuses platform, daemon and root packages that the plugin f
   );
 });
 
-test('the plugin framework carries R85 and its provider-policy remedy', () => {
+test('the plugin framework carries R85 and its provider-runtime remedy', () => {
   const [found] = check(PLUGIN_FRAMEWORK_ISOLATION, {
     plugins: { dependencies: { '@agent-device/provider-webdriver': 'workspace:*' } },
   });
   assert.equal(found?.rule, PLUGIN_FRAMEWORK_INDEPENDENCE_RULE);
-  assert.match(found!.message, /policy from the composing root/);
+  assert.match(found!.message, /Build provider runtimes inside their plugins/);
 });

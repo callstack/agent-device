@@ -16,7 +16,6 @@ import { webSelectionFixture } from '../../src/platform-runtime-web-provider.fix
 import { vegaSelectionFixture } from '../../src/platform-runtime-vega-provider.fixtures.ts';
 import { harmonySelectionFixture } from '../../src/platform-runtime-harmonyos-provider.fixtures.ts';
 import { linuxSelectionFixture } from '../../src/platform-runtime-linux-provider.fixtures.ts';
-import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 import { createPluginHost, type RunHostCommand } from '@agent-device/plugins/host';
 import testmuPlugin from '@agent-device/testmu';
 import browserstackPlugin from '@agent-device/browserstack';
@@ -26,6 +25,7 @@ import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createProviderWire, PROVIDER_ENV, stubLimrunSdk, type ProviderWire } from './seams.ts';
@@ -124,26 +124,19 @@ const CLOUD_WEBDRIVER_PLUGINS: Readonly<Record<string, typeof testmuPlugin | und
   'aws-device-farm': awsDeviceFarmPlugin,
 };
 
-/** The provider's WebDriver options, from the plugin package the target names. */
-async function cloudWebDriverOptions(
-  plugin: string,
-  runHostCommand: RunHostCommand,
-): Promise<Record<string, unknown>> {
+async function setupCloudWebDriver(plugin: string, runHostCommand: RunHostCommand) {
   const factory = CLOUD_WEBDRIVER_PLUGINS[plugin];
   if (!factory) throw new Error(`Unknown cloud WebDriver plugin "${plugin}".`);
-  // The package's default export is the plugin factory; the WebDriver is what its setup() builds.
-  const plugin_ = factory();
-  const [contribution] = plugin_.contributes;
-  if (contribution.kind !== 'provider')
-    throw new Error(`The ${plugin} plugin exposes no setup() to build a WebDriver from.`);
-  const created = (await contribution.setup({
-    ...createPluginHost({ env: PROVIDER_ENV, cwd: '/' }, undefined),
+  const [contribution] = factory().contributes;
+  const { runtime, platformModule } = await contribution.setup({
+    ...(await createPluginHost({ env: PROVIDER_ENV, cwd: '/' }, undefined)),
     clientVersion: '0.0.0',
     runHostCommand,
-  })) as {
-    webDriver: Record<string, unknown>;
+  });
+  return {
+    runtime: runtime as ProviderDeviceRuntime,
+    platformModule: platformModule as PlatformRuntimeProviderModule,
   };
-  return created.webDriver;
 }
 
 function cloudLease(target: Target & { readonly kind: 'cloud-webdriver' }): DeviceLease {
@@ -189,12 +182,11 @@ async function cloudWebDriverSupport(
   const previousFetch = globalThis.fetch;
   globalThis.fetch = wire.fetch;
   try {
-    const options = await cloudWebDriverOptions(target.plugin, wire.runHostCommand);
-    const runtime = await createCloudWebDriverRuntime({
-      ...options,
-      clientVersion: '0.0.0',
-    } as never);
-    const owner = await runtime.platformRuntimeModule.loadRuntime(host);
+    const { runtime, platformModule } = await setupCloudWebDriver(
+      target.plugin,
+      wire.runHostCommand,
+    );
+    const owner = await platformModule.loadRuntime(host);
     const lease = cloudLease(target);
     await runtime.leaseLifecycle.allocate?.(lease, { flags: target.flags } as never);
     const devices = await runtime.deviceInventoryProvider({

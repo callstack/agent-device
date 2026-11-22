@@ -314,16 +314,12 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
 
     const pluginTypes = fs.readFileSync(path.join(installedPackageRoot, 'dist/src/plugins.d.ts'));
     assert.ok(pluginTypes.length < 16 * 1024);
-    const webDriverPluginTypes = fs.readFileSync(
-      path.join(installedPackageRoot, 'dist/src/plugins/webdriver.d.ts'),
-    );
-    assert.ok(webDriverPluginTypes.length < 5120);
     for (const exported of [
       'AgentDevicePlugin',
       'AgentDevicePluginFactory',
       'PluginConnection',
       'PluginCredentials',
-      'PluginSetupResult',
+      'PluginRuntimeSetup',
       'ProviderPluginHost',
     ]) {
       assert.match(
@@ -671,7 +667,6 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './plugins': (mod) => Object.keys(mod).length === 1 && typeof mod.addPluginArtifact === 'function',
-          './plugins/webdriver': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>
             mod.isSelectorToken('||') &&
@@ -753,7 +748,6 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
       './install-source': 'boolean',
       './io': 'function',
       './plugins': true,
-      './plugins/webdriver': true,
       // Type-only subpath: resolving the module from the packed exports map is
       // the entire runtime check.
       './remote-config': 'object',

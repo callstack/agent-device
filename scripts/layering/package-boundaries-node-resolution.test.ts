@@ -9,6 +9,9 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 test('Node resolution enforces the exports map at runtime', () => {
   const replayPackageRequire = createRequire(path.join(repoRoot, 'packages/replay/package.json'));
+  const providerRequire = createRequire(
+    path.join(repoRoot, 'packages/provider-aws-device-farm/package.json'),
+  );
   // Real resolver, not the gate's model: a deep import is a resolution error,
   // and the legal subpath realpaths OUTSIDE node_modules (pnpm symlink), which
   // is what lets --experimental-strip-types load package sources in dev.
@@ -43,7 +46,9 @@ test('Node resolution enforces the exports map at runtime', () => {
       () =>
         deep.startsWith('@agent-device/ad-replay/') || deep.startsWith('@agent-device/replay-test/')
           ? replayPackageRequire.resolve(deep)
-          : import.meta.resolve(deep),
+          : deep.startsWith('@agent-device/provider-webdriver/')
+            ? providerRequire.resolve(deep)
+            : import.meta.resolve(deep),
       /ERR_PACKAGE_PATH_NOT_EXPORTED|Package subpath|No "exports" main/,
       `${deep} must not resolve`,
     );
@@ -62,10 +67,12 @@ test('Node resolution enforces the exports map at runtime', () => {
     contractsReactNativeOverlayResolved.endsWith('packages/contracts/src/react-native-overlay.ts'),
     contractsReactNativeOverlayResolved,
   );
-  assert.throws(() => import.meta.resolve('@agent-device/provider-webdriver'), {
+  assert.throws(() => providerRequire.resolve('@agent-device/provider-webdriver'), {
     code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
   });
-  const providerWebDriverResolved = import.meta.resolve('@agent-device/provider-webdriver/plugin');
+  const providerWebDriverResolved = providerRequire.resolve(
+    '@agent-device/provider-webdriver/plugin',
+  );
   assert.ok(
     providerWebDriverResolved.endsWith('packages/provider-webdriver/src/plugin.ts'),
     providerWebDriverResolved,
