@@ -10,7 +10,7 @@
 
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import type { LinuxAccessibilityProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxAccessibilityProvider } from './tool-provider-types.ts';
 import { normalizeAtspiRole } from './role-map.ts';
 import type { LinuxCommandRunner } from './command-runner.ts';
 import { createLinuxAtspiScriptResolver, LINUX_ATSPI_SCRIPT_NAME } from './atspi-script.ts';

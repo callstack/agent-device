@@ -64,5 +64,4 @@ export type PlatformGatedProviderResolverKey =
   | 'appleRunnerProvider'
   | 'appleToolProvider'
   | 'vegaToolProvider'
-  | 'linuxToolProvider'
   | 'webProvider';

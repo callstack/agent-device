@@ -7,10 +7,7 @@
  */
 
 import { AppError } from '@agent-device/kernel/errors';
-import type {
-  LinuxInputSelection,
-  LinuxToolProvider,
-} from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxInputSelection, LinuxToolProvider } from './tool-provider-types.ts';
 
 export async function ensureInputTool(provider: LinuxToolProvider): Promise<LinuxInputSelection> {
   const display = provider.display.detectDisplayServer();
