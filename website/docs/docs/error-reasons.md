@@ -796,7 +796,7 @@ These reasons can come from more than one command.
 | `session_address_occupied` | Another live session already holds this session address. |
 | `session_lifetime_ended` | The session the command ran in ended first; open a new session before retrying. |
 | `SESSION_IDLE_EXPIRED` | The session expired after its idle window (`details.idleExpiryMs`); run `open` to start a new one. |
-| `session_cleanup_incomplete` | The session was retired, but some of its resources did not release; `details.failedSteps` names them. |
+| `session_cleanup_incomplete` | Session cleanup was incomplete; `details.failedSteps` lists the steps that failed, and the hint says whether the session was kept (retry `close`) or retired, and what to do next. |
 
 ### Snapshot capture
 

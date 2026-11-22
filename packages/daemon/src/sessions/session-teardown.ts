@@ -16,8 +16,8 @@ import { openWebSessionNames } from './web-session-names.ts';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 
 const SESSION_TEARDOWN_REASONS = {
-  // The session was retired, but some of its resources did not release; `details.failedSteps` names
-  // them.
+  // Session cleanup was incomplete; `details.failedSteps` lists the steps that failed, and the hint
+  // says whether the session was kept (retry `close`) or retired, and what to do next.
   cleanupIncomplete: { reason: 'session_cleanup_incomplete' },
 } as const satisfies ReasonTable<'sessions'>;
 
