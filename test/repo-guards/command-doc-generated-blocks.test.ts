@@ -3,6 +3,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { describe, test } from 'vitest';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { getCliCommandSchema } from '@agent-device/command-surface';
@@ -48,6 +49,11 @@ describe('generated command blocks match the command registry', () => {
     assert.ok(generatedRegions(committed).includes('common-options'));
     // An opening marker that the region pattern does not match would never be regenerated.
     assert.equal(committed.match(/<!-- generated:/g)?.length, generatedRegions(committed).length);
+  });
+
+  // `listCliCommandNames()` leaves out `help`, which documents the others, so no command is exempt.
+  test('every public CLI command has exactly one generated block', () => {
+    assert.deepEqual([...generatedCommands(committed)].sort(), listCliCommandNames());
   });
 
   test('drift detection proves itself', () => {

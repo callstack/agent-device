@@ -5,7 +5,7 @@ import type http from 'node:http';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import type { DaemonRequestMeta } from '@agent-device/kernel/contracts';
@@ -14,6 +14,12 @@ import {
   buildDaemonHttpLeaseHeaders,
   buildDaemonHttpTenantHeaders,
 } from '@agent-device/contracts/daemon-http';
+
+/** Why a downloaded artifact is refused before it is written. */
+const ARTIFACT_DOWNLOAD_REASONS = {
+  // The remote artifact is larger than the bytes this download may hold.
+  tooLarge: { reason: 'artifact_too_large' },
+} as const satisfies ReasonTable<'remote transfer'>;
 
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
 
@@ -118,7 +124,7 @@ function boundedMemory(maxBytes: number, artifactId: string) {
       if (needed > maxBytes) {
         callback(
           new AppError('COMMAND_FAILED', `The remote artifact is larger than ${maxBytes} bytes.`, {
-            reason: 'artifact_too_large',
+            reason: ARTIFACT_DOWNLOAD_REASONS.tooLarge.reason,
             artifactId,
             maxBytes,
           }),

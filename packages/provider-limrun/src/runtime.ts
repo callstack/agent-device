@@ -93,6 +93,12 @@ export type LimrunRuntimeOptions = {
 export type LimrunRuntime = ProviderDeviceRuntime & {
   recoverExpiredLease: ProviderExpiredLeaseRecovery;
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
+  /** Installs an already-built app path; the public Limrun SDK exposes it. */
+  installInstallablePath(
+    device: DeviceInfo,
+    installablePath: string,
+    options?: ProviderDeviceInstallOptions,
+  ): Promise<ProviderDeviceInstallResult | undefined>;
 };
 
 export type LimrunRuntimeRegistration = Readonly<{

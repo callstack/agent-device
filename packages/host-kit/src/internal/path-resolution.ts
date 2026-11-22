@@ -1,7 +1,13 @@
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
+
+/** The host-path refusals this module answers with. */
+const HOST_PATH_REASONS = {
+  // `AGENT_DEVICE_CLAIMS_DIR` is relative, so the shared device-claim store has no fixed home.
+  relativeClaimsDir: { reason: 'relative_claims_dir' },
+} as const satisfies ReasonTable<'host paths'>;
 
 type PathResolutionOptions = {
   cwd?: string;
@@ -63,7 +69,7 @@ export function resolveDeviceClaimRoot(env: EnvMap): string {
       'INVALID_ARGS',
       `AGENT_DEVICE_CLAIMS_DIR must be an absolute path: ${override}`,
       {
-        reason: 'relative_claims_dir',
+        reason: HOST_PATH_REASONS.relativeClaimsDir.reason,
       },
     );
   }

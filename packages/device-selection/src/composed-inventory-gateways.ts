@@ -26,7 +26,7 @@ import {
   type Platform,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export function createComposedDeviceInventoryGateways(
   options: Readonly<{
@@ -230,6 +230,12 @@ function assertSourceFamily(family: Platform, devices: readonly DeviceInfo[]): v
   );
 }
 
+/** Why the provider-outcome rule refuses to answer at all. */
+const PROVIDER_OUTCOME_REASONS = {
+  // A provider's inventory answer was shaped outside the contract it registers under.
+  providerContractViolation: { reason: 'provider_inventory_contract_violation' },
+} as const satisfies ReasonTable<'device selection'>;
+
 // A malformed provider outcome (not a declined/inventory tagged object) is a provider
 // contract violation, not a local-inventory fallback.
 function assertProviderOutcome(
@@ -241,7 +247,7 @@ function assertProviderOutcome(
     if (outcome.kind === 'inventory' && Array.isArray(outcome.devices)) return;
   }
   throw new AppError('COMMAND_FAILED', 'Provider device inventory returned an invalid outcome.', {
-    reason: 'provider_inventory_contract_violation',
+    reason: PROVIDER_OUTCOME_REASONS.providerContractViolation.reason,
   });
 }
 

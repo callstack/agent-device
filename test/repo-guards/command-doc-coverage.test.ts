@@ -1,30 +1,17 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
-import { PUBLIC_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import { cliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
-import { getCliCommandSchema } from '@agent-device/command-surface';
-import { buildCommandUsage } from '../../src/commands/schema/usage.ts';
 
-// Enumerates the public command surface (`PUBLIC_COMMANDS`, derived from the
-// command descriptor registry) against the human-facing command reference at
-// `website/docs/docs/commands.md`, in both directions:
-//   forward  — every public command is shown as an `agent-device <command>` usage
-//              line, so a new public command cannot ship without a docs entry.
-//   reverse  — every `agent-device <command>` token documented in a code block is
-//              a real registry command (or CLI alias), so retiring a command with
-//              stale docs fails symmetrically.
-// Intentional omissions live in the waiver lists below with a reason; a stale
-// waiver (one whose target is already documented / already a registry command)
-// fails so the waiver list cannot silently rot.
+// Every `agent-device <command>` token documented in a code block of the command reference must be
+// a real registry command or CLI alias, so retiring a command with stale docs fails. That every
+// public command is documented is the generated-block guard's job
+// (command-doc-generated-blocks.test.ts). Intentional omissions live in the waiver list below with
+// a reason; a stale waiver fails so the list cannot silently rot.
 const COMMANDS_DOC_PATH = 'website/docs/docs/commands.md';
 
 type CommandDocWaiver = { command: string; reason: string };
-
-// Public commands intentionally absent from commands.md. Each entry needs a
-// reason. Empty today: every public command is documented (see the drift fixed
-// in this change — `doctor` and `react-native`).
-const UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS: readonly CommandDocWaiver[] = [];
 
 // `agent-device <token>` invocations documented in commands.md that intentionally
 // do not resolve to a registry command name or CLI alias (e.g. a documented
@@ -61,37 +48,8 @@ function extractDocumentedCommandTokens(markdown: string): Map<string, number> {
   return documented;
 }
 
-// Locates a verbatim executable usage line inside a code block. Command names
-// are covered by the token checks above; this is the stricter per-command gate
-// that keeps a published invocation identical to the schema that produces it.
-function findUsageLine(markdown: string, usageLine: string): number | undefined {
-  for (const { text, lineNumber } of fencedLines(markdown)) {
-    if (text.trim() === usageLine) return lineNumber;
-  }
-  return undefined;
-}
-
-// The canonical `snapshot` invocation, derived from the command schema rather
-// than restated here: `snapshot` grew `--actions`, `--force-full`, and
-// `--timeout` while the command reference still published a three-flag usage
-// line, so the flag list must stay owned by the schema.
-function canonicalSnapshotUsageLine(): string {
-  return `agent-device ${buildCommandUsage('snapshot', getCliCommandSchema('snapshot'))}`;
-}
-
 function isRegistryCommandToken(token: string): boolean {
   return isKnownCliCommandName(token) || cliCommandAlias(token) !== undefined;
-}
-
-function findUndocumentedPublicCommands(
-  publicCommands: readonly string[],
-  documented: ReadonlyMap<string, number>,
-  waivers: readonly CommandDocWaiver[],
-): string[] {
-  const waived = new Set(waivers.map((waiver) => waiver.command));
-  return publicCommands
-    .filter((command) => !documented.has(command) && !waived.has(command))
-    .sort();
 }
 
 function findUnknownDocumentedCommands(
@@ -102,18 +60,6 @@ function findUnknownDocumentedCommands(
   const waived = new Set(waivers.map((waiver) => waiver.command));
   return [...documented.keys()]
     .filter((token) => !isRegistryToken(token) && !waived.has(token))
-    .sort();
-}
-
-function findStaleUndocumentedWaivers(
-  publicCommands: readonly string[],
-  documented: ReadonlyMap<string, number>,
-  waivers: readonly CommandDocWaiver[],
-): string[] {
-  const publicSet = new Set(publicCommands);
-  return waivers
-    .filter((waiver) => !publicSet.has(waiver.command) || documented.has(waiver.command))
-    .map((waiver) => waiver.command)
     .sort();
 }
 
@@ -128,22 +74,6 @@ function findStaleUnknownWaivers(
     .sort();
 }
 
-function undocumentedMessage(missing: readonly string[]): string {
-  return (
-    `${COMMANDS_DOC_PATH} is missing documentation for public command(s): ${missing.join(', ')}. ` +
-    'Add an `agent-device <command>` usage line inside a code block, or add a waiver with a ' +
-    'reason to UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS.'
-  );
-}
-
-function canonicalUsageMessage(usageLine: string): string {
-  return (
-    `${COMMANDS_DOC_PATH} does not publish the canonical usage line \`${usageLine}\`. ` +
-    'The command schema owns CLI syntax: update the documented code block to match it rather ' +
-    'than editing this expectation.'
-  );
-}
-
 function unknownMessage(unknown: readonly string[]): string {
   return (
     `${COMMANDS_DOC_PATH} documents command token(s) absent from the command registry: ` +
@@ -154,18 +84,8 @@ function unknownMessage(unknown: readonly string[]): string {
 
 const markdown = fs.readFileSync(COMMANDS_DOC_PATH, 'utf8');
 const documentedCommands = extractDocumentedCommandTokens(markdown);
-const publicCommands = Object.values(PUBLIC_COMMANDS);
 
 describe('command reference doc coverage', () => {
-  test('every public command is documented in commands.md', () => {
-    const missing = findUndocumentedPublicCommands(
-      publicCommands,
-      documentedCommands,
-      UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS,
-    );
-    assert.deepEqual(missing, [], undocumentedMessage(missing));
-  });
-
   test('every documented command token resolves to a registry command', () => {
     const unknown = findUnknownDocumentedCommands(
       documentedCommands,
@@ -173,15 +93,6 @@ describe('command reference doc coverage', () => {
       UNKNOWN_DOCUMENTED_COMMAND_WAIVERS,
     );
     assert.deepEqual(unknown, [], unknownMessage(unknown));
-  });
-
-  test('commands.md publishes the canonical snapshot CLI usage', () => {
-    const usageLine = canonicalSnapshotUsageLine();
-    assert.notEqual(
-      findUsageLine(markdown, usageLine),
-      undefined,
-      canonicalUsageMessage(usageLine),
-    );
   });
 
   test('commands.md publishes the wait absence unreadable-observation reason', () => {
@@ -192,15 +103,6 @@ describe('command reference doc coverage', () => {
   });
 
   test('no stale waivers', () => {
-    assert.deepEqual(
-      findStaleUndocumentedWaivers(
-        publicCommands,
-        documentedCommands,
-        UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS,
-      ),
-      [],
-      'UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS has entries that are documented or not public commands.',
-    );
     assert.deepEqual(
       findStaleUnknownWaivers(
         documentedCommands,
@@ -238,19 +140,6 @@ describe('command reference doc coverage gate behavior', () => {
     assert.deepEqual([...tokens.keys()], ['snapshot']);
   });
 
-  test('adding a public command without touching commands.md fails, naming file and command', () => {
-    const withNewCommand = [...publicCommands, 'brand-new-command'];
-    const missing = findUndocumentedPublicCommands(
-      withNewCommand,
-      documentedCommands,
-      UNDOCUMENTED_PUBLIC_COMMAND_WAIVERS,
-    );
-    assert.deepEqual(missing, ['brand-new-command']);
-    const message = undocumentedMessage(missing);
-    assert.match(message, /website\/docs\/docs\/commands\.md/);
-    assert.match(message, /brand-new-command/);
-  });
-
   test('retiring a command with stale docs fails symmetrically, naming file and command', () => {
     const staleDocs = new Map(documentedCommands);
     staleDocs.set('retired-command', 999);
@@ -263,31 +152,5 @@ describe('command reference doc coverage gate behavior', () => {
     const message = unknownMessage(unknown);
     assert.match(message, /website\/docs\/docs\/commands\.md/);
     assert.match(message, /retired-command/);
-  });
-
-  test('a drifted snapshot usage line fails, naming file and canonical usage', () => {
-    const usageLine = canonicalSnapshotUsageLine();
-    const driftedDocs = markdown.replaceAll(usageLine, 'agent-device snapshot [-i]');
-    assert.equal(findUsageLine(driftedDocs, usageLine), undefined);
-    const message = canonicalUsageMessage(usageLine);
-    assert.match(message, /website\/docs\/docs\/commands\.md/);
-    assert.ok(message.includes(usageLine), 'the failure names the usage line the schema produces');
-  });
-
-  test('a waiver suppresses an intentional forward omission', () => {
-    const withNewCommand = [...publicCommands, 'deliberately-hidden'];
-    const missing = findUndocumentedPublicCommands(withNewCommand, documentedCommands, [
-      { command: 'deliberately-hidden', reason: 'covered by a dedicated guide, out of scope here' },
-    ]);
-    assert.deepEqual(missing, []);
-  });
-
-  test('a stale forward waiver is reported', () => {
-    const documentedPublic = publicCommands.find((command) => documentedCommands.has(command));
-    assert.ok(documentedPublic, 'expected at least one documented public command');
-    const stale = findStaleUndocumentedWaivers(publicCommands, documentedCommands, [
-      { command: documentedPublic, reason: 'no longer accurate — command is documented' },
-    ]);
-    assert.deepEqual(stale, [documentedPublic]);
   });
 });

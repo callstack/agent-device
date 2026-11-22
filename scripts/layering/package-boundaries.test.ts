@@ -756,7 +756,6 @@ test('the real tree parses, declares, and passes R11', () => {
       'AdReplayStepRuntime',
       'AdReplayTargetBindingEvidence',
       'AdReplayTargetClassification',
-      'AdReplayTargetObservation',
       'AdReplayVarSources',
       'AdReplayVerificationEntry',
       'inspectAdReplay',
@@ -816,7 +815,7 @@ test('the real tree parses, declares, and passes R11', () => {
     'selectors façade keeps AST and grammar internals private',
   );
   // Named exports are not the whole boundary. A parser-side type reached
-  // through a NESTED field — `PolicyResolutionOutcome.resolution` typed as
+  // through a NESTED field — `SelectorResolution` typed as
   // `AstSelectorResolution` — leaks the same objects while exporting none of
   // their names, and the assertion above stays green on it (#1649). What
   // separates the two is which module the type is re-exported FROM:
@@ -828,7 +827,7 @@ test('the real tree parses, declares, and passes R11', () => {
     fs.readFileSync(path.join(repoRoot, 'packages/selectors/src/index.ts'), 'utf8'),
   );
   assert.deepEqual(
-    ['PolicyResolutionOutcome', 'SelectorResolution', 'SelectorChainMatchList'].filter(
+    ['SelectorResolution', 'SelectorChainMatchList'].filter(
       (name) => selectorsReExports.get(name) !== './internal/public-resolution-types.ts',
     ),
     [],

@@ -29,6 +29,9 @@ test('usageForCommand advertises focused perf area subcommands', async () => {
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device perf frames --json/);
   assert.match(help ?? '', /perf memory snapshot/);
-  assert.match(help ?? '', /perf cpu profile report --kind xctrace --out <report\.json>/);
+  assert.match(
+    help ?? '',
+    /perf cpu profile report --kind xctrace \[--template <name>\] --out <report\.json>/,
+  );
   assert.match(help ?? '', /perf cpu profile report --kind simpleperf --out <cpu-report\.json>/);
 });
