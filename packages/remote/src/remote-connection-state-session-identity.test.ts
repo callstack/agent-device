@@ -373,3 +373,28 @@ test('the last guard names the record it refused and how to clear it', () => {
     'a refused disconnect must not delete the record it would have overwritten',
   );
 });
+
+test('an empty session finds the record an older build saved for it as default.json', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-empty-');
+  writeRecordFile(stateDir, 'default.json', recordFor(''));
+
+  assert.equal(readRemoteConnectionState({ stateDir, session: '' })?.runId, 'run-');
+  assert.deepEqual(recordsIn(stateDir), [hashedFileName('')]);
+});
+
+test.skipIf(runsAsRoot)(
+  'a read-only records directory still reports an older record of the exact session',
+  () => {
+    const stateDir = mkdtempForTestSync('agent-device-remote-identity-readonly-');
+    writeRecordFile(stateDir, 'Demo.json', recordFor('Demo'));
+    const recordsDir = path.join(stateDir, RECORDS_DIR);
+    fs.chmodSync(recordsDir, 0o500);
+    try {
+      assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
+      assert.throws(() => removeRemoteConnectionState({ stateDir, session: 'Demo' }));
+      assert.deepEqual(recordsIn(stateDir), ['Demo.json']);
+    } finally {
+      fs.chmodSync(recordsDir, 0o700);
+    }
+  },
+);

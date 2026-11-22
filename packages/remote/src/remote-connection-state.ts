@@ -223,11 +223,13 @@ type RemoteConnectionDefaults = {
 };
 
 const REMOTE_CONNECTION_STATE_REASONS = {
-  // A command named one session and the saved connection it reached names another, so nothing about
-  // that connection was read, replaced, or removed.
+  // A saved connection file cannot be used for the session a command named: it names another session,
+  // a record from an older build cannot move to its session file because that file already exists, or
+  // the active-session pointer path holds a record whose owner is unproven. No file was replaced or
+  // removed.
   sessionMismatch: { reason: 'connection_session_mismatch' },
-  // A saved connection file could not be read or parsed, so no session is known to own it, and it was
-  // neither replaced nor removed.
+  // The session's own saved connection file, or the active-session pointer, could not be read or
+  // parsed, so no session is known to own it. It was neither replaced nor removed.
   ownerUnknown: { reason: 'connection_record_owner_unknown' },
 } as const satisfies ReasonTable<'remote connections'>;
 
@@ -235,7 +237,7 @@ export function readRemoteConnectionState(options: {
   stateDir: string;
   session: string;
 }): RemoteConnectionState | null {
-  const statePath = remoteConnectionStatePath(options);
+  const statePath = remoteConnectionStatePath({ ...options, readOnlyFallback: true });
   const file = readRecordFile(statePath);
   if (file.kind === 'absent') return null;
   if (file.kind === 'unknown')
@@ -570,7 +572,15 @@ const PLAIN_SESSION_NAME = /^[a-z0-9_-][a-z0-9._-]*$/;
  * Before resolving, records that older builds wrote under sanitized names move once to their owners'
  * own paths. See {@link migrateLegacyRemoteConnectionState}.
  */
-function remoteConnectionStatePath(options: { stateDir: string; session: string }): string {
+function remoteConnectionStatePath(options: {
+  stateDir: string;
+  session: string;
+  /**
+   * A read may use a record an older build wrote for this exact session in place when the directory
+   * refuses the move. A save or removal must move it first.
+   */
+  readOnlyFallback?: boolean;
+}): string {
   const recordsDir = path.join(options.stateDir, 'remote-connections');
   const canonical = canonicalRemoteConnectionStatePath(recordsDir, options.session);
   const sources = new Set([canonical]);
@@ -579,7 +589,15 @@ function remoteConnectionStatePath(options: { stateDir: string; session: string 
   const lowered = options.session.toLowerCase();
   if (PLAIN_SESSION_NAME.test(lowered)) sources.add(path.join(recordsDir, `${lowered}.json`));
   for (const source of sources) {
-    migrateLegacyRemoteConnectionState({ recordsDir, source, session: options.session });
+    try {
+      migrateLegacyRemoteConnectionState({ recordsDir, source, session: options.session });
+    } catch (error) {
+      if (!options.readOnlyFallback || !isWriteRefusedError(error)) throw error;
+      if (fs.existsSync(canonical)) throw error;
+      const file = readRecordFile(source);
+      if (file.kind === 'owned' && file.session === options.session) return source;
+      throw error;
+    }
   }
   return canonical;
 }
@@ -598,6 +616,7 @@ function canonicalRemoteConnectionStatePath(recordsDir: string, session: string)
  * filesystem it also opens the file of any session whose name differs only in case.
  */
 function legacyRemoteConnectionFileName(session: string): string {
+  if (session === '') return 'default.json';
   const safe = session.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
   if (safe === session) return `${safe}.json`;
   const suffix = crypto.createHash('sha256').update(session).digest('hex').slice(0, 8);
@@ -671,6 +690,11 @@ function migrateLegacyRemoteConnectionState(options: {
     }
   }
   fs.rmSync(options.source, { force: true });
+}
+
+function isWriteRefusedError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
 }
 
 function isSameFile(left: string, right: string): boolean {
