@@ -3,11 +3,11 @@ import {
   resolveSessionAppLogPath,
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
-import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { devicesOverlap } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
@@ -48,6 +48,13 @@ import {
   type SessionEventLogInput,
   type SessionEventLogPage,
 } from '@agent-device/session-journal/session-event-log';
+
+const SESSION_STORE_REASONS = {
+  // Another live session already holds this session address.
+  addressOccupied: { reason: 'session_address_occupied' },
+  // The session the command ran in ended first; open a new session before retrying.
+  lifetimeEnded: { reason: 'session_lifetime_ended' },
+} as const satisfies ReasonTable<'sessions'>;
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
 type SessionEntry = { current: SessionState };
@@ -94,7 +101,7 @@ export class SessionStore {
   assertAdmissionOpen(address: string): void {
     if (!this.acceptingSessions) {
       throw new AppError('COMMAND_FAILED', 'Daemon is shutting down', {
-        reason: DAEMON_SHUTTING_DOWN_REASON,
+        reason: DAEMON_LIFECYCLE_REASONS.shuttingDown.reason,
         session: address,
       });
     }
@@ -104,7 +111,7 @@ export class SessionStore {
     this.assertAdmissionOpen(address);
     if (this.sessions.has(address)) {
       throw new AppError('COMMAND_FAILED', 'Session address is already occupied', {
-        reason: 'session_address_occupied',
+        reason: SESSION_STORE_REASONS.addressOccupied.reason,
         session: address,
       });
     }
@@ -137,7 +144,7 @@ export class SessionStore {
     const session = this.resolveCurrent(ref);
     if (!session) {
       throw new AppError('COMMAND_FAILED', 'Session lifetime has ended', {
-        reason: 'session_lifetime_ended',
+        reason: SESSION_STORE_REASONS.lifetimeEnded.reason,
         session: ref.address,
         hint: 'Open a new session before retrying the command.',
       });

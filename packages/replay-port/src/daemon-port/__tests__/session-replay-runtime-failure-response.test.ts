@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/input-validation';
-import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
+import { BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import {
   ANDROID_TEST_IME_FLOW_HINT,
   buildReplayDivergenceFailureResponseFromDescriptor,
@@ -60,7 +60,7 @@ test('bounded resource refusal keeps canonical typed fields on a replay-variable
       message: 'record:start secret-value cannot run within a bounded composite',
       hint: 'Use the original secret-value input in the same session.',
       details: {
-        reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+        reason: BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason,
         shape: 'record:start',
         standaloneCommandName: 'record',
         dispatched: 'no',
@@ -80,7 +80,7 @@ test('bounded resource refusal keeps canonical typed fields on a replay-variable
   });
   if (response.ok) throw new Error('expected a failure response');
   expect(response.error.details).toMatchObject({
-    reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+    reason: BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason,
     shape: 'record:start',
     standaloneCommandName: 'record',
     dispatched: 'no',

@@ -10,7 +10,7 @@ import {
   type ReactNativeOverlayDismissTarget,
 } from '@agent-device/capture-kit/react-native-overlay';
 import { reactNativeOverlaySurfaceFromCapture } from '@agent-device/contracts/react-native-overlay';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { successText } from '@agent-device/kernel/success-text';
 
@@ -27,6 +27,12 @@ import {
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
+
+const REACT_NATIVE_OVERLAY_REASONS = {
+  // `react-native dismiss-overlay` got a sparse capture, so it cannot tell whether an overlay is
+  // showing.
+  snapshotUnreadable: { reason: 'overlay_snapshot_unreadable' },
+} as const satisfies ReasonTable<'react-native'>;
 
 export async function handleReactNativeCommands(
   params: InteractionRouteInput,
@@ -130,7 +136,9 @@ function responseForSparseReactNativeOverlaySnapshot(
     'COMMAND_FAILED',
     'React Native overlay state could not be determined because the accessibility tree is unreadable',
     {
-      reason: verdict.reason,
+      reason: REACT_NATIVE_OVERLAY_REASONS.snapshotUnreadable.reason,
+      verdictReason: verdict.reason,
+      verdictReasonCode: verdict.reasonCode,
       hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth; if an overlay is visible, report it or navigate with coordinates, then retry snapshot or dismiss-overlay on a readable screen.',
     },
   );

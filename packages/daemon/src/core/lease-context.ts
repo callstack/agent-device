@@ -1,9 +1,6 @@
 import type { DaemonRequest } from './daemon-request.ts';
 import { getRequestExecutionDeadlineMs } from '@agent-device/host-kit/request';
-import {
-  AppError,
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
-} from '@agent-device/kernel/errors';
+import { AppError, BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
@@ -23,7 +20,7 @@ export type { LeaseScope };
 export function refuseBoundedCompositeResourceOperation(req: DaemonRequest, shape: string): never {
   const commandName = resolveCommandStandaloneProjection(req.command)?.command;
   throw new AppError('UNSUPPORTED_OPERATION', `${shape} cannot run within a bounded composite`, {
-    reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+    reason: BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason,
     shape,
     ...(commandName ? { standaloneCommandName: commandName } : {}),
     hint: `Run the original ${commandName ?? 'refused'} operation separately with its original arguments and options, the same --session value, and the same private CLI context. Inspect completed steps before retrying the batch or replay.`,

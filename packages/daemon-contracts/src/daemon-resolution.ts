@@ -323,9 +323,6 @@ export function readDaemonOwnership(value: unknown): DaemonOwnership {
 /** Stop if idle: refuses while the detached daemon holds work. */
 export const DAEMON_QUIESCE_COMMAND = 'daemon_quiesce';
 
-/** The reason a daemon gives every request it refuses once it has begun to leave. */
-export const DAEMON_SHUTTING_DOWN_REASON = 'daemon_shutting_down';
-
 /** Why a daemon refuses a lifecycle request: one entry per rule the admission seam enforces. */
 export const DAEMON_LIFECYCLE_REASONS = {
   // The daemon still holds work, so it refused to leave; `details` counts that work.
@@ -334,6 +331,8 @@ export const DAEMON_LIFECYCLE_REASONS = {
   instanceMismatch: { reason: 'daemon-instance-mismatch' },
   // A live host process owns this daemon and ends it through its own `close()`.
   ownerEmbedded: { reason: 'daemon-owner-embedded' },
+  // The daemon has begun to leave, so it refuses every new request; retry against a new daemon.
+  shuttingDown: { reason: 'daemon_shutting_down' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**

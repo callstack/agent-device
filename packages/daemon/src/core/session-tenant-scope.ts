@@ -1,8 +1,14 @@
 import { isTenantOwnedSessionName } from '@agent-device/contracts/daemon-http';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { WebSessionIdentity } from '@agent-device/kernel/device';
 import type { SessionScope } from '@agent-device/contracts/session';
 import type { DaemonRequest } from './daemon-request.ts';
+
+const REQUEST_SCOPE_REASONS = {
+  // A request reached device resolution without the web session its request scope derives; this is
+  // a daemon bug.
+  webSessionMissing: { reason: 'request_web_session_missing' },
+} as const satisfies ReasonTable<'daemon runtime'>;
 
 /**
  * The one rule that says which sessions belong to a tenant: under tenant
@@ -79,7 +85,7 @@ export function requestWebSession(req: DaemonRequest): WebSessionIdentity {
   const webSession = req.internal?.webSession;
   if (webSession === undefined) {
     throw new AppError('UNKNOWN', 'A request reached device resolution outside a request scope.', {
-      reason: 'request_web_session_missing',
+      reason: REQUEST_SCOPE_REASONS.webSessionMissing.reason,
     });
   }
   return webSession;

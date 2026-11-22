@@ -1,4 +1,9 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+export const TENANT_RESOURCE_REASONS = {
+  // The artifact, upload, or path id expired or never existed; the daemon cannot tell which.
+  expired: { reason: 'RESOURCE_EXPIRED' },
+} as const satisfies ReasonTable<'daemon resources'>;
 
 type TenantOwnedEntry = { tenantId?: string };
 
@@ -15,7 +20,7 @@ export type TenantOwnedResourceKind = {
  */
 export function expiredTenantOwnedEntryError(kind: TenantOwnedResourceKind, id: string): AppError {
   return new AppError('COMMAND_FAILED', `${kind.label} not found or expired: ${id}`, {
-    reason: 'RESOURCE_EXPIRED',
+    reason: TENANT_RESOURCE_REASONS.expired.reason,
     hint: kind.expiredHint,
   });
 }

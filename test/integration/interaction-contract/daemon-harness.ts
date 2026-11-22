@@ -124,6 +124,17 @@ export function runnerTypeEntry(
   };
 }
 
+export function runnerQuerySelectorEntry(
+  result: Record<string, unknown>,
+): ProviderScenarioProviderEntry {
+  return {
+    command: 'ios.runner.querySelector',
+    deviceId: CONTRACT_DEVICE_ID,
+    platform: 'apple',
+    result,
+  };
+}
+
 export function runnerLongPressEntry(
   result: Record<string, unknown>,
   request?: Record<string, unknown>,

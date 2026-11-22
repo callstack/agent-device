@@ -2,7 +2,6 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   ALERT_RUNNER_MAX_BUDGET_MS,
-  ALERT_WAIT_WINDOW_TOO_LONG_REASON,
   DEFAULT_ALERT_TIMEOUT_MS,
   MAX_ALERT_WINDOW_MS,
 } from '@agent-device/contracts/alert-contract';
@@ -223,7 +222,7 @@ test('alert wait refuses a window the request envelope cannot be armed for, nami
   ]).catch((error: unknown) => error);
   expect(refusal).toBeInstanceOf(AppError);
   expect((refusal as AppError).code).toBe('INVALID_ARGS');
-  expect((refusal as AppError).details?.reason).toBe(ALERT_WAIT_WINDOW_TOO_LONG_REASON);
+  expect((refusal as AppError).details?.reason).toBe('alert-wait-window-too-long');
   expect((refusal as AppError).details?.maxWaitWindowMs).toBe(MAX_ARMABLE_ALERT_WAIT_WINDOW_MS);
   // The contract's own larger ceiling is refused for the same typed reason: the command never
   // accepts a window it cannot honour and shortens it on the way down.
@@ -232,7 +231,7 @@ test('alert wait refuses a window the request envelope cannot be armed for, nami
   ).rejects.toMatchObject({
     code: 'INVALID_ARGS',
     details: {
-      reason: ALERT_WAIT_WINDOW_TOO_LONG_REASON,
+      reason: 'alert-wait-window-too-long',
       maxWaitWindowMs: MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
     },
   });

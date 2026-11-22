@@ -8,7 +8,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -18,6 +18,12 @@ import { ensureBoundDeviceReady } from './request-runtime-binding.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
+
+export const RUNTIME_GATEWAY_REASONS = {
+  // The daemon was composed without the runtime gateway, admission ledger, or diagnostics service
+  // this command needs.
+  missing: { reason: 'runtime-gateway-missing' },
+} as const satisfies ReasonTable<'daemon runtime'>;
 
 /** Builds the failure a command reports when its exact device cell does not admit an operation. */
 export type UnavailableRuntimeResponse = (
@@ -166,13 +172,13 @@ function requireFactsInspection(
 ): InspectDeviceRuntimeFacts {
   if (inspectFacts) return inspectFacts;
   throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
-    reason: 'runtime-gateway-missing',
+    reason: RUNTIME_GATEWAY_REASONS.missing.reason,
   });
 }
 
 function requireDeviceBinding(bindDevice: BindDeviceRuntime | undefined): BindDeviceRuntime {
   if (bindDevice) return bindDevice;
   throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
-    reason: 'runtime-gateway-missing',
+    reason: RUNTIME_GATEWAY_REASONS.missing.reason,
   });
 }

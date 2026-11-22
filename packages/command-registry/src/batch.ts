@@ -11,7 +11,7 @@ import {
 import {
   AppError,
   asAppError,
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  BOUNDED_COMPOSITE_REASONS,
   type DaemonError,
 } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
@@ -172,7 +172,7 @@ function batchStepFailure(
         ...(error.details ?? {}),
         ...(progress.executedSteps.some(stepMayMutateApp) &&
         !(
-          error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON &&
+          error.details?.reason === BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason &&
           error.details.dispatched === 'no'
         )
           ? { dispatched: 'unknown' }

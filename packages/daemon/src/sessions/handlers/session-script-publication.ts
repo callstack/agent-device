@@ -1,6 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import {
   effectiveWriteForce,
@@ -13,6 +13,12 @@ import { isRepairArmedSession } from '../../core/session-replay-transaction.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
+
+const SCRIPT_PUBLICATION_REASONS = {
+  // A remote recording is delivered to its `--save-script` path, so `session save-script` cannot
+  // publish it.
+  remoteUnsupported: { reason: 'remote_script_publication_unsupported' },
+} as const satisfies ReasonTable<'session'>;
 
 export function handleSessionScriptPublication(params: {
   req: DaemonRequest;
@@ -100,7 +106,7 @@ const PUBLICATION_INELIGIBILITY_ERRORS: Record<PublicationIneligibility, () => A
       'COMMAND_FAILED',
       'A remote recording is delivered to its --save-script path, not published from the session.',
       {
-        reason: 'remote_script_publication_unsupported',
+        reason: SCRIPT_PUBLICATION_REASONS.remoteUnsupported.reason,
         hint: 'The --save-script file already holds the recording through the last action, and close writes the final script there.',
       },
     ),

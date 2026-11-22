@@ -896,9 +896,11 @@ for (const mode of ['graceful', 'forced'] as const) {
         graceTimeoutMs: 30,
         killTimeoutMs: 1_000,
       });
+      // Win32 TerminateProcess executes SIGTERM immediately without graceful handlers.
+      const expectedMode = process.platform === 'win32' ? 'forced' : mode;
       assert.equal(result.stopped, true);
-      assert.equal(result.mode, mode);
-      assert.equal(result.cleanupConfidence, mode === 'forced' ? 'unknown' : 'known');
+      assert.equal(result.mode, expectedMode);
+      assert.equal(result.cleanupConfidence, expectedMode === 'forced' ? 'unknown' : 'known');
       await child.exited;
       assert.equal(fs.existsSync(paths.infoPath), false);
       assert.equal(fs.existsSync(paths.lockPath), false);

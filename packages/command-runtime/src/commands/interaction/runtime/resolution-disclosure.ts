@@ -3,6 +3,7 @@ import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
+import { describeNonHittableTarget } from '@agent-device/selectors/interaction-targeting';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { truncateUtf8 } from './truncate-utf8.ts';
@@ -155,24 +156,5 @@ function pressRecordingTargetOverride(
       }),
       refLabel: resolveRefLabel(recordingNode, nodes),
     },
-  };
-}
-
-/**
- * iOS AX `hittable` flags are unreliable on deep React Native trees (see #1037:
- * a map-pin annotation exact-matched a longer recents row label and reported tap
- * success while doing nothing visible). We deliberately do NOT fail or filter on
- * this signal — that would break selectors that only ever resolve to nodes the
- * platform marks non-hittable. Instead, surface it so the caller can notice a
- * likely no-op tap and re-target with a ref or a more specific selector/longer text.
- */
-export function describeNonHittableTarget(
-  node: SnapshotNode,
-  action: InteractionAction,
-): { targetHittable?: boolean; hint?: string } {
-  if (node.hittable !== false) return {};
-  return {
-    targetHittable: false,
-    hint: `The resolved element reports hittable: false, so this ${action} may have had no visible effect. Verify with a snapshot, or prefer a @ref or a longer/more specific selector to target the intended element.`,
   };
 }

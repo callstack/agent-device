@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/input-validation';
-import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
+import { BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -184,7 +184,7 @@ function pickCleanupFailedSteps(
 }
 
 function pickBoundedRefusal(details: Record<string, unknown>): Record<string, unknown> {
-  if (details.reason !== BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) return {};
+  if (details.reason !== BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason) return {};
   const safe: Record<string, unknown> = {};
   if (details.dispatched === 'no') safe.dispatched = 'no';
   const shape = readStringDetail(details, 'shape');

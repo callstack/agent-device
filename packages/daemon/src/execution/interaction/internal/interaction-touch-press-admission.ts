@@ -1,3 +1,4 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { InteractionRequestTarget } from '@agent-device/contracts/interaction';
@@ -28,6 +29,13 @@ import {
   type ParsedTouchTarget,
 } from './interaction-touch-targets.ts';
 import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
+
+const PRESS_SEQUENCE_REASONS = {
+  // A multi-ref press sequence cannot be recorded; record one press per key, or pass `--no-record`.
+  recordingUnsupported: { reason: 'sequence-recording-unsupported' },
+  // A multi-ref press sequence cannot carry a replay target guard; re-record one press per key.
+  replayGuardUnsupported: { reason: 'sequence-replay-guard-unsupported' },
+} as const satisfies ReasonTable<'press'>;
 
 /**
  * Whether a targeted `press`/`click`/`longpress`/`hover` may act, and on what: macOS
@@ -210,14 +218,14 @@ function sequenceRecordingGuardResponse(
     return errorResponse(
       'INVALID_ARGS',
       'A multi-ref press sequence cannot be recorded: the recorder binds one target per step, so the recorded step would press only the first key. Record one press per key, or pass --no-record on this step.',
-      { reason: 'sequence-recording-unsupported' },
+      { reason: PRESS_SEQUENCE_REASONS.recordingUnsupported.reason },
     );
   }
   if (req.internal?.replayTargetGuard !== undefined) {
     return errorResponse(
       'INVALID_ARGS',
       'A multi-ref press sequence cannot carry a replay target guard: the guard binds one target, so the replayed step would press only the first key. Re-record the journey as one press per key.',
-      { reason: 'sequence-replay-guard-unsupported' },
+      { reason: PRESS_SEQUENCE_REASONS.replayGuardUnsupported.reason },
     );
   }
   return undefined;

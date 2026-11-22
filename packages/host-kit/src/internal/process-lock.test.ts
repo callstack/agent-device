@@ -50,6 +50,28 @@ test('acquireProcessLock creates and releases a lock directory', async () => {
   assert.equal(fs.existsSync(lockDirPath), false);
 });
 
+test.skipIf(process.platform === 'win32')(
+  'acquireProcessLock keeps the lock owner-only under any umask',
+  async () => {
+    for (const umask of [0o200, 0o000]) {
+      const lockDirPath = path.join(tmpDir, `umask-${umask.toString(8)}.lock`);
+      const previousUmask = process.umask(umask);
+      let release: ProcessLockRelease;
+      try {
+        release = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+      } finally {
+        process.umask(previousUmask);
+      }
+      assert.equal(fs.statSync(lockDirPath).mode & 0o777, 0o700);
+      for (const entry of fs.readdirSync(lockDirPath)) {
+        assert.equal(fs.statSync(path.join(lockDirPath, entry)).mode & 0o777, 0o600);
+      }
+      await release();
+      assert.equal(fs.existsSync(lockDirPath), false);
+    }
+  },
+);
+
 test('acquireProcessLock reclaims locks owned by dead processes', async () => {
   const lockDirPath = path.join(tmpDir, 'stale.lock');
   writeDeadLockFixture(lockDirPath, Date.now() - 10_000);

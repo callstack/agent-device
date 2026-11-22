@@ -22,11 +22,7 @@ import {
 } from '@agent-device/replay-test';
 import { runReplayCommand } from './native-command.ts';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
-import {
-  AppError,
-  asAppError,
-  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
-} from '@agent-device/kernel/errors';
+import { AppError, asAppError, BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import {
   emitRequestProgress,
   clearRequestCanceled,
@@ -308,7 +304,7 @@ function withOriginalTestRefusalGuidance(
 ): ReplayTestAttemptOutcome {
   if (
     attempt.status !== 'failed' ||
-    attempt.error.details?.reason !== BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON
+    attempt.error.details?.reason !== BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason
   )
     return attempt;
   const details = attempt.error.details;

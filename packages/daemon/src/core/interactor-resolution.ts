@@ -1,7 +1,12 @@
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+const INTERACTOR_RESOLUTION_REASONS = {
+  // This process never composed interactor resolution, so it cannot reach a device.
+  missing: { reason: 'interactor-resolution-missing' },
+} as const satisfies ReasonTable<'daemon runtime'>;
 
 /**
  * Resolves the interactor that speaks to a device — the provider-owned one when a
@@ -22,7 +27,7 @@ const NO_INTERACTOR_RESOLUTION: InteractorResolution = {
       'COMMAND_FAILED',
       'Interactor resolution is not composed for this process.',
       {
-        reason: 'interactor-resolution-missing',
+        reason: INTERACTOR_RESOLUTION_REASONS.missing.reason,
       },
     );
   },

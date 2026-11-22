@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   makeSession,
   makeRepairCompleteSession,
@@ -130,7 +130,9 @@ test('shutdown closes draft admission while allowing the current lifetime to set
   store.closeAdmission();
   assert.throws(
     () => store.publish('late-draft', makeSession('late-draft')),
-    (error) => error instanceof AppError && error.details?.reason === DAEMON_SHUTTING_DOWN_REASON,
+    (error) =>
+      error instanceof AppError &&
+      error.details?.reason === DAEMON_LIFECYCLE_REASONS.shuttingDown.reason,
   );
   store.update(ref, { appName: 'Settled' });
   assert.equal(store.requireCurrent(ref).appName, 'Settled');

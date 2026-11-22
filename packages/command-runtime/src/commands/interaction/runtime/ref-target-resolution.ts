@@ -34,9 +34,10 @@ import {
   describeResolvedInteractionNode,
   type ResolvedRefNode,
 } from './resolution-disclosure.ts';
+import { offscreenRefFailure } from '@agent-device/selectors/interaction-offscreen';
 import {
-  assertVisibleRefTarget,
   runInteractionPipelineStages,
+  throwIfOffscreenInteractionTarget,
 } from './target-visibility-stages.ts';
 
 /** The node a ref target acts on, plus the tree the shared guards read it against. */
@@ -122,7 +123,13 @@ export async function resolveRefInteractionTarget(
     hooks: {
       onResolved: (node, tree) => assertReplayTargetResolution(node, tree, params),
       offscreen: async (node, tree) =>
-        await assertVisibleRefTarget(runtime, options, node, tree, target.ref, params),
+        await throwIfOffscreenInteractionTarget(
+          runtime,
+          options,
+          node,
+          tree,
+          offscreenRefFailure(target.ref, params.action),
+        ),
     },
     resolveTapPoint: (node) =>
       resolveNodeTouchPoint(node, nodes, {
