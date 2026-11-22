@@ -12,6 +12,7 @@ import {
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
   platformRequestScopeFixture,
@@ -128,12 +129,18 @@ test.each(['rebuild', 'retire'] as const)(
       }),
       sessionStore: store,
       leaseRegistry: leases,
-      platformResourceCleanup: {
-        stopSnapshotHelper,
-        closeManagedBrowser: async () => {},
-        cleanupSessionlessExecutionHost: async () => {},
-        retainExecutionHostAfterClose: () => false,
-      },
+      settleExpiredSession: async (ref) =>
+        await teardownSessionResources({
+          appLog: 'run',
+          ref,
+          sessionStore: store,
+          platformCleanup: {
+            stopSnapshotHelper,
+            closeManagedBrowser: async () => {},
+            cleanupSessionlessExecutionHost: async () => {},
+            retainExecutionHostAfterClose: () => false,
+          },
+        }),
     });
     expect(scope.sessionName).toBe(address);
     const running = scope.runLocked(async () => 'ran');

@@ -284,14 +284,9 @@ async function capabilitiesInventoryResponse(params: {
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
-  // `capabilities` holds no session lock, so a leased session can open here after admission.
-  const session = resolveRequestSessionRef(
-    params.req,
-    params.sessionStore.lookup(params.sessionName),
-  )?.session;
-  const resolution = await resolveInventoryCommandDevice({ ...params, session });
+  const resolution = await resolveInventoryCommandDevice(params);
   if ('response' in resolution) return resolution.response;
-  const { device } = resolution;
+  const { device, session } = resolution;
   const sessionOwnedAppStateAvailable = isSessionOwnedAppStateAvailable(
     device,
     session,
@@ -378,7 +373,7 @@ async function handleAppsInventory(params: {
   if (providerCatalogResponse) return providerCatalogResponse;
   const resolution = await resolveInventoryCommandDevice({
     req,
-    session: sessionStore.get(sessionName),
+    sessionName,
     sessionStore,
     platformServices,
   });
@@ -470,16 +465,22 @@ function appsInventoryResponse(apps: readonly { id: string; name: string }[]): D
 
 async function resolveInventoryCommandDevice(params: {
   req: DaemonRequest;
-  session: ReturnType<SessionStore['get']>;
+  sessionName: string;
   sessionStore: SessionStore;
   platformServices: DaemonPlatformServices;
-}): Promise<{ device: DeviceInfo } | { response: DaemonResponse }> {
-  const { req, session, sessionStore, platformServices } = params;
+}): Promise<
+  { device: DeviceInfo; session: ReturnType<SessionStore['get']> } | { response: DaemonResponse }
+> {
+  const { req, sessionName, sessionStore, platformServices } = params;
+  // The one lease-checked session read of `apps` and `capabilities`. A leased session can open
+  // here after the admission of a command that holds no session lock.
+  const session = resolveRequestSessionRef(req, sessionStore.lookup(sessionName))?.session;
   const flags = req.flags ?? {};
   const response = requireSessionOrExplicitSelector(req.command, session, flags);
   if (response) return { response };
 
   return {
+    session,
     device: await resolveCommandDevice({
       session,
       req,

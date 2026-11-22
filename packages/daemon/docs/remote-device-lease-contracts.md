@@ -77,8 +77,7 @@ If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reas
 The daemon never fills a missing lease id from the session.
 The daemon checks the lease id before the request reads, changes, or ends the session.
 A request writes request events to the session journal only after that check. Thus, a refused request writes none. It also does not stamp session activity.
-The same rule applies to a request at a different address that maps to the same session directory.
-A command that holds no session lock (`doctor`, `events`, `capabilities`, `artifacts`) is checked again when it reads the session. It does not refresh the recording of that session.
+A command that holds no session lock (`doctor`, `events`, `capabilities`, `artifacts`) is checked again when it reads the session, and so is `apps`. It does not refresh the recording of that session.
 A `test` suite reads, records, and closes an attempt session only with the lease id that the suite sent.
 After the lease deadline, a request that holds the session lock and sends the lease id of the session ends that session.
 A request that sends a different active lease also ends that expired session under its locks, and then runs as the new owner. Its reply does not name the expired lease.

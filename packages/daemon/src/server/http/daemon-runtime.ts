@@ -328,6 +328,7 @@ async function startDaemonRuntimeOnHost(
     leaseRegistry,
     endSessionsForLease: async (leaseId, reason) =>
       await endSessionsForLease(leaseId, reason ?? 'LEASE_RELEASED'),
+    settleExpiredSession: async (ref: SessionRef) => await settleIdleExpiredSession(ref),
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,

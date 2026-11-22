@@ -27,7 +27,6 @@ import {
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
-import type { SessionStore } from '../core/session-store.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
@@ -146,40 +145,16 @@ export function resolveRequestSessionRef(
   return ref;
 }
 
-/**
- * The sessions that write to the journal of an address: the session at that address, and any
- * session whose address maps to the same session directory.
- */
-function journalSessionRefs(sessionStore: SessionStore, address: string): SessionRef[] {
-  const directory = sessionStore.resolveSessionDir(address);
-  return sessionStore
-    .listRefs()
-    .filter((ref) => sessionStore.resolveSessionDir(ref.address) === directory);
-}
-
-/** Whether a request may write to the journal of its address: it acts through each leased owner. */
+/** Whether a request may write to the journal of its address: only a session it acts through. */
 export function requestMayRecordSessionEvents(
   req: DaemonRequest,
-  sessionStore: SessionStore,
-  address: string,
+  ref: SessionRef | undefined,
 ): boolean {
+  if (!ref?.session.lease) return true;
   try {
-    return journalSessionRefs(sessionStore, address).every(
-      (ref) => !ref.session.lease || resolveRequestSessionRef(req, ref) !== undefined,
-    );
+    return resolveRequestSessionRef(req, ref) !== undefined;
   } catch {
     return false;
-  }
-}
-
-/** Refuses a read of the journal of an address, unless the request holds each lease that owns it. */
-export function assertRequestMayReadSessionJournal(
-  req: DaemonRequest,
-  sessionStore: SessionStore,
-  address: string,
-): void {
-  for (const ref of journalSessionRefs(sessionStore, address)) {
-    assertRequestHoldsSessionLease(req, ref.session);
   }
 }
 

@@ -9,6 +9,7 @@ import {
   cleanupExpiredLeasedSession,
   releaseExpiredProviderLease,
   releaseSessionLease,
+  resolveLockedRequestSessionRef,
 } from '../lease-lifecycle.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 
@@ -61,7 +62,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   expect(leaseRegistry.listActiveLeases()[0]?.expiresAt).toBe(62_000);
 });
 
-test('admitRequestLeaseForLockedScope admits a command that ignores the session lease in its own scope', () => {
+test('admitRequestLeaseForLockedScope renews no session for a command that ignores the session lease', () => {
   const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
   const leaseRegistry = new LeaseRegistry();
   const own = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-b' });
@@ -84,8 +85,47 @@ test('admitRequestLeaseForLockedScope admits a command that ignores the session 
     leaseRegistry,
   });
 
-  expect(req.internal?.admittedLease).toBeUndefined();
+  // The addressed app lease still makes `devices` need a lease; it is admitted under its own.
+  expect(req.internal?.admittedLease?.leaseId).toBe(own.leaseId);
   expect(sessionStore.get('default')?.lease).toEqual(sessionLease);
+});
+
+test('resolveLockedRequestSessionRef ends nothing when the successor lease expires while it waits for the device lock', async () => {
+  let now = 1_000;
+  const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
+  const leaseRegistry = new LeaseRegistry({ minLeaseTtlMs: 1, now: () => now });
+  const expired = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a', ttlMs: 10 });
+  const successor = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-b',
+    ttlMs: 50,
+  });
+  const ref = sessionStore.publish(
+    'default',
+    makeIosSession('default', {
+      lease: { leaseId: expired.leaseId, tenantId: expired.tenantId, runId: expired.runId },
+    }),
+  );
+  now = 1_020;
+  const teardownSession = vi.fn(async () => {});
+
+  await expect(
+    resolveLockedRequestSessionRef({
+      env: process.env,
+      req: makeRequest({ command: 'open', meta: { leaseId: successor.leaseId } }),
+      sessionName: 'default',
+      sessionStore,
+      leaseRegistry,
+      teardown: 'inline',
+      holdDeviceLock: async () => {
+        now = 1_060;
+      },
+      teardownSession,
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'LEASE_SESSION_MISMATCH' } });
+
+  expect(teardownSession).not.toHaveBeenCalled();
+  expect(sessionStore.lookup('default')?.lifetime).toBe(ref.lifetime);
 });
 
 test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {

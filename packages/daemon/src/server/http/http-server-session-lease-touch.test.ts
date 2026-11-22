@@ -333,36 +333,43 @@ test('devices with no lease id stays detached from a leased session and its reco
   );
 });
 
-test.each(['doctor', 'events', 'capabilities'])(
-  '%s with no lease id returns nothing from a leased session opened after its admission',
-  async (command) => {
+// `apps` needs a lease of its own to reach dispatch, so it sends the lease of another client.
+test.each([
+  ['doctor', false],
+  ['events', false],
+  ['capabilities', false],
+  ['apps', true],
+] as const)(
+  '%s without the session lease id returns nothing from a leased session opened after its admission',
+  async (command, sendsOtherLease) => {
     if (!world) return;
     const { hooks, publishLeasedSession, sessionName } = world;
+    const scope = sendsOtherLease ? world.allocateOtherClient('ios:mobile:SIM-002') : {};
     hooks.beforeDispatch = () => {
       publishLeasedSession(sessionName);
     };
 
-    expectLeaseIdRefusal(await world.send(command, [], {}));
+    expectLeaseIdRefusal(await world.send(command, [], scope));
 
     expect(world.hostDiagnostics.deviceChecks).not.toHaveBeenCalled();
     expect(world.runtime.inspectFacts).not.toHaveBeenCalled();
-    // The request arrived at an empty address, and still leaves no event for the new session.
-    expect(await world.requestEvents(sessionName)).toEqual([]);
+    // The request arrived at an empty address, and still leaves no finished event for the new session.
+    expect(await world.requestEvents(sessionName)).not.toContain('request.finished');
+    if (!sendsOtherLease) expect(await world.requestEvents(sessionName)).toEqual([]);
   },
 );
 
-test('a request at an address that shares the journal of a leased session reads and writes none of it', async () => {
+test('devices with no lease id is still refused at the address of a macos-app leased session', async () => {
   if (!world) return;
-  // Both addresses map to the session directory `e2b_agent_A`.
-  const leased = tenantScopedSessionName(TENANT, 'agent:A');
-  world.publishLeasedSession(leased);
-  const other = { session: 'agent/A' };
+  const { session } = world.publishLeasedSession(world.sessionName);
+  session.lease = { ...session.lease!, leaseBackend: 'macos-app' };
 
-  const devices = await world.send('devices', [], {}, other);
-  expect(devices.result?.ok, JSON.stringify(devices)).toBe(true);
-  expectLeaseIdRefusal(await world.send('events', [], {}, other));
+  const devices = await world.send('devices', [], {});
 
-  expect(await world.requestEvents(leased)).toEqual([]);
+  // The app lease admits only the commands that opt into it, and `devices` does not.
+  expect(devices.result, JSON.stringify(devices)).toBeUndefined();
+  expect(devices.error?.data?.code).toBe('INVALID_ARGS');
+  expect(session.lease.leaseBackend).toBe('macos-app');
 });
 
 test('devices with no lease id delivers no script of a leased session that records one', async () => {

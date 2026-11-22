@@ -172,13 +172,16 @@ async function endExpiredSessionForSuccessor(
   const { leaseRegistry } = params;
   const sessionLease = ref.session.lease;
   const successorScope = resolveLeaseScope(params.req);
-  const successorLease = successorScope.leaseId
-    ? leaseRegistry.inspectActiveLease(successorScope.leaseId)
-    : undefined;
-  if (!sessionLease || !successorLease) return false;
+  const successorLease = (): DeviceLease | undefined =>
+    successorScope.leaseId ? leaseRegistry.inspectActiveLease(successorScope.leaseId) : undefined;
+  if (!sessionLease || !successorLease()) return false;
   if (leaseRegistry.inspectActiveLease(sessionLease.leaseId)) return false;
-  assertLeaseScopeMatch(successorLease, leaseScopeToHeartbeatRequest(successorScope));
   await params.holdDeviceLock(ref.session.device.id);
+  // The wait for the device lock can outlast the successor lease or the session. Both are checked
+  // again here, with no await before the teardown starts.
+  const successor = successorLease();
+  if (!successor || !params.sessionStore.resolveCurrent(ref)) return false;
+  assertLeaseScopeMatch(successor, leaseScopeToHeartbeatRequest(successorScope));
   await endLeasedSession(
     ref,
     params.sessionStore,
@@ -202,9 +205,10 @@ export function admitRequestLeaseForLockedScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
-  const ref = resolveRequestSessionRef(params.req, sessionStore.lookup(sessionName));
-  const existingSession = ref?.session;
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
+  // The addressed session still decides the app-lease veto.
+  const addressed = sessionStore.lookup(sessionName);
+  resolveRequestSessionRef(params.req, addressed);
+  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, addressed?.session, {
     env: params.env,
     providerAppCatalog: params.providerAppCatalog,
     daemonPolicy: params.daemonPolicy,

@@ -84,7 +84,7 @@ import {
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
-import type { SessionRef, SessionState } from '../core/session-state.ts';
+import type { SessionState } from '../core/session-state.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -165,6 +165,13 @@ async function resolveBoundedClaimDevice(
   return await resolveCommandDevice(params);
 }
 
+const expiredSessionSettleNotComposed: SessionTeardown = async () => {
+  throw new AppError(
+    'INTERNAL_ERROR',
+    'Expired-session teardown was not supplied by root runtime composition',
+  );
+};
+
 function expiredSessionTeardown(
   command: string,
   holdsSessionLock: boolean,
@@ -243,7 +250,8 @@ export async function createRequestExecutionScope(params: {
   platformServices: DaemonPlatformServices;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   platformRequestScope: PlatformRequestScope;
-  platformResourceCleanup?: PlatformResourceCleanup;
+  /** The daemon-owned teardown of a session whose lease expired (root runtime composition). */
+  settleExpiredSession?: SessionTeardown;
   providerAppCatalog?: ProviderAppCatalog;
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
@@ -303,7 +311,7 @@ export async function createRequestExecutionScope(params: {
   let recordsRequestEvents = false;
   const recordStarted = (ts?: string): void => {
     if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
-    if (!requestMayRecordSessionEvents(scopedReq, sessionStore, sessionName)) return;
+    if (!requestMayRecordSessionEvents(scopedReq, sessionStore.lookup(sessionName))) return;
     recordsRequestEvents = true;
     const started = buildRequestStartedEvent({ req: scopedReq });
     sessionStore.recordEvent(sessionName, ts ? { ...started, ts } : started);
@@ -311,7 +319,7 @@ export async function createRequestExecutionScope(params: {
   const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
     recordStarted(new Date(startedAtMs).toISOString());
     if (!recordsRequestEvents) return;
-    if (!requestMayRecordSessionEvents(req, sessionStore, sessionName)) return;
+    if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
     sessionStore.recordEvent(
       sessionName,
       buildRequestFinishedEvent({
@@ -427,16 +435,7 @@ export async function createRequestExecutionScope(params: {
           sessionStore,
           leaseRegistry,
           teardown: expiredSessionTeardown(command, attachesToSession, boundedStep),
-          teardownSession: async (ref: SessionRef) => {
-            const { teardownExpiredSession } = await import('./expired-session-teardown.ts');
-            await teardownExpiredSession({
-              ref,
-              sessionStore,
-              inspectFacts: scope.inspectFacts,
-              bindDevice: scope.bindDevice,
-              platformCleanup: params.platformResourceCleanup,
-            });
-          },
+          teardownSession: params.settleExpiredSession ?? expiredSessionSettleNotComposed,
         };
         const existingRef = await resolveLockedRequestSessionRef({
           ...expiry,
