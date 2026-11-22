@@ -19,10 +19,12 @@ import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult } from '../../runtime-types.ts';
 import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import { tryResolveRefNode } from './ref-target-resolution.ts';
-import { EXACT_REF_RESOLUTION, describeNonHittableTarget } from './resolution-disclosure.ts';
+import { EXACT_REF_RESOLUTION } from './resolution-disclosure.ts';
+import { describeNonHittableTarget } from '@agent-device/selectors/interaction-targeting';
+import { offscreenRefFailure } from '@agent-device/selectors/interaction-offscreen';
 import {
-  assertVisibleRefTarget,
   runInteractionPipelineStages,
+  throwIfOffscreenInteractionTarget,
 } from './target-visibility-stages.ts';
 
 /**
@@ -33,7 +35,7 @@ import {
  * run the SAME shared guards the runtime path uses against it before the
  * backend call — occlusion (`isSnapshotNodeInteractionBlocked` via
  * `assertInteractionNotBlocked`) and offscreen (the snapshot visibility resolver via
- * `assertVisibleRefTarget`) ERROR with the runtime path's exact shapes, and
+ * `throwIfOffscreenInteractionTarget`) ERROR with the runtime path's exact shapes, and
  * the non-hittable annotation is returned for the fast-path result.
  *
  * Zero extra round trips by construction on the accept path: no session, no
@@ -84,10 +86,13 @@ export async function preflightNativeRefInteraction(
     label: `Ref ${target.ref}`,
     hooks: {
       offscreen: async (node, tree) =>
-        await assertVisibleRefTarget(runtime, options, node, tree, target.ref, {
-          action,
-          pipeline,
-        }),
+        await throwIfOffscreenInteractionTarget(
+          runtime,
+          options,
+          node,
+          tree,
+          offscreenRefFailure(target.ref, action),
+        ),
     },
     resolveTapPoint: (node) => resolveRectCenter(node.rect),
   });
