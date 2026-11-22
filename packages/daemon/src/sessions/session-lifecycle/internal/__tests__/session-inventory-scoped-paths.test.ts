@@ -1,13 +1,18 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
+import fs from 'node:fs';
 import path from 'node:path';
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
-import { IOS_SIMULATOR, createTestHostEnvironment } from '@agent-device/test-kit';
-import { resolveImplicitSessionScope } from '../../../session-routing.ts';
+import {
+  IOS_SIMULATOR,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
+import { resolveImplicitSessionScope, resolveSessionScope } from '../../../session-routing.ts';
 import { tenantScopedSessionName } from '../../../../core/session-tenant-scope.ts';
 
 // A session opened without an explicit --session is NAMED `default` and STORED under
@@ -147,6 +152,84 @@ test('session list returns only sessions owned by the requesting tenant', async 
   ]);
 });
 
+// #4908: on a proxy shared by several clients under one token, the tenant label is something any
+// holder of that token can send, so it cannot be what keeps one client's session name out of
+// another client's `session list`. A session that holds a lease is listed only for the request that
+// sends that lease's id.
+
+function tenantSession(tenantId: string, leaseId?: string): SessionState {
+  const address = tenantScopedSessionName(tenantId, leaseId ? 'leased' : 'idle');
+  return {
+    name: address,
+    sessionScope: { kind: 'tenant', id: tenantId },
+    device: IOS_SIMULATOR,
+    createdAt: Date.now(),
+    actions: [],
+    ...(leaseId
+      ? { lease: { tenantId, runId: 'run-leased', leaseId, leaseProvider: 'proxy' } }
+      : {}),
+  };
+}
+
+async function runTenantSessionList(req: DaemonRequest) {
+  const sessionStore = makeSessionStore('agent-device-inventory-lease-');
+  for (const session of [
+    tenantSession('tenant-a'),
+    tenantSession('tenant-a', 'a'.repeat(32)),
+    tenantSession('tenant-b'),
+  ]) {
+    sessionStore.publish(session.name, session);
+  }
+  const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
+    platformServices: daemonPlatformServicesFixture(),
+    req,
+    sessionName: req.session,
+    sessionStore,
+  });
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return [];
+  const sessions = response.data?.sessions as { address: string }[];
+  return sessions.map((session) => session.address);
+}
+
+function tenantRequest(meta: DaemonRequest['meta']): DaemonRequest {
+  return {
+    token: 't',
+    session: tenantScopedSessionName('tenant-a', 'idle'),
+    command: 'session_list',
+    positionals: [],
+    flags: {},
+    meta: { tenantId: 'tenant-a', sessionIsolation: 'tenant', ...meta },
+  };
+}
+
+test('session list shows a tenant session that holds a lease only to the request sending that lease id', async () => {
+  const idleAddress = tenantScopedSessionName('tenant-a', 'idle');
+  const leasedAddress = tenantScopedSessionName('tenant-a', 'leased');
+
+  expect(await runTenantSessionList(tenantRequest(undefined))).toEqual([idleAddress]);
+  expect(await runTenantSessionList(tenantRequest({ leaseId: 'a'.repeat(32) }))).toEqual([
+    idleAddress,
+    leasedAddress,
+  ]);
+  expect(await runTenantSessionList(tenantRequest({ leaseId: 'b'.repeat(32) }))).toEqual([
+    idleAddress,
+  ]);
+});
+
+test('session list keeps a tenant session hidden from a request that sends its lease id without tenant isolation', async () => {
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'default',
+    command: 'session_list',
+    positionals: [],
+    flags: {},
+    meta: { cwd: '/tmp/shop-app', leaseId: 'a'.repeat(32) },
+  };
+  expect(await runTenantSessionList(req)).toEqual([]);
+});
+
 test('session list resolves a cwd-scoped session directory from its store key', async () => {
   const response = await runSessionList();
 
@@ -164,4 +247,63 @@ test('session list resolves a cwd-scoped session directory from its store key', 
   // … while the reported paths point at the directory that actually holds the session.
   expect(path.basename(session.sessionStateDir)).toBe('cwd_8bea844ab16aa9b3_default');
   expect(session.runnerLogPath.startsWith(`${session.sessionStateDir}${path.sep}`)).toBe(true);
+});
+
+test('session list judges every session against one workspace even if the cwd realpath changes', async () => {
+  const workspaceA = fs.realpathSync.native(mkdtempForTestSync('agent-device-inventory-ws-a-'));
+  const workspaceB = fs.realpathSync.native(mkdtempForTestSync('agent-device-inventory-ws-b-'));
+  const scopeOf = (cwd: string) =>
+    resolveSessionScope({
+      token: 't',
+      session: 'default',
+      command: 'session_list',
+      positionals: [],
+      meta: { cwd },
+    });
+  const sessionStore = makeSessionStore('agent-device-inventory-one-scope-');
+  for (const [name, cwd] of [
+    ['a-1', workspaceA],
+    ['b-1', workspaceB],
+    ['a-2', workspaceA],
+    ['b-2', workspaceB],
+  ] as const) {
+    sessionStore.publish(name, {
+      name,
+      sessionScope: scopeOf(cwd),
+      device: IOS_SIMULATOR,
+      createdAt: Date.now(),
+      actions: [],
+    });
+  }
+  // The first resolution sees workspace A; any later one would see workspace B.
+  const realpath = vi
+    .spyOn(fs.realpathSync, 'native')
+    .mockImplementationOnce(() => workspaceA)
+    .mockImplementation(() => workspaceB);
+
+  try {
+    const response = await handleSessionInventoryCommands({
+      host: createTestHostEnvironment(),
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'session_list',
+        positionals: [],
+        flags: {},
+        meta: { cwd: workspaceA },
+      },
+      sessionName: 'default',
+      sessionStore,
+    });
+
+    expect(response?.ok).toBe(true);
+    if (!response?.ok) return;
+    const sessions = (response.data?.sessions ?? []) as { name: string }[];
+    const names = sessions.map((session) => session.name);
+    expect(names.sort()).toEqual(['a-1', 'a-2']);
+    expect(realpath).toHaveBeenCalledTimes(1);
+  } finally {
+    realpath.mockRestore();
+  }
 });
