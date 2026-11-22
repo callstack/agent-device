@@ -1,7 +1,10 @@
 import { parseArgs } from 'node:util';
 import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ReactDevtoolsFailureReason } from './react-devtools-reasons.ts';
+import {
+  REACT_DEVTOOLS_REASONS,
+  type ReactDevtoolsFailureReason,
+} from './react-devtools-reasons.ts';
 import {
   debuggerUrlOn,
   InspectorSession,
@@ -164,43 +167,43 @@ export type RuntimeFailure = {
 
 /** The message and recovery each runtime failure reason carries. */
 const RUNTIME_FAILURES: Record<ReactDevtoolsFailureReason, { message: string; hint: string }> = {
-  'no-devtools-hook': {
+  [REACT_DEVTOOLS_REASONS.noDevtoolsHook.reason]: {
     message: 'The app runtime has no React DevTools hook.',
     hint: 'Use a development build; release builds do not include React DevTools.',
   },
-  'no-react-renderer': {
+  [REACT_DEVTOOLS_REASONS.noReactRenderer.reason]: {
     message: 'React has not rendered in this app runtime yet.',
     hint: 'Wait for the app to finish loading its bundle, then retry.',
   },
-  'no-devtools-backend': {
+  [REACT_DEVTOOLS_REASONS.noDevtoolsBackend.reason]: {
     message: 'This React Native version exposes no React DevTools backend to attach to.',
     hint: 'React Native 0.74 or newer is required.',
   },
-  'backend-attach-failed': {
+  [REACT_DEVTOOLS_REASONS.backendAttachFailed.reason]: {
     message: 'The React DevTools backend did not attach to the app renderer.',
     hint: 'Reload the app and retry.',
   },
-  'start-failed': {
+  [REACT_DEVTOOLS_REASONS.startFailed.reason]: {
     message: 'The React renderer refused to start profiling.',
     hint: 'Profile a development build; production renderers do not record render timings.',
   },
-  'not-profiling': {
+  [REACT_DEVTOOLS_REASONS.notProfiling.reason]: {
     message: 'No React profile is recording in this app runtime.',
     hint: 'Run react-devtools profile start first. A reload or app restart discards a recording.',
   },
-  'collect-failed': {
+  [REACT_DEVTOOLS_REASONS.collectFailed.reason]: {
     message: 'The React DevTools backend could not export the recorded profile.',
     hint: 'Run react-devtools profile start and stop again; reload the app if it keeps failing.',
   },
-  'tree-unavailable': {
+  [REACT_DEVTOOLS_REASONS.treeUnavailable.reason]: {
     message: 'Another React DevTools frontend owns the component tree of this app runtime.',
     hint: 'Close the connected React DevTools window, reload the app, and retry.',
   },
-  'element-not-found': {
+  [REACT_DEVTOOLS_REASONS.elementNotFound.reason]: {
     message: 'No mounted component has that ref.',
     hint: 'Refs change when components remount or the app reloads; run react-devtools find or tree again.',
   },
-  'inspect-failed': {
+  [REACT_DEVTOOLS_REASONS.inspectFailed.reason]: {
     message: 'The React DevTools backend could not inspect the component.',
     hint: 'Retry after the component renders again, or inspect its owner.',
   },
