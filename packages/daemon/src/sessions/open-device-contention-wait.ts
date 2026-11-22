@@ -7,8 +7,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../core/session-store.ts';
-import type { SessionState } from '../core/session-state.ts';
-import type { HeldSessionNaming, SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
+import type { SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
 import { isImplicitSessionScopeConflict, mayNameSession } from './session-routing.ts';
 import {
   buildDeviceInUseBySessionError,
@@ -154,20 +153,16 @@ export function findSessionDeviceConflict(params: {
     : sessionStore.findByDevice(device.id);
   if (!inUse) return undefined;
   const attempt = describeOpenWaitForRefusal(req);
-  if (isImplicitSessionScopeConflict(req, inUse.session)) {
+  const canNameHolder = mayNameSession(req, inUse.session, 'device-recovery');
+  if (canNameHolder && isImplicitSessionScopeConflict(req, inUse.session)) {
     return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }
   return buildDeviceInUseBySessionError(
     inUse,
     device,
     attempt,
-    heldSessionNaming(req, inUse.session),
+    canNameHolder ? 'named' : 'anonymous',
   );
-}
-
-/** Whether a refusal may name this holding session to this request. */
-function heldSessionNaming(req: DaemonRequest, holder: SessionState): HeldSessionNaming {
-  return mayNameSession(req, holder, 'device-recovery') ? 'named' : 'anonymous';
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };

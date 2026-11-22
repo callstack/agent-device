@@ -51,7 +51,7 @@ const PEER_SCOPE = {
 } as const;
 
 type RpcBody = {
-  result?: { ok?: boolean; data?: Record<string, unknown> };
+  result?: { ok?: boolean; data?: Record<string, unknown> & { lease?: { leaseId: string } } };
   error?: {
     data?: { code?: string; message?: string; hint?: string; details?: Record<string, unknown> };
   };
@@ -374,4 +374,35 @@ test('implicit shutdown names a cwd-scoped holder only in its own workspace', as
     hint: `Run agent-device close --shutdown --session ${holder.address}`,
     details: { session: holder.address },
   });
+});
+
+test('an implicit open in another workspace does not name a leased cwd-scoped holder', async () => {
+  if (!world) return;
+  world.sessionStore.retire(world.sessionStore.lookup(world.holderSessionName)!);
+  const holderCwd = mkdtempForTestSync('agent-device-leased-open-holder-');
+  const otherCwd = mkdtempForTestSync('agent-device-leased-open-other-');
+  const scope = { tenantId: 'local', runId: 'workspace-holder' };
+  const allocated = await world.sendLocal({ command: 'lease_allocate', meta: scope });
+  const leaseId = allocated.result?.data?.lease?.leaseId;
+  expect(leaseId, JSON.stringify(allocated)).toBeTypeOf('string');
+
+  const open = {
+    command: 'open',
+    positionals: ['com.example.app'],
+    flags: { platform: 'ios', udid: DEVICE.id },
+  };
+  const opened = await world.sendLocal({
+    ...open,
+    meta: { ...scope, cwd: holderCwd, leaseId },
+  });
+  expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+  const holder = world.sessionStore.findByDevice(DEVICE.id)!;
+  expect(holder.session.sessionScope?.kind).toBe('cwd');
+  expect(holder.session.lease).toMatchObject({ leaseId });
+  expect(holder.session.lease?.leaseProvider).toBeUndefined();
+
+  const refused = await world.sendLocal({ ...open, meta: { cwd: otherCwd } });
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('DEVICE_IN_USE');
+  expect(JSON.stringify(refused)).not.toContain(holder.address);
+  expect(refused.error?.data?.details?.session).toBeUndefined();
 });
