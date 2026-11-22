@@ -117,15 +117,15 @@ test('a baseline keeps the surface its tree came from', () => {
   const session = makeSession('ios');
   const sheet = makeSnapshotState(
     [{ index: 0, type: 'Button', label: 'Allow', rect: { x: 10, y: 20, width: 80, height: 40 } }],
-    { iosSystemSurfaceBundleId: 'com.apple.springboard' },
+    { systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' } },
   );
   session.snapshot = sheet;
 
   // The scope rides through as-is: the capture side narrows its tree with the same shape
   // (`surfaceScopedNodes`), so an iOS system-sheet tree must never be screened against app content.
-  markPress(session, { nodes: sheet.nodes, surfaceBundleId: 'com.apple.springboard' });
+  markPress(session, { nodes: sheet.nodes, surfaceBundleId: 'com.apple.SafariViewService' });
 
-  assert.equal(movingTargetBaseline(session)?.tree.surfaceBundleId, 'com.apple.springboard');
+  assert.equal(movingTargetBaseline(session)?.tree.surfaceBundleId, 'com.apple.SafariViewService');
 });
 
 test('a device side effect the session did not resolve a target through retires the baseline', () => {
@@ -245,11 +245,11 @@ test('a settle that stored its settled tree records that tree, not the tree the 
 
 test('a stored settled tree keeps the surface and presentation its capture read', () => {
   // #3565: the rest-proof baseline is minted like every other one, so a settle that came to rest on
-  // a sheet over SpringBoard hands the gate the same facts the capture published.
+  // a system sheet hands the gate the same facts the capture published.
   const session = makeSession('ios');
   session.snapshot = {
     ...appTree('Settled'),
-    iosSystemSurfaceBundleId: 'com.apple.springboard',
+    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
     presentedSurface: 'presented',
   };
 
@@ -263,7 +263,7 @@ test('a stored settled tree keeps the surface and presentation its capture read'
   });
 
   const tree = movingTargetBaseline(session)?.tree;
-  assert.equal(tree?.surfaceBundleId, 'com.apple.springboard');
+  assert.equal(tree?.surfaceBundleId, 'com.apple.SafariViewService');
   assert.equal(tree?.presentedSurface, 'presented');
 });
 

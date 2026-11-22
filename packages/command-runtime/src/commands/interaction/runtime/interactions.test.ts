@@ -556,7 +556,7 @@ function webSignInSheetSnapshot(labels: string[]): SnapshotState {
         hittable: true,
       })),
     ),
-    iosSystemSurfaceBundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID,
+    systemSurface: { bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID, kind: 'web-auth' },
   };
 }
 
@@ -595,7 +595,7 @@ test('runtime press with verify discloses the surface change when a sign-in shee
 test('runtime press with verify reports the sheet leaving even when the two digests coincide', async () => {
   const sheet: SnapshotState = {
     ...selectorSnapshot(),
-    iosSystemSurfaceBundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID,
+    systemSurface: { bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID, kind: 'web-auth' },
   };
   const app = selectorSnapshot();
   // The premise this test exists for: the sheet tree and the app tree that replaces it digest

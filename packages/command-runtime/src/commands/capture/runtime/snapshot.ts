@@ -37,7 +37,7 @@ import {
 import { isLikelyStaleSnapshotDrop } from '@agent-device/capture-kit/snapshot-freshness';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
-import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
+import { systemSurfaceDisclosure } from '@agent-device/contracts/system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '@agent-device/capture-kit/react-native-overlay';
 import { reactNativeOverlaySurfaceFromCapture } from '@agent-device/contracts/react-native-overlay';
 import { now } from '../../runtime-common.ts';
@@ -350,7 +350,12 @@ function buildSnapshotWarnings(params: {
   );
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 
-  const systemSurfaceWarning = formatAndroidSystemSurfaceWarning(params.annotations);
+  const systemSurfaceWarning = systemSurfaceDisclosure(
+    params.snapshot.systemSurface ??
+      (params.annotations.androidSnapshot?.systemSurfaceOnly === true
+        ? { kind: 'android-system-overlay' }
+        : undefined),
+  );
   if (systemSurfaceWarning) warnings.push(systemSurfaceWarning);
 
   const recentDropWarning = formatRecentSnapshotDropWarning(params);
@@ -358,13 +363,6 @@ function buildSnapshotWarnings(params: {
 
   warnings.push(...formatFreshnessWarnings(params.annotations.freshness, params.snapshot.backend));
   return Array.from(new Set(warnings));
-}
-
-function formatAndroidSystemSurfaceWarning(
-  annotations: SnapshotCaptureAnnotations,
-): string | undefined {
-  if (annotations.androidSnapshot?.systemSurfaceOnly !== true) return undefined;
-  return ANDROID_SYSTEM_SURFACE_DISCLOSURE;
 }
 
 function buildSparseIosInteractiveWarnings(params: {

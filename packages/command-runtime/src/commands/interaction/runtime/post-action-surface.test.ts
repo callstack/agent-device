@@ -32,7 +32,7 @@ function webSignInSheetSnapshot(labels: string[]): SnapshotState {
         hittable: true,
       })),
     ),
-    iosSystemSurfaceBundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID,
+    systemSurface: { bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID, kind: 'web-auth' },
   };
 }
 
@@ -81,7 +81,10 @@ test('press --settle attaches no diff across an app-to-sheet surface change and 
   // Disclosed, not hidden: the settled sheet still becomes the stored observation
   // a follow-up snapshot reads.
   const stored = (await device.sessions.get('default')) as { snapshot?: SnapshotState };
-  assert.equal(stored.snapshot?.iosSystemSurfaceBundleId, WEB_SIGN_IN_SHEET_BUNDLE_ID);
+  assert.deepEqual(stored.snapshot?.systemSurface, {
+    bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID,
+    kind: 'web-auth',
+  });
 });
 
 test('press --settle attaches no diff across a sheet-to-app surface change and discloses it', async () => {
@@ -151,7 +154,7 @@ test('press --settle --verify reports a surface change even when the selector an
 test('press --settle --verify reports a sheet-to-app surface change when the digests coincide', async () => {
   const sheet: SnapshotState = {
     ...welcomeSnapshot(),
-    iosSystemSurfaceBundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID,
+    systemSurface: { bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID, kind: 'web-auth' },
   };
   const app = welcomeSnapshot();
   // The premise this test exists for: the sheet tree and the app tree that replaces

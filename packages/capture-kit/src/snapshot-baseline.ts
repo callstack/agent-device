@@ -1,6 +1,17 @@
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotState, SnapshotSystemSurface } from '@agent-device/contracts/snapshot-model';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { SnapshotPresentation } from '@agent-device/kernel/snapshot';
+
+function systemSurfaceBundleId(surface: SnapshotSystemSurface | undefined): string | undefined {
+  if (surface === undefined) return undefined;
+  switch (surface.kind) {
+    case 'android-system-overlay':
+      return undefined;
+    case 'web-auth':
+    case 'payment':
+      return surface.bundleId;
+  }
+}
 
 /** Reproduce a populated baseline's view; without one, capture the interactive view. */
 export function postActionPresentation(
@@ -25,17 +36,13 @@ export function postActionPresentation(
  */
 export function surfaceScopedNodes(
   snapshot:
-    | Pick<
-        SnapshotState,
-        'nodes' | 'iosSystemSurfaceBundleId' | 'presentedSurface' | 'presentation'
-      >
+    | Pick<SnapshotState, 'nodes' | 'systemSurface' | 'presentedSurface' | 'presentation'>
     | undefined,
 ): SurfaceScopedNodes {
+  const surfaceBundleId = systemSurfaceBundleId(snapshot?.systemSurface);
   return {
     nodes: snapshot?.nodes ?? [],
-    ...(snapshot?.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
-      : {}),
+    ...(surfaceBundleId ? { surfaceBundleId } : {}),
     ...(snapshot?.presentedSurface ? { presentedSurface: snapshot.presentedSurface } : {}),
     ...(snapshot?.presentation ? { presentation: snapshot.presentation } : {}),
   };
