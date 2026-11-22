@@ -81,5 +81,5 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Limrun has not moved its lease ownership onto the shared provider lease table ([#4102](https://github.com/callstack/agent-device/issues/4102)).
 - Provider allocation can still leave a rental outside registry recovery when a first allocation fails or a late allocation's release fails. Only the provider runtime that still holds the device can end that rental.
 - An older client or a direct RPC caller that sent no lease id on a leased session is refused. It must send the lease id that its allocation returned.
-- `session_list` still shows session names to every holder of the proxy token ([#4908](https://github.com/callstack/agent-device/issues/4908)). The allocate run-binding refresh can still return an existing lease id to a caller that repeats the tenant, run id, and client id ([#4909](https://github.com/callstack/agent-device/issues/4909)).
+- `session_list` still shows session names to every holder of the proxy token ([#4908](https://github.com/callstack/agent-device/issues/4908)).
 - A web open can be admitted under a non-`macos-app` lease for another backend; admission does not compare the request platform with the lease backend.

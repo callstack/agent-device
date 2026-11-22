@@ -138,8 +138,9 @@ function writeStoredConnection(
   });
 }
 
-// The daemon reuses a lease for a matching run binding (tenant, run, backend, provider, device), so
-// two sessions whose allocations would bind the same run end up sharing one lease.
+// A repeat of a live run binding (tenant, run, backend, provider, device) gets that lease back only
+// when it sends the lease id. So the reader remembers what each allocation returned and sends it
+// back, the way a client that kept its lease does.
 async function leaseIdsOnRealDaemon(allocations: CapturedDaemonRequest[]): Promise<string[]> {
   const daemon = await startPublicDaemonRuntime({ serverMode: 'http' });
   try {
@@ -149,15 +150,23 @@ async function leaseIdsOnRealDaemon(allocations: CapturedDaemonRequest[]): Promi
       daemonTransport: 'http',
       session: 'lease-reader',
     });
+    const heldLeaseIds = new Map<string, string>();
     const leaseIds = [];
     for (const allocate of allocations) {
+      const tenant = String(scopeOf(allocate, 'tenantId'));
+      const runId = String(scopeOf(allocate, 'runId'));
+      const clientId = String(scopeOf(allocate, 'clientId'));
       const lease = await client.leases.allocate({
-        tenant: String(scopeOf(allocate, 'tenantId')),
-        runId: String(scopeOf(allocate, 'runId')),
+        tenant,
+        runId,
         leaseBackend: 'android-instance',
         leaseProvider: 'proxy',
-        clientId: String(scopeOf(allocate, 'clientId')),
+        clientId,
+        ...(heldLeaseIds.get(`${tenant}|${runId}|${clientId}`) !== undefined
+          ? { leaseId: heldLeaseIds.get(`${tenant}|${runId}|${clientId}`) }
+          : {}),
       });
+      heldLeaseIds.set(`${tenant}|${runId}|${clientId}`, lease.leaseId);
       leaseIds.push(lease.leaseId);
     }
     return leaseIds;
@@ -192,6 +201,7 @@ test('the Node client is refused a provider lease until it names a session', asy
     assert.ok(leaseId);
     const namedPerCall = await createAgentDeviceClient(connection).leases.allocate({
       ...lease,
+      leaseId,
       session: 'agent-a',
     });
     assert.equal(namedPerCall.leaseId, leaseId);

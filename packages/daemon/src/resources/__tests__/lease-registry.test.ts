@@ -38,6 +38,14 @@ function isLeaseIdInUse(error: unknown): boolean {
   );
 }
 
+function isDeviceLeaseBusy(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'DEVICE_IN_USE' &&
+    error.details?.reason === 'DEVICE_LEASE_BUSY'
+  );
+}
+
 test('allocateLease keeps a caller-chosen lease id and refuses any id it already issued', () => {
   const registry = new LeaseRegistry();
   const chosen = 'ABCDEF0123456789abcdef0123456789';
@@ -197,45 +205,45 @@ test('an expired provider lease keeps its id and provider session from a caller-
   );
 });
 
-test('allocateLease is idempotent per tenant/run/backend and refreshes expiry', () => {
+test('an allocation that repeats the run labels without the lease id is refused', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({
     now: () => now,
     defaultLeaseTtlMs: 10_000,
   });
   const first = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+
   now = 2_000;
-  const second = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  assert.equal(second.leaseId, first.leaseId);
-  assert.equal(second.heartbeatAt, 2_000);
-  assert.equal(second.expiresAt, 12_000);
+  const error = captureThrown(() =>
+    registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' }),
+  );
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'DEVICE_IN_USE');
+  assert.equal(error.details?.reason, 'DEVICE_LEASE_BUSY');
+  // The refusal names no lease id: a caller that does not hold one gets nothing back.
+  assert.equal(error.details?.leaseId, undefined);
+  assert.equal(registry.inspectActiveLease(first.leaseId)?.heartbeatAt, 1_000);
 });
 
-test('a later allocation asking for retainOnClose turns it on for the reused lease', () => {
+test('only a refresh that sends the lease id turns retainOnClose on for the run lease', () => {
   const registry = new LeaseRegistry();
-  const first = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const owner = { tenantId: 'tenant-a', runId: 'run-1', clientId: 'client-a' } as const;
+  const first = registry.allocateLease({ ...owner, leaseId: 'a'.repeat(32) });
   const second = registry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-1',
+    ...owner,
+    leaseId: first.leaseId,
     retainOnClose: true,
   });
-  const third = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const third = registry.allocateLease({ ...owner, leaseId: first.leaseId });
   assert.equal(second.leaseId, first.leaseId);
   assert.equal(first.retainOnClose, undefined);
   assert.equal(second.retainOnClose, true);
   assert.equal(third.retainOnClose, true);
-});
 
-test('a request without the owning clientId cannot turn retainOnClose on for a run lease', () => {
-  const registry = new LeaseRegistry();
-  const owned = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', clientId: 'a' });
-  const reused = registry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    retainOnClose: true,
-  });
-  assert.equal(reused.leaseId, owned.leaseId);
-  assert.equal(reused.retainOnClose, undefined);
+  const heldBefore = registry.inspectActiveLease(first.leaseId);
+  assert.throws(() => registry.allocateLease({ ...owner, retainOnClose: true }), isDeviceLeaseBusy);
+  assert.deepEqual(registry.inspectActiveLease(first.leaseId), heldBefore);
 });
 
 test('only an unexpired retainOnClose lease counts as retained', () => {
@@ -313,30 +321,24 @@ test('capacity limits reject additional simulator leases', () => {
   );
 });
 
-test('device-aware allocation is idempotent per tenant/run/backend/provider/device', () => {
+test('an owner refresh of a device-aware lease renews it, and the same labels without the id are refused', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({
     now: () => now,
     defaultLeaseTtlMs: 10_000,
   });
-  const first = registry.allocateLease({
+  const owner = {
     tenantId: 'tenant-a',
     runId: 'run-1',
-    leaseBackend: 'ios-instance',
+    leaseBackend: 'ios-instance' as const,
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
     clientId: 'client-a',
-  });
+  };
+  const first = registry.allocateLease({ ...owner, leaseId: 'a'.repeat(32) });
 
   now = 3_000;
-  const second = registry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'proxy',
-    deviceKey: 'device-1',
-    clientId: 'client-a',
-  });
+  const second = registry.allocateLease({ ...owner, leaseId: first.leaseId });
 
   assert.equal(second.leaseId, first.leaseId);
   assert.equal(second.leaseProvider, 'proxy');
@@ -344,6 +346,8 @@ test('device-aware allocation is idempotent per tenant/run/backend/provider/devi
   assert.equal(second.clientId, 'client-a');
   assert.equal(second.heartbeatAt, 3_000);
   assert.equal(second.expiresAt, 13_000);
+
+  assert.throws(() => registry.allocateLease({ ...owner }), isDeviceLeaseBusy);
 });
 
 test('same backend/provider/device rejects conflicting active lease', () => {
