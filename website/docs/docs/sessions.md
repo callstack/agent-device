@@ -194,14 +194,14 @@ scope. To see the address of a leased holder, the caller must send that holder's
 Open contention and claim conflicts can show the address of an unleased session in another
 workspace to a local caller. The owner can use that address to close the session from its workspace.
 
-`--wait` waits only for another session. A device claimed by another workspace's
-daemon is never waited for; `open` fails at once and names the command that releases it.
+`--wait` waits only for another session. If another workspace's daemon holds the claim,
+`open` fails at once.
 Device-mutating commands like `install` and `reinstall` don't wait either: while a
 session other than yours holds the device, they fail at once with `DEVICE_IN_USE`.
 Copying the owner's `--session` address doesn't change that — the claim must also
 record your workspace, so a command run from another checkout is refused even under
-the owner's name. The error names the owner when the claim is readable; when it
-isn't, `agent-device device status` shows what holds the device.
+the owner's name. The error shows the owner and its state directory only if you can see the owner.
+If the error omits the owner, follow its recovery hint.
 
 ## Release a device another session or workspace holds
 
