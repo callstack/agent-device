@@ -8,7 +8,6 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
-import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { ProviderPluginHost } from '@agent-device/plugins/host';
@@ -135,8 +134,6 @@ export type ProviderHostKit = Readonly<{
 export type ProviderHostCapabilities = Readonly<{
   /** The daemon's own state directory. */
   stateDir: string;
-  /** Records one event in the diagnostics of the request that is running. */
-  emitDiagnostic(event: DiagnosticEventInput): void;
   loadAndroid(): Promise<ProviderAndroidHost>;
   loadApple(): Promise<ProviderAppleHost>;
   loadHostKit(): Promise<ProviderHostKit>;

@@ -1,9 +1,5 @@
 import type { ProviderPluginHost } from 'agent-device/plugins';
-import type {
-  ProviderAppleHost,
-  ProviderHostCapabilities,
-  ProviderHostKit,
-} from 'agent-device/plugins/device-host';
+import type { ProviderAppleHost, ProviderHostKit } from 'agent-device/plugins/device-host';
 
 /**
  * What the lease's XCTest runner asks of the host it is set up on. The shared Apple runner, its
@@ -15,5 +11,5 @@ export type LimrunIosHost = Readonly<{
   kit: ProviderHostKit;
   env: ProviderPluginHost['env'];
   clientVersion: string;
-  emitDiagnostic: ProviderHostCapabilities['emitDiagnostic'];
+  emitDiagnostic: ProviderPluginHost['diagnostics']['emit'];
 }>;

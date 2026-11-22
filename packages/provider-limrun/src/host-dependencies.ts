@@ -20,7 +20,7 @@ const LIMRUN_HOST_REASONS = {
 export async function createLimrunRuntimeDependencies(
   host: DeviceProviderPluginHost,
 ): Promise<LimrunRuntimeDependencies> {
-  const { emitDiagnostic, loadAndroid, loadApple, loadHostKit } = requireHostCapabilities(host);
+  const { loadAndroid, loadApple, loadHostKit } = requireHostCapabilities(host);
   const android = await loadAndroid();
   const loadIosHost = async (): Promise<LimrunIosHost> => {
     const [apple, kit] = await Promise.all([loadApple(), loadHostKit()]);
@@ -29,7 +29,7 @@ export async function createLimrunRuntimeDependencies(
       kit,
       env: host.env,
       clientVersion: host.clientVersion,
-      emitDiagnostic,
+      emitDiagnostic: host.diagnostics.emit,
     };
   };
   return {
@@ -73,9 +73,9 @@ export async function createLimrunRuntimeDependencies(
 
 /** The capabilities the daemon and `startAgentDevice` add to a `setup` host; refuses a host without them. */
 function requireHostCapabilities(host: DeviceProviderPluginHost): ProviderHostCapabilities {
-  const { stateDir, emitDiagnostic, loadAndroid, loadApple, loadHostKit } = host;
-  if (stateDir !== undefined && emitDiagnostic && loadAndroid && loadApple && loadHostKit)
-    return { stateDir, emitDiagnostic, loadAndroid, loadApple, loadHostKit };
+  const { stateDir, loadAndroid, loadApple, loadHostKit } = host;
+  if (stateDir !== undefined && loadAndroid && loadApple && loadHostKit)
+    return { stateDir, loadAndroid, loadApple, loadHostKit };
   throw host.createError(
     'UNSUPPORTED_OPERATION',
     'This agent-device host does not provide the device capabilities Limrun needs.',

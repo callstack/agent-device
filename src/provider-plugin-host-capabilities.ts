@@ -2,7 +2,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { execFailureDetails, withCommandHost } from '@agent-device/host-kit/command';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type {
   ProviderAndroidHost,
@@ -29,7 +28,6 @@ export function createProviderHostCapabilities(host: HostEnvironment): ProviderH
       env: host.env,
       cwd: host.cwd,
     }).baseDir,
-    emitDiagnostic,
     loadAndroid: once(async () => await createProviderAndroidHost(runOnHost)),
     loadApple: once(async () => await createProviderAppleHost(host, runOnHost)),
     loadHostKit: once(async () => {

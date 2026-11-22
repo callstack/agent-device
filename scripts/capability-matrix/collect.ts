@@ -212,7 +212,9 @@ async function limrunSupport(
   const { createLimrunIosRunner } = await import('@agent-device/limrun/host');
   const { createProviderHostCapabilities } =
     await import('../../src/provider-plugin-host-capabilities.ts');
-  const capabilities = createProviderHostCapabilities({ env: {}, cwd: process.cwd() });
+  const environment = { env: {}, cwd: process.cwd() };
+  const capabilities = createProviderHostCapabilities(environment);
+  const pluginHost = await createPluginHost(environment, undefined, capabilities);
   const runtime = createLimrunRuntime(
     {
       instances: {
@@ -235,7 +237,7 @@ async function limrunSupport(
             kit: await capabilities.loadHostKit(),
             env: {},
             clientVersion: '0.0.0',
-            emitDiagnostic: capabilities.emitDiagnostic,
+            emitDiagnostic: pluginHost.diagnostics.emit,
           }),
       },
     } as never,

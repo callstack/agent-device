@@ -43,6 +43,7 @@ export async function verifyPacked({ core, contracts, plugin }) {
     env,
     options: {},
     clientVersion: '0.22.0',
+    diagnostics: { emit: () => {} },
     createError: (code, message, details) => new core.AppError(code, message, details),
     runHostCommand: async () => {
       throw new Error('Limrun runs no host command to set up');

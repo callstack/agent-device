@@ -31,7 +31,7 @@ async function logFixture(options: { holdFileDownload?: boolean; failFileStatus?
     appLogTail: vi.fn(async () => ''),
   } as unknown as InstanceClient;
   const dependencies = await createLimrunRuntimeDependencies(
-    limrunPluginHost({ env: {}, cwd: f.directory }),
+    await limrunPluginHost({ env: {}, cwd: f.directory }),
   );
   const reader = dependencies.ios.createAppLogReader({ ...f.session, client });
   const read = () => reader.readLogs('com.example.app', 100, new AbortController().signal);
