@@ -183,7 +183,7 @@ async function startDaemon() {
   return {
     owner: { ...OWNER_SCOPE, leaseBackend: lease.backend, leaseId: lease.leaseId },
     /** Another client of the same proxy token and tenant, with a live lease of its own. */
-    allocateOtherClient: (deviceKey: string = OWNER_SCOPE.deviceKey) => {
+    allocateOtherClient: (deviceKey: string = OWNER_SCOPE.deviceKey, ttlMs = 10 * LEASE_TTL_MS) => {
       const scope = {
         ...OWNER_SCOPE,
         runId: 'run-b',
@@ -191,7 +191,7 @@ async function startDaemon() {
         deviceKey,
         leaseBackend: 'ios-instance',
       } as const;
-      const { leaseId } = leaseRegistry.allocateLease({ ...scope, ttlMs: 10 * LEASE_TTL_MS });
+      const { leaseId } = leaseRegistry.allocateLease({ ...scope, ttlMs });
       return { ...scope, leaseId };
     },
     leaseId: lease.leaseId,
@@ -295,6 +295,71 @@ test('a new owner opens the session right after the lease deadline, before the s
   expect(world.requestTeardown.stopSnapshotHelper).toHaveBeenCalledTimes(1);
   await world.expiryOwnerSettled();
   expect(world.expiryTeardown).not.toHaveBeenCalled();
+});
+
+test('a successor open keeps its lease while the expired session teardown is pending', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  daemon.publishLeasedSession(daemon.sessionName);
+  const successor = daemon.allocateOtherClient('ios:mobile:SIM-002', LEASE_TTL_MS + 2);
+  daemon.passLeaseDeadline();
+  const originalExpiry = daemon.leaseRegistry.inspectActiveLease(successor.leaseId)?.expiresAt;
+  const teardownEntered = deferred();
+  const releaseTeardown = deferred();
+  daemon.requestTeardown.stopSnapshotHelper.mockImplementationOnce(async () => {
+    teardownEntered.resolve();
+    await releaseTeardown.promise;
+  });
+
+  const open = daemon.send('open', ['com.example.app'], successor);
+  let protectedExpiry: number | undefined;
+  try {
+    await Promise.race([
+      teardownEntered.promise,
+      open.then((response) => {
+        throw new Error(`Open finished before teardown: ${JSON.stringify(response)}`);
+      }),
+    ]);
+    daemon.passLeaseDeadline();
+    daemon.passLeaseDeadline();
+    protectedExpiry = daemon.leaseRegistry.inspectActiveLease(successor.leaseId)?.expiresAt;
+  } finally {
+    releaseTeardown.resolve();
+    await open;
+  }
+
+  const opened = await open;
+  expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+  expect(protectedExpiry).toBeGreaterThan(originalExpiry ?? Infinity);
+  expect(daemon.sessionStore.get(daemon.sessionName)?.lease?.leaseId).toBe(successor.leaseId);
+  await daemon.expiryOwnerSettled();
+  expect(daemon.expiryTeardown).not.toHaveBeenCalled();
+});
+
+test('a successor open cannot use a lease id reissued during the expired session teardown', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  daemon.publishLeasedSession(daemon.sessionName);
+  const successor = daemon.allocateOtherClient('ios:mobile:SIM-002');
+  const replacement = { ...successor, runId: 'run-c', clientId: 'client-c' };
+  daemon.passLeaseDeadline();
+  let released = false;
+  daemon.requestTeardown.stopSnapshotHelper.mockImplementationOnce(async () => {
+    await Promise.resolve();
+    released = daemon.leaseRegistry.releaseLease(successor).released;
+    daemon.leaseRegistry.putHostLease(successor.leaseId, replacement);
+  });
+
+  const opened = await daemon.send('open', ['com.example.app'], successor);
+
+  expect(released).toBe(true);
+  expect(opened.error?.data, JSON.stringify(opened)).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_NOT_FOUND' },
+  });
+  expect(daemon.sessionStore.get(daemon.sessionName)).toBeUndefined();
+  expect(daemon.leaseRegistry.inspectActiveLease(successor.leaseId)?.runId).toBe(replacement.runId);
+  await daemon.expiryOwnerSettled();
 });
 
 test('a new owner that lease admission would refuse does not end the expired session', async () => {

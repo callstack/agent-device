@@ -84,6 +84,7 @@ If the lock-exempt command has access to the session and can take the session lo
 A `test` suite reads, records, and closes an attempt session only with the lease id that the suite sent.
 After the lease deadline, a request that holds the session lock and sends the lease id of the session ends that session.
 A request that sends a different active lease, and that lease admission accepts for a new session, also ends that expired session under its locks. It then runs as the new owner. Its reply and its diagnostics do not name the expired lease.
+The successor starts admitted work before it ends the expired session.
 A `batch`, a `replay`, and a bounded step do not end the session, and the lease sweep ends it. With the expired lease id, they are refused with `LEASE_NOT_FOUND`. With a different active lease, they are refused with `LEASE_SESSION_MISMATCH`.
 A request without an active lease is refused and ends nothing. The lease sweep ends the session.
 A command that holds no session lock ends no session. It leaves the expired session to the lease-end teardown.

@@ -1,7 +1,27 @@
-import { isRequestCanceled } from '@agent-device/host-kit/request';
+import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { isHumanControlMutation } from '../core/daemon-command-registry.ts';
-import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import type { LeaseRegistry, RetainedLeaseWork } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
+
+function retainRequestLeaseWork(
+  leaseRegistry: LeaseRegistry,
+  lease: Pick<DeviceLease, 'leaseId'>,
+  requestId: string | undefined,
+): RetainedLeaseWork {
+  return leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId));
+}
+
+export function retainSuccessorLeaseWork(
+  leaseRegistry: LeaseRegistry,
+  req: DaemonRequest,
+  lease: DeviceLease,
+): { req: DaemonRequest; work: RetainedLeaseWork } {
+  return {
+    req: { ...req, internal: { ...req.internal, admittedLease: lease } },
+    work: retainRequestLeaseWork(leaseRegistry, lease, req.meta?.requestId),
+  };
+}
 
 /**
  * Runs one admitted request's work under the protection of its lease.
@@ -18,19 +38,24 @@ export async function runAdmittedLeaseWork<T>(
   params: Readonly<{
     leaseRegistry: LeaseRegistry;
     req: DaemonRequest;
+    /** A work pass already held and released by the caller. */
+    retainedWork?: RetainedLeaseWork;
     task: () => Promise<T>;
   }>,
 ): Promise<T> {
-  const { leaseRegistry, req, task } = params;
+  const { leaseRegistry, req, retainedWork, task } = params;
   const lease = req.internal?.admittedLease;
   if (!lease) return await task();
-  const requestId = req.meta?.requestId;
-  const work = leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId));
+  if (retainedWork) {
+    throwIfRequestCanceled(req.meta?.requestId);
+    retainedWork.assertRetained();
+  }
+  const work = retainedWork ?? retainRequestLeaseWork(leaseRegistry, lease, req.meta?.requestId);
   try {
     return await (isHumanControlMutation(req)
       ? leaseRegistry.runDeviceMutation(lease, task)
       : task());
   } finally {
-    work.release();
+    if (!retainedWork) work.release();
   }
 }

@@ -1,7 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
-import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS, leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
@@ -152,6 +152,7 @@ type LockedSessionParams = {
   holdDeviceLock: (deviceId: string) => Promise<void>;
   teardownSession: SessionTeardown;
   admission: Readonly<{ providerAppCatalog?: ProviderAppCatalog; daemonPolicy?: DaemonPolicy }>;
+  onSuccessorAdmitted(lease: DeviceLease): void;
   resolveSessionRef?: ResolveRequestSessionRef;
 };
 
@@ -181,7 +182,8 @@ async function endExpiredSessionForSuccessor(
 ): Promise<boolean> {
   const { leaseRegistry } = params;
   const expiredLeaseId = ref.session.lease?.leaseId;
-  const successorLeaseId = resolveLeaseScope(params.req).leaseId;
+  const successorScope = resolveLeaseScope(params.req);
+  const successorLeaseId = successorScope.leaseId;
   if (!expiredLeaseId || !successorLeaseId || successorLeaseId === expiredLeaseId) return false;
   const canEndSession = () =>
     params.sessionStore.resolveCurrent(ref)?.lease?.leaseId === expiredLeaseId &&
@@ -189,6 +191,7 @@ async function endExpiredSessionForSuccessor(
     leaseRegistry.inspectActiveLease(successorLeaseId) !== undefined;
   if (!canEndSession()) return false;
   await params.holdDeviceLock(ref.session.device.id);
+  throwIfRequestCanceled(params.req.meta?.requestId);
   const admitSuccessor = () =>
     assertRequestLeaseAdmission(params.req, leaseRegistry, undefined, {
       ...params.admission,
@@ -203,6 +206,10 @@ async function endExpiredSessionForSuccessor(
     throwIfRequestCanceled(params.req.meta?.requestId);
     if (!canEndSession() || !admitSuccessor()) return false;
   }
+  const admittedSuccessor = leaseRegistry.renewInspectedLeaseAdmission(
+    leaseScopeToHeartbeatRequest(successorScope),
+  );
+  params.onSuccessorAdmitted(admittedSuccessor);
   await endLeasedSession(
     ref,
     params.sessionStore,

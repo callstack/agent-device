@@ -52,6 +52,11 @@ const LEASE_REGISTRY_REASONS = {
 
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 
+export type RetainedLeaseWork = Pick<LeaseWorkPass, 'leaseId' | 'release'> & {
+  /** Refuses a released pass, even if the host reused its lease id. */
+  assertRetained(): void;
+};
+
 function requireActiveLease(lease: DeviceLease | undefined): DeviceLease {
   if (lease) return lease;
   throw new AppError('UNAUTHORIZED', 'Lease is not active', {
@@ -257,10 +262,13 @@ export class LeaseRegistry {
    * human-control hold does; a pass whose request was cancelled protects nothing.
    * `wanted` is how the caller reports that its client is still waiting.
    */
-  retainLeaseWork(lease: Pick<DeviceLease, 'leaseId'>, wanted: LeaseWorkWanted): LeaseWorkPass {
+  retainLeaseWork(lease: Pick<DeviceLease, 'leaseId'>, wanted: LeaseWorkWanted): RetainedLeaseWork {
     const pass = this.inFlightWork.retain(lease.leaseId, wanted);
     return {
       leaseId: pass.leaseId,
+      assertRetained: () => {
+        requireActiveLease(pass.isRetained() ? this.leases.get(pass.leaseId) : undefined);
+      },
       release: () => {
         const renewed = pass.release();
         if (renewed) this.refreshProtectedLease(lease.leaseId, this.now());
@@ -324,11 +332,23 @@ export class LeaseRegistry {
 
   /** Checks request admission and renewal without sweeping or refreshing any lease. */
   inspectLeaseAdmission(request: HeartbeatLeaseRequest): DeviceLease {
+    return this.checkLeaseAdmission(request).lease;
+  }
+
+  /** Renews a successor before its request tears down the incumbent session. */
+  renewInspectedLeaseAdmission(request: HeartbeatLeaseRequest): DeviceLease {
+    const { lease, ttlMs } = this.checkLeaseAdmission(request);
+    return this.refreshLease(lease, ttlMs);
+  }
+
+  private checkLeaseAdmission(request: HeartbeatLeaseRequest): {
+    lease: DeviceLease;
+    ttlMs: number;
+  } {
     const scope = normalizeLeaseAdmissionRequest(request);
     const lease = requireActiveLease(this.inspectActiveLease(scope.leaseId));
     assertLeaseScopeMatch(lease, scope);
-    this.resolveHeartbeatTtlMs(lease, request);
-    return lease;
+    return { lease, ttlMs: this.resolveHeartbeatTtlMs(lease, request) };
   }
 
   /** Whether this daemon ever allocated `tenantId` a `macos-app` lease, released or not. */

@@ -69,7 +69,7 @@ import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-ki
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
 import { refreshRecordingHealth } from '../sessions/request-recording-health.ts';
-import { runAdmittedLeaseWork } from './request-lease-work.ts';
+import { retainSuccessorLeaseWork, runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
   ignoresSessionLease,
@@ -83,7 +83,7 @@ import {
   buildRequestStartedEvent,
   shouldRecordEventForRequest,
 } from '@agent-device/session-journal/session-event-log';
-import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import type { LeaseRegistry, RetainedLeaseWork } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
@@ -457,17 +457,23 @@ export async function createRequestExecutionScope(params: {
           teardown: expiredSessionTeardown(command, attachesToSession, boundedStep),
           teardownSession: params.settleExpiredSession ?? expiredSessionSettleNotComposed,
         };
-        const existingRef = await resolveLockedRequestSessionRef({
-          ...expiry,
-          req: scopedReq,
-          sessionName,
-          holdDeviceLock: scope.retainDeviceExecutionLock,
-          admission: params,
-          resolveSessionRef: scope.resolveSessionRef,
-        });
-        if (attachesToSession) recordStarted();
+        let successorWork: RetainedLeaseWork | undefined;
         let admissionCompleted = false;
         try {
+          const existingRef = await resolveLockedRequestSessionRef({
+            ...expiry,
+            req: scopedReq,
+            sessionName,
+            holdDeviceLock: scope.retainDeviceExecutionLock,
+            admission: params,
+            resolveSessionRef: scope.resolveSessionRef,
+            onSuccessorAdmitted: (lease) => {
+              const retained = retainSuccessorLeaseWork(leaseRegistry, scopedReq, lease);
+              scopedReq = retained.req;
+              successorWork = retained.work;
+            },
+          });
+          if (attachesToSession) recordStarted();
           const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
@@ -533,28 +539,32 @@ export async function createRequestExecutionScope(params: {
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
           await cleanupExpiredLeasedSession({ ...expiry, ref: existingRef });
-          scopedReq = admitRequestLeaseForLockedScope({
-            env: params.host.env,
-            req: scopedReq,
-            sessionName,
-            sessionStore,
-            leaseRegistry,
-            providerAppCatalog: params.providerAppCatalog,
-            daemonPolicy: params.daemonPolicy,
-            resolveSessionRef: scope.resolveSessionRef,
-          });
+          if (!successorWork) {
+            scopedReq = admitRequestLeaseForLockedScope({
+              env: params.host.env,
+              req: scopedReq,
+              sessionName,
+              sessionStore,
+              leaseRegistry,
+              providerAppCatalog: params.providerAppCatalog,
+              daemonPolicy: params.daemonPolicy,
+              resolveSessionRef: scope.resolveSessionRef,
+            });
+          }
           scope.req = scopedReq;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({
             leaseRegistry,
             req: scopedReq,
+            retainedWork: successorWork,
             task: async () => {
               admissionCompleted = true;
               return await task();
             },
           });
         } finally {
+          successorWork?.release();
           // The #2833 inactivity deadline is measured from the end of the last admitted command
           // that attached to this session, stamped here under the session's execution lock. The lock
           // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a

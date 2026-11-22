@@ -108,6 +108,7 @@ test('resolveLockedRequestSessionRef ends nothing when the successor lease expir
   );
   now = 1_020;
   const teardownSession = vi.fn(async () => {});
+  const onSuccessorAdmitted = vi.fn();
 
   await expect(
     resolveLockedRequestSessionRef({
@@ -122,10 +123,12 @@ test('resolveLockedRequestSessionRef ends nothing when the successor lease expir
       },
       teardownSession,
       admission: {},
+      onSuccessorAdmitted,
     }),
   ).rejects.toMatchObject({ details: { reason: 'LEASE_SESSION_MISMATCH' } });
 
   expect(teardownSession).not.toHaveBeenCalled();
+  expect(onSuccessorAdmitted).not.toHaveBeenCalled();
   expect(sessionStore.lookup('default')?.lifetime).toBe(ref.lifetime);
 });
 
