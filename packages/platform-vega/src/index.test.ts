@@ -5,6 +5,7 @@ import type { VegaPlatformRegistration } from '@agent-device/contracts/platform-
 import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isExecutablePath } from '@agent-device/host-kit/command';
+import { hostFileExists } from '@agent-device/host-kit/host-file';
 import vegaPlatformPlugin from './index.ts';
 import { createVegaDefaultInstall, createVegaHostHome } from './command-host.fixtures.ts';
 
@@ -54,6 +55,7 @@ function createPluginHost(
     // The real host probe: a test that names a home proves the plugin resolves the CLI from a file
     // on disk, not from a verdict this fixture hands it.
     isFileExecutable: isExecutablePath,
+    isFilePresent: hostFileExists,
     isExecutableOnPath: async (executable) => onPath.has(executable),
     // Neither this family nor its devices are host processes: everything goes through the Vega CLI.
     processes: {
@@ -70,6 +72,13 @@ function createPluginHost(
         throw new Error('the Vega family takes no host lock');
       },
     } satisfies PlatformHost['processes'],
+    // This family is asked for neither: the Vega CLI owns its devices, and nothing streams.
+    startBackgroundCommand: async () => {
+      throw new Error('the Vega family streams no host process');
+    },
+    launchDetached: async () => {
+      throw new Error('the Vega family starts no detached process');
+    },
     emitDiagnostic,
     withDiagnosticTimer,
   };

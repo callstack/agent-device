@@ -15,6 +15,7 @@ import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-run
 import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import type {
+  DetachedCommandLaunch,
   HostOperatingSystem,
   OwnedProcessRecord,
   RecordedProcessLiveness,
@@ -61,23 +62,11 @@ export type PlatformBackgroundProcess = AsyncDisposable &
   }>;
 
 /**
- * How a process the host started detached ended: a start failure, a non-zero exit, or a signal.
- * Declared by its shape rather than taken from the host's exec module, because this contract ships in
- * the published bundle's declarations and a consumer that writes a plugin must not need Node's own
- * type packages to read it.
+ * How a detached process ended, and what that launch answered: both are declared once in
+ * `@agent-device/contracts/platform-runtime-host`, which the host's own exec module and the Linux
+ * family read from too, so the surfaces that answer that one question cannot drift. The published
+ * plugin declarations inline them, so a plugin author reads the shape without Node's type packages.
  */
-export type DetachedCommandExit = Readonly<{
-  pid: number;
-  exitCode?: number;
-  signal?: string;
-  error?: string;
-}>;
-
-/** What the host answered a detached launch: the process it started and how that process ended. */
-export type DetachedCommandLaunch = Readonly<{
-  pid: number;
-  exited: Promise<DetachedCommandExit>;
-}>;
 
 /** Authority shared by web setup and daemon-owned web sessions. */
 export type PlatformHost = HostEnvironment &
@@ -102,6 +91,14 @@ export type PlatformHost = HostEnvironment &
      * the probe uses the same host authority as the spawn it authorizes.
      */
     isFileExecutable(path: string): Promise<boolean>;
+    /**
+     * True when the host has a file at `path`, whatever its permissions. A plugin that ships a
+     * resource beside its own code asks the host whether the installed package carries it rather than
+     * reading the filesystem itself, so the probe is answered by the same authority as the spawn that
+     * resource is about to feed. A shipped helper is not executable: its absence names a broken
+     * install, not a missing tool, so this is the probe for it and {@link isFileExecutable} is not.
+     */
+    isFilePresent(path: string): Promise<boolean>;
     /**
      * Whether the host resolves `executable` on its `PATH`, answered against the host environment
      * the plugin was set up with. A plugin that prefers a tool from `PATH` asks this rather than
@@ -139,10 +136,9 @@ export type PlatformHost = HostEnvironment &
      * Starts one streamed command as a managed process: the host publishes an ownership marker at
      * `markerPath` while the process lives, clears it when the process ends, and stops the process on
      * `terminate()`. A plugin streams through this rather than spawning a process of its own, so a
-     * streamed log is the same kind of durable resource the core recovers and cleans up. Absent when
-     * the process composing this host owns no session artifacts to confine a marker to.
+     * streamed log is the same kind of durable resource the core recovers and cleans up.
      */
-    startBackgroundCommand?(
+    startBackgroundCommand(
       request: Readonly<{
         command: PlatformBackgroundCommand;
         output: PlatformOutputSink;
@@ -154,11 +150,9 @@ export type PlatformHost = HostEnvironment &
      * Starts `executable` detached, with its output discarded, and answers how it ended. A target
      * that outlives the call that started it — a desktop app, a display-server helper — must not
      * hold the request open for its whole life, so the host starts it, unrefs it, and reports its
-     * exit through `exited` instead of awaiting it. Absent where the host cannot start a process
-     * that outlives the request; a family that needs it says so rather than waiting on a spawn it
-     * never got.
+     * exit through `exited` instead of awaiting it.
      */
-    launchDetached?(
+    launchDetached(
       executable: string,
       args: string[],
       options: { env?: HostEnvironment['env'] },

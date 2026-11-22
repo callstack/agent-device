@@ -9,6 +9,7 @@
  */
 
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { DetachedCommandExit } from './platform-runtime-host.ts';
 import type { ClickButton } from './click-button.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -39,19 +40,13 @@ export type LinuxCommandOptions = Readonly<{
   stdin?: string;
 }>;
 
-/** Why a process that outlived its launch ended: a start failure, a non-zero exit, or a signal. */
-export type LinuxDetachedExit = Readonly<{
-  pid: number;
-  exitCode?: number;
-  signal?: string;
-  error?: string;
-}>;
-
 /**
  * The desktop-provider parts one request may supply. Each part answers one semantic intent of the
  * Linux interactor, so a caller that owns a surface — a scripted desktop, a display server it
  * drives directly — substitutes it for the family's own tool route without reimplementing the
- * interactor. The command primitives stay mandatory: every Linux tool call goes through them.
+ * interactor. Only `input` is optional, and only because the family's own synthesis is a fallback for
+ * it. Every other part is mandatory: the interactor reads each one on a plain Linux request, so a
+ * caller that omits one is a type error rather than a `TypeError` at the first dereference.
  */
 export type LinuxToolProvider = Readonly<{
   /** The display decision every local tool selection in this provider shares (#3794). */
@@ -69,13 +64,13 @@ export type LinuxToolProvider = Readonly<{
   launchDetached(
     cmd: string,
     args: readonly string[],
-  ): Readonly<{ exited: Promise<LinuxDetachedExit> }>;
+  ): Readonly<{ exited: Promise<DetachedCommandExit> }>;
   /** Waits for interaction pacing between synthesized input steps. */
   sleep(milliseconds: number): Promise<void>;
   desktop: LinuxDesktopProvider;
-  clipboard?: LinuxClipboardProvider;
-  screenshot?: LinuxScreenshotProvider;
-  accessibility?: LinuxAccessibilityProvider;
+  clipboard: LinuxClipboardProvider;
+  screenshot: LinuxScreenshotProvider;
+  accessibility: LinuxAccessibilityProvider;
   input?: LinuxInputProvider;
 }>;
 

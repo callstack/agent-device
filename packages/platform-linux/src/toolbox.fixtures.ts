@@ -3,10 +3,8 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformHost } from 'agent-device/plugins';
-import type {
-  LinuxCommandResult,
-  LinuxDetachedExit,
-} from '@agent-device/contracts/linux-tool-provider';
+import type { DetachedCommandExit } from '@agent-device/contracts/platform-runtime-host';
+import type { LinuxCommandResult } from '@agent-device/contracts/linux-tool-provider';
 import { createLinuxToolbox, type LinuxToolbox } from './toolbox.ts';
 
 /** One command this stubbed host was asked to run, plus the environment it was handed. */
@@ -39,7 +37,7 @@ export type LinuxHostStub = Readonly<{
   /** Queues one answer for the next command; exit code 0 is the common case. */
   answer(answer?: Partial<LinuxCommandResult> & Readonly<{ stdout?: string }>): void;
   /** Queues one exit for the next detached launch. */
-  answerLaunch(exit: LinuxDetachedExit): void;
+  answerLaunch(exit: DetachedCommandExit): void;
 }>;
 
 /** One family diagnostic the plugin recorded through the host. */
@@ -68,6 +66,8 @@ export function createLinuxHostStub(
     hostOs?: 'darwin' | 'linux' | 'win32' | 'other';
     /** Tools the host can execute. When set, `isFileExecutable` answers from it alone. */
     tools?: Iterable<string>;
+    /** Whether the host sees the helper this package ships. True unless a test names a broken install. */
+    shippedHelperPresent?: boolean;
     /** Answers one command. Takes precedence over the queued answers. */
     respond?: (
       executable: string,
@@ -76,7 +76,7 @@ export function createLinuxHostStub(
     /** Rejected one command, the way the host rejects a spawn it cannot start. */
     reject?: (executable: string, args: readonly string[]) => Error;
     /** Answers a detached launch. Takes precedence over the queued exits. */
-    launchExit?: (executable: string, args: readonly string[]) => LinuxDetachedExit;
+    launchExit?: (executable: string, args: readonly string[]) => DetachedCommandExit;
   }> = {},
 ): LinuxHostStub {
   const env = input.env ?? { PATH: '/usr/bin' };
@@ -84,7 +84,7 @@ export function createLinuxHostStub(
   const commands: LinuxHostStubCommand[] = [];
   const launches: LinuxHostStubLaunch[] = [];
   const answers: LinuxCommandResult[] = [];
-  const launchExits: LinuxDetachedExit[] = [];
+  const launchExits: DetachedCommandExit[] = [];
   const diagnostics: LinuxHostDiagnostic[] = [];
   function recordCommand(
     executable: string,
@@ -122,10 +122,19 @@ export function createLinuxHostStub(
     },
     withDiagnosticTimer: async (_phase: string, operation: () => Promise<unknown>) =>
       await operation(),
-    // The availability probe the plugin is allowed to make: the tool list stands in for the host's
-    // `PATH`, so a test states which desktop tools exist rather than writing executables.
+    // The availability probes the plugin is allowed to make: the tool list stands in for the host's
+    // `PATH`, so a test states which desktop tools exist rather than writing executables. The plain-file
+    // probe answers separately: the helper the family ships beside its own code is there unless a test
+    // names a broken install.
     isFileExecutable: async (candidate: string) =>
       tools === undefined ? false : tools.has(path.basename(candidate)),
+    isFilePresent: async () => input.shippedHelperPresent ?? true,
+    // The availability probe the real host answers: an absolute name is asked of the filesystem, a
+    // bare name is looked up in the tool list that stands in for the host `PATH`.
+    isExecutableOnPath: async (executable: string) =>
+      executable.startsWith('/')
+        ? tools !== undefined && tools.has(path.basename(executable))
+        : tools !== undefined && tools.has(executable),
     runCommand: async (
       executable: string,
       args: string[],

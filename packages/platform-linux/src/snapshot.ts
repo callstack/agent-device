@@ -35,7 +35,7 @@ export async function snapshotLinux(
   truncated?: boolean;
 }> {
   const linuxSurface = resolveLinuxSurface(toolbox, surface);
-  const result = await provider.accessibility!.captureTree(linuxSurface, { signal });
+  const result = await provider.accessibility.captureTree(linuxSurface, { signal });
 
   return {
     nodes: [...result.nodes],

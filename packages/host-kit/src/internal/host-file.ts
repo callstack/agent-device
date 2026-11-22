@@ -123,6 +123,16 @@ export function hostFileExistsSync(filePath: string): boolean {
   return fs.existsSync(filePath);
 }
 
+/** Whether the host has a file at `path`, whatever its permissions, without reading it. */
+export async function hostFileExists(filePath: string): Promise<boolean> {
+  try {
+    await fsPromises.access(filePath, fs.constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function hostFileStatSync(filePath: string): fs.Stats {
   return fs.statSync(filePath);
 }

@@ -6,5 +6,5 @@ export async function screenshotLinux(
   outPath: string,
   options?: ScreenshotOptions,
 ): Promise<void> {
-  await provider.screenshot!.capture(outPath, options);
+  await provider.screenshot.capture(outPath, options);
 }

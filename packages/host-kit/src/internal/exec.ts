@@ -18,6 +18,10 @@ import {
 } from './exec-trace.ts';
 export { signalProcessGroupBestEffort } from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import type {
+  DetachedCommandExit,
+  DetachedCommandLaunch,
+} from '@agent-device/contracts/platform-runtime-host';
 
 /** The `error.details.reason` values a failed command publishes beside its settlement. */
 const EXEC_FAILURE_REASONS = {
@@ -77,12 +81,12 @@ type ExecDetachedOptions = ExecOptions & {
   stdio?: StdioOptions;
 };
 
-export type ExecDetachedExit = {
-  pid: number;
-  exitCode?: number;
-  signal?: NodeJS.Signals;
-  error?: string;
-};
+/**
+ * How a detached process ended. The shape is owned by `@agent-device/contracts/platform-runtime-host`
+ * so the host's exec module, the host a plugin is set up with, and the families that launch through
+ * it answer the same question; this is the host kit's own name for it.
+ */
+export type ExecDetachedExit = DetachedCommandExit;
 
 /**
  * The child's side of the Node IPC channel, present only when `stdio` includes `'ipc'`. It is
@@ -93,9 +97,8 @@ export type ExecDetachedChannel = Readonly<{
   onMessage(listener: (message: unknown) => void): void;
 }>;
 
-export type ExecDetachedProcess = {
-  pid: number;
-  exited: Promise<ExecDetachedExit>;
+export type ExecDetachedProcess = DetachedCommandLaunch & {
+  /** Present only when `stdio` includes `'ipc'`: the child's own progress channel. */
   channel?: ExecDetachedChannel;
 };
 
