@@ -202,6 +202,8 @@ export type RequestExecutionScope = AsyncDisposable & {
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** For a request without the session lock: runs `task` under it, unless a request holds it. */
   tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
+  /** Writes the start event after a handler checks the lease of a newly resolved session. */
+  recordResolvedSessionStart(): void;
   /** Writes the request-finished event, unless the request may not write to its session. */
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -220,6 +222,7 @@ export type LockedRequestScope = {
   sessionName: string;
   logPath: string;
   existingSession: SessionState | undefined;
+  recordResolvedSessionStart(): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
@@ -309,9 +312,8 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  // A request starts its journal under the session lock or after it resolves an authorized leased
-  // ref. A request that resolves no leased ref can defer its start until it finishes.
-  let hasAuthorizedLeasedRef = false;
+  // A request can defer its start until it finishes if it resolves no session ref.
+  let resolvedRef = false;
   let recordsRequestEvents = false;
   const recordStarted = (ts?: string): void => {
     if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
@@ -321,7 +323,7 @@ export async function createRequestExecutionScope(params: {
     sessionStore.recordEvent(sessionName, ts ? { ...started, ts } : started);
   };
   const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
-    if (!hasAuthorizedLeasedRef) recordStarted(new Date(startedAtMs).toISOString());
+    if (!resolvedRef) recordStarted(new Date(startedAtMs).toISOString());
     if (!recordsRequestEvents) return;
     if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
     sessionStore.recordEvent(
@@ -429,6 +431,10 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
+      recordResolvedSessionStart: () => {
+        resolvedRef = true;
+        recordStarted();
+      },
       recordFinished,
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -453,8 +459,8 @@ export async function createRequestExecutionScope(params: {
           holdDeviceLock: scope.retainDeviceExecutionLock,
           admission: params,
         });
-        hasAuthorizedLeasedRef = existingRef?.session.lease !== undefined;
-        if (attachesToSession || hasAuthorizedLeasedRef) recordStarted();
+        resolvedRef = existingRef !== undefined;
+        if (attachesToSession || resolvedRef) recordStarted();
         let admissionCompleted = false;
         try {
           const session = existingRef?.session;
@@ -764,6 +770,7 @@ export async function prepareLockedRequestScope(params: {
       sessionName: scope.sessionName,
       logPath,
       existingSession,
+      recordResolvedSessionStart: scope.recordResolvedSessionStart,
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
       platformServices: scope.platformServices,

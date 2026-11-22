@@ -58,6 +58,7 @@ export async function handleDoctorCommand(params: {
   /** Opaque provider-scope transport override; the android family narrows it back. */
   androidAdbExecutor?: unknown;
   hostDiagnostics?: HostDiagnostics;
+  recordResolvedSessionStart?: () => void;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
@@ -67,6 +68,7 @@ export async function handleDoctorCommand(params: {
 
   // Doctor holds no session lock, so a leased session can open here after admission.
   const session = resolveRequestSessionRef(req, sessionStore.lookup(sessionName))?.session;
+  if (session?.lease) params.recordResolvedSessionStart?.();
   const options = readDoctorOptions(req, session);
   const stateDir = resolveDoctorStateDir(sessionStore, sessionName);
   const checks: DoctorCheck[] = [];

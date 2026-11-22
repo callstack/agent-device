@@ -42,6 +42,7 @@ export type SessionCommandInput = {
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
+  recordResolvedSessionStart?: () => void;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;

@@ -471,6 +471,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger,
       hostDiagnostics,
+      recordResolvedSessionStart: lockedScope.recordResolvedSessionStart,
       requestScope,
       retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,
       throwIfCanceled: lockedScope.throwIfCanceled,

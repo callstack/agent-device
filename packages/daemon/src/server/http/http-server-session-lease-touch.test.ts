@@ -113,7 +113,10 @@ async function startDaemon() {
   // A request that ends an expired session itself stops the snapshot helper of that session.
   const requestTeardown = platformResourceCleanupFixture();
   const runtime = createLifecycleDeviceRuntimeGatewaySpies();
-  const hooks: { beforeDispatch?: () => void; duringDeviceSelection?: () => void } = {};
+  const hooks: {
+    beforeDispatch?: () => void | Promise<void>;
+    duringDeviceSelection?: () => void;
+  } = {};
   const handleRequest = createRequestHandler({
     host: createTestHostEnvironment({
       env: { ...process.env, AGENT_DEVICE_MACOS_APP_BACKEND: 'native' },
@@ -142,7 +145,7 @@ async function startDaemon() {
     // Runs after admission and before the handler, where an owner's open can land for a command
     // that holds no session lock.
     providerDeviceRuntimeScope: async (task) => {
-      hooks.beforeDispatch?.();
+      await hooks.beforeDispatch?.();
       return await task();
     },
   });
@@ -209,12 +212,16 @@ async function startDaemon() {
     expiryOwnerSettled: async () => {
       await Promise.all(expiryEnds);
     },
-    requestEvents: async (address: string) => {
+    requestEvents: async (address: string, command?: string) => {
       await sessionStore.flushEvents(address);
       return sessionStore
         .readEvents(address)
-        .events.map((event) => event.kind)
-        .filter((kind) => kind.startsWith('request.'));
+        .events.filter(
+          (event) =>
+            event.kind.startsWith('request.') &&
+            (command === undefined || event.command === command),
+        )
+        .map((event) => event.kind);
     },
     close: async () => {
       await closeLoopbackServer(daemon);
@@ -481,42 +488,59 @@ function deferred() {
   return { promise, resolve };
 }
 
-test('events shows the authorized doctor start while its toolchain check is pending', async () => {
-  if (!world) return;
-  world.publishLeasedSession(world.sessionName);
-  const enteredToolchain = deferred();
-  const releaseToolchain = deferred();
-  vi.mocked(world.hostDiagnostics.toolchainCheck).mockImplementation(async () => {
-    enteredToolchain.resolve();
-    await releaseToolchain.promise;
-    return undefined;
-  });
+test.each(['leased', 'unleased', 'opened before dispatch'] as const)(
+  'events shows the doctor start for a session that is %s while the toolchain check is pending',
+  async (scenario) => {
+    const daemon = world;
+    if (!daemon) return;
+    const { owner, sessionName, sessionStore, hooks } = daemon;
+    const scope = scenario === 'unleased' ? {} : owner;
+    if (scenario === 'leased') daemon.publishLeasedSession(sessionName);
+    if (scenario === 'unleased') sessionStore.publish(sessionName, makeIosAppSession(sessionName));
+    if (scenario === 'opened before dispatch') {
+      hooks.beforeDispatch = async () => {
+        hooks.beforeDispatch = undefined;
+        const opened = await daemon.send('open', ['com.example.app'], owner);
+        expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+        expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(owner.leaseId);
+      };
+    }
+    const enteredToolchain = deferred();
+    const releaseToolchain = deferred();
+    vi.mocked(daemon.hostDiagnostics.toolchainCheck).mockImplementation(async () => {
+      enteredToolchain.resolve();
+      await releaseToolchain.promise;
+      return undefined;
+    });
 
-  const doctor = world.send('doctor', [], world.owner);
-  try {
-    await Promise.race([
-      enteredToolchain.promise,
-      doctor.then((response) => {
-        throw new Error(`Doctor finished before its toolchain check: ${JSON.stringify(response)}`);
-      }),
+    const doctor = daemon.send('doctor', [], scope);
+    try {
+      await Promise.race([
+        enteredToolchain.promise,
+        doctor.then((response) => {
+          throw new Error(
+            `Doctor finished before its toolchain check: ${JSON.stringify(response)}`,
+          );
+        }),
+      ]);
+
+      const events = await daemon.send('events', [], scope);
+
+      expect(events.result?.ok).toBe(true);
+      expect(events.result?.data?.events).toContainEqual(
+        expect.objectContaining({ command: 'doctor', kind: 'request.started' }),
+      );
+    } finally {
+      releaseToolchain.resolve();
+      await doctor;
+    }
+    expect((await doctor).result?.ok).toBe(true);
+    expect(await daemon.requestEvents(sessionName, 'doctor')).toEqual([
+      'request.started',
+      'request.finished',
     ]);
-
-    const events = await world.send('events', [], world.owner);
-
-    expect(events.result?.ok).toBe(true);
-    expect(events.result?.data?.events).toMatchObject([
-      { command: 'doctor', kind: 'request.started' },
-    ]);
-  } finally {
-    releaseToolchain.resolve();
-    await doctor;
-  }
-  expect((await doctor).result?.ok).toBe(true);
-  expect(await world.requestEvents(world.sessionName)).toEqual([
-    'request.started',
-    'request.finished',
-  ]);
-});
+  },
+);
 
 // `apps` needs a lease of its own to reach dispatch, so it sends the lease of another client.
 test.each([

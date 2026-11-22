@@ -70,6 +70,7 @@ type RequestHandlerChainParams = {
   perfCaptureAdmissionLedger: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
+  recordResolvedSessionStart?: () => void;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
@@ -203,6 +204,7 @@ async function runSessionHandler(
       perfCaptureAdmissionLedger: params.perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
       hostDiagnostics: params.hostDiagnostics,
+      recordResolvedSessionStart: params.recordResolvedSessionStart,
       requestScope: params.requestScope,
       retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,
