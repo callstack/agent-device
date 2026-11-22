@@ -78,8 +78,8 @@ type MaterializationCase = {
   positionals?: string[];
   registered?: string;
   localPath: string;
-  fileName: string;
-  expected: string;
+  fileName?: string;
+  expected?: string;
 };
 
 test.for<MaterializationCase>([
@@ -97,6 +97,11 @@ test.for<MaterializationCase>([
     localPath: 'outside/x',
     fileName: '../../x',
     expected: 'cwd/x',
+  },
+  {
+    name: 'an omitted file name generates a destination in cwd',
+    command: 'snapshot',
+    localPath: 'outside/shot.png',
   },
   {
     name: 'a close does not authorize an unrelated response artifact destination',
@@ -150,7 +155,7 @@ test.for<MaterializationCase>([
               artifactType: 'screenshot',
               path: '/daemon/x',
               localPath: inRoot(c.localPath),
-              fileName: c.fileName,
+              ...(c.fileName === undefined ? {} : { fileName: c.fileName }),
             },
           ],
         },
@@ -158,23 +163,33 @@ test.for<MaterializationCase>([
       createTestHostEnvironment(),
       inRoot('state'),
     );
-    expect(response.ok && response.data?.path).toBe(inRoot(c.expected));
-    expect(fs.readFileSync(inRoot(c.expected), 'utf8')).toBe('artifact-bytes');
+    const saved = response.ok && response.data?.path;
+    expect(saved).toEqual(c.expected ? inRoot(c.expected) : expect.any(String));
+    if (!c.expected) {
+      expect(path.dirname(String(saved))).toBe(inRoot('cwd'));
+      expect(path.basename(String(saved))).toMatch(/^path-\d+$/);
+    }
+    expect(fs.readFileSync(String(saved), 'utf8')).toBe('artifact-bytes');
     expect(fs.existsSync(inRoot('outside'))).toBe(false);
   } finally {
     await closeLoopbackServer(server);
   }
 });
 
-test('a remote artifact named with a NUL byte is dropped and the action result is kept', async (t) => {
+test.for([
+  { name: 'a NUL byte', field: 'path', fileName: 'shot\0.png' },
+  { name: 'explicit null', field: 'path', fileName: null as unknown as string },
+  { name: 'a drive prefix on the response basename', field: 'path', fileName: 'subdir/C:shot.png' },
+  { name: 'a drive prefix on the generated basename', field: 'subdir/c:path', fileName: '' },
+])('a remote artifact with $name is dropped and the action result is kept', async (c, t) => {
   if (await skipWhenLoopbackUnavailable(t, 'remote artifact download')) return;
-  const root = mkdtempForTestSync('agent-device-remote-artifact-nul-');
+  const root = mkdtempForTestSync('agent-device-remote-artifact-invalid-name-');
   const cwd = path.join(root, 'cwd');
   fs.mkdirSync(cwd);
   const requested: string[] = [];
   const server = http.createServer((req, res) => {
     requested.push(req.url ?? '');
-    res.end('artifact-bytes');
+    res.writeHead(404).end();
   });
   try {
     const port = await listenOnLoopback(server);
@@ -188,11 +203,11 @@ test('a remote artifact named with a NUL byte is dropped and the action result i
           path: '/daemon/x',
           artifacts: [
             {
-              artifactId: 'nul',
-              field: 'path',
+              artifactId: 'invalid',
+              field: c.field,
               artifactType: 'screenshot',
               path: '/daemon/x',
-              fileName: 'shot\0.png',
+              fileName: c.fileName,
             },
           ],
         },
@@ -206,9 +221,9 @@ test('a remote artifact named with a NUL byte is dropped and the action result i
         nodes: 3,
         path: '/daemon/x',
         artifacts: [],
-        droppedArtifacts: [{ field: 'path', reason: 'artifact_name_invalid' }],
+        droppedArtifacts: [{ field: c.field, reason: 'artifact_name_invalid' }],
         warnings: [
-          'The remote artifact for "path" was not downloaded: its name cannot be a file name.',
+          `The remote artifact for "${c.field}" was not downloaded: its name cannot be a file name.`,
         ],
       },
     });

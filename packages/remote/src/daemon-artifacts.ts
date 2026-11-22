@@ -750,13 +750,14 @@ function resolveMaterializedArtifactPath(
   if (hasNonEmptyString(artifact.localPath) && finishesEarlierClientCapture(req)) {
     return { path: artifact.localPath, fallback: false };
   }
-  const rawName: unknown = artifact.fileName ?? '';
+  const { fileName: rawName = '' }: { fileName?: unknown } = artifact;
   if (typeof rawName !== 'string') return undefined;
   const responseName = path.basename(rawName.trim());
   const fileName =
     responseName && responseName !== '.' && responseName !== '..'
       ? responseName
       : `${path.basename(artifact.field)}-${Date.now()}`;
+  if (/^[a-z]:/i.test(fileName)) return undefined;
   return { path: path.resolve(req.meta?.cwd ?? host.cwd, fileName), fallback: false };
 }
 
