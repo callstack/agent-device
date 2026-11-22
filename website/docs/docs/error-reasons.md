@@ -493,7 +493,7 @@ These reasons can come from more than one command.
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
-| `daemon_exit_unconfirmed` | The process was signaled but stayed alive, so the stop cannot claim it ended. |
+| `daemon_exit_unconfirmed` | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified. |
 | `repair_evidence_invalid` | The repair tombstone file exists but does not parse into a valid marker. |
 | `daemon-clean-not-detached` | The record does not prove the process is a daemon of its own, so its process tree may be someone else's work. |
 

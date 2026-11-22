@@ -3,10 +3,11 @@ import type { DaemonRetirementResult } from './daemon-registration-owner.ts';
 
 /**
  * Why `daemon stop` reports a retirement it could not prove. The owner is the retirement watchdog:
- * it signaled the process and the observation never came back the way the rule needs.
+ * the observation never came back the way the rule needs.
  */
 const DAEMON_STOP_REASONS = {
-  // The process was signaled but stayed alive, so the stop cannot claim it ended.
+  // The stop could not confirm the daemon exited: the process stayed alive after the signal, the
+  // signal failed, or its start time or identity could not be verified.
   exitUnconfirmed: { reason: 'daemon_exit_unconfirmed' },
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
