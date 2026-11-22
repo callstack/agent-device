@@ -26,6 +26,17 @@ export const FIND_FOCUS_DISPATCH_COVERAGE = definePathCoverage('find-focus-dispa
     'find-focus-dispatch parentOwnedTouchPoint: an off-screen field neither takes the focus nor counts',
     'find-focus-dispatch parentOwnedTouchPoint: a label inside a disabled field refuses instead of writing into its sibling',
   ],
+  offscreen: [
+    'find-focus-dispatch offscreen: a closed-drawer match refuses with offscreen_ref before dispatch',
+    'find-focus-dispatch offscreen: a live read that confirms the match on screen focuses at the live rect',
+    'find-focus-dispatch offscreen: an on-screen twin still wins over an off-screen one',
+    'find-focus-dispatch offscreen: a live hittability probe with duplicate matches refuses instead of rescuing',
+    'find-focus-dispatch offscreen: a role-qualified find refuses without running an id/label rescue probe',
+  ],
+  nonHittable: [
+    'find-focus-dispatch nonHittable: a non-hittable label retargets the dispatch to the hittable ancestor row',
+    'find-focus-dispatch nonHittable: a target still non-hittable after promotion answers with targetHittable false and a hint',
+  ],
   responseConstruction:
     'find-focus-dispatch responseConstruction: find focus returns the shared point-focus payload',
   errorTaxonomy:

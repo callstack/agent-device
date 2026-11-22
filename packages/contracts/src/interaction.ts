@@ -562,6 +562,8 @@ export type FindCommandResponseData = {
   x?: number;
   y?: number;
   message?: string;
+  targetHittable?: boolean;
+  hint?: string;
   settle?: SettleObservation;
   cost?: ResponseCost;
 };

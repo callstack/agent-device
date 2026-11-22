@@ -127,3 +127,42 @@ test('confirmIosOffscreenTargetVisible: null when the owner answers found withou
 
   assert.equal(rect, null);
 });
+
+test('confirmIosOffscreenTargetVisible: exactSelector probes that exact key with hittability probe and rejects duplicates', async () => {
+  const uniqueQuery = vi.fn<ProbeQuery>(async () => ({
+    found: true,
+    hittability: {
+      matchCount: 1,
+      hittable: true,
+      rect: { x: 20, y: 240, width: 300, height: 50 },
+    },
+  }));
+  const rescued = await confirmIosOffscreenTargetVisible({
+    session: makeSession(),
+    node: { identifier: 'drawer-action', label: 'Explore' },
+    rootViewport: ROOT_VIEWPORT,
+    querySelector: uniqueQuery,
+    execution: {},
+    exactSelector: { key: 'label', value: 'Explore' },
+  });
+  assert.deepEqual(rescued, { x: 20, y: 240, width: 300, height: 50 });
+  assert.deepEqual(uniqueQuery.mock.calls[0]?.[0]?.selector, { key: 'label', value: 'Explore' });
+  assert.equal(uniqueQuery.mock.calls[0]?.[0]?.probe, 'hittability');
+
+  const duplicate = await confirmIosOffscreenTargetVisible({
+    session: makeSession(),
+    node: { label: 'Explore' },
+    rootViewport: ROOT_VIEWPORT,
+    querySelector: async () => ({
+      found: true,
+      hittability: {
+        matchCount: 2,
+        hittable: true,
+        rect: { x: 20, y: 240, width: 300, height: 50 },
+      },
+    }),
+    execution: {},
+    exactSelector: { key: 'label', value: 'Explore' },
+  });
+  assert.equal(duplicate, null);
+});

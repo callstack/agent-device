@@ -43,7 +43,7 @@ export async function throwIfOffscreenTarget<TNode extends SnapshotNode>(
   if (!node.rect || !viewport || visibility.isVisibleOnScreen(node)) return node;
   const rootViewport = visibility.resolveViewport(node.rect);
   const liveRect = await confirmVisible?.(node, rootViewport);
-  if (liveRect) return { ...node, rect: liveRect };
+  if (liveRect) return { ...node, rect: liveRect, hittable: true };
   // The direction that scrolls this off-screen target into view. Named in the
   // hint (and surfaced as a machine-readable detail) so the recovery is a single
   // deterministic move instead of a guess (#1366). Derived from the same

@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   PreresolvedInteractionTarget,
   SurfaceScopedNodes,
@@ -9,6 +9,7 @@ import {
   isReadOnlyFindAction,
   checkFindArgs,
   parseFindSelectorExpression,
+  readSimpleSelectorTarget,
   type FindLocator,
 } from '@agent-device/selectors';
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
@@ -21,6 +22,11 @@ import {
   resolveFocusTarget,
   resolveNodeTouchPoint,
 } from '@agent-device/selectors/node-touch-point';
+import {
+  offscreenRefFailure,
+  throwIfOffscreenTarget,
+} from '@agent-device/selectors/interaction-offscreen';
+import { describeNonHittableTarget } from '@agent-device/selectors/interaction-targeting';
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import { buildNestedTextFieldsError } from '../../selector-match-errors.ts';
 import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
@@ -48,9 +54,12 @@ import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../../core/deferred-interaction-outcome.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
 import { executeFocusPoint } from '../../focus-runtime.ts';
+import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { executeBoundTypeText, parseTypeTextRequest } from '../../type-text-runtime.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../../selector-runtime.ts';
 import { admitAndBindSnapshotCapture } from '../../../core/snapshot-runtime-binding.ts';
+import type { BoundSelectorQuery } from '../../../core/selector-operation-binding.ts';
+import { runtimeExecutionFromContext } from '../../../core/snapshot-runtime-capture-input.ts';
 import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
 import {
   findRuntimeIntent,
@@ -77,6 +86,8 @@ type FindContext = {
   /** The one action-selected bind's directly-executed operations (ADR 0019 §9). */
   boundFocusPoint?: (input: FocusPointInput) => Promise<void>;
   boundTypeText?: TypeTextRuntimeOperations['typeText'];
+  /** The same bind's conditional live selector read, present only when its owner advertised it. */
+  boundQuerySelector?: BoundSelectorQuery;
 };
 
 type ResolvedMatch = {
@@ -184,6 +195,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     publicFlags: publicFindFlags(req.flags),
     boundFocusPoint: boundSelector.focusPoint,
     boundTypeText: boundSelector.typeText,
+    boundQuerySelector: boundSelector.querySelector,
   };
 
   const snapshotResult = await readTargetTree();
@@ -365,10 +377,10 @@ async function handleFindFill(
 }
 
 async function handleFindFocus(ctx: FindContext, match: ResolvedMatch): Promise<DaemonResponse> {
-  const response = await dispatchFocusForFindMatch(ctx, match);
-  if (!response.ok) return response;
+  const focused = await dispatchFocusForFindMatch(ctx, match, 'focus');
+  if (!focused.ok) return focused;
   recordFindAction(ctx, match, 'focus');
-  return response;
+  return { ok: true, data: { ...focused.data, ...focused.targetAnnotation } };
 }
 
 async function handleFindType(
@@ -386,8 +398,8 @@ async function handleFindType(
   };
   // The value is always text here, so a leading `@e12` is typed, not refused as a target ref.
   const request = parseTypeTextRequest([value], context(), { rejectRefTarget: false });
-  const focusResponse = await dispatchFocusForFindMatch(ctx, match);
-  if (!focusResponse.ok) return focusResponse;
+  const focused = await dispatchFocusForFindMatch(ctx, match, 'type');
+  if (!focused.ok) return focused;
   const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
   // The focus above already crossed the seam; expiry is idempotent, but keep it
   // explicit at the type dispatch so it does not rely on the focus-first order.
@@ -400,13 +412,26 @@ async function handleFindType(
   }
   const response = await executeBoundTypeText({ operations: { typeText } }, request, context());
   recordFindAction(ctx, match, 'type');
-  return { ok: true, data: response };
+  return { ok: true, data: { ...response, ...focused.targetAnnotation } };
 }
+
+/**
+ * The focus leg's dispatch result, with the non-hittable annotation of the node it focused kept apart
+ * so `type` can answer with it beside its own text payload.
+ */
+type FindFocusDispatch =
+  | DaemonFailureResponse
+  | {
+      ok: true;
+      data: Record<string, unknown>;
+      targetAnnotation: ReturnType<typeof describeNonHittableTarget>;
+    };
 
 async function dispatchFocusForFindMatch(
   ctx: FindContext,
   match: ResolvedMatch,
-): Promise<DaemonResponse> {
+  action: 'focus' | 'type',
+): Promise<FindFocusDispatch> {
   const { req, logPath } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'focus');
   if (coveredResponse) return coveredResponse;
@@ -430,14 +455,27 @@ async function dispatchFocusForFindMatch(
       },
     );
   }
-  const target = focusTarget.node;
-  if (isSnapshotNodeInteractionBlocked(target)) return coveredFindResponse(target, 'focus');
-  const targetRef = `@${target.ref}`;
+  const located = focusTarget.node;
+  if (isSnapshotNodeInteractionBlocked(located)) return coveredFindResponse(located, 'focus');
+  const targetRef = `@${located.ref}`;
+  let target: SnapshotAddressableNode;
   let coords: Point;
-  // The same touch-point and keyboard decisions the acting paths run (#2589/#2622/#3734): this seam
-  // dispatches the point itself instead of re-entering the interaction leaf, so they have to run here.
+  // The same off-screen, touch-point and keyboard decisions the acting paths run
+  // (#1542/#2589/#2622/#3734): this seam dispatches the point itself instead of re-entering the
+  // interaction leaf, so they have to run here. find's ranking already preferred an on-screen match.
   try {
     await assertSnapshotScreenOrigin(match.tree.nodes, `Ref ${targetRef}`);
+    const refFailure = offscreenRefFailure(targetRef, 'focus');
+    target = await throwIfOffscreenTarget(
+      located,
+      match.tree.nodes,
+      {
+        ...refFailure,
+        hint: (direction) =>
+          `${direction ? `Scroll ${direction} toward it` : 'Scroll toward it'} or open its container, then re-run find to ${action}.`,
+      },
+      offscreenRescue(ctx),
+    );
     coords = resolveNodeTouchPoint(target, match.tree.nodes, {
       invalidMessage: `Ref ${targetRef} has no usable bounds`,
       blockedTargetLabel: `Ref ${targetRef}`,
@@ -470,20 +508,60 @@ async function dispatchFocusForFindMatch(
     coords,
     contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
   );
-  return { ok: true, data: response };
+  return { ok: true, data: response, targetAnnotation: describeNonHittableTarget(target, 'focus') };
+}
+
+function directIdentityFindSelector(
+  ctx: FindContext,
+): Readonly<{ key: 'id' | 'label'; value: string }> | null {
+  if (ctx.locator === 'id' || ctx.locator === 'label') {
+    const value = ctx.query.trim();
+    return value ? { key: ctx.locator, value } : null;
+  }
+  if (ctx.locator !== 'any') return null;
+  const target = readSimpleSelectorTarget(ctx.query);
+  if (!target || (target.key !== 'id' && target.key !== 'label')) return null;
+  const value = target.value.trim();
+  return value ? { key: target.key, value } : null;
+}
+
+/**
+ * The #1542 rescue read over the bind's conditional live selector query, or `undefined` when the
+ * owner did not advertise one or the find locator cannot be verified as an exact `id`/`label`
+ * match on the focused node, so the off-screen rule fails closed on the capture's verdict.
+ */
+function offscreenRescue(ctx: FindContext): Parameters<typeof throwIfOffscreenTarget>[3] {
+  const querySelector = ctx.boundQuerySelector;
+  const exactSelector = directIdentityFindSelector(ctx);
+  if (!querySelector || !exactSelector) return undefined;
+  const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
+  return async (node, rootViewport) => {
+    const nodeValue = exactSelector.key === 'id' ? node.identifier?.trim() : node.label?.trim();
+    if (nodeValue !== exactSelector.value) return null;
+    return await confirmIosOffscreenTargetVisible({
+      session,
+      node,
+      rootViewport,
+      querySelector,
+      execution: runtimeExecutionFromContext(
+        contextFromFlags(ctx.logPath, ctx.req.flags, session.appBundleId, session.trace?.outPath),
+      ),
+      exactSelector,
+    });
+  };
 }
 
 function rejectCoveredFindMatch(
   match: ResolvedMatch,
   action: InteractionAction,
-): DaemonResponse | null {
+): DaemonFailureResponse | null {
   return match.occludedNode ? coveredFindResponse(match.occludedNode, action) : null;
 }
 
 function coveredFindResponse(
   blockedNode: SnapshotAddressableNode,
   action: InteractionAction,
-): DaemonResponse {
+): DaemonFailureResponse {
   return errorResponse(
     'COMMAND_FAILED',
     `Matched element @${blockedNode.ref} is covered by another visible element and cannot ${interactionVerb(action)} safely`,
