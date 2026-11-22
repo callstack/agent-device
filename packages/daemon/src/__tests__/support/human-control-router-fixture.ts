@@ -6,13 +6,13 @@ import {
 } from './platform-services-fixture.ts';
 import { makeIosAppSession } from './session-factories.ts';
 import { makeSessionStore } from './store-factory.ts';
-import { buildSessionLeaseFromRequest } from '../../core/lease-context.ts';
+import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../server/request-router.ts';
 import { providerCredentialsFixture } from './provider-credentials-fixture.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import { lifecycleDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
-import { HUMAN_CONTROL_LEASE_REQUEST, humanControlRequest } from './human-control-fixtures.ts';
+import { HUMAN_CONTROL_LEASE_REQUEST } from './human-control-fixtures.ts';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
 import { platformResourceCleanupFixture } from './platform-resource-cleanup-fixture.ts';
@@ -25,7 +25,7 @@ export function createHumanControlHarness() {
   sessionStore.publish(
     sessionName,
     makeIosAppSession(sessionName, {
-      lease: buildSessionLeaseFromRequest(humanControlRequest(lease), lease),
+      lease: sessionLeaseOf(lease),
     }),
   );
   const handleRequest = createRequestHandler({

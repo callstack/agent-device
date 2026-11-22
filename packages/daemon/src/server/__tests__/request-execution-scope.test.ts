@@ -212,11 +212,10 @@ test('a request that sends only the session lease id is admitted under the store
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: 'proxy',
         clientId: 'client-a',
         deviceKey: 'ios:sim-1',
-        expiresAt: lease.expiresAt,
       },
     }),
   );
@@ -234,7 +233,6 @@ test('a request that sends only the session lease id is admitted under the store
   const activeLease = leaseRegistry.listActiveLeases()[0];
   expect(activeLease?.heartbeatAt).toBe(2_000);
   expect(activeLease?.expiresAt).toBe(62_000);
-  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(62_000);
 });
 
 test('leased session heartbeat is serialized with the request execution lock', async () => {
@@ -255,11 +253,10 @@ test('leased session heartbeat is serialized with the request execution lock', a
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: 'proxy',
         clientId: 'client-a',
         deviceKey: 'ios:sim-1',
-        expiresAt: lease.expiresAt,
       },
     }),
   );
@@ -397,7 +394,7 @@ test('leased session rejects mismatched lease id before dispatch', async () => {
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
       },
     }),
   );
@@ -428,7 +425,7 @@ test.each([
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: 'proxy',
         clientId: 'client-a',
         deviceKey: 'ios:SIM-001',
@@ -491,7 +488,7 @@ test('provider lease admission succeeds without a device key', async () => {
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: 'limrun',
       },
     }),
@@ -527,8 +524,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
-        expiresAt: lease.expiresAt,
+        backend: lease.backend,
       },
     }),
   );
@@ -568,8 +564,7 @@ test('expired leased session cleanup waits for the request execution lock', asyn
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
-        expiresAt: lease.expiresAt,
+        backend: lease.backend,
       },
     }),
   );

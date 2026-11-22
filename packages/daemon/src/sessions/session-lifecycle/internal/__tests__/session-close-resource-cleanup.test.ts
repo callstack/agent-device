@@ -221,11 +221,10 @@ test('close preserves the session and lease when provider release fails so it ca
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       leaseProvider: lease.leaseProvider,
       deviceKey: lease.deviceKey,
       clientId: lease.clientId,
-      expiresAt: lease.expiresAt,
     },
   });
 
@@ -296,11 +295,10 @@ test('close cannot retire a replacement session while its provider release waits
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       leaseProvider: lease.leaseProvider,
       deviceKey: lease.deviceKey,
       clientId: lease.clientId,
-      expiresAt: lease.expiresAt,
     },
   });
   let release!: () => void;

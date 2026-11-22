@@ -4,16 +4,18 @@ import { AppError, BOUNDED_COMPOSITE_REASONS, type ReasonTable } from '@agent-de
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import { ignoresSessionLease } from './daemon-command-registry.ts';
-import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
+import { readLeaseBackend } from '@agent-device/kernel/contracts';
+import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import { stripUndefined } from '@agent-device/kernel/record';
-import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import {
   findMissingProxyLeaseFields,
   isProxyLeaseScope,
   leaseScopeFromRequest,
   leaseScopeToRequestMeta,
+  normalizeLeaseId,
+  type LeaseClaims,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
 
@@ -42,16 +44,51 @@ export function isBoundedCompositeRequest(req: DaemonRequest): boolean {
   return true;
 }
 
-export type SessionLease = {
-  tenantId: string;
-  runId: string;
-  leaseId: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  expiresAt?: number;
-};
+/** The lease a session is bound to: the id and labels of the lease that admitted its open. */
+export type SessionLease = Readonly<
+  Pick<
+    DeviceLease,
+    'leaseId' | 'tenantId' | 'runId' | 'backend' | 'leaseProvider' | 'deviceKey' | 'clientId'
+  >
+>;
+
+type LeaseClaimField = keyof LeaseClaims;
+
+type LeaseClaimRequest = Pick<DaemonRequest, 'flags' | 'meta' | 'internal'>;
+
+/** The flags that carry each lease field. `meta` carries each field under the field's own name. */
+const LEASE_CLAIM_FLAGS = {
+  leaseId: ['leaseId'],
+  tenantId: ['tenant'],
+  leaseBackend: ['leaseBackend'],
+  runId: ['runId'],
+  leaseProvider: ['leaseProvider', 'provider'],
+  clientId: ['clientId'],
+  deviceKey: ['deviceKey'],
+} as const satisfies Record<LeaseClaimField, readonly string[]>;
+
+const LEASE_CLAIM_FIELDS = Object.keys(LEASE_CLAIM_FLAGS) as LeaseClaimField[];
+
+function trimmedLeaseLabel(pattern: RegExp): (raw: unknown) => string | undefined {
+  return (raw) => {
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    return pattern.test(value) ? value : undefined;
+  };
+}
+
+/**
+ * The canonical value of each lease field, as the lease registry stores it. A value that names
+ * none, of any type, gives `undefined`.
+ */
+export const LEASE_FIELD_NORMALIZERS = {
+  leaseId: normalizeLeaseId,
+  tenantId: normalizeTenantId,
+  leaseBackend: (raw) => (typeof raw === 'string' ? readLeaseBackend(raw) : undefined),
+  runId: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,128}$/),
+  leaseProvider: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,64}$/),
+  clientId: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,128}$/),
+  deviceKey: trimmedLeaseLabel(/^[\u0020-\u007E]{1,256}$/),
+} as const satisfies Record<LeaseClaimField, (raw: unknown) => string | undefined>;
 
 /** The `error.details.reason` values a session-lease refusal publishes. */
 const LEASE_ADMISSION_REASONS = {
@@ -66,26 +103,15 @@ export function resolveLeaseScope(req: Pick<DaemonRequest, 'flags' | 'meta'>): L
   return leaseScopeFromRequest(req);
 }
 
-export function buildSessionLeaseFromRequest(
-  req: Pick<DaemonRequest, 'flags' | 'meta'>,
-  activeLease?: DeviceLease,
-): SessionLease | undefined {
-  const leaseScope = resolveLeaseScope(req);
-  const leaseId = leaseScope.leaseId ?? activeLease?.leaseId;
-  const tenantId = leaseScope.tenantId ?? activeLease?.tenantId;
-  const runId = leaseScope.runId ?? activeLease?.runId;
-  if (!tenantId || !runId || !leaseId) {
-    return undefined;
-  }
+export function sessionLeaseOf(lease: SessionLease): SessionLease {
   return stripUndefined({
-    tenantId,
-    runId,
-    leaseId,
-    leaseBackend: leaseScope.leaseBackend ?? activeLease?.backend,
-    leaseProvider: leaseScope.leaseProvider ?? activeLease?.leaseProvider,
-    deviceKey: leaseScope.deviceKey ?? activeLease?.deviceKey,
-    clientId: leaseScope.clientId ?? activeLease?.clientId,
-    expiresAt: activeLease?.expiresAt,
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    backend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
   });
 }
 
@@ -96,7 +122,7 @@ export function buildSessionLeaseFromRequest(
  * (ADR 0007). A command that ignores the session lease acts under its own request scope.
  */
 export function resolveSessionLeaseScope(
-  req: Pick<DaemonRequest, 'command' | 'flags' | 'meta'>,
+  req: Pick<DaemonRequest, 'command'> & LeaseClaimRequest,
   session?: SessionLeaseHolder | null,
 ): LeaseScope {
   const requestScope = resolveLeaseScope(req);
@@ -107,7 +133,7 @@ export function resolveSessionLeaseScope(
     runId: sessionLease.runId,
     leaseId: sessionLease.leaseId,
     leaseTtlMs: requestScope.leaseTtlMs,
-    leaseBackend: sessionLease.leaseBackend ?? requestScope.leaseBackend,
+    leaseBackend: sessionLease.backend,
     leaseProvider: sessionLease.leaseProvider,
     deviceKey: sessionLease.deviceKey,
     clientId: sessionLease.clientId,
@@ -115,23 +141,56 @@ export function resolveSessionLeaseScope(
 }
 
 /**
+ * Records lease labels that an intake adapter replaced or collapsed. Admission compares them with
+ * the lease as it compares the labels the request still carries.
+ */
+export function withDisplacedLeaseClaims(
+  req: DaemonRequest,
+  displaced: Partial<Record<LeaseClaimField, readonly unknown[]>>,
+): DaemonRequest {
+  const claims = mergeLeaseClaims(req.internal?.displacedLeaseClaims, displaced);
+  return claims ? { ...req, internal: { ...req.internal, displacedLeaseClaims: claims } } : req;
+}
+
+function mergeLeaseClaims(
+  ...sources: (Partial<Record<LeaseClaimField, readonly unknown[]>> | undefined)[]
+): LeaseClaims | undefined {
+  const claims: Partial<Record<LeaseClaimField, unknown[]>> = {};
+  for (const field of LEASE_CLAIM_FIELDS) {
+    const values = sources.flatMap((source) => source?.[field] ?? []).filter(isSupplied);
+    if (values.length > 0) claims[field] = values;
+  }
+  return Object.keys(claims).length > 0 ? claims : undefined;
+}
+
+/**
  * A request the daemon builds inside an admitted request acts for the same caller, so it carries the
  * lease scope that the parent presented. A field the nested request names, in its meta or its
- * flags, is kept, so a step that names another lease id is still refused.
+ * flags, is kept, so a step that names another lease id is still refused. Every value the parent
+ * sent that the nested request does not carry is handed down as a displaced claim.
  */
 export function handDownRequestLeaseScope(
   invoke: DaemonInvokeFn,
-  parent: Pick<DaemonRequest, 'flags' | 'meta'>,
+  parent: LeaseClaimRequest,
 ): DaemonInvokeFn {
   const parentScope = resolveLeaseScope(parent);
+  const parentClaims = readLeaseClaims(parent);
   return async (req) => {
     const childScope = resolveLeaseScope(req);
-    const missing = Object.fromEntries(
+    const inherited = Object.fromEntries(
       Object.entries(parentScope).filter(
         ([key]) => childScope[key as keyof LeaseScope] === undefined,
       ),
     ) as LeaseScope;
-    return await invoke({ ...req, meta: { ...leaseScopeToRequestMeta(missing), ...req.meta } });
+    const child = { ...req, meta: { ...leaseScopeToRequestMeta(inherited), ...req.meta } };
+    const childClaims = readLeaseClaims(child);
+    const absent = Object.fromEntries(
+      LEASE_CLAIM_FIELDS.map((field) => [
+        field,
+        parentClaims[field].filter((claim) => !childClaims[field].includes(claim)),
+      ]),
+    );
+    return await invoke(withDisplacedLeaseClaims(child, absent));
   };
 }
 
@@ -148,7 +207,7 @@ export function resolveLeaseRefusalScope(
   return stripUndefined({
     ...requestScope,
     leaseId: requestScope.leaseId ?? sessionLease?.leaseId,
-    leaseBackend: requestScope.leaseBackend ?? sessionLease?.leaseBackend,
+    leaseBackend: requestScope.leaseBackend ?? sessionLease?.backend,
     leaseProvider: requestScope.leaseProvider ?? sessionLease?.leaseProvider,
   });
 }
@@ -158,99 +217,68 @@ export function resolveLeaseRefusalScope(
  * differs from the lease. Returns the session lease the request may act under.
  */
 export function assertRequestHoldsSessionLease(
-  req: Pick<DaemonRequest, 'command' | 'flags' | 'meta'>,
+  req: Pick<DaemonRequest, 'command'> & LeaseClaimRequest,
   session?: SessionLeaseHolder | null,
 ): SessionLease | undefined {
   const sessionLease = ignoresSessionLease(req.command) ? undefined : session?.lease;
   if (!sessionLease) return undefined;
-  assertRequestPresentsLease(resolveLeaseScope(req), sessionLease);
-  // Meta wins the request scope (HTTP intake may attest the tenant, and a batch step inherits the
-  // batch's meta), so a lease field sent in flags, such as a batch step's, is compared on its own.
-  assertSuppliedLeaseLabels(resolveLeaseScope({ flags: req.flags }), sessionLease);
+  assertRequestPresentsLease(req, sessionLease);
   return sessionLease;
 }
 
-/** Refuses a request that does not send `leaseId`, the credential of the lease it acts on. */
-function assertRequestSendsLeaseId(requestScope: LeaseScope, leaseId: string): void {
-  if (!requestScope.leaseId) {
+/**
+ * Refuses a request that does not send the lease's id, or sends a label that differs from the
+ * lease. Every value the request sent is compared: its meta, its flags, each alias, and each claim
+ * an intake adapter displaced. A label the lease does not carry differs from any value the request
+ * sends, and so does an empty label or a value that is not a string.
+ */
+export function assertRequestPresentsLease(req: LeaseClaimRequest, lease: SessionLease): void {
+  const claims = readLeaseClaims(req);
+  if (claims.leaseId.every((claim) => typeof claim === 'string' && !claim.trim())) {
     throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
       reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
       field: 'leaseId',
       hint: 'Send the leaseId that the allocation returned (meta.leaseId or the leaseId param). From the CLI, open the session through connect proxy or connect --remote-config and keep the same --session; raw --tenant and --session flags do not send it.',
     });
   }
-  assertMatchingLeaseId(requestScope.leaseId, leaseId);
+  for (const field of LEASE_CLAIM_FIELDS) {
+    if (claims[field].every((claim) => leaseClaimNamesLease(field, claim, lease))) continue;
+    throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
+      reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
+      field,
+    });
+  }
 }
 
-function assertMatchingLeaseId(requestValue: string | undefined, leaseId: string): void {
-  if (requestValue === undefined) return;
-  const requested = canonicalLeaseId(requestValue);
-  if (requested !== undefined && requested === canonicalLeaseId(leaseId)) return;
-  throw leaseFieldMismatchError('leaseId');
+function readLeaseClaims(req: LeaseClaimRequest): Record<LeaseClaimField, unknown[]> {
+  const meta: Record<string, unknown> = req.meta ?? {};
+  const flags: Record<string, unknown> = req.flags ?? {};
+  const displaced = req.internal?.displacedLeaseClaims;
+  return Object.fromEntries(
+    LEASE_CLAIM_FIELDS.map((field) => [
+      field,
+      [
+        meta[field],
+        ...LEASE_CLAIM_FLAGS[field].map((flag) => flags[flag]),
+        ...(displaced?.[field] ?? []),
+      ].filter(isSupplied),
+    ]),
+  ) as Record<LeaseClaimField, unknown[]>;
 }
 
-/** A lease id is 16 to 128 hex digits; case and surrounding space do not change it. */
-function canonicalLeaseId(raw: string | undefined): string | undefined {
-  const value = (raw ?? '').trim();
-  return /^[a-f0-9]{16,128}$/i.test(value) ? value.toLowerCase() : undefined;
+/** The lease holds canonical values, so a claim names the lease once the registry normalizes it. */
+function leaseClaimNamesLease(
+  field: LeaseClaimField,
+  claim: unknown,
+  lease: SessionLease,
+): boolean {
+  const normalized = LEASE_FIELD_NORMALIZERS[field](claim);
+  const expected = field === 'leaseBackend' ? lease.backend : lease[field];
+  return normalized !== undefined && normalized === expected;
 }
 
-/**
- * Refuses a request that does not send the lease's id, or sends a label that differs from the
- * lease. A label the lease does not carry differs from any value the request sends, and so does an
- * empty label.
- */
-export function assertRequestPresentsLease(
-  requestScope: LeaseScope,
-  lease: Omit<SessionLease, 'expiresAt'>,
-): void {
-  assertRequestSendsLeaseId(requestScope, lease.leaseId);
-  assertSuppliedLeaseLabels(requestScope, lease);
-}
-
-/** Compares each lease field the scope names with the lease; a field it omits is not compared. */
-function assertSuppliedLeaseLabels(
-  requestScope: LeaseScope,
-  lease: Omit<SessionLease, 'expiresAt'>,
-): void {
-  assertMatchingLeaseId(requestScope.leaseId, lease.leaseId);
-  assertMatchingTenant(requestScope.tenantId, lease.tenantId);
-  assertMatchingLeaseBackend(requestScope.leaseBackend, lease.leaseBackend);
-  assertMatchingLeaseField('runId', requestScope.runId, lease.runId);
-  assertMatchingLeaseField('leaseProvider', requestScope.leaseProvider, lease.leaseProvider);
-  assertMatchingLeaseField('clientId', requestScope.clientId, lease.clientId);
-  assertMatchingLeaseField('deviceKey', requestScope.deviceKey, lease.deviceKey);
-}
-
-/**
- * Refuses a tenant that does not name the expected tenant once both are normalized. An empty or
- * malformed tenant names none, so it differs.
- */
-function assertMatchingTenant(requestValue?: string, expectedValue?: string): void {
-  if (requestValue === undefined) return;
-  const requested = normalizeTenantId(requestValue);
-  if (requested !== undefined && requested === normalizeTenantId(expectedValue)) return;
-  throw leaseFieldMismatchError('tenantId');
-}
-
-function assertMatchingLeaseBackend(requestValue?: string, leaseValue?: string) {
-  if (requestValue === undefined) return;
-  const requested = readLeaseBackend(requestValue);
-  if (requested !== undefined && requested === readLeaseBackend(leaseValue)) return;
-  throw leaseFieldMismatchError('leaseBackend');
-}
-
-/** An omitted label is not compared; an empty one differs from the lease. */
-function assertMatchingLeaseField(field: string, requestValue?: string, leaseValue?: string) {
-  if (requestValue === undefined || requestValue === leaseValue) return;
-  throw leaseFieldMismatchError(field);
-}
-
-function leaseFieldMismatchError(field: string): AppError {
-  return new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
-    reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
-    field,
-  });
+function isSupplied(value: unknown): boolean {
+  return value !== undefined;
 }
 
 export function resolveRunnerLogicalLeaseContext(

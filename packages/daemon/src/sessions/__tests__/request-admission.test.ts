@@ -362,8 +362,7 @@ test('close still admits and heartbeats a real active lease', () => {
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
-      expiresAt: lease.expiresAt,
+      backend: lease.backend,
     },
   });
   now = 2_000;
@@ -394,7 +393,7 @@ function iosLeasedSession(registry: LeaseRegistry) {
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
     },
   });
   return { lease, session };
@@ -450,7 +449,7 @@ test.each([
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       leaseProvider: 'proxy',
       clientId: 'client-a',
       deviceKey: 'ios:SIM-001',
@@ -497,7 +496,7 @@ test('a request with the session lease id and another lease backend is refused',
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: 'macos-app',
+      backend: 'macos-app',
       clientId: lease.clientId,
     },
   });
@@ -531,8 +530,7 @@ test.each(['close', 'snapshot', 'apps', 'artifacts'])(
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
-        expiresAt: lease.expiresAt,
+        backend: lease.backend,
       },
     });
     now = 2_000;
@@ -731,7 +729,12 @@ test('a daemon policy that requires a macos-app lease refuses unleased and other
   );
 });
 
-const SESSION_LEASE = { tenantId: 'tenant-a', runId: 'run-1', leaseId: 'a'.repeat(32) };
+const SESSION_LEASE = {
+  tenantId: 'tenant-a',
+  runId: 'run-1',
+  leaseId: 'a'.repeat(32),
+  backend: 'ios-simulator',
+} as const;
 
 test('an unnamed request reaching a provider lease through its session is refused', () => {
   const session = makeIosSession('default', {

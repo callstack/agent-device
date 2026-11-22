@@ -275,7 +275,7 @@ test('a settled session of another kind is never touched by the sweep', async ()
         leaseId: 'lease-1',
         tenantId: 'tenant-1',
         runId: 'run-1',
-        expiresAt: NOW + WINDOW_MS,
+        backend: 'ios-simulator',
       },
     }),
   );

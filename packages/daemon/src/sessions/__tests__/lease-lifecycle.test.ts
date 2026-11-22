@@ -9,7 +9,6 @@ import {
   cleanupExpiredLeasedSession,
   releaseExpiredProviderLease,
   releaseSessionLease,
-  resolveSessionLeaseForRequest,
 } from '../lease-lifecycle.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 
@@ -38,11 +37,10 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: lease.leaseProvider,
         deviceKey: lease.deviceKey,
         clientId: lease.clientId,
-        expiresAt: lease.expiresAt,
       },
     }),
   );
@@ -60,7 +58,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   expect(req.internal?.admittedLease?.heartbeatAt).toBe(2_000);
   // Renewal is for the window the lease carries — the registry default here, since this client
   // named none — not the proxy-specific default admission used to name on every request (#2946).
-  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(62_000);
+  expect(leaseRegistry.listActiveLeases()[0]?.expiresAt).toBe(62_000);
 });
 
 test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {
@@ -77,8 +75,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
-      expiresAt: lease.expiresAt,
+      backend: lease.backend,
     },
   });
   sessionStore.publish('default', session);
@@ -116,7 +113,7 @@ test('releaseSessionLease releases with the stored session owner scope', async (
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       leaseProvider: lease.leaseProvider,
       deviceKey: lease.deviceKey,
       clientId: lease.clientId,
@@ -148,7 +145,7 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       clientId: lease.clientId,
     },
   });
@@ -196,7 +193,7 @@ test('releaseSessionLease retains provider session ownership for artifact lookup
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       leaseProvider: lease.leaseProvider,
     },
   });
@@ -246,7 +243,7 @@ test('releaseSessionLease keeps the local lease when the provider release fails'
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       leaseProvider: lease.leaseProvider,
       deviceKey: lease.deviceKey,
       clientId: lease.clientId,
@@ -266,42 +263,6 @@ test('releaseSessionLease keeps the local lease when the provider release fails'
   ).rejects.toThrow('provider unavailable');
 
   expect(leaseRegistry.listActiveLeases()).toEqual([lease]);
-});
-
-test('resolveSessionLeaseForRequest prefers admitted lease and falls back to existing lease', () => {
-  const leaseRegistry = new LeaseRegistry();
-  const lease = leaseRegistry.allocateLease({
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'proxy',
-    deviceKey: 'ios:SIM-001',
-    clientId: 'client-a',
-  });
-  const req = makeRequest({
-    meta: {
-      tenantId: 'tenant-a',
-      runId: 'run-1',
-      leaseId: lease.leaseId,
-      leaseBackend: lease.backend,
-      leaseProvider: 'proxy',
-      deviceKey: 'ios:SIM-001',
-      clientId: 'client-a',
-    },
-    internal: { admittedLease: lease },
-  });
-
-  const resolved = resolveSessionLeaseForRequest({
-    req,
-    existingLease: {
-      leaseId: 'older',
-      tenantId: 'tenant-a',
-      runId: 'run-1',
-    },
-  });
-
-  expect(resolved?.leaseId).toBe(lease.leaseId);
-  expect(resolved?.expiresAt).toBe(lease.expiresAt);
 });
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {

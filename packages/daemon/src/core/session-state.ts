@@ -10,15 +10,13 @@ import type {
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import type { SessionAction, SessionScope, SessionSurface } from '@agent-device/contracts/session';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
-import type {
-  LeaseBackend,
-  SessionRuntimeHints as PublicSessionRuntimeHints,
-} from '@agent-device/kernel/contracts';
+import type { SessionRuntimeHints as PublicSessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { PostGesturePreActionBaseline } from '@agent-device/capture-kit/post-gesture-stability';
 import type { SnapshotFreshnessWindow } from '@agent-device/capture-kit/snapshot-freshness';
 import type { RefFrame } from './ref-frame-slot.ts';
+import type { SessionLease } from './lease-context.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
 
 /**
@@ -150,16 +148,7 @@ export type CloseBootOwnership = 'proved' | 'inferred' | 'disproved' | 'none';
 export type SessionState = {
   name: string;
   sessionScope?: SessionScope;
-  lease?: {
-    leaseId: string;
-    tenantId: string;
-    runId: string;
-    leaseBackend?: LeaseBackend;
-    leaseProvider?: string;
-    deviceKey?: string;
-    clientId?: string;
-    expiresAt?: number;
-  };
+  lease?: SessionLease;
   /**
    * #2833: the instant a command that attaches to this session last finished, which is what the
    * opt-in inactivity deadline for a claim-holding session is measured from. Absent until then, in

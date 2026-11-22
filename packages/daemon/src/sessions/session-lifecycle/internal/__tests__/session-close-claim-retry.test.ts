@@ -104,7 +104,7 @@ async function openSession(
             leaseId: lease.leaseId,
             tenantId: lease.tenantId,
             runId: lease.runId,
-            leaseBackend: lease.backend,
+            backend: lease.backend,
             deviceKey: lease.deviceKey,
           },
         }

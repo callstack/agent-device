@@ -106,7 +106,12 @@ test.each([false, true])(
         if (nestedReq.command === 'open' && nestedReq.session) {
           const session = makeIosSession(nestedReq.session, {
             bootedByOpen: true,
-            lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
+            lease: {
+              backend: lease.backend,
+              leaseId: lease.leaseId,
+              tenantId: lease.tenantId,
+              runId: lease.runId,
+            },
           });
           const claim = await acquireDeviceClaim({
             env: host.env,

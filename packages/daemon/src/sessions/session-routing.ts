@@ -17,7 +17,7 @@ import {
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
 } from '../core/session-selector.ts';
-import { resolveLeaseScope } from '../core/lease-context.ts';
+import { LEASE_FIELD_NORMALIZERS, resolveLeaseScope } from '../core/lease-context.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 const IMPLICIT_SESSION_KEY_PREFIX = 'cwd';
@@ -96,7 +96,7 @@ export function createSessionVisibilityPredicate(
   req: DaemonRequest,
 ): (session: SessionState) => boolean {
   const requestScope = resolveSessionScope(req);
-  const requestLeaseId = resolveLeaseScope(req).leaseId;
+  const requestLeaseId = LEASE_FIELD_NORMALIZERS.leaseId(resolveLeaseScope(req).leaseId);
   return (session) => {
     if (!sessionMatchesInventoryScope(session, requestScope)) return false;
     if (session.lease) return requestLeaseId === session.lease.leaseId;
