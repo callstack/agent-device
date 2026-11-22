@@ -119,6 +119,35 @@ test('cleanup failed steps retain their type while replay variables are scrubbed
   expect(JSON.stringify(response)).not.toContain('secret-value');
 });
 
+test('a sparse find refusal keeps its verdict while replay variables are scrubbed', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'find could not read the current accessibility tree',
+      details: {
+        reason: 'find_snapshot_unreadable',
+        verdictReason: 'sparse tree near secret-value',
+        verdictReasonCode: 'sparse-tree',
+      },
+    },
+    actionLabel: 'find',
+    action: 'find',
+    positionals: ['label', 'Submit', 'click'],
+    step: 1,
+    replayPath: '/tmp/find.ad',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [{ name: 'SECRET', value: 'secret-value' }],
+  });
+  if (response.ok) throw new Error('expected a failure response');
+  expect(response.error.details).toMatchObject({
+    reason: 'find_snapshot_unreadable',
+    verdictReason: 'sparse tree near <var:SECRET>',
+    verdictReasonCode: 'sparse-tree',
+  });
+  expect(JSON.stringify(response)).not.toContain('secret-value');
+});
+
 // #2997: the Android platform states `open --test-ime` because it sees one dispatched
 // session-open. On this surface that advice is unactionable — a flow caller never runs
 // `open` — so the cause's hint is replaced off the typed reason, never off the message.
