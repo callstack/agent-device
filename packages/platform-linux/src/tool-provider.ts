@@ -53,6 +53,7 @@ function withCommandOverrides(
     hostOs: commands.hostOs,
     run: overrides.runCommand ?? commands.run,
     which: overrides.whichCommand ?? commands.which,
+    isFilePresent: commands.isFilePresent,
     launchDetached: overrides.launchDetached ?? commands.launchDetached,
     sleep: overrides.sleep ?? commands.sleep,
     diagnose: commands.diagnose,

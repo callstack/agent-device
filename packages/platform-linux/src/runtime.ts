@@ -156,6 +156,11 @@ export function createLinuxPlatformRuntime(
         throw new AppError('UNSUPPORTED_PLATFORM', 'Linux runtime cannot bind this device');
       }
       const facts = linuxFacts(request.device);
+      // The provider this binding answers with, resolved once: the request scope is already entered
+      // when the runtime gateway binds, so a request that scoped its own provider is the one that
+      // answers for every operation of this binding. Resolving here rather than per call is what keeps
+      // one binding from asking the same question twice.
+      const running = resolveLinuxToolProvider(provider);
       const lifecycle = bindLocalDirectApplicationLifecycle({
         owner: 'Linux',
         openTargetIdentity: 'app-name',
@@ -170,7 +175,7 @@ export function createLinuxPlatformRuntime(
         operations: Object.freeze({
           ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
           ...(facts.operations.captureSnapshot.available
-            ? linuxSnapshotOperations(toolbox, provider, request)
+            ? linuxSnapshotOperations(toolbox, running, request)
             : {}),
           ...linuxInteractionOperations(host, request, facts),
         }),
@@ -332,8 +337,7 @@ function linuxSnapshotOperations(
       async () =>
         await captureLinuxSurfaceSnapshot(
           toolbox,
-          // The provider the request scoped, when it scoped one; otherwise this runtime's own.
-          resolveLinuxToolProvider(provider),
+          provider,
           input.options,
           captureSnapshotSignal(request.scope.signal, input),
         ),

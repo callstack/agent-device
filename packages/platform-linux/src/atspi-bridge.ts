@@ -13,7 +13,7 @@ import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import type { LinuxAccessibilityProvider } from '@agent-device/contracts/linux-tool-provider';
 import { normalizeAtspiRole } from './role-map.ts';
 import type { LinuxCommandRunner } from './command-runner.ts';
-import { resolveLinuxAtspiScriptPath } from './atspi-script.ts';
+import { createLinuxAtspiScriptResolver, LINUX_ATSPI_SCRIPT_NAME } from './atspi-script.ts';
 
 /** Limits matching the macOS helper's SnapshotTraversalLimits. */
 const MAX_DESKTOP_APPS = 24;
@@ -47,6 +47,11 @@ type PythonResult = {
 export function createLinuxAccessibilityProvider(
   commands: LinuxCommandRunner,
 ): LinuxAccessibilityProvider {
+  // Probed once per setup: the helper's location never changes while the process lives, and a repair
+  // of a broken install needs a restarted process anyway.
+  const resolveScriptPath = createLinuxAtspiScriptResolver((candidate) =>
+    commands.isFilePresent(candidate),
+  );
   return {
     async captureTree(surface, options = {}) {
       if (commands.hostOs !== 'linux') {
@@ -60,8 +65,16 @@ export function createLinuxAccessibilityProvider(
         );
       }
 
+      const scriptPath = await resolveScriptPath();
+      if (scriptPath === undefined) {
+        throw new AppError(
+          'TOOL_MISSING',
+          `Cannot find ${LINUX_ATSPI_SCRIPT_NAME}. Ensure the @agent-device/linux plugin package is installed correctly.`,
+        );
+      }
+
       const args = [
-        resolveLinuxAtspiScriptPath(),
+        scriptPath,
         '--surface',
         surface,
         '--max-nodes',

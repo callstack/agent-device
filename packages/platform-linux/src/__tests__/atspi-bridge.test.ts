@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
 import { createLinuxToolProvider } from '../tool-provider.ts';
-import { resolveLinuxAtspiScriptPath } from '../atspi-script.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 /** The AT-SPI2 capture route, answering through the host the plugin was set up with. */
@@ -13,7 +12,7 @@ function captureAtspi(
   options: { maxNodes?: number; maxDepth?: number; maxApps?: number; signal?: AbortSignal } = {},
 ) {
   const provider = createLinuxToolProvider(stub.toolbox);
-  return provider.accessibility!.captureTree(surface, options);
+  return provider.accessibility.captureTree(surface, options);
 }
 
 function stubPython(
@@ -55,10 +54,27 @@ test('the AT-SPI capture runs the helper shipped with the plugin', async () => {
 
   const command = stub.commands[0]!;
   assert.equal(command.executable, 'python3');
-  assert.equal(command.args[0], resolveLinuxAtspiScriptPath());
-  // The helper has to ship inside the installed package, not resolve against a repository layout.
-  assert.equal(path.basename(command.args[0]!), 'atspi-dump.py');
-  assert.equal(path.dirname(command.args[0]!).endsWith('linux'), true);
+  // The helper is resolved beside the code that runs it, not against a repository layout: the
+  // installed package carries it under `linux`.
+  assert.equal(
+    command.args[0],
+    path.resolve(import.meta.dirname, '../..', 'linux', 'atspi-dump.py'),
+  );
+});
+
+test('the AT-SPI capture names a broken install when the host cannot see the shipped helper', async () => {
+  const stub = createLinuxHostStub({
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    tools: ['python3'],
+    shippedHelperPresent: false,
+    respond: () => ({ stdout: TREE }),
+  });
+
+  await assert.rejects(captureAtspi(stub), (error: unknown) => {
+    const failure = error as AppError;
+    return failure.code === 'TOOL_MISSING' && failure.message.includes('atspi-dump.py');
+  });
+  assert.equal(stub.commands.length, 0);
 });
 
 test('the AT-SPI capture passes the surface and traversal limits', async () => {

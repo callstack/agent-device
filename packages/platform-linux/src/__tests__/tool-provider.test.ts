@@ -231,7 +231,7 @@ test('the desktop provider falls back to pkill when the host has no wmctrl', asy
 test('the screenshot provider translates capture to the tool the host reports', async () => {
   const stub = x11Stub(['scrot']);
 
-  await providerFor(stub).screenshot!.capture('/tmp/screen.png');
+  await providerFor(stub).screenshot.capture('/tmp/screen.png');
 
   assert.deepEqual(tuples(stub.commands), [['scrot', ['/tmp/screen.png']]]);
 });
