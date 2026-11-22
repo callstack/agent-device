@@ -4,7 +4,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformHost } from 'agent-device/plugins';
 import type { DetachedCommandExit } from '@agent-device/contracts/platform-runtime-host';
-import type { LinuxCommandResult } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxCommandResult } from './tool-provider-types.ts';
 import { createLinuxToolbox, type LinuxToolbox } from './toolbox.ts';
 
 /** One command this stubbed host was asked to run, plus the environment it was handed. */

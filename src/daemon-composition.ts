@@ -163,7 +163,6 @@ export async function composeDaemonRuntimeDeps(
       },
       web,
       vega,
-      linux,
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
       host,

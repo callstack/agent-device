@@ -1,18 +1,17 @@
 /**
- * The Linux host-tool surface a request scopes (ADR 0019 host execution).
+ * The Linux host-tool vocabulary the family drives its desktop with (ADR 0019 host execution).
  *
- * The Linux family drives desktop tools — `xdotool`, `ydotool`, a clipboard tool, a screenshot
- * tool, and the AT-SPI helper — through this vocabulary. Root composition passes a resolved
- * provider back to the Linux plugin without naming its implementation, exactly as it does for the
- * Vega family's CLI adapter, so a request that owns a display decision and a command route hands
- * them to the family instead of the family reaching process globals of its own.
+ * The Linux family runs desktop tools — `xdotool`, `ydotool`, a clipboard tool, a screenshot tool,
+ * and the AT-SPI helper — through this shape. One instance answers one `PlatformHost`: the toolbox
+ * built from the host the plugin was set up with supplies the command route, and the display
+ * decision comes from that host's environment. Nothing outside this package builds or receives it.
  */
 
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { DetachedCommandExit } from './platform-runtime-host.ts';
-import type { ClickButton } from './click-button.ts';
-import type { ScrollDirection } from './scroll-gesture.ts';
-import type { SessionSurface } from './session-surface.ts';
+import type { DetachedCommandExit } from '@agent-device/contracts/platform-runtime-host';
+import type { ClickButton } from '@agent-device/contracts/click-button';
+import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import type { SessionSurface } from '@agent-device/contracts/session';
 
 /** The Linux family's display-server vocabulary, from one detector. */
 export type LinuxDisplayServer = 'wayland' | 'x11';
@@ -41,12 +40,10 @@ export type LinuxCommandOptions = Readonly<{
 }>;
 
 /**
- * The desktop-provider parts one request may supply. Each part answers one semantic intent of the
- * Linux interactor, so a caller that owns a surface — a scripted desktop, a display server it
- * drives directly — substitutes it for the family's own tool route without reimplementing the
- * interactor. Only `input` is optional, and only because the family's own synthesis is a fallback for
- * it. Every other part is mandatory: the interactor reads each one on a plain Linux request, so a
- * caller that omits one is a type error rather than a `TypeError` at the first dereference.
+ * The Linux desktop surface one setup drives: the command primitives, read from the family's own
+ * host, and the semantic parts built on them. `input` is the only optional part because the
+ * family's own xdotool/ydotool synthesis is the fallback for it; every other part is mandatory,
+ * because the interactor reads each one on a plain Linux request.
  */
 export type LinuxToolProvider = Readonly<{
   /** The display decision every local tool selection in this provider shares (#3794). */
