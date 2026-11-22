@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import {
   readPostGestureOutcome,
   snapshotStateProvenance,
+  systemSurfaceBundleId,
   type SnapshotProvenance,
   type SnapshotStateProvenance,
 } from './snapshot-model.ts';
@@ -44,4 +45,15 @@ test('readPostGestureOutcome reads every outcome kind off the wire and drops mal
     readPostGestureOutcome({ kind: 'loading', gesture: { action: 'open', positionals: [1] } }),
   ).toBeUndefined();
   expect(readPostGestureOutcome('loading')).toBeUndefined();
+});
+
+test('systemSurfaceBundleId projects the host identity only for host-bearing surfaces', () => {
+  expect(systemSurfaceBundleId(undefined)).toBeUndefined();
+  expect(systemSurfaceBundleId({ kind: 'android-system-overlay' })).toBeUndefined();
+  expect(systemSurfaceBundleId({ kind: 'web-auth', bundleId: 'com.apple.SafariViewService' })).toBe(
+    'com.apple.SafariViewService',
+  );
+  expect(systemSurfaceBundleId({ kind: 'payment', bundleId: 'com.apple.PassbookUIService' })).toBe(
+    'com.apple.PassbookUIService',
+  );
 });

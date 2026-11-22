@@ -98,6 +98,23 @@ export type SnapshotSystemSurface =
   | Readonly<{ kind: 'android-system-overlay' }>
   | IosSystemSurfaceProvenance;
 
+/**
+ * The surface host bundle id a capture scopes comparisons by, or undefined when the surface carries
+ * no host identity (ordinary app content or an Android system overlay).
+ */
+export function systemSurfaceBundleId(
+  surface: SnapshotSystemSurface | undefined,
+): string | undefined {
+  if (surface === undefined) return undefined;
+  switch (surface.kind) {
+    case 'android-system-overlay':
+      return undefined;
+    case 'web-auth':
+    case 'payment':
+      return surface.bundleId;
+  }
+}
+
 export type SnapshotState = {
   nodes: SnapshotNode[];
   createdAt: number;

@@ -12,6 +12,7 @@ export {
 } from '../snapshot-scope.ts';
 export {
   snapshotStateProvenance,
+  systemSurfaceBundleId,
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
   inheritPostGestureOutcome,
