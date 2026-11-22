@@ -33,7 +33,7 @@ const WEBDRIVER_SESSION_REASONS = {
   sessionShutdownDuringAllocation: { reason: 'provider_session_shutdown_during_allocation' },
   // The lease is still releasing its previous session, so a new allocation gets no session.
   sessionReleaseInProgress: { reason: 'provider_session_release_in_progress' },
-  // Shutdown left WebDriver sessions running, so they may still be billed.
+  // Shutdown could not confirm that all WebDriver sessions and provider resources were cleaned up.
   sessionCleanupIncomplete: { reason: 'provider_session_cleanup_incomplete' },
 } as const satisfies ReasonTable<'webdriver provider'>;
 

@@ -299,7 +299,7 @@ These reasons can come from more than one command.
 | `provider_session_released_during_allocation` | Releasing the lease interrupted the allocation; `details.cleanup` reports how cleanup ended. |
 | `provider_session_shutdown_during_allocation` | The WebDriver runtime could not finish the allocation: shutdown was in progress or done. |
 | `provider_session_release_in_progress` | The lease is still releasing its previous session, so a new allocation gets no session. |
-| `provider_session_cleanup_incomplete` | Shutdown left WebDriver sessions running, so they may still be billed. |
+| `provider_session_cleanup_incomplete` | Shutdown could not confirm that all WebDriver sessions and provider resources were cleaned up. |
 | `text_entry_clear_target_unavailable` | `fill` has no focused element reference to clear before it types the replacement text. |
 | `webdriver_request_timeout` | The transport stopped waiting on a WebDriver request the driver may still be carrying out. |
 | `webdriver_connect_refused` | The request never reached the driver: the connection was refused or the host is unreachable. |
