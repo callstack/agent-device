@@ -187,12 +187,15 @@ async function verifyLimrunIosInstall(
     });
     if (verifiedBundleId) return { appId: verifiedBundleId };
   }
+  const { safeInstanceErrorText } = await import('./error-text.ts');
+  const scrubId = (value?: string) =>
+    value === undefined ? undefined : safeInstanceErrorText(value, [session.token]);
   throw new AppError('COMMAND_FAILED', 'Limrun iOS app installation could not be verified.', {
-    resultBundleId,
-    requestedBundleId,
+    resultBundleId: scrubId(resultBundleId),
+    requestedBundleId: scrubId(requestedBundleId),
     installedUserApps: afterInstallApps
       .filter(isUserInstalledIosApp)
-      .map((app) => app.bundleId)
+      .map((app) => safeInstanceErrorText(app.bundleId, [session.token]))
       .sort(),
   });
 }

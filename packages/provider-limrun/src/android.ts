@@ -282,12 +282,9 @@ async function runLimrunAndroidAdbAtSerial(
   options?: LimrunAdbCommandOptions,
 ): Promise<LimrunAdbCommandResult> {
   const invocation = session.dependencies.android.deviceAdbInvocation(serial, args);
-  const result = await session.dependencies.host.runAdb(invocation, {
-    allowFailure: options?.allowFailure,
-    binaryStdout: options?.binaryStdout,
-    stdin: options?.stdin,
+  const result = await runLimrunAndroidAdbCommand(session.dependencies, session.token, invocation, {
+    ...options,
     timeoutMs: options?.timeoutMs ?? 30_000,
-    signal: options?.signal,
   });
   return await requireSuccessfulLimrunAndroidAdb(
     invocation,
@@ -295,6 +292,38 @@ async function runLimrunAndroidAdbAtSerial(
     options?.allowFailure,
     session.dependencies,
   );
+}
+
+export async function runLimrunAndroidAdbCommand(
+  dependencies: Pick<LimrunRuntimeDependencies, 'host'>,
+  token: string,
+  invocation: AndroidAdbInvocation,
+  options?: LimrunAdbCommandOptions,
+): Promise<LimrunAdbCommandResult> {
+  let result: LimrunAdbCommandResult;
+  try {
+    result = await dependencies.host.runAdb(invocation, options);
+  } catch (error) {
+    const { scrubInstanceCommandFailure } = await import('./instance-error-scrubbing.ts');
+    throw scrubInstanceCommandFailure(error, [token]);
+  }
+  if (result.exitCode === 0) return result;
+  const { safeInstanceErrorText } = await import('./error-text.ts');
+  return {
+    ...result,
+    stdout: safeInstanceErrorText(result.stdout, [token]),
+    stderr: safeInstanceErrorText(result.stderr, [token]),
+  };
+}
+
+export async function readLimrunAndroidLogs(
+  dependencies: Pick<LimrunRuntimeDependencies, 'android'>,
+  token: string,
+  adb: LimrunAdbExecutor,
+  lineLimit: number,
+): Promise<string> {
+  const { safeInstanceErrorText } = await import('./error-text.ts');
+  return safeInstanceErrorText(await dependencies.android.readLogs(adb, lineLimit), [token]);
 }
 
 async function requireSuccessfulLimrunAndroidAdb(

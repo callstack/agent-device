@@ -14,7 +14,7 @@ export async function connectLimrunInstanceClient<
     const client = await connect({ ...access, ...LIMRUN_INSTANCE_CLIENT_LOGGING });
     return withInstanceCredentialScrubbing(client, secrets);
   } catch (error) {
-    throw instanceCommandFailure(error, secrets);
+    throw scrubInstanceCommandFailure(error, secrets);
   }
 }
 
@@ -44,9 +44,6 @@ export function withInstanceCredentialScrubbing<Client extends object>(
   sentValues: Iterable<string | undefined>,
 ): Client {
   const secrets = [...sentValues].filter((value): value is string => typeof value === 'string');
-  const scrub = (error: unknown): never => {
-    throw instanceCommandFailure(error, secrets);
-  };
   return new Proxy(client, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
@@ -54,7 +51,12 @@ export function withInstanceCredentialScrubbing<Client extends object>(
       const method = value as (...args: unknown[]) => unknown;
       return (...args: unknown[]) => {
         const answer = method.apply(target, args);
-        return answer instanceof Promise ? answer.then(undefined, scrub) : answer;
+        if (!(answer instanceof Promise)) return answer;
+        return answer.catch((error: unknown) => {
+          // The SDK's sync response decoder can quote only a prefix of the token.
+          if (property === 'syncApp' && error instanceof SyntaxError) throw new SyntaxError();
+          throw scrubInstanceCommandFailure(error, secrets);
+        });
       };
     },
   });
@@ -65,7 +67,7 @@ export function withInstanceCredentialScrubbing<Client extends object>(
  * the message: it is the only diagnosis of a rejected command an instance gives. A failure that names
  * none of it is this plugin's caller's own error to answer for, and is returned as it came.
  */
-function instanceCommandFailure(error: unknown, secrets: readonly string[]): unknown {
+export function scrubInstanceCommandFailure(error: unknown, secrets: readonly string[]): unknown {
   if (!(error instanceof Error)) return error;
   if (error instanceof AppError) {
     const text = safeInstanceErrorText(error.message, secrets);
@@ -124,8 +126,13 @@ function scrubPublishedDetails(
   if (details === undefined) return undefined;
   const secrets = [...sentValues].filter((value): value is string => typeof value === 'string');
   if (secrets.length === 0) return details;
-  const scrubbed = scrubInstanceDiagnostic(details, secrets);
-  return scrubbed === details ? details : (scrubbed as Record<string, unknown>);
+  const scrubbed = scrubInstanceDiagnostic(details, secrets) as Record<string, unknown>;
+  if (scrubbed === details) return details;
+  for (const key of ['status', 'statusCode', 'exitCode']) {
+    const status = details[key];
+    if (typeof status === 'number') scrubbed[key] = status;
+  }
+  return scrubbed;
 }
 
 /** Rebuilds only the strings of a diagnostic value that name a sent credential; a type is preserved. */
@@ -138,7 +145,7 @@ export function scrubInstanceDiagnostic(value: unknown, secrets: readonly string
     const entries = value.map((entry) => scrubInstanceDiagnostic(entry, secrets));
     return entries.every((entry, index) => entry === value[index]) ? value : entries;
   }
-  if (value === null || typeof value !== 'object') return value;
+  if (value === null || typeof value !== 'object' || ArrayBuffer.isView(value)) return value;
   const original = Object.entries(value);
   const entries = original
     .filter(([key]) => safeInstanceErrorText(key, secrets) === key)

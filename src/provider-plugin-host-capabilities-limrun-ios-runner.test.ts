@@ -818,3 +818,28 @@ test('an interrupted upload does not prevent the fixture from serving a later re
   await f.runner.applicationTools.prewarmRunnerCache(f.device, {}, new AbortController().signal);
   expect(f.uploads).toHaveLength(1);
 });
+
+test('a short instance token matching the success field leaves the runner reply intact', async () => {
+  const f = await fixture({
+    instanceToken: 'ok',
+    snapshot: {
+      nodes: [
+        {
+          index: 0,
+          type: 'Application',
+          label: 'Book',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+      ],
+      truncated: false,
+    },
+  });
+  try {
+    const snapshot = await f.runner
+      .createInteractor()
+      .snapshot({ appBundleId: 'com.apple.Preferences' });
+    expect(snapshot).toMatchObject({ nodes: [expect.objectContaining({ label: 'Book' })] });
+  } finally {
+    await f.runner.dispose();
+  }
+});

@@ -57,7 +57,7 @@ export async function resolveLimrunAppAsset(
   throw new AppError('COMMAND_FAILED', `Limrun returned multiple uploaded apps named ${name}.`, {
     app: name,
     platform,
-    assetIds: matches.map((asset) => asset.id),
+    matchCount: matches.length,
   });
 }
 

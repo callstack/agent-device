@@ -51,14 +51,17 @@ export async function createLimrunIosRunner(
   let prepared = false;
   let canceledRunMayHoldSlot = false;
   const token = apple.runner.mintToken();
+  const credentials = [headers.Authorization, token];
   const endpoint = {
     port,
     token,
     http: {
       url: commandUrl,
       headers,
-      transformResponse: (response: Response) =>
-        scrubRunnerResponse(response, [headers.Authorization, token]),
+      diagnostics: {
+        scrubText: (text: string) => safeInstanceErrorText(text, credentials),
+        scrubPayload: (payload: unknown) => scrubInstanceDiagnostic(payload, credentials),
+      },
     },
   };
   const provider = await apple.runner.createLaunchedProvider(session.device, { endpoint, launch });
@@ -352,37 +355,4 @@ export async function createLimrunIosRunner(
       }
     },
   };
-}
-
-function scrubRunnerResponse(response: Response, credentials: readonly string[]): Response {
-  if (!response.body) return response;
-  const chunks: string[] = [];
-  const body = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(
-    new TransformStream<string, Uint8Array>({
-      transform: (chunk) => {
-        chunks.push(chunk);
-      },
-      flush: (controller) => {
-        controller.enqueue(
-          new TextEncoder().encode(scrubRunnerResponseText(chunks.join(''), credentials)),
-        );
-      },
-    }),
-  );
-  return new Response(body, {
-    status: response.status,
-    statusText: safeInstanceErrorText(response.statusText, credentials),
-    headers: response.headers,
-  });
-}
-
-function scrubRunnerResponseText(text: string, credentials: readonly string[]): string {
-  let payload: unknown;
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    return safeInstanceErrorText(text, credentials);
-  }
-  const scrubbed = scrubInstanceDiagnostic(payload, credentials);
-  return scrubbed === payload ? text : JSON.stringify(scrubbed);
 }

@@ -59,6 +59,7 @@ async function requestBody(request: IncomingMessage): Promise<Buffer | undefined
 
 export async function fixture(
   options: {
+    instanceToken?: string;
     launchStatus?: number;
     holdLaunchErrorBody?: boolean;
     syncStatus?: number;
@@ -79,6 +80,7 @@ export async function fixture(
     snapshot?: Record<string, unknown>;
   } & FileStoreOptions = {},
 ): Promise<RunnerFixture> {
+  const instanceToken = options.instanceToken ?? 'instance-token';
   const directory = await mkdtempForTest('limrun-runner-');
   const app = path.join(directory, 'AgentDeviceRunnerUITests-Runner.app');
   await fs.mkdir(path.join(app, 'PlugIns', 'AgentDeviceRunnerUITests.xctest'), { recursive: true });
@@ -208,7 +210,7 @@ export async function fixture(
   const storage = fileStore(options);
   const server = createServer(async (request, response) => {
     requests.push(request.url!);
-    if (request.headers.authorization !== 'Bearer instance-token') {
+    if (request.headers.authorization !== `Bearer ${instanceToken}`) {
       response.writeHead(401).end();
       return;
     }
@@ -256,7 +258,7 @@ export async function fixture(
   const stopReadiness: Mock<() => void> = vi.fn();
   const session = {
     apiUrl: `http://127.0.0.1:${address.port}/v1/ios_test/api`,
-    token: 'instance-token',
+    token: instanceToken,
     device: {
       id: 'limrun:ios:test',
       platform: 'apple',

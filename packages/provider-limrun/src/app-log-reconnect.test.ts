@@ -224,7 +224,7 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
           androidAdbInvocation(androidAdbHostTarget(), command),
         readLogs: async (adb: LimrunAdbExecutor) => {
           await adb(['shell', 'logcat', '-d', '-T', '20']);
-          return 'line\n';
+          return 'line secret\n';
         },
       },
     } as unknown as LimrunRuntimeDependencies,
@@ -232,7 +232,9 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
   expect(outcome.status).toBe('opened');
   if (outcome.status !== 'opened') return;
 
-  await outcome.reader.readLogs('com.example.app', 20, new AbortController().signal);
+  await expect(
+    outcome.reader.readLogs('com.example.app', 20, new AbortController().signal),
+  ).resolves.toBe('line [REDACTED]\n');
   // The tunnel serial is addressing, so the command the reader wrote travels unchanged: no `-s`
   // is stitched back into the payload the provider hands over.
   expect(calls[0]).toEqual({

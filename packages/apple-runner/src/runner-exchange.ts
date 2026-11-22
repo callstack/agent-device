@@ -205,7 +205,8 @@ async function settleRunnerAnsweredExchange(
   const runnerFatalReason = resolveRunnerFatalReason(data);
   if (runnerFatalReason) {
     session.lastHealthyMutation = undefined;
-    await invalidateFatalSession(runnerFatalReason);
+    const scrubText = session.endpoint.http?.diagnostics?.scrubText;
+    await invalidateFatalSession(scrubText?.(runnerFatalReason) ?? runnerFatalReason);
   } else if (canSkipRunnerReadinessPreflightAfterHealthyMutation(runnerCommand)) {
     session.lastHealthyMutation = {
       atMs: Date.now(),
@@ -411,7 +412,10 @@ async function drainCanceledRunnerCommand(params: {
       command: runnerCommand.command,
       commandId: runnerCommand.commandId,
       outcome,
-      lifecycleState,
+      lifecycleState:
+        lifecycleState === undefined
+          ? undefined
+          : (session.endpoint.http?.diagnostics?.scrubText(lifecycleState) ?? lifecycleState),
       polls,
     },
   });
@@ -509,34 +513,43 @@ function emitRunnerReadinessPreflightSkipped(
  */
 export async function parseRunnerResponse(
   response: Response,
-  session: Pick<RunnerSession, 'state'>,
+  session: Pick<RunnerSession, 'state'> & Partial<Pick<RunnerSession, 'endpoint'>>,
   /** The command's own log boundary. Absent means no log was configured, so nothing is read. */
   logAttempt?: RunnerLogAttempt,
 ): Promise<Record<string, unknown>> {
-  const payload = decodeRunnerResponseBody(await response.text());
+  const diagnostics = session.endpoint?.http?.diagnostics;
+  const payload = decodeRunnerResponseBody(await response.text(), diagnostics?.scrubText);
   if (!isRunnerResponseOk(payload)) {
     throw await enrichRunnerFailureFromLog({
-      error: buildRunnerResponseError(payload, logAttempt?.logPath),
+      error: buildRunnerResponseError(payload, logAttempt?.logPath, diagnostics),
       logSince: logAttempt,
     });
   }
   advanceRunnerSessionState(session, 'ready');
   const data = readRunnerResponseData(payload);
-  emitRunnerResponseDiagnostics(data);
+  emitRunnerResponseDiagnostics(data, diagnostics?.scrubText);
   return data;
 }
 
-function emitRunnerResponseDiagnostics(data: Record<string, unknown>): void {
+function emitRunnerResponseDiagnostics(
+  data: Record<string, unknown>,
+  scrubText: (text: string) => string = (text) => text,
+): void {
   const fallback = data.gestureFallback;
   if (typeof fallback !== 'string' || fallback.length === 0) return;
   emitDiagnostic({
     level: 'debug',
     phase: 'ios_runner_gesture_fallback',
     data: {
-      fallback,
+      fallback: scrubText(fallback),
       message:
-        typeof data.gestureFallbackMessage === 'string' ? data.gestureFallbackMessage : undefined,
-      hint: typeof data.gestureFallbackHint === 'string' ? data.gestureFallbackHint : undefined,
+        typeof data.gestureFallbackMessage === 'string'
+          ? scrubText(data.gestureFallbackMessage)
+          : undefined,
+      hint:
+        typeof data.gestureFallbackHint === 'string'
+          ? scrubText(data.gestureFallbackHint)
+          : undefined,
     },
   });
 }

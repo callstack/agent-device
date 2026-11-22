@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   androidAdbHostTarget,
@@ -296,3 +297,52 @@ function androidDependencies(
     } as unknown as LimrunRuntimeDependencies['host'],
   };
 }
+
+test('redacts failed ADB result text and preserves the exit and binary output', async () => {
+  const dependencies = androidDependencies();
+  const stdoutBuffer = Buffer.from([0, 255]);
+  dependencies.host.runAdb = async () => ({
+    exitCode: 17,
+    stdout: 'stdout instance-token',
+    stderr: 'stderr instance-token',
+    stdoutBuffer,
+  });
+  const session = await createLimrunAndroidSession(ANDROID_SESSION_OPTIONS, dependencies);
+  const result = await session.adbProvider.exec(['shell', 'pm', 'list', 'packages', '-3'], {
+    allowFailure: true,
+    binaryStdout: true,
+  });
+  expect(result).toEqual({
+    exitCode: 17,
+    stdout: 'stdout [REDACTED]',
+    stderr: 'stderr [REDACTED]',
+    stdoutBuffer,
+  });
+  expect(result.stdoutBuffer).toBe(stdoutBuffer);
+});
+
+test('redacts thrown ADB errors while preserving typed failure details', async () => {
+  const dependencies = androidDependencies();
+  dependencies.host.runAdb = async () => {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'ADB failed status',
+      {
+        stderr: 'connection refused status',
+        exitCode: 17,
+        status: 502,
+      },
+      new Error('transport status'),
+    );
+  };
+  const session = await createLimrunAndroidSession(
+    { ...ANDROID_SESSION_OPTIONS, token: 'status' },
+    dependencies,
+  );
+  await expect(session.adbProvider.exec(['shell', 'echo', 'ready'])).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'ADB failed [REDACTED]',
+    details: { stderr: 'connection refused [REDACTED]', exitCode: 17, status: 502 },
+    cause: { message: 'transport [REDACTED]' },
+  });
+});

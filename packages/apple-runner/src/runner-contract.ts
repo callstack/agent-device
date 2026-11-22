@@ -524,14 +524,10 @@ export type RunnerReportedErrorClass = Readonly<{
   }>;
 }>;
 
-/**
- * The one reading of a runner-reported error code (#2484 follow-up). A runner failure reaches the
- * host by two routes — the command's own response, and the lifecycle journal a status probe reads
- * back after the transport response was lost — and both must classify it identically, or the same
- * runner condition surfaces under two codes with only one of them marked retriable.
- */
+/** Classifies live and retained runner failures from the original protocol code. */
 export function classifyRunnerReportedError(
   runnerErrorCode: string | undefined,
+  scrubText?: (text: string) => string,
 ): RunnerReportedErrorClass {
   const row = runnerErrorCodeRow(runnerErrorCode);
   // A code the table does not declare carries no dispatch evidence, so it publishes `unknown`.
@@ -542,7 +538,10 @@ export function classifyRunnerReportedError(
         ? (row.diagnosticOnly.wireCode ?? 'COMMAND_FAILED')
         : toAppErrorCode(runnerErrorCode),
     details: Object.freeze({
-      runnerErrorCode,
+      runnerErrorCode:
+        row || runnerErrorCode === undefined
+          ? runnerErrorCode
+          : (scrubText?.(runnerErrorCode) ?? runnerErrorCode),
       ...(row?.diagnosticOnly?.retriable === true ? { retriable: true as const } : {}),
       ...(row?.reason === undefined ? {} : { reason: row.reason }),
       dispatched,
@@ -612,26 +611,21 @@ function backDismissHint(controls: readonly BackDismissControl[]): string | unde
     : 'Press one of details.dismissControls by its selector to dismiss this screen; back only pops the navigation stack.';
 }
 
-/**
- * The one decoding of a runner response body (#2662). The envelope arrives at three readers — a
- * command's own response, the lifecycle journal a status probe reads back after the transport
- * response was lost, and the adoption `uptime` probe — and all three must agree on what is
- * readable, or a body one of them refuses becomes an answer for another.
- *
- * Only a JSON object can be an envelope. A body that is not JSON at all, and a JSON scalar or array
- * that carries no `ok`, are both transport-shaped: neither is something the runner's encoder emits,
- * and reading either as an empty reply would let a proxy page or a half-written body answer for a
- * command the runner may still be executing.
- */
-export function decodeRunnerResponseBody(text: string): RunnerResponsePayload {
+/** Decodes command, retained journal, and adoption replies with the same envelope rules. */
+export function decodeRunnerResponseBody(
+  text: string,
+  scrubText?: (text: string) => string,
+): RunnerResponsePayload {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
+    parsed = undefined;
   }
   if (!isRunnerEnvelopeObject(parsed)) {
-    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
+    throw new AppError('COMMAND_FAILED', 'Invalid runner response', {
+      text: scrubText?.(text) ?? text,
+    });
   }
   return parsed;
 }
@@ -653,15 +647,20 @@ export function readRunnerResponseData(payload: RunnerResponsePayload): Record<s
 export function buildRunnerResponseError(
   payload: RunnerResponsePayload,
   logPath?: string,
+  diagnostics?: NonNullable<RunnerEndpoint['http']>['diagnostics'],
 ): AppError {
-  const runnerErrorCode = readRunnerErrorCode(payload.error?.code);
+  const rawCode = payload.error?.code;
+  const runnerErrorCode = typeof rawCode === 'string' ? rawCode.trim() || undefined : undefined;
+  const text = diagnostics?.scrubText ?? ((value) => value);
   const errorMessage =
-    typeof payload.error?.message === 'string' ? payload.error.message : undefined;
-  const hint = typeof payload.error?.hint === 'string' ? payload.error.hint : undefined;
-  const classification = classifyRunnerReportedError(runnerErrorCode);
-  const dismissControls = readBackDismissControls(runnerErrorCode, payload.error);
+    typeof payload.error?.message === 'string' ? text(payload.error.message) : undefined;
+  const hint = typeof payload.error?.hint === 'string' ? text(payload.error.hint) : undefined;
+  const classification = classifyRunnerReportedError(runnerErrorCode, text);
+  const dismissControls = readBackDismissControls(runnerErrorCode, payload.error).filter(
+    (control) => !diagnostics || diagnostics.scrubPayload(control) === control,
+  );
   return new AppError(classification.code, errorMessage ?? 'Runner error', {
-    runner: payload,
+    runner: diagnostics ? diagnostics.scrubPayload(payload) : payload,
     ...classification.details,
     ...(dismissControls.length > 0 ? { dismissControls } : {}),
     xcodebuild: {
@@ -672,10 +671,6 @@ export function buildRunnerResponseError(
     hint: backDismissHint(dismissControls) ?? hint,
     logPath,
   });
-}
-
-function readRunnerErrorCode(rawCode: unknown): string | undefined {
-  return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
 }
 
 export function withRunnerCommandId(command: RunnerCommand): RunnerCommand {
@@ -706,7 +701,10 @@ export type RunnerEndpoint = Readonly<{
   http?: Readonly<{
     url: string;
     headers?: Readonly<Record<string, string>>;
-    transformResponse?(response: Response): Response;
+    diagnostics?: Readonly<{
+      scrubText(text: string): string;
+      scrubPayload(payload: unknown): unknown;
+    }>;
   }>;
 }>;
 

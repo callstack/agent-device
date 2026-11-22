@@ -6,6 +6,7 @@ import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader, LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
 import { fromLimrunOrgApi, isLimrunApiNotFound, requireLimrunOrgClient } from './client-options.ts';
 import { connectLimrunInstanceClient } from './instance-error-scrubbing.ts';
+import { readLimrunAndroidLogs, runLimrunAndroidAdbCommand } from './android.ts';
 import { attachedLimrunInstanceId } from './device.ts';
 import type {
   LimrunAndroidInstanceAccess,
@@ -154,7 +155,9 @@ async function openAndroidReader(
       args: readonly string[],
       commandOptions?: Parameters<LimrunRuntimeDependencies['host']['runAdb']>[1],
     ) =>
-      await dependencies.host.runAdb(
+      await runLimrunAndroidAdbCommand(
+        dependencies,
+        access.token,
         dependencies.android.deviceAdbInvocation(serial, args),
         commandOptions,
       );
@@ -164,7 +167,7 @@ async function openAndroidReader(
       instanceId: descriptor.instanceId,
       ownership: descriptor.ownership,
       readLogs: async (_appBundleId, lineLimit) =>
-        await dependencies.android.readLogs(adb, lineLimit),
+        await readLimrunAndroidLogs(dependencies, access.token, adb, lineLimit),
       [Symbol.asyncDispose]: async () => {
         await dependencies.host
           .runAdb(dependencies.android.hostAdbInvocation(['disconnect', serial]), {
