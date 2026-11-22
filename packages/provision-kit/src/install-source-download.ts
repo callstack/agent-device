@@ -103,8 +103,17 @@ async function requestHop(
   environment: NodeJS.ProcessEnv,
 ): Promise<networkTransport.InstallSourceNetworkResponse> {
   const { watchdog } = phases;
+  let approved: Awaited<ReturnType<typeof approveDownloadSourceUrl>>;
   try {
-    const approved = await approveDownloadSourceUrl(url, watchdog.signal);
+    approved = await approveDownloadSourceUrl(url, watchdog.signal);
+  } catch (error) {
+    // An approval refusal is a typed answer about the URL, not a transport failure.
+    throw (
+      phaseTimeout(error, phases) ??
+      (isSignalFailure(error, watchdog.signal) ? watchdog.signal.reason : error)
+    );
+  }
+  try {
     return await networkTransport.requestApprovedUrl({
       url,
       approvedAddress: approved.address,

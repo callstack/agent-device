@@ -492,3 +492,29 @@ test('download and the trusted-source check refuse an unparsable source alike', 
   );
   assert.throws(() => isTrustedInstallSourceUrl(source), expected);
 });
+
+test('download keeps the INVALID_ARGS refusal and hint when the source host does not resolve', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-dns-');
+  const lookup = vi
+    .spyOn(dns, 'lookup')
+    .mockRejectedValue(Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }));
+  const requester = vi.spyOn(networkTransport, 'requestApprovedUrl');
+  try {
+    const error = await downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://typo.example/app.apk',
+      signal: new AbortController().signal,
+      environment: {},
+    }).catch((error: unknown) => error);
+
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'INVALID_ARGS');
+    assert.equal(error.details?.hint, 'Use a public artifact URL.');
+    assert.equal(error.details?.networkErrorCode, undefined);
+    assert.equal(requester.mock.calls.length, 0);
+  } finally {
+    requester.mockRestore();
+    lookup.mockRestore();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
