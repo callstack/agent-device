@@ -23,7 +23,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'diff.depth',
   'diff.interactiveOnly',
   'diff.kind',
-  'diff.out',
   'diff.raw',
   'diff.scope',
   'events.cursor',

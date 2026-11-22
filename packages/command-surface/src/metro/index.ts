@@ -108,7 +108,7 @@ export const metroCliReader: CliReader = (positionals, flags) => {
   return {
     action,
     projectRoot: flags.metroProjectRoot,
-    kind: readMetroPrepareKind(flags.kind ?? flags.metroKind),
+    kind: readMetroPrepareKind(flags.kind),
     port: flags.metroPreparePort,
     listenHost: flags.metroListenHost,
     statusHost: flags.metroStatusHost,

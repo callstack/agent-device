@@ -107,6 +107,9 @@ test('isFlagSupportedForCommand consults option schema support map', () => {
   assert.equal(isFlagSupportedForCommand('delayMs', 'type'), true);
   assert.equal(isFlagSupportedForCommand('delayMs', 'fill'), true);
   assert.equal(isFlagSupportedForCommand('delayMs', 'press'), false);
+  // `metro prepare` reads --kind; --metro-kind belongs to connect's hint family only.
+  assert.equal(isFlagSupportedForCommand('metroKind', 'metro'), false);
+  assert.equal(isFlagSupportedForCommand('metroKind', 'connect'), true);
 });
 
 test('option schema parses enum options from env/config sources', () => {
