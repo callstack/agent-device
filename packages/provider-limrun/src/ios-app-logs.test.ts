@@ -19,7 +19,7 @@ test('scrubs retained, live console, and buffered unified app logs', async () =>
         streamSyslog: () => systemStream,
       },
     } as unknown as Parameters<typeof createLimrunIosAppLogReader>[0],
-    async () => async () => ({}),
+    async () => () => ({}),
   );
   const signal = new AbortController().signal;
   const app = 'com.example.app';

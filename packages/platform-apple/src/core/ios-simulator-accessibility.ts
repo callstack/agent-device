@@ -3,7 +3,7 @@ import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { hostHomeDirectory, readHostBinaryFile } from '@agent-device/host-kit/host-file';
-import { parseApplePlist } from './plist.ts';
+import { parseApplePlist } from './plist-value.ts';
 import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
 import { hasScopedAppleToolProvider, runXcrun } from './tool-provider.ts';
 
@@ -67,7 +67,7 @@ async function readHostAppAccessibility(
       udid,
       'data/Library/Preferences/com.apple.Accessibility.plist',
     );
-    const parsed = await parseApplePlist(await readHostBinaryFile(preferences));
+    const parsed = parseApplePlist(await readHostBinaryFile(preferences));
     if (!parsed) return 'unknown';
     const value = parsed.ApplicationAccessibilityEnabled;
     if (value === undefined || value === true || value === 1) return 'enabled';

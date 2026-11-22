@@ -62,7 +62,6 @@ export default defineConfig({
   deps: {
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: [
-      '@xmldom/xmldom',
       'b4a',
       'events-universal',
       'fast-fifo',
@@ -71,14 +70,12 @@ export default defineConfig({
       'ip-address',
       'jpeg-js',
       'pend',
-      'plist',
       'pngjs',
       'smart-buffer',
       'socks',
       'streamx',
       'tar-stream',
       'text-decoder',
-      'xmlbuilder',
       'yaml',
       'yauzl',
     ],

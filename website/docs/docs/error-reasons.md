@@ -149,6 +149,13 @@ These reasons can come from more than one command.
 | --- | --- |
 | `app-list-unreadable` | `simctl` produced no list of the simulator's installed apps, so the app could not be resolved. |
 
+### Apple plist
+
+| Reason | Meaning |
+| --- | --- |
+| `apple_plist_malformed` | The document is damaged, refers to itself, or is larger than a reader's budget. |
+| `apple_plist_unsupported_type` | The document is well formed but names a value kind or key type this reader does not model. |
+
 ### Apple runner
 
 | Reason | Meaning |

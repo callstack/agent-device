@@ -22,7 +22,7 @@ export function parseXmlDocumentSync(xml: string, options: XmlParseOptions = {})
       `XML document exceeds maximum supported size of ${maxDocumentChars} characters.`,
     );
   }
-  return new LimitedXmlParser(xml).parse();
+  return new LimitedXmlParser(xml, options.trimText ?? true).parse();
 }
 
 class LimitedXmlParser {
@@ -30,9 +30,11 @@ class LimitedXmlParser {
   private readonly stack: XmlNode[] = [];
   private index = 0;
   private readonly xml: string;
+  private readonly trimText: boolean;
 
-  constructor(xml: string) {
+  constructor(xml: string, trimText: boolean) {
     this.xml = xml;
+    this.trimText = trimText;
   }
 
   parse(): XmlNode[] {
@@ -168,14 +170,15 @@ class LimitedXmlParser {
   }
 
   private appendText(text: string, decodeEntities: boolean): void {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+    // Without `trimText`, spacing that is all a node holds is kept: Apple reads the text of
+    // `<string>   </string>` as three spaces, and spacing between two tags is dropped by
+    // `readText`, which never hands an all-spacing segment to a node that holds a value.
+    const kept = this.trimText ? text.trim() : text;
+    if (!kept) return;
     const node = this.stack.at(-1);
     if (!node) return;
-    // Preserve fast-xml-parser's trimValues behavior for each text segment we keep.
-    node.text = `${node.text ?? ''}${
-      decodeEntities ? decodeXmlCharacterReferences(trimmed) : trimmed
-    }`;
+    // With `trimText`, this keeps fast-xml-parser's trimValues behavior for each kept segment.
+    node.text = `${node.text ?? ''}${decodeEntities ? decodeXmlCharacterReferences(kept) : kept}`;
   }
 
   private addNode(node: XmlNode): void {

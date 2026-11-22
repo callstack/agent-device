@@ -120,13 +120,19 @@ async function createProviderAppleHost(
   host: HostEnvironment,
   runOnHost: RunOnHost,
 ): Promise<ProviderAppleHost> {
-  const [runner, tools, { buildSimctlArgsForDevice }, { createAppleApplicationTools }] =
-    await Promise.all([
-      import('@agent-device/platform-apple/runner/operations'),
-      import('@agent-device/platform-apple/tool-provider'),
-      import('@agent-device/platform-apple/simctl'),
-      import('./platform-runtime-apple-application-tools.ts'),
-    ]);
+  const [
+    runner,
+    tools,
+    { buildSimctlArgsForDevice },
+    { createAppleApplicationTools },
+    { parseApplePlist },
+  ] = await Promise.all([
+    import('@agent-device/platform-apple/runner/operations'),
+    import('@agent-device/platform-apple/tool-provider'),
+    import('@agent-device/platform-apple/simctl'),
+    import('./platform-runtime-apple-application-tools.ts'),
+    import('@agent-device/platform-apple/plist'),
+  ]);
   const { resolveOpenTarget, applyRuntimeHints, clearRuntimeHints } = createAppleApplicationTools(
     host.env,
   );
@@ -148,7 +154,7 @@ async function createProviderAppleHost(
       hasScopedProvider: tools.hasScopedAppleToolProvider,
       runXcrun: tools.runXcrun,
       simctlArgsForDevice: buildSimctlArgsForDevice,
-      parsePlist: tools.parseApplePlist,
+      parsePlist: parseApplePlist,
     }),
     readBundleAppName: async (appPath) =>
       await runOnHost(async () => {
