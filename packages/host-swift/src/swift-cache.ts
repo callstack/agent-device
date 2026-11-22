@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   commandDeveloperDir,
   runCmd,
@@ -16,10 +16,12 @@ import {
   acquireProcessLock,
   expandUserHomePath,
   prepareScriptDestination,
+  PROCESS_LOCK_REASONS,
   scriptAncestryReason,
   withProcessLock,
   type ProcessLockRelease,
 } from '@agent-device/host-kit/file';
+
 const LOCK_RETRY_DELAY_MS = 25;
 // swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
 // SIGKILL or SIGTERM leaves them compiling with no parent.
@@ -40,7 +42,12 @@ const MACOS_ADMIN_GID = 80;
  */
 const SWIFT_CACHE_VERSION = '3';
 
-const SWIFT_CACHE_UNTRUSTED_REASON = 'swift_cache_untrusted';
+/** Why the Swift helper cache refuses to be used or compiled against. */
+const SWIFT_CACHE_REASONS = {
+  // The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a
+  // trusted path that only this user or root can change.
+  untrusted: { reason: 'swift_cache_untrusted' },
+} as const satisfies ReasonTable<'Swift helper cache'>;
 
 /** The directories of one cache version; every one of them sits inside the private version directory. */
 type SwiftCacheDirectory = 'bin' | 'home' | 'module-cache';
@@ -195,7 +202,9 @@ function isReusableSwiftExecutable(filePath: string): boolean {
 }
 
 export function isUntrustedSwiftCacheError(error: unknown): error is AppError {
-  return error instanceof AppError && error.details?.reason === SWIFT_CACHE_UNTRUSTED_REASON;
+  return (
+    error instanceof AppError && error.details?.reason === SWIFT_CACHE_REASONS.untrusted.reason
+  );
 }
 
 function untrustedAsSwiftCacheError<T>(directory: string, judge: () => T): T {
@@ -248,7 +257,11 @@ function untrustedSwiftCache(
   return new AppError(
     'COMMAND_FAILED',
     `Refusing to use the Swift helper cache directory ${directory}: it is not private to this user.`,
-    { reason: SWIFT_CACHE_UNTRUSTED_REASON, ...details, directory },
+    {
+      reason: SWIFT_CACHE_REASONS.untrusted.reason,
+      ...details,
+      directory,
+    },
     cause,
   );
 }
@@ -329,7 +342,7 @@ function trustedDeveloperDir(selection: string): string {
     'COMMAND_FAILED',
     `Refusing to compile Swift helpers with DEVELOPER_DIR=${selection}: ${ancestor} is not a directory only root or this user can change.`,
     {
-      reason: SWIFT_CACHE_UNTRUSTED_REASON,
+      reason: SWIFT_CACHE_REASONS.untrusted.reason,
       exposure: 'untrusted_developer_dir',
       ancestor,
       hint:
@@ -539,7 +552,10 @@ async function acquireSwiftCacheLock(
       description: `Swift cache lock: ${lockDir} (${timeoutMs}ms)`,
     });
   } catch (error) {
-    if (error instanceof AppError && error.details?.reason === 'process_lock_timeout') {
+    if (
+      error instanceof AppError &&
+      error.details?.reason === PROCESS_LOCK_REASONS.timeout.reason
+    ) {
       throw new AppError('COMMAND_FAILED', error.message, {
         ...error.details,
         lockDir,

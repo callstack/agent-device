@@ -46,7 +46,7 @@ export function requireWindowsScriptVolume(spelled: string, candidate: string): 
     'INVALID_ARGS',
     `Refusing to save the script at ${spelled}: ${candidate} lacks a supported Windows volume.`,
     {
-      reason: 'script_ancestor_untrusted',
+      reason: SCRIPT_ANCESTRY_REASONS.untrusted.reason,
       exposure: 'windows_path_form',
       path: spelled,
       ancestor: candidate,
@@ -66,7 +66,7 @@ export function unnamedEntryFailure(spelled: string, rules: path.PlatformPath): 
       'INVALID_ARGS',
       `Refusing to save the script under ${parent}: a Windows path cannot hold \`:\` after its drive, and a directory in it does.`,
       {
-        reason: SCRIPT_ANCESTRY_REASONS[0],
+        reason: SCRIPT_ANCESTRY_REASONS.untrusted.reason,
         exposure: 'unnamed_entry',
         path: spelled,
         ancestor: parent,

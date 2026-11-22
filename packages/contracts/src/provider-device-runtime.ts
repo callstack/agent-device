@@ -47,11 +47,6 @@ export type ProviderDeviceRuntime = {
     appPath: string,
     options?: ProviderDeviceInstallOptions,
   ): Promise<ProviderDeviceInstallResult | undefined>;
-  installInstallablePath?(
-    device: DeviceInfo,
-    installablePath: string,
-    options?: ProviderDeviceInstallOptions,
-  ): Promise<ProviderDeviceInstallResult | undefined>;
   configurePortReverse?(
     options: ProviderPortReverseOptions,
   ): Promise<Record<string, unknown> | undefined>;

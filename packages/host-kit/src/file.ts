@@ -38,4 +38,5 @@ export {
   type ProcessLockInspection,
   type ProcessLockOwner,
   type ProcessLockRelease,
+  PROCESS_LOCK_REASONS,
 } from './internal/process-lock.ts';

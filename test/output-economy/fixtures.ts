@@ -138,32 +138,6 @@ export const SELECTOR_READ_RESULT: DaemonResponseData = {
   },
 };
 
-const overlayRef = (ref: string, label: string) => ({
-  ref,
-  label,
-  rect: { x: 20, y: 120, width: 350, height: 44 },
-  overlayRect: { x: 18, y: 118, width: 354, height: 48 },
-  center: { x: 195, y: 142 },
-});
-
-export const SCREENSHOT_RESULT: DaemonResponseData = {
-  path: '/tmp/agent-device/economy-fixture.png',
-  width: 1170,
-  height: 2532,
-  logicalWidth: 390,
-  logicalHeight: 844,
-  pixelDensity: 3,
-  overlayRefs: [overlayRef('e2', 'Email'), overlayRef('e3', 'Place order')],
-  artifacts: [
-    {
-      field: 'path',
-      artifactType: 'screenshot',
-      artifactId: 'artifact-economy-fixture',
-      fileName: 'economy-fixture.png',
-    },
-  ],
-};
-
 export const ACTIONABLE_ERROR = new AppError(
   'DEVICE_IN_USE',
   'Device ios-simulator-1 is already used by session checkout',
