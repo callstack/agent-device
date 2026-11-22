@@ -313,25 +313,19 @@ function claimRemoteConnectionRecord(options: { stateDir: string; session: strin
   return { statePath, record: file.record };
 }
 
-/** A saved connection a removal has settled at its session's own path. */
-type RemoteConnectionClaim = {
-  session: string;
-  /** `null` when the record names the session but fails validation. */
-  state: RemoteConnectionState | null;
-};
-
 /**
  * The first step of a removal: the saved connection `session` owns, moved to its session's own path.
  *
  * A caller runs this before any remote teardown, so a record it cannot remove is refused before a lease
  * ends, and finishes with {@link removeRemoteConnectionState}. `session` is `undefined` when the caller
- * named none: the `default` session comes first, then the active-session pointer. A missing record
- * returns `null`.
+ * named none: the `default` session comes first, then the active-session pointer. A record that names
+ * its session but fails validation is removed on the way, and the next candidate is tried. A missing
+ * record returns `null`.
  */
 export function claimRemoteConnectionState(options: {
   stateDir: string;
   session: string | undefined;
-}): RemoteConnectionClaim | null {
+}): RemoteConnectionState | null {
   if (options.session !== undefined) {
     return claimSessionRecord({ stateDir: options.stateDir, session: options.session });
   }
@@ -346,10 +340,12 @@ export function claimRemoteConnectionState(options: {
 function claimSessionRecord(options: {
   stateDir: string;
   session: string;
-}): RemoteConnectionClaim | null {
-  const { record } = claimRemoteConnectionRecord(options);
+}): RemoteConnectionState | null {
+  const { statePath, record } = claimRemoteConnectionRecord(options);
   if (!record) return null;
-  return { session: options.session, state: isRemoteConnectionState(record) ? record : null };
+  if (isRemoteConnectionState(record)) return record;
+  removeInvalidRemoteConnectionState(options, statePath);
+  return null;
 }
 
 function observedRemoteConnectionState(
@@ -786,11 +782,13 @@ function migrateLegacyRemoteConnectionState(options: {
 
 /**
  * Whether `file` is a record an older build left at `source` for the session it names: `source` is a
- * name an older build wrote for that session, compared case-insensitively, and not its own path.
+ * name an older build wrote for that session, compared case-insensitively, and not its own path. A
+ * pointer at the active-session pointer path, or at a case alias of it, is no record.
  */
 function isMovableLegacyRecord(recordsDir: string, source: string, file: RecordFile): boolean {
-  if (file.kind !== 'owned' || isActiveSessionPointer(file.record)) return false;
+  if (file.kind !== 'owned') return false;
   const sourceName = path.basename(source).toLowerCase();
+  if (sourceName === ACTIVE_SESSION_FILE_NAME && isActiveSessionPointer(file.record)) return false;
   // Canonical names hold no upper-case letters, so a name that folds onto the target IS the target.
   if (path.basename(canonicalRemoteConnectionStatePath(recordsDir, file.session)) === sourceName) {
     return false;

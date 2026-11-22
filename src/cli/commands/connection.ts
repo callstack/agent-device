@@ -345,10 +345,8 @@ async function claimOrReportNothingToRemove(
   flags: CliFlags,
   stateDir: string,
 ): Promise<RemoteConnectionState | undefined> {
-  const claim = claimRemoteConnectionState({ stateDir, session: flags.session });
-  if (claim?.state) return claim.state;
-  // A record that names its session but fails validation still has a known owner to remove it for.
-  if (claim) removeRemoteConnectionState({ stateDir, session: claim.session });
+  const state = claimRemoteConnectionState({ stateDir, session: flags.session });
+  if (state) return state;
   await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
   return undefined;
 }

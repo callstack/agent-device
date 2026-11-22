@@ -56,6 +56,7 @@ import {
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
+  claimRemoteConnectionState,
   remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
@@ -790,6 +791,8 @@ function resolveActiveConnectionDefaults(options: {
   ) {
     return null;
   }
+  // Disconnect settles its record and removes invalid ones it passes before the defaults read it.
+  if (options.command === 'disconnect') claimRemoteConnectionState(options);
   const defaults = resolveRemoteConnectionDefaults({
     stateDir: options.stateDir,
     session: options.session,
