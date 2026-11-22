@@ -11,7 +11,6 @@ import type {
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
-import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   platforms: ProviderRegistry['platforms'];
@@ -39,7 +38,6 @@ export async function createDaemonProviderRuntimeComposition(
     await import('@agent-device/plugins/store');
   const candidates = await storePluginCandidates(host.env);
   return await composeProviderRuntime(host, candidates, {
-    ...PROVIDER_PLUGIN_POLICY,
     platformHost,
     assertSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
   });
@@ -52,7 +50,6 @@ export async function createEmbeddedProviderRuntimeComposition(
   platformHost: PlatformHost,
 ): Promise<ProviderRuntimeComposition> {
   return await composeProviderRuntime(host, candidates, {
-    ...PROVIDER_PLUGIN_POLICY,
     platformHost,
   });
 }
@@ -66,7 +63,13 @@ async function composeProviderRuntime(
     await import('@agent-device/plugins/registry');
   const { builtinPlatformCandidates } = await import('./platform-runtime/platform-plugins.ts');
   const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
-  const registry = await startProviderRegistry(resolved, host, policy);
+  const registry = await startProviderRegistry(resolved, host, {
+    ...policy,
+    hostCapabilities: async (environment) =>
+      (await import('./provider-plugin-host-capabilities.ts')).createProviderHostCapabilities(
+        environment,
+      ),
+  });
   return Object.freeze({
     platforms: registry.platforms,
     platformLeaves: registry.platformLeaves,
