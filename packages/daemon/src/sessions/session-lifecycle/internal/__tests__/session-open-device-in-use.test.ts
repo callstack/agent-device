@@ -26,7 +26,7 @@ const scopedRef: SessionRef = makeStoredSessionRef(
 );
 
 test('the by-session conflict reports the address, in the message, details and hint', () => {
-  const response = buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR);
+  const response = buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR, {}, 'named');
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -37,35 +37,47 @@ test('the by-session conflict reports the address, in the message, details and h
   );
 });
 
-// The other workspace's session used to be reported as "another workspace session" with no
-// address at all: the caller was told to wait for a session it could neither name, reach with
-// --session, nor close.
-test('the foreign-workspace conflict names the owning session address', () => {
-  const foreignAddress = 'cwd:1d9b7c2f4a6e8b03:default';
-  const foreignRef: SessionRef = makeStoredSessionRef(
-    {
-      name: 'default',
-      sessionScope: { kind: 'cwd', id: '1d9b7c2f4a6e8b03' },
-      device: IOS_SIMULATOR,
-      createdAt: 0,
-      actions: [],
-    },
-    foreignAddress,
-  );
-
-  const response = buildForeignWorkspaceSessionConflict(foreignRef, IOS_SIMULATOR);
+// The session of another client on a proxy shared under one token is another client's handle
+// (#4923): the refusal keeps the device fields and stays actionable through `session list`, and
+// names nothing.
+test('the by-session conflict names no session to a request that may not name it', () => {
+  const response = buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR, {}, 'anonymous');
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error?.code).toBe('DEVICE_IN_USE');
-  expect(response.error?.message).toContain(foreignAddress);
+  expect(response.error?.message).toBe('Device is already in use by another session.');
+  expect(response.error?.details?.session).toBeUndefined();
+  expect(String(response.error?.details?.hint)).not.toContain(SCOPED_ADDRESS);
+  expect(String(response.error?.details?.hint)).toContain('session list');
+  expect(response.error?.details).toMatchObject({
+    deviceId: IOS_SIMULATOR.id,
+    deviceName: IOS_SIMULATOR.name,
+  });
+});
+
+// The foreign-workspace conflict keeps naming its holder: the address is the only handle that
+// reaches another workspace's implicit session, and its owner can close it from that folder
+// (#2580).
+test('the foreign-workspace conflict names the holder address it can be closed with', () => {
+  const response = buildForeignWorkspaceSessionConflict(scopedRef, IOS_SIMULATOR, {
+    offersDeviceWait: true,
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error?.code).toBe('DEVICE_IN_USE');
+  expect(response.error?.message).toBe(
+    `Device is already in use by workspace session "${SCOPED_ADDRESS}".`,
+  );
   expect(response.error?.details).toMatchObject({
     reason: 'WORKSPACE_SESSION_SCOPE_CONFLICT',
-    session: foreignAddress,
+    session: SCOPED_ADDRESS,
     deviceId: IOS_SIMULATOR.id,
   });
-  const hint = String(response.error?.details?.hint);
-  expect(hint).toContain(`agent-device close --session ${foreignAddress}`);
+  expect(String(response.error?.details?.hint)).toContain(
+    `agent-device close --session ${SCOPED_ADDRESS}`,
+  );
 });
 
 // A caller that already spent a --wait budget is not helped by being told to wait, and is misled
@@ -86,8 +98,8 @@ test('a spent wait budget is reported as spent and never re-offered', () => {
 
 test('an open that never waited offers the wait instead of claiming one', () => {
   const hint = String(
-    buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR, { offersDeviceWait: true }).error
-      ?.details?.hint,
+    buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR, { offersDeviceWait: true }, 'named')
+      .error?.details?.hint,
   );
 
   expect(hint).not.toMatch(/Waited/);
@@ -98,8 +110,9 @@ test('an open that never waited offers the wait instead of claiming one', () => 
 // owning session, and a hint ending in a flag its command rejects sends it away from both.
 test('a refusal from a command that cannot wait never offers the flag', () => {
   const hints = [
-    buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR),
-    buildForeignWorkspaceSessionConflict(scopedRef, IOS_SIMULATOR),
+    buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR, {}, 'named'),
+    buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR, {}, 'anonymous'),
+    buildForeignWorkspaceSessionConflict(scopedRef, IOS_SIMULATOR, {}),
   ];
 
   for (const response of hints) {
