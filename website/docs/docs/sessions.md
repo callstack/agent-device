@@ -32,6 +32,7 @@ Each session artifact directory contains:
 - `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` before an entry would exceed 5 MiB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors within the retained window stay valid across rotation. Older cursors expire.
 - `runner.log` - Apple runner and `xcodebuild` build/start output for this session.
 - `app.log` - app/device logs when `logs start` or `logs clear --restart` is active.
+- `screenshots/<request id>-<suffix>.png` - the capture a `screenshot` request without a destination mints; each request owns its file, so captures never overwrite each other, and a sparse-snapshot fallback writes `screenshots/snapshot-fallback.png` beside them.
 
 `events.ndjson` leaves out user-entered content. It keeps command names, status,
 durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and

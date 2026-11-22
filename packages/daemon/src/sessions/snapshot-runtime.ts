@@ -49,6 +49,7 @@ export async function dispatchSnapshotViaRuntime(
         session,
         sessionName: resolvedSessionName,
         logPath: params.logPath,
+        sessionDir: params.sessionStore.resolveSessionDir(resolvedSessionName),
         verdict: result.snapshotQuality,
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,

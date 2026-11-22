@@ -36,6 +36,11 @@ export async function resolveGenericRuntimeExecution(
     createCommandSurface: CreateDaemonCommandSurface;
     /** The runtime host's working directory: the fallback base for a client-typed output path. */
     hostCwd: string;
+    /**
+     * This session's artifact directory. Only the screenshot leaf reads it: the stable base
+     * for a capture that names no destination. The other leaves ignore it.
+     */
+    sessionDir?: string;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {

@@ -951,3 +951,42 @@ test.each(['atomic-selector', 'coordinate'] as const)(
     }
   },
 );
+
+test.each([false, true])(
+  'a flow screenshot step asks the daemon for the capture the network surface allows: publicNetworkOnly=%s',
+  async (publicNetworkOnly) => {
+    const root = mkdtempForTestSync('agent-device-maestro-remote-screenshot-');
+    const requests: MaestroDaemonOperationRequest[] = [];
+    const port = createDaemonMaestroRuntimePort({
+      ...makeRuntimeEnvelope({
+        flags: { platform: 'android', replayBackend: 'maestro' },
+        publicNetworkOnly,
+      }),
+      invoke: async (request) => {
+        requests.push(request);
+        return { ok: true, data: { path: path.join(root, 'minted-by-daemon.png') } };
+      },
+      dependencies: makeDependencies(),
+      platform: 'android',
+    });
+
+    await expect(
+      port.execute({
+        command: { kind: 'takeScreenshot', source: { line: 2 }, path: 'flow-shot.png' },
+        generation: 0,
+        env: {},
+        invalidateObservation() {},
+      }),
+    ).resolves.toMatchObject({ artifactPaths: [path.join(root, 'minted-by-daemon.png')] });
+
+    const [dispatched] = requests;
+    expect(dispatched?.command).toBe('screenshot');
+    if (publicNetworkOnly) {
+      // The flow script is untrusted on the public network surface, so it may not choose a
+      // destination on the daemon host: the capture asks the daemon to mint its own.
+      expect(dispatched?.positionals).toEqual([]);
+    } else {
+      expect(dispatched?.positionals).toEqual(['flow-shot.png']);
+    }
+  },
+);

@@ -569,7 +569,7 @@ test('screenshot reports annotated ref count in non-json mode', async () => {
     assert.equal(handled, true);
   });
 
-  assert.equal(stdout, 'Annotated 2 refs onto /tmp/screenshot.png\n');
+  assert.equal(stdout, 'Annotated 2 refs onto:\n/tmp/screenshot.png\n');
 });
 
 test('replay export writes Maestro YAML without contacting the daemon', async () => {

@@ -9,7 +9,10 @@ import { assertPngDimensions, assertRpcOk } from './assertions.ts';
 import { withProviderScenarioResource } from './harness.ts';
 
 function trackStaging() {
-  return vi.spyOn(fs.promises, 'mkdtemp');
+  return {
+    mkdir: vi.spyOn(fs.promises, 'mkdir'),
+    mkdtemp: vi.spyOn(fs.promises, 'mkdtemp'),
+  };
 }
 
 let staging: ReturnType<typeof trackStaging>;
@@ -17,12 +20,22 @@ beforeEach(() => {
   staging = trackStaging();
 });
 afterEach(async () => {
-  const results = staging.mock.results.filter((_, index) =>
-    path.basename(String(staging.mock.calls[index]?.[0])).startsWith('agent-device-crop-'),
+  // The crop publish stages inside the session's screenshots/crop-staging root: the root
+  // is created by a mkdir ending in crop-staging, and each request mints its own dir in it.
+  const stagedInRoot = staging.mkdir.mock.calls.some(([created]) =>
+    String(created).endsWith('crop-staging'),
   );
-  staging.mockRestore();
-  assert.ok(results.length > 0, 'the request must acquire crop staging');
-  for (const result of results) {
+  const acquired = staging.mkdtemp.mock.results
+    .map((result, index) => ({
+      result,
+      prefix: String(staging.mkdtemp.mock.calls[index]?.[0]),
+    }))
+    .filter(({ prefix }) => path.dirname(prefix).endsWith('crop-staging'));
+  staging.mkdir.mockRestore();
+  staging.mkdtemp.mockRestore();
+  assert.ok(stagedInRoot, 'the request must stage inside the session crop-staging root');
+  assert.ok(acquired.length > 0, 'the request must acquire crop staging');
+  for (const { result } of acquired) {
     assert.equal(result.type, 'return');
     const directory = await result.value;
     assert.equal(fs.existsSync(directory), false, `crop staging remains: ${directory}`);

@@ -1,5 +1,10 @@
 import { createDaemonScreenshotArtifactAdapter } from './screenshot-artifact-adapter.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
+import {
+  resolveSessionScreenshotNamePrefix,
+  resolveSessionScreenshotStagingDir,
+  resolveSessionScreenshotsDir,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
@@ -55,6 +60,11 @@ export async function resolveScreenshotGenericExecution(
     createCommandSurface: CreateDaemonCommandSurface;
     /** The runtime host's working directory: the fallback base for a client-typed output path. */
     hostCwd: string;
+    /**
+     * This session's artifact directory: the base a capture without an explicit destination
+     * mints its own request-named file under, instead of minting a temp dir.
+     */
+    sessionDir?: string;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {
@@ -91,6 +101,7 @@ export async function resolveScreenshotGenericExecution(
   const runtime = resolved.runtime;
   const cropRun: ScreenshotCropRun = { warnings: [] };
   const { createCommandSurface } = params;
+  const sessionDir = params.sessionDir;
   return {
     ok: true,
     recorded: request.recorded,
@@ -106,6 +117,7 @@ export async function resolveScreenshotGenericExecution(
         runtime,
         cropOn,
         cropRun,
+        sessionDir,
       }),
   };
 }
@@ -121,6 +133,20 @@ export async function captureScreenshotArtifact(
     session: SessionState;
     sessionName: string;
     outPath?: string;
+    /**
+     * The stable destination a capture without an explicit one lands on, resolved from the
+     * session dir by the session-artifact-paths owner. One shared file, so only a caller
+     * that owns that sharing passes it (the sparse fallback). Absent: see `mintedDefaultDir`.
+     */
+    defaultOutputPath?: string;
+    /**
+     * The directory a capture without an explicit one mints its own request-named file
+     * into, so each capture owns a distinct path. Takes precedence over
+     * `defaultOutputPath`; both absent, the adapter mints a legacy temp dir.
+     */
+    mintedDefaultDir?: string;
+    /** This session's artifact directory; the crop staging root resolves against it. */
+    sessionDir?: string;
     dispatchContext: DaemonCommandContext;
     captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
     crop?: ScreenshotCropBinding;
@@ -132,6 +158,20 @@ export async function captureScreenshotArtifact(
     artifacts: createDaemonScreenshotArtifactAdapter(
       params.crop !== undefined,
       dispatchContext.signal,
+      {
+        ...(params.mintedDefaultDir
+          ? {
+              mintDir: params.mintedDefaultDir,
+              requestNamePrefix: resolveSessionScreenshotNamePrefix(dispatchContext.requestId),
+            }
+          : {}),
+        ...(params.mintedDefaultDir === undefined && params.defaultOutputPath !== undefined
+          ? { defaultPath: params.defaultOutputPath }
+          : {}),
+        stagingDir: params.sessionDir
+          ? resolveSessionScreenshotStagingDir(params.sessionDir)
+          : undefined,
+      },
     ),
     sessions: createReadonlyRuntimeSessionStore(sessionName, session),
     policy: localCommandPolicy(),
@@ -196,6 +236,7 @@ async function executeScreenshot(
     runtime: BoundScreenshotRuntime;
     cropOn?: string;
     cropRun?: ScreenshotCropRun;
+    sessionDir?: string;
   }>,
 ): Promise<Record<string, unknown>> {
   const { session, runtime, flags } = params;
@@ -210,6 +251,10 @@ async function executeScreenshot(
     session,
     sessionName: params.sessionName,
     outPath: params.outPath,
+    ...(!params.outPath && params.sessionDir
+      ? { mintedDefaultDir: resolveSessionScreenshotsDir(params.sessionDir) }
+      : {}),
+    sessionDir: params.sessionDir,
     dispatchContext: params.dispatchContext,
     captureScreenshot: runtime.captureScreenshot,
     ...(crop ? { crop } : {}),

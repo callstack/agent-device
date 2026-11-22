@@ -34,7 +34,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
   SCREENSHOT_COMMAND_NAME,
   screenshotCommandDescription,
   {
-    path: stringField('Output path.'),
+    path: stringField("Output path. Omit it to write the session's stable screenshot file."),
     cropOn: stringField(
       'Selector expression; the capture is cropped to the frame the selector resolves on the same screen.',
     ),

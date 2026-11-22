@@ -47,7 +47,7 @@ export const screenshotCommand: ClientCommandHandler = async ({
   };
   await writeCommandOutput(flags, data, () => {
     const summary = result.overlayRefs
-      ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
+      ? `Annotated ${result.overlayRefs.length} refs onto:\n${result.path}`
       : formatScreenshotSummary(result);
     return appendWarningLinesText(summary, { warnings: result.warnings ?? [] });
   });
@@ -151,12 +151,16 @@ function createClientScreenshotBackend(
   };
 }
 
+/**
+ * Metadata first, the destination path last: a caller that reads the final line gets the
+ * path alone, without prose or dimensions attached.
+ */
 function formatScreenshotSummary(result: CaptureScreenshotResult): string {
   if (typeof result.width !== 'number' || typeof result.height !== 'number') {
     return result.path;
   }
   const densitySuffix = typeof result.pixelDensity === 'number' ? ` @${result.pixelDensity}x` : '';
-  return `${result.path} (${result.width}x${result.height}${densitySuffix})`;
+  return `${result.width}x${result.height}${densitySuffix}\n${result.path}`;
 }
 
 function resolveClientBackendPlatform(flags: CliFlags): AgentDeviceBackend['platform'] {
