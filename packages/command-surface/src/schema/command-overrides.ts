@@ -44,7 +44,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     usageOverride: 'auth status|login|logout',
     listUsageOverride: 'auth',
     positionalArgs: ['status|login|logout'],
-    supportedFlags: ['remoteConfig', 'stateDir'],
+    supportedFlags: ['stateDir'],
   },
   daemon: {
     text: {

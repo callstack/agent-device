@@ -769,17 +769,22 @@ test('parseArgs recognizes connect aws-device-farm provider flags', () => {
   assert.equal(parsed.flags.awsInteractionMode, 'INTERACTIVE');
 });
 
-test('parseArgs accepts auth management subcommands', () => {
+test('parseArgs accepts auth management subcommands and rejects --remote-config', () => {
   const status = parseArgs(['auth', 'status'], { strictFlags: true });
   assert.equal(status.command, 'auth');
   assert.deepEqual(status.positionals, ['status']);
 
-  const login = parseArgs(['auth', 'login', '--remote-config', './remote.json'], {
+  const login = parseArgs(['auth', 'login', '--state-dir', './tmp-state'], {
     strictFlags: true,
   });
   assert.equal(login.command, 'auth');
   assert.deepEqual(login.positionals, ['login']);
-  assert.equal(login.flags.remoteConfig, './remote.json');
+  assert.equal(login.flags.stateDir, './tmp-state');
+
+  assert.throws(
+    () => parseArgs(['auth', 'login', '--remote-config', './remote.json'], { strictFlags: true }),
+    /Flag --remote-config is not supported for command auth\./,
+  );
 });
 
 test('parseArgs accepts proxy command flags', () => {

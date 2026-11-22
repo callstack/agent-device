@@ -195,3 +195,21 @@ test('a selector-less command inherits the pinned device', () => {
     source: { kind: 'project', path: path.join(cwd, 'agent-device.json') },
   });
 });
+
+test('commands that do not support --remote-config reject it before reading the file', () => {
+  const dir = mkdtempForTestSync('agent-device-cli-no-remote-config-');
+  const badPath = path.join(dir, 'bad.json');
+  const missingPath = path.join(dir, 'missing.json');
+  fs.writeFileSync(badPath, '{not-json');
+
+  for (const [argv, command] of [
+    [['auth', 'status', '--remote-config', badPath], 'auth'],
+    [['auth', 'status', '--remote-config', missingPath], 'auth'],
+    [['web', 'doctor', '--remote-config', missingPath], 'web'],
+  ] as const) {
+    assert.throws(
+      () => resolveCliOptions([...argv], { cwd: dir, env: isolatedEnv({}) }),
+      new RegExp(`Flag --remote-config is not supported for command ${command}\\.`),
+    );
+  }
+});

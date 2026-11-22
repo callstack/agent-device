@@ -384,7 +384,7 @@ test('a command that takes no session runs while a leased connection is active',
   fs.rmSync(solo.root, { recursive: true, force: true });
 });
 
-test('a command that takes no session never leases through a remote config', async () => {
+test('a command that takes no session rejects --remote-config without reading or leasing', async () => {
   const solo = workspace();
   const remoteConfig = path.join(solo.project, 'generic.remote.json');
   fs.writeFileSync(
@@ -398,14 +398,18 @@ test('a command that takes no session never leases through a remote config', asy
     }),
   );
 
-  // A profile that names a lease provider asks for no session either: `auth` cannot take one.
+  // `auth` takes no session and drops `--remote-config`: neither generic nor leased profiles are read or leased.
+  const resolutionsBefore = profileResolutions.count;
   for (const profile of [remoteConfig, writeLeasedProfile(solo)]) {
     const auth = await runAgentCommand(solo, ['auth', 'status', '--remote-config', profile]);
-    assert.equal(auth.code, null, auth.stdout);
-    assert.equal(JSON.parse(auth.stdout).data.authenticated, false);
+    assert.equal(auth.code, 1, auth.stdout);
+    const error = JSON.parse(auth.stdout).error;
+    assert.equal(error.code, 'INVALID_ARGS');
+    assert.match(error.message, /Flag --remote-config is not supported for command auth\./);
     assert.deepEqual(auth.calls, []);
     assert.equal(readRemoteConnectionState({ stateDir: solo.stateDir, session: 'default' }), null);
   }
+  assert.equal(profileResolutions.count, resolutionsBefore);
 
   // The same profile does lease for a command that takes a session.
   const open = await runAgentCommand(solo, [
