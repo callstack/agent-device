@@ -55,7 +55,7 @@ export class LimrunSyncCache {
             platform,
             installablePath,
           },
-          error,
+          error instanceof SyntaxError ? undefined : error,
         );
       }
     });

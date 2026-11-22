@@ -94,12 +94,18 @@ export type SnapshotRouteTarget = Readonly<{
   targetId: string;
 }>;
 
+type SnapshotRouteDiagnostics = Readonly<{
+  scrubText(text: string): string;
+  scrubPayload(payload: unknown): unknown;
+}>;
+
 /**
  * One way to reach the bridge reader on a device: the source that reads, and how the app generation
  * it reads is named. A local Simulator reaches it through a guest process the host starts; a
  * Simulator whose host cannot start one reaches it through the XCTest runner.
  */
 export type SnapshotSourceChannel<Target extends SnapshotRouteTarget> = Readonly<{
+  diagnostics?: SnapshotRouteDiagnostics;
   source: Readonly<{
     acquire(
       request: Readonly<{
@@ -247,7 +253,7 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
         target = await resolveCaptureTarget(channel, device, input, signal, captureBridgeDisabled);
       } catch (error) {
         rethrowIfResolutionCancelled(signal, error);
-        const reason = targetFailureReason(error, device, circuit);
+        const reason = targetFailureReason(error, device, circuit, channel.diagnostics);
         // The app's current generation is unknown, so the capture names none.
         return await settleFallback(device, input, fallback, {
           kind: 'reason',
@@ -299,6 +305,7 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
           outcome.failure,
           disposition,
           circuit.disabledGenerations,
+          channel.diagnostics,
         );
       }
       try {
@@ -319,6 +326,7 @@ export function createSnapshotRouter<Target extends SnapshotRouteTarget>(
           // A tree the presenter cannot publish is app evidence, so it retires the generation.
           { scope: 'generation', code: failure.code },
           circuit.disabledGenerations,
+          channel.diagnostics,
           error,
         );
       }
@@ -341,6 +349,7 @@ function targetFailureReason(
   error: unknown,
   device: DeviceInfo,
   circuit: RunnerSessionCircuit,
+  diagnostics?: SnapshotRouteDiagnostics,
 ): FallbackReason {
   const disposition =
     error instanceof SnapshotSourceError
@@ -351,9 +360,11 @@ function targetFailureReason(
     device,
     undefined,
     error,
+    undefined,
+    diagnostics,
   );
   if (disposition?.scope === 'runner-session')
-    return settleRunnerSessionRefusal(circuit, disposition);
+    return settleRunnerSessionRefusal(circuit, publishDisposition(disposition, diagnostics));
   return 'target-resolution-failed';
 }
 
@@ -506,16 +517,33 @@ async function fallbackAfterFailure(
   failure: SnapshotSourceFailure,
   disposition: BridgeFallbackDisposition,
   disabledGenerations: Set<string>,
+  diagnostics?: SnapshotRouteDiagnostics,
   cause?: unknown,
 ): Promise<SnapshotResult> {
   if (disposition.scope === 'generation') disabledGenerations.add(generationKey(failedTarget));
-  emitRouteDiagnostic(failure.code, device, failedTarget.generation, cause, failure.details);
+  emitRouteDiagnostic(
+    failure.code,
+    device,
+    failedTarget.generation,
+    cause,
+    failure.details,
+    diagnostics,
+  );
   return await settleFallback(device, input, fallback, {
     kind: 'reason',
     lineage: identity.lineage,
-    reason: disposition,
+    reason: publishDisposition(disposition, diagnostics),
     residue: identity.residue,
   });
+}
+
+function publishDisposition<T extends BridgeFailureDisposition>(
+  disposition: T,
+  diagnostics?: SnapshotRouteDiagnostics,
+): T {
+  return diagnostics
+    ? { ...disposition, code: diagnostics.scrubText(disposition.code) }
+    : disposition;
 }
 
 type FallbackPlan =
@@ -727,7 +755,14 @@ async function resolveFailureFallbackIdentity<Target extends SnapshotRouteTarget
     };
   } catch (error) {
     signal.throwIfAborted();
-    emitRouteDiagnostic('fallback-target-resolution-failed', device, undefined, error);
+    emitRouteDiagnostic(
+      'fallback-target-resolution-failed',
+      device,
+      undefined,
+      error,
+      undefined,
+      channel.diagnostics,
+    );
     return {
       lineage: { targetId: target.targetId },
       residue: [unknownGenerationResidue()],
@@ -777,16 +812,18 @@ function emitRouteDiagnostic(
   generation?: string,
   error?: unknown,
   details?: Readonly<Record<string, unknown>>,
+  diagnostics?: SnapshotRouteDiagnostics,
 ): void {
+  const text = diagnostics?.scrubText ?? ((value) => value);
   emitDiagnostic({
     level: 'debug',
     phase: 'ios_snapshot_route_fallback',
     data: {
-      reason,
+      reason: text(reason),
       deviceId: device.id,
-      ...(generation ? { generation } : {}),
-      ...(error ? { error: error instanceof Error ? error.message : String(error) } : {}),
-      ...(details ? { details } : {}),
+      ...(generation ? { generation: text(generation) } : {}),
+      ...(error ? { error: text(error instanceof Error ? error.message : String(error)) } : {}),
+      ...(details ? { details: diagnostics ? diagnostics.scrubPayload(details) : details } : {}),
     },
   });
 }

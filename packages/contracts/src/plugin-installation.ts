@@ -138,6 +138,8 @@ export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
 export const PLUGIN_INSTALLATION_REASONS = {
   // A command requires a plugin that is absent.
   notInstalled: { reason: 'plugin-not-installed', commands: ['connect', 'replay', 'test'] },
+  // The selected plugin cannot supply the requested provider.
+  unavailable: { reason: 'plugin-unavailable', commands: ['connect'] },
 } as const satisfies ReasonTable<'plugins'>;
 
 /**
@@ -175,7 +177,7 @@ export function missingMacOsPlatformError(coreVersion: string): AppError {
     'UNSUPPORTED_PLATFORM',
     `${declaration.label} automation requires the ${declaration.package} plugin.`,
     {
-      reason: PLUGIN_INSTALLATION_REASONS.notInstalled,
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
       family: 'apple',
       appleOs: 'macos',
       package: declaration.package,

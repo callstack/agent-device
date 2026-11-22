@@ -7,7 +7,11 @@ import type {
   LimrunAndroidKeyboardState,
   LimrunHostAdapter,
 } from './runtime-dependencies.ts';
-import { createLimrunAndroidInteractor, type LimrunAndroidSession } from './android.ts';
+import {
+  createLimrunAndroidInteractor,
+  readLimrunAndroidLogs,
+  type LimrunAndroidSession,
+} from './android.ts';
 import {
   createLimrunIosInteractor,
   installLimrunIosRemoteApp,
@@ -130,7 +134,8 @@ function createAndroidDeviceSession(session: LimrunAndroidSession): LimrunAndroi
     },
     getKeyboardState: async () => await session.dependencies.android.getKeyboardState(adb),
     dismissKeyboard: async () => await session.dependencies.android.dismissKeyboard(adb),
-    readLogs: async (lineLimit) => await session.dependencies.android.readLogs(adb, lineLimit),
+    readLogs: async (lineLimit) =>
+      await readLimrunAndroidLogs(session.dependencies, session.token, adb, lineLimit),
     ...createRecordingOperations(session.client, session.token, session.dependencies.host),
     installRemoteApp: async (url) => {
       await session.client.sendAsset(url);

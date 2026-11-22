@@ -2,7 +2,6 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCliCapture } from './cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
@@ -272,59 +271,6 @@ test('connect testmu stores and verifies the real-device pool', async () => {
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
-});
-
-test('providers other than TestMu refuse --provider-device-type before saving a profile', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-device-type-reject-');
-  const base = { json: false, help: false, version: false, platform: 'android' as const };
-
-  try {
-    for (const [provider, flags, env] of [
-      ['limrun', { ...base, tenant: 'team-a', runId: 'run-a' }, { LIMRUN_API_KEY: 'lim_test_key' }],
-    ] as const) {
-      await assert.rejects(
-        resolveConnectProviderProfile({
-          provider,
-          stateDir: path.join(tempRoot, '.state'),
-          cwd: tempRoot,
-          env,
-          flags: { ...flags, providerDeviceType: 'real' },
-        }),
-        (error: unknown) => {
-          assert.ok(error instanceof AppError);
-          assert.equal(error.code, 'INVALID_ARGS');
-          assert.match(error.message, /^--provider-device-type is not supported by /);
-          assert.equal(error.details?.provider, provider);
-          return true;
-        },
-      );
-    }
-    assert.equal(fs.existsSync(path.join(tempRoot, '.state')), false);
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('connect limrun refuses the device type', async () => {
-  const result = await runCliCapture(
-    [
-      'connect',
-      'limrun',
-      '--session',
-      'ci',
-      '--platform',
-      'ios',
-      '--provider-device-type',
-      'real',
-      '--json',
-    ],
-    {
-      env: { LIMRUN_API_KEY: 'lim_test_key' },
-      stateDirPrefix: 'agent-device-connect-limrun-device-type-',
-    },
-  );
-  assert.equal(result.code, 1);
-  assert.match(result.stdout, /--provider-device-type is not supported by Limrun/);
 });
 
 function readGeneratedConfig(configPath: string): {

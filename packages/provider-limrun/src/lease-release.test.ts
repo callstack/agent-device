@@ -223,7 +223,11 @@ test('recovery by labels refuses with every id when a delete is not confirmed', 
     'Ask Limrun to delete: android-instance-b, android-instance-c.',
   );
   expect(String(thrown.details?.hint)).toContain('android-instance-a was confirmed deleted');
-  expect(String(thrown.cause)).toContain('refused');
+  expect(thrown.cause).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'limrun_api_failed' },
+    cause: undefined,
+  });
 });
 
 /**

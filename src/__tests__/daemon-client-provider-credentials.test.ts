@@ -13,12 +13,12 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
-import { builtinPluginInventory } from './test-utils/builtin-plugin-inventory.ts';
+import { limrunPluginInventory } from './test-utils/limrun-plugin-inventory.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { pluginCredentialVariables } from '@agent-device/contracts/plugin-inventory';
 import { readDaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 
-const inventory = await builtinPluginInventory();
+const inventory = await limrunPluginInventory();
 const providerCredentialFingerprint = (provider: string, env: EnvMap, leaseBackend?: string) =>
   fingerprintFor(provider, env, leaseBackend, inventory);
 

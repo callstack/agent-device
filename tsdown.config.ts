@@ -2,7 +2,7 @@ import { buildEntries } from './scripts/build-entries.ts';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { defineConfig, type TsdownPluginOption } from 'tsdown';
+import { defineConfig } from 'tsdown';
 import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
 
 const typeScriptPackageJsonUrl = pathToFileURL(
@@ -57,79 +57,31 @@ const publicSdkChunkGroups = [
   ['sdk-selectors', /src[\\/]sdk[\\/]selectors\.d\.[cm]?ts$/, /src[\\/]sdk[\\/]selectors\.ts$/],
 ] as const;
 
-/**
- * Drops the ambient `import '...'` marker `deps.dts.neverBundle` leaves behind, which a
- * published install cannot resolve. Safe only while the name appears nowhere else.
- */
-function dropAmbientDeclarationImport(
-  fileName: string,
-  code: string,
-  packageName = '@limrun/api',
-): string | null {
-  const ambientImport = new RegExp(`^import ["']${packageName}["'];\\n`, 'm');
-  if (!ambientImport.test(code)) return null;
-  const declarationChunk = code.replace(ambientImport, '');
-  if (declarationChunk.includes(packageName)) {
-    throw new Error(
-      `${fileName} keeps a type reference to ${packageName}, which is dev-bundled and absent from a published install.`,
-    );
-  }
-  return declarationChunk;
-}
-
-const dropAmbientDeclarationImports: TsdownPluginOption = {
-  name: 'agent-device:drop-ambient-declaration-imports',
-  renderChunk(code, chunk) {
-    return chunk.fileName.endsWith('.d.ts')
-      ? dropAmbientDeclarationImport(chunk.fileName, code)
-      : null;
-  },
-};
-
 export default defineConfig({
   entry: buildEntries,
   deps: {
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: [
-      '@limrun/api',
-      '@limrun/xdelta3-wasm',
       '@xmldom/xmldom',
-      'agent-base',
       'b4a',
-      'debug',
       'events-universal',
-      'eventsource-client',
-      'eventsource-parser',
       'fast-fifo',
-      'has-flag',
-      'https-proxy-agent',
       'ignore',
       'ipaddr.js',
       'ip-address',
       'jpeg-js',
-      'ms',
       'pend',
       'plist',
       'pngjs',
-      'proxy-from-env',
       'smart-buffer',
       'socks',
       'streamx',
-      'supports-color',
       'tar-stream',
       'text-decoder',
-      'undici',
-      'undici-types',
-      'ws',
       'xmlbuilder',
       'yaml',
       'yauzl',
     ],
-    // The Limrun SDK is dev-bundled, so a published install has no `@limrun/api` to resolve:
-    // the limrun facade declares the session and runtime types consumers may use.
-    dts: {
-      neverBundle: ['@limrun/api'],
-    },
   },
   inputOptions: {
     // A build with missing workspace links resolves nothing under `alwaysBundle` and emits the
@@ -176,7 +128,7 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
-  plugins: [dropAmbientDeclarationImports, bundledLicenseNotices(import.meta.dirname)],
+  plugins: [bundledLicenseNotices(import.meta.dirname)],
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),

@@ -179,7 +179,7 @@ async function readDoctorDeviceInventory(selector: DeviceInventoryRequest): Prom
 function isFamilyNotInstalledFailure(error: unknown): boolean {
   return (
     error instanceof AppError &&
-    error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled &&
+    error.details?.reason === PLUGIN_INSTALLATION_REASONS.notInstalled.reason &&
     typeof error.details.family === 'string'
   );
 }

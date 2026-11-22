@@ -20,6 +20,12 @@ import {
   beginStdoutCapture,
 } from '@agent-device/test-kit';
 
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
+
 bindTestCommandHost();
 
 // The Limrun SDK is the boundary this suite stubs: the provider's own connection verification is

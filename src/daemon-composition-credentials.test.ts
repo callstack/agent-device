@@ -5,7 +5,7 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { providerCredentialFingerprint } from '@agent-device/plugins/credential-fingerprint';
-import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
+import { limrunPluginInventory } from './__tests__/test-utils/limrun-plugin-inventory.ts';
 import { browserstackPluginInventory } from './__tests__/test-utils/browserstack-plugin-inventory.ts';
 
 vi.mock('./platform-runtime.ts', () => ({
@@ -48,8 +48,8 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => ({
     shutdown: async () => [],
     inventory: [
       ...(await (
-        await import('./__tests__/test-utils/builtin-plugin-inventory.ts')
-      ).builtinPluginInventory()),
+        await import('./__tests__/test-utils/limrun-plugin-inventory.ts')
+      ).limrunPluginInventory()),
       ...(await (
         await import('./__tests__/test-utils/browserstack-plugin-inventory.ts')
       ).browserstackPluginInventory()),
@@ -59,7 +59,7 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => ({
 
 test('daemon startup compares lease credentials with its own startup environment', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-credential-composition-');
-  const inventory = [...(await builtinPluginInventory()), ...(await browserstackPluginInventory())];
+  const inventory = [...(await limrunPluginInventory()), ...(await browserstackPluginInventory())];
   const daemonEnv = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
   const runtime = await startDaemonRuntime({
     host: createTestHostEnvironment({

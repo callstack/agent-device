@@ -224,7 +224,7 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
           androidAdbInvocation(androidAdbHostTarget(), command),
         readLogs: async (adb: LimrunAdbExecutor) => {
           await adb(['shell', 'logcat', '-d', '-T', '20']);
-          return 'line\n';
+          return 'line secret\n';
         },
       },
     } as unknown as LimrunRuntimeDependencies,
@@ -232,7 +232,9 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
   expect(outcome.status).toBe('opened');
   if (outcome.status !== 'opened') return;
 
-  await outcome.reader.readLogs('com.example.app', 20, new AbortController().signal);
+  await expect(
+    outcome.reader.readLogs('com.example.app', 20, new AbortController().signal),
+  ).resolves.toBe('line [REDACTED]\n');
   // The tunnel serial is addressing, so the command the reader wrote travels unchanged: no `-s`
   // is stitched back into the payload the provider hands over.
   expect(calls[0]).toEqual({
@@ -280,7 +282,7 @@ test('reattaches app logs to the attached instance the descriptor names', async 
   });
   expect(vi.mocked(createIosInstanceClient)).toHaveBeenLastCalledWith({
     ...ATTACHED_ACCESS,
-    logLevel: 'warn',
+    logLevel: 'none',
   });
   expect(outcome.status).toBe('opened');
 
@@ -320,4 +322,37 @@ test('does not connect once the reconnect request is aborted', async () => {
     }),
   ).rejects.toThrow();
   expect(vi.mocked(createIosInstanceClient)).not.toHaveBeenCalled();
+});
+
+test('scrubs an iOS device-info failure while reconnecting the app log', async () => {
+  const token = 'syntheticInstanceCredential';
+  vi.mocked(createIosInstanceClient).mockRejectedValueOnce(
+    new Error('deviceInfo refused ' + token),
+  );
+  await expect(
+    reconnectLimrunAppLogReader({
+      limrun: {
+        iosInstances: {
+          get: async () => ({
+            metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
+            status: { state: 'ready', apiUrl: 'https://instance', token },
+          }),
+        },
+      } as never,
+      descriptor: {
+        transport: 'limrun-log-poller',
+        platform: 'ios',
+        leaseId: 'lease-a',
+        instanceId: 'instance-a',
+        ownership: 'created',
+        appBundleId: 'com.example.app',
+        outputPath: '/sessions/one/app.log',
+      },
+      dependencies: iosDependencies,
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'deviceInfo refused [REDACTED]',
+    details: { reason: 'limrun_instance_command_failed' },
+  });
 });
