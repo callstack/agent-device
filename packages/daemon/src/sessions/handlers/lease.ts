@@ -31,9 +31,10 @@ import {
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import {
+  assertRequestPresentsLease,
   isProxyLeaseScope,
   resolveLeaseScope,
-  resolveRequestOrSessionLeaseScope,
+  resolveSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
   isProviderInstanceEndedError,
@@ -103,7 +104,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
     case PUBLIC_COMMANDS.artifacts: {
-      const artifactScope = resolveRequestOrSessionLeaseScope(req, sessionStore.get(sessionName));
+      const artifactScope = resolveSessionLeaseScope(req, sessionStore.get(sessionName));
       return {
         ok: true,
         data: (await listArtifactsForRequest(
@@ -570,10 +571,14 @@ async function listCloudArtifactsForRequest(
       'artifacts requires an active cloud lease or --provider-session <id>.',
     );
   }
+  // A presented active lease id is checked with its labels first, before any tenant-filtered lookup.
+  const activeLeaseId = leaseScope.leaseId
+    ? assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, leaseScope.leaseId)
+    : undefined;
   const providerSession = resolveProviderSession(leaseRegistry, leaseScope, providerSessionId);
   const result = await cloudArtifactProvider?.listCloudArtifacts?.({
     provider: leaseScope.leaseProvider,
-    leaseId: providerSession?.leaseId ?? leaseScope.leaseId,
+    leaseId: providerSession?.leaseId ?? activeLeaseId ?? leaseScope.leaseId,
     providerSessionId,
   });
   if (!result) {
@@ -596,10 +601,30 @@ function resolveProviderSession(
     providerSessionId,
     tenantId: leaseScope.tenantId,
   });
-  if (providerSession) return providerSession;
+  if (providerSession) {
+    assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, providerSession.leaseId);
+    return providerSession;
+  }
   throw new AppError('UNAUTHORIZED', 'Provider session is not owned by the request tenant', {
     reason: LEASE_HANDLER_REASONS.providerSessionNotOwned.reason,
   });
+}
+
+/**
+ * While its lease is active, a provider session belongs to the client that holds that lease: the
+ * lookup needs the lease id and matching labels, as any request on the leased session does
+ * (ADR 0007). A released provider session keeps its tenant-scoped retention lookup. Returns the
+ * active lease's canonical id.
+ */
+function assertRequestHoldsActiveProviderLease(
+  leaseRegistry: LeaseRegistry,
+  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseId: string,
+): string | undefined {
+  const lease = leaseRegistry.inspectActiveLease(leaseId);
+  if (!lease) return undefined;
+  assertRequestPresentsLease(leaseScope, { ...lease, leaseBackend: lease.backend });
+  return lease.leaseId;
 }
 
 function readFlagString(

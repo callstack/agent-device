@@ -18,6 +18,13 @@ The daemon is authoritative for admission, ownership, and session lifetime.
 `open` is the natural acquisition point.
 Runner and process locks remain separate backend guards.
 
+The proxy token authenticates the host, not the client: every client of one proxy can hold the same token.
+The lease id is the credential that proves ownership of a leased session.
+A request on a session that holds a lease must send that lease's id. The daemon refuses a request that omits it with `LEASE_SESSION_MISMATCH` and never fills it from the session.
+Tenant, run id, lease backend, client id, device key, and lease provider are scope labels. The daemon checks a label when the request sends it. A label never grants access.
+A lease id that a client chooses on allocate needs at least 128 random bits. The daemon returns a lease id only to the caller that allocated the lease.
+A daemon that enforces this rule reports the `session-lease-id` capability.
+
 Lease admission, heartbeats, stored session lease refresh, and request execution share the daemon request lock.
 Scope resolution may precede the lock. Ownership mutation must not.
 A session cannot outlive its lease: lease end tears down its sessions and clears their device claims, even when the device no longer answers.
@@ -51,6 +58,7 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Preserving wanted work prevents an active command or provider allocation from losing its device to inactivity expiry.
 - Recovery ends paid rentals without reviving claims and sessions that died with the daemon.
 - Host-owned app leases keep tenants from choosing their own authority over the desktop.
+- A shared proxy token cannot tell one client from another. A session name and tenant can be listed or guessed, so only a random lease id can prove ownership.
 
 ## Rejected alternatives
 
@@ -61,6 +69,8 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Put the table in capture-kit: renting a device prepares it for execution, which provision-kit owns.
 - Silently accept unsupported device specifications: the client could receive a different device than requested.
 - Add a separate device-class flag: `--target` already selects the class.
+- Fill a missing lease id from the session: any holder of the proxy token could then read, drive, and close a session by its name.
+- Give each client its own proxy token: a host in front of the proxy already authenticates each client, and the lease id protects the session without a second credential store.
 
 ## Consequences
 
@@ -70,4 +80,6 @@ The detailed contracts are in the [daemon](../../packages/daemon/docs/remote-dev
 - Local human-control takeover remains deferred. A future host-global fence must coexist with local session claims.
 - Limrun has not moved its lease ownership onto the shared provider lease table ([#4102](https://github.com/callstack/agent-device/issues/4102)).
 - Provider allocation can still leave a rental outside registry recovery when a first allocation fails or a late allocation's release fails. Only the provider runtime that still holds the device can end that rental.
+- An older client or a direct RPC caller that sent no lease id on a leased session is refused. It must send the lease id that its allocation returned.
+- `session_list` still shows session names to every holder of the proxy token ([#4908](https://github.com/callstack/agent-device/issues/4908)). The allocate run-binding refresh can still return an existing lease id to a caller that repeats the tenant, run id, and client id ([#4909](https://github.com/callstack/agent-device/issues/4909)).
 - A web open can be admitted under a non-`macos-app` lease for another backend; admission does not compare the request platform with the lease backend.

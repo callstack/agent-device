@@ -252,6 +252,7 @@ export async function resourceAdmissionWorld(
     },
   });
   let requestNumber = 0;
+  const sessionLeaseId = () => sessionStore.get('resource-session')?.lease?.leaseId;
   const call = async (
     command: string,
     positionals: string[] = [],
@@ -268,7 +269,14 @@ export async function resourceAdmissionWorld(
         jsonrpc: '2.0',
         id: `resource-${++requestNumber}`,
         method: 'agent_device.command',
-        params: { command, positionals, flags, session: 'resource-session' },
+        params: {
+          command,
+          positionals,
+          flags,
+          session: 'resource-session',
+          // The caller that holds the session lease presents its id, as a connected client does.
+          meta: { leaseId: sessionLeaseId() },
+        },
       }),
     });
     return { statusCode: response.status, json: await response.json() };

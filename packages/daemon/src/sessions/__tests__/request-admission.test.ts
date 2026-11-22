@@ -371,7 +371,12 @@ test('close still admits and heartbeats a real active lease', () => {
   const result = assertRequestLeaseAdmission(
     makeRequest({
       command: 'close',
-      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        sessionIsolation: 'tenant',
+        leaseId: lease.leaseId,
+      },
     }),
     registry,
     session,
@@ -381,6 +386,177 @@ test('close still admits and heartbeats a real active lease', () => {
   assert.equal(result?.leaseId, lease.leaseId);
   assert.equal(result?.heartbeatAt, 2_000);
 });
+
+function iosLeasedSession(registry: LeaseRegistry) {
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+    },
+  });
+  return { lease, session };
+}
+
+test.each([
+  ['clientId', { meta: { clientId: 'client-b' } }],
+  ['deviceKey', { meta: { deviceKey: 'ios:SIM-002' } }],
+  ['leaseProvider', { meta: { leaseProvider: 'proxy' } }],
+  ['leaseBackend', { flags: { leaseBackend: 'android-instance' } }],
+] as const)(
+  'a request with the lease id and a %s the session lease does not match is refused',
+  (field, extra) => {
+    const registry = new LeaseRegistry();
+    const { lease, session } = iosLeasedSession(registry);
+
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({
+            command: 'snapshot',
+            flags: { ...('flags' in extra ? extra.flags : {}) },
+            meta: { leaseId: lease.leaseId, ...('meta' in extra ? extra.meta : {}) },
+          }),
+          registry,
+          session,
+          { env: process.env },
+        ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+        error.details?.field === field,
+    );
+  },
+);
+
+test.each([
+  ['clientId', { clientId: '' }],
+  ['deviceKey', { deviceKey: '' }],
+  ['leaseProvider', { leaseProvider: '' }],
+  ['leaseBackend', { leaseBackend: '' as never }],
+] as const)('an empty %s differs from the session lease', (field, label) => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:SIM-001',
+  });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: 'proxy',
+      clientId: 'client-a',
+      deviceKey: 'ios:SIM-001',
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId, ...label } }),
+        registry,
+        session,
+        { env: process.env },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === field,
+  );
+});
+
+test('a lease backend that differs only in case and space matches the session lease', () => {
+  const registry = new LeaseRegistry();
+  const { lease, session } = iosLeasedSession(registry);
+
+  const admitted = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'snapshot',
+      meta: { leaseId: lease.leaseId, leaseBackend: ' IOS-SIMULATOR ' as never },
+    }),
+    registry,
+    session,
+    { env: process.env },
+  );
+
+  assert.equal(admitted?.leaseId, lease.leaseId);
+});
+
+test('a request with the session lease id and another lease backend is refused', () => {
+  const registry = new LeaseRegistry();
+  const lease = hostMacOsAppLease(registry);
+  const session = makeMacOsSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: 'macos-app',
+      clientId: lease.clientId,
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'apps',
+          meta: { leaseId: lease.leaseId, leaseBackend: 'ios-simulator' },
+        }),
+        registry,
+        session,
+        { env: process.env },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'leaseBackend',
+  );
+});
+
+test.each(['close', 'snapshot', 'apps', 'artifacts'])(
+  '%s on a leased session without its lease id is refused and renews nothing',
+  (command) => {
+    let now = 1_000;
+    const registry = new LeaseRegistry({ now: () => now });
+    const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+    const session = makeIosSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        expiresAt: lease.expiresAt,
+      },
+    });
+    now = 2_000;
+
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({
+            command,
+            meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+          }),
+          registry,
+          session,
+          { env: process.env },
+        ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'UNAUTHORIZED' &&
+        error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+        error.details?.field === 'leaseId',
+    );
+    assert.equal(registry.getLease({ leaseId: lease.leaseId })?.heartbeatAt, 1_000);
+  },
+);
 
 function hostMacOsAppLease(registry: LeaseRegistry) {
   return registry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {

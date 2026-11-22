@@ -41,10 +41,26 @@ test('artifacts lists an owned active and recently released provider session', a
   const world = createWorld();
   const lease = await allocateLease(world, 'tenant-a', 'run-a');
 
+  await assert.rejects(
+    () =>
+      listArtifacts(world, {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        providerSessionId: 'session-tenant-a',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNAUTHORIZED' &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'leaseId',
+  );
+  assert.deepEqual(world.providerCalls, []);
+
   const active = await listArtifacts(world, {
     tenantId: 'tenant-a',
     runId: 'run-a',
     providerSessionId: 'session-tenant-a',
+    leaseId: lease.leaseId,
   });
   assert.equal(active.ok, true);
   assert.deepEqual(world.providerCalls, [
@@ -71,6 +87,76 @@ test('artifacts lists an owned active and recently released provider session', a
       providerSessionId: 'session-tenant-a',
     },
   ]);
+});
+
+test.each([
+  ['runId', { runId: 'run-other' }],
+  ['leaseBackend', { leaseBackend: 'macos-app' }],
+] as const)(
+  'artifacts refuses an active provider session lookup whose %s differs from the lease',
+  async (field, label) => {
+    const world = createWorld();
+    const lease = await allocateLease(world, 'tenant-a', 'run-a');
+
+    await assert.rejects(
+      () =>
+        listArtifacts(world, {
+          tenantId: 'tenant-a',
+          runId: 'run-a',
+          providerSessionId: 'session-tenant-a',
+          leaseId: lease.leaseId,
+          ...label,
+        }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+        error.details?.field === field,
+    );
+    assert.deepEqual(world.providerCalls, []);
+  },
+);
+
+test('artifacts by an active lease id checks its labels before provider dispatch', async () => {
+  const world = createWorld();
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
+
+  await assert.rejects(
+    () =>
+      listArtifacts(world, { tenantId: 'tenant-a', runId: 'run-other', leaseId: lease.leaseId }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'runId',
+  );
+  assert.deepEqual(world.providerCalls, []);
+});
+
+test('artifacts with an active lease id checks the tenant before the tenant-filtered lookup and accepts canonical spellings', async () => {
+  const world = createWorld();
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
+
+  await assert.rejects(
+    () =>
+      listArtifacts(world, {
+        tenantId: 'tenant-b',
+        runId: 'run-a',
+        providerSessionId: 'session-tenant-a',
+        leaseId: lease.leaseId,
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+      error.details?.field === 'tenantId',
+  );
+
+  const padded = await listArtifacts(world, {
+    tenantId: ' tenant-a ',
+    runId: 'run-a',
+    providerSessionId: 'session-tenant-a',
+    leaseId: ` ${lease.leaseId.toUpperCase()} `,
+  });
+  assert.equal(padded.ok, true);
+  assert.equal(world.providerCalls.at(-1)?.leaseId, lease.leaseId);
 });
 
 test('artifacts refuses a released provider session after the retention window', async () => {
@@ -134,11 +220,12 @@ test('artifacts lists a provider session whose allocation outlasted the lease TT
     return { providerSessionId: 'slow-allocation-session' };
   };
 
-  await allocateLease(world, 'tenant-a', 'run-a');
+  const lease = await allocateLease(world, 'tenant-a', 'run-a');
   const listed = await listArtifacts(world, {
     tenantId: 'tenant-a',
     runId: 'run-a',
     providerSessionId: 'slow-allocation-session',
+    leaseId: lease.leaseId,
   });
   assert.equal(listed.ok, true);
 });
@@ -289,8 +376,10 @@ async function listArtifacts(
   scope: {
     tenantId: string;
     runId: string;
-    providerSessionId: string;
+    providerSessionId?: string;
     leaseProvider?: string;
+    leaseId?: string;
+    leaseBackend?: string;
   },
 ): Promise<DaemonResponse> {
   return (await handleLeaseCommands({
@@ -301,8 +390,10 @@ async function listArtifacts(
         tenantId: scope.tenantId,
         runId: scope.runId,
         leaseProvider: scope.leaseProvider ?? CLOUD_PROVIDER,
+        ...(scope.leaseId ? { leaseId: scope.leaseId } : {}),
+        ...(scope.leaseBackend ? { leaseBackend: scope.leaseBackend as never } : {}),
       },
-      { providerSessionId: scope.providerSessionId },
+      scope.providerSessionId ? { providerSessionId: scope.providerSessionId } : {},
     ),
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,

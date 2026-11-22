@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { hostDeviceIdOf, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
-import { resolveRequestOrSessionLeaseScope } from '../core/lease-context.ts';
+import { resolveSessionLeaseScope } from '../core/lease-context.ts';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
@@ -59,7 +59,7 @@ export async function resolveCommandDevice(params: {
   androidAvdSelection?: 'running-only' | 'include-stopped';
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
-  const scope = resolveRequestOrSessionLeaseScope(params.req, params.session);
+  const scope = resolveSessionLeaseScope(params.req, params.session);
   const { session } = params;
   const explicitIdentity = hasExplicitDeviceSelector(params.req.flags);
   // An explicit selector that names the session's own device resolves from the session like an

@@ -119,7 +119,9 @@ export function leaseScopeFromRequest(req: LeaseRequestLike): LeaseScope {
     leaseId: req.meta?.leaseId ?? readFlagString(req.flags, 'leaseId'),
     leaseTtlMs: req.meta?.leaseTtlMs,
     leaseRetainOnClose: req.meta?.leaseRetainOnClose,
-    leaseBackend: req.meta?.leaseBackend,
+    leaseBackend:
+      req.meta?.leaseBackend ??
+      (readFlagString(req.flags, 'leaseBackend') as LeaseBackend | undefined),
     leaseProvider:
       req.meta?.leaseProvider ??
       readFlagString(req.flags, 'leaseProvider') ??
