@@ -10,6 +10,7 @@ import {
 } from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import { normalizeLeaseId } from '@agent-device/contracts/lease-scope';
 import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
 import type { PackedGzipTar } from '@agent-device/host-kit/gzip-tar';
 import {
@@ -27,7 +28,6 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import { resolveLeaseScope } from '../core/lease-context.ts';
-import { normalizeLeaseId } from './lease-registry-scope.ts';
 
 // --- Leased output ownership ---
 

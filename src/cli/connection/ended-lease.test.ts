@@ -86,7 +86,7 @@ test('an ended lease is forgotten from a reply or its error details', () => {
 test('the stored lease stays unless the reply ends that lease at response level', () => {
   const nestedStep = { step: 1, command: 'close', ok: true, data: { endedLeases: [...ENDED] } };
   const replies: DaemonResponse[] = [
-    { ok: true, data: { endedLeases: [{ leaseId: 'other-lease', outcome: 'released' }] } },
+    { ok: true, data: { endedLeases: [{ leaseId: 'f'.repeat(32), outcome: 'released' }] } },
     { ok: true, data: { endedLeases: [{ leaseId: LEASE_ID, outcome: 'retained' }] } },
     { ok: true, data: { endedLeases: { leaseId: LEASE_ID, outcome: 'released' } } },
     { ok: true, data: { lease: { leaseId: LEASE_ID, tenantId: 'proxy', runId: 'run' } } },

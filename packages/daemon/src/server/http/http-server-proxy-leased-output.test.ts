@@ -23,6 +23,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
+import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   cleanupDownloadableArtifact,
@@ -70,7 +71,7 @@ async function startProxiedDaemon() {
     sessionName,
     makeAndroidSession(sessionName, {
       sessionScope: { kind: 'tenant', id: TENANT },
-      lease: { leaseId: lease.leaseId, ...OWNER_SCOPE, leaseBackend: lease.backend },
+      lease: sessionLeaseOf(lease),
     }),
   );
   const handleRequest = createRequestHandler({

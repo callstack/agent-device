@@ -15,6 +15,7 @@ import { makeAndroidSession } from '../../__tests__/support/session-factories.ts
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
+import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
@@ -191,7 +192,7 @@ test('record stop keeps the unleased producer when the stop runs under a lease',
     async (post, base) => {
       successfulData(await post({ command: 'record', positionals: ['start'] }));
       harness.sessionStore.update(harness.sessionStore.lookup(harness.sessionName)!, {
-        lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
+        lease: sessionLeaseOf(lease),
       });
       const output = successfulData(
         await post({
@@ -225,7 +226,8 @@ test.each(['leased at start', 'leased after start'])(
     sessionStore.publish('capture', makeAndroidSession('capture'));
     const leaseRegistry = new LeaseRegistry();
     const scope = { tenantId: 'tenant', runId: 'trace', leaseBackend: 'android-instance' } as const;
-    const { leaseId } = leaseRegistry.allocateLease(scope);
+    const lease = leaseRegistry.allocateLease(scope);
+    const { leaseId } = lease;
     const owner = { ...scope, leaseId };
     const handler = createRequestHandler({
       host: createTestHostEnvironment(),
@@ -280,7 +282,7 @@ test.each(['leased at start', 'leased after start'])(
       } else {
         successfulData(await wait('trace-owner-request', unleased));
         sessionStore.update(sessionStore.lookup('capture')!, {
-          lease: { ...owner, leaseBackend: scope.leaseBackend },
+          lease: sessionLeaseOf(lease),
         });
         successfulData(await wait('trace-other-request', owner));
       }

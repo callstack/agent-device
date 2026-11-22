@@ -260,7 +260,7 @@ test('record stop recovery carries the request lease and discovery context', asy
   );
   fs.writeFileSync(outPath, 'mp4');
   const leaseFlags = {
-    leaseId: 'lease-1',
+    leaseId: 'a'.repeat(32),
     leaseProvider: 'proxy',
     deviceKey: 'android:mobile:emulator-5554',
     clientId: 'client-1',
