@@ -113,64 +113,72 @@ test('shutdown rejects active session device and points to close --shutdown', as
 // #4908: naming the session that owns a busy device in the refusal is a leak when the caller is
 // another client on the same proxy token. The tenant label is not proof of ownership; the lease id
 // the caller sends is.
-// A request on the leased session's own address is not an exception: without the lease id, naming
-// the session would confirm to a guessing caller that it exists and holds this device.
-for (const leaseId of [undefined, 'a'.repeat(32)] as const) {
-  test(`shutdown names the leased session in its DEVICE_IN_USE refusal for a request on its own address ${
-    leaseId ? 'sending' : 'omitting'
-  } that lease id`, async () => {
-    const sessionStore = makeSessionStore();
-    const sessionAddress = 'tenant-a:remote-agent';
-    const leasedDevice: SessionState['device'] = {
-      platform: 'apple',
-      id: 'sim-2',
-      name: 'iPhone 17 Pro',
-      kind: 'simulator',
-      target: 'mobile',
-      booted: true,
-    };
-    sessionStore.publish(sessionAddress, {
-      name: sessionAddress,
-      sessionScope: { kind: 'tenant', id: 'tenant-a' },
-      device: leasedDevice,
-      createdAt: Date.now(),
-      actions: [],
-      lease: { tenantId: 'tenant-a', runId: 'run-1', leaseId: 'a'.repeat(32) },
-    });
-    mockResolveTargetDevice.mockResolvedValue(leasedDevice);
+const LEASED_ADDRESS = 'tenant-a:remote-agent';
+const SESSION_LEASE_ID = 'a'.repeat(32);
 
-    const response = await handleSessionCommands({
-      host: createTestHostEnvironment(),
-      createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
-      req: {
-        token: 't',
-        session: sessionAddress,
-        command: 'shutdown',
-        positionals: [],
-        flags: { platform: 'ios', device: 'iPhone 17 Pro' },
-        meta: {
-          tenantId: 'tenant-a',
-          sessionIsolation: 'tenant',
-          ...(leaseId ? { leaseId } : {}),
-        },
-      },
-      sessionName: sessionAddress,
-      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-      sessionStore,
-      invoke: noopInvoke,
-    });
-
-    expect(response?.ok).toBe(false);
-    if (response && !response.ok) {
-      expect(response.error.code).toBe('DEVICE_IN_USE');
-      expect(response.error.details?.session).toBe(leaseId ? sessionAddress : undefined);
-      expect(response.error.details?.hint).toBe(
-        leaseId ? `Run agent-device close --shutdown --session ${sessionAddress}` : undefined,
-      );
-    }
+async function shutdownOnLeasedSessionAddress(leaseId: string | undefined) {
+  const sessionStore = makeSessionStore();
+  const leasedDevice: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-2',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+  sessionStore.publish(LEASED_ADDRESS, {
+    name: LEASED_ADDRESS,
+    sessionScope: { kind: 'tenant', id: 'tenant-a' },
+    device: leasedDevice,
+    createdAt: Date.now(),
+    actions: [],
+    lease: { tenantId: 'tenant-a', runId: 'run-1', leaseId: SESSION_LEASE_ID },
+  });
+  mockResolveTargetDevice.mockResolvedValue(leasedDevice);
+  return await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: LEASED_ADDRESS,
+      command: 'shutdown',
+      positionals: [],
+      flags: { platform: 'ios', device: 'iPhone 17 Pro' },
+      meta: { tenantId: 'tenant-a', sessionIsolation: 'tenant', ...(leaseId ? { leaseId } : {}) },
+    },
+    sessionName: LEASED_ADDRESS,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
   });
 }
+
+test('shutdown on a leased session address with its lease id names the session in DEVICE_IN_USE', async () => {
+  const response = await shutdownOnLeasedSessionAddress(SESSION_LEASE_ID);
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      details: {
+        session: LEASED_ADDRESS,
+        hint: `Run agent-device close --shutdown --session ${LEASED_ADDRESS}`,
+      },
+    },
+  });
+});
+
+// Refused before the device check, so the refusal never confirms that the session holds this device.
+test('shutdown on a leased session address without its lease id is refused without naming it', async () => {
+  const refusal = await shutdownOnLeasedSessionAddress(undefined).catch((error: unknown) => error);
+
+  expect(refusal).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
+  });
+  expect(JSON.stringify(refusal)).not.toContain('remote-agent');
+});
 
 test('shutdown turns off selected Android emulator', async () => {
   const sessionStore = makeSessionStore();
