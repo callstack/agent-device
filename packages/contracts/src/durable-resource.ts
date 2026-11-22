@@ -1,11 +1,16 @@
+import type { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type { JsonObject } from './json.ts';
 
-export type CleanupPendingReason =
-  | 'ownership-fence-lost'
-  | 'owner-unavailable'
-  | 'transport-failed'
-  | 'cleanup-unconfirmed'
-  | 'manual-recovery-required';
+type DurableResourceReason<K extends keyof typeof DURABLE_RESOURCE_REASONS> =
+  (typeof DURABLE_RESOURCE_REASONS)[K]['reason'];
+
+export type CleanupPendingReason = DurableResourceReason<
+  | 'ownershipFenceLost'
+  | 'ownerUnavailable'
+  | 'transportFailed'
+  | 'cleanupUnconfirmed'
+  | 'manualRecoveryRequired'
+>;
 
 export type CleanupOutcome =
   | Readonly<{ status: 'cleaned' }>
@@ -44,12 +49,18 @@ export type LiveResourceHandle<Result> = AsyncDisposable &
     forceCleanup(): Promise<CleanupOutcome>;
   }>;
 
-export type ResourceUnreattachableReason =
-  | 'descriptor-invalid'
-  | 'descriptor-version-unsupported'
-  | 'owner-unavailable'
-  | 'transport-not-reattachable'
-  | 'ownership-fence-lost';
+export type ResourceUnreattachableReason = DurableResourceReason<
+  | 'descriptorInvalid'
+  | 'descriptorVersionUnsupported'
+  | 'ownerUnavailable'
+  | 'transportNotReattachable'
+  | 'ownershipFenceLost'
+>;
+
+/** The reasons a stored descriptor that does not decode is unreattachable for. */
+export type DescriptorDecodeFailureReason = DurableResourceReason<
+  'descriptorInvalid' | 'descriptorVersionUnsupported'
+>;
 
 export type ReattachOutcome<Handle extends AsyncDisposable, Result> =
   | Readonly<{ status: 'active'; handle: Handle }>
@@ -93,7 +104,9 @@ export function createRetryableCleanup(
         (error: unknown) => ({
           outcome: {
             status: 'cleanup-pending',
-            reason: 'cleanup-unconfirmed',
+            // Type-checked against the kernel row: a value import would make this subpath load
+            // kernel errors.
+            reason: 'cleanup-unconfirmed' satisfies DurableResourceReason<'cleanupUnconfirmed'>,
             // Non-Error rejections keep the facet's default message; `cause` keeps the raw value.
             message: error instanceof Error ? error.message : undefined,
           } as const,

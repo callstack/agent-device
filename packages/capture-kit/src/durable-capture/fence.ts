@@ -1,4 +1,4 @@
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   DurableResourceEnvelope,
   DurableResourceLifecycleState,
@@ -10,8 +10,8 @@ const resourceFenceTails = new Map<string, Promise<void>>();
 
 /**
  * What the durable-capture record store answers when a caller arrives at a record that can no
- * longer carry its work. `ownership-fence-lost` itself belongs to contracts' durable-resource
- * outcome union, so it is not declared here.
+ * longer carry its work. `ownership-fence-lost` itself is a `DURABLE_RESOURCE_REASONS` row of the
+ * durable outcome union, so it is not declared here.
  */
 export const DURABLE_CAPTURE_REFUSAL_REASONS = {
   // The record is already committed, so a finish, cleanup, or late progress write is refused.
@@ -149,7 +149,7 @@ async function serializeResource<Result>(
 
 function fenceError(store: DurableCaptureResourceStore<string>, message: string): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: 'ownership-fence-lost',
+    reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
     retriable: false,
     hint: `Use the current ${store.displayName.toLowerCase()} resource owner or retain the recovery record for manual recovery.`,
   });

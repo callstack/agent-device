@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AudioProbeCompletion,
   AudioProbeLiveHandle,
@@ -33,10 +34,16 @@ export function createHostAudioProbeRecoveryOperations(params: {
       const descriptor = decoded.descriptor;
       const liveness = await host.inspectProcess(descriptor.marker);
       if (liveness === 'owned-alive') {
-        return { status: 'unreattachable', reason: 'transport-not-reattachable' };
+        return {
+          status: 'unreattachable',
+          reason: DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
+        };
       }
       if (liveness === 'ownership-lost') {
-        return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+        return {
+          status: 'unreattachable',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+        };
       }
       const status = await readStatusFile(descriptor);
       // Only a terminal publication proves the run finished: a `running` checkpoint with the
@@ -53,19 +60,25 @@ export function createHostAudioProbeRecoveryOperations(params: {
       if (decoded.status !== 'decoded') {
         return {
           status: 'cleanup-pending',
-          reason: 'manual-recovery-required',
+          reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
           message: decoded.message,
         };
       }
       const descriptor = decoded.descriptor;
       const liveness = await host.inspectProcess(descriptor.marker);
       if (liveness === 'ownership-lost') {
-        return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+        return {
+          status: 'cleanup-pending',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+        };
       }
       if (liveness === 'missing') return { status: 'already-missing' };
       const terminated = await host.terminateProcess(descriptor.marker);
       if (terminated === 'ownership-lost') {
-        return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+        return {
+          status: 'cleanup-pending',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+        };
       }
       return { status: terminated === 'terminated' ? 'cleaned' : 'already-missing' };
     },

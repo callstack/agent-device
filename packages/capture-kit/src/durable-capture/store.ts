@@ -1,3 +1,5 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
+import type { DescriptorDecodeFailureReason } from '@agent-device/contracts/durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
@@ -12,7 +14,7 @@ export type DurableCaptureResourceRecord<K extends string> =
   | Readonly<{ status: 'decoded'; envelope: DurableResourceEnvelope<K> }>
   | Readonly<{
       status: 'unreattachable';
-      reason: 'descriptor-invalid' | 'descriptor-version-unsupported';
+      reason: DescriptorDecodeFailureReason;
       message: string;
       version?: number;
     }>;
@@ -107,7 +109,11 @@ function pathEntryExistsWithoutFollowing(resourcePath: string): boolean {
 }
 
 function invalidRecord<K extends string>(message: string): DurableCaptureResourceRecord<K> {
-  return { status: 'unreattachable', reason: 'descriptor-invalid', message };
+  return {
+    status: 'unreattachable',
+    reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
+    message,
+  };
 }
 
 function isMissingFile(error: unknown): boolean {

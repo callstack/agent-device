@@ -1,5 +1,5 @@
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogProcessCommand,
   AppLogProcessTransport,
@@ -149,7 +149,7 @@ function createBinding<Family extends Platform, Descriptor extends PidScopedDesc
       if (!appLogSessionArtifactsMatch(host, context.sessionId, descriptor)) {
         return {
           status: 'unreattachable',
-          reason: 'descriptor-invalid',
+          reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
           message: `${options.label} app-log descriptor paths do not match the owning session`,
         };
       }
@@ -159,7 +159,7 @@ function createBinding<Family extends Platform, Descriptor extends PidScopedDesc
       if (!appLogSessionArtifactsMatch(host, context.sessionId, descriptor)) {
         return {
           status: 'cleanup-pending',
-          reason: 'ownership-fence-lost',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
           message: `${options.label} app-log descriptor paths do not match the owning session`,
         } as const;
       }

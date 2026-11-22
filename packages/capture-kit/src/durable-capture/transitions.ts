@@ -8,7 +8,7 @@ import {
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   completedDurableCaptureError,
@@ -91,7 +91,7 @@ export async function finishDurableCaptureHandle<
       } catch (error) {
         cleanup = {
           status: 'cleanup-pending',
-          reason: 'cleanup-unconfirmed',
+          reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
           message: errorMessage(error),
         };
       }
@@ -181,7 +181,7 @@ function persistCleanupPendingBestEffort<K extends string>(
   try {
     transitionCleanupOutcome(lease, {
       status: 'cleanup-pending',
-      reason: 'cleanup-unconfirmed',
+      reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
       message: errorMessage(cleanupError),
     });
     return undefined;
@@ -327,7 +327,7 @@ function cleanupPendingError(
     {
       reason: outcome.reason,
       cleanupStatus: outcome.status,
-      retriable: outcome.reason !== 'ownership-fence-lost',
+      retriable: outcome.reason !== DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
       hint: definition.messages.cleanupPendingHint,
     },
   );

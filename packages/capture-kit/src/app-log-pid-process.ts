@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import type {
   AppLogBackgroundProcess,
@@ -126,7 +127,7 @@ async function finishPidScopedProcess(
     input.setState('failed');
     return {
       status: 'cleanup-pending',
-      reason: 'transport-failed',
+      reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
       message: input.options.cleanupFailureMessage,
     } as const;
   }

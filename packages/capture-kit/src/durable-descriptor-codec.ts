@@ -1,3 +1,5 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
+import type { DescriptorDecodeFailureReason } from '@agent-device/contracts/durable-resource';
 import type {
   DurableDescriptorCodec,
   DurableResourceEnvelope,
@@ -7,7 +9,7 @@ export type DurableDescriptorDecodeOutcome<Descriptor extends object> =
   | Readonly<{ status: 'decoded'; descriptor: Descriptor }>
   | Readonly<{
       status: 'unreattachable';
-      reason: 'descriptor-invalid' | 'descriptor-version-unsupported';
+      reason: DescriptorDecodeFailureReason;
       message: string;
       version?: number;
     }>;
@@ -20,14 +22,14 @@ export function decodeDurableDescriptor<Descriptor extends object, ResourceKind 
   if (envelope.resourceKind !== codec.resourceKind) {
     return {
       status: 'unreattachable',
-      reason: 'descriptor-invalid',
+      reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
       message: `Durable resource kind ${envelope.resourceKind} does not match ${codec.resourceKind}`,
     };
   }
   if (envelope.descriptor.version !== codec.version) {
     return {
       status: 'unreattachable',
-      reason: 'descriptor-version-unsupported',
+      reason: DURABLE_RESOURCE_REASONS.descriptorVersionUnsupported.reason,
       message: `Unsupported ${codec.resourceKind} descriptor version: ${envelope.descriptor.version}`,
       version: envelope.descriptor.version,
     };
@@ -38,13 +40,13 @@ export function decodeDurableDescriptor<Descriptor extends object, ResourceKind 
       ? decoded
       : {
           status: 'unreattachable',
-          reason: 'descriptor-invalid',
+          reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
           message: decoded.message,
         };
   } catch (error) {
     return {
       status: 'unreattachable',
-      reason: 'descriptor-invalid',
+      reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
       message: error instanceof Error ? error.message : 'Descriptor codec rejected the body',
     };
   }
