@@ -41,6 +41,7 @@
 | [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
 | [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
 | [0039 Pre-dispatch admission](0039-pre-dispatch-admission.md) | one admission step for resolved-target input: ordered typed checks, one request-bound wait loop, one evidence path, and no extra reads for an idle target |
+| [0040 Daemon ownership and request state machines](0040-daemon-ownership-state-machines.md) | lifetime-scoped authority, lease expiry and settlement, device claims, request locks, session visibility, and producer-owned outputs |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.
