@@ -5,15 +5,21 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
-import { readCloudJsonResponse } from './cloud-response.ts';
+import {
+  CLI_SESSION_FORMAT_VERSION,
+  parseCliSessionRecord,
+  type CliSessionRecord,
+} from './cli-session-format.ts';
 
+// The transport loads when a request is made, so a command that reads no cloud auth stays off it.
+const postCloudAuthJson: typeof import('./cloud-auth-request.ts').postCloudAuthJson = async (o) =>
+  (await import('./cloud-auth-request.ts')).postCloudAuthJson(o);
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
 const DEVICE_AUTH_POLL_PATH = '/api/control-plane/device-auth/poll';
 const CLI_SESSION_REFRESH_PATH = '/api/control-plane/cli-session/refresh';
 const API_KEYS_PATH = '/api-keys';
 const DEVICE_POLL_TIMEOUT_MS = 10 * 60 * 1000;
-const HTTP_TIMEOUT_MS = 15_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 // A holder keeps the session lock for one file operation, or for one token exchange, which spends
@@ -32,19 +38,14 @@ const CLI_SESSION_REASONS = {
   tokenless: { reason: 'cli_session_refresh_unanswered', commands: ['connect'] },
   // The directory holding the session file cannot be written, so its lock cannot be taken.
   storeUnwritable: { reason: 'cli_session_store_unwritable', commands: ['connect'] },
+  // The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued
+  // the stored CLI session, so the stored credential is not sent. Log in with the named origin, or
+  // unset the override.
+  loginOriginMismatch: { reason: 'cloud_login_origin_mismatch', commands: ['connect'] },
+  // The stored CLI session does not record the cloud that issued its credential, as a session saved
+  // by an older CLI does not, so the credential is not sent. Run agent-device auth login.
+  issuerUnverified: { reason: 'cli_session_issuer_unverified', commands: ['connect'] },
 } as const satisfies ReasonTable<'auth'>;
-
-export type CliSessionRecord = {
-  version: 1;
-  id: string;
-  cloudBaseUrl: string;
-  workspaceId?: string;
-  accountId?: string;
-  name?: string;
-  refreshCredential: string;
-  createdAt: string;
-  expiresAt?: string;
-};
 
 export type RemoteAuthResolution = {
   flags: CliFlags;
@@ -244,7 +245,7 @@ export async function loginWithDeviceAuth(options: {
     throw buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);
   }
   const cloudBaseUrl = resolveCloudBaseUrl(env);
-  const start = await postJson<DeviceAuthStartResponse>({
+  const start = await postCloudAuthJson<DeviceAuthStartResponse>({
     baseUrl: cloudBaseUrl,
     pathName: DEVICE_AUTH_START_PATH,
     body: {
@@ -296,7 +297,7 @@ export async function loginWithDeviceAuth(options: {
   // expired, so the login exchanges it instead of handing back a token of unknown age.
   const approvedExpiresAt = hasToken(approved.expiresAt) ? approved.expiresAt : undefined;
   const session: CliSessionRecord = {
-    version: 1,
+    version: CLI_SESSION_FORMAT_VERSION,
     id: approved.cliSession?.id ?? `cli-${Date.now().toString(36)}`,
     cloudBaseUrl,
     workspaceId: approved.cliSession?.workspaceId,
@@ -325,7 +326,6 @@ export async function loginWithDeviceAuth(options: {
           stateDir: options.stateDir,
           session,
           flags: options.flags,
-          env,
           io: options.io,
         });
       } catch (error) {
@@ -349,23 +349,36 @@ export async function loginWithDeviceAuth(options: {
 }
 
 export function readCliSession(options: { stateDir: string }): CliSessionRecord | null {
-  const filePath = resolveCliSessionPath(options.stateDir);
+  const stored = readStoredCliSession(options.stateDir);
+  return stored === 'unverified' ? null : stored;
+}
+
+/** Reads the session file. A missing or unreadable file answers `null`. */
+function readStoredCliSession(stateDir: string): CliSessionRecord | 'unverified' | null {
+  const filePath = resolveCliSessionPath(stateDir);
   if (!fs.existsSync(filePath)) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<CliSessionRecord>;
-    if (
-      parsed.version !== 1 ||
-      !hasToken(parsed.id) ||
-      !hasToken(parsed.cloudBaseUrl) ||
-      !hasToken(parsed.refreshCredential) ||
-      !hasToken(parsed.createdAt)
-    ) {
-      return null;
-    }
-    return parsed as CliSessionRecord;
+    return parseCliSessionRecord(fs.readFileSync(filePath, 'utf8'));
   } catch {
     return null;
   }
+}
+
+/**
+ * The stored session to exchange, or `null` when there is none. A session whose issuer the file does
+ * not establish is refused: its credential could belong to another cloud than its URL names.
+ */
+function readExchangeableCliSession(stateDir: string): CliSessionRecord | null {
+  const stored = readStoredCliSession(stateDir);
+  if (stored !== 'unverified') return stored;
+  throw new AppError(
+    'UNAUTHORIZED',
+    'The stored CLI session does not record the cloud that issued it, so it must be renewed.',
+    {
+      reason: CLI_SESSION_REASONS.issuerUnverified.reason,
+      hint: 'Run agent-device auth login, or set AGENT_DEVICE_DAEMON_AUTH_TOKEN.',
+    },
+  );
 }
 
 export function writeCliSession(options: { stateDir: string; session: CliSessionRecord }): void {
@@ -528,16 +541,17 @@ async function resolveCliSessionAccess(options: {
   const { env, flags, io, stateDir } = options;
   // This read only asks whether there is a session to exchange, so a command that has none takes no
   // lock and writes nothing. The credential is read again once the lock is held.
-  const stored = readCliSession({ stateDir });
+  const stored = readExchangeableCliSession(stateDir);
   if (!stored || isExpired(stored.expiresAt, io?.now)) return null;
   // A refresh read is not a change the cloud will not repeat: a wait that times out fails with its
   // typed reason, and the next command asks again.
   const exchanged = await withCliSessionLock(
     stateDir,
     async () => {
-      const session = readCliSession({ stateDir });
+      const session = readExchangeableCliSession(stateDir);
       if (!session || isExpired(session.expiresAt, io?.now)) return null;
-      return await exchangeCliSessionAccess({ stateDir, session, flags, env, io });
+      assertStoredSessionOrigin(session, env);
+      return await exchangeCliSessionAccess({ stateDir, session, flags, io });
     },
     { io },
   );
@@ -545,8 +559,26 @@ async function resolveCliSessionAccess(options: {
   return {
     accessToken: exchanged.accessToken,
     ...(hasToken(exchanged.expiresAt) ? { expiresAt: exchanged.expiresAt } : {}),
+    // The refresh went to the stored URL. A same-origin override still names the connection.
     cloudBaseUrl: resolveCloudBaseUrl(env, exchanged.session.cloudBaseUrl),
   };
+}
+
+/**
+ * The stored credential goes only to the cloud that issued it. An override that names another
+ * origin would send it to that origin, so the command stops before any request.
+ */
+function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): void {
+  const storedOrigin = new URL(resolveCloudBaseUrl({}, session.cloudBaseUrl)).origin;
+  if (new URL(resolveCloudBaseUrl(env, session.cloudBaseUrl)).origin === storedOrigin) return;
+  throw new AppError(
+    'UNAUTHORIZED',
+    'The stored CLI session belongs to another cloud API origin.',
+    {
+      reason: CLI_SESSION_REASONS.loginOriginMismatch.reason,
+      hint: 'Run agent-device auth login with this AGENT_DEVICE_CLOUD_BASE_URL, or unset it.',
+    },
+  );
 }
 
 /**
@@ -560,10 +592,9 @@ async function exchangeCliSessionAccess(options: {
   stateDir: string;
   session: CliSessionRecord;
   flags: CliFlags;
-  env: EnvMap;
   io?: AuthIo;
 }): Promise<{ accessToken: string; expiresAt?: string; session: CliSessionRecord }> {
-  const { env, flags, io, stateDir } = options;
+  const { flags, io, stateDir } = options;
   // The file is what a store compares against: the last record this command saw there, and
   // `null` once a write would land on a session it did not write. `asked` is what the cloud
   // accepts for this session now, which stays ahead of the file when a save failed. `saved` is
@@ -579,7 +610,7 @@ async function exchangeCliSessionAccess(options: {
   for (let exchange = 1; ; exchange += 1) {
     let refreshed;
     try {
-      refreshed = await refreshAgentToken({ session: asked, flags, env, io });
+      refreshed = await refreshAgentToken({ session: asked, flags, io });
     } catch (error) {
       // Only the first exchange is required. A token already read from the cloud stays usable by
       // the daemon that accepted it, so a transient failure of the optional exchange that asks
@@ -653,7 +684,12 @@ function storeRotatedCredential(options: {
   const held = file.holds;
   try {
     const stored = readCliSession({ stateDir: options.stateDir });
-    if (held && stored?.id === held.id && stored.refreshCredential === held.refreshCredential) {
+    if (
+      held &&
+      stored?.id === held.id &&
+      stored.cloudBaseUrl === held.cloudBaseUrl &&
+      stored.refreshCredential === held.refreshCredential
+    ) {
       const replaced: CliSessionRecord = { ...stored, ...rotation };
       writeCliSession({ stateDir: options.stateDir, session: replaced });
       file.holds = replaced;
@@ -677,7 +713,6 @@ function storeRotatedCredential(options: {
 async function refreshAgentToken(options: {
   session: CliSessionRecord;
   flags: CliFlags;
-  env: EnvMap;
   io?: AuthIo;
 }): Promise<{
   accessToken: string;
@@ -685,9 +720,9 @@ async function refreshAgentToken(options: {
   refreshCredential?: string;
   sessionExpiresAt?: string;
 }> {
-  const cloudBaseUrl = resolveCloudBaseUrl(options.env, options.session.cloudBaseUrl);
-  const response = await postJson<CliSessionRefreshResponse>({
-    baseUrl: cloudBaseUrl,
+  // The refresh goes to the URL stored with the session, never to an override.
+  const response = await postCloudAuthJson<CliSessionRefreshResponse>({
+    baseUrl: resolveCloudBaseUrl({}, options.session.cloudBaseUrl),
     pathName: CLI_SESSION_REFRESH_PATH,
     body: {
       refreshCredential: options.session.refreshCredential,
@@ -770,7 +805,7 @@ async function pollDeviceAuth(options: {
     (options.interval ?? DEFAULT_POLL_INTERVAL_MS / 1000) * 1000,
   );
   while (now() < deadline) {
-    const response = await postJson<DeviceAuthPollResponse>({
+    const response = await postCloudAuthJson<DeviceAuthPollResponse>({
       baseUrl: options.cloudBaseUrl,
       pathName: DEVICE_AUTH_POLL_PATH,
       body: { deviceCode: options.deviceCode },
@@ -791,30 +826,6 @@ async function pollDeviceAuth(options: {
     await sleep(intervalMs);
   }
   throw new AppError('TIMEOUT', 'Device authorization expired before approval.');
-}
-
-async function postJson<T>(options: {
-  baseUrl: string;
-  pathName: string;
-  body: Record<string, unknown>;
-  // di-seam-approved: same fetch-global seam as AuthIo.fetch above, threaded through this
-  // postJson helper as fetchImpl.
-  fetchImpl?: typeof fetch;
-  // Passed to the response reader, which calls it on a status it would otherwise reject generically.
-  classifyRejectedBody?: (parsed: unknown) => AppError | undefined;
-}): Promise<T> {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(new URL(options.pathName, options.baseUrl), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(options.body),
-    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-  });
-  return await readCloudJsonResponse<T>(response, {
-    invalidJsonMessage: `Cloud auth endpoint returned invalid JSON (${response.status}).`,
-    rejectedMessage: 'Cloud auth endpoint rejected the request.',
-    classifyRejectedBody: options.classifyRejectedBody,
-  });
 }
 
 type UnusableDeviceAuthStartField =

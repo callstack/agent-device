@@ -24,7 +24,7 @@ function writeStoredCliSession(
   writeCliSession({
     stateDir,
     session: {
-      version: 1,
+      version: 2,
       id: 'cli-1',
       cloudBaseUrl: 'https://cloud.example.test',
       refreshCredential: 'refresh-credential',

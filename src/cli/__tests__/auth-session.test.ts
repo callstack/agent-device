@@ -100,7 +100,7 @@ test('remote auth leaves non-cloud remote daemons to existing daemon auth valida
   writeCliSession({
     stateDir: tempRoot,
     session: {
-      version: 1,
+      version: 2,
       id: 'session-non-cloud',
       cloudBaseUrl: 'https://cloud.example',
       refreshCredential: 'adc_refresh_should_not_be_used',
@@ -132,7 +132,7 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
   writeCliSession({
     stateDir: tempRoot,
     session: {
-      version: 1,
+      version: 2,
       id: 'session-1',
       cloudBaseUrl: 'https://cloud.example',
       workspaceId: 'acme',
@@ -175,7 +175,7 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
 test('remote auth stores a refresh credential that the cloud rotated', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-rotate-');
   const session = {
-    version: 1 as const,
+    version: 2 as const,
     id: 'session-rotate',
     cloudBaseUrl: 'https://cloud.example',
     refreshCredential: 'adc_refresh_old',
@@ -226,7 +226,7 @@ test('remote auth stores a refresh credential that the cloud rotated', async () 
 test('a rotated credential does not replace a session another writer changed', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-rotate-race-');
   const session = {
-    version: 1 as const,
+    version: 2 as const,
     id: 'session-race',
     cloudBaseUrl: 'https://cloud.example',
     refreshCredential: 'adc_refresh_old',
@@ -286,7 +286,7 @@ test('logout without a stored session takes no lock and writes nothing', async (
 test('a stored rotation is kept when the lock release fails, and the warning is best effort', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-release-');
   const session = {
-    version: 1 as const,
+    version: 2 as const,
     id: 'session-release',
     cloudBaseUrl: 'https://cloud.example',
     refreshCredential: 'adc_refresh_old',
@@ -347,7 +347,7 @@ test('a timed-out session lock wait keeps a login waiting and fails a refresh re
     writeCliSession({
       stateDir: tempRoot,
       session: {
-        version: 1,
+        version: 2,
         id: 'session-timeout',
         cloudBaseUrl: 'https://cloud.example',
         refreshCredential: 'adc_refresh_old',
@@ -465,7 +465,7 @@ test('device login does not print a user code that carries control characters', 
 test('remote auth does not fall back to login when session refresh gets 503', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-refresh-503-');
   const session = {
-    version: 1 as const,
+    version: 2 as const,
     id: 'session-503',
     cloudBaseUrl: 'https://cloud.example',
     refreshCredential: 'adc_refresh_503',
@@ -515,7 +515,7 @@ test('remote auth fails immediately when stored CLI session is revoked', async (
   writeCliSession({
     stateDir: tempRoot,
     session: {
-      version: 1,
+      version: 2,
       id: 'session-revoked',
       cloudBaseUrl: 'https://cloud.example',
       refreshCredential: 'adc_refresh_revoked',
@@ -623,7 +623,7 @@ test('auth summary and logout do not expose stored refresh credentials', async (
   writeCliSession({
     stateDir: tempRoot,
     session: {
-      version: 1,
+      version: 2,
       id: 'session-3',
       cloudBaseUrl: 'https://cloud.example',
       refreshCredential: 'adc_refresh_hidden',
@@ -873,7 +873,7 @@ function assertRefusedWithoutOutput(refused: RefusedDeviceLogin): void {
 test('a rewritten CLI session replaces the file, so a reader never sees a partial record', () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-session-replace-');
   const session = {
-    version: 1 as const,
+    version: 2 as const,
     id: 'session-first',
     cloudBaseUrl: 'https://cloud.example',
     refreshCredential: 'adc_refresh_first',
