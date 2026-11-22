@@ -233,8 +233,12 @@ export function admitRequestLeaseForLockedScope(params: {
   daemonPolicy?: DaemonPolicy;
   resolveSessionRef?: ResolveRequestSessionRef;
 }): DaemonRequest {
-  const { sessionName, sessionStore, leaseRegistry, resolveSessionRef = resolveRequestSessionRef } =
-    params;
+  const {
+    sessionName,
+    sessionStore,
+    leaseRegistry,
+    resolveSessionRef = resolveRequestSessionRef,
+  } = params;
   // The addressed session still decides the app-lease veto.
   const addressed = sessionStore.lookup(sessionName);
   resolveSessionRef(params.req, addressed);

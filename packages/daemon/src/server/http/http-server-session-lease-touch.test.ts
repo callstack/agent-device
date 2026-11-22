@@ -100,7 +100,7 @@ async function startDaemon() {
         leaseId: lease.leaseId,
         tenantId: TENANT,
         runId: OWNER_SCOPE.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: OWNER_SCOPE.leaseProvider,
         clientId: OWNER_SCOPE.clientId,
         deviceKey: OWNER_SCOPE.deviceKey,
@@ -646,14 +646,14 @@ test.each([
 test('devices with no lease id is still refused at the address of a macos-app leased session', async () => {
   if (!world) return;
   const { session } = world.publishLeasedSession(world.sessionName);
-  session.lease = { ...session.lease!, leaseBackend: 'macos-app' };
+  session.lease = { ...session.lease!, backend: 'macos-app' };
 
   const devices = await world.send('devices', [], {});
 
   // The app lease admits only the commands that opt into it, and `devices` does not.
   expect(devices.result, JSON.stringify(devices)).toBeUndefined();
   expect(devices.error?.data?.code).toBe('INVALID_ARGS');
-  expect(session.lease.leaseBackend).toBe('macos-app');
+  expect(session.lease.backend).toBe('macos-app');
 });
 
 test('devices with no lease id delivers no script of a leased session that records one', async () => {

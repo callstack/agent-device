@@ -70,7 +70,7 @@ test('admitRequestLeaseForLockedScope renews no session for a command that ignor
     leaseId: 'a'.repeat(32),
     tenantId: 'tenant-a',
     runId: 'run-a',
-    leaseBackend: 'macos-app',
+    backend: 'macos-app',
   } as const;
   sessionStore.publish('default', makeIosSession('default', { lease: sessionLease }));
 
@@ -103,7 +103,12 @@ test('resolveLockedRequestSessionRef ends nothing when the successor lease expir
   const ref = sessionStore.publish(
     'default',
     makeIosSession('default', {
-      lease: { leaseId: expired.leaseId, tenantId: expired.tenantId, runId: expired.runId },
+      lease: {
+        leaseId: expired.leaseId,
+        tenantId: expired.tenantId,
+        runId: expired.runId,
+        backend: expired.backend,
+      },
     }),
   );
   now = 1_020;

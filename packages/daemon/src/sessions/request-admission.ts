@@ -14,6 +14,7 @@ import {
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
   assertRequestHoldsSessionLease,
+  compareRequestLeaseClaims,
   findMissingProxyLeaseFields,
   resolveLeaseRefusalScope,
   resolveLeaseScope,
@@ -27,6 +28,7 @@ import {
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
+import type { SessionStore } from '../core/session-store.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
@@ -153,11 +155,7 @@ export function requestMayRecordSessionEvents(
   ref: SessionRef | undefined,
 ): boolean {
   if (!ref?.session.lease) return true;
-  try {
-    return resolveRequestSessionRef(req, ref) !== undefined;
-  } catch {
-    return false;
-  }
+  return !ignoresSessionLease(req.command) && !compareRequestLeaseClaims(req, ref.session.lease);
 }
 
 export function assertRequestLeaseAdmission(
