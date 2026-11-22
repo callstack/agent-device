@@ -1,16 +1,11 @@
 import type Limrun from '@limrun/api';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
 import { CAPTURE_OPEN_BUDGET_MS } from './capture-lifecycle.ts';
 import { deleteLimrunInstance } from './client-options.ts';
 import type { LimrunBudgetOutcome } from './lifecycle-budget.ts';
-import {
-  LIMRUN_PROVIDER,
-  LIMRUN_PROVIDER_REASONS,
-  platformForLimrunLeaseBackend,
-  type LimrunPlatform,
-} from './device.ts';
+import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
 import type {
   LimrunDeleteResult,
   LimrunDisposalOutcome,
@@ -19,6 +14,14 @@ import type {
   LimrunTeardownRoute,
 } from './lease-ownership.ts';
 import type { SettledNetworkCapture } from './network-har.ts';
+
+/** Why a Limrun lease release could not be confirmed. */
+const LIMRUN_LEASE_RELEASE_REASONS = {
+  // A release could not confirm Limrun deleted the instance, so it may still be billed.
+  instanceDeleteUnconfirmed: { reason: 'limrun_instance_delete_unconfirmed' },
+  // The lease was released while its instance was still being prepared for the allocation.
+  leaseReleasedMidAllocation: { reason: 'limrun_lease_released_mid_allocation' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 /**
  * Everything this runtime does once a lease has been taken for good: end what its owner holds, and answer with
@@ -503,7 +506,7 @@ export function allocationRefusedForTake(
     'DEVICE_IN_USE',
     `Limrun lease '${lease.leaseId}' was released while its instance was being prepared`,
     {
-      reason: LIMRUN_PROVIDER_REASONS.leaseReleasedMidAllocation.reason,
+      reason: LIMRUN_LEASE_RELEASE_REASONS.leaseReleasedMidAllocation.reason,
       ...(instanceId === undefined
         ? { hint: `Instance create for lease '${lease.leaseId}' may still rent one. Check Limrun.` }
         : { limrunInstanceId: instanceId, ...(ended === undefined ? {} : { hint: ended }) }),
@@ -567,7 +570,7 @@ function throwUnconfirmedDelete(
     'COMMAND_FAILED',
     message,
     {
-      reason: LIMRUN_PROVIDER_REASONS.instanceDeleteUnconfirmed.reason,
+      reason: LIMRUN_LEASE_RELEASE_REASONS.instanceDeleteUnconfirmed.reason,
       retriable: true,
       ...instanceDetails,
       ...(failure === undefined ? {} : { cause: failure }),

@@ -207,12 +207,12 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `limrun_adb_tunnel_cleaned_up` | The ADB tunnel of this lease was already cleaned up, so nothing can be typed over it. |
+| `limrun_instance_unreachable` | The instance stopped answering, so its app state cannot be read. |
 | `limrun_instance_delete_unconfirmed` | A release could not confirm Limrun deleted the instance, so it may still be billed. |
 | `limrun_lease_released_mid_allocation` | The lease was released while its instance was still being prepared for the allocation. |
 | `limrun_lease_not_live` | The lease holds no live session, so the command that addresses it has nothing to act on. |
 | `limrun_runtime_shut_down` | This runtime is shut down, so it refuses to allocate a lease into it. |
-| `limrun_instance_unreachable` | The instance stopped answering, so its app state cannot be read. |
-| `limrun_adb_tunnel_cleaned_up` | The ADB tunnel of this lease was already cleaned up, so nothing can be typed over it. |
 | `limrun_app_sync_retired` | The app-sync session of this lease has ended, so no further sync runs on it. |
 | `limrun_app_sync_failed` | App sync or local cache maintenance failed; check the device for the app before retrying. |
 
@@ -296,7 +296,7 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `provider_session_create_timeout` | The provider did not create the WebDriver session within the session-creation budget. |
-| `provider_session_released_during_allocation` | The provider ended the session an allocation was waiting on by releasing its lease. |
+| `provider_session_released_during_allocation` | Releasing the lease interrupted the allocation; `details.cleanup` reports how cleanup ended. |
 | `provider_session_shutdown_during_allocation` | The WebDriver runtime could not finish the allocation: shutdown was in progress or done. |
 | `provider_session_release_in_progress` | The lease is still releasing its previous session, so a new allocation gets no session. |
 | `provider_session_cleanup_incomplete` | Shutdown left WebDriver sessions running, so they may still be billed. |

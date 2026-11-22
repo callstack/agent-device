@@ -27,7 +27,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 const WEBDRIVER_SESSION_REASONS = {
   // The provider did not create the WebDriver session within the session-creation budget.
   sessionCreateTimeout: { reason: 'provider_session_create_timeout' },
-  // The provider ended the session an allocation was waiting on by releasing its lease.
+  // Releasing the lease interrupted the allocation; `details.cleanup` reports how cleanup ended.
   sessionReleasedDuringAllocation: { reason: 'provider_session_released_during_allocation' },
   // The WebDriver runtime could not finish the allocation: shutdown was in progress or done.
   sessionShutdownDuringAllocation: { reason: 'provider_session_shutdown_during_allocation' },

@@ -1,8 +1,13 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import { AppError } from '@agent-device/kernel/errors';
-import { LIMRUN_PROVIDER_REASONS } from './device.ts';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { LimrunDeviceSession } from './device-session.ts';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
+
+/** Why reading app state from a Limrun instance failed. */
+const LIMRUN_APP_STATE_REASONS = {
+  // The instance stopped answering, so its app state cannot be read.
+  instanceUnreachable: { reason: 'limrun_instance_unreachable' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 /**
  * Android reads the foreground app. Limrun exposes no foreground bundle id on iOS, so an iOS read
@@ -42,7 +47,7 @@ async function confirmLimrunIosInstanceAnswers(
       'COMMAND_FAILED',
       'Could not confirm that the Limrun iOS instance is running, so its app state is unknown.',
       {
-        reason: LIMRUN_PROVIDER_REASONS.instanceUnreachable.reason,
+        reason: LIMRUN_APP_STATE_REASONS.instanceUnreachable.reason,
         hint: 'Retry appstate. If it keeps failing, the instance may have been terminated: run connect limrun and open again.',
       },
       error,

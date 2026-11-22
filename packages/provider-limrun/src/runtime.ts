@@ -14,7 +14,7 @@ import type {
   ProviderPortReverseOptions,
 } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   configureLimrunAndroidPortReverse,
   createLimrunAndroidInteractor,
@@ -26,7 +26,6 @@ import {
   attachedLimrunInstanceId,
   buildLimrunDevice,
   LIMRUN_PROVIDER,
-  LIMRUN_PROVIDER_REASONS,
   parseLimrunDeviceId,
   platformForLimrunLeaseBackend,
   type LimrunPlatform,
@@ -67,6 +66,14 @@ import type {
 } from './lease-ownership.ts';
 import type { LimrunCaptureLifecycle } from './capture-lifecycle.ts';
 import type { LimrunDisposalHost } from './lease-release.ts';
+
+/** Why the Limrun runtime refuses a lease request. */
+const LIMRUN_RUNTIME_REASONS = {
+  // The lease holds no live session, so the command that addresses it has nothing to act on.
+  leaseNotLive: { reason: 'limrun_lease_not_live' },
+  // This runtime is shut down, so it refuses to allocate a lease into it.
+  runtimeShutDown: { reason: 'limrun_runtime_shut_down' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 const HEARTBEAT_PROBE_BUDGET_MS = 2_000;
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
@@ -811,7 +818,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       throw new AppError(
         'COMMAND_FAILED',
         `Limrun lease '${owner.lease.leaseId}' has no live session`,
-        { reason: LIMRUN_PROVIDER_REASONS.leaseNotLive.reason },
+        { reason: LIMRUN_RUNTIME_REASONS.leaseNotLive.reason },
       );
     }
     return session;
@@ -940,7 +947,7 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
     'SESSION_NOT_FOUND',
     `Cannot allocate Limrun lease '${lease.leaseId}': this runtime is shut down`,
     {
-      reason: LIMRUN_PROVIDER_REASONS.runtimeShutDown.reason,
+      reason: LIMRUN_RUNTIME_REASONS.runtimeShutDown.reason,
       hint: 'Start the daemon again to allocate a Limrun lease.',
     },
   );
