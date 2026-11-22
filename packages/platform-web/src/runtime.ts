@@ -6,6 +6,7 @@ import {
   sameRuntimeOwner,
   unavailableFact,
   whenAdmitted,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -69,33 +70,41 @@ import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/app
 const owner = localRuntimeOwner('web');
 const available = Object.freeze({ available: true } as const);
 const elementTextUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Web targets read element text from the captured tree only.',
 );
-const appLogUnavailable = unavailableFact('unsupported-platform-leaf');
+const appLogUnavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 const recordingUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'record is not supported by this web provider',
 );
 const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Re-run without --actions, or target an iOS simulator.',
 );
-const readinessUnavailable = unavailableFact('unsupported-platform-leaf');
+const readinessUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const appsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'apps is not supported on web targets.',
 );
-const appStateUnavailable = unavailableFact('unsupported-platform-leaf');
+const appStateUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 // `back`, `home`, `orientation`, `tv-remote`, and every keyboard action never carried a web
 // capability bucket (the retired `WEB_SUPPORTED_COMMANDS` overlay never listed them), so all are
 // unavailable unconditionally.
-const navigationUnavailable = unavailableFact('unsupported-platform-leaf');
+const navigationUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const prepareUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Apple runner preparation is supported only for Apple targets.',
 );
-const nativeRefUnavailable = unavailableFact('owner-capability-missing');
+const nativeRefUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
+);
 /**
  * The web click affordance is one immediate pointer press, which is everything `press` needs for a
  * repeated `--count` series. Timed actions are a policy this owner declines rather than a missing
@@ -104,11 +113,11 @@ const nativeRefUnavailable = unavailableFact('owner-capability-missing');
  * double-click is declined one level down, by the interactor member the browser never supplies.
  */
 const holdUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'A web click is one immediate pointer press; the browser backend has no timed hold.',
 );
 const audioCaptureUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'audio on web sessions is the stateless page probe; host capture is a macOS-host operation.',
 );
 
@@ -121,21 +130,21 @@ function webAvailableFact(condition: boolean, unavailable: RuntimeOperationFact)
 }
 
 /** `gesture` and `swipe` never carried a web capability bucket; the browser drives no synthesis. */
-const gestureUnavailable = unavailableFact('unsupported-platform-leaf');
+const gestureUnavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 const targetAuthoredDragUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 const openTargetKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'open is supported only for web browser devices.',
 );
 const closeTargetKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'close is supported only for web browser devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Port reverse is supported only by an owning provider runtime.',
 );
 
@@ -336,7 +345,7 @@ function webRuntimeFacts(
   interactor: Interactor | undefined,
 ): RuntimeFacts<PlatformRuntimeOperations> {
   const networkUnavailable = unavailableFact(
-    'owner-capability-missing',
+    PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
     'network is not supported by this web provider',
   );
   // One browser-device cell, read by every operation this runtime binds through the interactor.
@@ -359,7 +368,7 @@ function webRuntimeFacts(
       screenRecordingStart: webAvailableFact(recordingAvailable, recordingUnavailable),
       screenRecordingReattach: webAvailableFact(recordingAvailable, recordingUnavailable),
       screenRecordingCleanup: webAvailableFact(recordingAvailable, recordingUnavailable),
-      accessibilityAudit: unavailableFact('unsupported-platform-leaf'),
+      accessibilityAudit: unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason),
       ...snapshotRuntimeOperationFacts({
         capture: browserDevice,
         customActions: snapshotCustomActionsUnavailable,

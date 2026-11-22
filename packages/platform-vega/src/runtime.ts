@@ -1,4 +1,11 @@
-import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import {
+  type DeviceBinding,
+  type RuntimeFacts,
+  PLATFORM_RUNTIME_REASONS,
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -20,11 +27,6 @@ import {
   bindAdmittedLocalInteractorOperations,
   type InteractorOperationDefinition,
 } from '@agent-device/contracts/interactor-operation-binding';
-import {
-  localRuntimeOwner,
-  sameRuntimeOwner,
-  unavailableFact,
-} from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
@@ -39,25 +41,27 @@ import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/app
 
 const vegaOwner = localRuntimeOwner('vega');
 const lifecycleAvailable = Object.freeze({ available: true } as const);
-const unsupportedPlatformLeaf = unavailableFact('unsupported-platform-leaf');
+const unsupportedPlatformLeaf = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
 );
 const appleRunnerUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Apple runner preparation is supported only for Apple targets.',
 );
 const providerPortReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Port reverse is supported only by an owning provider runtime.',
 );
 const openTargetUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'open currently supports only Vega Virtual Devices.',
 );
 const closeTargetUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'close currently supports only Vega Virtual Devices.',
 );
 export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
@@ -113,25 +117,25 @@ const VEGA_INTERACTOR_OPERATIONS: readonly InteractorOperationDefinition<Platfor
   ];
 
 const screenshotUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'screenshot is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 
 const focusUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'focus is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 const typeUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'type is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 
 const gestureUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Gestures are not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 const scrollUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'scroll is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 /**
@@ -139,64 +143,66 @@ const scrollUnavailable = unavailableFact(
  * own wording: two-contact synthesis with no hint at all, and target-authored drag by naming the
  * phases an adapter has to preserve.
  */
-const multiTouchUnavailable = unavailableFact('unsupported-platform-leaf');
+const multiTouchUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const targetAuthoredDragUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 // `orientation` and every keyboard action never carried a Vega capability bucket at all; `back`,
 // `home`, and `tv-remote` did (the retired `vegaPlugin` closure), gated by the same VVD cell
 // their lifecycle open/close already require.
 const orientationUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'orientation is not supported on Vega OS.',
 );
 const keyboardUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'keyboard is not supported on Vega OS.',
 );
 const alertUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'alert is not supported on Vega OS.',
 );
 const settingsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'settings is not supported on Vega OS.',
 );
 const appEventUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'trigger-app-event is not supported on Vega OS.',
 );
 const systemButtonUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'System buttons other than home are not supported on Vega OS.',
 );
 const foldUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'fold is not supported on Vega OS.',
 );
 const telephonyUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'telephony is not supported on Vega OS.',
 );
 const clipboardUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'clipboard is not supported on Vega OS.',
 );
 const backUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'back currently supports only Vega Virtual Devices.',
 );
 const homeUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'home currently supports only Vega Virtual Devices.',
 );
 const tvRemoteUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'tv-remote currently supports only Vega Virtual Devices.',
 );
 const audioProbeUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
 
@@ -266,7 +272,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
           supported: tvRemoteButtonsForPlatform('vega'),
           unsupported: {
             available: false,
-            reason: 'unsupported-platform-leaf',
+            reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
             hint: 'This TV remote button is not supported on Vega OS.',
           },
         },

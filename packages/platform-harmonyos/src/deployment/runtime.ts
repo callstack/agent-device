@@ -6,7 +6,10 @@ import type {
   AppUninstallResult,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { HostCommandRunner } from '@agent-device/contracts/platform-runtime-host';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
@@ -17,11 +20,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 const available = Object.freeze({ available: true } as const);
 const unsupportedKind = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
 } as const);
 const unsupportedLeaf = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
 } as const);
 
 export function harmonyAppDeploymentFacts(device: DeviceInfo): Readonly<{

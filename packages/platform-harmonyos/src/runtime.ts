@@ -1,4 +1,11 @@
-import type { DeviceBinding, RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type DeviceBinding,
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+  localRuntimeOwner,
+  unavailableFact,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -25,11 +32,6 @@ import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
-import {
-  localRuntimeOwner,
-  unavailableFact,
-  whenAdmitted,
-} from '@agent-device/contracts/platform-runtime';
 import {
   screenshotRuntimeOperationFacts,
   defaultCaptureOnly,
@@ -63,52 +65,52 @@ import {
 
 const owner = localRuntimeOwner('harmonyos');
 const elementTextUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'HarmonyOS reads element text from the captured tree only.',
 );
 /** Focus is available on the two HarmonyOS target kinds HDC can drive. */
 const focusKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'focus is supported on HarmonyOS emulators and physical devices.',
 );
 const available = Object.freeze({ available: true } as const);
-const unavailable = unavailableFact('unsupported-platform-leaf');
+const unavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 const appStateUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'HarmonyOS appstate is supported only for HarmonyOS emulators and devices.',
 );
 const prepareUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Apple runner preparation is supported only for Apple targets.',
 );
 
 const lifecycleAvailable = Object.freeze({ available: true } as const);
 const openTargetKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'open is supported only for HarmonyOS emulators and devices.',
 );
 const closeTargetKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'close is supported only for HarmonyOS emulators and devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Port reverse is supported only by an owning provider runtime.',
 );
 const snapshotKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'snapshot is supported only for HarmonyOS emulators and devices.',
 );
 const screenshotKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'screenshot is supported only for HarmonyOS emulators and devices.',
 );
 const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Re-run without --actions, or target an iOS simulator.',
 );
 const viewportUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'viewport resizes web targets only (--platform web).',
 );
 
@@ -171,16 +173,18 @@ function harmonyCloseTargetFact(device: DeviceInfo) {
 }
 
 const gestureKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'Gestures are supported on HarmonyOS emulators and physical devices.',
 );
 /**
  * hdc synthesizes one contact. The retired admission refused two-contact synthesis on every
  * platform that is neither Android nor Apple, with no hint — that is this cell.
  */
-const multiTouchUnavailable = unavailableFact('unsupported-platform-leaf');
+const multiTouchUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const targetAuthoredDragUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 
@@ -195,21 +199,23 @@ function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
 }
 
 /** Public orientation and TV-remote operations are not supported by the HarmonyOS owner. */
-const harmonyPlatformLeafUnavailable = unavailableFact('unsupported-platform-leaf');
+const harmonyPlatformLeafUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+);
 const harmonySettingUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'HarmonyOS supports settings clear-app-state only.',
 );
 
 /** Android's live IME status read has no HarmonyOS counterpart (parity with the retired leaf,
  * which rejected `status`/`get` on every non-Android family). */
 const harmonyKeyboardStatusUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'keyboard status/get is not available through the public HarmonyOS HDC API; use keyboard dismiss or enter',
 );
 
 const audioProbeUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
 
@@ -229,7 +235,9 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,
-        accessibilityAudit: unavailableFact('unsupported-platform-leaf'),
+        accessibilityAudit: unavailableFact(
+          PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+        ),
         ...snapshotRuntimeOperationFacts({
           capture:
             device.kind === 'emulator' || device.kind === 'device'

@@ -1,7 +1,10 @@
 import type { SetFoldPoseInput } from '@agent-device/contracts/device';
 import { foldRuntimeOperationFacts } from '@agent-device/contracts/fold-runtime';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import { whenAdmitted } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 import { setAndroidFoldPose } from './pose.ts';
@@ -10,7 +13,7 @@ const available = Object.freeze({ available: true } as const);
 
 const foldKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'fold poses the hinge of a foldable Android emulator through the emulator console; a physical device is folded by hand.',
 } as const);
 
