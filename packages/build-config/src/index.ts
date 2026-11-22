@@ -17,7 +17,7 @@ export const providerPluginBuildConfig = {
   minify: true,
   dts: false,
   hash: false,
-  deps: { alwaysBundle: [/^@agent-device\//] },
+  deps: { alwaysBundle: [/^@agent-device\//], neverBundle: ['agent-device/plugins'] },
   inputOptions: strictBundlerInputOptions,
 };
 
@@ -31,10 +31,6 @@ export const managedPlatformPluginBuildConfig = {
   config: false,
   dts: true,
   tsconfig: '../../tsconfig.lib.json',
-  deps: {
-    ...providerPluginBuildConfig.deps,
-    neverBundle: ['agent-device/plugins'],
-  },
 };
 
 /**

@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { resolveProviderPlugins, startProviderRegistry } from './registry.ts';
-import type { PluginCandidate, PluginRegistryPolicy } from './registry.ts';
+import type { PluginCandidate } from './registry.ts';
 import type { ReplayBackend, ReplayBackendHost } from '@agent-device/contracts/replay-backend';
 import { validateReplayBackendSetup, validateReplayExecutionSetup } from './validate.ts';
 import type { PluggedClaim } from './validate.ts';
@@ -9,11 +9,6 @@ import type { AgentDevicePlugin } from './contract.ts';
 import type { ReplaySetupHost } from './host.ts';
 
 const host = {} as ReplayBackendHost;
-const policy: PluginRegistryPolicy = {
-  adaptWebDriver: async () => {
-    throw new Error('no provider');
-  },
-};
 /** A candidate that declares the claims its package metadata would declare. */
 function candidate(plugin: unknown, declaredClaims?: readonly PluggedClaim[]): PluginCandidate {
   return { source: 'embedder', ...(declaredClaims ? { declaredClaims } : {}), load: () => plugin };
@@ -73,7 +68,6 @@ test('one backend disposer cannot delay another backend disposer', async () => {
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(first.plugin), candidate(second.plugin)]),
     { env: {}, cwd: '/' },
-    policy,
   );
   const closing = registry.close();
   await new Promise((resolve) => setImmediate(resolve));
@@ -94,7 +88,7 @@ test('a duplicate claim keeps its duplicate reason when its factory also fails',
       },
     },
   ]);
-  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' }, policy);
+  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' });
   expect(registry.inventory).toMatchObject([
     { backend: 'maestro', state: 'active' },
     { backend: 'maestro', state: 'failed', error: { reason: 'duplicate_replay_backend' } },
@@ -105,11 +99,10 @@ test('a duplicate claim keeps its duplicate reason when its factory also fails',
 test('managed replay setup stays lazy and retains one backend and one cleanup owner', async () => {
   const e = engine();
   const resolved = await resolveProviderPlugins([candidate(e.plugin)]);
-  const registry = await startProviderRegistry(
-    resolved,
-    { env: { TOKEN: 'host-value' }, cwd: '/' },
-    policy,
-  );
+  const registry = await startProviderRegistry(resolved, {
+    env: { TOKEN: 'host-value' },
+    cwd: '/',
+  });
   expect(e.create).not.toHaveBeenCalled();
   // The replay setup host grants only version and error construction.
   expect(e.setup.mock.calls[0]?.[0]).toMatchObject({ clientVersion: expect.any(String) });
@@ -153,7 +146,7 @@ test('backend identity is separate from provider identity and first failure clai
     candidate(engine().plugin, [{ kind: 'replay-backend', id: 'maestro' }]),
     candidate(other.plugin, [{ kind: 'replay-backend', id: 'other' }]),
   ]);
-  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' }, policy);
+  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' });
   expect(registry.claimedProviders).toEqual([]);
   expect(registry.inventory).toMatchObject([
     { backend: 'maestro', state: 'failed', error: { reason: 'incompatible-plugin-api' } },
@@ -177,7 +170,6 @@ test('an embedder candidate on another contract version answers native execution
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate({ ...nativeExecution().plugin, apiVersion: 99 })]),
     { env: {}, cwd: '/' },
-    policy,
   );
   expect(registry.inventory).toMatchObject([
     { source: 'embedder', state: 'failed', error: { reason: 'incompatible-plugin-api' } },
@@ -201,7 +193,6 @@ test('the shipped version 2 replay shapes answer their selection with incompatib
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(versionTwoReplay), candidate(versionTwoMaestro)]),
     { env: {}, cwd: '/' },
-    policy,
   );
   expect(registry.inventory).toMatchObject([
     { state: 'failed', error: { reason: 'incompatible-plugin-api' } },
@@ -229,7 +220,6 @@ test('a format claim of the reserved ad id fails while native execution claims i
       candidate(native.plugin),
     ]),
     { env: {}, cwd: '/' },
-    policy,
   );
   expect(registry.inventory).toMatchObject([
     { backend: 'ad', state: 'failed', error: { reason: 'reserved_replay_backend' } },
@@ -253,7 +243,6 @@ test('setup failures stay permanent while failed lazy loads can retry without fa
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(setup.plugin), candidate(load.plugin)]),
     { env: {}, cwd: '/' },
-    policy,
   );
   await expect(registry.resolveReplayBackend('absent', host)).rejects.toMatchObject({
     details: { reason: 'plugin-not-installed' },
@@ -303,7 +292,6 @@ test('the registry rejects the wrong runtime id and cleans up an invalid setup',
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(wrong.plugin), candidate(invalid)]),
     { env: {}, cwd: '/' },
-    policy,
   );
   await expect(registry.resolveReplayBackend('wrong', host)).rejects.toMatchObject({
     details: { reason: 'invalid_plugin' },
@@ -322,7 +310,6 @@ test('native execution retries failed lazy loads while sharing claims, caching a
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(native.plugin), candidate(competing.plugin)]),
     { env: {}, cwd: '/' },
-    policy,
   );
   expect(registry.inventory).toMatchObject([
     { backend: 'ad', state: 'active' },
@@ -408,7 +395,6 @@ test.each([
         ),
       ]),
       { env: {}, cwd: '/' },
-      policy,
     );
     await expect(registry.resolveReplayExecution()).rejects.toMatchObject({ details: { reason } });
     await registry.close();
@@ -447,7 +433,6 @@ test('wrong native capability fails inventory, disposes setup and keeps its firs
       candidate(engine('maestro').plugin),
     ]),
     { env: {}, cwd: '/' },
-    policy,
   );
   expect(later.setup).not.toHaveBeenCalled();
   await expect(registry.resolveReplayExecution()).rejects.toMatchObject({
@@ -478,7 +463,6 @@ test('a package name cannot select an active foreign backend for native executio
       },
     ]),
     { env: {}, cwd: '/' },
-    policy,
   );
   try {
     await expect(registry.resolveReplayExecution(packageName)).rejects.toMatchObject({
@@ -506,7 +490,6 @@ test('a selected native package load failure cannot masquerade as absence by its
       },
     ]),
     { env: {}, cwd: '/' },
-    policy,
   );
   try {
     await expect(registry.resolveReplayExecution('@agent-device/replay')).rejects.toMatchObject({
@@ -536,11 +519,10 @@ test('a multi-kind package activates its replay claim even when its provider set
       engine('maestro').plugin.contributes[0]!,
     ],
   };
-  const registry = await startProviderRegistry(
-    await resolveProviderPlugins([candidate(multi)]),
-    { env: {}, cwd: '/' },
-    policy,
-  );
+  const registry = await startProviderRegistry(await resolveProviderPlugins([candidate(multi)]), {
+    env: {},
+    cwd: '/',
+  });
   expect(registry.registrations).toEqual([]);
   expect(registry.inventory).toMatchObject([
     { provider: 'multi', state: 'failed', error: { reason: 'plugin_setup_failed' } },
@@ -560,7 +542,9 @@ test('a multi-kind package activates its replay claim even when its provider set
 });
 
 test('the replay-only scope sets up no provider claim', async () => {
-  const providerSetup = vi.fn(async () => ({ webDriver: { provider: 'scoped' } }));
+  const providerSetup = vi.fn(async () => {
+    throw new Error('unexpected provider setup');
+  });
   const multi: AgentDevicePlugin = {
     apiVersion: 3,
     contributes: [
@@ -576,7 +560,7 @@ test('the replay-only scope sets up no provider claim', async () => {
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([candidate(multi)]),
     { env: {}, cwd: '/' },
-    policy,
+    {},
     'replay-backends',
   );
   expect(providerSetup).not.toHaveBeenCalled();
@@ -634,7 +618,6 @@ test('close starts activated claims in reverse order with per-step outcomes', as
       candidate(make('second', true)),
     ]),
     { env: {}, cwd: '/' },
-    policy,
   );
   const outcomes = await registry.close();
   // Teardown starts in reverse activation order; each runtime shuts down before its own disposer.

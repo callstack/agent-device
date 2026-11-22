@@ -51,7 +51,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime.ts',
     'src/provider-credential-fingerprint.ts',
     'src/provider-device-runtimes.ts',
-    'src/provider-plugin-policy.ts',
   ],
   // The operation host the platform runtime loads through `import()` (`loadHost`) and its facets.
   // It ranks above every spine zone, so a static import of it is a back-edge from anywhere but

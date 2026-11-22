@@ -27,7 +27,11 @@ import {
 } from './capabilities.ts';
 import { createWebDriverDeploymentRuntime } from './runtime-deployment.ts';
 import { WebDriverSessionManager } from './runtime-session.ts';
-import type { WebDriverAuth, WebDriverRequestPolicy } from './webdriver-client.ts';
+import type {
+  WebDriverAuth,
+  WebDriverClientOptions,
+  WebDriverRequestPolicy,
+} from './webdriver-client.ts';
 
 export type CloudWebDriverPlatform = 'android' | 'ios';
 
@@ -86,6 +90,7 @@ export type CloudWebDriverPrepareSession = (params: {
 
 export type CloudWebDriverRuntimeOptions = {
   clientVersion: string;
+  diagnostics?: WebDriverClientOptions['diagnostics'];
   provider: string;
   endpoint: string | URL;
   platform: CloudWebDriverPlatform;

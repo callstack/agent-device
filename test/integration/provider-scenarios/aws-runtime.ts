@@ -1,35 +1,23 @@
 import awsDeviceFarm from '@agent-device/aws-device-farm';
 import { createPluginHost } from '@agent-device/plugins/host';
-import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { RunHostCommand } from '@agent-device/plugins/host';
 
 export const AWS_DEVICE_FARM_PROVIDER = 'aws-device-farm';
 
-/** The WebDriver descriptor the AWS Device Farm plugin's `setup` builds from `env`, as `clientVersion` hosted. */
-async function awsDeviceFarmWebDriver(
-  env: Record<string, string>,
-  clientVersion: string,
-  runHostCommand: RunHostCommand,
-) {
-  const [contribution] = awsDeviceFarm().contributes;
-  if (contribution.kind !== 'provider') throw new Error('AWS Device Farm sets up a provider');
-  const setup = await contribution.setup({
-    ...createPluginHost({ env, cwd: '/' }, undefined),
-    clientVersion,
-    runHostCommand,
-  });
-  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
-  return setup.webDriver;
-}
-
-/** An AWS Device Farm runtime composed the way the registry composes a plugin's WebDriver descriptor. */
 export async function createAwsDeviceFarmRuntime(options: {
   env: Record<string, string>;
   clientVersion: string;
   runHostCommand: RunHostCommand;
 }) {
-  return await createCloudWebDriverRuntime({
-    ...(await awsDeviceFarmWebDriver(options.env, options.clientVersion, options.runHostCommand)),
+  const [contribution] = awsDeviceFarm().contributes;
+  const { runtime } = await contribution.setup({
+    ...(await createPluginHost({ env: options.env, cwd: '/' }, undefined)),
     clientVersion: options.clientVersion,
+    runHostCommand: options.runHostCommand,
   });
+  return runtime as ProviderDeviceRuntime & {
+    platformRuntimeModule: PlatformRuntimeProviderModule;
+  };
 }

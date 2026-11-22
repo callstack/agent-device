@@ -1,13 +1,12 @@
 import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  emitWebDriverDiagnostic,
   isWebDriverInvalidSession,
   isWebDriverRouteUnsupported,
   WebDriverTransport,
-  type WebDriverAuth,
   type WebDriverRequestOverrides,
   type WebDriverRequestPolicy,
+  type WebDriverTransportOptions,
 } from './webdriver-transport.ts';
 
 export type { WebDriverAuth, WebDriverRequestPolicy } from './webdriver-transport.ts';
@@ -20,11 +19,7 @@ export type { WebDriverAuth, WebDriverRequestPolicy } from './webdriver-transpor
  */
 const DEFAULT_SESSION_CREATE_TIMEOUT_MS = 180_000;
 
-export type WebDriverClientOptions = {
-  clientVersion: string;
-  endpoint: string | URL;
-  auth?: WebDriverAuth;
-  headers?: Record<string, string>;
+export type WebDriverClientOptions = Omit<WebDriverTransportOptions, 'requestPolicy'> & {
   requestPolicy?: WebDriverRequestPolicy;
 };
 
@@ -148,7 +143,7 @@ export class WebDriverClient {
         `/session/${this.requireSessionId()}/execute/sync`,
         { script: siblingScript, args: [{ appId, bundleId: appId }] },
       );
-      emitWebDriverDiagnostic('webdriver_route_fallback', {
+      this.transport.emitDiagnostic('webdriver_route_fallback', {
         from: route,
         to: siblingScript,
         status,

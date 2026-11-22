@@ -80,6 +80,7 @@ export async function verifyPacked({ core, contracts, plugin }) {
     env: {},
     options: {},
     clientVersion: '0.22.0',
+    diagnostics: { emit: () => {} },
     createError: (code, message, details) => new core.AppError(code, message, details),
     runHostCommand: async (_command, commandArgs) => {
       const subcommand = commandArgs[1];
@@ -128,20 +129,23 @@ export async function verifyPacked({ core, contracts, plugin }) {
     'Wait for the upload to succeed or reconnect with a different --aws-app-arn.',
   );
 
-  const setup = await aws.setup(host);
+  const { runtime } = await aws.setup(host);
   const allocation = await capture(() =>
-    setup.webDriver.prepareSession({
-      lease: { leaseId: 'lease-1' },
-      req: { flags },
-      base: {
-        provider,
-        platform: 'android',
-        deviceName: 'device',
-        endpoint: 'http://localhost',
-        webdriverCapabilities: {},
+    runtime.leaseLifecycle.allocate(
+      {
+        leaseId: 'lease-1',
+        tenantId: 'tenant',
+        runId: 'run',
+        backend: 'android-instance',
+        leaseProvider: provider,
+        createdAt: 1,
+        heartbeatAt: 1,
+        expiresAt: 2,
       },
-    }),
+      { flags },
+    ),
   );
+  await runtime.shutdown();
   assert.equal(allocation.code, 'COMMAND_FAILED');
   assert.equal(allocation.details.reason, 'host-primary');
   assert.equal(allocation.hint, 'Retry manually.');
@@ -177,6 +181,8 @@ await verifyAwsDeviceFarmConnection({ platform: 'android', projectArn: 'project'
       'NodeNext',
       '--target',
       'ES2022',
+      '--lib',
+      'es2022,dom,esnext.disposable',
       '--typeRoots',
       path.join(root, 'node_modules/@types'),
       'consumer.mts',

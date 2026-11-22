@@ -12,11 +12,9 @@ test('plugin host runs commands with the AWS command bounds', async () => {
       return { stdout: '{"project":{}}', stderr: '', exitCode: 0 };
     },
     async () => {
+      const pluginHost = await createPluginHost({ env: {}, cwd: '/' }, undefined);
       await expect(
-        createPluginHost({ env: {}, cwd: '/' }, undefined).runHostCommand('aws', [
-          'devicefarm',
-          'get-project',
-        ]),
+        pluginHost.runHostCommand('aws', ['devicefarm', 'get-project']),
       ).resolves.toEqual({ stdout: '{"project":{}}' });
     },
   );
@@ -28,7 +26,7 @@ test('commands use the supplied host and overlay request environment without amb
   const { withCommandHost } = await import('@agent-device/host-kit/command');
   const cwd = realpathSync(mkdtempForTestSync('plugin-command-host-'));
   const host = { cwd, env: { PLUGIN_VALUE: 'host', HOST_ONLY: 'present' } };
-  const pluginHost = createPluginHost(host, undefined);
+  const pluginHost = await createPluginHost(host, undefined);
   const args = [
     '-e',
     'process.stdout.write(JSON.stringify({cwd:process.cwd(), value:process.env.PLUGIN_VALUE, hostOnly:process.env.HOST_ONLY, ambient:process.env.PLUGIN_AMBIENT}))',
@@ -136,22 +134,30 @@ test('provider registry setup receives its supplied command host', async () => {
                 'process.stdout.write(JSON.stringify([process.cwd(), process.env.SETUP_VALUE]))',
               ]);
               observed = JSON.parse(result.stdout);
-              return { webDriver: { provider: 'example' } };
+              return {
+                runtime: {
+                  provider: 'example',
+                  leaseLifecycle: {},
+                  shutdown: async () => {},
+                  ownsDevice: () => false,
+                  getInteractor: () => undefined,
+                  deviceInventoryProvider: async () => [],
+                },
+                platformModule: {
+                  owner: { kind: 'provider-runtime', provider: 'example', instance: 'test' },
+                  loadRuntime: async () => {
+                    throw new Error('lazy');
+                  },
+                },
+              };
             },
           },
         ],
       }),
     },
   ]);
-  const registry = await startProviderRegistry(
-    resolved,
-    { cwd, env: { SETUP_VALUE: 'supplied' } },
-    {
-      adaptWebDriver: async () => {
-        throw new Error('not needed for host assertion');
-      },
-    },
-  );
+  const registry = await startProviderRegistry(resolved, { cwd, env: { SETUP_VALUE: 'supplied' } });
+  expect(registry.registrations).toHaveLength(1);
   expect(observed).toEqual([cwd, 'supplied']);
   await registry.close();
 });

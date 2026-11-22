@@ -33,11 +33,8 @@ function awsDeviceFarm(): ProviderAgentDevicePlugin {
           resolve: async (context) => await (await loadConnection(context.host)).resolve(context),
           verify: async (context) => await (await loadConnection(context.host)).verify(context),
         },
-        setup: async (host) => ({
-          webDriver: (await import('./aws-device-farm-webdriver.ts')).createAwsDeviceFarmWebDriver(
-            host,
-          ),
-        }),
+        setup: async (host) =>
+          (await import('./aws-device-farm-webdriver.ts')).setupAwsDeviceFarm(host),
       },
     ],
   };

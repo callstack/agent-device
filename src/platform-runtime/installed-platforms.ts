@@ -4,7 +4,6 @@ import type { PlatformModuleSelection } from '@agent-device/contracts/platform-p
 import { getOptionalPlatformPluginDeclaration } from '@agent-device/contracts/plugin-installation';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { PROVIDER_PLUGIN_POLICY } from '../provider-plugin-policy.ts';
 import {
   bindPlatformLeaves,
   builtinPlatformCandidates,
@@ -57,7 +56,6 @@ export async function startInstalledPlatforms(
     resolved,
     host,
     {
-      ...PROVIDER_PLUGIN_POLICY,
       assertSelectionCurrent,
       platformHost: createPlatformPluginHost(host, daemonPaths.baseDir, {
         sessionsDir: daemonPaths.sessionsDir,

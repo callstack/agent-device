@@ -206,6 +206,7 @@ function verifyContext(
       env,
       options: {},
       clientVersion: '1.2.3',
+      diagnostics: { emit: () => {} },
       createError: (code, message, details) => new AppError(code, message, details),
       runHostCommand: async () => {
         throw new Error('connection verification runs no host command');

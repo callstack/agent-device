@@ -13,6 +13,7 @@ import { rejectRefusedRevylProfileFields } from './session-allocation.ts';
 const HOST = {
   env: { REVYL_API_KEY: 'test-key' },
   clientVersion: '0.0.0-test',
+  diagnostics: { emit: () => {} },
   createError: (code: string, message: string) => new AppError(code as 'INVALID_ARGS', message),
 } as never;
 
@@ -145,6 +146,7 @@ test('verify refuses a profile flag Revyl has no field for before it rents anyth
   const host = {
     env: { REVYL_API_KEY: 'test-key', REVYL_API_URL: fixture.backendUrl },
     clientVersion: '0.0.0-test',
+    diagnostics: { emit: () => {} },
     createError: (code: string, message: string) => new AppError(code as 'INVALID_ARGS', message),
   } as never;
   const connection = createRevylConnection(host);
@@ -169,6 +171,7 @@ test('verify canonicalizes the device and OS version it reports', async () => {
   const host = {
     env: { REVYL_API_KEY: 'test-key', REVYL_API_URL: fixture.backendUrl },
     clientVersion: '0.0.0-test',
+    diagnostics: { emit: () => {} },
     createError: (code: string, message: string) => new AppError(code as 'INVALID_ARGS', message),
   } as never;
   const result = await createRevylConnection(host).verify({

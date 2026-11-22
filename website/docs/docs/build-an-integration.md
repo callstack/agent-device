@@ -75,8 +75,6 @@ Entry points for integrations:
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
   - `resolveAndroidArchivePackageName(archivePath, host, signal?)`
-- `agent-device/plugins/webdriver`
-  - experimental `WebDriverPluginOptions` for providers using the shared engine.
 - `agent-device/plugins`
   - experimental plugin contract: `AgentDevicePluginFactory` and `ProviderPluginHost`; see [provider plugins](./plugins.md).
 
