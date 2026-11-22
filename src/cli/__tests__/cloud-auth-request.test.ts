@@ -26,7 +26,7 @@ afterEach(async () => {
 
 async function listen() {
   const received: Received[] = [];
-  const routes: Record<string, Route> = {};
+  const routes = new Map<string, Route>();
   const server = http.createServer((req, res) => {
     let body = '';
     req.setEncoding('utf8');
@@ -38,8 +38,8 @@ async function listen() {
         body,
         contentType: req.headers['content-type'],
       });
-      const route = routes[req.url ?? ''];
-      if (route) return route(res);
+      const route = routes.get(req.url ?? '');
+      if (route !== undefined) return route(res);
       res.writeHead(404).end();
     });
   });
@@ -75,8 +75,8 @@ test.each([
   [303, fetchedAsGet('/next')],
 ])('a same-origin %i is followed with the method fetch gives it', async (status, followed) => {
   const cloud = await listen();
-  cloud.routes['/start'] = redirect(status, '/next');
-  cloud.routes['/next'] = answer;
+  cloud.routes.set('/start', redirect(status, '/next'));
+  cloud.routes.set('/next', answer);
 
   expect(await post(cloud.origin)).toEqual({ accessToken: 'adc_agent' });
   expect(cloud.received).toEqual([posted('/start'), followed]);
@@ -84,10 +84,10 @@ test.each([
 
 test('a chain keeps the POST through a 307 and stays a GET after a 303', async () => {
   const cloud = await listen();
-  cloud.routes['/start'] = redirect(307, '/a');
-  cloud.routes['/a'] = redirect(303, '/b');
-  cloud.routes['/b'] = redirect(307, '/c');
-  cloud.routes['/c'] = answer;
+  cloud.routes.set('/start', redirect(307, '/a'));
+  cloud.routes.set('/a', redirect(303, '/b'));
+  cloud.routes.set('/b', redirect(307, '/c'));
+  cloud.routes.set('/c', answer);
 
   await post(cloud.origin);
   expect(cloud.received).toEqual([
@@ -100,14 +100,14 @@ test('a chain keeps the POST through a 307 and stays a GET after a 303', async (
 
 test('three same-origin redirects are followed and a fourth is refused', async () => {
   const cloud = await listen();
-  cloud.routes['/start'] = redirect(307, '/1');
-  cloud.routes['/1'] = redirect(307, '/2');
-  cloud.routes['/2'] = redirect(307, '/3');
-  cloud.routes['/3'] = answer;
+  cloud.routes.set('/start', redirect(307, '/1'));
+  cloud.routes.set('/1', redirect(307, '/2'));
+  cloud.routes.set('/2', redirect(307, '/3'));
+  cloud.routes.set('/3', answer);
   expect(await post(cloud.origin)).toEqual({ accessToken: 'adc_agent' });
 
-  cloud.routes['/3'] = redirect(307, '/4');
-  cloud.routes['/4'] = answer;
+  cloud.routes.set('/3', redirect(307, '/4'));
+  cloud.routes.set('/4', answer);
   cloud.received.length = 0;
   await expect(post(cloud.origin)).rejects.toMatchObject({
     details: { reason: 'cloud_auth_redirect_refused' },
@@ -125,9 +125,9 @@ test.each([
   async (_case, location) => {
     const cloud = await listen();
     const other = await listen();
-    cloud.routes['/start'] = redirect(307, location(new URL(cloud.origin).host, other.origin));
-    cloud.routes['/next'] = answer;
-    other.routes['/next'] = answer;
+    cloud.routes.set('/start', redirect(307, location(new URL(cloud.origin).host, other.origin)));
+    cloud.routes.set('/next', answer);
+    other.routes.set('/next', answer);
 
     const rejection = await post(cloud.origin).then(
       () => undefined,
