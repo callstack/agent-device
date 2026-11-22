@@ -388,11 +388,13 @@ export function selectorPollBudget(policy: SelectorPipelinePolicy): WaitPollBudg
  * The candidate set of every `find` action that binds one node: mutating actions and the value
  * reads (`get text`, `get attrs`). The root interaction container is never a candidate, and
  * on-screen matches rank first. Callers count this list and narrow it with `narrowFindMatches`,
- * so a read and a tap on the same query bind the same node. The caller passes the `findAct` row,
- * which the type pins, so this module stays clear of the policy table's eager import closure.
+ * so a read and a tap on the same query bind the same node. Which nodes are addressable comes from
+ * the action's row: `findAct` for click/fill/focus/type, `findRead` for get text/attrs. The caller
+ * passes the row, which the type pins, so this module stays clear of the policy table's eager import
+ * closure.
  */
 export function findOneNodeCandidates(params: {
-  pipeline: (typeof SELECTOR_PIPELINE_POLICIES)['findAct'];
+  pipeline: (typeof SELECTOR_PIPELINE_POLICIES)['findAct' | 'findRead'];
   nodes: SnapshotNode[];
   locator: FindLocator;
   query: string;

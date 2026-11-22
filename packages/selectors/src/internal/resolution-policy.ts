@@ -79,13 +79,18 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'first-match',
     requireRect: false,
   },
-  /**
-   * Mutating `find` (#1625) and its value reads (`get text`/`get attrs`, #4685):
-   * candidates reject unless explicitly narrowed.
-   */
+  /** Mutating `find` (#1625): candidates reject unless explicitly narrowed. */
   findAct: {
     ambiguity: 'reject-candidates',
     requireRect: true,
+  },
+  /**
+   * `find <q> get text|attrs` (#4685): the same ambiguity contract as `findAct`, but a read needs
+   * no tap point, so a node without a rect or ref (web static text) is still a candidate.
+   */
+  findRead: {
+    ambiguity: 'reject-candidates',
+    requireRect: false,
   },
   /**
    * `find <q> list` — the inspection surface: every match is the ANSWER, so the

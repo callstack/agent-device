@@ -279,7 +279,7 @@ async function findValueReadMatch(
 ): Promise<{ capture: CapturedSnapshot; match: SnapshotNode }> {
   const capture = await captureFindCandidates(runtime, options);
   const matched = findOneNodeCandidates({
-    pipeline: SELECTOR_PIPELINE_POLICIES.findAct,
+    pipeline: SELECTOR_PIPELINE_POLICIES.findRead,
     nodes: capture.snapshot.nodes,
     locator,
     query: options.query,

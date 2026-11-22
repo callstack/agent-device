@@ -148,3 +148,25 @@ test('runtime find get text binds the onscreen match over an offscreen duplicate
   });
   assert.equal(last.kind === 'text' ? last.ref : undefined, '@e2');
 });
+
+// #4699 review: on a producer that issues its own refs (web, agent-browser), a static text line it
+// left unaddressed has no ref and no rect. A value read only reports text, so it must still find
+// that node, as `find list`, `wait text` and `snapshot` do.
+test('runtime find get text reads a ref-less, rectless text node', async () => {
+  const [root, total] = makeSnapshotState([
+    APPLICATION,
+    { index: 1, parentIndex: 0, type: 'StaticText', label: 'Order total $42.00' },
+  ]).nodes;
+  const { ref: _unissued, ...refless } = total!;
+  assert.equal(refless.rect, undefined);
+  const device = createSelectorDevice({ nodes: [root!, refless], createdAt: Date.now() });
+
+  const read = await device.selectors.find({
+    session: 'default',
+    locator: 'text',
+    query: 'Order total',
+    action: 'get_text',
+  });
+  assert.equal(read.kind, 'text');
+  assert.equal(read.kind === 'text' ? read.text : undefined, 'Order total $42.00');
+});
