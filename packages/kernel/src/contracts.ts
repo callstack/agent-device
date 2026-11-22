@@ -270,7 +270,7 @@ export function readScriptDeliveryReceipt(
   if (failures !== undefined && !readsAsReceiptFailures(failures, publicationId)) return undefined;
   return {
     publicationId,
-    ...(version === undefined ? {} : { version: version as DaemonArtifact }),
+    ...(version === undefined ? {} : { version }),
     ...(close === undefined ? {} : { close: { step: close.step } }),
     ...(failures === undefined
       ? {}
@@ -556,7 +556,7 @@ function parseJsonRpcId(
   path: string,
 ): string | number | null | undefined {
   const value = record.id;
-  if (value === undefined || value === null) return value as null | undefined;
+  if (value === undefined || value === null) return value;
   if (typeof value !== 'string' && typeof value !== 'number') {
     fail(`${path}.id`, 'Expected a string, number, or null');
   }

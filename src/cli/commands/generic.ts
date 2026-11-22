@@ -29,7 +29,7 @@ export async function runGenericClientBackedCommand({
 }: ClientCommandParams & { command: ClientBackedCliCommandName }): Promise<boolean> {
   const { result, cliOutput: formatted } = await runCliCommandWithOutput({
     client,
-    command: command as CommandName,
+    command,
     positionals,
     flags,
     commandProgress,

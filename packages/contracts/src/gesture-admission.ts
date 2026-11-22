@@ -57,18 +57,7 @@ function gestureRefusalSubject(device: DeviceInfo, tier: GestureRuntimeTier): st
 function multiTouchRefusalSubject(device: DeviceInfo): string | undefined {
   if (device.platform === 'android') return device.target === 'tv' ? 'Android TV' : undefined;
   if (!isApplePlatform(device.platform)) return undefined;
-  const appleOs = resolveDeviceAppleOs(device);
-  if (
-    appleOs === 'ios' ||
-    appleOs === 'ipados' ||
-    appleOs === 'macos' ||
-    appleOs === 'tvos' ||
-    appleOs === 'visionos' ||
-    appleOs === 'watchos'
-  ) {
-    return APPLE_OS_DISPLAY_NAMES[appleOs];
-  }
-  return undefined;
+  return APPLE_OS_DISPLAY_NAMES[resolveDeviceAppleOs(device)];
 }
 
 /**

@@ -34,7 +34,7 @@ export function readScriptReplaySelection(actions: SessionAction[]): {
   const platform = resolveDeclaredScriptPlatform(actions) as CommandFlags['platform'] | undefined;
   for (const action of actions) {
     if (action.command !== 'open') continue;
-    const target = action.positionals?.[0];
+    const target = action.positionals[0];
     if (isStaticAppTarget(target)) return { appTarget: target, platform };
     return { appTarget: undefined, platform };
   }

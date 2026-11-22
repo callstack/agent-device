@@ -390,11 +390,11 @@ function parseScrollUntilVisible(
   const timeout = hasEntry(entries, 'timeout')
     ? readOptionalNumeric(entryValue(entries, 'timeout'), 'scrollUntilVisible.timeout', context)
     : undefined;
-  const optional = options.optional === true || parsedElement!.optional === true ? true : undefined;
+  const optional = options.optional === true || parsedElement.optional === true ? true : undefined;
   return stripUndefined({
     kind: 'scrollUntilVisible' as const,
     source,
-    element: parsedElement!.selector,
+    element: parsedElement.selector,
     direction,
     timeout,
     optional,

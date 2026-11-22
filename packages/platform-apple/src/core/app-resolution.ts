@@ -189,7 +189,7 @@ async function listRunningIosSimulatorBundleIds(device: DeviceInfo): Promise<str
   if (result.exitCode !== 0) return [];
 
   const bundleIds: string[] = [];
-  for (const line of (result.stdout as string).split('\n')) {
+  for (const line of result.stdout.split('\n')) {
     const match = UIKIT_APPLICATION_JOB_PATTERN.exec(line);
     if (match?.[1]) bundleIds.push(match[1]);
   }

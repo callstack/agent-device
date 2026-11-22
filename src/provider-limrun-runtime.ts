@@ -54,7 +54,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   }
 
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined {
-    return this.implementation.getDeviceSession(device) as LimrunDeviceSession | undefined;
+    return this.implementation.getDeviceSession(device);
   }
 
   async installApp(

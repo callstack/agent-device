@@ -222,7 +222,7 @@ export async function createLimrunIosRunner(
     } finally {
       startupSignal.removeEventListener('abort', cancel);
     }
-    const reader = response.body!.getReader();
+    const reader = response.body.getReader();
     let settle!: () => void;
     const exited = new Promise<void>((resolve) => {
       settle = resolve;

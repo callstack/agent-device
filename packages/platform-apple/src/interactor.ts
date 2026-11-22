@@ -548,19 +548,19 @@ function withInjectedAppleRunnerTransport(
     ...interactor,
     open: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('open');
-      return await interactor.open!(...args);
+      return await interactor.open(...args);
     },
     openDevice: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('openDevice');
-      return await interactor.openDevice!(...args);
+      return await interactor.openDevice(...args);
     },
     close: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('close');
-      return await interactor.close!(...args);
+      return await interactor.close(...args);
     },
     screenshot: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('screenshot');
-      return await interactor.screenshot!(...args);
+      return await interactor.screenshot(...args);
     },
     readClipboard: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readClipboard');
@@ -568,7 +568,7 @@ function withInjectedAppleRunnerTransport(
     },
     setSetting: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('setSetting');
-      return await interactor.setSetting!(...args);
+      return await interactor.setSetting(...args);
     },
     readSetting: async (...args) => {
       if (!hasScopedAppleToolProvider()) rejectLocalAppleToolMethod('readSetting');
