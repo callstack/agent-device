@@ -20,6 +20,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
 
+### `events`
+
+| Reason | Meaning |
+| --- | --- |
+| `EVENT_LOG_CURSOR_EXPIRED` | The cursor names a line that rotation has already removed from the retained window. |
+| `EVENT_LOG_WINDOW_UNVERIFIED` | The retained event log files or their window sidecar are malformed, incomplete, or disagree, so no cursor can be trusted. |
+
 ### `fold`
 
 | Reason | Meaning |
@@ -37,6 +44,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `fold-pose-dispatched-unverified` | The iOS simulator received the pose, but the first hinge read returned no sample to verify it. |
 | `fold-angle-unverified` | The iOS simulator hinge did not reach the angle of the final keyframe. |
 | `fold-pose-unsettled` | The iOS simulator hinge reached the pose but never came to rest. |
+
+### `install-from-source`
+
+| Reason | Meaning |
+| --- | --- |
+| `ARTIFACT_BYTE_LIMIT` | The response declared or carried more bytes than the artifact budget allows. |
+| `source_materialization_deadline_exceeded` | The aggregate or handed-down materialization budget ran out before the source was ready. |
 
 ### `logs`
 
@@ -62,6 +76,39 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `unsupported-foldable-orientation` | A foldable iOS simulator cannot rotate to portrait-upside-down. |
 | `orientation-unverified` | The orientation was sent, but the panel table does not report it afterwards. |
 | `orientation-panel-table-unavailable` | The foldable's guest panel table could not be read. |
+
+### `plugins`
+
+| Reason | Meaning |
+| --- | --- |
+| `duplicate_provider` | Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns. |
+| `incompatible_plugin` | The package exports no plugin entry or declares no provider contract this build can load. |
+| `plugin_load_failed` | The plugin's manifest or code could not be read, resolved, or loaded. |
+| `plugin_setup_failed` | The plugin's `setup(host)` threw, or registering what it returned failed. |
+| `reserved_provider` | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`. |
+
+### `proxy`
+
+| Reason | Meaning |
+| --- | --- |
+| `transfer_forwarding_deadline_exceeded` | The whole exchange outlived the proxy's aggregate forwarding budget. |
+| `transfer_gateway_status` | The upstream daemon answered with a status that is not an HTTP response this proxy may relay. |
+| `transfer_upstream_closed` | The upstream daemon closed the connection before it answered, or during a write. |
+
+### `react-devtools`
+
+| Reason | Meaning |
+| --- | --- |
+| `backend-attach-failed` | The DevTools backend attached to no renderer interface. |
+| `collect-failed` | The DevTools backend could not export the recorded profile. |
+| `element-not-found` | No mounted component has the ref the command named or resolved. |
+| `inspect-failed` | The DevTools backend could not inspect the component. |
+| `no-devtools-backend` | The app runtime exposes no DevTools backend for this React Native version. |
+| `no-devtools-hook` | The app runtime has no React DevTools hook at all. |
+| `no-react-renderer` | React has not rendered in this app runtime yet. |
+| `not-profiling` | No React profile is recording in this app runtime. |
+| `start-failed` | The React renderer refused to start profiling. |
+| `tree-unavailable` | Another DevTools frontend owns the component tree of this app runtime. |
 
 ### `record`
 
@@ -140,6 +187,12 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 These reasons can come from more than one command.
 
+### Swift helper cache
+
+| Reason | Meaning |
+| --- | --- |
+| `swift_cache_untrusted` | The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a trusted path that only this user or root can change. |
+
 ### Apple app resolution
 
 | Reason | Meaning |
@@ -151,6 +204,18 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `apple_runner_host_unbound` | The Apple runner was asked for its host before the daemon bound one. |
+
+### Artifact extraction
+
+| Reason | Meaning |
+| --- | --- |
+| `ARCHIVE_ENTRY_LIMIT` | The archive holds more entries than the extraction budget allows. |
+| `ARCHIVE_EXPANDED_BYTES_LIMIT` | The archive expands past the byte budget its extraction was given. |
+| `ARCHIVE_INVALID_ENTRY` | An archive entry states a size that is not a usable non-negative integer. |
+| `ARCHIVE_MANIFEST_MISMATCH` | The archive's contents changed between the manifest that reserved the budget and the bytes read. |
+| `ARCHIVE_NESTING_LIMIT` | The archive nests deeper than the allowed archive-within-archive depth. |
+| `ARCHIVE_UNSAFE_ENTRY` | The archive holds a link, a special file, or an encrypted entry. |
+| `ARCHIVE_UNSAFE_PATH` | An archive entry's name is absolute, escaping, or otherwise not one relative path. |
 
 ### Daemon lifecycle
 
@@ -164,6 +229,22 @@ These reasons can come from more than one command.
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
 
+### Device selection
+
+| Reason | Meaning |
+| --- | --- |
+| `provider_inventory_contract_violation` | A provider's inventory answer was shaped outside the contract it registers under. |
+| `device_inventory_context_unavailable` | Inventory was reached outside a request, so no request scope carries its gateways. |
+| `ios_simulator_device_set_outside_daemon_set` | The request names an iOS simulator device set other than the one this daemon reaches. |
+
+### Device shell
+
+| Reason | Meaning |
+| --- | --- |
+| `hdc-empty-word-unsupported` | `hdc` drops an empty element, so the device command would lose an operand. |
+| `hdc-shell-fragment-unsupported` | `hdc` double-quotes every element, so a shell fragment cannot reach the device as a script. |
+| `unguarded-device-shell-argv` | A `shell`/`exec-out` command the device-shell builder did not build was refused before dispatch. |
+
 ### Foldable panels
 
 | Reason | Meaning |
@@ -172,6 +253,19 @@ These reasons can come from more than one command.
 | `fold-helper-panels-unreadable` | The fold helper returned no panel table for the iOS simulator. |
 | `panel-table-unreadable` | The foldable's lit panel could not be named from its panel table, so nothing was sent. |
 | `panel-probe-budget-exhausted` | Reading the panel table spent the request's time budget, so nothing was sent. |
+
+### Host commands
+
+| Reason | Meaning |
+| --- | --- |
+| `host_environment_unscoped` | A command needed the host environment and no `withCommandHost` scope wrapped the call. |
+| `xcrun-tool-not-found` | `xcrun` reported that the tool a command asked for is not in the selected developer dir. |
+
+### Host paths
+
+| Reason | Meaning |
+| --- | --- |
+| `relative_claims_dir` | `AGENT_DEVICE_CLAIMS_DIR` is relative, so the shared device-claim store has no fixed home. |
 
 ### Interaction
 
@@ -216,6 +310,36 @@ These reasons can come from more than one command.
 | `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
 | `missing_button` | No button on the alert fits the requested accept or dismiss. |
 
+### Process lock
+
+| Reason | Meaning |
+| --- | --- |
+| `process_lock_guard_release_failed` | The guard that serialises lock-directory mutations could not confirm its own release. |
+| `process_lock_timeout` | The caller gave up waiting for a lock another owner held. |
+
+### Process stop
+
+| Reason | Meaning |
+| --- | --- |
+| `signal-failed` | The host refused the signal, usually because another user owns the process. |
+| `exit-timeout` | SIGKILL was sent and nothing proved the process exited within the budget it was given. |
+| `identity-unverified` | Nothing confirmed the pid names the recorded process, so signalling it was refused. |
+
+### Remote connection
+
+| Reason | Meaning |
+| --- | --- |
+| `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
+
+### Remote transfer
+
+| Reason | Meaning |
+| --- | --- |
+| `artifact_too_large` | The remote artifact is larger than the bytes this download may hold. |
+| `remote_script_lifecycle_unsupported` | `--save-script` was asked for on a command whose script lifecycle the daemon does not remote. |
+| `artifact_preparation_deadline_exceeded` | Preparing the artifact for upload, the read and the hop together, outlived its budget. |
+| `cross-origin-redirect` | The upload endpoint answered with a redirect to an origin the caller never named. |
+
 ### Request admission
 
 | Reason | Meaning |
@@ -225,6 +349,18 @@ These reasons can come from more than one command.
 | `named_session_not_found` | The request names a session that this daemon does not hold. |
 | `app_not_installed` | The named app resolves to no installed app on the target. |
 | `malformed_request` | The transport refused the request envelope before any handler read it. |
+
+### Request cancellation
+
+| Reason | Meaning |
+| --- | --- |
+| `duplicate_request_id` | A request arrived with an id another request is still in flight under. |
+
+### Script publication
+
+| Reason | Meaning |
+| --- | --- |
+| `script_ancestor_untrusted` | The script path is not one absolute file name under existing directories private to this user. |
 
 ### Snapshot capture
 
@@ -237,3 +373,16 @@ These reasons can come from more than one command.
 | `simulator-target-identity-unavailable` | The app's simulator process was found, but its identity could not be read. |
 | `simulator-runtime-probe-failed` | The simulator could not be asked for its runtime. |
 | `simulator-runtime-unavailable` | The simulator reported no runtime. |
+
+### Timeouts
+
+| Reason | Meaning |
+| --- | --- |
+| `daemon_request_timeout` | The daemon request's deadline left no time to finish its work. |
+| `operation_deadline_expired` | An `AbortSignal.timeout` ended the wait before the operation it guarded finished. |
+
+### Web session naming
+
+| Reason | Meaning |
+| --- | --- |
+| `web_session_name_invalid` | The session name is longer than the backend key allows or holds a character it rejects. |
