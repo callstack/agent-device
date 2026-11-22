@@ -153,6 +153,9 @@ const SAFE_CAUSE_DETAIL_KEYS = [
   'systemSurface',
 ] as const;
 
+// Free text a cause may echo from the device, such as a sparse capture verdict, so it is scrubbed.
+const SCRUBBED_CAUSE_DETAIL_KEYS = ['verdictReason', 'verdictReasonCode'] as const;
+
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
   scrubVars: readonly ReplayVarScrubEntry[],
@@ -161,6 +164,10 @@ function pickSafeCauseDetails(
   const safe: Record<string, unknown> = {};
   for (const key of SAFE_CAUSE_DETAIL_KEYS) {
     if (details[key] !== undefined) safe[key] = details[key];
+  }
+  for (const key of SCRUBBED_CAUSE_DETAIL_KEYS) {
+    const value = readStringDetail(details, key);
+    if (value !== undefined) safe[key] = scrubReplayVarValues(value, scrubVars);
   }
   if (
     details.reason === 'session_cleanup_incomplete' &&
