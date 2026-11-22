@@ -10,6 +10,7 @@ import {
   type RuntimeFacts,
   localRuntimeOwner,
   sameRuntimeOwner,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import {
   appLogSessionArtifactsMatch,
@@ -99,7 +100,7 @@ function appleAppLogFacts(device: DeviceInfo): RuntimeFacts<AppLogRuntimeOperati
     isIosFamily(device) && device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest'
       ? ({
           available: false,
-          reason: 'unsupported-device-backend',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
           hint: APPLE_XCTEST_LOGS_HINT,
         } as const)
       : available;

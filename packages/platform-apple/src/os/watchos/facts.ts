@@ -1,4 +1,7 @@
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -61,14 +64,14 @@ const WATCH_OS_REFUSALS: Partial<Record<keyof PlatformRuntimeOperations, string>
 
 const WATCH_OS_PHYSICAL_UNAVAILABLE = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'watchOS is supported on simulators only. A physical Apple Watch reaches the Mac only through its paired iPhone.',
 } as const);
 
 function watchOsRefusal(operation: string): RuntimeOperationFact {
   return Object.freeze({
     available: false,
-    reason: 'unsupported-platform-leaf',
+    reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
     hint:
       WATCH_OS_REFUSALS[operation as keyof PlatformRuntimeOperations] ??
       'watchOS simulators support only watch interactions: app lifecycle, snapshot, press, swipe, scroll (the Digital Crown), back, home, typing, screenshots, and recording.',

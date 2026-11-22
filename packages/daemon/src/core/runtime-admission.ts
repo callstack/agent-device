@@ -5,6 +5,7 @@ import {
   type RuntimeOperationKey,
   type RuntimeOperationUnavailability,
   type RuntimeUse,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -54,7 +55,7 @@ export type { RuntimeAdmissionBindings };
 
 /** The owner has no live session for the device, so a session record must not answer for it. */
 export function ownerHoldsNoLiveSession(reason: unknown): boolean {
-  return reason === 'owner-capability-missing';
+  return reason === PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason;
 }
 
 /**

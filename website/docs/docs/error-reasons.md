@@ -783,6 +783,14 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `unsupported-platform-leaf` | This platform does not implement the operation for any of its devices. |
+| `unsupported-device-kind` | The platform implements the operation, but not for this kind of device, such as a simulator, emulator, physical device, TV or watch. |
+| `unsupported-device-backend` | The device's backend cannot serve the operation, such as an XCTest-backed physical iOS device, a macOS app driven without its native backend, or a device without a macOS host for audio. |
+| `unsupported-device-scope` | The session holds only part of the device, such as one app of a Mac, and the operation needs the whole device. Use a session that holds the whole device. |
+| `unsupported-provider-mode` | The device's provider mode (local, transport-composed or a hosted provider) has no implementation of the operation, or its provider runtime module is missing. |
+| `owner-capability-missing` | The runtime owner lacks a capability the request needs, such as a provider API, an interactor member, an active provider session or a log transport. |
+| `network-capture-post-session` | A hosted provider owns the network path for its session, so a live `network dump` has no source to read. |
+| `provider-session-unavailable` | The provider's session for the device ended, so the runtime has nothing left to serve. |
 | `runtime-gateway-shut-down` | The gateway is closed, so the command reached no runtime owner. |
 | `platform-owner-shutdown-failed` | One or more runtime owners failed to shut down; `details.failures` keeps each owner's error and cleanup stays unconfirmed. |
 
@@ -800,12 +808,6 @@ These reasons can come from more than one command.
 | `signal-failed` | The host refused the signal, usually because another user owns the process. |
 | `exit-timeout` | SIGKILL was sent and nothing proved the process exited within the budget it was given. |
 | `identity-unverified` | Nothing confirmed the pid names the recorded process, so signalling it was refused. |
-
-### Provider runtime
-
-| Reason | Meaning |
-| --- | --- |
-| `provider-session-unavailable` | The provider's session for the device ended, so the runtime has nothing left to serve. |
 
 ### Ref frames
 

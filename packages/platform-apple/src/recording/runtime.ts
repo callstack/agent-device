@@ -7,7 +7,11 @@ import { AppError, asAppError, DURABLE_RESOURCE_REASONS } from '@agent-device/ke
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
-import { type RuntimeOwnerRef, unavailableFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOwnerRef,
+  unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   SCREEN_RECORDING_OUTPUT_REASONS,
@@ -53,7 +57,7 @@ export function appleScreenRecordingFacts(device: DeviceInfo) {
     device.iosPhysicalDeviceBackend === 'xctest'
   ) {
     return unavailableFact(
-      'unsupported-device-backend',
+      PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
       'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.',
     );
   }

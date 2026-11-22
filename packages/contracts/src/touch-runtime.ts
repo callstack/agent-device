@@ -245,7 +245,9 @@ function requireAdmittedHold(options: PressPointOptions, fact: RuntimeOperationF
 function requireDoubleTapMechanic(interactor: Interactor): NonNullable<Interactor['doubleTap']> {
   if (interactor.doubleTap) return interactor.doubleTap;
   throw new AppError('UNSUPPORTED_OPERATION', 'double-tap is not supported by this runtime.', {
-    reason: 'owner-capability-missing',
+    // Checked against the PLATFORM_RUNTIME_REASONS row type: a value import of platform-runtime.ts
+    // would grow this module's eager closure.
+    reason: 'owner-capability-missing' satisfies RuntimeOperationUnavailability['reason'],
     hint: 'This runtime drives single presses; use --count to repeat them.',
   });
 }

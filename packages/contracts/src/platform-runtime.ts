@@ -164,14 +164,51 @@ export function sameRuntimeOwner(left: RuntimeOwnerRef, right: RuntimeOwnerRef):
 export type RuntimeProviderMode = 'local' | 'transport-composed' | 'provider-runtime';
 
 /**
- * Every `details.reason` a hosted provider's runtime owner publishes when it refuses to serve a
- * request. More than one provider raises these, so the row lives with the runtime contract the
- * providers all bind through.
+ * Why a platform runtime owner does not serve an operation: the reasons its runtime facts state,
+ * which admission and the bound runtime publish as `details.reason`, and the refusals a hosted
+ * provider's runtime raises. Every platform and provider owner binds through this contract.
  */
-export const PROVIDER_RUNTIME_REASONS = {
+export const PLATFORM_RUNTIME_REASONS = {
+  // This platform does not implement the operation for any of its devices.
+  unsupportedPlatformLeaf: { reason: 'unsupported-platform-leaf' },
+  // The platform implements the operation, but not for this kind of device, such as a simulator,
+  // emulator, physical device, TV or watch.
+  unsupportedDeviceKind: { reason: 'unsupported-device-kind' },
+  // The device's backend cannot serve the operation, such as an XCTest-backed physical iOS device,
+  // a macOS app driven without its native backend, or a device without a macOS host for audio.
+  unsupportedDeviceBackend: { reason: 'unsupported-device-backend' },
+  // The session holds only part of the device, such as one app of a Mac, and the operation needs
+  // the whole device. Use a session that holds the whole device.
+  unsupportedDeviceScope: { reason: 'unsupported-device-scope' },
+  // The device's provider mode (local, transport-composed or a hosted provider) has no
+  // implementation of the operation, or its provider runtime module is missing.
+  unsupportedProviderMode: { reason: 'unsupported-provider-mode' },
+  // The runtime owner lacks a capability the request needs, such as a provider API, an interactor
+  // member, an active provider session or a log transport.
+  ownerCapabilityMissing: { reason: 'owner-capability-missing' },
+  /**
+   * Where the provider records traffic at all, it publishes that report only after its own session
+   * ends, on the provider's side.
+   */
+  // A hosted provider owns the network path for its session, so a live `network dump` has no
+  // source to read.
+  networkCapturePostSession: { reason: 'network-capture-post-session' },
   // The provider's session for the device ended, so the runtime has nothing left to serve.
-  sessionUnavailable: { reason: 'provider-session-unavailable' },
-} as const satisfies ReasonTable<'provider runtime'>;
+  providerSessionUnavailable: { reason: 'provider-session-unavailable' },
+} as const satisfies ReasonTable<'platform runtime'>;
+
+type PlatformRuntimeReason<K extends keyof typeof PLATFORM_RUNTIME_REASONS> =
+  (typeof PLATFORM_RUNTIME_REASONS)[K]['reason'];
+
+const RUNTIME_OPERATION_UNAVAILABILITY_REASONS: ReadonlySet<string> = new Set([
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceScope.reason,
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
+  PLATFORM_RUNTIME_REASONS.networkCapturePostSession.reason,
+]);
 
 export type RuntimeDeviceShape = Readonly<{
   family: Platform;
@@ -184,19 +221,15 @@ export type RuntimeDeviceShape = Readonly<{
 
 export type RuntimeOperationUnavailability = Readonly<{
   available: false;
-  reason:
-    | 'unsupported-platform-leaf'
-    | 'unsupported-device-kind'
-    | 'unsupported-device-backend'
-    | 'unsupported-device-scope'
-    | 'unsupported-provider-mode'
-    | 'owner-capability-missing'
-    /**
-     * A hosted provider owns the network path for its session, so a live `network dump` has no
-     * source to read. Where the provider records traffic at all, it publishes that report only
-     * after its own session ends, on the provider's side.
-     */
-    | 'network-capture-post-session';
+  reason: PlatformRuntimeReason<
+    | 'unsupportedPlatformLeaf'
+    | 'unsupportedDeviceKind'
+    | 'unsupportedDeviceBackend'
+    | 'unsupportedDeviceScope'
+    | 'unsupportedProviderMode'
+    | 'ownerCapabilityMissing'
+    | 'networkCapturePostSession'
+  >;
   hint?: string;
 }>;
 
@@ -215,7 +248,7 @@ export type RuntimeOperationFact =
     }>
   | RuntimeOperationUnavailability;
 
-const UNLISTED_SUBJECT = unavailableFact('unsupported-platform-leaf');
+const UNLISTED_SUBJECT = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 
 export function runtimeSubjectFact(
   fact: RuntimeOperationFact,
@@ -434,15 +467,7 @@ function requireRuntimeOperation<Operations extends object>(
 function isRuntimeOperationUnavailabilityReason(
   value: unknown,
 ): value is RuntimeOperationUnavailability['reason'] {
-  return (
-    value === 'unsupported-platform-leaf' ||
-    value === 'unsupported-device-kind' ||
-    value === 'unsupported-device-backend' ||
-    value === 'unsupported-device-scope' ||
-    value === 'unsupported-provider-mode' ||
-    value === 'owner-capability-missing' ||
-    value === 'network-capture-post-session'
-  );
+  return typeof value === 'string' && RUNTIME_OPERATION_UNAVAILABILITY_REASONS.has(value);
 }
 
 function unsupportedRuntimeOperation(key: string, fact: RuntimeOperationUnavailability): AppError {

@@ -22,9 +22,10 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type {
-  RuntimeOperationFact,
-  RuntimeOperationUnavailability,
+import {
+  type RuntimeOperationFact,
+  type RuntimeOperationUnavailability,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import {
   isHandheldAppleSimulator,
@@ -38,33 +39,33 @@ const available = Object.freeze({ available: true } as const);
 
 const clipboardKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'clipboard is supported on Apple simulators and the macOS host.',
 } as const);
 const settingsKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'settings is supported on Apple simulators and the macOS host.',
 } as const);
 const settingsLeafUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const);
 const settingUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'Run `agent-device settings --help` for the settings each target serves.',
 } as const);
 const macOsSettingUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'The macOS host supports settings appearance and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>.',
 } as const);
 /** Content size and BiometricKit_Sim notifications answer only on iPhone and iPad simulators. */
 const handheldSimulatorUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'Select a booted iPhone or iPad simulator: this setting runs only there.',
 } as const);
 /**
@@ -75,7 +76,7 @@ const handheldSimulatorUnavailable = Object.freeze({
  */
 const clipboardLeafUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'clipboard is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const);
 
@@ -107,7 +108,7 @@ function appleHostOrSimulatorFact(
  */
 const appDeviceHostStateUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-scope',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceScope.reason,
   hint: 'This session holds one app of the Mac. Use a --surface desktop session for the clipboard and host settings.',
 } as const);
 
@@ -118,18 +119,18 @@ function appleClipboardFact(device: DeviceInfo): RuntimeOperationFact {
 
 const appEventKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'trigger-app-event is supported on Apple simulators and physical devices.',
 } as const);
 
 const alertKindUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'alert is supported on Apple simulators and physical devices.',
 } as const);
 const alertLeafUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   hint: 'alert is supported on Apple simulators, the macOS host, and physical iOS devices.',
 } as const);
 

@@ -15,7 +15,10 @@ import type {
   HostCommandResult,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
@@ -28,21 +31,21 @@ import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 const available = Object.freeze({ available: true } as const);
 const coreDeviceRequired = Object.freeze({
   available: false,
-  reason: 'unsupported-device-backend',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
   hint: 'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.',
 } as const);
 const simulatorOnly = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   hint: 'Push notifications are supported on Apple simulators only.',
 } as const);
 const unsupportedLeaf = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
 } as const);
 const unsupportedKind = Object.freeze({
   available: false,
-  reason: 'unsupported-device-kind',
+  reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
 } as const);
 
 export function appleAppDeploymentFacts(device: DeviceInfo): Readonly<{

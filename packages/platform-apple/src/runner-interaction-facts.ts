@@ -1,6 +1,7 @@
 import {
   unavailableFact,
   type RuntimeOperationFact,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
@@ -14,9 +15,9 @@ import { appleNavigationFacts } from './navigation/runtime.ts';
 import { appleSystemFacts } from './system/runtime.ts';
 
 const available = Object.freeze({ available: true } as const);
-const unavailable = unavailableFact('unsupported-platform-leaf');
+const unavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason);
 function unsupportedAppleDeviceKind(hint: string) {
-  return unavailableFact('unsupported-device-kind', hint);
+  return unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason, hint);
 }
 /**
  * Focus drives touch through the Apple interactor, which exists for the simulator and physical
@@ -24,28 +25,30 @@ function unsupportedAppleDeviceKind(hint: string) {
  * (`{ simulator: true, device: true }`), stated as one fact instead of an admission table.
  */
 const focusKindUnavailable = unavailableFact(
-  'unsupported-device-kind',
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
   'focus is supported on Apple simulators and physical devices.',
 );
 
 const appStateUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
 );
 
-const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+const elementTextKindUnavailable = unavailableFact(
+  PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
+);
 
 const snapshotKindUnavailable = unsupportedAppleDeviceKind(
   'snapshot is supported only for Apple simulators and devices.',
 );
 
 const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Re-run without --actions, or target an iOS simulator.',
 );
 
 const snapshotActiveAppRequired = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'Open the app under test before capturing its snapshot.',
 );
 

@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { RuntimeOperationUnavailability } from './platform-runtime.ts';
 
 type TvRemoteDurationMode = 'exact' | 'longpress';
 
@@ -173,7 +174,9 @@ function unsupportedTvRemoteButton(button: TvRemoteButton, platform: string): Ap
     'UNSUPPORTED_OPERATION',
     `TV remote button ${button} is not supported on ${platform}.`,
     {
-      reason: 'unsupported-platform-leaf',
+      // Checked against the PLATFORM_RUNTIME_REASONS row type: a value import of platform-runtime.ts
+      // would grow this module's eager closure.
+      reason: 'unsupported-platform-leaf' satisfies RuntimeOperationUnavailability['reason'],
     },
   );
 }

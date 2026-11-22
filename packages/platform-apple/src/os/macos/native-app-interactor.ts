@@ -1,3 +1,4 @@
+import { PLATFORM_RUNTIME_REASONS } from '@agent-device/contracts/platform-runtime';
 import type {
   Interactor,
   PressPointOptions,
@@ -143,7 +144,7 @@ function nativeBackendRefusal(action: string): AppError {
   return new AppError(
     'UNSUPPORTED_OPERATION',
     `${action} is not supported by the native macOS app backend.`,
-    { reason: 'unsupported-device-backend', hint: NATIVE_BACKEND_HINT },
+    { reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason, hint: NATIVE_BACKEND_HINT },
   );
 }
 
@@ -159,7 +160,7 @@ async function withHelperRefusals<T>(action: Promise<T>): Promise<T> {
       error.message,
       {
         ...error.details,
-        reason: 'unsupported-device-backend',
+        reason: PLATFORM_RUNTIME_REASONS.unsupportedDeviceBackend.reason,
         helperReason: reason,
         hint: NATIVE_BACKEND_HINT,
       },
