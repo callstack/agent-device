@@ -529,7 +529,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       return redactSensitiveFillResponse(
         req,
         dropInvisibleClaimOwner(
-          req,
+          childScope?.req ?? req,
           sessionStore,
           await finalizeRequestBindingCleanup(childScope, response),
         ),

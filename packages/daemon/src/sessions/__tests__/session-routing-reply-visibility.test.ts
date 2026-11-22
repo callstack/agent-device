@@ -30,6 +30,8 @@ function request(overrides: Partial<DaemonRequest['meta']> = {}): DaemonRequest 
   };
 }
 
+const LOCAL_REQUEST = request({ tenantId: undefined, sessionIsolation: undefined });
+
 function storeWithLeasedSession(): SessionStore {
   const store = makeSessionStore('agent-device-reply-visibility-');
   store.publish(
@@ -115,7 +117,7 @@ test('a local request keeps the owner of a transient claim of this daemon', () =
   const store = storeWithLeasedSession();
 
   const response = dropInvisibleClaimOwner(
-    request({ tenantId: undefined, sessionIsolation: undefined }),
+    LOCAL_REQUEST,
     store,
     claimConflictResponse('transient:install', store.resolveDaemonStateDir()),
   );
@@ -125,20 +127,21 @@ test('a local request keeps the owner of a transient claim of this daemon', () =
   expect(response.error.details?.owner).toMatchObject({ session: 'transient:install' });
 });
 
-test('a claim another daemon on this host wrote keeps its recorded owner', () => {
+test('a claim another daemon on this host wrote keeps its owner for a local request only', () => {
   const store = storeWithLeasedSession();
   const peerStateDir = mkdtempForTestSync('agent-device-reply-visibility-peer-');
+  const conflict = claimConflictResponse('default', path.join(peerStateDir, 'daemon'));
 
-  const response = dropInvisibleClaimOwner(
-    request(),
-    store,
-    claimConflictResponse('default', path.join(peerStateDir, 'daemon')),
-  );
+  const local = dropInvisibleClaimOwner(LOCAL_REQUEST, store, conflict);
+  expect(local.ok).toBe(false);
+  if (local.ok) return;
+  expect(local.error.message).toContain('default');
+  expect(local.error.details?.owner).toMatchObject({ workspace: '/work/a' });
 
-  expect(response.ok).toBe(false);
-  if (response.ok) return;
-  expect(response.error.message).toContain('default');
-  expect(response.error.details?.owner).toMatchObject({ workspace: '/work/a' });
+  const proxied = dropInvisibleClaimOwner(request(), store, conflict);
+  expect(proxied.ok).toBe(false);
+  if (proxied.ok) return;
+  expect(proxied.error.details?.owner).toBeUndefined();
 });
 
 test('a refusal without a claim owner passes through', () => {
@@ -157,7 +160,7 @@ test('a refusal without a claim owner passes through', () => {
 
 // The naming rule: another proxy client's leased or tenant-scoped session is the only thing a
 // local caller may not be told. A local session of another workspace keeps its address (#2580).
-test('the naming rule hides only leased and tenant-scoped sessions', () => {
+test('a tenant-scoped request learns only sessions it may list; a local request keeps #2580', () => {
   const store = storeWithLeasedSession();
   const own = { session: 'e2b:agentA', workspace: '/w', stateDir: store.resolveDaemonStateDir() };
 
@@ -166,9 +169,9 @@ test('the naming rule hides only leased and tenant-scoped sessions', () => {
   expect(
     claimOwnerVisible(request({ leaseId: 'lease-a' }), store, { ...own, session: 'gone' }),
   ).toBe(false);
-  expect(
-    claimOwnerVisible(request(), store, { ...own, stateDir: path.join(own.stateDir, 'peer') }),
-  ).toBe(true);
+  const peerClaim = { ...own, stateDir: path.join(own.stateDir, 'peer') };
+  expect(claimOwnerVisible(request(), store, peerClaim)).toBe(false);
+  expect(claimOwnerVisible(LOCAL_REQUEST, store, peerClaim)).toBe(true);
 
   const foreignWorkspaceSession = {
     name: 'default',
@@ -177,6 +180,7 @@ test('the naming rule hides only leased and tenant-scoped sessions', () => {
     createdAt: 0,
     actions: [],
   };
-  expect(mayNameSession(request(), foreignWorkspaceSession)).toBe(true);
+  expect(mayNameSession(request(), foreignWorkspaceSession)).toBe(false);
+  expect(mayNameSession(LOCAL_REQUEST, foreignWorkspaceSession)).toBe(true);
   expect(mayNameSession(request(), store.get('e2b:agentA')!)).toBe(false);
 });

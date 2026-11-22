@@ -368,35 +368,38 @@ export type ClaimOwnerRef = Readonly<{
 }>;
 
 /**
- * Whether a reply may name `session` to this request. The listing rule decides the common case;
- * the exception is #2580's: a local session of another workspace stays unnamed by the listing yet
- * must keep its address, because that address is the handle its owner uses to close it from that
- * folder. What may never be named is the session of another client on a proxy shared under one
- * token — a leased session, or any tenant-scoped session the request does not already see (#4923).
+ * Whether a reply may name `session` to this request. The listing rule decides. A local request has
+ * one exception, #2580's: a local session of another workspace stays unnamed by the listing yet keeps
+ * its address, because that address is the handle its owner uses to close it from that folder. A
+ * tenant-scoped request, which is how a client reaches a proxy shared under one token, gets no
+ * exception: it learns only the sessions it may list (#4923).
  */
 export function mayNameSession(req: DaemonRequest, session: SessionState): boolean {
   if (createSessionVisibilityPredicate(req)(session)) return true;
+  if (resolveSessionScope(req).kind === 'tenant') return false;
   return session.lease === undefined && session.sessionScope?.kind !== 'tenant';
 }
 
 /**
  * Whether a reply may name the session a host-global device claim records as its owner.
  *
- * A claim of another daemon on this host keeps its owner: that is the documented cross-worktree
- * recovery. A claim of this daemon whose label resolves follows `mayNameSession`. A label that names
- * no stored session, such as a transient command's claim or a claim that outlived its session, is
- * named to a local request as before and hidden from a tenant-scoped one: on a proxy shared under
- * one token, the tenant prefix does not tell one client's ended session from another's (#4923).
+ * A claim of this daemon whose label resolves follows `mayNameSession`. To a local request, a claim
+ * of another daemon on this host and a label that names no stored session (a transient command's
+ * claim, or a claim that outlived its session) keep their owner: that is the documented
+ * cross-worktree recovery. A tenant-scoped request learns neither: on a proxy shared under one token,
+ * those owners are not sessions it may list (#4923).
  */
 export function claimOwnerVisible(
   req: DaemonRequest,
   sessionStore: SessionStore,
   owner: ClaimOwnerRef,
 ): boolean {
-  if (!isSameDaemonStateDir(owner.stateDir, sessionStore.resolveDaemonStateDir())) return true;
+  const localRequest = resolveSessionScope(req).kind !== 'tenant';
+  if (!isSameDaemonStateDir(owner.stateDir, sessionStore.resolveDaemonStateDir())) {
+    return localRequest;
+  }
   const ref = sessionStore.lookup(owner.session);
-  if (ref) return mayNameSession(req, ref.session);
-  return resolveSessionScope(req).kind !== 'tenant';
+  return ref ? mayNameSession(req, ref.session) : localRequest;
 }
 
 /**

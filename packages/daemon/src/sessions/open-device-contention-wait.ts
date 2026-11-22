@@ -184,7 +184,6 @@ function createOpenDeviceWait(params: {
   const holder = () => findSessionHoldingDevice(sessionStore, deviceId, sessionName);
 
   const waitForDeviceOutsideLocks = async (): Promise<void> => {
-    const naming = (holder: SessionState) => mayNameSession(req, holder);
     for (;;) {
       const holding = holder();
       // Either nobody is on the device and this open goes looking for it under the locks, or the
@@ -194,7 +193,7 @@ function createOpenDeviceWait(params: {
         type: 'command',
         status: 'progress',
         message: `Waiting for ${holding.session.device.name}: ${
-          naming(holding.session)
+          mayNameSession(req, holding.session)
             ? `held by session "${holding.address}"`
             : 'held by another session'
         } (${Math.round(deadline.elapsedMs())}ms of the ${Math.round(budgetMs)}ms wait budget used)`,

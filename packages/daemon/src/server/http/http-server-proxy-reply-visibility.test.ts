@@ -266,3 +266,29 @@ test('the peer client gets a claim conflict without the holder session', async (
   expect(String(refusal.error?.data?.details?.reason)).toMatch(/DEVICE_CLAIM/);
   expectNoHolderName(refusal);
 });
+
+test('a proxy client is refused a device held by a local session without learning its name', async () => {
+  if (!world) return;
+  const localHolder = 'local-holder-session';
+  world.sessionStore.retire(world.sessionStore.lookup(world.holderSessionName)!);
+  world.sessionStore.publish(
+    localHolder,
+    makeIosAppSession(localHolder, {
+      sessionScope: { kind: 'named-local' },
+      device: DEVICE,
+    }),
+  );
+
+  const refusal = await world.send(
+    PEER,
+    'open',
+    {
+      meta: { ...PEER_SCOPE, leaseId: world.peerLeaseId },
+      flags: { waitMs: 400 },
+    },
+    ['com.example.app'],
+  );
+
+  expect(refusal.error?.data?.code, JSON.stringify(refusal)).toBe('DEVICE_IN_USE');
+  expect(JSON.stringify(refusal)).not.toContain(localHolder);
+});
