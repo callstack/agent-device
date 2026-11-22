@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
 import type {
   PlatformBackgroundProcess,
   PlatformHost,
@@ -81,14 +80,8 @@ export function createHarmonyCommandRunner(host: PlatformHost): HarmonyCommandRu
         ...options,
         env: await spawnEnvironment(),
       }),
-    start: async (executable, args, options) => {
-      const startManaged = host.startBackgroundCommand;
-      if (!startManaged) {
-        throw new AppError('UNSUPPORTED_OPERATION', NO_MANAGED_PROCESS_MESSAGE, {
-          hint: 'Run logs start against a daemon, which owns the managed app-log process service.',
-        });
-      }
-      return await startManaged(
+    start: async (executable, args, options) =>
+      await host.startBackgroundCommand(
         {
           command: {
             executable,
@@ -100,15 +93,11 @@ export function createHarmonyCommandRunner(host: PlatformHost): HarmonyCommandRu
           ...(options.markerPath === undefined ? {} : { markerPath: options.markerPath }),
         },
         options.signal,
-      );
-    },
+      ),
     resolveHdc: async () => (await harmonyToolchainHdc(env, isExecutable)) ?? 'hdc',
     toolchainHdc: async () => await harmonyToolchainHdc(env, isExecutable),
   });
 }
-
-const NO_MANAGED_PROCESS_MESSAGE =
-  'The selected host cannot keep a HarmonyOS command running, so it cannot stream hilog.';
 
 /**
  * DevEco's command-line tools do not amend `PATH` for non-interactive processes. Honoring the

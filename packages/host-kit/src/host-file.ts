@@ -6,6 +6,7 @@ export {
   copyHostPath,
   ensureHostDirectory,
   ensureHostDirectorySync,
+  hostFileExists,
   hostFileExistsSync,
   hostFileLstatSync,
   hostFileStat,

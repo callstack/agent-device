@@ -2,7 +2,6 @@ import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producer
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import { shapeDesktopSurfaceSnapshot } from '@agent-device/capture-kit/snapshot-desktop-projection';
 import { snapshotLinux } from './snapshot.ts';
-import { resolveLinuxToolProvider } from './tool-provider.ts';
 import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import type { LinuxToolbox } from './toolbox.ts';
 
@@ -10,14 +9,17 @@ import type { LinuxToolbox } from './toolbox.ts';
  * One Linux surface capture, shaped like every other desktop surface capture. The core no longer
  * routes this: the family's runtime owns it, so a `snapshot` of a Linux device runs here and lands in
  * the request's exec trace through the host the plugin was set up with.
+ *
+ * The caller passes the provider it resolved for its own request, because that is the question each
+ * caller answers differently: the runtime and the interactor prefer a provider a request scoped over
+ * the one built from their host, and resolve it once per operation rather than per leg of one.
  */
 export async function captureLinuxSurfaceSnapshot(
   toolbox: LinuxToolbox,
-  own: LinuxToolProvider,
+  provider: LinuxToolProvider,
   options: CaptureSnapshotInput['options'],
   signal?: AbortSignal,
 ) {
-  const provider = resolveLinuxToolProvider(own);
   const result = await snapshotLinux(toolbox, provider, options?.surface, signal);
   return shapeDesktopSurfaceSnapshot(
     stampSnapshotIdentity(

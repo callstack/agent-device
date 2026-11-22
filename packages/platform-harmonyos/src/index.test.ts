@@ -5,6 +5,7 @@ import type { HarmonyPlatformRegistration } from '@agent-device/contracts/platfo
 import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isExecutablePath, whichCmd } from '@agent-device/host-kit/command';
+import { hostFileExists } from '@agent-device/host-kit/host-file';
 import path from 'node:path';
 import harmonyPlatformPlugin from './index.ts';
 import { createHarmonyToolchainRoot } from './toolbox.fixtures.ts';
@@ -48,6 +49,7 @@ function createPluginHost(
     // The host probe the real one is: a test that names a toolchain root proves the plugin resolves
     // HDC from a file on disk, not from a verdict this fixture hands it.
     isFileExecutable: isExecutablePath,
+    isFilePresent: hostFileExists,
     isExecutableOnPath: async (executable) => await whichCmd(executable, env),
     // Neither this family nor its devices are host processes: everything goes through HDC.
     processes: {
@@ -64,6 +66,14 @@ function createPluginHost(
         throw new Error('the HarmonyOS family takes no host lock');
       },
     } satisfies PlatformHost['processes'],
+    // This host is asked for neither: the tests that stream `hilog` use the toolbox stub, which
+    // records the managed process the family starts, and nothing starts a detached process.
+    startBackgroundCommand: async () => {
+      throw new Error('this host is not asked to keep a command running');
+    },
+    launchDetached: async () => {
+      throw new Error('the HarmonyOS family starts no detached process');
+    },
     emitDiagnostic,
     withDiagnosticTimer,
   };
