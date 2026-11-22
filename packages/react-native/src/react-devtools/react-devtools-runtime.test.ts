@@ -7,22 +7,19 @@ import {
   encodeOperations,
 } from './react-devtools-runtime.fixtures.ts';
 import type { RawReactProfile } from './react-profile-renders.ts';
-import {
-  REACT_DEVTOOLS_ALREADY_PROFILING,
-  REACT_DEVTOOLS_REASONS,
-} from './react-devtools-reasons.ts';
+import { runtimeFailure } from './react-devtools-connection.ts';
 import { REACT_DEVTOOLS_RUNTIME_SOURCE } from './react-devtools-runtime.ts';
 
-test('the injected runtime publishes only reasons the table declares', () => {
-  const declared = new Set<string>([
-    ...Object.values(REACT_DEVTOOLS_REASONS).map((row) => row.reason),
-    REACT_DEVTOOLS_ALREADY_PROFILING,
-  ]);
-  const published = new Set<string>(
+test('every failure spelling in the injected runtime is published as that details.reason', () => {
+  const spellings = new Set<string>(
     [...REACT_DEVTOOLS_RUNTIME_SOURCE.matchAll(/reason: '([a-z-]+)'/g)].map((m) => m[1]!),
   );
-  assert.ok(published.size > 0);
-  for (const reason of published) assert.ok(declared.has(reason), String(reason));
+  // `profile start` reports a running recording as a success, so it is no error reason.
+  assert.ok(spellings.delete('already-profiling'));
+  assert.ok(spellings.size > 0);
+  for (const reason of spellings) {
+    assert.equal(runtimeFailure({ ok: false, reason }).details?.reason, reason, reason);
+  }
 });
 
 type Started = {

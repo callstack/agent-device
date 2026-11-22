@@ -45,7 +45,7 @@ const untrustedGroundWording: Record<ScriptAncestryExposure, string> = {
  * through cannot be trusted to hold the file. ADR 0016.
  */
 export const SCRIPT_ANCESTRY_REASONS = {
-  // A directory the script path runs through is one another local user can change.
+  // The script path is not one absolute file name under existing directories private to this user.
   untrusted: { reason: 'script_ancestor_untrusted' },
 } as const satisfies ReasonTable<'script publication'>;
 

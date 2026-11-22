@@ -11,8 +11,6 @@ import {
   runtimeFailure,
   RUNTIME_OPTIONS,
   withAppRuntime,
-  type AlreadyRecordingResult,
-  isAlreadyRecording,
   type CommandForm,
   type DevtoolsArgs,
   type ReactDevtoolsCommandOptions,
@@ -64,8 +62,31 @@ type SavedReactProfile = {
   notes: string[];
 };
 
+/**
+ * What the runtime answers when `profile start` finds a recording already running. The start reports
+ * it as a success, so the spelling is not a published error reason and has no reason table row.
+ */
+const ALREADY_PROFILING = 'already-profiling';
+
+/** `ok: false` in shape; `elapsedMs` is measured on the device clock. */
+type AlreadyRecordingResult = {
+  ok: false;
+  reason: typeof ALREADY_PROFILING;
+  elapsedMs?: number;
+};
+
 type StartResult = { ok: true; attach: string } | AlreadyRecordingResult | RuntimeFailure;
 type StopResult = ({ ok: true; failures: string[] } & RawReactProfile) | RuntimeFailure;
+
+/**
+ * Whether the answer to `profile start` reports an already-running recording. The reason is untrusted
+ * text until this says so, which is what lets the caller read `elapsedMs` from it.
+ */
+function isAlreadyRecording(
+  result: AlreadyRecordingResult | RuntimeFailure,
+): result is AlreadyRecordingResult {
+  return result.reason === ALREADY_PROFILING;
+}
 
 function isReactProfileSubcommand(value: string | undefined): value is ReactProfileSubcommand {
   return REACT_PROFILE_SUBCOMMANDS.includes(value as ReactProfileSubcommand);

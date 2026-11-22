@@ -43,7 +43,8 @@ const EVENT_LOG_WRITER_TOKEN = randomUUID();
 export const EVENT_LOG_WINDOW_REASONS = {
   // The cursor names a line that rotation has already removed from the retained window.
   cursorExpired: { reason: 'EVENT_LOG_CURSOR_EXPIRED' },
-  // The retained files do not match the window sidecar, so no cursor can be trusted.
+  // The retained event log files or their window sidecar are malformed, incomplete, or disagree, so
+  // no cursor can be trusted.
   windowUnverified: { reason: 'EVENT_LOG_WINDOW_UNVERIFIED' },
 } as const satisfies ReasonTable<'events'>;
 

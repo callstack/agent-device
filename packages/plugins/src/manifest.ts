@@ -8,13 +8,13 @@ import type { ConnectionProviderCapabilities } from '@agent-device/contracts/rem
  * answer from this one table.
  */
 export const PLUGIN_REASONS = {
-  // Two plugins claim one provider id, or a plugin claims an id the routing layer owns.
+  // Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns.
   duplicateProvider: { reason: 'duplicate_provider' },
-  // The plugin declares a provider contract this build cannot drive.
+  // The package exports no plugin entry or declares no provider contract this build can load.
   incompatiblePlugin: { reason: 'incompatible_plugin' },
-  // The plugin's code could not be read, resolved, or loaded.
+  // The plugin's manifest or code could not be read, resolved, or loaded.
   loadFailed: { reason: 'plugin_load_failed' },
-  // The plugin's `setup(host)` threw.
+  // The plugin's `setup(host)` threw, or registering what it returned failed.
   setupFailed: { reason: 'plugin_setup_failed' },
   // A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`.
   reservedProvider: { reason: 'reserved_provider' },

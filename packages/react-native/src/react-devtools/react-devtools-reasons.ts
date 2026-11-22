@@ -10,9 +10,9 @@ export const REACT_DEVTOOLS_REASONS = {
   backendAttachFailed: { reason: 'backend-attach-failed' },
   // The DevTools backend could not export the recorded profile.
   collectFailed: { reason: 'collect-failed' },
-  // No mounted component has the ref the command named.
+  // No mounted component has the ref the command named or resolved.
   elementNotFound: { reason: 'element-not-found' },
-  // The DevTools backend refused to inspect the component.
+  // The DevTools backend could not inspect the component.
   inspectFailed: { reason: 'inspect-failed' },
   // The app runtime exposes no DevTools backend for this React Native version.
   noDevtoolsBackend: { reason: 'no-devtools-backend' },
@@ -31,10 +31,3 @@ export const REACT_DEVTOOLS_REASONS = {
 /** One {@link REACT_DEVTOOLS_REASONS} spelling a failing runtime answer may carry. */
 export type ReactDevtoolsFailureReason =
   (typeof REACT_DEVTOOLS_REASONS)[keyof typeof REACT_DEVTOOLS_REASONS]['reason'];
-
-/**
- * What the runtime answers when `profile start` finds a recording already running. The command
- * reports that as a success result, so the spelling is not a published error reason and has no
- * {@link REACT_DEVTOOLS_REASONS} row.
- */
-export const REACT_DEVTOOLS_ALREADY_PROFILING = 'already-profiling' as const;

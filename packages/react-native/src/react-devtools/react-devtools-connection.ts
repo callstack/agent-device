@@ -1,10 +1,7 @@
 import { parseArgs } from 'node:util';
 import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  REACT_DEVTOOLS_ALREADY_PROFILING,
-  type ReactDevtoolsFailureReason,
-} from './react-devtools-reasons.ts';
+import type { ReactDevtoolsFailureReason } from './react-devtools-reasons.ts';
 import {
   debuggerUrlOn,
   InspectorSession,
@@ -164,26 +161,6 @@ export type RuntimeFailure = {
   reason: string;
   detail?: string;
 };
-
-/**
- * The answer `profile start` gets while a recording is already running: `ok: false` in shape, and a
- * success result to the caller, which reads the elapsed time measured on the device clock.
- */
-export type AlreadyRecordingResult = {
-  ok: false;
-  reason: typeof REACT_DEVTOOLS_ALREADY_PROFILING;
-  elapsedMs?: number;
-};
-
-/**
- * Whether the answer to `profile start` reports an already-running recording. The reason is untrusted
- * text until this says so, which is what lets the caller read `elapsedMs` from it.
- */
-export function isAlreadyRecording(
-  result: AlreadyRecordingResult | RuntimeFailure,
-): result is AlreadyRecordingResult {
-  return result.reason === REACT_DEVTOOLS_ALREADY_PROFILING;
-}
 
 /** The message and recovery each runtime failure reason carries. */
 const RUNTIME_FAILURES: Record<ReactDevtoolsFailureReason, { message: string; hint: string }> = {

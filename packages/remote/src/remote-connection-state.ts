@@ -440,7 +440,7 @@ export function sessionLeaseScope(
 
 /** Why a remote command refuses before it reaches the connection. */
 const REMOTE_CONNECTION_REASONS = {
-  // A command used a leased connection without naming the session it belongs to.
+  // A command on a leased remote connection, or one that would lease one, named no session.
   sessionRequired: { reason: 'REMOTE_SESSION_REQUIRED' },
 } as const satisfies ReasonTable<'remote connection'>;
 

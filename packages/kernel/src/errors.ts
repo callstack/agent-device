@@ -433,7 +433,7 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
 
 /** The two deadlines that end work with a reason naming which budget ran out. */
 export const TIMEOUT_REASONS = {
-  // The daemon request its handler ran under passed its registered deadline.
+  // The daemon request's deadline left no time to finish its work.
   daemonDeadline: { reason: 'daemon_request_timeout' },
   // An `AbortSignal.timeout` ended the wait before the operation it guarded finished.
   operationDeadline: { reason: 'operation_deadline_expired' },

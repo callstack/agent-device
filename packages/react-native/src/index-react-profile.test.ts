@@ -159,6 +159,52 @@ test('runtime failures carry a typed reason and a hint', async () => {
   );
 });
 
+/** A harness whose app answers `stop` with `answer` and evaluates every other call. */
+function answeringStop(answer: unknown) {
+  const harnessed = harness();
+  vi.spyOn(InspectorSession, 'connect').mockImplementation(
+    async () =>
+      ({
+        evaluate: async (expression: string) =>
+          expression.includes('.stop(')
+            ? JSON.stringify(answer)
+            : vm.runInContext(expression, harnessed.app.context),
+        close: () => {},
+      }) as unknown as InspectorSession,
+  );
+  return harnessed;
+}
+
+test('a declared runtime spelling is published as details.reason with its wording and hint', async () => {
+  const { run } = answeringStop({ ok: false, reason: 'not-profiling', detail: 'Reloaded.' });
+  await assert.rejects(run('stop'), (error: { message: string; details: unknown }) => {
+    assert.equal(error.message, 'No React profile is recording in this app runtime. Reloaded.');
+    assert.deepEqual(error.details, {
+      reason: 'not-profiling',
+      hint: 'Run react-devtools profile start first. A reload or app restart discards a recording.',
+    });
+    return true;
+  });
+});
+
+test('an undeclared runtime spelling publishes no details.reason and keeps the raw text', async () => {
+  // An inherited key of the wording table, so only an own-key lookup refuses it.
+  const { run } = answeringStop({ ok: false, reason: 'toString', detail: 'Reloaded.' });
+  await assert.rejects(
+    run('stop'),
+    (error: { code: string; message: string; details: Record<string, unknown> }) => {
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details.reason, undefined);
+      assert.equal(error.details.runtimeReason, 'toString');
+      assert.equal(
+        error.message,
+        'The React DevTools runtime reported an unknown failure (toString). Reloaded.',
+      );
+      return true;
+    },
+  );
+});
+
 test('drill-down views need a saved profile', async () => {
   await assert.rejects(harness().run('report'), /No React profile saved for session qa/);
 });

@@ -44,7 +44,8 @@ const SWIFT_CACHE_VERSION = '3';
 
 /** Why the Swift helper cache refuses to be used or compiled against. */
 const SWIFT_CACHE_REASONS = {
-  // The cache directory, or one above it, is not private to this user.
+  // The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a
+  // trusted path that only this user or root can change.
   untrusted: { reason: 'swift_cache_untrusted' },
 } as const satisfies ReasonTable<'Swift helper cache'>;
 

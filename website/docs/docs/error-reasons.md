@@ -28,7 +28,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `EVENT_LOG_CURSOR_EXPIRED` | The cursor names a line that rotation has already removed from the retained window. |
-| `EVENT_LOG_WINDOW_UNVERIFIED` | The retained files do not match the window sidecar, so no cursor can be trusted. |
+| `EVENT_LOG_WINDOW_UNVERIFIED` | The retained event log files or their window sidecar are malformed, incomplete, or disagree, so no cursor can be trusted. |
 
 ### `fold`
 
@@ -84,10 +84,10 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `duplicate_provider` | Two plugins claim one provider id, or a plugin claims an id the routing layer owns. |
-| `incompatible_plugin` | The plugin declares a provider contract this build cannot drive. |
-| `plugin_load_failed` | The plugin's code could not be read, resolved, or loaded. |
-| `plugin_setup_failed` | The plugin's `setup(host)` threw. |
+| `duplicate_provider` | Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns. |
+| `incompatible_plugin` | The package exports no plugin entry or declares no provider contract this build can load. |
+| `plugin_load_failed` | The plugin's manifest or code could not be read, resolved, or loaded. |
+| `plugin_setup_failed` | The plugin's `setup(host)` threw, or registering what it returned failed. |
 | `reserved_provider` | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`. |
 
 ### `proxy`
@@ -104,8 +104,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `backend-attach-failed` | The DevTools backend attached to no renderer interface. |
 | `collect-failed` | The DevTools backend could not export the recorded profile. |
-| `element-not-found` | No mounted component has the ref the command named. |
-| `inspect-failed` | The DevTools backend refused to inspect the component. |
+| `element-not-found` | No mounted component has the ref the command named or resolved. |
+| `inspect-failed` | The DevTools backend could not inspect the component. |
 | `no-devtools-backend` | The app runtime exposes no DevTools backend for this React Native version. |
 | `no-devtools-hook` | The app runtime has no React DevTools hook at all. |
 | `no-react-renderer` | React has not rendered in this app runtime yet. |
@@ -194,7 +194,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `swift_cache_untrusted` | The cache directory, or one above it, is not private to this user. |
+| `swift_cache_untrusted` | The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a trusted path that only this user or root can change. |
 
 ### Apple app resolution
 
@@ -325,14 +325,14 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `signal-failed` | The host refused the signal, usually because another user owns the process. |
-| `exit-timeout` | SIGKILL was accepted and the process still outlived the budget it was given. |
+| `exit-timeout` | SIGKILL was sent and nothing proved the process exited within the budget it was given. |
 | `identity-unverified` | Nothing confirmed the pid names the recorded process, so signalling it was refused. |
 
 ### Remote connection
 
 | Reason | Meaning |
 | --- | --- |
-| `REMOTE_SESSION_REQUIRED` | A command used a leased connection without naming the session it belongs to. |
+| `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
 
 ### Remote transfer
 
@@ -363,7 +363,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `script_ancestor_untrusted` | A directory the script path runs through is one another local user can change. |
+| `script_ancestor_untrusted` | The script path is not one absolute file name under existing directories private to this user. |
 
 ### Snapshot capture
 
@@ -381,7 +381,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `daemon_request_timeout` | The daemon request its handler ran under passed its registered deadline. |
+| `daemon_request_timeout` | The daemon request's deadline left no time to finish its work. |
 | `operation_deadline_expired` | An `AbortSignal.timeout` ended the wait before the operation it guarded finished. |
 
 ### Web session naming

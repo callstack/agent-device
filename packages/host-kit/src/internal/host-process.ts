@@ -27,7 +27,7 @@ export type {
 export const PROCESS_STOP_REASONS = {
   // The host refused the signal, usually because another user owns the process.
   signalFailed: { reason: 'signal-failed' },
-  // SIGKILL was accepted and the process still outlived the budget it was given.
+  // SIGKILL was sent and nothing proved the process exited within the budget it was given.
   exitTimeout: { reason: 'exit-timeout' },
   // Nothing confirmed the pid names the recorded process, so signalling it was refused.
   identityUnverified: { reason: 'identity-unverified' },
