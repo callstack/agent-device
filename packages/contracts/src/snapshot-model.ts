@@ -115,6 +115,13 @@ export function systemSurfaceBundleId(
   }
 }
 
+/** Maps Android capture metadata to the shared occluding-surface model when it reports one. */
+export function androidSnapshotSystemSurface(
+  metadata: Readonly<{ systemSurfaceOnly?: boolean }> | undefined,
+): SnapshotSystemSurface | undefined {
+  return metadata?.systemSurfaceOnly === true ? { kind: 'android-system-overlay' } : undefined;
+}
+
 export type SnapshotState = {
   nodes: SnapshotNode[];
   createdAt: number;

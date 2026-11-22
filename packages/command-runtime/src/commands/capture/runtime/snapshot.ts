@@ -10,7 +10,7 @@ import {
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSameSnapshotPresentation } from '@agent-device/kernel/snapshot';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { androidSnapshotSystemSurface, normalizeType } from '@agent-device/contracts/snapshot';
 import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type {
   PresentedSurface,
@@ -250,11 +250,16 @@ async function captureRuntimeSnapshot(
       ...(options.observeOnly === undefined ? {} : { observeOnly: options.observeOnly }),
     },
   );
+  const annotations = snapshotCaptureAnnotationsFrom(result);
+  const systemSurface =
+    result.snapshot.systemSurface ?? androidSnapshotSystemSurface(annotations.androidSnapshot);
+  const presented = ensureSnapshotPresentationKey(result.snapshot, options);
   const snapshot = copySnapshotClickabilityEvidence(
     result.snapshot,
-    ensureSnapshotPresentationKey(result.snapshot, options),
+    systemSurface && presented.systemSurface === undefined
+      ? { ...presented, systemSurface }
+      : presented,
   );
-  const annotations = snapshotCaptureAnnotationsFrom(result);
   const warningTime = now(runtime);
   return {
     snapshot,
@@ -350,12 +355,7 @@ function buildSnapshotWarnings(params: {
   );
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 
-  const systemSurfaceWarning = systemSurfaceDisclosure(
-    params.snapshot.systemSurface ??
-      (params.annotations.androidSnapshot?.systemSurfaceOnly === true
-        ? { kind: 'android-system-overlay' }
-        : undefined),
-  );
+  const systemSurfaceWarning = systemSurfaceDisclosure(params.snapshot.systemSurface);
   if (systemSurfaceWarning) warnings.push(systemSurfaceWarning);
 
   const recentDropWarning = formatRecentSnapshotDropWarning(params);

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  androidSnapshotSystemSurface,
   readPostGestureOutcome,
   snapshotStateProvenance,
   systemSurfaceBundleId,
@@ -56,4 +57,13 @@ test('systemSurfaceBundleId projects the host identity only for host-bearing sur
   expect(systemSurfaceBundleId({ kind: 'payment', bundleId: 'com.apple.PassbookUIService' })).toBe(
     'com.apple.PassbookUIService',
   );
+});
+
+test('androidSnapshotSystemSurface maps systemSurfaceOnly to the shared Android overlay arm', () => {
+  expect(androidSnapshotSystemSurface(undefined)).toBeUndefined();
+  expect(androidSnapshotSystemSurface({})).toBeUndefined();
+  expect(androidSnapshotSystemSurface({ systemSurfaceOnly: false })).toBeUndefined();
+  expect(androidSnapshotSystemSurface({ systemSurfaceOnly: true })).toEqual({
+    kind: 'android-system-overlay',
+  });
 });

@@ -13,6 +13,7 @@ export {
 export {
   snapshotStateProvenance,
   systemSurfaceBundleId,
+  androidSnapshotSystemSurface,
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
   inheritPostGestureOutcome,
