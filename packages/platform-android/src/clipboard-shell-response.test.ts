@@ -4,7 +4,6 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import {
   androidClipboardShellCommandUnavailableError,
   androidClipboardShellSupportForVerdict,
-  ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
   classifyAndroidClipboardShellResponse,
 } from './clipboard-shell-response.ts';
 
@@ -107,7 +106,7 @@ test('clipboard shell refusal is dispatchable and names the substitute', () => {
   assert.equal(error.code, 'UNSUPPORTED_OPERATION');
   assert.equal(
     (error.details as { reason?: unknown }).reason,
-    ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
+    'android_clipboard_shell_command_unavailable',
   );
   assert.match(String(normalizeError(error).hint), /pasting into a focused field/);
 });

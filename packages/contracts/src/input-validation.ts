@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 export function readOptionalInteger(
   record: Record<string, unknown>,
@@ -40,23 +40,25 @@ export function readOptionalNumber(
 }
 
 /**
- * The typed reason the Android adb-shell text channel reports when it cannot carry the
- * requested text. Recovery routing keys on this constant, never on the message: the message
- * states the channel limit; the reason names which recovery surfaces apply. It lives here
- * because every producer and consumer of the reason already evaluates this module.
+ * Why an Android text channel refused to carry the text it was handed. Recovery routing keys on the
+ * reason, never on the message: the message states the channel limit, the reason names which
+ * recovery surfaces apply. The table lives here because every producer of these failures and the
+ * replay boundary that rewrites their hint already evaluate this module.
  */
-export const ANDROID_SHELL_TEXT_UNSUPPORTED_REASON = 'android_shell_text_unsupported' as const;
-
-/**
- * Typed reasons for the Android test-IME broadcast channel's truthful-outcome failures (#4520).
- * The channel's acknowledgement proves attempted dispatch only; these reasons distinguish "no
- * acknowledgement evidence at all" (result=0 / unparseable — a pre-ack helper or no receiver, which
- * are indistinguishable and therefore both refused) from a receiver-reported rejection. Result data
- * carries codes and lengths only, never user text.
- */
-export const ANDROID_IME_HELPER_NO_ACK_REASON = 'android_ime_helper_no_ack' as const;
-export const ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON =
-  'android_ime_helper_dispatch_rejected' as const;
+export const ANDROID_TEXT_CHANNEL_REASONS = {
+  // The adb-shell fallback carries ASCII text only; a helper or provider channel is needed.
+  shellTextUnsupported: {
+    reason: 'android_shell_text_unsupported',
+    commands: ['fill', 'type'],
+  },
+  // The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed.
+  imeHelperNoAck: { reason: 'android_ime_helper_no_ack', commands: ['fill', 'type'] },
+  // The test IME helper answered that it rejected the dispatch, so nothing was typed.
+  imeHelperDispatchRejected: {
+    reason: 'android_ime_helper_dispatch_rejected',
+    commands: ['fill', 'type'],
+  },
+} as const satisfies ReasonTable<'android text channel'>;
 
 /** Resolves a batch step command with the same whitespace and case rules on both peers. */
 export function normalizeBatchCommandName(command: unknown): string {

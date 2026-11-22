@@ -1,4 +1,4 @@
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   inspectInstalledAndroidHelper,
   installAndroidHelperPackage,
@@ -29,16 +29,20 @@ export function forgetAndroidSnapshotHelperInstall(options: {
   }
 }
 
-/**
- * @internal Test isolation hook for process-global snapshot helper install cache.
- */
-const ANDROID_SNAPSHOT_HELPER_NOT_CURRENT = 'android-snapshot-helper-not-current';
+/** Why a snapshot capture refuses before it installs anything. */
+const SNAPSHOT_HELPER_INSTALL_REASONS = {
+  // A current-only check found no current helper: nothing ran, so there is nothing to recover.
+  notCurrent: { reason: 'android-snapshot-helper-not-current' },
+} as const satisfies ReasonTable<'android snapshot helper'>;
 
 /** A `current-only` check found no current helper: nothing ran, so there is nothing to recover. */
 export function isAndroidSnapshotHelperNotCurrentError(error: unknown): boolean {
-  return asAppError(error).details?.reason === ANDROID_SNAPSHOT_HELPER_NOT_CURRENT;
+  return asAppError(error).details?.reason === SNAPSHOT_HELPER_INSTALL_REASONS.notCurrent.reason;
 }
 
+/**
+ * @internal Test isolation hook for process-global snapshot helper install cache.
+ */
 export function resetAndroidSnapshotHelperInstallCache(): void {
   installedSnapshotHelpers.clear();
 }
@@ -149,7 +153,7 @@ export async function ensureAndroidSnapshotHelper(options: {
       'COMMAND_FAILED',
       'Android snapshot helper is not installed at the current version',
       {
-        reason: ANDROID_SNAPSHOT_HELPER_NOT_CURRENT,
+        reason: SNAPSHOT_HELPER_INSTALL_REASONS.notCurrent.reason,
         packageName,
         versionCode,
         installedVersionCode,

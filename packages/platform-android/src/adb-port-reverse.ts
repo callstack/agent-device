@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { androidAdbResultError } from './adb-failure.ts';
 import { normalizeAndroidAdbProvider } from './adb-provider-normalization.ts';
@@ -25,8 +25,11 @@ export type AndroidExecPortReverseOptions = Readonly<{
   noRebind?: boolean;
 }>;
 
-const ANDROID_PORT_REVERSE_REBIND_REFUSED_REASON = 'android_port_reverse_rebind_refused';
-
+/** Why an owner-tracked port reverse refuses to touch the device's mapping table. */
+const PORT_REVERSE_REASONS = {
+  // The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces.
+  rebindRefused: { reason: 'android_port_reverse_rebind_refused', commands: ['open'] },
+} as const satisfies ReasonTable<'android adb port reverse'>;
 const managedAndroidPortReverseProviders = new WeakSet<AndroidPortReverseProvider>();
 
 export function createAndroidPortReverseManager(
@@ -169,7 +172,7 @@ function rebindRefusedError(
     'COMMAND_FAILED',
     `Android port reverse ${requested.local} is already mapped on the device`,
     {
-      reason: ANDROID_PORT_REVERSE_REBIND_REFUSED_REASON,
+      reason: PORT_REVERSE_REASONS.rebindRefused.reason,
       requested,
       existing,
       hint: `agent-device does not replace an existing reverse mapping on a shared device. Remove the mapping that holds device ${requested.local}, or use another device port.`,

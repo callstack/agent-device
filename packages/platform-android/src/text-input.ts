@@ -5,13 +5,14 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
-import {
-  ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
-  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
-} from '@agent-device/contracts/command';
+import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatchAfterSteps,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import {
@@ -259,6 +260,15 @@ async function admitAndroidTextChannel(
   return { backend: 'adb-shell' };
 }
 
+/** Why the Android text routes refuse before any text is sent. */
+const ANDROID_TEXT_ROUTE_REASONS = {
+  // The test IME rebind could not be confirmed, so the focused field may have no input session.
+  testImeRebindUnconfirmed: {
+    reason: 'android_test_ime_rebind_unconfirmed',
+    commands: ['type'],
+  },
+} as const satisfies ReasonTable<'fill'>;
+
 /**
  * Rebinds the test IME so the focused field gets a fresh input session, or throws: a helper whose
  * rebind went unconfirmed may hold no session, so no text may reach it.
@@ -271,7 +281,7 @@ async function confirmAndroidTestImeRebound(device: DeviceInfo): Promise<void> {
     'COMMAND_FAILED',
     `Could not confirm the Android test IME rebind on ${device.name ?? device.id}.`,
     {
-      reason: 'android_test_ime_rebind_unconfirmed',
+      reason: ANDROID_TEXT_ROUTE_REASONS.testImeRebindUnconfirmed.reason,
       rebindCause: outcome.kind === 'not-owned' ? 'not-owned' : outcome.cause,
       deviceId: device.id,
       hint: 'Close and reopen the session to restore the keyboard and reactivate the test IME.',
@@ -382,7 +392,7 @@ function isImeDispatchRejection(
 ): error is AppError {
   return (
     error instanceof AppError &&
-    error.details?.reason === ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON &&
+    error.details?.reason === ANDROID_TEXT_CHANNEL_REASONS.imeHelperDispatchRejected.reason &&
     error.details.dispatchKind === kind
   );
 }
@@ -630,7 +640,7 @@ function unsupportedAndroidShellTextError(text: string, cause?: unknown): AppErr
     'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only.',
     {
       backend: 'adb-shell',
-      reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+      reason: ANDROID_TEXT_CHANNEL_REASONS.shellTextUnsupported.reason,
       textLength: Array.from(text).length,
       textPreview: text.slice(0, 32),
       // The direct-interaction route's recovery. The replay failure boundary rewrites it
