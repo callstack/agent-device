@@ -102,7 +102,7 @@ export function createOwnerScopedDeviceClaimReconciler(
      * Process-lifetime sink for active recovery disposals, so the owning daemon or CLI awaits
      * every disposal — whether still inside its per-transaction grace or past it — before exiting.
      */
-    trackDisposal?: (disposal: Promise<void>) => void;
+    trackDisposal: (disposal: Promise<void>) => void;
     /** Optional per-transaction disposal budget override, for tests that exercise the bound. */
     disposeBudgetMs?: number;
   }>,
@@ -122,7 +122,7 @@ export function createOwnerScopedDeviceClaimReconciler(
     });
     // Track from gateway composition through disposal settlement so a daemon close that starts
     // while reconciliation is still in flight still sees this recovery gateway.
-    params.trackDisposal?.(trackedLifecycle);
+    params.trackDisposal(trackedLifecycle);
     let disposalTracked = false;
     try {
       let outcome:
@@ -164,40 +164,6 @@ export function createOwnerScopedDeviceClaimReconciler(
         }
       };
       const disposal = Promise.resolve().then(async () => await recovery.dispose());
-      let disposalOutcome:
-        | { status: 'fulfilled' }
-        | { status: 'rejected'; error: unknown }
-        | undefined;
-      let budgetExpired = false;
-      const reportLateDisposal = () => {
-        if (!disposalOutcome) return;
-        if (disposalOutcome.status === 'fulfilled') {
-          emit({
-            level: 'info',
-            phase: 'device_claim_recovery_dispose_settled',
-            data: { afterBudget: true },
-          });
-        } else {
-          emit({
-            level: 'error',
-            phase: 'device_claim_recovery_dispose_failed',
-            data: { afterBudget: true, ...failureData(disposalOutcome.error) },
-          });
-        }
-        flushLateDiagnostics();
-      };
-      const observedDisposal = disposal.then(
-        () => {
-          disposalOutcome = { status: 'fulfilled' };
-          if (budgetExpired) reportLateDisposal();
-        },
-        (error: unknown) => {
-          disposalOutcome = { status: 'rejected', error };
-          if (budgetExpired) reportLateDisposal();
-        },
-      );
-      disposalTracked = true;
-      void observedDisposal.finally(resolveTracked);
       let disposalPending = false;
       try {
         disposalPending = (await settleWithin(() => disposal, disposeBudgetMs)).kind === 'deadline';
@@ -210,15 +176,31 @@ export function createOwnerScopedDeviceClaimReconciler(
         if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
       }
       if (disposalPending) {
-        budgetExpired = true;
         emit({
           level: 'warn',
           phase: 'device_claim_recovery_dispose_pending',
           data: { budgetMs: disposeBudgetMs },
         });
-        // If disposal settled between the deadline timer firing and this microtask resuming,
-        // report the late settlement now so it is never dropped.
-        if (disposalOutcome) reportLateDisposal();
+        const lateObservation = disposal.then(
+          () => {
+            emit({
+              level: 'info',
+              phase: 'device_claim_recovery_dispose_settled',
+              data: { afterBudget: true },
+            });
+            flushLateDiagnostics();
+          },
+          (error: unknown) => {
+            emit({
+              level: 'error',
+              phase: 'device_claim_recovery_dispose_failed',
+              data: { afterBudget: true, ...failureData(error) },
+            });
+            flushLateDiagnostics();
+          },
+        );
+        disposalTracked = true;
+        void lateObservation.finally(resolveTracked);
       }
       if (outcome.status === 'rejected') throw outcome.error;
       if (disposalPending && outcome.result.status === 'reconciled') {

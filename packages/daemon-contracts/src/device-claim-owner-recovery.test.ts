@@ -85,6 +85,7 @@ function fixture(
       throw new Error('the supplied recovery owns composition');
     },
     composeRecovery: () => ({ reconcile: reconcileOnce, dispose }),
+    trackDisposal: () => {},
   });
   const claimPath = resolveDeviceClaimPath(claim.deviceKey, env);
   const claimBytes = fs.readFileSync(claimPath, 'utf8');
@@ -432,6 +433,7 @@ test('a late disposal failure after a non-debug request flush is still persisted
       reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
       dispose: async () => await disposePromise,
     }),
+    trackDisposal: () => {},
   });
 
   await withDiagnosticsScope(

@@ -142,8 +142,8 @@ export type RequestRouterDeps = {
    * passes it to every reconciler it builds; only root composition can construct a router.
    */
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
-  /** Process-lifetime owner for post-budget claim-recovery disposals started during requests. */
-  trackClaimRecoveryDisposal?: (disposal: Promise<void>) => void;
+  /** Process-lifetime owner for active claim-recovery disposals started during requests. */
+  trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;

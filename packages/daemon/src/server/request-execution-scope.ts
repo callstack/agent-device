@@ -231,7 +231,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformServices: DaemonPlatformServices;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
-  trackClaimRecoveryDisposal?: (disposal: Promise<void>) => void;
+  trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   platformRequestScope: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
@@ -578,7 +578,7 @@ function createRequestDeviceAccess(params: {
   daemonPolicy: DaemonPolicy | undefined;
   admitDevicePin: ((device: DeviceInfo) => void) | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
-  trackClaimRecoveryDisposal?: (disposal: Promise<void>) => void;
+  trackClaimRecoveryDisposal: (disposal: Promise<void>) => void;
   sessionStore: SessionStore;
 }): {
   claimAdmission: DeviceClaimAdmission;

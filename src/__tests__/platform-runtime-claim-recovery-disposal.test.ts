@@ -137,6 +137,7 @@ function composedRecovery(loadRuntime: () => Promise<PlatformRuntimeOwner>, sign
         modules: new Map([['android', androidModule]]),
         loadHost: async () => ({}) as PlatformRuntimeHost,
       }),
+    trackDisposal: () => {},
   });
   return { reconcile, emit };
 }

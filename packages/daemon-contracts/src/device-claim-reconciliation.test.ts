@@ -317,6 +317,7 @@ test.each([
             scope,
             beforeGateway: inspectDeviceClaimRecovery,
             composeGateway: () => gateway,
+            trackDisposal: () => {},
           })
         : createDeviceClaimReconciler({ gateway, scope });
     const settlement = settleVerifiedOrphanedClaim(claim, reconciler, env);
