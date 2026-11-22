@@ -21,7 +21,7 @@ import {
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
-import { logChunk } from './runner-io.ts';
+import { bindRunnerTraceOutput, logChunk } from './runner-io.ts';
 import {
   runnerLaunchLogClassificationDetails,
   runnerSimulatorSetFailureDetails,
@@ -900,6 +900,7 @@ async function buildRunnerXctestrun(
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
   const archBuildSettings = resolveRunnerArchBuildSettings(env);
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs(env);
+  const writeTrace = bindRunnerTraceOutput(options.traceLogPath);
   try {
     await runCmdStreaming(
       'xcodebuild',
@@ -932,10 +933,10 @@ async function buildRunnerXctestrun(
           registerRunnerPrepProcess(device.id, child, options.startAdmission);
         },
         onStdoutChunk: (chunk) => {
-          logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
+          logChunk(chunk, options.logPath, writeTrace, options.verbose);
         },
         onStderrChunk: (chunk) => {
-          logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
+          logChunk(chunk, options.logPath, writeTrace, options.verbose);
         },
       },
     );

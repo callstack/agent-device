@@ -1,14 +1,17 @@
 import fs from 'node:fs';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { captureDiagnosticTraceWriter, emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 export function appendReplayTraceEvent(
   tracePath: string | undefined,
   event: Record<string, unknown>,
 ): void {
-  if (!tracePath) return;
+  const scopedWrite = tracePath ? undefined : captureDiagnosticTraceWriter();
+  if (!tracePath && !scopedWrite) return;
   try {
-    fs.appendFileSync(tracePath, `${JSON.stringify(redactDiagnosticData(event))}\n`);
+    const line = `${JSON.stringify(redactDiagnosticData(event))}\n`;
+    if (tracePath) fs.appendFileSync(tracePath, line);
+    else scopedWrite?.(line);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',

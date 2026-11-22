@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, test, vi } from 'vitest';
+import { beforeEach, onTestFinished, test, vi } from 'vitest';
+import { loadRealHostKitCapabilities } from '@agent-device/test-kit';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { makeBackgroundRunner } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -122,6 +123,41 @@ test('the listener-ready marker is read back from the runner log file', async ()
   fs.appendFileSync(logPath, 'READY\n');
 
   await waitFor(() => assert.equal(launched.startupRetryWake.aborted, true));
+});
+
+test('runner trace output is scoped to the trace and the request that started the runner', async () => {
+  const { withDiagnosticsScope } = await loadRealHostKitCapabilities();
+  const logPath = runnerLogPath();
+  const traceLogPath = path.join(path.dirname(logPath), 'trace.log');
+  let finish = () => {};
+  const wait = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+    finish = () => resolve({ stdout: '', stderr: '', exitCode: 0 });
+  });
+  onTestFinished(finish);
+  mockRunCmdBackground.mockReturnValue({ ...makeBackgroundRunner(4242), wait });
+  let traceActive = true;
+  const launched = await withDiagnosticsScope(
+    { traceLogPath, traceLogWritable: () => traceActive },
+    async () => {
+      const runner = launchRunnerProcess({
+        device: IOS_SIMULATOR,
+        xctestrunPath: '/tmp/runner.xctestrun',
+        derivedPath: '/tmp/runner-derived',
+        logPath,
+      });
+      fs.appendFileSync(logPath, 'runner output\n');
+      await waitFor(() => assert.equal(fs.readFileSync(traceLogPath, 'utf8'), 'runner output\n'));
+      traceActive = false;
+      fs.appendFileSync(logPath, 'AGENT_DEVICE_RUNNER_LISTENER_READY\n');
+      await waitFor(() => assert.equal(runner.startupRetryWake.aborted, true));
+      return runner;
+    },
+  );
+  traceActive = true;
+  fs.appendFileSync(logPath, 'after producer request\n');
+  finish();
+  await launched.output;
+  assert.equal(fs.readFileSync(traceLogPath, 'utf8'), 'runner output\n');
 });
 
 test('output an older runner generation left in the same log file does not wake startup', async () => {

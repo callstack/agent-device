@@ -383,7 +383,12 @@ function resolveRecordingStartPaths(
       daemonOwned: true,
       ...(clientOutputPath === undefined
         ? {}
-        : { clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension) }),
+        : {
+            clientOutputPath:
+              remotePlaceholder && !req.internal?.publicNetworkOnly
+                ? clientOutputPath
+                : appendRecordingExtensionWhenMissing(clientOutputPath, extension),
+          }),
     };
   }
   return {
@@ -452,7 +457,7 @@ async function stopRecording(
   }
   const completion = stopped.completion;
   const response = buildRecordingStopResponse(completion);
-  const { daemonOwned, tenantId } = readRecordingOutput(params, completion, leaseOwner);
+  const { daemonOwned, tenantId } = readRecordingOutput(params, completion, leaseOwner, ref);
   if (stopped.recordsSessionAction) {
     recordSessionAction(params.sessionStore, ref, params.req, params.req.command, {
       action: 'stop',
@@ -484,6 +489,7 @@ function readRecordingOutput(
   params: RecordRuntimeHandlerParams,
   completion: ScreenRecordingCompletion,
   leaseOwner: string | null | undefined,
+  ref: SessionRef | undefined,
 ): { daemonOwned: boolean; tenantId?: string } {
   const resourcePath = screenRecordingDurableResource.resourcePath(
     params.sessionStore,
@@ -497,7 +503,11 @@ function readRecordingOutput(
   }
   const storedTenant =
     record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureTenantId : undefined;
-  const tenantId = typeof storedTenant === 'string' ? storedTenant : undefined;
+  const tenantId =
+    typeof storedTenant === 'string'
+      ? storedTenant
+      : ((ref && params.sessionStore.resolveCurrent(ref)?.lease?.tenantId) ??
+        params.req.meta?.tenantId);
   return { daemonOwned, tenantId };
 }
 

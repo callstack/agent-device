@@ -12,11 +12,7 @@ import {
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
-import {
-  requestTraceLogPath,
-  requestDiagnosticsRecordId,
-  type TrackDownloadableArtifact,
-} from '../resources/artifact-tracking.ts';
+import * as output from '../resources/artifact-tracking.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -299,7 +295,7 @@ export async function createRequestExecutionScope(params: {
   const requestLog = resolveSessionRequestLog({
     sessionDir,
     session: sessionName,
-    requestId: requestDiagnosticsRecordId(scopedReq),
+    requestId: output.requestDiagnosticsRecordId(scopedReq),
     directory: 'request-records',
   });
   const requestLogPath = requestLog.path;
@@ -717,7 +713,7 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
 export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
-  trackDownloadableArtifact: TrackDownloadableArtifact;
+  trackDownloadableArtifact: output.TrackDownloadableArtifact;
 }): Promise<LockedRequestScopeResult> {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
@@ -756,7 +752,7 @@ export async function prepareLockedRequestScope(params: {
   const deliverRemoteScript = ignoresSessionLease(scope.command)
     ? (response: DaemonResponse) => response
     : remoteScriptVersionDelivery(sessionStore, scope.sessionName);
-  updateDiagnosticsScope({ traceLogPath: requestTraceLogPath(lockedReq, existingSession?.trace) });
+  updateDiagnosticsScope(output.requestTraceDiagnostics(lockedReq, existingRef, sessionStore));
   const finalize = (handled: DaemonResponse): DaemonResponse => {
     const response = deliverRemoteScript(handled);
     const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);

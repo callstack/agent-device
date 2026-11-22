@@ -91,11 +91,15 @@ test('direct HTTP recording replay requires known remote output provenance', asy
     return await start(input);
   });
   const placeholder = buildRemoteTempArtifactPath('recording', '.mp4');
+  const clientPath = '/client/recording';
   const started = await harness.run(['start', placeholder], {
-    clientArtifactPaths: { outPath: '/client/recording.mp4' },
+    clientArtifactPaths: { outPath: clientPath },
   });
   expect(started.ok).toBe(true);
-  const capturePath = harness.runtime.start.mock.calls[0]![0].outputPath;
+  const capture = harness.runtime.start.mock.calls[0]![0];
+  expect(capture.clientOutputPath).toBe(clientPath);
+  const capturePath = capture.outputPath;
+  expect(path.extname(capturePath)).toBe('.mp4');
   expect(path.dirname(capturePath)).toBe(
     harness.sessionStore.resolveSessionDir(harness.sessionName),
   );
@@ -149,6 +153,7 @@ test('direct HTTP recording replay requires known remote output provenance', asy
         metadata: { ...metadata, remoteCaptureLease: 'unleased' },
       });
       const data = successfulData(await replay());
+      expect(data.artifacts?.[0]?.localPath).toBe(clientPath);
       const id = data.artifacts?.[0]?.artifactId;
       const download = await fetch(`${base}/artifacts/${id}`, {
         headers: { authorization: 'Bearer test-token' },
@@ -192,7 +197,6 @@ test('record stop keeps the unleased producer when the stop runs under a lease',
         await post({
           command: 'record',
           positionals: ['stop'],
-          meta: { tenantId: lease.tenantId },
         }),
       );
       const id = output.artifacts?.[0]?.artifactId;
@@ -244,6 +248,22 @@ test.each(['leased at start', 'leased after start'])(
       const leasedAtStart = scenario === 'leased at start';
       const unleased = { tenantId: scope.tenantId };
       successfulData(await trace('start', leasedAtStart ? owner : unleased));
+      const script = 'flow.ad';
+      successfulData(
+        await post({
+          command: 'replay',
+          session: 'capture',
+          positionals: [script],
+          flags: {
+            replayKeepSession: true,
+            replayScriptSource: {
+              entry: script,
+              files: { [script]: 'context platform=android\nwait 0\n' },
+            },
+          },
+          meta: { ...(leasedAtStart ? owner : unleased), sessionExplicit: true },
+        }),
+      );
       const wait = (requestId: string, meta = {}) =>
         post({
           command: 'wait',
@@ -276,6 +296,16 @@ test.each(['leased at start', 'leased after start'])(
       });
       expect(served.status).toBe(200);
       const log = await served.text();
+      const events = log
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'replay_action_start' }),
+          expect.objectContaining({ type: 'replay_action_stop' }),
+        ]),
+      );
       expect(log).toContain('trace-owner-request');
       expect(log).not.toContain('trace-other-request');
     });

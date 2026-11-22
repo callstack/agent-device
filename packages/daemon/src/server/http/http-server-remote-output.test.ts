@@ -464,6 +464,7 @@ test.each([
         },
       };
     };
+    const explicitTrace = path.join(root, 'explicit.trace');
     const leaseRegistry = new LeaseRegistry();
     const { ownership, reporter } = nativePerfOwners(leaseRegistry, origin);
     const handler = createRequestHandler({
@@ -544,13 +545,18 @@ test.each([
                   response: snapshot(false),
                 };
               },
-              perfProfileReport: async ({ tracePath, outPath }) => {
+              perfProfileReport: async ({ tracePath, outPath, profile, template }) => {
+                const explicit = tracePath === explicitTrace;
+                if (explicit) {
+                  expect(profile).toBeUndefined();
+                  expect(template).toBeUndefined();
+                }
                 expect(
                   fs.readFileSync(
                     kind === 'xctrace' ? path.join(tracePath, 'capture.bin') : tracePath,
                     'utf8',
                   ),
-                ).toBe('generated-capture');
+                ).toBe(explicit ? 'independent-capture' : 'generated-capture');
                 fs.writeFileSync(outPath, 'generated-report');
                 return { outPath };
               },
@@ -623,6 +629,25 @@ test.each([
         await ownership.refuseUnowned(() =>
           post({ command: 'perf', session: 'capture', positionals: positionals('report') }),
         );
+        if (kind === 'xctrace' && origin === 'leased') {
+          fs.mkdirSync(explicitTrace);
+          fs.writeFileSync(path.join(explicitTrace, 'capture.bin'), 'independent-capture');
+          const reportPath = path.join(root, 'explicit-report.json');
+          const explicitReport = (source: string) =>
+            post(
+              {
+                command: 'perf',
+                session: 'capture',
+                positionals: [...positionals('report'), '', reportPath, source],
+              },
+              false,
+            );
+          successfulData(await explicitReport(explicitTrace));
+          expect(fs.readFileSync(reportPath, 'utf8')).toBe('generated-report');
+          const alias = path.join(root, 'retained-alias.trace');
+          fs.symlinkSync(output, alias, 'dir');
+          await ownership.refuseUnowned(() => explicitReport(alias));
+        }
         const report = await post({
           command: 'perf',
           session: 'capture',

@@ -237,6 +237,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         command: req.command,
         debug,
         logPath,
+        traceLogPath: undefined,
       },
       async () => {
         claimRequestDiagnosticsRecord(req);

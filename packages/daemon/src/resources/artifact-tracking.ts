@@ -24,7 +24,8 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../core/daemon-request.ts';
-import type { SessionState } from '../core/session-state.ts';
+import type { SessionRef } from '../core/session-state.ts';
+import type { SessionStore } from '../core/session-store.ts';
 import { resolveLeaseScope } from '../core/lease-context.ts';
 import { normalizeLeaseId } from './lease-registry-scope.ts';
 
@@ -47,13 +48,19 @@ export function admittedOutputLeaseVerifier(req: Pick<DaemonRequest, 'internal'>
   return leaseId === undefined ? null : leaseVerifier(leaseId);
 }
 
-export function requestTraceLogPath(
+export function requestTraceDiagnostics(
   req: DaemonRequest,
-  trace: SessionState['trace'],
-): string | undefined {
-  if (!trace || (trace.leaseVerifier ?? null) !== admittedOutputLeaseVerifier(req))
-    return undefined;
-  return trace.remoteCaptureOutputPath ?? trace.outPath;
+  ref: SessionRef | undefined,
+  store: Pick<SessionStore, 'resolveCurrent'>,
+) {
+  const trace = ref?.session.trace;
+  if (!ref || !trace || (trace.leaseVerifier ?? null) !== admittedOutputLeaseVerifier(req)) {
+    return { traceLogPath: undefined, traceLogWritable: undefined };
+  }
+  return {
+    traceLogPath: trace.remoteCaptureOutputPath ?? trace.outPath,
+    traceLogWritable: () => store.resolveCurrent(ref)?.trace === trace,
+  };
 }
 
 /**

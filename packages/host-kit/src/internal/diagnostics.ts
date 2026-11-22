@@ -53,6 +53,7 @@ type DiagnosticsScopeOptions = {
    */
   operatorLog?: boolean;
   traceLogPath?: string;
+  traceLogWritable?: () => boolean;
 };
 
 type DiagnosticsScope = DiagnosticsScopeOptions & {
@@ -67,6 +68,7 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   phaseCounts: Map<string, number>;
   sensitiveValues: Set<string>;
   ensuredDirectories: Set<string>;
+  traceLogClosed?: true;
   // Sorted-longest-first view of `sensitiveValues`, recomputed lazily after a
   // registration invalidates it so replacement order stays deterministic.
   sortedSensitiveValues?: string[];
@@ -99,13 +101,44 @@ export async function withDiagnosticsScope<T>(
     sensitiveValues: new Set(),
     ensuredDirectories: new Set(),
   };
-  return await diagnosticsStorage.run(scope, fn);
+  try {
+    return await diagnosticsStorage.run(scope, fn);
+  } finally {
+    scope.traceLogClosed = true;
+    scope.traceLogPath = undefined;
+    scope.traceLogWritable = undefined;
+  }
 }
 
 export function updateDiagnosticsScope(options: DiagnosticsScopeOptions): void {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return;
   Object.assign(scope, options);
+}
+
+/**
+ * Binds a raw trace writer to the current request and trace. An inactive binding still suppresses
+ * fallback to an unverified session path.
+ */
+export function captureDiagnosticTraceWriter(): ((line: string) => void) | undefined {
+  const scope = diagnosticsStorage.getStore();
+  if (!scope || !('traceLogPath' in scope)) return undefined;
+  const { traceLogPath } = scope;
+  return (line) => {
+    if (traceLogPath && activeTracePath(scope) === traceLogPath) {
+      appendDiagnosticLine(
+        scope,
+        traceLogPath,
+        redactSensitiveString(line, sortedScopeSensitiveValues(scope)),
+      );
+    }
+  };
+}
+
+function activeTracePath(scope: DiagnosticsScope): string | undefined {
+  if (!scope.traceLogClosed && scope.traceLogPath && scope.traceLogWritable?.() !== false)
+    return scope.traceLogPath;
+  return undefined;
 }
 
 export function getDiagnosticsMeta(): {
@@ -203,16 +236,17 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
     };
     scope.events.push(payload);
     scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
-    if (!scope.debug && !scope.traceLogPath) return;
+    const tracePath = activeTracePath(scope);
+    if (!scope.debug && !tracePath) return;
     const fileLine = `${stringifyDiagnosticEvent(payload, sortedScopeSensitiveValues(scope))}\n`;
     if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
     }
-    if (scope.traceLogPath) {
-      appendDiagnosticLine(scope, scope.traceLogPath, fileLine);
+    if (tracePath) {
+      appendDiagnosticLine(scope, tracePath, fileLine);
     }
-    if (scope.debug && !scope.logPath && !scope.traceLogPath) {
+    if (scope.debug && !scope.logPath && !tracePath) {
       // The file form stays exact; the terminal copy is escaped, and its `\u00NN` form keeps the JSON parseable.
       process.stderr.write(`${DIAGNOSTIC_STDERR_PREFIX}${escapeTerminalText(fileLine)}`);
     }
@@ -340,13 +374,17 @@ function redactScopeData(
   }
 }
 
+function redactSensitiveString(value: string, sensitiveValues: readonly string[]): string {
+  return sensitiveValues.reduce(
+    (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),
+    value,
+  );
+}
+
 function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string[]): unknown {
   if (typeof value === 'bigint') value = value.toString();
   if (typeof value === 'string') {
-    return sensitiveValues.reduce(
-      (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),
-      value,
-    );
+    return redactSensitiveString(value, sensitiveValues);
   }
   if (Array.isArray(value)) {
     return value.map((entry) => replaceSensitiveValues(entry, sensitiveValues));

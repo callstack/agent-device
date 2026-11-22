@@ -2,6 +2,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import path from 'node:path';
+import { statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { cp, rename, rm } from 'node:fs/promises';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
@@ -174,11 +175,19 @@ async function executeAdmittedPerfPlan(
       return await startPerfCapture(params, session, runtime, plan.request);
     }
     case 'profile-report': {
-      const retained = session.lastPerfProfile;
+      const cwd = requestCwd(params.req, params.host);
+      const explicitPath = plan.request.tracePath && expandSessionPath(plan.request.tracePath, cwd);
+      const saved = session.lastPerfProfile;
+      const retained =
+        plan.request.kind === 'xctrace' &&
+        explicitPath &&
+        saved &&
+        !samePerfSource(explicitPath, saved.profile.outPath)
+          ? undefined
+          : saved;
+      const tracePath = explicitPath || retained?.profile.outPath;
       assertPerfOutputOwner(params.req, retained?.leaseVerifier);
-      const runtime = await bindDevice(device, plan.use);
       const last = retained?.profile;
-      const tracePath = plan.request.tracePath ?? last?.outPath;
       if (!tracePath) {
         throw new AppError(
           'INVALID_ARGS',
@@ -191,11 +200,12 @@ async function executeAdmittedPerfPlan(
           'perf cpu profile report requires a stopped profile trace; stop the active capture first.',
         );
       }
+      const runtime = await bindDevice(device, plan.use);
       const outPath = resolveNativeOutPath(params, plan.request.outPath, 'cpu-report.json');
       const data = await runtime.operations.perfProfileReport({
         appId: session.appBundleId,
         kind: plan.request.kind,
-        tracePath: expandSessionPath(tracePath, requestCwd(params.req, params.host)),
+        tracePath,
         outPath,
         template: plan.request.template ?? (last?.kind === 'xctrace' ? last.template : undefined),
         profile: last,
@@ -344,6 +354,13 @@ async function stopPerfCapture(
       owner,
     ),
   };
+}
+
+function samePerfSource(explicitPath: string, retainedPath: string): boolean {
+  if (explicitPath === retainedPath) return true;
+  const explicit = statSync(explicitPath, { throwIfNoEntry: false });
+  const retained = statSync(retainedPath, { throwIfNoEntry: false });
+  return !!explicit && !!retained && explicit.dev === retained.dev && explicit.ino === retained.ino;
 }
 
 function assertPerfOutputOwner(req: DaemonRequest, owner: string | null | undefined): void {
