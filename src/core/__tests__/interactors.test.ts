@@ -9,6 +9,11 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
 import { getInteractor, getLocalInteractor } from '../interactors.ts';
 import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
+import { macOsPlatformCompositionFixture } from '../../platform-runtime-macos-leaf.fixtures.ts';
+
+// macOS desktop automation is the managed macOS package's: composing it binds the leaf to the
+// bundled Apple owner, as the daemon's composition does.
+macOsPlatformCompositionFixture();
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',

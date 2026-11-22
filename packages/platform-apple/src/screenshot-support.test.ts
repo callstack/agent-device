@@ -4,6 +4,7 @@ import type { Interactor, ScreenshotOptions } from '@agent-device/contracts/inte
 import type { MacOsAppBackend, SessionSurface } from '@agent-device/contracts/session';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+import { bindMacOsLeafFixture } from './__tests__/macos-leaf.fixtures.ts';
 
 const simulator: DeviceInfo = {
   platform: 'apple',
@@ -83,6 +84,8 @@ test.each([
 ] satisfies [DeviceInfo, SessionSurface | undefined, MacOsAppBackend | undefined, boolean][])(
   'the bound Apple capture declares runner support for %j on surface %s with app backend %s: %s',
   async (device, surface, appBackend, supported) => {
+    // The native rows read the leaf's admission facts; this test is about the capture route.
+    bindMacOsLeafFixture({ nativeBackendFacts: async () => ({}) });
     const screenshot = vi.fn(async () => ({}));
     const resolve = vi.fn(async () => ({ screenshot }) as unknown as Interactor);
     const host = {

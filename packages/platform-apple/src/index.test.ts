@@ -21,8 +21,8 @@ test('lazy Apple tool provider preserves the local semantic operation shape', ()
   assert.equal(typeof provider.simctl.run, 'function');
   assert.equal(typeof provider.devicectl.run, 'function');
   assert.equal(typeof provider.plist?.readJson, 'function');
-  assert.equal(typeof provider.macosHost?.openBundle, 'function');
-  assert.equal(typeof provider.macosHost?.listApps, 'function');
+  // The local macOS host routes belong to the installed macOS leaf, not to this provider.
+  assert.equal(provider.macosHost, undefined);
 });
 
 test('Apple app resolution facade preserves its synchronous helper contract', () => {

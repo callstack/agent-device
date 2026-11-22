@@ -115,8 +115,6 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     IOS_SIMULATOR,
     press({ count: 2, intervalMs: 50, holdMs: 600 }),
   ],
-  'macos.interactions-mouse-click.secondary': [MACOS_DEVICE, press({ button: 'secondary' })],
-  'macos.interactions-mouse-click.middle': [MACOS_DEVICE, press({ button: 'middle' })],
   'ios-simulator.interactions-single-press-double-tap.single': [
     IOS_SIMULATOR,
     press({ doubleTap: true }),
@@ -164,14 +162,6 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactions-scroll.inertial': [
     IOS_SIMULATOR,
     (i) => i.scroll('left', { amount: 0.5, releaseBehavior: 'inertial' }),
-  ],
-  'macos.desktop-scroll.amount': [
-    MACOS_DEVICE,
-    (i) => i.scroll('down', { amount: 0.5, durationMs: 300 }),
-  ],
-  'macos.desktop-scroll.pixels': [
-    MACOS_DEVICE,
-    (i) => i.scroll('up', { pixels: 200, durationMs: 300 }),
   ],
   'ios-simulator.interactor-find-text.text': [
     IOS_SIMULATOR,

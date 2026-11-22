@@ -106,6 +106,7 @@ export type ProviderContribution<WebDriver extends WebDriverDescriptor = WebDriv
   }>;
 
 export type {
+  MacOsPlatformLeafContribution,
   PlatformBackgroundCommand,
   PlatformBackgroundProcess,
   PlatformContribution,

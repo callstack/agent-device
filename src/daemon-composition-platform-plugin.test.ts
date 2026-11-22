@@ -267,3 +267,146 @@ test('absent web reports the same install hint for daemon inventory, interactors
     });
   });
 });
+
+const macOsPackage = '@agent-device/macos';
+const macOsDevice = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host-macos-local',
+  name: 'Host Mac',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+} as const;
+const iosSimulator = {
+  platform: 'apple',
+  appleOs: 'ios',
+  id: 'sim-1',
+  name: 'iPhone',
+  kind: 'simulator',
+  target: 'mobile',
+  booted: true,
+} as const;
+
+// A macOS leaf that answers one operation from what the Apple owner hands it: the state directory
+// of the host it was set up with, and the shape of the request's tools.
+const macOsLeafPlugin = `
+  export default () => ({
+    apiVersion: 3,
+    contributes: [{
+      kind: 'platform',
+      family: 'apple',
+      appleOs: 'macos',
+      setup(host) {
+        return {
+          family: 'apple',
+          appleOs: 'macos',
+          bind: (tools) => ({
+            readClipboardText: async () =>
+              [host.stateDir, typeof tools.runCommand, String(tools.scoped)].join('|'),
+          }),
+        };
+      },
+    }],
+  });
+`;
+
+function selectMacOsLeaf(home: string) {
+  selectPlugin(home, macOsPackage, macOsLeafPlugin, {
+    claims: { apiVersion: 3, platform: 'apple', appleOs: 'macos' },
+  });
+}
+
+test('absent macOS reports its install hint for a macOS request and leaves iOS and tvOS to the bundled owner', async () => {
+  const { home, env } = pluginHome();
+  const stateDir = path.join(home, 'state');
+  await withDaemonComposition(env, stateDir, async (deps) => {
+    const gateway = deps.requestRouter.deviceInventoryGateways.localOnly;
+    const absent = {
+      code: 'UNSUPPORTED_PLATFORM',
+      details: expect.objectContaining({
+        reason: 'plugin-not-installed',
+        family: 'apple',
+        appleOs: 'macos',
+        package: macOsPackage,
+        installCommand: expect.stringContaining('agent-device plugins add @agent-device/macos'),
+        hint: expect.stringContaining('agent-device plugins add @agent-device/macos'),
+      }),
+    };
+    // `--platform macos` and its `apple` desktop spelling both name the leaf.
+    await expect(gateway.discover({ platform: 'macos' }, inventoryScope())).rejects.toMatchObject(
+      absent,
+    );
+    await expect(
+      gateway.discover({ platform: 'apple', target: 'desktop' }, inventoryScope()),
+    ).rejects.toMatchObject(absent);
+    // A macOS command on a device named some other way meets the same outcome at its first leaf call.
+    const mac = await deps.interactorResolution.resolve(macOsDevice, {});
+    await expect(mac.readClipboard!()).rejects.toMatchObject(absent);
+    // The Apple family is bundled: an iOS and a tvOS device resolve with no package installed.
+    for (const device of [
+      iosSimulator,
+      { ...iosSimulator, appleOs: 'tvos', target: 'tv' },
+    ] as const) {
+      await expect(deps.interactorResolution.resolve(device, {})).resolves.toHaveProperty('tap');
+    }
+    expect(deps.pluginInventory.some((entry) => entry.appleOs === 'macos')).toBe(false);
+  });
+});
+
+test('an installed macOS plugin serves the leaf the bundled apple owner delegates to', async () => {
+  const { home, env } = pluginHome();
+  const stateDir = path.join(home, 'state');
+  selectMacOsLeaf(home);
+  await withDaemonComposition(env, stateDir, async (deps, host) => {
+    expect(deps.pluginInventory).toContainEqual(
+      expect.objectContaining({
+        package: macOsPackage,
+        platform: 'apple',
+        appleOs: 'macos',
+        source: 'store',
+        state: 'active',
+      }),
+    );
+    // The leaf holds no family: the bundled owner still discovers, and now lists this Mac.
+    const devices = await deps.requestRouter.deviceInventoryGateways.localOnly.discover(
+      { platform: 'macos' },
+      inventoryScope(),
+    );
+    expect(devices).toEqual([
+      expect.objectContaining({ platform: 'apple', appleOs: 'macos', id: 'host-macos-local' }),
+    ]);
+    // The owner's macOS branch reaches the installed leaf, with the host the leaf was set up with
+    // and the Apple tools of the calling request.
+    const mac = await deps.interactorResolution.resolve(devices[0]!, {});
+    await expect(mac.readClipboard!()).resolves.toBe(`${stateDir}|function|false`);
+    // A selection narrowed to one family names no leaf, so it must not unbind this one: the web
+    // backend composes only the web family, and the owner still reaches the macOS leaf afterwards.
+    await expect(createManagedWebBackend(host).doctor({ stateDir })).rejects.toMatchObject({
+      details: expect.objectContaining({ reason: 'plugin-not-installed', family: 'web' }),
+    });
+    await expect(mac.readClipboard!()).resolves.toBe(`${stateDir}|function|false`);
+  });
+});
+
+test('a macOS plugin that fails to load reports its own error instead of an install hint', async () => {
+  const { home, env } = pluginHome();
+  const stateDir = path.join(home, 'state');
+  selectPlugin(home, macOsPackage, "throw new Error('broken macOS build');", {
+    claims: { apiVersion: 3, platform: 'apple', appleOs: 'macos' },
+  });
+  await withDaemonComposition(env, stateDir, async (deps) => {
+    await expect(
+      deps.requestRouter.deviceInventoryGateways.localOnly.discover(
+        { platform: 'macos' },
+        inventoryScope(),
+      ),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        reason: 'plugin_load_failed',
+        package: macOsPackage,
+        appleOs: 'macos',
+      }),
+    });
+  });
+});

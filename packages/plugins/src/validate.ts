@@ -1,5 +1,6 @@
 import { PLUGIN_REASONS } from './reasons.ts';
 import type { RegisteredPlatformSetup } from './platform.ts';
+import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import { isPlatform, type Platform } from '@agent-device/kernel/device-identity';
 import { NATIVE_REPLAY_BACKEND } from '@agent-device/contracts/replay-execution';
 import type {
@@ -26,13 +27,61 @@ const CLAIM_ID = /^[a-z][a-z0-9-]*$/;
 /** The claim space one contribution kind owns. */
 export type ClaimKind = 'provider' | 'platform' | 'replay-backend' | 'replay-execution';
 
-/** One claim: its kind's space and the id this plugin holds in it. */
-export type PluggedClaim = Readonly<{ kind: ClaimKind; id: string }>;
+/**
+ * One claim: its kind's space, the id this plugin holds in it, and the leaf part where the space has
+ * one. The `platform` space narrows an Apple family claim to one Apple OS, so a managed package can
+ * own macOS desktop mechanics while the bundled Apple owner keeps the family claim. No other space
+ * narrows, and an id without a leaf claims the whole id.
+ */
+export type PluggedClaim = Readonly<{ kind: ClaimKind; id: string; appleOs?: PlatformClaimLeaf }>;
 
 /** How a claim's space names it in the inventory and in a cleanup outcome. */
 export type ClaimIdentity = Readonly<
-  { provider: string } | { backend: string } | { platform: string }
+  | { provider: string; appleOs?: never }
+  | { backend: string; appleOs?: never }
+  | { platform: string; appleOs?: PlatformClaimLeaf }
 >;
+
+/**
+ * The leaf part a `platform` claim key may carry: the one Apple OS the bundled Apple owner
+ * delegates to an installed package. iOS and tvOS stay with the owner, so they are not leaves.
+ */
+export type PlatformClaimLeaf = 'macos';
+type ClaimLeaf = PlatformClaimLeaf;
+
+/**
+ * The leaf a platform claim narrows to. Only `apple` narrows, and only to macOS, so this answers no
+ * leaf for another family or for any other value.
+ */
+function readClaimLeaf(value: unknown, family: string): ClaimLeaf | undefined {
+  return family === 'apple' && value === 'macos' ? value : undefined;
+}
+
+/**
+ * The leaf one claim declares under `field`, refusing a declaration the id cannot narrow instead of
+ * silently widening it to the whole family.
+ */
+function requireClaimLeaf(
+  field: string | undefined,
+  source: Record<string, unknown>,
+  id: string,
+): ClaimLeaf | undefined {
+  return field === undefined ? undefined : requireDeclaredLeaf(source[field], field, id);
+}
+
+/**
+ * The leaf one declared value names, refusing it the same way whichever reader reached it: a leaf
+ * that is present but cannot narrow its id would widen the claim to the whole id, which is a
+ * declaration no claim space admits.
+ */
+function requireDeclaredLeaf(declared: unknown, field: string, id: string): ClaimLeaf | undefined {
+  if (declared === undefined) return undefined;
+  const leaf = readClaimLeaf(declared, id);
+  if (leaf === undefined) {
+    throw invalidPlugin(`A platform claim narrows only apple to macos with ${field}: ${id}`);
+  }
+  return leaf;
+}
 
 /** Deterministic order for reading a package's static claims and for claim spaces. */
 const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
@@ -52,19 +101,25 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
   platform: {
     metadataField: 'platform',
     contributionIdField: 'family',
+    leafField: 'appleOs',
     rejectId: (id) =>
       isPlatform(id)
         ? undefined
         : { reason: PLUGIN_REASONS.invalidPlugin.reason, message: `Unknown platform family: ${id}` },
     duplicateReason: PLUGIN_REASONS.duplicatePlatform.reason,
-    identityFor: (id) => ({ platform: id }),
+    identityFor: (id, appleOs) => ({
+      platform: id,
+      ...(appleOs === undefined ? {} : { appleOs }),
+    }),
     readMetadata: (value) => readableClaimId(value, 'platform'),
+    readLeaf: (declaredLeaf, id) => requireDeclaredLeaf(declaredLeaf, 'appleOs', id),
     readContribution: (value) => {
       const id = readableClaimId(value.family, 'family');
       if (typeof value.setup !== 'function') {
         throw invalidPlugin('A platform contribution must provide setup(host)');
       }
-      return { kind: 'platform', id };
+      const appleOs = requireClaimLeaf(CLAIM_KINDS.platform.leafField, value, id);
+      return { kind: 'platform', id, ...(appleOs === undefined ? {} : { appleOs }) };
     },
     validateSetup: validatePlatformSetup,
   },
@@ -135,7 +190,7 @@ const CLAIM_KINDS: { readonly [Kind in ClaimKind]: ClaimKindSpec<Kind> } = {
  */
 type ClaimSetup = {
   provider: undefined;
-  platform: RegisteredPlatformSetup;
+  platform: RegisteredPlatformSetup | MacOsPlatformLeafRegistration;
   'replay-backend': ReplayBackendSetup;
   'replay-execution': ReplayExecutionSetup;
 };
@@ -145,22 +200,33 @@ type ClaimKindSpec<Kind extends ClaimKind = ClaimKind> = Readonly<{
   metadataField: string;
   /** The contribution field that spells this kind's id. */
   contributionIdField: string;
+  /**
+   * The one field this space's claim reads for its leaf part, in the package manifest and in the
+   * contribution. Only the `platform` space declares it, and only an `apple` id has a leaf to name.
+   */
+  leafField?: string;
   /** Ids no plugin may claim in this space. */
   rejectId?(id: string): { reason: string; message: string } | undefined;
   /** What a claim that loses this space's duplicate race reports. */
   duplicateReason: string;
   /** How this space names the claim in the inventory and in cleanup outcomes. */
-  identityFor(id: string): ClaimIdentity;
+  identityFor(id: string, leaf?: ClaimLeaf): ClaimIdentity;
   /** Reads the id out of the `agent-device` field. */
   readMetadata(value: unknown): string;
+  /**
+   * Reads the leaf part this space's claim declares, refusing a declared leaf the id cannot narrow:
+   * answering no leaf would silently widen the claim to the whole id. Only the `platform` space
+   * declares a leaf, and only an `apple` id has one to name.
+   */
+  readLeaf?(declaredLeaf: unknown, id: string): ClaimLeaf | undefined;
   /** Validates one contribution of this kind and answers its claim. */
   readContribution(value: Record<string, unknown>): PluggedClaim;
   /** Reads the name of a malformed contribution for failure reporting. */
   readNamedId?(value: unknown): string | undefined;
   /** Reads the identity of a refused legacy contribution. */
   readLegacyClaim?(value: Record<string, unknown>): string | undefined;
-  /** Checks what setup returned before the registry keeps the claim. */
-  validateSetup(value: unknown, id: string): ClaimSetup[Kind];
+  /** Checks what setup returned before the registry keeps the claim, for a leaf or a whole id. */
+  validateSetup(value: unknown, id: string, leaf?: ClaimLeaf): ClaimSetup[Kind];
 }>;
 
 /** The claim spaces, in the order a package's static claims are read and compared. */
@@ -201,9 +267,9 @@ function claimOfContribution(value: unknown): PluggedClaim {
   return spec.readContribution(value);
 }
 
-/** One claim as the store's declared claims and the registry compare them: `kind:id`. */
+/** One claim as the store's declared claims and the registry compare them: `kind:id`, leaf last. */
 export function claimKeyOf(claim: PluggedClaim): string {
-  return `${claim.kind}:${claim.id}`;
+  return `${claim.kind}:${claim.id}${claim.appleOs === undefined ? '' : `:${claim.appleOs}`}`;
 }
 
 /** Why a claim cannot be held at all: a reserved id belongs to the host, not to a package. */
@@ -213,7 +279,7 @@ export function reservedClaimError(claim: PluggedClaim): AppError | undefined {
   if (rejection) {
     return new AppError('INVALID_ARGS', rejection.message, {
       reason: rejection.reason,
-      ...spec.identityFor(claim.id),
+      ...spec.identityFor(claim.id, claim.appleOs),
     });
   }
   return undefined;
@@ -226,9 +292,11 @@ function assertClaimAvailable(claim: PluggedClaim): void {
 }
 
 /**
- * The claims a returned value already names, read through the same table without validating it. Only
- * a slot that failed before its claims were readable uses this, so the inventory and the plugin that
- * selected it can still say what it was meant to provide.
+ * The claims a returned value already names, read through the same table without validating the rest
+ * of it. Only a slot that failed before its claims were readable uses this, so the inventory and the
+ * plugin that selected it can still say what it was meant to provide. A leaf an id cannot narrow is
+ * refused here exactly as the validating readers refuse it: answering no leaf would widen the claim to
+ * the whole id, and a widened claim would deny that id to a package that really holds it.
  */
 export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
   if (!isRecord(value)) return [];
@@ -237,18 +305,26 @@ export function readableClaimsOfValue(value: unknown): readonly PluggedClaim[] {
     const readNamedId = spec.readNamedId ?? namedId;
     const declared = readNamedId(value[spec.metadataField]);
     const legacy = spec.readLegacyClaim?.(value);
-    const ids = declared === undefined ? namedContributionIds(value.contributes, kind) : [declared];
-    return (legacy === undefined ? ids : [legacy, ...ids]).map((id) => ({ kind, id }));
+    const named = (id: string): PluggedClaim => {
+      const appleOs = spec.readLeaf?.(value[spec.leafField ?? ''], id);
+      return appleOs === undefined ? { kind, id } : { kind, id, appleOs };
+    };
+    if (declared !== undefined) return [named(declared)];
+    const fromContributions = namedContributionClaims(value.contributes, kind);
+    return legacy === undefined ? fromContributions : [{ kind, id: legacy }, ...fromContributions];
   });
 }
 
-function namedContributionIds(contributions: unknown, kind: ClaimKind): readonly string[] {
+function namedContributionClaims(contributions: unknown, kind: ClaimKind): readonly PluggedClaim[] {
   if (!Array.isArray(contributions)) return [];
-  const { contributionIdField, readNamedId = namedId } = CLAIM_KINDS[kind];
+  const { contributionIdField, leafField, readNamedId = namedId, readLeaf } = CLAIM_KINDS[kind];
   return contributions.flatMap((contribution) => {
     if (!isRecord(contribution) || contribution.kind !== kind) return [];
     const id = readNamedId(contribution[contributionIdField]);
-    return id === undefined ? [] : [id];
+    if (id === undefined) return [];
+    const declaredLeaf = leafField === undefined ? undefined : contribution[leafField];
+    const appleOs = readLeaf?.(declaredLeaf, id);
+    return [appleOs === undefined ? { kind, id } : { kind, id, appleOs }];
   });
 }
 
@@ -261,13 +337,14 @@ export function duplicateClaimError(claim: PluggedClaim): AppError {
   const spec = CLAIM_KINDS[claim.kind];
   return new AppError('INVALID_ARGS', `Duplicate ${claim.kind} claim: ${claim.id}`, {
     reason: spec.duplicateReason,
-    ...spec.identityFor(claim.id),
+    ...spec.identityFor(claim.id, claim.appleOs),
   });
 }
 
-/** How a claim's space names it: `provider` or `backend`. */
+/** How a claim's space names it: `provider`, `backend`, or `platform` with its leaf. */
 export function identityOfClaim(claim: PluggedClaim): ClaimIdentity {
-  return CLAIM_KINDS[claim.kind].identityFor(claim.id);
+  const spec = CLAIM_KINDS[claim.kind];
+  return spec.identityFor(claim.id, claim.appleOs);
 }
 
 /** Checks a setup result against the kind that asked for it. */
@@ -275,7 +352,7 @@ export function validateClaimSetup<Kind extends ClaimKind>(
   claim: PluggedClaim & { kind: Kind },
   value: unknown,
 ): ClaimSetup[Kind] {
-  return CLAIM_KINDS[claim.kind].validateSetup(value, claim.id);
+  return CLAIM_KINDS[claim.kind].validateSetup(value, claim.id, claim.appleOs);
 }
 
 /**
@@ -293,15 +370,41 @@ export function readPluginPackageClaims(field: unknown): readonly PluggedClaim[]
     const declared = field[spec.metadataField];
     if (declared === undefined) continue;
     const id = spec.readMetadata(declared);
-    assertClaimAvailable({ kind, id });
-    claims.push({ kind, id });
+    const appleOs = requireClaimLeaf(spec.leafField, field, id);
+    const claim: PluggedClaim = appleOs === undefined ? { kind, id } : { kind, id, appleOs };
+    assertClaimAvailable(claim);
+    claims.push(claim);
   }
   return claims;
 }
 
-function validatePlatformSetup(value: unknown, family: string): RegisteredPlatformSetup {
+function validatePlatformSetup(
+  value: unknown,
+  family: string,
+  leaf?: ClaimLeaf,
+): RegisteredPlatformSetup | MacOsPlatformLeafRegistration {
+  if (leaf !== undefined) {
+    assertPlatformLeafSetup(value, family, leaf);
+    return value;
+  }
   assertPlatformSetup(value, family);
   return value;
+}
+
+/** A leaf registers no family modules: the family's owner calls the operations it binds. */
+function assertPlatformLeafSetup(
+  value: unknown,
+  family: string,
+  leaf: ClaimLeaf,
+): asserts value is MacOsPlatformLeafRegistration {
+  if (
+    !isRecord(value) ||
+    value.family !== family ||
+    value.appleOs !== leaf ||
+    typeof value.bind !== 'function'
+  ) {
+    throw invalidPlugin(`Platform leaf setup must supply bind(tools): ${family}:${leaf}`);
+  }
 }
 
 function assertPlatformSetup(

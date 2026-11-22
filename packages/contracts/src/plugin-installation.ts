@@ -124,6 +124,16 @@ export function getOptionalPlatformPluginDeclaration(
     : undefined;
 }
 
+/**
+ * The vetted declaration for the macOS leaf of the Apple family. macOS is not a family, so it has no
+ * row in the family catalog: the bundled Apple owner delegates its macOS branches to this package.
+ */
+export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
+  package: '@agent-device/macos',
+  label: 'macOS desktop',
+  nightlyTag: 'nightly-0.22',
+} as const satisfies PluginReleaseDeclaration & Readonly<{ label: string }>);
+
 /** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
 export const PLUGIN_INSTALLATION_REASONS = {
   // A command requires a plugin that is absent.
@@ -148,6 +158,26 @@ export function missingOptionalPlatformError(family: Platform, coreVersion: stri
     {
       reason: PLUGIN_INSTALLATION_REASONS.notInstalled.reason,
       family,
+      package: declaration.package,
+      ...pluginInstallationHint(declaration, coreVersion),
+    },
+  );
+}
+
+/**
+ * The typed outcome for a macOS request the composition has no leaf for: `plugin-not-installed` with
+ * the package that provides macOS desktop automation and its installation command. iOS and tvOS
+ * requests never reach it, because the bundled Apple owner serves them.
+ */
+export function missingMacOsPlatformError(coreVersion: string): AppError {
+  const declaration = MACOS_PLATFORM_PLUGIN_DECLARATION;
+  return new AppError(
+    'UNSUPPORTED_PLATFORM',
+    `${declaration.label} automation requires the ${declaration.package} plugin.`,
+    {
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled,
+      family: 'apple',
+      appleOs: 'macos',
       package: declaration.package,
       ...pluginInstallationHint(declaration, coreVersion),
     },

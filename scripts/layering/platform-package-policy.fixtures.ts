@@ -32,7 +32,27 @@ function managedPackageName(family: string): string {
   return `@agent-device/${family}`;
 }
 
-export function declarations(): PlatformPackageDeclaration[] {
+/** The managed macOS leaf package: it holds a leaf of the bundled `apple` family, not a family. */
+export function macOsLeafDeclaration(): PlatformPackageDeclaration {
+  return {
+    dir: 'packages/platform-macos',
+    family: 'macos',
+    name: '@agent-device/macos',
+    managedClaim: { platform: 'apple', appleOs: 'macos', apiVersion: 3 },
+    publishedSubpaths: ['./agent-device'],
+    private: true,
+    exportedSubpaths: ['@agent-device/macos/agent-device'],
+  };
+}
+
+/** Every platform package declaration, or only the family packages for a test that edits them by index. */
+export function declarations(scope: 'all' | 'families' = 'all'): PlatformPackageDeclaration[] {
+  return scope === 'families'
+    ? familyDeclarations()
+    : [...familyDeclarations(), macOsLeafDeclaration()];
+}
+
+function familyDeclarations(): PlatformPackageDeclaration[] {
   return CANONICAL_PLATFORM_FAMILIES.map((family) => ({
     dir: `packages/platform-${family}`,
     family,
@@ -53,7 +73,8 @@ export function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/debug-symbols',
             '@agent-device/platform-apple/doctor',
             '@agent-device/platform-apple/install-artifact',
-            '@agent-device/platform-apple/macos',
+            '@agent-device/platform-apple/macos-desktop',
+            '@agent-device/platform-apple/macos-leaf',
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner/operations',

@@ -50,8 +50,8 @@ export async function loadMacOsSurfaceSnapshot(
   if (!surface) {
     throw new TypeError('Apple surface capture requires a helper-routed macOS surface');
   }
-  const { captureMacOsSurfaceSnapshot } = await import('@agent-device/platform-apple/macos');
-  return await captureMacOsSurfaceSnapshot({ ...options, surface }, signal, env);
+  const { macOsDesktop } = await import('@agent-device/platform-apple/macos-desktop');
+  return await (await macOsDesktop()).captureSurfaceSnapshot({ ...options, surface }, signal, env);
 }
 
 export function createPlatformRuntimeHost(options: {

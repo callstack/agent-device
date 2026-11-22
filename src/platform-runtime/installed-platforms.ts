@@ -5,7 +5,11 @@ import { getOptionalPlatformPluginDeclaration } from '@agent-device/contracts/pl
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { PROVIDER_PLUGIN_POLICY } from '../provider-plugin-policy.ts';
-import { builtinPlatformCandidates, composePlatformPlugins } from './platform-plugins.ts';
+import {
+  bindPlatformLeaves,
+  builtinPlatformCandidates,
+  composePlatformPlugins,
+} from './platform-plugins.ts';
 import { createPlatformPluginHost } from './plugin-host.ts';
 
 export type InstalledPlatforms = Readonly<{
@@ -42,7 +46,8 @@ export async function startInstalledPlatforms(
     (candidate) =>
       packages.has(candidate.package) ||
       candidate.declaredClaims?.some(
-        ({ kind, id }) => kind === 'platform' && (family === undefined || id === family),
+        ({ kind, id, appleOs }) =>
+          kind === 'platform' && (family === undefined || (id === family && appleOs === undefined)),
       ),
   );
   const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
@@ -61,12 +66,17 @@ export async function startInstalledPlatforms(
     'platforms',
   );
   try {
+    const platforms = composePlatformPlugins(
+      registry.platforms,
+      registry.inventory,
+      assertSelectionCurrent,
+      registry.platformLeaves,
+    );
+    // Without `family` this is the whole selection of a process that runs outside the daemon, so
+    // its leaves are the owners' leaves. A selection narrowed to one family names no leaf.
+    if (family === undefined) bindPlatformLeaves(platforms);
     return Object.freeze({
-      platforms: composePlatformPlugins(
-        registry.platforms,
-        registry.inventory,
-        assertSelectionCurrent,
-      ),
+      platforms,
       close: async () => {
         await registry.close();
       },

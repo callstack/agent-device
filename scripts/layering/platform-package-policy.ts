@@ -47,7 +47,7 @@ export type PlatformPackageDeclaration = {
   family: string;
   name: string;
   private: boolean;
-  managedClaim?: { platform?: unknown; apiVersion?: unknown };
+  managedClaim?: { platform?: unknown; apiVersion?: unknown; appleOs?: unknown };
   publishedSubpaths?: readonly string[];
   exportedSubpaths: readonly string[];
 };
@@ -104,7 +104,8 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/debug-symbols',
     '@agent-device/platform-apple/doctor',
     '@agent-device/platform-apple/install-artifact',
-    '@agent-device/platform-apple/macos',
+    '@agent-device/platform-apple/macos-desktop',
+    '@agent-device/platform-apple/macos-leaf',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner-owner',
@@ -125,6 +126,30 @@ const MANAGED_PLATFORMS: Readonly<Partial<Record<PlatformFamily, string>>> = {
   harmonyos: '@agent-device/harmonyos',
   linux: '@agent-device/linux',
 };
+
+/**
+ * The managed packages that hold a leaf of a bundled family instead of a family (#4675). macOS
+ * desktop automation is the one leaf: the bundled Apple owner keeps the `apple` claim, and this
+ * package holds `{ platform: 'apple', appleOs: 'macos' }`. A leaf package is keyed by its
+ * `packages/platform-<leaf>` directory and obeys every rule a managed family package obeys: one
+ * `./agent-device` entry, no sibling platform import, no host-kit export that reaches the exec or
+ * diagnostics roots, and a metadata-eager façade.
+ */
+export const MANAGED_PLATFORM_LEAVES: Readonly<
+  Record<string, Readonly<{ name: string; family: PlatformFamily; appleOs: string }>>
+> = {
+  macos: { name: '@agent-device/macos', family: 'apple', appleOs: 'macos' },
+};
+
+/** The managed package a `packages/platform-<owner>` directory holds, family or leaf. */
+function managedPackageName(owner: string): string | undefined {
+  return MANAGED_PLATFORMS[owner as PlatformFamily] ?? MANAGED_PLATFORM_LEAVES[owner]?.name;
+}
+
+const MANAGED_PACKAGE_NAMES: readonly string[] = [
+  ...Object.values(MANAGED_PLATFORMS),
+  ...Object.values(MANAGED_PLATFORM_LEAVES).map((leaf) => leaf.name),
+];
 
 /**
  * The host-kit surfaces a managed platform package may not reach at runtime. Which exported names of a
@@ -301,11 +326,14 @@ function isTestKitTestImport(file: string, specifier: string): boolean {
 function managedPlatformDeclarationFailures(
   declaration: PlatformPackageDeclaration,
   expectedName: string,
+  // What the package's claim must name: its own family, or the family and leaf it narrows.
+  claim: Readonly<{ platform: string; appleOs?: string }> = { platform: declaration.family },
 ): LayeringViolation[] {
   const file = `${declaration.dir}/package.json`;
   if (
     declaration.name !== expectedName ||
-    declaration.managedClaim?.platform !== declaration.family ||
+    declaration.managedClaim?.platform !== claim.platform ||
+    declaration.managedClaim?.appleOs !== claim.appleOs ||
     declaration.managedClaim?.apiVersion !== 3 ||
     declaration.exportedSubpaths.length !== 1 ||
     declaration.exportedSubpaths[0] !== `${expectedName}/agent-device` ||
@@ -316,7 +344,7 @@ function managedPlatformDeclarationFailures(
       violation(
         file,
         1,
-        `Managed platform must declare its family and export only ${expectedName}/agent-device`,
+        `Managed platform must declare its ${claim.appleOs === undefined ? 'family' : 'family leaf'} and export only ${expectedName}/agent-device`,
       ),
     ];
   }
@@ -377,9 +405,23 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
       );
     }
   }
+  for (const [leaf, { name, family, appleOs }] of Object.entries(MANAGED_PLATFORM_LEAVES)) {
+    const expectedDir = `packages/platform-${leaf}`;
+    const declaration = packages.find((pkg) => pkg.dir === expectedDir);
+    if (!declaration) {
+      violations.push(
+        violation(expectedDir, 1, `missing managed platform leaf package ${expectedDir}`),
+      );
+      continue;
+    }
+    violations.push(
+      ...managedPlatformDeclarationFailures(declaration, name, { platform: family, appleOs }),
+    );
+  }
   for (const declaration of packages) {
     if (!declaration.dir.startsWith('packages/platform-')) continue;
     const family = declaration.dir.slice('packages/platform-'.length);
+    if (Object.hasOwn(MANAGED_PLATFORM_LEAVES, family)) continue;
     if (!(CANONICAL_PLATFORM_FAMILIES as readonly string[]).includes(family)) {
       violations.push(
         violation(declaration.dir, 1, `${declaration.dir} is not a canonical platform family`),
@@ -425,7 +467,7 @@ function checkSource(
       violations.push(...appleRunnerPackageSiteViolations(file, site));
     }
     violations.push(...appleRunnerEntryImporterViolations(file, site));
-    const managedImport = Object.values(MANAGED_PLATFORMS).some(
+    const managedImport = MANAGED_PACKAGE_NAMES.some(
       (name) => site.spec === name || site.spec.startsWith(name + '/'),
     );
     if (managedImport && isProductionSourceFile(file)) {
@@ -479,7 +521,7 @@ function checkSource(
       );
     }
     if (!ownerFamily) continue;
-    const managedName = MANAGED_PLATFORMS[ownerFamily as PlatformFamily];
+    const managedName = managedPackageName(ownerFamily);
     if (managedName && isProductionSourceFile(file)) {
       violations.push(...managedHostKitScopeViolations(file, site, managedName, hostKitReach));
     }
@@ -514,9 +556,7 @@ function checkSource(
       );
     }
     const importsPluginTypes =
-      MANAGED_PLATFORMS[ownerFamily as PlatformFamily] &&
-      site.typeOnly &&
-      site.spec === 'agent-device/plugins';
+      managedPackageName(ownerFamily) && site.typeOnly && site.spec === 'agent-device/plugins';
     if (
       resolvesOutsidePackage(file, site.spec, ownerFamily) ||
       (/^agent-device(?:\/|$)/.test(site.spec) && !importsPluginTypes)

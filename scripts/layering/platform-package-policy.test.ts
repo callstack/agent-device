@@ -65,7 +65,7 @@ test('untracked production TypeScript makes committed-state evidence fail closed
 });
 
 test('family packages are exact, private, and expose only their root facade', () => {
-  const packages = declarations();
+  const packages = declarations('families');
   packages[0] = { ...packages[0]!, private: false };
   packages[1] = { ...packages[1]!, name: '@agent-device/not-android' };
   packages[2] = { ...packages[2]!, managedClaim: { platform: 'linux', apiVersion: 3 } };
@@ -830,7 +830,7 @@ test('managed platform code enters core only through the registry', () => {
 // diagnostic store never enter it: a runtime import of either runs outside the request the plugin was
 // asked to serve. The plugin binds to the host its `setup` receives instead. No managed package
 // carries an entry: every one of them is on the host.
-for (const family of ['web', 'vega', 'harmonyos'] as const) {
+for (const family of ['web', 'vega', 'harmonyos', 'macos'] as const) {
   test(`a managed platform package may not reach the host-kit command or diagnostics scope (${family})`, () => {
     const file = `packages/platform-${family}/src/new-surface.ts`;
     for (const specifier of [

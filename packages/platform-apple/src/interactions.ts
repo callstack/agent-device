@@ -20,6 +20,9 @@ import {
 import {
   type ScrollDirection,
   assertScrollGestureInput,
+  normalizeAppleScrollResult,
+  normalizeAppleScrollResultWithResolvedFrame,
+  scrollRunnerFields,
 } from '@agent-device/contracts/scroll-gesture';
 import { assertAppleMultiTouchSupported } from './multitouch-support.ts';
 import {
@@ -38,13 +41,11 @@ import {
 } from '@agent-device/apple-runner';
 import {
   materializeIosScrollOptions,
-  normalizeAppleScrollResult,
-  normalizeAppleScrollResultWithResolvedFrame,
-  scrollRunnerFields,
   withAppleScrollKeyboardOcclusion,
   type AppleScrollOptions,
 } from './core/scroll.ts';
-import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
+import { macOsDesktop } from './core/macos-desktop.ts';
+import { macOsRunner } from './core/macos-runner.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 
 type RunAppleRunnerCommand = typeof runAppleRunnerCommand;
@@ -240,10 +241,9 @@ async function runMacOsSurfacePress(
       `${options.button} click is not supported on macOS ${surface} sessions.`,
     );
   }
-  const { runMacOsPressAction } = await import('./os/macos/helper.ts');
   // `count` is independent presses and `doubleTap` raises the click state inside each one,
   // the same reading every other platform gives the two flags.
-  const posted = await runMacOsPressAction(point.x, point.y, {
+  const posted = await macOsDesktop().press(point.x, point.y, {
     bundleId: context.appBundleId,
     surface,
     holdMs: options.holdMs,
@@ -265,6 +265,16 @@ async function runAppleAlternateClick(
   point: { x: number; y: number },
   button: 'secondary' | 'middle',
 ) {
+  if (isMacOs(device)) {
+    // The installed macOS leaf maps the click to the runner's `mouseClick` wire case.
+    return await macOsDesktop().alternateClick(
+      macOsRunner(device),
+      context,
+      runnerOpts,
+      point,
+      button,
+    );
+  }
   return await runAppleRunnerCommand(
     device,
     {
@@ -454,9 +464,8 @@ async function runAppleScroll(
   assertScrollGestureInput(options ?? {});
 
   if (isMacOs(device)) {
-    return await runMacosDesktopScroll(
-      runRunnerCommand,
-      device,
+    return await macOsDesktop().desktopScroll(
+      macOsRunner(device, runRunnerCommand),
       ctx,
       runnerOpts,
       direction,

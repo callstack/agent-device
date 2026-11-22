@@ -247,7 +247,7 @@ agent-device audio probe start 10 1000 --platform android
 
 - `audio probe start [durationSeconds] [bucketMs]` samples live audio while the session keeps running and reports compact `rmsDbfs` and `peakDbfs` buckets. The first timing positional is seconds; the second is milliseconds.
 - On web, the probe samples HTML media elements through Web Audio. URL-backed media may be routed through the probe `AudioContext` while observed.
-- On macOS hosts, the probe samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators. It requires Screen Recording permission and is system-audio evidence, not app-instrumented audio. Physical iOS and Android devices are not supported.
+- On macOS hosts, the probe samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators. The sampler belongs to the `@agent-device/macos` plugin, so every one of those sessions needs it installed — see [Installation](/docs/installation#macos-desktop-notes). Without it, the probe answers `UNSUPPORTED_PLATFORM` with `error.details.reason: plugin-not-installed`, the package name, and the install command. It requires Screen Recording permission and is system-audio evidence, not app-instrumented audio. Physical iOS and Android devices are not supported.
 - Use `status` to poll partial buckets during a 10-20 second observation window, and `stop` to end the probe early.
 
 ### Performance snapshots

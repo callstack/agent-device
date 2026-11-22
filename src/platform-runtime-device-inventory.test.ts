@@ -15,7 +15,13 @@ import { describe, expect, test, vi } from 'vitest';
 import { attachAppleSelectionProbes } from './platform-runtime-device-inventory.ts';
 
 // A core version no release channel pins, so an absent family's install hint names the bare package.
+import { macOsPlatformCompositionFixture } from './platform-runtime-macos-leaf.fixtures.ts';
+
 const CORE_VERSION = '0.0.0-test';
+
+// macOS desktop automation is the managed macOS package's: composing it binds the leaf to the
+// bundled Apple owner, as the daemon's composition does.
+macOsPlatformCompositionFixture();
 
 const simctl = vi.hoisted(() => ({
   listapps: [] as Array<{ deviceId: string; apps: Record<string, unknown> }>,

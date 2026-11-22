@@ -23,7 +23,7 @@ import {
 } from './provider-device-runtimes.ts';
 import { readDaemonProviderCredentials } from './provider-credential-fingerprint.ts';
 import { createPlatformPluginHost } from './platform-runtime/plugin-host.ts';
-import { composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
+import { bindPlatformLeaves, composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 import type { WebPlatformSelection } from '@agent-device/contracts/platform-plugin';
 import { getInteractor } from './core/interactors.ts';
 import {
@@ -136,7 +136,10 @@ export async function composeDaemonRuntimeDeps(
       providerComposition.platforms,
       providerComposition.inventory,
       providerComposition.assertSelectionCurrent,
+      providerComposition.platformLeaves,
     );
+    // This selection is the daemon's one platform selection, so its leaves are the owners' leaves.
+    bindPlatformLeaves(platforms);
     const { web, vega, harmony, linux } = platforms;
     const hostDiagnostics = createHostDiagnostics(host, web, vega, harmony, linux);
     const deviceRuntimeGateway = createPlatformRuntimeGateway({

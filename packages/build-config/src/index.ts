@@ -47,13 +47,14 @@ export function assertManagedPlatformPluginFactory(
   packageJsonUrl: URL,
   factory: () => {
     apiVersion: unknown;
-    contributes: readonly { kind: unknown; family: unknown }[];
+    contributes: readonly { kind: unknown; family: unknown; appleOs?: unknown }[];
   },
   label: string,
 ): void {
   const manifest = JSON.parse(readFileSync(packageJsonUrl, 'utf8'))['agent-device'] as {
     apiVersion: unknown;
     platform: unknown;
+    appleOs?: unknown;
   };
   const { apiVersion, contributes } = factory();
   const [platform] = contributes;
@@ -61,7 +62,9 @@ export function assertManagedPlatformPluginFactory(
     apiVersion !== manifest.apiVersion ||
     contributes.length !== 1 ||
     platform?.kind !== 'platform' ||
-    platform.family !== manifest.platform
+    platform.family !== manifest.platform ||
+    // A leaf claim is part of the pair: a package that narrows must contribute the same leaf.
+    platform.appleOs !== manifest.appleOs
   ) {
     throw new Error(`The managed ${label} factory must match its package claim`);
   }

@@ -27,7 +27,7 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
 import { APP_SETTINGS_REASONS, setIosSetting } from '../app-settings.ts';
-import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
+import { bindMacOsLeafFixture } from '../../__tests__/macos-leaf.fixtures.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
 import {
   AppError,
@@ -209,81 +209,34 @@ test('setIosSetting touchid reports COMMAND_FAILED with the notifyutil attempt w
   );
 });
 
-test('setIosSetting appearance toggle queries current osascript appearance on macOS', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (args[0] !== 'osascript' || args[1] !== '-e') return unexpectedArgs(args);
-      const script = args[2] ?? '';
-      if (script.includes('get dark mode')) return 'true';
-      if (script.includes('set dark mode to false')) return '';
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await setIosSetting(
-        MACOS_TEST_DEVICE,
-        'appearance',
-        'toggle',
-        undefined,
-        undefined,
-        process.env,
-      );
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.some((line) => line.includes('get dark mode')),
-        true,
-        flat.join('; '),
-      );
-      assert.equal(
-        flat.some((line) => line.includes('set dark mode to false')),
-        true,
-        flat.join('; '),
-      );
-    },
-  );
-});
+test('setIosSetting on macOS delegates appearance and permission to the installed leaf', async () => {
+  const granted = {
+    action: 'grant' as const,
+    granted: true,
+    openedSettings: false,
+    requested: true,
+    target: 'accessibility' as const,
+  };
+  const leaf = bindMacOsLeafFixture({
+    setAppearance: async () => {},
+    runPermissionAction: async () => granted,
+  });
 
-test('setIosSetting permission grant accessibility uses macOS helper', async () => {
-  await withMockedMacOsHelper(
-    [
-      '#!/bin/sh',
-      String.raw`printf "%s\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"`,
-      "cat <<'JSON'",
-      '{"ok":true,"data":{"target":"accessibility","action":"grant","granted":true,"requested":true,"openedSettings":false}}',
-      'JSON',
-      '',
-    ].join('\n'),
-    async ({ tmpDir }) => {
-      const argsLogPath = path.join(tmpDir, 'args.log');
-      const previousArgsFile = process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-      process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
-
-      try {
-        const result = await setIosSetting(
-          MACOS_TEST_DEVICE,
-          'permission',
-          'grant',
-          undefined,
-          {
-            permissionTarget: 'accessibility',
-          },
-          process.env,
-        );
-        const logged = await fs.readFile(argsLogPath, 'utf8');
-        assert.equal(logged, 'permission\ngrant\naccessibility\n');
-        assert.deepEqual(result, {
-          action: 'grant',
-          granted: true,
-          openedSettings: false,
-          requested: true,
-          target: 'accessibility',
-        });
-      } finally {
-        if (previousArgsFile === undefined) delete process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-        else process.env.AGENT_DEVICE_TEST_ARGS_FILE = previousArgsFile;
-      }
-    },
-    { tempPrefix: 'agent-device-macos-permission-grant-test-' },
+  await setIosSetting(MACOS_TEST_DEVICE, 'appearance', 'toggle', undefined, undefined, process.env);
+  const result = await setIosSetting(
+    MACOS_TEST_DEVICE,
+    'permission',
+    'grant',
+    undefined,
+    { permissionTarget: 'accessibility' },
+    process.env,
   );
+
+  assert.deepEqual(result, granted);
+  assert.deepEqual(leaf.calls, [
+    { operation: 'setAppearance', args: ['toggle'] },
+    { operation: 'runPermissionAction', args: ['grant', 'accessibility', process.env] },
+  ]);
 });
 
 test('setIosSetting rejects unsupported macOS permission deny action', async () => {

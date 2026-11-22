@@ -48,12 +48,9 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     releaseIosRunnerOnClose: vi.fn(async () => {}),
   };
 });
-vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple/macos')>();
-  return {
-    ...actual,
-    runMacOsAlertAction: vi.fn(async () => {}),
-  };
+vi.mock('@agent-device/platform-apple/macos-desktop', () => {
+  const runAlertAction = vi.fn(async () => ({}));
+  return { macOsDesktop: async () => ({ runAlertAction }) };
 });
 vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
   const actual =
@@ -103,7 +100,7 @@ import {
   stopIosRunnerSession,
   releaseIosRunnerOnClose,
 } from '@agent-device/platform-apple/runner/operations';
-import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
+import { macOsDesktop } from '@agent-device/platform-apple/macos-desktop';
 import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
@@ -122,7 +119,7 @@ export const mockPrewarmAppleRunnerCache = vi.mocked(prewarmAppleRunnerCache);
 const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
 const mockReleaseRunnerOnClose = vi.mocked(releaseIosRunnerOnClose);
-const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
+const mockDismissMacOsAlert = vi.mocked((await macOsDesktop()).runAlertAction);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const mockCleanupRetainedMaterializedPaths = vi.mocked(cleanupRetainedMaterializedPathsForSession);
 const mockRunCmd = vi.mocked(runCmd);

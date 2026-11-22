@@ -9,7 +9,7 @@ The target tables below are generated from the runtime command-admission facts t
 
 Physical iOS devices discovered only through `xctrace` use the XCTest backend rather than CoreDevice: they support open/close, interactions, snapshots, and screenshots, while app inventory, installation, logs, performance sampling, recording, deep links, and launch arguments need CoreDevice.
 
-One capability depends on the agent machine rather than the target: system audio sampling works only when the daemon runs on macOS, which is what this page assumes.
+One capability depends on the agent machine rather than the target: system audio sampling works only when the daemon runs on macOS, which is what this page assumes, and it needs the `@agent-device/macos` plugin on that host — the sampler lives there — for a macOS, iOS simulator, or Android emulator session.
 
 Check the device in front of you rather than trusting a table:
 
@@ -241,7 +241,7 @@ What a **Yes** does not claim:
 
 - **Screen recording**: An iOS physical device records runner screenshots, not a native video stream: no audio, and dropped frames are expected. An Android clip covers 180 seconds, and a longer recording arrives as chunks.
 - **HTTP(S) request inspection**: Local native app sessions inspect the HTTP(S) entries present in the session app log; traffic absent from those logs is not captured. The three WebDriver provider clouds refuse a live dump: their traffic is on the provider side, and TestMu AI can return provider network-log artifacts after the session ends. Managed web sessions inspect the browser request history.
-- **Audio probe**: A simulator, emulator, or macOS desktop session samples host system audio, which works on a macOS agent host and needs Screen Recording permission there.
+- **Audio probe**: A simulator, emulator, or macOS desktop session samples host system audio, which works on a macOS agent host and needs Screen Recording permission there. The sampler is the `@agent-device/macos` plugin, so every one of those sessions needs the plugin installed.
 
 ## System and hardware
 

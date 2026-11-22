@@ -13,7 +13,6 @@
  */
 
 import { UNIT_TEST_CONDITION } from '../package-apple-runner-source.mjs';
-import { DOCUMENTED_PACK_STUBS } from '../size-report-package.mjs';
 
 /** Test-only directory names. Any packed path carrying one of these segments is test code. */
 const TEST_ONLY_DIRECTORY_NAMES = new Set(['UnitTests', 'Tests', '__tests__', 'fixtures', 'mocks']);
@@ -24,10 +23,6 @@ const TEST_ONLY_DIRECTORY_NAMES = new Set(['UnitTests', 'Tests', '__tests__', 'f
  */
 const TEST_ONLY_FILE_PATTERN = /(^|[._])(test|spec)\.[^/]+$/;
 const TEST_ONLY_FILE_SUFFIX = 'ForTesting';
-
-// The allowed pack stubs live in scripts/size-report-package.mjs, the publish check that already
-// requires one per test target; both decisions cannot drift.
-const documentedPackStubPaths = new Set<string>(DOCUMENTED_PACK_STUBS);
 
 /** Packaged-source locations scanned for test code that survived stripping, by path segments. */
 const RUNNER_SOURCE_ROOT = ['dist', 'apple', 'runner'];
@@ -66,16 +61,10 @@ function isTestOnlyFileName(fileName: string): boolean {
   return TEST_ONLY_FILE_PATTERN.test(fileName) || fileName.includes(TEST_ONLY_FILE_SUFFIX);
 }
 
-/**
- * Every packed path that names test code, as `path: reason` lines. The documented PackStubs are
- * the single exemption; they are listed rather than patterned so a new stub has to be declared.
- */
+/** Every packed path that names test code, as `path: reason` lines. Nothing is exempt. */
 export function testOnlyPathFailures(packedPaths: Iterable<string>): string[] {
   const failures: string[] = [];
   for (const packedPath of packedPaths) {
-    if (documentedPackStubPaths.has(packedPath)) {
-      continue;
-    }
     const directory = hasTestOnlyDirectory(packedPath);
     if (directory !== undefined) {
       failures.push(`${packedPath}: test-only directory "${directory}/" ships in the package.`);
