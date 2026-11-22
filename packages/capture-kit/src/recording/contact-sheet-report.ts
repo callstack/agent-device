@@ -7,16 +7,14 @@ import type { ReasonTable } from '@agent-device/kernel/errors';
  * package; a caller branches on a reason instead of reading an error message.
  */
 export const CONTACT_SHEET_REASONS = {
-  /** Frame decoding is Apple AVFoundation tooling, so a host on another platform cannot build one. */
   // The host cannot decode frames at all: frame decoding is Apple AVFoundation tooling.
   unsupportedHost: { reason: 'contact_sheet_unsupported_host' },
   // The MP4 timeline could not be read, so no bounded sample grid can be planned.
   durationUnknown: { reason: 'contact_sheet_duration_unknown' },
-  // The contact sheet could not obtain usable extracted frames: the extractor failed to start or run.
+  // The contact sheet could not obtain usable extracted frames: the extractor failed to start, run, or return frames the sheet can use.
   frameExtractionFailed: { reason: 'contact_sheet_frame_extraction_failed' },
   // Extraction returned nothing usable, so there is no sheet to draw.
   noFrames: { reason: 'contact_sheet_no_frames' },
-  /** The requested sheet would exceed the caller's image pixel budget even at the smallest cell. */
   // The sheet would exceed the caller's image pixel budget even at the smallest cell.
   pixelBudgetExceeded: { reason: 'contact_sheet_pixel_budget_exceeded' },
   // The file is present but is not a container this feature decodes, such as a WebM recording.
