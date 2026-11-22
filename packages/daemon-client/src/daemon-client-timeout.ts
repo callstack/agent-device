@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { DAEMON_TRANSPORT_REASONS } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';

@@ -44,8 +44,9 @@ export type ResolvedLeaseState = {
 // Why the connection a live session already holds refuses the device or platform this request
 // names. `connect --force` replaces the whole connection, the one recovery every row shares.
 export const CONNECTION_SCOPE_REASONS = {
-  // The lease behind the connection was allocated by another device spec; `details.keys` names the keys that disagree.
-  deviceSpec: { reason: 'CONNECTION_DEVICE_CONFLICT' },
+  // The connection is bound to another device, or its lease was allocated by another device spec;
+  // `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch.
+  device: { reason: 'CONNECTION_DEVICE_CONFLICT' },
   // The connection is bound to another platform, or the request names one its lease backend does not rent.
   platform: { reason: 'CONNECTION_PLATFORM_CONFLICT' },
 } as const satisfies ReasonTable<'remote connection'>;
@@ -240,7 +241,7 @@ function assertLeaseSpecMatchesRequest(
       keys: conflicting,
       deviceSpec: bound,
       requestedDeviceSpec: requested,
-      reason: CONNECTION_SCOPE_REASONS.deviceSpec.reason,
+      reason: CONNECTION_SCOPE_REASONS.device.reason,
     },
   );
 }
@@ -263,7 +264,7 @@ function leasedIdentityConflict(
       session: state.session,
       deviceKey: buildConnectionDeviceKey(leased),
       requestedDevice: requested,
-      reason: CONNECTION_SCOPE_REASONS.deviceSpec.reason,
+      reason: CONNECTION_SCOPE_REASONS.device.reason,
     },
   );
 }
@@ -325,7 +326,7 @@ async function assertLeasedDeviceMatchesRequest(
       session: state.session,
       deviceKey: buildConnectionDeviceKey(leased),
       requestedDevice: deviceName,
-      reason: CONNECTION_SCOPE_REASONS.deviceSpec.reason,
+      reason: CONNECTION_SCOPE_REASONS.device.reason,
     },
   );
 }

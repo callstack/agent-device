@@ -12,7 +12,7 @@ import {
 import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { DAEMON_TRANSPORT_REASONS } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { resolveLocalDaemonSettings } from './daemon-client-lifecycle.ts';
 import {
   assertDaemonPolicyMatches,

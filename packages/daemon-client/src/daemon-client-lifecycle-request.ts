@@ -8,7 +8,7 @@ import {
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
-import { DAEMON_TRANSPORT_REASONS } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { isDaemonTransportUnavailableError, sendRequest } from './daemon-client-transport.ts';
 import { daemonBusyError, daemonNotRetirableError } from './daemon-lifecycle-errors.ts';

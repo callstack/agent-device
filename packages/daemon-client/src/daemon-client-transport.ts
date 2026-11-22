@@ -23,8 +23,8 @@ import {
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
-  DAEMON_TRANSPORT_REASONS,
 } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,

@@ -7,7 +7,7 @@ import type http from 'node:http';
 import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
-import { DAEMON_TRANSPORT_REASONS } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,

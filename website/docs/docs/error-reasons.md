@@ -537,7 +537,7 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
-| `CONNECTION_DEVICE_CONFLICT` | The lease behind the connection was allocated by another device spec; `details.keys` names the keys that disagree. |
+| `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
 
 ### Remote transfer

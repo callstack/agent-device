@@ -17,10 +17,8 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import {
-  DAEMON_REQUEST_MAX_BYTES,
-  DAEMON_TRANSPORT_REASONS,
-} from '@agent-device/contracts/daemon-http';
+import { DAEMON_REQUEST_MAX_BYTES } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
