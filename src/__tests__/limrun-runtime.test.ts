@@ -492,6 +492,11 @@ test('Limrun Android syncs direct local artifacts', async () => {
       launchTarget: 'com.example.android',
       appName: 'Example',
     });
+
+    // The public SDK method installs an already-built path through the same Android sync.
+    const pathResult = await runtime.installInstallablePath(allocatedDevice, apkPath);
+    assert.equal(limrunMockState.androidSyncApp.mock.calls.length, 2);
+    assert.equal(pathResult?.packageName, 'com.example.android');
   } finally {
     await runtime.shutdown();
   }
