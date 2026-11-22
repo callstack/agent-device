@@ -85,7 +85,7 @@ export type LeaseAllocateOptions = LeaseOptions &
     /**
      * The id for the new lease (32-128 random hex characters), refused when the daemon already issued it;
      * the client's configured `leaseId` is never sent here. Use the returned lease's `leaseId`: a daemon that predates this field mints its own,
-     * and a run that already holds a lease gets that lease back.
+     * and only a retry that sends the id of a live lease gets that lease back.
      */
     leaseId?: string;
     leaseBackend?: LeaseBackend;
@@ -95,8 +95,10 @@ export type LeaseAllocateOptions = LeaseOptions &
     clientId?: string;
     /**
      * Keeps the lease through session `close`; it then ends only through `leases.release`, expiry, or
-     * daemon shutdown. Asking for it on a lease the same client already holds for the run turns it on
-     * for that lease; the returned lease's `retainOnClose` says whether the daemon honored it.
+     * daemon shutdown. Enabling it on a lease that is already live needs that lease's current
+     * `leaseId` in this call, with the matching scope; an allocate that repeats the labels without
+     * the id is refused and retention stays off. The returned lease's `retainOnClose` says whether
+     * the daemon honored it.
      */
     retainOnClose?: boolean;
   };

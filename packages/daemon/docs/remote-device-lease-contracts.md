@@ -9,7 +9,7 @@ Session `close` then leaves that lease and its provider device in place.
 Only `leases.release`, expiry, a provider-reported instance end, or daemon shutdown ends it.
 The default is unchanged, so the CLI's proxy sharing still frees devices on `close`.
 The allocated lease reports `retainOnClose: true` only if the daemon honored it.
-Only the lease's own client can turn it on for a lease that the run already holds.
+Only a refresh that sends the lease id turns it on for a lease that is already live.
 An unexpired `retainOnClose` lease keeps an idle daemon alive.
 Other leases, including human-control holds, do not.
 If the caller stops heartbeats for a retained lease, that lease expires after its `ttlMs`.
@@ -77,6 +77,7 @@ If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reas
 The daemon never fills a missing lease id from the session.
 Tenant, run id, lease backend, client id, device key, and lease provider are labels.
 The daemon refuses a label that differs from the session lease. A missing label is not a refusal and grants nothing.
+An allocate that repeats the labels of a live lease without that lease's id is refused as contention, with `DEVICE_IN_USE` and reason `DEVICE_LEASE_BUSY`. It returns no lease id. If the live lease has no device key, a label that contradicts it stays a scope mismatch, with `UNAUTHORIZED` and reason `LEASE_SCOPE_MISMATCH`. A repeat of a live lease with a device key is `DEVICE_LEASE_BUSY` whatever its client id says. Only an allocate that sends the id of its live lease gets that lease back.
 A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
 Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.
 
