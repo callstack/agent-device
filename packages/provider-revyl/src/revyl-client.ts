@@ -46,12 +46,11 @@ export type RevylClientOptions = Readonly<{
 }>;
 
 /**
- * Every `details.reason` the Revyl provider publishes, keyed by what the failure means. The status
- * table below and every Revyl refusal site read these rows, so the plugin's wire vocabulary has one
- * owner beside the code that classifies it. `missing_provider_credentials` sits with the credential
- * reader instead, which the plugin's eager entry loads before this module exists.
+ * Request outcomes the Revyl client, deployment and snapshot code all publish. With
+ * `REVYL_HTTP_REASONS` below, these rows are every `details.reason` this client publishes.
+ * `missing_provider_credentials` sits with the credential reader instead, which the plugin's eager
+ * entry loads before this module exists.
  */
-/** Request outcomes the Revyl client, deployment and snapshot code all publish. */
 export const REVYL_OUTCOME_REASONS = {
   // Revyl refused the request or the action it carries.
   refused: { reason: 'provider-refused' },
