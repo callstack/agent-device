@@ -3996,7 +3996,7 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 ```
 
 * `connect` saves the connection and waits to lease a device and prepare Metro until a command needs them. `connect --remote-config <path>` uses a local profile instead of the cloud one.
-* Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`.
+* Cloud auth: `connect` uses your stored CLI session, and starts login in an interactive shell. In CI, use an `adc_live_...` service token. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`. Interactive login prints the code that the browser page must show; approve only when they match. When the cloud rotates the session credential during a refresh, the CLI stores the replacement and any session expiry. One command refreshes a stored session at a time; a command that waits too long fails with a session-file lock timeout, so retry it. A revoked session fails with `cli_session_revoked`, a refresh without a token fails with `cli_session_refresh_unanswered`, and a session directory that cannot be written fails with `cli_session_store_unwritable`.
 * `AGENT_DEVICE_CLOUD_BASE_URL` is the bridge API origin, which is not always the dashboard.
 * On a connection with a lease provider, such as the cloud or `connect proxy`, every command must name the session with `--session`, `AGENT_DEVICE_SESSION`, or config, or it fails with `REMOTE_SESSION_REQUIRED`. On other profiles, commands without a session use the most recent connection, which is safe only for one sequential workflow. To replace a connection, pass `--session <name> --force`.
 * After `connect`, normal commands reuse the connection. `connection status` shows `leaseId=pending` until the first command that needs a device.
@@ -4740,6 +4740,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `native_audit_blocked_by_alert` | Apple’s audit failed while a system alert covered the app; answer the alert, then retry. |
 | `native-audit-invalid-result`   | The runner answered the native audit with a missing or malformed result.                 |
 
+### `auth`
+
+| Reason                           | Meaning                                                                                |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| `cli_session_revoked`            | The cloud answered a refresh by reporting the stored session revoked.                  |
+| `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send.          |
+| `cli_session_store_unwritable`   | The directory holding the session file cannot be written, so its lock cannot be taken. |
+
 ### `back`
 
 | Reason                            | Meaning                                                                                     |
@@ -4766,10 +4774,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ### `connect`
 
-| Reason                 | Meaning                                                                                                   |
-| ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| `plugin-unavailable`   | The provider’s plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
-| `plugin-not-installed` | No plugin declares this provider; `details.installCommand` is the command that adds it.                   |
+| Reason                           | Meaning                                                                                                   |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `cli_session_revoked`            | The cloud answered a refresh by reporting the stored session revoked.                                     |
+| `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send.                             |
+| `cli_session_store_unwritable`   | The directory holding the session file cannot be written, so its lock cannot be taken.                    |
+| `plugin-unavailable`             | The provider’s plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
+| `plugin-not-installed`           | No plugin declares this provider; `details.installCommand` is the command that adds it.                   |
 
 ### `events`
 

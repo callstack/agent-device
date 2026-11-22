@@ -15,6 +15,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `native_audit_blocked_by_alert` | Apple's audit failed while a system alert covered the app; answer the alert, then retry. |
 | `native-audit-invalid-result` | The runner answered the native audit with a missing or malformed result. |
 
+### `auth`
+
+| Reason | Meaning |
+| --- | --- |
+| `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
+| `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
+| `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
+
 ### `back`
 
 | Reason | Meaning |
@@ -43,6 +51,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
+| `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
+| `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
 | `plugin-unavailable` | The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
 | `plugin-not-installed` | No plugin declares this provider; `details.installCommand` is the command that adds it. |
 
