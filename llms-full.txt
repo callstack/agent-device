@@ -2651,6 +2651,16 @@ A successful `click` or `press` means the action was sent to where the command f
 
 After an action that animated the screen, a `click` or `press` on a ref or selector waits for the target to come to rest. If it does not, the command refuses with `target_still_moving` and nothing is pressed. Run `wait <selector>` on the target and retry, or add `--settle`. A refused `@ref` press needs a new `snapshot -i`, because the wait retires the ref. Presses at raw coordinates, and `click @ref` on the web, skip this check.
 
+A raw-coordinate press has no ref to wait on and skips that check. To confirm that a coordinate press changed the screen, capture before and after, then diff:
+
+```bash
+agent-device screenshot --out before.png
+agent-device press 201 500
+agent-device diff screenshot --baseline before.png --out diff.png --json
+```
+
+`diff screenshot` ranks the changed regions and writes the tinted diff PNG. Before you retry a coordinate press that produced no change, see [Screenshots](#media-and-logs).
+
 On iOS, a press on a control nested inside a larger touch control, such as a swipe action beside its row, refuses with `target_not_hittable` when the platform reports the control as not hittable. Reveal the control, for example by swiping its row, and take a new `snapshot -i`.
 
 A comma-separated ref plan, such as `press @e13,@e14`, presses 2 to 16 refs as one command. Run `snapshot -i` first and copy the refs exactly. A refusal after the first press reports `details.dispatchedSteps`; plan again from a new `snapshot -i`. While script recording is armed, a plan needs `--no-record`. See `agent-device help press`.
