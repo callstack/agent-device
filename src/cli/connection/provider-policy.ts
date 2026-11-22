@@ -62,6 +62,21 @@ export async function primeProviderConnection(
   if (unavailable) throw unavailable;
 }
 
+/**
+ * Loads the plugin store and reads a provider's declared capabilities, without refusing a provider
+ * this host has no working plugin for. A command that dispatches to a configured remote daemon uses
+ * it where the daemon's own provider registration answers for the provider, so a plugin this host
+ * lacks is not that command's answer; the plugin is still read when the host has it, so a connection
+ * keeps the capabilities its provider declares.
+ */
+export async function primeProviderConnectionWithoutRefusal(
+  provider: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  if (provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(provider)) return;
+  await primePluginConnections(env);
+}
+
 export function isConnectProviderName(
   value: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
@@ -86,12 +101,27 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
 
 /**
  * Whether a route admits `provider` itself before it authenticates or writes anything. The core ships
- * no Limrun runtime, so only the plugin supplies that provider, and a route that selects it refuses
+ * no Limrun runtime, so only the plugin supplies that provider, and a route that needs it here refuses
  * it early. Every other provider name keeps this release's starting behavior: the connect handler
  * admits a named provider, and the adapter that reads a profile verifies the provider it names.
  */
 export function requiresOwnProviderAdmission(provider: string | undefined): boolean {
   return provider === LIMRUN.provider;
+}
+
+/**
+ * Whether a command on a remote connection needs the provider's plugin in this process. A configured
+ * remote daemon owns its own provider registration and answers for the provider, so a command that
+ * dispatches there needs no local plugin: it authenticates and sends its request. A connection with
+ * no configured daemon is driven from here, where the plugin is the only thing that can drive it.
+ * The daemon client treats any configured base URL as a remote daemon, so the test is its own: a
+ * base URL is set.
+ */
+export function connectionNeedsLocalProviderRuntime(
+  daemonBaseUrl: string | undefined,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  return (daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL) === undefined;
 }
 
 export function unavailableConnectPluginError(

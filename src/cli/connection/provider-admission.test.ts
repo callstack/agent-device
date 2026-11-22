@@ -116,16 +116,130 @@ function storedLimrunConnection() {
   return { root, home, project, stateDir };
 }
 
-test('a device command on a stored Limrun connection refuses the missing plugin before authentication', async () => {
+// The rule: this host needs the plugin only for a connection it drives itself. A connection whose
+// daemon is configured elsewhere is answered by that daemon's own provider registration, so the
+// command authenticates and dispatches.
+test('a device command on a stored Limrun connection with a remote daemon dispatches without the plugin', async () => {
   const { root, home, project, stateDir } = storedLimrunConnection();
+  const token = 'adc_live_remote_daemon_token_1348';
+
+  const result = await runCliCapture(
+    ['snapshot', '--session', 'limrun-a', '--state-dir', stateDir, '--json'],
+    {
+      cwd: project,
+      env: { HOME: home, AGENT_DEVICE_DAEMON_AUTH_TOKEN: token },
+      sendToDaemon: async (req) =>
+        req.command === 'lease_heartbeat' || req.command === 'lease_allocate'
+          ? {
+              ok: true,
+              data: {
+                lease: {
+                  leaseId: 'lease-limrun-a',
+                  tenantId: 'team-a',
+                  runId: 'run-a',
+                  backend: 'android-instance',
+                  leaseProvider: 'limrun',
+                },
+              },
+            }
+          : req.command === 'snapshot'
+            ? { ok: true, data: { nodes: [], truncated: false } }
+            : { ok: true, data: {} },
+    },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.ok(vi.mocked(resolveRemoteAuthForCli).mock.calls.length > 0, 'auth must proceed');
+  assert.deepEqual(
+    result.calls.map((call) => call.command),
+    ['lease_allocate', 'snapshot'],
+  );
+  const snapshot = JSON.parse(result.stdout);
+  assert.equal(snapshot.success, true, result.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('an explicit Limrun remote config with a remote daemon dispatches without the plugin', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = limrunProfile(project);
+  const token = 'adc_live_remote_daemon_token_1348';
+
+  const result = await runCliCapture(
+    [
+      'snapshot',
+      '--session',
+      'ci',
+      '--remote-config',
+      remoteConfig,
+      '--state-dir',
+      stateDir,
+      '--json',
+    ],
+    {
+      cwd: project,
+      env: { HOME: home, AGENT_DEVICE_DAEMON_AUTH_TOKEN: token },
+      sendToDaemon: async (req) =>
+        req.command === 'lease_allocate' || req.command === 'lease_heartbeat'
+          ? {
+              ok: true,
+              data: {
+                lease: {
+                  leaseId: 'lease-ci',
+                  tenantId: 'team-a',
+                  runId: 'run-a',
+                  backend: 'android-instance',
+                  leaseProvider: 'limrun',
+                },
+              },
+            }
+          : { ok: true, data: {} },
+    },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.ok(vi.mocked(resolveRemoteAuthForCli).mock.calls.length > 0, 'auth must proceed');
+  assert.deepEqual(
+    result.calls.map((call) => call.command),
+    ['lease_allocate', 'snapshot'],
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// A connection with no daemon configured elsewhere is driven from this process, and only the plugin
+// can drive it: that route still refuses before it authenticates or dispatches.
+test('a stored Limrun connection with no configured daemon refuses the missing plugin before authentication', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = limrunProfile(project);
+  const profile = JSON.parse(fs.readFileSync(remoteConfig, 'utf8')) as Record<string, unknown>;
+  delete profile.daemonBaseUrl;
+  fs.writeFileSync(remoteConfig, JSON.stringify(profile));
+  const now = new Date().toISOString();
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'limrun-local',
+      remoteConfigPath: remoteConfig,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfig),
+      tenant: 'team-a',
+      runId: 'run-a',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'limrun',
+      platform: 'android',
+      connectedAt: now,
+      updatedAt: now,
+    },
+  });
   const before = snapshotTree(stateDir);
 
   const result = await runCliCapture(
-    ['apps', '--session', 'limrun-a', '--state-dir', stateDir, '--json'],
+    ['snapshot', '--session', 'limrun-local', '--state-dir', stateDir, '--json'],
     { cwd: project, env: { HOME: home } },
   );
 
-  assert.equal(result.code, 1);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
   assertLimrunPluginMissing(result.stdout);
   assert.equal(vi.mocked(resolveRemoteAuthForCli).mock.calls.length, 0);
   assert.equal(result.calls.length, 0);

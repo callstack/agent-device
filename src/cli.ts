@@ -454,12 +454,14 @@ async function resolveRemoteContext(
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
   }
 
-  // A missing provider plugin answers with its install command before any login or auth state.
+  // A missing provider plugin answers with its install command before any login or auth state, unless
+  // this command dispatches to a configured remote daemon, whose own registration supplies it.
   if (ctx.command === 'connect' || ctx.effectiveFlags.remoteConfig) {
     const { admitConnectionProvider } = await import('./cli/connection/provider-admission.ts');
     await admitConnectionProvider({
       ...ctx,
       materializes: shouldMaterializeRemoteConnection(ctx.command),
+      daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
     });
   }
 

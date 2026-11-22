@@ -489,7 +489,7 @@ Providers:
   Limrun (plugin, install separately): agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
   Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
 
-Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
+Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. A plugin is needed where the device is driven: a command that dispatches to a configured remote daemon is answered by that daemon's own plugins. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
 ${providerPluginHelp(coreVersion)}
 
 After direct-provider connect:

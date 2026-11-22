@@ -5,7 +5,9 @@ import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { parseRawArgs } from '../parser/args.ts';
 import {
   connectionLeaseProvider,
+  connectionNeedsLocalProviderRuntime,
   primeProviderConnection,
+  primeProviderConnectionWithoutRefusal,
   requiresOwnProviderAdmission,
 } from './provider-policy.ts';
 
@@ -18,6 +20,8 @@ type AdmissionContext = Readonly<{
   connectionDefaults: { connection?: RemoteConnectionRequestMetadata } | null;
   /** Whether the command materializes its remote connection. Cleanup commands do not. */
   materializes: boolean;
+  /** The daemon this command dispatches to, once the stored connection and profile are merged. */
+  daemonBaseUrl: string | undefined;
 }>;
 
 /**
@@ -25,6 +29,9 @@ type AdmissionContext = Readonly<{
  * authenticates: a provider whose plugin cannot supply it refuses with its install or repair
  * guidance, so no login starts and no auth state is written. Cleanup commands admit no provider, so
  * they work after a plugin is removed. `connect` admits its own provider earlier, where it names it.
+ * A command that dispatches to a configured remote daemon is not driven by this host's plugin: the
+ * daemon's own provider registration answers for the provider there, so this host loads its plugin
+ * when it has one and proceeds when it does not.
  */
 export async function admitConnectionProvider(context: AdmissionContext): Promise<void> {
   if (!context.materializes) return;
@@ -32,9 +39,12 @@ export async function admitConnectionProvider(context: AdmissionContext): Promis
     context.connectionDefaults?.connection,
     context.remoteConfigLeaseProvider,
   );
-  if (requiresOwnProviderAdmission(provider)) {
+  if (!requiresOwnProviderAdmission(provider)) return;
+  if (connectionNeedsLocalProviderRuntime(context.daemonBaseUrl, context.host.env)) {
     await primeProviderConnection(provider, context.host.env);
+    return;
   }
+  await primeProviderConnectionWithoutRefusal(provider, context.host.env);
 }
 
 /**

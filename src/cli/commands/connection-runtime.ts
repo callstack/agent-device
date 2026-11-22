@@ -18,8 +18,10 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   connectionLeaseProvider,
+  connectionNeedsLocalProviderRuntime,
   connectionProviderCapabilities,
   primeProviderConnection,
+  primeProviderConnectionWithoutRefusal,
 } from '../connection/provider-policy.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
@@ -86,10 +88,15 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   }
 
-  await primeProviderConnection(
-    connectionLeaseProvider(existingState, remoteConfig.profile.leaseProvider),
-    host.env,
-  );
+  // A connection driven by a configured remote daemon needs no plugin here: that daemon's own
+  // provider registration supplies the runtime, and this command only leases and dispatches. Its
+  // connection metadata still has to be read and saved, so the profile is loaded either way.
+  const provider = connectionLeaseProvider(existingState, remoteConfig.profile.leaseProvider);
+  if (connectionNeedsLocalProviderRuntime(mergedFlags.daemonBaseUrl, host.env)) {
+    await primeProviderConnection(provider, host.env);
+  } else {
+    await primeProviderConnectionWithoutRefusal(provider, host.env);
+  }
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(
