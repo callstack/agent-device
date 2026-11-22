@@ -233,9 +233,9 @@ test('lease_allocate answers whether its request created the lease or got back a
   const created = await allocate(leaseId);
   assert.ok(created?.ok);
   assert.equal(created.data?.reused, false);
-  // A repeat for the same run binding gets that lease back, and the answer says this request did
-  // not create it — a client that might end the lease must end only the one its request created.
-  const repeated = await allocate();
+  // A repeat that sends that lease id gets it back, and the answer says this request did not create
+  // it — a client that might end the lease must end only the one its request created.
+  const repeated = await allocate(leaseId);
   assert.ok(repeated?.ok);
   assert.equal((repeated.data?.lease as DeviceLease | undefined)?.leaseId, leaseId);
   assert.equal(repeated.data?.reused, true);
@@ -503,8 +503,8 @@ test('a lease allocated without a provider keeps the TTL it was created with', a
   assert.deepEqual(registry.listActiveLeases(), [lease]);
 });
 
-// The registry hands a run's repeat allocation the lease it already holds. A provider refusing the
-// repeat request (a profile field it does not read) must leave that lease and its session alone.
+// A repeat allocation that sends its lease id gets that lease back. A provider refusing the repeat
+// request (a profile field it does not read) must leave that lease and its session alone.
 test("a refused repeat allocation keeps the run's live lease", async () => {
   const registry = new LeaseRegistry();
   const sessionStore = makeSessionStore('agent-device-refused-repeat-');
@@ -528,6 +528,7 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
   const first = await allocate(allocateRequest());
   const lease = (first?.ok ? first.data?.lease : undefined) as DeviceLease;
   const repeat = allocateRequest();
+  repeat.meta = { ...repeat.meta, leaseId: lease.leaseId };
   repeat.flags = { providerOsVersion: '18.0' };
   await assert.rejects(
     allocate(repeat),
@@ -581,7 +582,7 @@ test('a repeat allocation canceled by its requester releases the reused lease', 
   const first = await allocate(allocateRequest());
   const lease = (first?.ok ? first.data?.lease : undefined) as DeviceLease;
   const repeat = allocateRequest();
-  repeat.meta = { ...repeat.meta, requestId };
+  repeat.meta = { ...repeat.meta, requestId, leaseId: lease.leaseId };
   const registration = registerRequestAbort(requestId);
   try {
     await assert.rejects(

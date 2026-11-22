@@ -124,7 +124,7 @@ test('lease handler executes commands owned by the lease route', async () => {
         flags: {
           tenant: 'tenant-a',
           runId: 'run-a',
-          ...(command === INTERNAL_COMMANDS.leaseAllocate ? {} : { leaseId: allocated.leaseId }),
+          leaseId: allocated.leaseId,
         },
         positionals: [],
       },
