@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
 import { selectChecks } from '../check-affected/model.ts';
 import { resolveImportEdges } from '../layering/model.ts';
@@ -277,14 +278,44 @@ test('text output treats empty and nonempty command lists as lower bounds', () =
   }
 });
 
-test('blast radius over the real tree agrees with check:affected and stays under 10s', async () => {
-  const file = 'packages/host-kit/src/internal/exec.ts';
-  const started = Date.now();
-  const radius = await computeBlastRadius(repoRoot, file);
-  const elapsed = Date.now() - started;
+// The budget is in CPU time, not wall clock, because wall clock cannot hold here. A query re-reads
+// and re-parses every production source to rebuild the layering gate's graph, so its wall clock is
+// that work multiplied by whoever else holds a core. `process.cpuUsage` counts this process only, so
+// the git file listing (tens of ms) is excluded; the reads and parses that dominate the call are not.
+// Measured on one 12-core host for `packages/host-kit/src/internal/exec.ts`:
+//
+//   host load ~95   wall  5.2-6.5s   CPU mean 1.53s
+//   host load ~183  wall 14.3-21.6s  CPU mean 1.54s
+//   host load ~262  wall  9.8-12.5s  CPU mean 1.57s
+//
+// The same work each time. Wall clock varied 4x across those rows; CPU time did not move. The old
+// assertion timed wall clock, so it asserted the machine's load — 22.8s on a CI runner (Repo Guards
+// & Compatibility, run 44902304781, which runs three whole-tree parsers as a parallel group behind a
+// Fallow audit) against 2.4-3.6s on that same job's passing runs. 5s of CPU is 3x the worst CPU
+// figure measured here, and a 1s pin fails, so the budget binds without tracking load.
+const CPU_BUDGET_MS = 5_000;
 
-  assert.ok(elapsed < 10_000, `blast radius took ${elapsed}ms`);
-  assert.ok(radius.dependents.direct.length > 0);
+// One query serves both the budget and the check:affected agreement, because each call pays a
+// whole-tree scan.
+test('a blast-radius query over the real tree stays within its CPU budget and agrees with check:affected', async () => {
+  const file = 'packages/host-kit/src/internal/exec.ts';
+  const cpuBefore = process.cpuUsage();
+  const wallBefore = performance.now();
+  const radius = await computeBlastRadius(repoRoot, file);
+  const cpu = process.cpuUsage(cpuBefore);
+  const cpuMs = (cpu.user + cpu.system) / 1_000;
+  const wallMs = performance.now() - wallBefore;
+
+  assert.ok(
+    cpuMs < CPU_BUDGET_MS,
+    `blast radius query burned ${cpuMs.toFixed(0)}ms of CPU (wall ${wallMs.toFixed(0)}ms)`,
+  );
+  // The budget only means something if the timed query did real traversal: this file's value
+  // dependents spread across the tree, so a walk that reached nothing would sail through.
+  assert.ok(
+    radius.dependents.transitive.length > 100,
+    `the query reached ${radius.dependents.transitive.length} transitive dependents`,
+  );
 
   // The gate plan is check:affected's own selection over the dependent set, so it can only ever
   // be a superset of the plan for the file alone — a contradiction would mean an edit selected
