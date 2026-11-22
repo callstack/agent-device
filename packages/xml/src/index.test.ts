@@ -68,6 +68,43 @@ test('parseXmlDocumentSync skips UTF-8 byte order marks', () => {
   assert.equal(nodes[0]?.name, 'root');
 });
 
+test('parseXmlDocumentSync with trimText false keeps the spacing a value is written with', () => {
+  const nodes = parseXmlDocumentSync(
+    [
+      '<dict>',
+      '  ',
+      '<key>  Name  </key>',
+      '<string>  Padded  </string>',
+      '<string>   </string>',
+      '<string></string>',
+      '</dict>',
+    ].join('\n'),
+    { trimText: false },
+  );
+
+  const values = nodes[0]!.children;
+  assert.equal(values[0]?.text, '  Name  ');
+  assert.equal(values[1]?.text, '  Padded  ');
+  assert.equal(values[2]?.text, '   ');
+  assert.equal(values[3]?.text, null);
+});
+
+test('parseXmlDocumentSync with trimText false joins each text segment as written', () => {
+  const nodes = parseXmlDocumentSync('<value>foo<![CDATA[  bar  ]]>baz</value>', {
+    trimText: false,
+  });
+
+  assert.equal(nodes[0]?.text, 'foo  bar  baz');
+});
+
+test('parseXmlDocumentSync with trimText false keeps text a CDATA section alone holds', () => {
+  const nodes = parseXmlDocumentSync(['<value>', '<![CDATA[ spaced ]]>', '</value>'].join('\n'), {
+    trimText: false,
+  });
+
+  assert.equal(nodes[0]?.text, '\n spaced \n');
+});
+
 test('parseXmlDocumentSync rejects mismatched closing tags', () => {
   assert.throws(() => parseXmlDocumentSync('<root><child></root>'), /Expected <\/child>/);
 });

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { build, type PlistValue } from 'plist';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
@@ -24,21 +23,33 @@ beforeEach(async () => {
   vi.mocked(runXcrun).mockClear();
 });
 
-function writePreferences(contents: string | Record<string, PlistValue>): void {
+/** Builds an XML preferences document from entries whose values are already plist XML. */
+function plistEntries(entries: Record<string, string>): string {
+  const body = Object.entries(entries)
+    .map(([key, value]) => `<key>${key}</key>${value}`)
+    .join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>${body}</dict></plist>`;
+}
+
+/** Writes the simulator preferences file from entries whose values are already plist XML. */
+function writePreferences(entries: Record<string, string>): void;
+/** Writes the simulator preferences file verbatim: damaged bytes, or bytes copied from a fixture. */
+function writePreferences(contents: string): void;
+function writePreferences(contents: Record<string, string> | string): void {
   const dir = path.join(setPath, device.id, 'data/Library/Preferences');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, 'com.apple.Accessibility.plist'),
-    typeof contents === 'string' ? contents : build(contents),
+    typeof contents === 'string' ? contents : plistEntries(contents),
   );
 }
 
 const wrote = () => vi.mocked(runXcrun).mock.calls.some(([args]) => args.includes('defaults'));
 
 for (const [label, preferences] of [
-  ['the key is on', { ApplicationAccessibilityEnabled: true }],
-  ['the key is 1', { ApplicationAccessibilityEnabled: 1 }],
-  ['the key is absent', { ReduceMotionEnabled: false }],
+  ['the key is on', { ApplicationAccessibilityEnabled: '<true/>' }],
+  ['the key is 1', { ApplicationAccessibilityEnabled: '<integer>1</integer>' }],
+  ['the key is absent', { ReduceMotionEnabled: '<false/>' }],
 ] as const) {
   test(`skips the guest write when ${label} on this host`, async () => {
     writePreferences(preferences);
@@ -48,8 +59,11 @@ for (const [label, preferences] of [
 }
 
 for (const [label, write] of [
-  ['the key is off', () => writePreferences({ ApplicationAccessibilityEnabled: false })],
-  ['the key is 0', () => writePreferences({ ApplicationAccessibilityEnabled: 0 })],
+  ['the key is off', () => writePreferences({ ApplicationAccessibilityEnabled: '<false/>' })],
+  [
+    'the key is 0',
+    () => writePreferences({ ApplicationAccessibilityEnabled: '<integer>0</integer>' }),
+  ],
   ['the file is malformed', () => writePreferences('bplist00 truncated')],
   ['the file is missing', () => {}],
 ] as const) {
@@ -61,9 +75,9 @@ for (const [label, write] of [
 }
 
 test('reads again on every launch, so a later teardown is seen', async () => {
-  writePreferences({ ApplicationAccessibilityEnabled: true });
+  writePreferences({ ApplicationAccessibilityEnabled: '<true/>' });
   await prepareIosSimulatorAccessibility(device);
-  writePreferences({ ApplicationAccessibilityEnabled: false });
+  writePreferences({ ApplicationAccessibilityEnabled: '<false/>' });
   await prepareIosSimulatorAccessibility(device);
   assert.equal(
     vi.mocked(runXcrun).mock.calls.filter(([args]) => args.includes('defaults')).length,
@@ -88,7 +102,7 @@ for (const [value, expectWrite] of [
 }
 
 test('a scoped (remote) tool provider writes even when this host has an on key', async () => {
-  writePreferences({ ApplicationAccessibilityEnabled: true });
+  writePreferences({ ApplicationAccessibilityEnabled: '<true/>' });
   await withAppleToolProvider({} as Parameters<typeof withAppleToolProvider>[0], () =>
     prepareIosSimulatorAccessibility(device),
   );

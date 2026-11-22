@@ -59,6 +59,10 @@
       "types": "./src/physical-device-facade.ts",
       "default": "./src/physical-device-facade.ts"
     },
+    "./plist": {
+      "types": "./src/plist-facade.ts",
+      "default": "./src/plist-facade.ts"
+    },
     "./snapshot-source": {
       "types": "./src/snapshot-source-facade.ts",
       "default": "./src/snapshot-source-facade.ts"
@@ -93,7 +97,6 @@
     }
   },
   "devDependencies": {
-    "@agent-device/test-kit": "workspace:*",
-    "plist": "5.0.0"
+    "@agent-device/test-kit": "workspace:*"
   }
 }

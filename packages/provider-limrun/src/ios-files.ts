@@ -222,7 +222,7 @@ export async function readLimrunAppInfo(
       timeoutMs,
       signal,
     });
-    return await parsePlist(await fs.readFile(destinationPath, { signal }));
+    return parsePlist(await fs.readFile(destinationPath, { signal }));
   } catch (error) {
     if (error instanceof AppError && error.details?.statusCode === 404) return null;
     throw error;

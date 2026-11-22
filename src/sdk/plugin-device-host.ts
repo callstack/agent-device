@@ -22,6 +22,7 @@ type AndroidAdbInvocation = import('@agent-device/platform-android/mechanics').A
 type AndroidAdbExecutor = Parameters<AndroidMechanics['runAdbShell']>[0];
 type AndroidPerfOperations = Awaited<ReturnType<AndroidMechanics['createAndroidPerfOperations']>>;
 type AppleRunnerOperations = typeof import('@agent-device/platform-apple/runner/operations');
+type ApplePlistModule = typeof import('@agent-device/platform-apple/plist');
 type AppleToolProviderModule = typeof import('@agent-device/platform-apple/tool-provider');
 type HostRetry = typeof import('@agent-device/host-kit/retry');
 
@@ -114,7 +115,7 @@ export type ProviderAppleHost = Readonly<{
     hasScopedProvider: AppleToolProviderModule['hasScopedAppleToolProvider'];
     runXcrun: AppleToolProviderModule['runXcrun'];
     simctlArgsForDevice: typeof import('@agent-device/platform-apple/simctl').buildSimctlArgsForDevice;
-    parsePlist: AppleToolProviderModule['parseApplePlist'];
+    parsePlist: ApplePlistModule['parseApplePlist'];
   }>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 }>;

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>  PaddedKey  </key>
+	<string>  PaddedValue  </string>
+	<key>Blank</key>
+	<string>   </string>
+	<key>Tabbed</key>
+	<string>	x	</string>
+	<key>CdataSplit</key>
+	<string>foo<![CDATA[  bar  ]]>baz</string>
+	<key>CdataSpaced</key>
+	<string>
+<![CDATA[ spaced ]]>
+</string>
+	<key>Entities</key>
+	<string>  &amp;  </string>
+	<key>Multiline</key>
+	<string>line1
+	line2</string>
+	<key>URL</key>
+	<string>https://example.com/a?b=1&amp;c=2</string>
+</dict>
+</plist>
