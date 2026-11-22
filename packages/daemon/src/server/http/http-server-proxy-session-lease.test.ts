@@ -451,6 +451,51 @@ test('unattested HTTP routes by the tenant flag and compares the numeric meta te
   expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
 });
 
+test('session inventory rejects the original malformed tenant after routing by the flag', async () => {
+  if (!world) return;
+  const flags = { tenant: TENANT };
+
+  const refused = await world.send('session_list', [], { tenantId: 5 }, flags);
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+
+  const listed = await world.send('session_list', [], { tenantId: undefined }, flags);
+  expect(listed.result?.ok, JSON.stringify(listed)).toBe(true);
+});
+
+test('a refused standalone lease label does not count as session activity', async () => {
+  if (!world) return;
+  const session = world.sessionStore.get(world.sessionName);
+  expect(session).toBeDefined();
+  const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+
+  expectLeaseFieldRefusal(await world.send('snapshot', [], owner, { runId: null }), 'runId');
+  expect(session?.lastActivityAtMs).toBeUndefined();
+
+  const snapshot = await world.send('snapshot', [], owner);
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+  expect(session?.lastActivityAtMs).toBeGreaterThan(0);
+});
+
+test('a malformed tenant is refused before a fresh open checks device contention', async () => {
+  if (!world) return;
+  const { sessionStore } = world;
+  expect(sessionStore.findByDevice(IOS_SIMULATOR.id)?.address).toBe(world.sessionName);
+  const findHolder = vi.spyOn(sessionStore, 'findByDevice');
+  try {
+    const response = await world.rpc('agent_device.command', {
+      session: 'fresh',
+      command: 'open',
+      positionals: ['com.example.app'],
+      meta: { tenantId: 'not a tenant', sessionExplicit: true },
+      flags: { platform: 'ios', udid: IOS_SIMULATOR.id, waitMs: 100 },
+    });
+    expect(response.error?.data?.code, JSON.stringify(response)).toBe('INVALID_ARGS');
+    expect(findHolder).not.toHaveBeenCalled();
+  } finally {
+    findHolder.mockRestore();
+  }
+});
+
 test('malformed tenant polling leaves an unleased session and its claim eligible for idle expiry', async () => {
   if (!world) return;
   const { sessionStore, leaseRegistry } = world;

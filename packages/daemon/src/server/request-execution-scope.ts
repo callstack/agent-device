@@ -239,7 +239,8 @@ export async function createRequestExecutionScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
+  const unscopedReq = restrictRemoteHostInputs(params.req);
+  const tenantScopedReq = scopeRequestSession(unscopedReq);
   // A nested batch or replay step arrives with the identity of the request that spawned it, and its
   // own name is already the store key.
   const webSession =
@@ -311,6 +312,7 @@ export async function createRequestExecutionScope(params: {
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     const preflightSession = sessionStore.get(sessionName);
+    assertRequestTenantAdmission(unscopedReq, preflightSession);
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
     assertRequestLeaseAdmissionPreflight(scopedReq, preflightSession);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
@@ -399,7 +401,7 @@ export async function createRequestExecutionScope(params: {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         const existingRef = sessionStore.lookup(sessionName);
         const session = existingRef?.session;
-        assertRequestTenantAdmission(scopedReq, session);
+        assertRequestTenantAdmission(unscopedReq, session);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
         let admissionCompleted = false;
@@ -498,8 +500,8 @@ export async function createRequestExecutionScope(params: {
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
         } finally {
-          // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED
-          // to this session, stamped here under the session's own execution lock. The lock is what
+          // The #2833 inactivity deadline is measured from the end of the last admitted command
+          // that attached to this session, stamped here under the session's execution lock. The lock
           // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a
           // session mid-command, and one command slower than the window keeps the session it is
           // working on — the same guarantee admitted work gives a remote lease (ADR 0007).
@@ -511,7 +513,7 @@ export async function createRequestExecutionScope(params: {
           // hung up preserves nothing, exactly as a canceled request renews no lease: an agent that
           // timed out is the behavior this feature exists to catch.
           if (
-            (!boundedStep || admissionCompleted) &&
+            admissionCompleted &&
             attachesToSession &&
             !isRequestCanceled(scopedReq.meta?.requestId)
           ) {

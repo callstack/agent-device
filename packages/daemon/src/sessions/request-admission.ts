@@ -77,10 +77,13 @@ function requireWellFormedTenant(
   return tenant;
 }
 
-/** A malformed tenant on a leased session gets the typed lease refusal. */
-export function assertRequestTenantAdmission(req: DaemonRequest, session?: SessionState): void {
-  requireWellFormedTenant(req.meta?.tenantId ?? req.flags?.tenant, () => {
-    assertRequestHoldsSessionLease(req, session);
+/** Check the original tenant selection after routing resolves a target for the lease comparison. */
+export function assertRequestTenantAdmission(
+  unscopedReq: DaemonRequest,
+  session?: SessionState,
+): void {
+  requireWellFormedTenant(unscopedReq.meta?.tenantId ?? unscopedReq.flags?.tenant, () => {
+    assertRequestHoldsSessionLease(unscopedReq, session);
   });
 }
 
