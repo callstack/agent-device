@@ -225,19 +225,26 @@ type RemoteConnectionDefaults = {
 const REMOTE_CONNECTION_STATE_REASONS = {
   // A saved connection file cannot be used for the session a command named: it names another session,
   // a record from an older build cannot move to its session file because that file already exists, or
-  // the active-session pointer path holds a record whose owner is unproven. No file was replaced or
-  // removed.
+  // the active-session pointer path holds a record whose owner is unproven. The files that the refusal
+  // names are kept: the refused file, and the occupied session file it could not move to.
   sessionMismatch: { reason: 'connection_session_mismatch' },
   // The session's own saved connection file, or the active-session pointer, could not be read or
   // parsed, so no session is known to own it. It was neither replaced nor removed.
   ownerUnknown: { reason: 'connection_record_owner_unknown' },
 } as const satisfies ReasonTable<'remote connections'>;
 
+/**
+ * The saved connection `session` owns, for a command that saves or removes it next.
+ *
+ * Records an older build wrote for the session move to its own path first, and a record that names
+ * the session but fails validation is removed. A command that only reports the connection uses
+ * {@link observeRemoteConnectionState}, which changes no file.
+ */
 export function readRemoteConnectionState(options: {
   stateDir: string;
   session: string;
 }): RemoteConnectionState | null {
-  const statePath = remoteConnectionStatePath({ ...options, readOnlyFallback: true });
+  const statePath = remoteConnectionStatePath(options);
   const file = readRecordFile(statePath);
   if (file.kind === 'absent') return null;
   if (file.kind === 'unknown')
@@ -255,6 +262,61 @@ export function readRemoteConnectionState(options: {
     return null;
   }
   return file.record;
+}
+
+/**
+ * The saved connection `session` owns, read without a change to any file.
+ *
+ * A record an older build wrote for exactly this session is reported where it is. A record that names
+ * the session but fails validation is reported as no connection and is kept.
+ */
+export function observeRemoteConnectionState(options: {
+  stateDir: string;
+  session: string;
+}): RemoteConnectionState | null {
+  const recordsDir = path.join(options.stateDir, 'remote-connections');
+  const canonical = canonicalRemoteConnectionStatePath(recordsDir, options.session);
+  const file = readRecordFile(canonical);
+  if (file.kind === 'unknown') {
+    throw recordOwnerUnknownError(options.session, canonical, file.cause);
+  }
+  // A record that another session's older build left at this path moves away on the next save.
+  if (file.kind === 'owned' && !isMovableLegacyRecord(recordsDir, canonical, file)) {
+    if (file.session !== options.session) {
+      throw sessionMismatchError(
+        options.session,
+        canonical,
+        'The saved connection belongs to a different session.',
+      );
+    }
+    return observedRemoteConnectionState(options.session, canonical, file.record);
+  }
+  for (const source of remoteConnectionStateSources(recordsDir, options.session)) {
+    if (source === canonical) continue;
+    const legacy = readRecordFile(source);
+    if (
+      legacy.kind === 'owned' &&
+      legacy.session === options.session &&
+      isMovableLegacyRecord(recordsDir, source, legacy)
+    ) {
+      return observedRemoteConnectionState(options.session, source, legacy.record);
+    }
+  }
+  return null;
+}
+
+function observedRemoteConnectionState(
+  session: string,
+  recordPath: string,
+  record: Record<string, unknown>,
+): RemoteConnectionState | null {
+  if (isRemoteConnectionState(record)) return record;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'remote_connection_state_invalid',
+    data: { session, recordPath },
+  });
+  return null;
 }
 
 function sessionMismatchError(session: string, recordPath: string, message: string): AppError {
@@ -572,34 +634,21 @@ const PLAIN_SESSION_NAME = /^[a-z0-9_-][a-z0-9._-]*$/;
  * Before resolving, records that older builds wrote under sanitized names move once to their owners'
  * own paths. See {@link migrateLegacyRemoteConnectionState}.
  */
-function remoteConnectionStatePath(options: {
-  stateDir: string;
-  session: string;
-  /**
-   * A read may use a record an older build wrote for this exact session in place when the directory
-   * refuses the move. A save or removal must move it first.
-   */
-  readOnlyFallback?: boolean;
-}): string {
+function remoteConnectionStatePath(options: { stateDir: string; session: string }): string {
   const recordsDir = path.join(options.stateDir, 'remote-connections');
-  const canonical = canonicalRemoteConnectionStatePath(recordsDir, options.session);
-  const sources = new Set([canonical]);
-  const legacy = path.join(recordsDir, legacyRemoteConnectionFileName(options.session));
-  sources.add(legacy);
-  const lowered = options.session.toLowerCase();
-  if (PLAIN_SESSION_NAME.test(lowered)) sources.add(path.join(recordsDir, `${lowered}.json`));
-  for (const source of sources) {
-    try {
-      migrateLegacyRemoteConnectionState({ recordsDir, source, session: options.session });
-    } catch (error) {
-      if (!options.readOnlyFallback || !isWriteRefusedError(error)) throw error;
-      if (fs.existsSync(canonical)) throw error;
-      const file = readRecordFile(source);
-      if (file.kind === 'owned' && file.session === options.session) return source;
-      throw error;
-    }
+  for (const source of remoteConnectionStateSources(recordsDir, options.session)) {
+    migrateLegacyRemoteConnectionState({ recordsDir, source, session: options.session });
   }
-  return canonical;
+  return canonicalRemoteConnectionStatePath(recordsDir, options.session);
+}
+
+/** The paths a record `session` owns can be at: its own path first, then the names older builds wrote. */
+function remoteConnectionStateSources(recordsDir: string, session: string): Set<string> {
+  const sources = new Set([canonicalRemoteConnectionStatePath(recordsDir, session)]);
+  sources.add(path.join(recordsDir, legacyRemoteConnectionFileName(session)));
+  const lowered = session.toLowerCase();
+  if (PLAIN_SESSION_NAME.test(lowered)) sources.add(path.join(recordsDir, `${lowered}.json`));
+  return sources;
 }
 
 function canonicalRemoteConnectionStatePath(recordsDir: string, session: string): string {
@@ -671,12 +720,10 @@ function migrateLegacyRemoteConnectionState(options: {
   session: string;
 }): void {
   const file = readRecordFile(options.source);
-  if (file.kind !== 'owned' || isActiveSessionPointer(file.record)) return;
+  if (file.kind !== 'owned' || !isMovableLegacyRecord(options.recordsDir, options.source, file)) {
+    return;
+  }
   const target = canonicalRemoteConnectionStatePath(options.recordsDir, file.session);
-  const sourceName = path.basename(options.source).toLowerCase();
-  // Canonical names hold no upper-case letters, so a name that folds onto the target IS the target.
-  if (path.basename(target) === sourceName) return;
-  if (legacyRemoteConnectionFileName(file.session).toLowerCase() !== sourceName) return;
   try {
     fs.linkSync(options.source, target);
   } catch (error) {
@@ -692,9 +739,18 @@ function migrateLegacyRemoteConnectionState(options: {
   fs.rmSync(options.source, { force: true });
 }
 
-function isWriteRefusedError(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException | undefined)?.code;
-  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+/**
+ * Whether `file` is a record an older build left at `source` for the session it names: `source` is a
+ * name an older build wrote for that session, compared case-insensitively, and not its own path.
+ */
+function isMovableLegacyRecord(recordsDir: string, source: string, file: RecordFile): boolean {
+  if (file.kind !== 'owned' || isActiveSessionPointer(file.record)) return false;
+  const sourceName = path.basename(source).toLowerCase();
+  // Canonical names hold no upper-case letters, so a name that folds onto the target IS the target.
+  if (path.basename(canonicalRemoteConnectionStatePath(recordsDir, file.session)) === sourceName) {
+    return false;
+  }
+  return legacyRemoteConnectionFileName(file.session).toLowerCase() === sourceName;
 }
 
 function isSameFile(left: string, right: string): boolean {
@@ -733,23 +789,28 @@ export function readActiveConnectionState(options: {
   stateDir: string;
 }): RemoteConnectionState | null {
   const session = readActiveConnectionSession(options.stateDir);
-  return session
-    ? readRemoteConnectionState({
-        stateDir: options.stateDir,
-        session,
-      })
-    : null;
+  return session === undefined
+    ? null
+    : readRemoteConnectionState({ stateDir: options.stateDir, session });
 }
 
+/** The connection the active-session pointer names, read without a change to any file. */
+export function observeActiveConnectionState(options: {
+  stateDir: string;
+}): RemoteConnectionState | null {
+  const session = readActiveConnectionSession(options.stateDir);
+  return session === undefined
+    ? null
+    : observeRemoteConnectionState({ stateDir: options.stateDir, session });
+}
+
+/**
+ * The session the active-session pointer names. A file at the pointer path that is not a pointer, such
+ * as a full record an older build wrote there, names no session.
+ */
 function readActiveConnectionSession(stateDir: string): string | undefined {
-  const activePath = activeConnectionStatePath(stateDir);
-  if (!fs.existsSync(activePath)) return undefined;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(activePath, 'utf8')) as Record<string, unknown>;
-    return typeof parsed.session === 'string' ? parsed.session : undefined;
-  } catch {
-    return undefined;
-  }
+  const file = readRecordFile(activeConnectionStatePath(stateDir));
+  return file.kind === 'owned' && isActiveSessionPointer(file.record) ? file.session : undefined;
 }
 
 export function fingerprint(value: string | undefined): string | undefined {

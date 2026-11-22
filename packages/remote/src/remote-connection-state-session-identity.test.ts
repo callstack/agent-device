@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -6,6 +6,8 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
+  observeActiveConnectionState,
+  observeRemoteConnectionState,
   readRemoteConnectionState,
   removeRemoteConnectionState,
   writeRemoteConnectionState,
@@ -293,7 +295,7 @@ test('an invalid record of the U+D800 session survives a U+D801 status read', ()
     updatedAt: null,
   });
 
-  assert.equal(readRemoteConnectionState({ stateDir, session: '\uD801' }), null);
+  assert.equal(observeRemoteConnectionState({ stateDir, session: '\uD801' }), null);
   assert.equal(fs.existsSync(recordPath), true);
 });
 
@@ -383,18 +385,93 @@ test('an empty session finds the record an older build saved for it as default.j
 });
 
 test.skipIf(runsAsRoot)(
-  'a read-only records directory still reports an older record of the exact session',
+  'a read-only records directory reports an older record of the exact session and refuses its removal',
   () => {
     const stateDir = mkdtempForTestSync('agent-device-remote-identity-readonly-');
     writeRecordFile(stateDir, 'Demo.json', recordFor('Demo'));
     const recordsDir = path.join(stateDir, RECORDS_DIR);
     fs.chmodSync(recordsDir, 0o500);
     try {
-      assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
-      assert.throws(() => removeRemoteConnectionState({ stateDir, session: 'Demo' }));
+      assert.equal(observeRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
+      assert.throws(() => removeRemoteConnectionState({ stateDir, session: 'Demo' }), {
+        code: 'EACCES',
+      });
       assert.deepEqual(recordsIn(stateDir), ['Demo.json']);
     } finally {
       fs.chmodSync(recordsDir, 0o700);
     }
   },
 );
+
+test('status on a valid older Demo.json reports it and leaves the directory unchanged', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-observe-legacy-');
+  writeRecordFile(stateDir, 'Demo.json', recordFor('Demo'));
+  writeRecordFile(stateDir, 'default.json', recordFor(''));
+
+  assert.equal(observeRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
+  assert.equal(observeRemoteConnectionState({ stateDir, session: '' })?.runId, 'run-');
+  assert.equal(observeRemoteConnectionState({ stateDir, session: 'default' }), null);
+  assert.deepEqual(recordsIn(stateDir), ['Demo.json', 'default.json'], 'status moved no file');
+});
+
+test('status on an invalid record that names the session leaves it and its pointer in place', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-observe-invalid-');
+  writeRecordFile(stateDir, 'demo.json', { ...recordFor('demo'), updatedAt: null });
+  writeRecordFile(stateDir, 'Team.json', { ...recordFor('Team'), updatedAt: null });
+  writeRecordFile(stateDir, ACTIVE_SESSION_FILE, { session: 'demo' });
+
+  assert.equal(observeRemoteConnectionState({ stateDir, session: 'demo' }), null);
+  assert.equal(observeActiveConnectionState({ stateDir }), null);
+  assert.equal(observeRemoteConnectionState({ stateDir, session: 'Team' }), null);
+  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, 'Team.json', 'demo.json'].sort());
+});
+
+test('an EPERM hard-link failure never deletes default.json', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-eperm-');
+  // The empty session's older record, which fails validation, at the literal `default` session path.
+  const legacyPath = writeRecordFile(stateDir, 'default.json', {
+    ...recordFor(''),
+    updatedAt: null,
+  });
+  const link = vi.spyOn(fs, 'linkSync').mockImplementation(() => {
+    throw Object.assign(new Error('EPERM: operation not permitted, link'), { code: 'EPERM' });
+  });
+  try {
+    assert.throws(() => removeRemoteConnectionState({ stateDir, session: '' }), {
+      code: 'EPERM',
+    });
+    assert.throws(() => writeRemoteConnectionState({ stateDir, state: recordFor('') }), {
+      code: 'EPERM',
+    });
+  } finally {
+    link.mockRestore();
+  }
+  assert.equal(fs.existsSync(legacyPath), true);
+});
+
+test('an empty-session pointer resolves for unnamed status', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-empty-pointer-');
+  writeRecordFile(stateDir, hashedFileName(''), recordFor(''));
+  writeRecordFile(stateDir, ACTIVE_SESSION_FILE, { session: '' });
+
+  assert.equal(observeActiveConnectionState({ stateDir })?.runId, 'run-');
+});
+
+test('a full record at the pointer path is not deleted by disconnect of the session it names', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-record-');
+  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
+  const pointerPath = writeRecordFile(stateDir, ACTIVE_SESSION_FILE, {
+    ...recordFor('demo'),
+    runId: 'run-at-pointer',
+  });
+
+  assert.equal(
+    observeActiveConnectionState({ stateDir }),
+    null,
+    'a full record is not a pointer, so unnamed status selects no session from it',
+  );
+  removeRemoteConnectionState({ stateDir, session: 'demo' });
+
+  assert.equal(JSON.parse(fs.readFileSync(pointerPath, 'utf8')).runId, 'run-at-pointer');
+  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE]);
+});

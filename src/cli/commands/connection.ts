@@ -3,6 +3,8 @@ import type { CloudProviderSessionResult } from '@agent-device/contracts/observa
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
+  observeActiveConnectionState,
+  observeRemoteConnectionState,
   readActiveConnectionState,
   requireLeasedConnectionSession,
   sessionLeaseScope,
@@ -336,7 +338,7 @@ function scopeConnectProfile(
 }
 
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
-  const { session, stateDir, state } = readRequestedConnectionState(flags, host);
+  const { session, stateDir, state } = readRequestedConnectionState(flags, host, CHANGE_LOOKUP);
   if (!state) {
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
@@ -390,7 +392,7 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
   if (positionals[0] !== 'status') {
     throw new AppError('INVALID_ARGS', 'connection accepts only: status');
   }
-  const { session, state } = readRequestedConnectionState(flags, host);
+  const { session, state } = readRequestedConnectionState(flags, host, OBSERVE_LOOKUP);
   if (!state) {
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
@@ -470,9 +472,27 @@ function readConnectProvider(
   );
 }
 
+type ConnectionStateLookup = {
+  session: (options: { stateDir: string; session: string }) => RemoteConnectionState | null;
+  active: (options: { stateDir: string }) => RemoteConnectionState | null;
+};
+
+/** For a command that removes or rewrites the saved connection it reads. */
+const CHANGE_LOOKUP: ConnectionStateLookup = {
+  session: readRemoteConnectionState,
+  active: readActiveConnectionState,
+};
+
+/** For a command that only reports the saved connection: it changes no file. */
+const OBSERVE_LOOKUP: ConnectionStateLookup = {
+  session: observeRemoteConnectionState,
+  active: observeActiveConnectionState,
+};
+
 function readRequestedConnectionState(
   flags: CliFlags,
   host: HostEnvironment,
+  lookup: ConnectionStateLookup,
 ): {
   session: string;
   stateDir: string;
@@ -483,9 +503,11 @@ function readRequestedConnectionState(
     cwd: host.cwd,
     env: host.env,
   }).baseDir;
+  // Only a caller that named no session follows the active-session pointer. `--session=` names the
+  // empty session.
   const state =
-    readRemoteConnectionState({ stateDir, session }) ??
-    (flags.session ? null : readActiveConnectionState({ stateDir }));
+    lookup.session({ stateDir, session }) ??
+    (flags.session === undefined ? lookup.active({ stateDir }) : null);
   if (state) requireLeasedConnectionSession(state, flags.session);
   return { session, stateDir, state };
 }
