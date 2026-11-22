@@ -7,7 +7,8 @@ import type { SnapshotSourceFailure } from './source-channel.ts';
 /**
  * What the screen showed when a capture-scoped bridge refusal fired: a preparation still running
  * (#2491), a runner-served read still running, a tree that changed between two reads, an unresolved coordinate space (#2612), a foreground
- * another surface owns (#3874), or a window that does not fill the screen (#3844). The route consumes one disposition for both
+ * another surface owns (#3874), a window that does not fill the screen (#3844), or a keyboard
+ * typing into an input the tree leaves out. The route consumes one disposition for both
  * decisions that must agree: whether the generation's bridge circuit opens, and which sentence the
  * fallback warning carries (#3874, #3895).
  */
@@ -16,6 +17,7 @@ export type CaptureScopedConsequence =
   | 'bridge-read-busy'
   | 'coordinate-space-unresolved'
   | 'foreground-ownership'
+  | 'keyboard-focus-outside-tree'
   | 'tree-changed'
   | 'window-not-full-screen';
 
@@ -66,6 +68,9 @@ const CAPTURE_SCOPED_REFUSALS: ReadonlyMap<string, CaptureScopedConsequence> = n
   // A continuation re-read found fewer children than the first read reported: the tree changed
   // between the two reads, as a list does while it scrolls and recycles its cells.
   ['snapshot-tree-changed', 'tree-changed'],
+  // The keyboard is up and no node holds keyboard focus: the input it types into is outside the
+  // tree. Focus moves with the next tap, so only this capture goes to the runner.
+  ['keyboard-focus-outside-tree', 'keyboard-focus-outside-tree'],
 ]);
 
 const RUNNER_SESSION_SCOPED: ReadonlySet<string> = new Set(['bridge-reader-wedged']);

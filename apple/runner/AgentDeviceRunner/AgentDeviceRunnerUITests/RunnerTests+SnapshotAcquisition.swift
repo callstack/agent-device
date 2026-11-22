@@ -543,6 +543,60 @@ extension RunnerTests {
     )
   }
 
+  /// The walked tree with the input that holds keyboard focus when the AX server left it out: an
+  /// accessibility element that wraps the input, such as a React Native `Pressable` around a
+  /// `TextInput`, stands in for it as the app's responder, and the input is in neither the tree nor
+  /// any query. The input joins as the first child of that element's node with its own type,
+  /// identifier, and focus. Nothing changes while a node already holds focus, while the app reports
+  /// no such element, or when that element's node is not in the walk or sits at the raw depth bound.
+  func graftingAbsorbedResponderInput(
+    into nodes: [RawAXNode],
+    context: SnapshotTraversalContext,
+    hint: CaptureHint
+  ) -> [RawAXNode] {
+    guard
+      !nodes.contains(where: { $0.focused == true }),
+      let application = context.queryRoot as? XCUIApplication,
+      let absorbed = RunnerAXSnapshotBridge.absorbedResponderInput(for: application),
+      let container = absorbed[RunnerAXAbsorbedResponderContainerKey] as? XCUIElementSnapshot,
+      let input = absorbed[RunnerAXAbsorbedResponderInputKey] as? XCUIElementSnapshot
+    else {
+      return nodes
+    }
+    let containerType = elementTypeName(container.elementType)
+    let containerIdentifier = container.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+    let containerRect = SnapshotRect(container.frame)
+    guard
+      let parent = nodes.last(where: {
+        $0.type == containerType && ($0.identifier ?? "") == containerIdentifier && $0.rect == containerRect
+      }),
+      Self.canDescendAtRawDepth(parent.depth, hint: hint)
+    else {
+      return nodes
+    }
+    let child = makeSnapshotNode(
+      snapshot: input,
+      evaluation: evaluateSnapshot(input),
+      depth: parent.depth + 1,
+      index: parent.index + 1,
+      parentIndex: parent.index
+    )
+    return Self.insertingFirstChild(child, under: parent.index, into: nodes)
+  }
+
+  /// `nodes` with `child` as the first child of the node at `parentIndex`. Every later node moves one
+  /// place down with its parent reference, so the array stays in preorder with index = position.
+  static func insertingFirstChild(_ child: RawAXNode, under parentIndex: Int, into nodes: [RawAXNode]) -> [RawAXNode] {
+    let position = parentIndex + 1
+    var inserted = Array(nodes[..<position])
+    inserted.append(child.reindexed(index: position, depth: nodes[parentIndex].depth + 1, parentIndex: parentIndex))
+    for node in nodes[position...] {
+      let parent = node.parentIndex.map { $0 >= position ? $0 + 1 : $0 }
+      inserted.append(node.reindexed(index: node.index + 1, depth: node.depth, parentIndex: parent))
+    }
+    return inserted
+  }
+
   func snapshotHasFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
     return focusBool(snapshot as! NSObject)
   }

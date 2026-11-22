@@ -12,7 +12,10 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/too
 import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 import { DEPTH_HINT_PROBE_BACK_AFTER_USES } from './depth-hints.ts';
 import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
-import { ADAPTER_KEYBOARD_CASES } from './adapter-keyboard.fixtures.ts';
+import {
+  ADAPTER_KEYBOARD_CASES,
+  DOCKED_KEYBOARD_WITHOUT_FOCUSED_INPUT,
+} from './adapter-keyboard.fixtures.ts';
 import type { SnapshotSourceOutcome } from '@agent-device/capture-kit/snapshot-source-channel';
 import { createAdapterHost, targetForTest, type AdapterFixture } from './adapter.fixtures.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
@@ -721,6 +724,44 @@ test('the Simulator AX source publishes absence only from a complete tree with n
           entry.keyboard,
           `${entry.name} (${acquisitionIntent})`,
         );
+      }
+    }
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// A React Native `Pressable` around a `TextInput` is one accessibility element, and the AX server
+// leaves the focused input out of its tree: the keyboard is up and no node holds keyboard focus.
+// The source refuses that screen, so the route serves the runner, which reaches the input through
+// the app's responder element.
+test('the Simulator AX source refuses a docked keyboard whose focused input is outside the tree', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-focus-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  fixture.windows = DOCKED_KEYBOARD_WITHOUT_FOCUSED_INPUT;
+  const source = createSimulatorSnapshotSource({
+    host: fixture.host,
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+
+  try {
+    for (const acquisitionIntent of ['full', 'surface-observation'] as const) {
+      const outcome = await source.acquire({
+        target,
+        hint: deriveIosCaptureHint(createIosSnapshotRequest({ acquisitionIntent })),
+      });
+      assert.equal(outcome.stage, 'failed', acquisitionIntent);
+      if (outcome.stage === 'failed') {
+        assert.equal(outcome.failure.kind, 'unsupported');
+        assert.equal(outcome.failure.code, 'keyboard-focus-outside-tree');
       }
     }
   } finally {

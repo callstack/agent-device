@@ -96,6 +96,20 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 /// unavailable.
 + (nullable id)accessibilityClient;
 
+/// Keys of the dictionary `absorbedResponderInputForApplication:` returns: the snapshot of the
+/// accessibility element the AX server reports as the app's responder, and the snapshot of the input
+/// inside it that holds keyboard focus.
+FOUNDATION_EXPORT NSString *const RunnerAXAbsorbedResponderContainerKey;
+FOUNDATION_EXPORT NSString *const RunnerAXAbsorbedResponderInputKey;
+
+/// The input that holds keyboard focus when the app's responder element is an accessibility element
+/// standing in for it, such as a React Native `Pressable` around a `TextInput`. The AX server answers
+/// the container for the app's responder and lists no input among the container's user-testing
+/// children, so neither a tree snapshot nor an element query reaches the input; a hit test inside the
+/// container does. Returns both snapshots, or nil when no responder is reported, the responder holds
+/// keyboard focus itself, or no probe point inside it reaches an element that holds keyboard focus.
++ (nullable NSDictionary<NSString *, id> *)absorbedResponderInputForApplication:(XCUIApplication *)application;
+
 + (NSInteger)processIdentifierForApplication:(XCUIApplication *)application;
 
 /// Pids of the applications the AX client currently reports as active. Same private accessor the

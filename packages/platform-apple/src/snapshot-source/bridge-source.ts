@@ -251,6 +251,20 @@ function createAcquisition(
   const nodes = Object.freeze(
     decoded.nodes.map((node) => Object.freeze({ ...node, pid: target.pid })),
   );
+  const keyboard = observeCompleteTreeKeyboard({
+    nodes,
+    viewport: decoded.viewport.kind === 'reported' ? decoded.viewport.rect : null,
+    complete: !truncated,
+  });
+  // CONSERVATIVE: A docked keyboard with no node holding keyboard focus means the input it types
+  // into is absent from the tree, as when a React Native `Pressable` around a `TextInput` stands in
+  // for it as the app's responder element. Publishing the tree would hide that input from snapshots
+  // and `focused=true`, so the source refuses the screen and the route serves the slower runner,
+  // which reaches the input through the responder element. Revisit if the bridge reader recovers
+  // the input itself.
+  if (keyboard.kind === 'derived' && !nodes.some((node) => node.focused === true)) {
+    throw snapshotSourceError('unsupported', 'keyboard-focus-outside-tree');
+  }
   const residue = createAcquisitionResidue(hint, truncated, decoded.viewport);
   const lineage = Object.freeze({
     ...(target.targetId ? { targetId: target.targetId } : {}),
@@ -261,11 +275,7 @@ function createAcquisition(
     nodes,
     truncated,
     viewport: decoded.viewport,
-    keyboard: observeCompleteTreeKeyboard({
-      nodes,
-      viewport: decoded.viewport.kind === 'reported' ? decoded.viewport.rect : null,
-      complete: !truncated,
-    }),
+    keyboard,
     lineage,
     residue,
   };

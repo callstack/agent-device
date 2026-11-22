@@ -34,6 +34,10 @@
       "consequence": "tree-changed"
     },
     {
+      "code": "keyboard-focus-outside-tree",
+      "consequence": "keyboard-focus-outside-tree"
+    },
+    {
       "code": "system-surface-host-present",
       "consequence": "system-surface-host"
     },

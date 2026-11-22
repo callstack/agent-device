@@ -129,6 +129,45 @@ extension RunnerTests {
       )
     }
   }
+
+  /// A grafted node joins right after its parent, so the walk's preorder and index = position hold,
+  /// and every later node keeps pointing at the same parent.
+  func testInsertingFirstChildKeepsPreorderAndParentReferences() {
+    func node(_ index: Int, _ identifier: String, depth: Int, parent: Int?) -> RawAXNode {
+      RawAXNode(
+        index: index,
+        type: "Other",
+        label: nil,
+        identifier: identifier,
+        value: nil,
+        rect: SnapshotRect(x: 0, y: 0, width: 10, height: 10),
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: false,
+        depth: depth,
+        parentIndex: parent,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
+    }
+    let nodes = [
+      node(0, "root", depth: 0, parent: nil),
+      node(1, "container", depth: 1, parent: 0),
+      node(2, "container-child", depth: 2, parent: 1),
+      node(3, "sibling", depth: 1, parent: 0),
+      node(4, "sibling-child", depth: 2, parent: 3),
+    ]
+    let inserted = Self.insertingFirstChild(node(0, "input", depth: 0, parent: nil), under: 1, into: nodes)
+
+    XCTAssertEqual(
+      inserted.map { $0.identifier },
+      ["root", "container", "input", "container-child", "sibling", "sibling-child"]
+    )
+    XCTAssertEqual(inserted.map(\.index), Array(0..<6))
+    XCTAssertEqual(inserted.map(\.parentIndex), [nil, 0, 1, 1, 0, 4])
+    XCTAssertEqual(inserted.map(\.depth), [0, 1, 2, 2, 1, 2])
+  }
 }
 
 private struct CollapsedTabGeometryFixture: Decodable {
