@@ -94,7 +94,8 @@ export type ClaimRecoveryRetentionReason =
   | `${DurableSessionResourceKind}-owner-mismatch`
   | `${DurableSessionResourceKind}-descriptor-invalid`
   | `${DurableSessionResourceKind}-descriptor-version-unsupported`
-  | 'durable-resource-reconciliation-failed';
+  | 'durable-resource-reconciliation-failed'
+  | 'recovery-dispose-pending';
 
 /** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
 export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
