@@ -6,6 +6,7 @@ import type { PreresolvedInteractionTarget } from '@agent-device/contracts/inter
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
@@ -53,7 +54,9 @@ function slideTree(x: number, over?: { label?: string; surfaceBundleId?: string 
         hittable: true,
       },
     ],
-    over?.surfaceBundleId ? { iosSystemSurfaceBundleId: over.surfaceBundleId } : undefined,
+    over?.surfaceBundleId
+      ? { systemSurface: { bundleId: over.surfaceBundleId, kind: 'web-auth' } }
+      : undefined,
   );
 }
 
@@ -93,12 +96,7 @@ function createGuardedDevice(params: {
           finishedAt: clock.now() - params.baselineAgeMs,
           // The baseline carries its surface the way a real one does: `surfaceScopedNodes` reads it
           // off the capture, so a fixture that wants a system-surface baseline asks for one.
-          tree: {
-            nodes: baselineTree.nodes,
-            ...(baselineTree.iosSystemSurfaceBundleId
-              ? { surfaceBundleId: baselineTree.iosSystemSurfaceBundleId }
-              : {}),
-          },
+          tree: surfaceScopedNodes(baselineTree),
         };
   const device = createAgentDevice({
     backend: {
@@ -300,7 +298,7 @@ test('a surface that arrives between the two looks is not rest', async () => {
   // surfaces for exactly the #2438 reason — a system sheet can carry the same control at the same
   // rect — and the two looks that certify rest are the same comparison. Without the surface check, a
   // sheet presented during the sample gap would let a press land on it while reporting agreement.
-  const sheet = 'com.apple.springboard';
+  const sheet = 'com.apple.SafariViewService';
   const device = createGuardedDevice({
     stored: slideTree(MID_FLIGHT_X),
     trees: [
@@ -358,7 +356,7 @@ test('a target newly arrived on a different surface is re-observed, not certifie
   // sheet arriving over the app can carry the same-identity node at the same rect, and that is the
   // positional coincidence ADR 0014 refuses rather than evidence of rest. The press pays the
   // re-observations instead of tapping on the strength of the other surface's tree.
-  const sheet = 'com.apple.springboard';
+  const sheet = 'com.apple.SafariViewService';
   const device = createGuardedDevice({
     stored: slideTree(MID_FLIGHT_X, { surfaceBundleId: sheet }),
     trees: [

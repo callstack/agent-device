@@ -36,10 +36,6 @@
       "types": "./src/android-system-chrome.ts",
       "default": "./src/android-system-chrome.ts"
     },
-    "./android-system-surface-disclosure": {
-      "types": "./src/android-system-surface-disclosure.ts",
-      "default": "./src/android-system-surface-disclosure.ts"
-    },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
       "default": "./src/app-deployment-runtime.ts"
@@ -523,6 +519,10 @@
     "./system-button-runtime": {
       "types": "./src/system-button-runtime.ts",
       "default": "./src/system-button-runtime.ts"
+    },
+    "./system-surface-disclosure": {
+      "types": "./src/system-surface-disclosure.ts",
+      "default": "./src/system-surface-disclosure.ts"
     },
     "./tap-keyboard-occlusion": {
       "types": "./src/tap-keyboard-occlusion.ts",

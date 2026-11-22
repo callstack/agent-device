@@ -16,7 +16,7 @@ import type { RunnerCommand } from '../runner-contract.ts';
 import {
   isRetryableRunnerError,
   isStructuredRunnerFailure,
-  RUNNER_REPLY_LOST_REASON,
+  RUNNER_EXCHANGE_REASONS,
 } from '../runner-error-classification.ts';
 import { runApplePressSeries } from '../runner-sequence.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from '../runner-session.ts';
@@ -249,7 +249,10 @@ for (const row of ROWS) {
     await assert.rejects(drive(), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, row.dispatched);
-      assert.equal(error.details?.reason === RUNNER_REPLY_LOST_REASON, REPLY_LOST_ROWS.has(row.id));
+      assert.equal(
+        error.details?.reason === RUNNER_EXCHANGE_REASONS.replyLost.reason,
+        REPLY_LOST_ROWS.has(row.id),
+      );
       return true;
     });
   });
@@ -267,7 +270,7 @@ test.each([
   async (_, status) => {
     await assert.rejects(lostResponse([...status], SNAPSHOT), (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.notEqual(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.notEqual(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       assert.equal(isRetryableRunnerError(error), true);
       return true;
     });

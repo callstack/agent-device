@@ -39,6 +39,7 @@ import {
 } from './daemon-client-metadata.ts';
 import { canConnect, isDaemonTransportUnavailableError } from './daemon-client-transport.ts';
 import {
+  DAEMON_UNAVAILABLE_REASONS,
   daemonContendedError,
   daemonIncompatibleError,
   daemonTakeoverRetirementError,
@@ -76,7 +77,10 @@ const MINIMUM_DAEMON_TAKEOVER_BUDGET_MS = 5_000;
 
 const DAEMON_STARTUP_TIMEOUT_ENV = 'AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS';
 
-type DaemonStartupFailureReason = 'startup-exited' | 'startup-stalled' | 'startup-ceiling';
+type DaemonStartupFailureReason =
+  | typeof DAEMON_UNAVAILABLE_REASONS.startupExited.reason
+  | typeof DAEMON_UNAVAILABLE_REASONS.startupStalled.reason
+  | typeof DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason;
 
 function resolveDaemonStartupTimeoutMs(env: Readonly<EnvMap>): number {
   const raw = env[DAEMON_STARTUP_TIMEOUT_ENV]?.trim();
@@ -239,7 +243,7 @@ export async function assertDaemonPolicyMatches(
     'COMMAND_FAILED',
     'The running daemon does not enforce the daemon policy named by AGENT_DEVICE_DAEMON_POLICY.',
     {
-      reason: 'DAEMON_POLICY_MISMATCH',
+      reason: DAEMON_UNAVAILABLE_REASONS.policyMismatch.reason,
       expectedPolicyDigest: expected,
       daemonPolicyDigest: existing.policyDigest ?? null,
       hint: `Stop the running daemon (${daemonStopCommand(stateDir)}), then retry so a daemon starts with this policy.`,
@@ -316,7 +320,8 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
   }
   const { startError, startupError, daemonProcess, reason, phases }: Partial<FailedDaemonStartup> =
     failure ?? {};
-  const effectiveReason: DaemonStartupFailureReason = reason ?? 'startup-exited';
+  const effectiveReason: DaemonStartupFailureReason =
+    reason ?? DAEMON_UNAVAILABLE_REASONS.startupExited.reason;
   const state = getDaemonMetadataState(settings.paths);
   const daemonLogTail = readRecentLogTail(settings.paths.logPath);
   throw new AppError('COMMAND_FAILED', 'Failed to start daemon', {
@@ -336,7 +341,8 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
     hint:
-      reason === 'startup-stalled' || reason === 'startup-ceiling'
+      reason === DAEMON_UNAVAILABLE_REASONS.startupStalled.reason ||
+      reason === DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
         ? resolveStartupProgressHint(reason, startupTimeoutMs)
         : resolveDaemonStartupHint(state, settings.paths),
   });
@@ -381,10 +387,10 @@ async function attemptLocalDaemonStartup(
   const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
   const reason: DaemonStartupFailureReason =
     startup.kind === 'stalled'
-      ? 'startup-stalled'
+      ? DAEMON_UNAVAILABLE_REASONS.startupStalled.reason
       : startup.kind === 'ceiling'
-        ? 'startup-ceiling'
-        : 'startup-exited';
+        ? DAEMON_UNAVAILABLE_REASONS.startupCeiling.reason
+        : DAEMON_UNAVAILABLE_REASONS.startupExited.reason;
   const available = isRegistrationAvailable(inspectProcessLock(settings.paths.lockPath));
   return {
     cleanup,
@@ -554,7 +560,7 @@ function describeStartupPhaseTimings(observation: StartupPhaseObservation): Reco
 }
 
 function resolveStartupProgressHint(reason: DaemonStartupFailureReason, ceilingMs: number): string {
-  if (reason === 'startup-stalled') {
+  if (reason === DAEMON_UNAVAILABLE_REASONS.startupStalled.reason) {
     return (
       `The daemon is alive but made no startup progress for ${DAEMON_STARTUP_STALL_WINDOW_MS / 1000} s. ` +
       `The host can be overloaded. Retry once the host load drops; ${DAEMON_STARTUP_TIMEOUT_ENV} ` +
@@ -587,7 +593,10 @@ async function observeContendingDaemon(
   try {
     winner = await readReusableLocalDaemon(settings, { deadline, waitForLiveStartup: true });
   } catch (error) {
-    if (error instanceof AppError && error.details?.reason === 'daemon_registration_unproven')
+    if (
+      error instanceof AppError &&
+      error.details?.reason === DAEMON_UNAVAILABLE_REASONS.registrationUnproven.reason
+    )
       return { kind: 'unproven', error };
     throw error;
   }

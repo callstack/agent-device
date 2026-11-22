@@ -24,6 +24,7 @@ import {
   type DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { DAEMON_CLIENT_CONFIG_REASONS } from './daemon-lifecycle-errors.ts';
 
 import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-contracts/session-repair-tombstone';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
@@ -104,7 +105,7 @@ export function resolveClientSettings(
       'INVALID_ARGS',
       'daemonBinding names a local daemon instance and cannot be combined with a daemon base URL.',
       {
-        reason: 'daemon_binding_with_remote_base_url',
+        reason: DAEMON_CLIENT_CONFIG_REASONS.bindingWithBaseUrl.reason,
         daemonBaseUrl: remote.remoteBaseUrl,
         hint: 'Drop the base URL to reach the pinned daemon on its own state dir, or drop the pin to reach a remote daemon.',
       },

@@ -132,7 +132,7 @@ export function buildSnapshotState(
     ...(data.comparisonIdentity
       ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
       : {}),
-    ...(data.systemSurface ? { iosSystemSurfaceBundleId: data.systemSurface.bundleId } : {}),
+    ...(data.systemSurface ? { systemSurface: data.systemSurface } : {}),
     ...(data.presentedSurface ? { presentedSurface: data.presentedSurface } : {}),
     ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
     ...(data.keyboard ? { keyboard: data.keyboard } : {}),

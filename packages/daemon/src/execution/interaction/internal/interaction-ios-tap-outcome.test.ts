@@ -443,7 +443,7 @@ test('a capture of a system surface cannot corroborate a tap taken against the a
   sessionStore.publish(sessionName, session);
   const after = snapshot(imageViewerNodes);
   after.comparisonKey = systemSurfaceCaptureComparisonKey(IOS_SIMULATOR.id);
-  after.iosSystemSurfaceBundleId = 'com.apple.SafariViewService';
+  after.systemSurface = { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' };
 
   await expect(
     corroborateIosTapFailure({

@@ -12,7 +12,7 @@ import {
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
-  RUNNER_REPLY_LOST_REASON,
+  RUNNER_EXCHANGE_REASONS,
   shouldRetainRunnerSession,
   shouldRecoverRunnerStatus,
 } from './runner-error-classification.ts';
@@ -111,7 +111,7 @@ async function applyRunnerTransportRecovery(
 }
 
 /**
- * A lost reply fails a mutation as {@link RUNNER_REPLY_LOST_REASON}: it is not resent. A read keeps
+ * A lost reply fails a mutation as `runner_reply_lost`: it is not resent. A read keeps
  * the transport error, because `runAppleRunnerCommand` resends a read on exactly that error.
  */
 function resolveRunnerRecoveryFailure(
@@ -146,7 +146,7 @@ function buildLostReplyError(
       ...(lostReply.lifecycleState === undefined
         ? {}
         : { lifecycleState: lostReply.lifecycleState }),
-      reason: RUNNER_REPLY_LOST_REASON,
+      reason: RUNNER_EXCHANGE_REASONS.replyLost.reason,
       ...(transportReason === undefined ? {} : { transportReason }),
       recovery: lostReply.recovery,
       ...readReadinessPreflightRecoveryDetails(transportError),

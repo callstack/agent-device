@@ -1,11 +1,17 @@
 import { createAgentDeviceClient } from '@agent-device/client';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { AgentDeviceHost, StartAgentDeviceOptions } from './sdk/host-types.ts';
+
+// Why an embedded host refuses to hand out a client that pins its runtime.
+const HOST_INSTANCE_REASONS = {
+  // The host could not prove its own process start time, so it cannot issue a daemon pin.
+  instanceUnreadable: { reason: 'host_instance_unreadable' },
+} as const satisfies ReasonTable<'host runtime'>;
 
 /** Starts an embedded runtime and returns its pinned client and close handle. */
 export async function startAgentDevice(options: StartAgentDeviceOptions): Promise<AgentDeviceHost> {
@@ -52,7 +58,7 @@ export async function startAgentDevice(options: StartAgentDeviceOptions): Promis
     const identity = runtime.identity;
     if (identity.startTime === null) {
       throw new AppError('COMMAND_FAILED', 'This host cannot pin its runtime identity.', {
-        reason: 'host_instance_unreadable',
+        reason: HOST_INSTANCE_REASONS.instanceUnreadable.reason,
         pid: identity.pid,
         hint: 'Use a detached daemon on this platform.',
       });

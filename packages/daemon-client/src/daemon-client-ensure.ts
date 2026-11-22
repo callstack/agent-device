@@ -12,6 +12,7 @@ import {
 import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import { resolveLocalDaemonSettings } from './daemon-client-lifecycle.ts';
 import {
   assertDaemonPolicyMatches,
@@ -25,7 +26,7 @@ import { DAEMON_LEAVE_WAIT_MS, requestDaemonLifecycle } from './daemon-client-li
 import { answersLivenessProbe } from './daemon-client-liveness-probe.ts';
 import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 import {
-  DAEMON_CONTENDED_REASON,
+  DAEMON_UNAVAILABLE_REASONS,
   daemonIdentityOf,
   daemonDrainTimeoutError,
   daemonIncompatibleError,
@@ -80,7 +81,7 @@ export async function ensureDaemon(
     await sleep(Math.min(JUDGE_AGAIN_DELAY_MS, remainingMs));
   }
   throw new AppError('COMMAND_FAILED', 'The daemon kept changing while it was being ensured.', {
-    reason: 'daemon-lifecycle-contended',
+    reason: DAEMON_UNAVAILABLE_REASONS.lifecycleContended.reason,
     stateDir: settings.paths.baseDir,
     hint: 'Another process is starting or replacing the daemon on this state directory. Retry.',
   });
@@ -199,7 +200,10 @@ async function quiesceOrRetireUnresponsive(
   try {
     return (await requestDaemonLifecycle(info, settings)).outcome;
   } catch (error) {
-    if (!(error instanceof AppError) || error.details?.reason !== 'daemon_transport_timeout')
+    if (
+      !(error instanceof AppError) ||
+      error.details?.reason !== DAEMON_TRANSPORT_REASONS.timeout.reason
+    )
       throw error;
     if (await answersLivenessProbe(info)) throw error;
     await retireDaemonForTakeover(info, settings.paths, 'force');
@@ -219,7 +223,10 @@ async function start(
   } catch (error) {
     // The winner of a startup race is judged again from the top, so an incompatible one is quiesced
     // rather than retired.
-    if (error instanceof AppError && error.details?.reason === DAEMON_CONTENDED_REASON) {
+    if (
+      error instanceof AppError &&
+      error.details?.reason === DAEMON_UNAVAILABLE_REASONS.contended.reason
+    ) {
       return { kind: 'judge-again' };
     }
     throw error;

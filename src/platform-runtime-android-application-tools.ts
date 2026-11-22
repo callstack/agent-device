@@ -4,7 +4,7 @@ import type {
   OpenTargetResolutionInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
@@ -19,6 +19,19 @@ const loadOpenTarget = () => (openTargetModule ??= import('./platform-runtime-op
 let runtimeHintsModule: Promise<typeof import('./platform-runtime-runtime-hints.ts')> | undefined;
 const loadRuntimeHints = () =>
   (runtimeHintsModule ??= import('./platform-runtime-runtime-hints.ts'));
+
+// Why `open` could not install the Android test IME safely. Ordinary text entry stays available
+// unless this refuses.
+const ANDROID_TEST_IME_INSTALL_REASONS = {
+  // The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe.
+  recoveryFenceFailed: { reason: 'android_test_ime_recovery_fence_failed' },
+} as const satisfies ReasonTable<'open'>;
+
+// Why `close` could not restore the keyboard the Android test IME replaced.
+const ANDROID_TEST_IME_RESTORE_REASONS = {
+  // The IME could not be restored, so the device may still send test-helper text.
+  restoreIncomplete: { reason: 'android_test_ime_restore_incomplete' },
+} as const satisfies ReasonTable<'close'>;
 
 /** Lazy Android tools; the Android package owns lifecycle sequencing and durable IME policy. */
 export function createAndroidApplicationTools(): AndroidApplicationTools {
@@ -78,7 +91,10 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       throw new AppError(
         'COMMAND_FAILED',
         `Android test IME recovery records could not be persisted for ${device.name ?? device.id}.`,
-        { reason: 'android_test_ime_recovery_fence_failed', deviceId: device.id },
+        {
+          reason: ANDROID_TEST_IME_INSTALL_REASONS.recoveryFenceFailed.reason,
+          deviceId: device.id,
+        },
       );
     },
     restoreTestIme: async (device, input) => {
@@ -92,7 +108,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
       throw new AppError(
         'COMMAND_FAILED',
         `Android test IME could not be restored on ${device.name ?? device.id}.`,
-        { reason: 'android_test_ime_restore_incomplete', deviceId: device.id },
+        { reason: ANDROID_TEST_IME_RESTORE_REASONS.restoreIncomplete.reason, deviceId: device.id },
       );
     },
     recoverTestImeStartup: async (input) => {

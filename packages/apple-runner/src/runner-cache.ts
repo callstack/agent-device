@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { resolveRunnerDerivedOverride } from './apple-runner-platform.ts';
 import {
   emitDiagnostic,
@@ -24,6 +24,11 @@ import type {
   RunnerCacheArtifactMismatch,
   RunnerCacheRefusal,
 } from './runner-artifact-manifest.ts';
+
+const RUNNER_CACHE_REASONS = {
+  // The runner build products cannot be certified for cache reuse; `details.refusalReason` says why.
+  cacheUncertifiable: { reason: 'runner_cache_uncertifiable' },
+} as const satisfies ReasonTable<'apple runner'>;
 export {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerArchBuildSettings,
@@ -203,7 +208,7 @@ export function requireCertifiedRunnerCacheArtifacts(
     'COMMAND_FAILED',
     'The Apple runner products cannot be certified for cache reuse',
     {
-      reason: 'runner_cache_uncertifiable',
+      reason: RUNNER_CACHE_REASONS.cacheUncertifiable.reason,
       refusalReason: refusal.reason,
       refusingPath: refusal.path ?? derived,
       ...(refusal.reason === 'root_unusable' ? {} : { resolvesTo: refusal.target }),

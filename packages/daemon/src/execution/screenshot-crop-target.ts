@@ -4,7 +4,7 @@ import {
   type ScreenshotCropReason,
 } from '@agent-device/contracts/capture';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { SnapshotProducer } from '@agent-device/contracts/snapshot-producers';
+import type { SnapshotProducerIdentity } from '@agent-device/contracts/snapshot-producers';
 import type { SnapshotCaptureScale, SnapshotViewportSize } from '@agent-device/kernel/snapshot';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -191,7 +191,7 @@ export function assertScreenshotCropCapture(
 export function assertScreenshotCropSnapshot(
   device: DeviceInfo,
   snapshot: Readonly<{
-    producer?: SnapshotProducer;
+    producer?: SnapshotProducerIdentity;
     captureScale?: SnapshotCaptureScale;
     viewport?: SnapshotViewportSize;
   }>,

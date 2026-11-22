@@ -5,7 +5,11 @@ import {
   runnerSynthesizesTap,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatchAfterSteps,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import {
   MAX_RUNNER_SEQUENCE_STEPS,
   buildRunnerSequenceCommand,
@@ -14,6 +18,11 @@ import {
   type RunnerSequenceOrientation,
   type RunnerSequenceStep,
 } from './runner-contract.ts';
+
+const RUNNER_SEQUENCE_REASONS = {
+  // The runner did not report the orientation of a press series; inspect the screen before continuing.
+  orientationUnavailable: { reason: 'runner_sequence_orientation_unavailable' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 /**
  * Wall-clock budget for one sequence request. The runner executes a complete chunk inside one
@@ -92,7 +101,7 @@ function requirePressSeriesOrientation(
   if (orientation !== undefined) return orientation;
   throw discloseDispatchAfterSteps(
     new AppError('COMMAND_FAILED', 'The runner did not return the press series orientation', {
-      reason: 'runner_sequence_orientation_unavailable',
+      reason: RUNNER_SEQUENCE_REASONS.orientationUnavailable.reason,
       completedSteps,
       hint: 'Run snapshot -i to inspect the current UI before continuing with the remaining actions.',
     }),

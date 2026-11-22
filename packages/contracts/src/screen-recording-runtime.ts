@@ -1,3 +1,4 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
 import type { GestureReferenceFrame, ScrollDirection } from './scroll-gesture.ts';
 import type { RecordingAppIdentity } from './recording.ts';
 import type { StopObservation } from './recording-stop-observation.ts';
@@ -11,8 +12,11 @@ import type { ResourceOwnershipFence } from './platform-runtime.ts';
 
 export const SCREEN_RECORDING_RESOURCE_KIND = 'screen-recording' as const;
 
-/** The recording's file exists and is not a video, which only a still-finalizing recorder can undo. */
-export const RECORDING_OUTPUT_UNPLAYABLE_REASON = 'recording-output-unplayable';
+// Why a stopped recording does not yield a video the caller can watch.
+export const SCREEN_RECORDING_OUTPUT_REASONS = {
+  // The recording's file is not a playable video, which only a recorder still finalizing it can undo.
+  unplayable: { reason: 'recording-output-unplayable' },
+} as const satisfies ReasonTable<'record'>;
 
 type RecordingTelemetryBase = Readonly<{
   tMs: number;

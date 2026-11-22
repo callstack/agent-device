@@ -757,7 +757,7 @@ test('capturePostGestureStabilizedResult re-baselines when an in-place system su
     makeSnapshotState(pickupSnapshot(500).nodes, {
       snapshotQuality: { state: 'healthy', backend: 'tree' },
       comparisonKey: systemSurfaceCaptureComparisonKey(session.device.id),
-      iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+      systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
     }),
   );
 
@@ -791,7 +791,7 @@ test('capturePostGestureStabilizedResult re-baselines when an in-place system su
   session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
     snapshotQuality: { state: 'healthy', backend: 'tree' },
     comparisonKey: systemSurfaceCaptureComparisonKey(session.device.id),
-    iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
   });
   markPostGestureStabilization(session, 'scroll');
 

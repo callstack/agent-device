@@ -5,7 +5,10 @@ import type {
   BackendSnapshotOptions,
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
-import type { IosSnapshotProducer } from '@agent-device/contracts/ios-snapshot';
+import type {
+  IosSnapshotProducer,
+  KnownIosSnapshotProducer,
+} from '@agent-device/contracts/ios-snapshot';
 import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
@@ -74,9 +77,9 @@ test('runtime snapshot upgrades an absent truncation flag only for producers tha
     'simulator-ax-bridge': false,
     'appium-source': undefined,
     'revyl-ios-tree': undefined,
-  } as const satisfies Record<IosSnapshotProducer, boolean | undefined>;
+  } as const satisfies Record<KnownIosSnapshotProducer, boolean | undefined>;
 
-  for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {
+  for (const producer of Object.keys(expected) as KnownIosSnapshotProducer[]) {
     const device = createSnapshotOnlyDevice({
       snapshot: { nodes: [], backend: 'xctest', producer, createdAt: 1 },
     });
@@ -261,26 +264,38 @@ test('runtime snapshot emits filtered Android guidance from backend analysis', a
   ]);
 });
 
-test('runtime snapshot renders the system-surface disclosure from Android annotations', async () => {
-  const device = createSnapshotOnlyDevice({
-    snapshot: makeSnapshotState(
-      [
-        { index: 0, depth: 0, type: 'FrameLayout', label: 'Quick settings' },
-        { index: 1, depth: 1, parentIndex: 0, type: 'Switch', label: 'Internet' },
-      ],
-      { truncated: false, backend: 'android' },
-    ),
-    androidSnapshot: {
-      backend: 'android-helper',
-      systemSurfaceOnly: true,
+test('runtime snapshot renders the system-surface disclosure from Android annotations or SnapshotState.systemSurface', async () => {
+  const cases = [
+    {
+      snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'FrameLayout', label: 'Shade' }], {
+        truncated: false,
+        backend: 'android',
+      }),
+      androidSnapshot: { backend: 'android-helper' as const, systemSurfaceOnly: true },
+      match: /system surface \(notification shade, quick settings[\s\S]*press back or swipe up/,
     },
-  });
-
-  const result = await device.capture.snapshot({ session: 'default' });
-
-  assert.equal(result.warnings?.length, 1);
-  assert.match(String(result.warnings?.[0]), /system surface \(notification shade, quick settings/);
-  assert.match(String(result.warnings?.[0]), /press back or swipe up/);
+    {
+      snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'FrameLayout', label: 'Shade' }], {
+        truncated: false,
+        backend: 'android',
+        systemSurface: { kind: 'android-system-overlay' as const },
+      }),
+      match: /system surface \(notification shade, quick settings/,
+    },
+    {
+      snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Application', label: 'Sheet' }], {
+        truncated: false,
+        backend: 'xctest',
+        systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' as const },
+      }),
+      match: /system web sign-in sheet/,
+    },
+  ];
+  for (const { match, ...input } of cases) {
+    const result = await createSnapshotOnlyDevice(input).capture.snapshot({ session: 'default' });
+    assert.equal(result.warnings?.length, 1);
+    assert.match(String(result.warnings?.[0]), match);
+  }
 });
 
 test('runtime snapshot warns when iOS interactive output is root-only', async () => {
