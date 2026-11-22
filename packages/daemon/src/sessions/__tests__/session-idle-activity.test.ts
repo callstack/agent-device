@@ -1,5 +1,3 @@
-import { sessionLeaseOf } from '../../core/lease-context.ts';
-import type { SessionState } from '../../core/session-state.ts';
 /**
  * #2833: the request path reports session activity by finishing UNDER the session's execution lock —
  * the same lock an expiry must take before settling. That is what makes the stamp and the verdict
@@ -9,6 +7,9 @@ import type { SessionState } from '../../core/session-state.ts';
  * cannot keep another agent's abandoned claim alive; and a request whose client hung up preserves
  * nothing, exactly as a canceled request renews no lease (ADR 0007).
  */
+
+import { sessionLeaseOf } from '../../core/lease-context.ts';
+import type { SessionState } from '../../core/session-state.ts';
 
 import {
   daemonPlatformServicesFixture,

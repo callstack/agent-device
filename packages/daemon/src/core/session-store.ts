@@ -8,7 +8,7 @@ import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daem
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
@@ -659,6 +659,7 @@ export class SessionCoordinator {
         throwIfRequestCanceled(req.meta?.requestId);
         const ref = this.#store.publish(address, { ...draft, lease });
         published = true;
+        req.internal?.onLifetimePublished?.(address, ref.lifetime);
         const authority = this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));
         req.internal?.onSessionPublished?.(remoteScriptVersionDelivery(undefined, authority));
         return authority;
@@ -697,4 +698,9 @@ export function requireSessionOpenSlot(req: SessionOpenRequest): AuthorizedOpenS
   const slot = req.internal?.openSlot;
   if (!slot) throw new TypeError('Session creation requires an open slot');
   return slot;
+}
+
+export function assertSessionAuthorityActive(req: DaemonRequest): void {
+  throwIfRequestCanceled(req.meta?.requestId);
+  if (req.internal?.sessionAuthorityActive?.() === false) throw createRequestCanceledError();
 }

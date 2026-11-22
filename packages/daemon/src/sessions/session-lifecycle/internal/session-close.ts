@@ -438,7 +438,6 @@ async function runCloseTeardownAndRelease(params: {
   ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
-  sessionRef?: SessionRef;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;

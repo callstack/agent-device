@@ -129,7 +129,8 @@ export async function handleSessionCommands(
     bindDevice:
       params.bindDevice ??
       (lifecycleOperationsLoader === undefined
-        ? mockBindDeviceRuntime
+        ? (device, use, cache) =>
+            cache ? mockBindDeviceRuntime(device, use, cache) : mockBindDeviceRuntime(device, use)
         : (device, use, cache) =>
             mockBindDeviceRuntime(device, use, cache, lifecycleOperationsLoader)),
     platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanupFixture(),

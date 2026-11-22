@@ -1,3 +1,9 @@
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import {
+  clearRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -13,7 +19,10 @@ import { createRequestHandler } from '../../__tests__/support/test-device-runtim
 import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 
-function snapshotHandler(error?: AppError) {
+function snapshotHandler(
+  error?: AppError,
+  createCommandSurface: CreateDaemonCommandSurface = forwardingCreateCommandSurface,
+) {
   const sessionStore = makeSessionStore('agent-device-snapshot-helper-response-');
   if (error) {
     sessionStore.publish(
@@ -33,7 +42,7 @@ function snapshotHandler(error?: AppError) {
   const leaseRegistry = new LeaseRegistry();
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
-    createCommandSurface: forwardingCreateCommandSurface,
+    createCommandSurface,
     logPath: `${mkdtempForTestSync('agent-device-snapshot-helper-response-')}/daemon.log`,
     token: 'token',
     sessionStore,
@@ -126,3 +135,49 @@ test('snapshot-only creation binds its lease before another request can read it'
   });
   expect(runtime.captureSnapshot).toHaveBeenCalledOnce();
 });
+
+test.each(['before publication', 'after publication'])(
+  'canceled snapshot blocks its remaining writes %s',
+  async (when) => {
+    const requestId = `snapshot-${when}`;
+    registerRequestAbort(requestId);
+    const { handler, sessionStore } = snapshotHandler(undefined, async (params) => {
+      const sessions = params.sessions!;
+      return await forwardingCreateCommandSurface({
+        ...params,
+        sessions: {
+          ...sessions,
+          set: async (record) => {
+            if (when === 'before publication') markRequestCanceled(requestId);
+            await sessions.set(record);
+            if (when === 'after publication') markRequestCanceled(requestId);
+          },
+        },
+      });
+    });
+    const session = makeSession('default', {
+      device: ANDROID_EMULATOR,
+      appBundleId: 'com.example.app',
+    });
+    sessionStore.publish('default', session);
+    try {
+      const result = await handler({
+        token: 'token',
+        session: 'default',
+        command: 'snapshot',
+        positionals: [],
+        meta: { requestId },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'request_canceled' } },
+      });
+      const current = sessionStore.get('default');
+      expect(current?.actions).toEqual([]);
+      if (when === 'before publication') expect(current?.snapshot).toBeUndefined();
+      else expect(current?.snapshot).toBeDefined();
+    } finally {
+      clearRequestCanceled(requestId);
+    }
+  },
+);

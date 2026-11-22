@@ -287,6 +287,7 @@ async function startRecording(
   });
   const { fence, outputPaths } = prepareRecordingStart(params, session);
   binding.assertAdoptable();
+  params.throwIfCanceled();
   const started = await runtime.operations.screenRecordingStart(
     screenRecordingStartInput(params, session, prepared, fence, outputPaths),
   );

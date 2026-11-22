@@ -1,67 +1,30 @@
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import * as retry from '@agent-device/host-kit/retry';
-import { heldKeyedLockKeys } from '@agent-device/kernel/keyed-lock';
+import { heldKeyedLockKeys, withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import * as hostCommand from '@agent-device/host-kit/command';
 import * as hostProcess from '@agent-device/host-kit/process';
-import {
-  IOS_SIMULATOR,
-  closeLoopbackServer,
-  createTestHostEnvironment,
-  listenOnLoopback,
-  mkdtempForTestSync,
-  skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit';
-import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import {
-  parseDaemonPolicy,
-  type DaemonPolicy,
-} from '@agent-device/daemon-contracts/daemon-policy-file';
-import { createDaemonHttpServer } from './http-server.ts';
-import {
-  createLifecycleDeviceRuntimeGatewaySpies,
-  createRequestHandler,
-} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import {
   authoringPublication,
   makeIosAppSession,
 } from '../../__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
-import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
-import { hostDiagnosticsFixture } from '../../__tests__/support/host-diagnostics-fixture.ts';
-import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import type { SessionRef } from '../../core/session-state.ts';
-import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import {
-  createLeaseSessionEnd,
-  getLeaseRegistryExecutionLocks,
-  type LeaseSessionEnd,
-} from '../request-execution-scope.ts';
+  startDaemon,
+  TENANT,
+  SESSION,
+  LEASE_TTL_MS,
+  type RpcBody,
+} from './http-server-session-lease-touch.fixtures.ts';
 
-const TENANT = 'e2b';
-const SESSION = 'agentA';
 const UNLEASED = { sessionIsolation: 'none', tenantId: undefined };
-const LEASE_TTL_MS = 60_000;
-const OWNER_SCOPE = {
-  tenantId: TENANT,
-  runId: 'run-a',
-  leaseProvider: 'proxy',
-  clientId: 'client-a',
-  deviceKey: 'ios:mobile:SIM-001',
-} as const;
-
-type RpcBody = {
-  result?: { ok?: boolean; data?: Record<string, unknown> };
-  error?: {
-    message?: string;
-    data?: { code?: string; details?: { reason?: string; field?: string } };
-  };
-};
 
 let world: Awaited<ReturnType<typeof startDaemon>> | undefined;
 
@@ -75,168 +38,6 @@ afterEach(async () => {
   await world?.close();
   world = undefined;
 });
-
-async function startDaemon(daemonPolicy?: DaemonPolicy) {
-  let now = 1_000;
-  const sessionStore = makeSessionStore('agent-device-session-lease-touch-');
-  const expiryTeardown = vi.fn(async (_ref: SessionRef) => {});
-  const expiryEnds: Promise<void>[] = [];
-  const leaseRegistry = new LeaseRegistry({
-    now: () => now,
-    // The expiry owner of a real daemon: it ends the sessions of an expired lease under their locks.
-    onLeaseExpired: (lease) => {
-      expiryEnds.push(leaseSessionEnd.end(lease.leaseId, 'LEASE_EXPIRED'));
-    },
-  });
-  const leaseSessionEnd: LeaseSessionEnd = createLeaseSessionEnd({
-    env: {},
-    sessionStore,
-    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
-    teardownSession: expiryTeardown,
-    cleanupSessionlessExecutionHost: async () => {},
-  });
-  const lease = leaseRegistry.allocateLease({
-    ...OWNER_SCOPE,
-    leaseBackend: 'ios-instance',
-    ttlMs: LEASE_TTL_MS,
-  });
-  const sessionName = tenantScopedSessionName(TENANT, SESSION);
-  const publishLeasedSession = (address: string, backend = lease.backend): SessionRef => {
-    const session = makeIosAppSession(address, {
-      sessionScope: { kind: 'tenant', id: TENANT },
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: TENANT,
-        runId: OWNER_SCOPE.runId,
-        backend,
-        leaseProvider: OWNER_SCOPE.leaseProvider,
-        clientId: OWNER_SCOPE.clientId,
-        deviceKey: OWNER_SCOPE.deviceKey,
-      },
-    });
-    return sessionStore.publish(address, session);
-  };
-  const observeRunnerSession = vi.fn(async () => ({ alive: true, sessionId: 'runner-1' }));
-  const hostDiagnostics = hostDiagnosticsFixture();
-  // A request that ends an expired session itself stops the snapshot helper of that session.
-  const requestTeardown = platformResourceCleanupFixture();
-  const runtime = createLifecycleDeviceRuntimeGatewaySpies();
-  const hooks: {
-    beforeDispatch?: () => void | Promise<void>;
-    duringDeviceSelection?: () => void;
-  } = {};
-  const handleRequest = createRequestHandler({
-    host: createTestHostEnvironment({
-      env: { ...process.env, AGENT_DEVICE_MACOS_APP_BACKEND: 'native' },
-    }),
-    createCommandSurface: fakeCreateCommandSurface,
-    logPath: path.join(mkdtempForTestSync('agent-device-session-lease-touch-log-'), 'daemon.log'),
-    token: 'daemon-token',
-    sessionStore,
-    leaseRegistry,
-    deviceInventoryGateways: createTestDeviceInventoryGateways({
-      local: async () => {
-        hooks.duringDeviceSelection?.();
-        return [IOS_SIMULATOR];
-      },
-    }),
-    deviceRuntimeGateway: runtime.gateway,
-    trackDownloadableArtifact: () => 'artifact-id',
-    hostDiagnostics,
-    daemonPolicy,
-    platformResourceCleanup: requestTeardown,
-    platformServices: daemonPlatformServicesFixture({
-      appleSessionObservation: {
-        observeRunnerSession,
-        resolveSoleForegroundApp: async () => undefined,
-      },
-    }),
-    // Runs after admission and before the handler, where an owner's open can land for a command
-    // that holds no session lock.
-    providerDeviceRuntimeScope: async (task) => {
-      await hooks.beforeDispatch?.();
-      return await task();
-    },
-  });
-  const daemon = await createDaemonHttpServer({
-    token: 'daemon-token',
-    handleRequest,
-    env: {},
-    cwd: process.cwd(),
-  });
-  const daemonPort = await listenOnLoopback(daemon);
-  const send = async (
-    command: string,
-    positionals: string[],
-    meta: Record<string, unknown>,
-    request: { session?: string; flags?: Record<string, unknown> } = {},
-  ) => {
-    const response = await fetch(`http://127.0.0.1:${daemonPort}/rpc`, {
-      method: 'POST',
-      headers: { authorization: 'Bearer daemon-token', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: command,
-        method: 'agent_device.command',
-        params: {
-          session: request.session ?? SESSION,
-          command,
-          positionals,
-          flags: request.flags ?? {},
-          meta: { tenantId: TENANT, sessionIsolation: 'tenant', sessionExplicit: true, ...meta },
-        },
-      }),
-    });
-    return (await response.json()) as RpcBody;
-  };
-  return {
-    owner: { ...OWNER_SCOPE, leaseBackend: lease.backend, leaseId: lease.leaseId },
-    /** Another client of the same proxy token and tenant, with a live lease of its own. */
-    allocateOtherClient: (deviceKey: string = OWNER_SCOPE.deviceKey, ttlMs = 10 * LEASE_TTL_MS) => {
-      const scope = {
-        ...OWNER_SCOPE,
-        runId: 'run-b',
-        clientId: 'client-b',
-        deviceKey,
-        leaseBackend: 'ios-instance',
-      } as const;
-      const { leaseId } = leaseRegistry.allocateLease({ ...scope, ttlMs });
-      return { ...scope, leaseId };
-    },
-    leaseId: lease.leaseId,
-    sessionName,
-    sessionStore,
-    leaseRegistry,
-    publishLeasedSession,
-    expiryTeardown,
-    observeRunnerSession,
-    hostDiagnostics,
-    requestTeardown,
-    runtime,
-    hooks,
-    send,
-    passLeaseDeadline: () => {
-      now += LEASE_TTL_MS + 1;
-    },
-    expiryOwnerSettled: async () => {
-      await Promise.all(expiryEnds);
-    },
-    requestEvents: async (address: string, command?: string) => {
-      await sessionStore.flushEvents(address);
-      return sessionStore
-        .readEvents(address)
-        .events.filter(
-          (event) =>
-            event.kind.startsWith('request.') &&
-            (command === undefined || event.command === command),
-        )
-        .map((event) => event.kind);
-    },
-    close: async () => {
-      await closeLoopbackServer(daemon);
-    },
-  };
-}
 
 function expectLeaseIdRefusal(body: RpcBody): void {
   expect(body.error?.data, JSON.stringify(body)).toMatchObject({
@@ -800,10 +601,12 @@ test('doctor with the lease id reports its leased session', async () => {
   ]);
 });
 
-function writeSuite(): { flags: Record<string, unknown>; positionals: string[] } {
+function writeSuite(script = 'context platform=ios\nwait 0\n'): {
+  flags: Record<string, unknown>;
+  positionals: string[];
+} {
   const root = mkdtempForTestSync('agent-device-session-lease-touch-suite-');
   const scriptPath = path.join(root, 'flow.ad');
-  const script = 'context platform=ios\nwait 0\n';
   fs.writeFileSync(scriptPath, script);
   return {
     positionals: [scriptPath],
@@ -988,4 +791,101 @@ test('delayed suite recording and cleanup leave a replacement attempt lifetime i
   expect(replacement).toBeDefined();
   expect(daemon.sessionStore.lookup(name)?.lifetime).toBe(replacement?.lifetime);
   expect(daemon.sessionStore.get(name)?.screenRecording).toBe(replacementCapture);
+});
+
+test('a canceled queued attempt never acquires or cleans up the lifetime opened ahead of it', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  const name = attemptAddress(SUITE_SESSION);
+  const key = `session:${name}`;
+  const locks = getLeaseRegistryExecutionLocks(daemon.leaseRegistry);
+  const gate = deferred();
+  const occupied = deferred();
+  const holder = withKeyedLock(locks, key, async () => {
+    occupied.resolve();
+    await gate.promise;
+    return daemon.sessionStore.publish(name, makeIosAppSession(name));
+  });
+  await occupied.promise;
+  const initialLock = locks.get(key);
+  const suite = writeSuite('context platform=ios timeout=100\nwait 0\n');
+  const pending = daemon.send(
+    'test',
+    suite.positionals,
+    { ...UNLEASED, requestId: SUITE_REQUEST_ID },
+    {
+      session: SUITE_SESSION,
+      flags: { ...suite.flags, recordVideo: false },
+    },
+  );
+  try {
+    const response = await pending;
+    expect(response.result?.data).toMatchObject({ failed: 1 });
+    expect(JSON.stringify(response)).not.toContain('cleanup may still');
+    expect(locks.get(key)).not.toBe(initialLock);
+  } finally {
+    gate.resolve();
+  }
+  const successor = await holder;
+  await locks.get(key)?.catch(() => {});
+  expect(daemon.sessionStore.resolveCurrent(successor)).toBe(successor.session);
+});
+
+test('a recording on a timed-out attempt exports inside the video tail when replay settles', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  const name = attemptAddress(SUITE_SESSION);
+  const session = makeIosAppSession(name);
+  const outPath = path.join(mkdtempForTestSync('attempt-video-tail-'), 'capture.mp4');
+  fs.writeFileSync(outPath, 'capture');
+  session.screenRecording = makeTestScreenRecordingResource(session, { scope: 'device', outPath });
+  screenRecordingResourceStore.write(
+    screenRecordingResourceStore.resolvePath(daemon.sessionStore.resolveSessionDir(name)),
+    session.screenRecording.envelope,
+  );
+  daemon.sessionStore.publish(name, session);
+  const holdingReplay = deferred();
+  const settleReplay = deferred();
+  daemon.hooks.beforeDispatch = () => {
+    daemon.hooks.beforeDispatch = async () => {
+      daemon.hooks.beforeDispatch = undefined;
+      holdingReplay.resolve();
+      await settleReplay.promise;
+    };
+  };
+  let tailReached = false;
+  const sleep = retry.sleep;
+  vi.spyOn(retry, 'sleep').mockImplementation(async (ms) => {
+    if (ms === 2_000) return;
+    if (ms !== 3_000) return await sleep(ms);
+    tailReached = true;
+    settleReplay.resolve();
+    const key = `session:${name}`;
+    await getLeaseRegistryExecutionLocks(daemon.leaseRegistry)
+      .get(key)
+      ?.catch(() => {});
+  });
+  const suite = writeSuite('context platform=ios timeout=100\nopen "com.example.app"\n');
+  const response = daemon.send(
+    'test',
+    suite.positionals,
+    { ...UNLEASED, requestId: SUITE_REQUEST_ID },
+    {
+      session: SUITE_SESSION,
+      flags: suite.flags,
+    },
+  );
+  try {
+    expect(
+      await Promise.race([holdingReplay.promise.then(() => true), response.then(() => false)]),
+    ).toBe(true);
+    const result = await response;
+    expect(tailReached).toBe(true);
+    expect(JSON.stringify(result)).toContain('capture.mp4');
+    expect(JSON.stringify(result)).not.toContain('timeout_cleanup_pending');
+    expect(daemon.sessionStore.get(name)).toBeUndefined();
+  } finally {
+    settleReplay.resolve();
+    await response;
+  }
 });

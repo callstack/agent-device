@@ -1,3 +1,8 @@
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { handleRecordCommand } from '../record-runtime.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -24,6 +29,32 @@ test('record start adopts the runtime pair and projects unchanged response metad
   expect(harness.sessionStore.get(harness.sessionName)?.screenRecording?.handle).toBe(
     harness.runtime.handle,
   );
+});
+
+test('cancellation during runtime binding prevents starting native recording', async () => {
+  const { runtime, sessionName, sessionStore } = makeRecordRuntimeHarness('record-start-canceled-');
+  let canceled = false;
+  const response = await handleRecordCommand({
+    req: { token: 't', session: sessionName, command: 'record', positionals: ['start'] },
+    sessionName,
+    sessionStore,
+    platformServices: daemonPlatformServicesFixture(),
+    bindDevice: async (device, use) => {
+      const binding = await runtime.bindDevice(device, use);
+      canceled = true;
+      return binding;
+    },
+    bindExactDevice: runtime.bindExactDevice,
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    requestScope: platformRequestScopeFixture(),
+    retainDeviceExecutionLock: async () => {},
+    throwIfCanceled: () => {
+      if (canceled) throw createRequestCanceledError();
+    },
+  });
+  expect(response).toMatchObject({ ok: false, error: { details: { reason: 'request_canceled' } } });
+  expect(runtime.start).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
 
 test('record start preserves the requested path while the runtime receives the expanded native path', async () => {

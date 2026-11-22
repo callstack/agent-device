@@ -1,4 +1,5 @@
-import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import { getRequestSignal, throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import { errorResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { handleRecordCommand } from './record-runtime.ts';
 import type {
@@ -49,31 +50,52 @@ export function createReplayTestVideoOwner(
   ) {
     return undefined;
   }
-  const record: ReplayTestVideoOwner['record'] = async (request) =>
-    await withSessionExecutionLock(request.sessionName, async (holdDevice) => {
-      const ref = sessionRef(request.sessionName, request.phase);
-      if (!ref) return { ok: true, data: {} };
-      await holdDevice(ref.session.device.id);
-      return await handleRecordCommand({
-        req: recordRequest(request),
-        sessionName: ref.address,
-        sessionRef: ref,
-        sessionStore,
-        bindDevice,
-        platformServices,
-        bindExactDevice,
-        admissionLedger: screenRecordingAdmissionLedger,
-        requestScope,
-        retainDeviceExecutionLock: holdDevice,
-        throwIfCanceled:
-          request.phase === 'stop'
-            ? throwIfCanceled
-            : () => {
-                throwIfRequestCanceled(request.request.meta?.requestId);
-                throwIfCanceled();
-              },
-      });
-    });
+  const record: ReplayTestVideoOwner['record'] = async (request) => {
+    if (request.phase === 'stop' && !sessionRef(request.sessionName, 'stop'))
+      return { ok: true, data: {} };
+    const requestId = request.request.meta?.requestId;
+    const signal = request.phase === 'start' ? getRequestSignal(requestId) : undefined;
+    const scope = signal ? { ...requestScope, signal } : requestScope;
+    const bindStart: BindDeviceRuntime = signal
+      ? (device, use) => bindDevice(device, use, 'bypass', scope)
+      : bindDevice;
+    return await withSessionExecutionLock(
+      request.sessionName,
+      async (holdDevice) => {
+        signal?.throwIfAborted();
+        const ref = sessionRef(request.sessionName, request.phase);
+        if (!ref)
+          return request.phase === 'stop'
+            ? { ok: true, data: {} }
+            : errorResponse(
+                'NO_ACTIVE_SESSION',
+                'Replay recording requires a live attempt session.',
+              );
+        await holdDevice(ref.session.device.id);
+        return await handleRecordCommand({
+          req: recordRequest(request),
+          sessionName: ref.address,
+          sessionRef: ref,
+          sessionStore,
+          bindDevice: bindStart,
+          platformServices,
+          bindExactDevice,
+          admissionLedger: screenRecordingAdmissionLedger,
+          requestScope: scope,
+          retainDeviceExecutionLock: holdDevice,
+          throwIfCanceled:
+            request.phase === 'stop'
+              ? throwIfCanceled
+              : () => {
+                  signal?.throwIfAborted();
+                  throwIfRequestCanceled(requestId);
+                  throwIfCanceled();
+                },
+        });
+      },
+      signal,
+    );
+  };
   return {
     throwIfCanceled,
     record,

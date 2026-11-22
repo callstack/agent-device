@@ -118,6 +118,9 @@ test('cancelled publication leaves prior client authority intact', () => {
     published: false,
     reason: 'cancelled',
   });
+  const canceled = bindAuthority(input.sessionStore, input.sessionName, controller.signal);
+  expect(() => canceled.store(input.prior)).toThrow(controller.signal.reason);
+  expect(input.session.snapshot).toBe(input.captured);
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
   expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
   expect(refFrameTree(input.session)).toBe(input.prior);

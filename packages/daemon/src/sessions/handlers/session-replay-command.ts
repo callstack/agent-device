@@ -2,6 +2,7 @@ import {
   getRequestDeadlineMs,
   getRequestSignal,
   isRequestCanceled,
+  throwIfRequestCanceled,
 } from '@agent-device/host-kit/request';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
@@ -61,7 +62,10 @@ export const replayDaemonDependencies: ReplayDaemonDependencies = { resolveSessi
  * leaves every capture on the owner's own snapshot path. Root composition always supplies one, so
  * a replay run driven through the daemon never takes that branch.
  */
-export type ReplayCaptureAdmission = Readonly<{ meta?: DaemonRequest['meta'] }> &
+export type ReplayCaptureAdmission = Readonly<{
+  meta?: DaemonRequest['meta'];
+  isActive?: () => boolean;
+}> &
   RuntimeAdmissionBindings;
 
 /** What a replay run with no composed admission resolves every capture cell to. */
@@ -87,6 +91,7 @@ export const handleReplayCommand: SessionCommandHandler = async ({
       inspectFacts,
       bindDevice,
       platformServices,
+      isActive: req.internal?.sessionAuthorityActive,
     }),
     invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
@@ -126,10 +131,11 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     return attempt?.running === true && !isRequestCanceled(attempt.requestId);
   };
   const running = (name: string) => (isRunning(name) ? coordinator.pin(req, name) : undefined);
-  const completed = (name: string) => {
+  const pinned = (name: string) => {
     const ref = attempts.get(name)?.ref;
     return ref && sessionStore.resolveCurrent(ref) ? sessionStore.refresh(ref) : undefined;
   };
+  const completed = (name: string) => (attempts.get(name)?.running ? undefined : pinned(name));
   const video = createReplayTestVideoOwner({
     sessionStore,
     withSessionExecutionLock,
@@ -163,31 +169,48 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     host,
     session: createReplaySession(sessionName, logPath, sessionStore, capture),
     runAttempt: async (name, requestId, task) =>
-      await withSessionExecutionLock(name, async () => {
-        coordinator.pin(req, name);
-        const attempt: { running: boolean; requestId?: string; ref?: SessionRef } = {
-          running: true,
-          requestId,
-        };
-        attempts.set(name, attempt);
-        try {
-          return await task();
-        } finally {
-          attempt.running = false;
-          attempt.ref = coordinator.pin(req, name);
-        }
-      }),
+      await withSessionExecutionLock(
+        name,
+        async () => {
+          throwIfRequestCanceled(requestId);
+          const attempt = { running: true, requestId, ref: coordinator.pin(req, name) };
+          attempts.set(name, attempt);
+          try {
+            return await task();
+          } finally {
+            attempt.running = false;
+          }
+        },
+        getRequestSignal(requestId),
+      ),
     createSession: (name, testLogPath, phase) =>
       createReplaySession(
         name,
         testLogPath,
         sessionStore,
         capture,
-        phase === 'replay' ? () => running(name) : () => completed(name),
+        phase === 'replay' ? () => running(name) : () => pinned(name),
         withSessionExecutionLock,
         () => isRunning(name),
       ),
-    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
+    invoke: replayInvokeOverDispatch(async (nested) => {
+      const name = nested.session;
+      const attempt = attempts.get(name);
+      const result = await (invokeReplayAction ?? invoke)({
+        ...nested,
+        internal: {
+          ...nested.internal,
+          onLifetimePublished: (address, lifetime) => {
+            if (attempt && name === address && isRunning(name)) {
+              const ref = coordinator.pin(req, name);
+              if (ref?.lifetime === lifetime) attempt.ref = ref;
+            }
+          },
+        },
+      });
+      if (attempt && isRunning(name)) attempt.ref = coordinator.pin(req, name);
+      return result;
+    }, req),
     dependencies: replayDaemonDependencies,
     cleanupSession: async (name) => {
       // A timed-out attempt can still hold the lock. Its late cleanup runs after it settles.
@@ -258,7 +281,7 @@ export function createReplaySession(
   capture?: ReplayCaptureAdmission,
   lookup: () => SessionRef | undefined = () => store.lookup(name),
   withSessionExecutionLock?: WithSessionExecutionLock,
-  isActive?: () => boolean,
+  isActive = capture?.isActive,
 ): ReplaySession {
   const updateSession = (mutate: (session: SessionState) => void): boolean => {
     const session = lookup()?.session;
@@ -355,6 +378,7 @@ export function createReplaySession(
         platform,
       }),
     bindAuthority: (signal) => {
+      signal ??= getRequestSignal(capture?.meta?.requestId);
       const ref = lookup();
       return {
         ...bindInternalObservationAuthority({ sessionStore: store, ref, signal, isActive }),
@@ -363,18 +387,22 @@ export function createReplaySession(
             throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
           }
           const captureCurrent = async () => {
-            signal?.throwIfAborted();
-            if (isActive?.() === false)
-              throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
-            const session = store.requireCurrent(ref);
+            const assertCurrent = () => {
+              signal?.throwIfAborted();
+              if (isActive?.() === false)
+                throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
+              return store.requireCurrent(ref);
+            };
+            const session = assertCurrent();
             const bound = await bindCaptureFor(ref.lifetime, session);
-            signal?.throwIfAborted();
+            assertCurrent();
             return await captureSnapshot({
               device: session.device,
               session,
               flags,
               logPath: captureLogPath,
               signal,
+              assertCurrent,
               ...(bound
                 ? {
                     captureData: async () =>
@@ -393,10 +421,14 @@ export function createReplaySession(
             });
           };
           if (!withSessionExecutionLock) return await captureCurrent();
-          return await withSessionExecutionLock(ref.address, async (holdDevice) => {
-            await holdDevice(store.requireCurrent(ref).device.id);
-            return await captureCurrent();
-          });
+          return await withSessionExecutionLock(
+            ref.address,
+            async (holdDevice) => {
+              await holdDevice(store.requireCurrent(ref).device.id);
+              return await captureCurrent();
+            },
+            signal,
+          );
         },
       };
     },

@@ -39,6 +39,7 @@ export function bindInternalObservationAuthority(
 ): ReplayObservationAuthority {
   return {
     store: (snapshot) => {
+      params.signal?.throwIfAborted();
       if (params.isActive?.() === false)
         throw new Error('Internal observation authority has ended.');
       return storeInternalObservation(params, snapshot);

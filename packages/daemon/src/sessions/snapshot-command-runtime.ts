@@ -26,7 +26,11 @@ import { createDaemonRuntimePolicy } from '../execution/runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../core/runtime-session.ts';
 import { isInteractiveObservation } from '../core/session-action-recorder.ts';
 import { setCommandSnapshot } from '../execution/session-snapshot.ts';
-import { SessionCoordinator, SessionStore } from '../core/session-store.ts';
+import {
+  assertSessionAuthorityActive,
+  SessionCoordinator,
+  SessionStore,
+} from '../core/session-store.ts';
 import {
   resolveBoundSnapshotCaptureRuntime,
   type SnapshotRuntimeRouteParams,
@@ -112,6 +116,7 @@ export async function dispatchSnapshotRuntimeCommand(
         return timeoutResponse;
       }
       const current = getSession();
+      assertSessionAuthorityActive(req);
       if (result.record) {
         recordSnapshotRuntimeAction({
           req,
@@ -160,6 +165,8 @@ async function createSnapshotRuntime(params: {
     ref: params.ref,
     recordOptions: { includeSnapshot: true },
     setRecord: (record, current, ref) => {
+      if (!ref) slot!.assertPublishable();
+      assertSessionAuthorityActive(req);
       const snapshotRecord = assertSnapshotSessionRecord(record);
       const keepCurrentSnapshot = shouldKeepCurrentSnapshot(
         current,
@@ -203,6 +210,10 @@ async function createSnapshotRuntime(params: {
       device,
       snapshotScope,
       capturedQuality: params.capturedQuality,
+      assertCurrent: () => {
+        if (params.ref) sessionStore.requireCurrent(params.ref);
+        assertSessionAuthorityActive(req);
+      },
       captureSnapshotData: params.captureSnapshotData,
       accessibilityAudit: params.accessibilityAudit,
     }),
@@ -258,6 +269,7 @@ function createDaemonSnapshotBackend(params: {
   device: SessionState['device'];
   snapshotScope: string | undefined;
   capturedQuality: CapturedSnapshotQuality;
+  assertCurrent: () => void;
   captureSnapshotData: () => Promise<SnapshotResult>;
   accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
 }): AgentDeviceBackend {
@@ -283,6 +295,7 @@ function createDaemonSnapshotBackend(params: {
         logPath,
         snapshotScope,
         signal: context.signal,
+        assertCurrent: params.assertCurrent,
         captureData: params.captureSnapshotData,
       });
       const annotations = snapshotCaptureAnnotationsFrom(capture);

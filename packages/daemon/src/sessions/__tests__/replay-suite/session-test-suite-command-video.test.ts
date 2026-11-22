@@ -187,6 +187,7 @@ function expectRecordVideoCalls(params: {
   const { artifactsDir } = params;
   const [startCall, stopCall] = requireRecordVideoCalls();
   expectRecordRuntimeCall(startCall, params);
+  assert.notEqual(startCall.requestScope.signal, params.requestScope.signal);
   const attemptId = startCall.req.meta?.requestId;
   assert.ok(attemptId);
   markRequestCanceled(attemptId);
@@ -203,6 +204,8 @@ function expectRecordVideoCalls(params: {
     path.join(artifactsDir ?? '', 'attempt-1', 'recording.mp4'),
   ]);
   expectRecordRuntimeCall(stopCall, params);
+  assert.strictEqual(stopCall.bindDevice, unavailableBindDevice);
+  assert.strictEqual(stopCall.requestScope, params.requestScope);
   assert.strictEqual(stopCall.throwIfCanceled, params.throwIfCanceled);
   assert.deepEqual(stopCall.req.positionals, ['stop']);
 }
@@ -220,15 +223,13 @@ function expectRecordRuntimeCall(
   call: RecordRuntimeHandlerParams,
   expected: Pick<
     Parameters<typeof expectRecordVideoCalls>[0],
-    'generatedSession' | 'admissionLedger' | 'requestScope'
+    'generatedSession' | 'admissionLedger'
   >,
 ): void {
   assert.equal(call.sessionName, expected.generatedSession);
   assert.equal(call.req.session, expected.generatedSession);
-  assert.strictEqual(call.bindDevice, unavailableBindDevice);
   assert.strictEqual(call.bindExactDevice, unavailableBindExactDevice);
   assert.strictEqual(call.admissionLedger, expected.admissionLedger);
-  assert.strictEqual(call.requestScope, expected.requestScope);
 }
 
 test('test finalizes replay video exactly once when cancellation arrives after start', async () => {
