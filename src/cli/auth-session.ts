@@ -5,13 +5,15 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
-import { postCloudAuthJson } from './cloud-auth-request.ts';
 import {
   CLI_SESSION_FORMAT_VERSION,
   parseCliSessionRecord,
   type CliSessionRecord,
 } from './cli-session-format.ts';
 
+// The transport loads when a request is made, so a command that reads no cloud auth stays off it.
+const postCloudAuthJson: typeof import('./cloud-auth-request.ts').postCloudAuthJson = async (o) =>
+  (await import('./cloud-auth-request.ts')).postCloudAuthJson(o);
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
 const DEVICE_AUTH_POLL_PATH = '/api/control-plane/device-auth/poll';
