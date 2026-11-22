@@ -11,9 +11,9 @@ const RUNNER_MACOS_PRODUCT_REASONS = {
   productRepairFailed: { reason: 'RUNNER_PRODUCT_REPAIR_FAILED' },
 } as const satisfies ReasonTable<'apple runner'>;
 
-const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set([
-  'RUNNER_PRODUCT_MISSING',
-  'RUNNER_PRODUCT_REPAIR_FAILED',
+const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set<string>([
+  RUNNER_MACOS_PRODUCT_REASONS.productMissing.reason,
+  RUNNER_MACOS_PRODUCT_REASONS.productRepairFailed.reason,
 ]);
 
 const AD_HOC_RESIGN_ARGS = [

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { memberPath } from '../../scripts/layering/layering-ast.ts';
+import { collectReasonTables } from '../../scripts/reasons/collect.ts';
 import {
   exportedConstObject,
   parseTs,
@@ -11,11 +13,13 @@ import {
  * `error.details.reason` is a published vocabulary: a client that branches on it treats an
  * undocumented member as an unknown value. Every exported typed published-reason table must have
  * each reason documented at the surfaces that enumerate it, in the same change that adds it.
- * Tables are read as typed syntax (oxc), so an unreadable member fails here instead of being dropped.
+ * Reason tables are read by the collector the reasons page uses; the runner code rows, which are not a
+ * reason table, and the claim-conflict union are read as typed syntax (oxc), so an unreadable member
+ * fails here instead of being dropped.
  */
 
 type Surface = Readonly<{ name: string; relativePath: string }>;
-type Kind = 'rows' | 'object' | 'union';
+type Kind = 'table' | 'runnerCodes' | 'union';
 const commandsDoc: Surface = { name: 'commands.md', relativePath: 'website/docs/docs/commands.md' };
 const cliHelpWorkflows: Surface = {
   name: 'cli-help-workflows.ts',
@@ -30,15 +34,15 @@ const reasonTable = (
 ) => ({ name, relativePath, kind, surfaces });
 
 const REASON_TABLES = [
-  reasonTable('RUNNER_ERROR_CODES', 'packages/apple-runner/src/runner-contract.ts', 'rows'),
-  reasonTable('PRE_DISPATCH_REFUSAL_REASONS', 'packages/kernel/src/errors.ts', 'rows'),
-  reasonTable('SCROLL_REASONS', 'packages/contracts/src/scroll-reasons.ts', 'rows'),
+  reasonTable('RUNNER_ERROR_CODES', 'packages/apple-runner/src/runner-contract.ts', 'runnerCodes'),
+  reasonTable('PRE_DISPATCH_REFUSAL_REASONS', 'packages/kernel/src/errors.ts', 'table'),
+  reasonTable('SCROLL_REASONS', 'packages/contracts/src/scroll-reasons.ts', 'table'),
   reasonTable(
     'ANDROID_SCREEN_RECORDING_REASONS',
     'packages/contracts/src/screen-recording-runtime-host.ts',
-    'rows',
+    'table',
   ),
-  reasonTable('WAIT_REASONS', 'packages/contracts/src/wait.ts', 'rows', [
+  reasonTable('WAIT_REASONS', 'packages/contracts/src/wait.ts', 'table', [
     commandsDoc,
     cliHelpWorkflows,
   ]),
@@ -77,62 +81,46 @@ test('a documented reason does not stand in for a longer undocumented one', () =
 
 test('the extractors read every member and reject unsupported ones instead of dropping them', () => {
   const read = (source: string, name: string, kind: Kind) =>
-    readReasons(source, 'fixture.ts', name, kind);
+    readReasons(source, 'packages/a/src/table.ts', name, kind);
   const expectRead = (source: string, name: string, kind: Kind, expected: string[]) =>
     assert.deepEqual(read(source, name, kind), expected);
   const expectReject = (source: string, name: string, kind: Kind, pattern: RegExp) =>
     assert.throws(() => read(source, name, kind), pattern);
+  const codes = (reason: string) =>
+    `export const R = {
+    // Busy.
+    busy: { reason: 'runner_busy' } } as const satisfies ReasonTable<'r'>;
+    export const RUNNER_ERROR_CODES = { RUNNER_BUSY: { dispatched: 'no', reason: ${reason} }, RUNNER_WEDGED: { dispatched: 'no' } } as const satisfies Record<string, RunnerErrorCodeRow>;`;
 
-  expectRead(
-    `export const RUNNER_ERROR_CODES = {
-      RUNNER_BUSY: { dispatched: 'no', reason: 'runner_busy' },
-      RUNNER_WEDGED: { dispatched: 'no' },
-    } as const satisfies Record<string, RunnerErrorCodeRow>;`,
-    'RUNNER_ERROR_CODES',
-    'rows',
-    ['runner_busy'],
-  );
+  expectRead(codes('R.busy.reason'), 'RUNNER_ERROR_CODES', 'runnerCodes', ['runner_busy']);
   expectReject(
-    `export const RUNNER_ERROR_CODES = { RUNNER_BUSY: { dispatched: 'no', reason: R.busy } } as const satisfies Record<string, RunnerErrorCodeRow>;`,
+    codes('R.gone.reason'),
     'RUNNER_ERROR_CODES',
-    'rows',
-    /unsupported reason in RUNNER_ERROR_CODES row RUNNER_BUSY/,
+    'runnerCodes',
+    /RUNNER_ERROR_CODES row RUNNER_BUSY must write its reason as a literal or read it from a reason table row/,
   );
+  expectRead(codes("'runner_busy'"), 'RUNNER_ERROR_CODES', 'runnerCodes', ['runner_busy']);
   expectRead(
-    `export const R = { busy: { reason: 'runner_busy' } } as const satisfies ReasonTable<'r'>;
-    export const RUNNER_ERROR_CODES = { RUNNER_BUSY: { dispatched: 'no', reason: R.busy.reason } } as const satisfies Record<string, RunnerErrorCodeRow>;`,
-    'RUNNER_ERROR_CODES',
-    'rows',
-    ['runner_busy'],
-  );
-  expectRead(
-    `export const WAIT_REASONS = { captureStalled: 'wait_capture_stalled', deadlineExceeded: "wait_deadline_exceeded" } as const;`,
+    `export const WAIT_REASONS = {
+      // Stalled.
+      captureStalled: { reason: 'wait_capture_stalled' },
+    } as const satisfies ReasonTable<'wait'>;`,
     'WAIT_REASONS',
-    'object',
-    ['wait_capture_stalled', 'wait_deadline_exceeded'],
+    'table',
+    ['wait_capture_stalled'],
   );
-  for (const member of ['computeReason()']) {
-    expectReject(
-      `export const WAIT_REASONS = { a: ${member} } as const;`,
-      'WAIT_REASONS',
-      'object',
-      /unsupported member in WAIT_REASONS/,
-    );
-  }
   expectRead(
     `export type DeviceClaimConflictReason = 'DEVICE_CLAIM_LIVE_OWNER' | 'DEVICE_CLAIM_OWNER_UNCERTAIN';`,
     'DeviceClaimConflictReason',
     'union',
     ['DEVICE_CLAIM_LIVE_OWNER', 'DEVICE_CLAIM_OWNER_UNCERTAIN'],
   );
-  for (const member of ['string']) {
-    expectReject(
-      `export type DeviceClaimConflictReason = ${member};`,
-      'DeviceClaimConflictReason',
-      'union',
-      /unsupported member in DeviceClaimConflictReason/,
-    );
-  }
+  expectReject(
+    `export type DeviceClaimConflictReason = string;`,
+    'DeviceClaimConflictReason',
+    'union',
+    /unsupported member in DeviceClaimConflictReason/,
+  );
 });
 
 /** Whether `docs` names `reason` as a whole token, so a longer reason that extends it does not count. */
@@ -141,16 +129,44 @@ function documentsReason(docs: string, reason: string): boolean {
   return new RegExp(`(?<![A-Za-z0-9_-])${reason}(?![A-Za-z0-9_-])`).test(docs);
 }
 
-/** Reads a published-reason table's members from the typed syntax, failing on anything unreadable. */
-function readReasons(
-  source: string,
-  filename: string,
+/** Reads a published-reason table's members, failing on anything unreadable. */
+function readReasons(source: string, filename: string, name: string, kind: Kind): string[] {
+  if (kind === 'union') return readUnionReasons(parseTs(filename, source), filename, name);
+  const tables = collectReasonTables(new Map([[filename, source]]));
+  if (kind === 'table') {
+    const table = tables.find((candidate) => candidate.name === name);
+    assert.ok(table, `${filename} must declare the ${name} reason table`);
+    return table.rows.map(({ reason }) => reason);
+  }
+  return readRunnerCodeReasons(parseTs(filename, source), tables, name);
+}
+
+/**
+ * The reasons the rows of the runner code table publish. A row writes its reason as
+ * a literal or `TABLE.member.reason`, which must name a row of a reason table in the same file.
+ */
+function readRunnerCodeReasons(
+  parsed: ReturnType<typeof parseTs>,
+  tables: ReturnType<typeof collectReasonTables>,
   name: string,
-  kind: 'rows' | 'object' | 'union',
 ): string[] {
-  const parsed = parseTs(filename, source);
-  if (kind === 'union') return readUnionReasons(parsed, filename, name);
-  return readTableReasons(parsed, name, kind);
+  return exportedConstObject(parsed, name).properties.flatMap((property: any) => {
+    const row = unwrapAssertion(property.value);
+    const reason = row?.properties?.find((member: any) => member.key?.name === 'reason');
+    if (reason === undefined) return [];
+    if (reason.value.type === 'Literal' && typeof reason.value.value === 'string') {
+      return [reason.value.value];
+    }
+    const [table, member, field] = memberPath(reason.value) ?? [];
+    const found = tables
+      .find((candidate) => candidate.name === table)
+      ?.rows.find((candidate) => candidate.member === member);
+    assert.ok(
+      field === 'reason' && found !== undefined,
+      `${name} row ${property.key.name} must write its reason as a literal or read it from a reason table row as TABLE.member.reason.`,
+    );
+    return [found.reason];
+  });
 }
 
 /** The string members of an exported `type Name = 'a' | 'b'` union. */
@@ -180,76 +196,4 @@ function readUnionReasons(
     );
     return member.literal.value;
   });
-}
-
-/**
- * The reasons of an exported const table: each row's `reason`, or each member's literal. A row may
- * read its reason from a reason table in the same file as `TABLE.member.reason`.
- */
-function readTableReasons(
-  parsed: ReturnType<typeof parseTs>,
-  name: string,
-  kind: 'rows' | 'object',
-): string[] {
-  return exportedConstObject(parsed, name).properties.flatMap((property: any) => {
-    assert.ok(
-      property.type === 'Property' && property.key.type === 'Identifier',
-      `unsupported member in ${name}: ${property.type}`,
-    );
-    return kind === 'object'
-      ? [objectMemberReason(property, name)]
-      : rowReasons(parsed, property, name);
-  });
-}
-
-/** A member whose value is the reason literal itself. */
-function objectMemberReason(property: any, name: string): string {
-  assert.ok(
-    property.value.type === 'Literal' && typeof property.value.value === 'string',
-    `unsupported member in ${name}: ${property.value.type}`,
-  );
-  return property.value.value;
-}
-
-/** The `reason` of a row object: a literal, or `TABLE.member.reason` from a table in the same file. */
-function rowReasons(parsed: ReturnType<typeof parseTs>, property: any, name: string): string[] {
-  const row = unwrapAssertion(property.value);
-  assert.ok(
-    row?.type === 'ObjectExpression',
-    `unsupported row in ${name} for ${property.key.name}: ${row?.type ?? 'none'}`,
-  );
-  return row.properties
-    .filter(
-      (member: any) =>
-        member.type === 'Property' &&
-        member.key.type === 'Identifier' &&
-        member.key.name === 'reason',
-    )
-    .map((member: any) => {
-      const reason =
-        member.value.type === 'Literal' && typeof member.value.value === 'string'
-          ? member.value.value
-          : readReferencedReason(parsed, member.value);
-      assert.ok(
-        reason !== undefined,
-        `unsupported reason in ${name} row ${property.key.name}: ${member.value.type}`,
-      );
-      return reason;
-    });
-}
-
-/** The reason `TABLE.member.reason` names, read from the row of an exported table in `parsed`. */
-function readReferencedReason(parsed: ReturnType<typeof parseTs>, node: any): string | undefined {
-  const row = node?.type === 'MemberExpression' && !node.computed ? node.object : undefined;
-  const table = row?.type === 'MemberExpression' && !row.computed ? row.object : undefined;
-  if (node?.property?.name !== 'reason' || table?.type !== 'Identifier') return undefined;
-  const named = exportedConstObject(parsed, table.name).properties.find(
-    (property: any) => property.key?.name === row.property.name,
-  );
-  const field = unwrapAssertion(named?.value)?.properties?.find(
-    (property: any) => property.key?.name === 'reason',
-  );
-  return field?.value?.type === 'Literal' && typeof field.value.value === 'string'
-    ? field.value.value
-    : undefined;
 }
