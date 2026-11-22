@@ -152,36 +152,41 @@ export async function stopDaemonProcess(
   if ((await waitForDaemonExit(identity, { timeoutMs: 0 })).exited) {
     return { status: 'exited', identity, mode: 'already-exited' };
   }
-  let previousSignal: 'SIGTERM' | undefined;
+  let previousExitMode: 'graceful' | 'forced' | undefined;
   if (options.mode === 'graceful') {
     const result = await signalAndWaitForDaemonExit(identity, {
       signal: 'SIGTERM',
       timeoutMs: options.termTimeoutMs,
     });
     if (result.status !== 'survived') return result;
-    previousSignal = 'SIGTERM';
+    previousExitMode = signalExitMode('SIGTERM');
   }
   const result = await signalAndWaitForDaemonExit(identity, {
     signal: 'SIGKILL',
     timeoutMs: options.killTimeoutMs,
-    previousSignal,
+    previousExitMode,
   });
   return result.status === 'survived' ? { status: 'retained', reason: 'exit-timeout' } : result;
 }
 
+function signalExitMode(signal: 'SIGTERM' | 'SIGKILL'): 'graceful' | 'forced' {
+  // Win32 TerminateProcess handles cross-process SIGTERM immediately without invoking Node handlers.
+  return signal === 'SIGTERM' && process.platform !== 'win32' ? 'graceful' : 'forced';
+}
+
 async function signalAndWaitForDaemonExit(
   identity: DaemonProcessIdentity,
-  options: { signal: 'SIGTERM' | 'SIGKILL'; timeoutMs: number; previousSignal?: 'SIGTERM' },
+  options: {
+    signal: 'SIGTERM' | 'SIGKILL';
+    timeoutMs: number;
+    previousExitMode?: 'graceful' | 'forced';
+  },
 ): Promise<DaemonTerminationResult | Readonly<{ status: 'survived' }>> {
   const verified = isAgentDeviceDaemonProcess(identity.pid, identity.startTime);
   const signaled = verified && trySignalProcess(identity.pid, options.signal);
   const mode = signaled
-    ? options.signal === 'SIGTERM'
-      ? 'graceful'
-      : 'forced'
-    : options.previousSignal
-      ? 'graceful'
-      : 'already-exited';
+    ? signalExitMode(options.signal)
+    : (options.previousExitMode ?? 'already-exited');
   const wait = await waitForDaemonExit(identity, {
     timeoutMs: mode === 'already-exited' ? 0 : options.timeoutMs,
   });
