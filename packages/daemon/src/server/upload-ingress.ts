@@ -17,7 +17,8 @@ import { sendRestJsonError } from './http-errors.ts';
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
 
 const UPLOAD_INGRESS_REASONS = {
-  // The upload body did not finish within the request's aggregate deadline (`details.timeoutMs`).
+  // The upload request exceeded its aggregate deadline (`details.timeoutMs`), which also covers
+  // processing after the body arrived.
   deadlineExceeded: { reason: 'transfer_ingress_deadline_exceeded' },
   // The client disconnected or canceled before the upload finished.
   canceled: { reason: 'upload_canceled' },

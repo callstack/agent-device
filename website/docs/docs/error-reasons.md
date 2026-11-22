@@ -698,7 +698,7 @@ These reasons can come from more than one command.
 | `UPLOAD_STATE_CORRUPT` | The staged upload holds more bytes than it declared, so it cannot resume; start a new upload. |
 | `UPLOAD_ROLLBACK_FAILED` | A failed chunk could not be rolled back, so the upload ticket was invalidated; start a new upload. |
 | `UPLOAD_FINALIZE_CLEANUP_FAILED` | Finalizing the upload failed, and removing its staged files failed too; `details.originalError` holds the first failure. |
-| `transfer_ingress_deadline_exceeded` | The upload body did not finish within the request's aggregate deadline (`details.timeoutMs`). |
+| `transfer_ingress_deadline_exceeded` | The upload request exceeded its aggregate deadline (`details.timeoutMs`), which also covers processing after the body arrived. |
 | `upload_canceled` | The client disconnected or canceled before the upload finished. |
 
 ### Web session naming
