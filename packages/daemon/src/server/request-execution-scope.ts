@@ -33,6 +33,7 @@ import {
   assertRequestTenantAdmission,
   resolveRequestSessionName,
   scopeRequestSession,
+  withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
 import { isBoundedCompositeRequest } from '../core/lease-context.ts';
 import {
@@ -244,7 +245,7 @@ export async function createRequestExecutionScope(params: {
     deriveWebSessionIdentity(
       params.req.session,
       tenantScopedReq,
-      resolveSessionScope(tenantScopedReq),
+      withTenantAdmissionOnRoutingError(unscopedReq, () => resolveSessionScope(tenantScopedReq)),
     );
   let scopedReq = applyRequestCommandDefaults({
     ...tenantScopedReq,

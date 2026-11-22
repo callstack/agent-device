@@ -102,23 +102,32 @@ export function assertRequestTenantAdmission(
   requireWellFormedTenant(rawTenant, assertLease);
 }
 
-/** Resolve the session address, giving an invalid tenant priority over routing errors. */
+/** If routing fails without a session, give an invalid tenant priority over the routing error. */
+export function withTenantAdmissionOnRoutingError<T>(
+  unscopedReq: DaemonRequest,
+  resolve: () => T,
+): T {
+  try {
+    return resolve();
+  } catch (error) {
+    assertRequestTenantAdmission(unscopedReq);
+    throw error;
+  }
+}
+
+/** Resolve the session address and validate the original tenant against that session. */
 export function resolveRequestSessionName(params: {
   scopedReq: DaemonRequest;
   unscopedReq: DaemonRequest;
   sessionStore: SessionStore;
 }): string {
   const { scopedReq, unscopedReq, sessionStore } = params;
-  let sessionName: string;
-  try {
-    sessionName = resolveEffectiveSessionName(scopedReq, sessionStore, {
+  const sessionName = withTenantAdmissionOnRoutingError(unscopedReq, () =>
+    resolveEffectiveSessionName(scopedReq, sessionStore, {
       // Inventory must resolve an address even when the workspace owns several implicit sessions.
       attachesToSession: getSessionCommandKind(scopedReq.command) !== 'inventory',
-    });
-  } catch (error) {
-    assertRequestTenantAdmission(unscopedReq);
-    throw error;
-  }
+    }),
+  );
   assertRequestTenantAdmission(unscopedReq, sessionStore.get(sessionName));
   return sessionName;
 }

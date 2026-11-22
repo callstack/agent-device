@@ -500,6 +500,28 @@ test('a malformed tenant takes precedence over ambiguous workspace routing', asy
   expect(malformed.error?.data?.code, JSON.stringify(malformed)).toBe('INVALID_ARGS');
 });
 
+test('a malformed tenant flag takes precedence over conflicting isolation carriers', async () => {
+  if (!world) return;
+  world.sessionStore.publish('local', makeIosAppSession('local'));
+  const refused = await world.socket({
+    session: 'local',
+    command: 'snapshot',
+    meta: { sessionExplicit: true, sessionIsolation: 'none' },
+    flags: { sessionIsolation: 'tenant', tenant: 'not a tenant' },
+  });
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+});
+
+test('a malformed meta tenant takes precedence over an invalid implicit workspace', async () => {
+  if (!world) return;
+  const refused = await world.socket({
+    session: 'default',
+    command: 'snapshot',
+    meta: { tenantId: 'not a tenant', cwd: 1 },
+  });
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+});
+
 test('a malformed tenant takes precedence over device pin and daemon policy refusals', async () => {
   if (!world) return;
   await world.close();
