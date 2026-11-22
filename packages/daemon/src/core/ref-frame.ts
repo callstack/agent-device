@@ -39,7 +39,8 @@ const outdatedObservations = new WeakSet<SnapshotState>();
  * distinguish "capture a complete snapshot" from "use the emitted pinned ref".
  */
 export const REF_FRAME_REASONS = {
-  // A device action since the snapshot expired the ref frame, so none of its refs resolve.
+  // A device action since the snapshot expired the ref frame, so a mutation using its refs is
+  // refused; a read that still has retained evidence answers with a staleness warning instead.
   frameExpired: { reason: 'ref_frame_expired' },
   // The pinned ref was minted from a snapshot generation that a newer one superseded.
   generationMismatch: { reason: 'ref_generation_mismatch' },
