@@ -18,7 +18,7 @@ test('invalid file list and staging JSON preserve status without a decoder cause
     { apiUrl: 'https://instance.invalid/api', token } as Parameters<
       typeof createLimrunSimulatorFiles
     >[0],
-    async () => ({}),
+    () => ({}),
     new AbortController().signal,
   );
   const file = path.join(await mkdtempForTest('limrun-files-'), 'data.txt');
