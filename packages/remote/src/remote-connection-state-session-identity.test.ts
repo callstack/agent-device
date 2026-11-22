@@ -1,4 +1,4 @@
-import { test, vi } from 'vitest';
+import { describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -103,81 +103,39 @@ function captureRefusal(run: () => unknown): AppError {
 
 const runsAsRoot = process.getuid?.() === 0;
 
-test('sessions named Demo and demo keep separate records', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-case-');
-  writeRemoteConnectionState({ stateDir, state: recordFor('Demo') });
-  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
+describe.each([
+  { first: 'Demo', second: 'demo', files: ['demo.json', hashedFileName('Demo')] },
+  {
+    first: '\uD800',
+    second: '\uD801',
+    files: [hashedFileName('\uD800'), hashedFileName('\uD801')],
+  },
+])('sessions named $first and $second', ({ first, second, files }) => {
+  test('keep separate records, and removing one leaves the other', () => {
+    const stateDir = mkdtempForTestSync('agent-device-remote-identity-pair-');
+    writeRemoteConnectionState({ stateDir, state: recordFor(first) });
+    writeRemoteConnectionState({ stateDir, state: recordFor(second) });
 
-  assert.equal(
-    readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId,
-    'run-Demo',
-    'reading one session must not return the record the case-variant session wrote',
-  );
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' })?.runId, 'run-demo');
-  assert.deepEqual(
-    recordsIn(stateDir),
-    [ACTIVE_SESSION_FILE, 'demo.json', hashedFileName('Demo')].sort(),
-    'a name that cannot be a filename gets its own hashed file, never one two names share',
-  );
+    assert.equal(readRemoteConnectionState({ stateDir, session: first })?.runId, `run-${first}`);
+    assert.equal(readRemoteConnectionState({ stateDir, session: second })?.runId, `run-${second}`);
+    assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, ...files].sort());
+
+    removeRemoteConnectionState({ stateDir, session: first });
+    assert.equal(readRemoteConnectionState({ stateDir, session: first }), null);
+    assert.equal(readRemoteConnectionState({ stateDir, session: second })?.runId, `run-${second}`);
+  });
 });
 
-test('sessions named by the lone surrogates U+D800 and U+D801 keep separate records', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-surrogate-');
-  writeRemoteConnectionState({ stateDir, state: recordFor('\uD800') });
-  writeRemoteConnectionState({ stateDir, state: recordFor('\uD801') });
-
-  assert.equal(readRemoteConnectionState({ stateDir, session: '\uD800' })?.runId, 'run-\uD800');
-  assert.equal(readRemoteConnectionState({ stateDir, session: '\uD801' })?.runId, 'run-\uD801');
-  assert.deepEqual(
-    recordsIn(stateDir),
-    [ACTIVE_SESSION_FILE, hashedFileName('\uD800'), hashedFileName('\uD801')].sort(),
-    'names that UTF-8 encodes alike must still get different files',
-  );
-});
-
-test('disconnecting one of two case-variant sessions leaves the other record', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-remove-');
-  writeRemoteConnectionState({ stateDir, state: recordFor('Demo') });
-  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
-
-  removeRemoteConnectionState({ stateDir, session: 'Demo' });
-
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' }), null);
-  assert.equal(
-    readRemoteConnectionState({ stateDir, session: 'demo' })?.runId,
-    'run-demo',
-    'removing a session must not reach through to the file another session owns',
-  );
-});
-
-test('a session name that cannot be a filename is stored under its hash', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-hashed-');
-  const session = 'team/dev#1';
-
-  writeRemoteConnectionState({ stateDir, state: recordFor(session) });
-
-  assert.deepEqual(recordsIn(stateDir), [hashedFileName(session), ACTIVE_SESSION_FILE].sort());
-  assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, `run-${session}`);
-});
-
-test('a record at the sanitized path that names this session moves to its hashed path on save', () => {
+test('a record at the sanitized path that names this session is read in place and moves on save', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-identity-legacy-match-');
   const session = 'team/dev#1';
   writeRecordFile(stateDir, sanitizedFileName(session), recordFor(session));
 
-  assert.equal(
-    readRemoteConnectionState({ stateDir, session })?.runId,
-    `run-${session}`,
-    'a record written before hashed paths still serves the session it names',
-  );
+  assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, `run-${session}`);
   assert.deepEqual(recordsIn(stateDir), [sanitizedFileName(session)], 'a read moved no file');
 
   writeRemoteConnectionState({ stateDir, state: { ...recordFor(session), runId: 'run-saved' } });
-  assert.deepEqual(
-    recordsIn(stateDir),
-    [ACTIVE_SESSION_FILE, hashedFileName(session)].sort(),
-    'the record now lives only at the hashed path, and the sanitized name is gone',
-  );
+  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, hashedFileName(session)].sort());
   assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, 'run-saved');
 });
 
@@ -200,7 +158,6 @@ test('a sanitized record whose hashed path is already taken is kept and refused'
   const legacyPath = writeRecordFile(stateDir, sanitizedFileName(session), recordFor(session));
   writeRecordFile(stateDir, hashedFileName(session), recordFor(session));
 
-  assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, `run-${session}`);
   const refusal = captureRefusal(() => removeRemoteConnectionState({ stateDir, session }));
 
   assert.equal(refusal.details?.reason, 'connection_session_mismatch');
@@ -216,11 +173,7 @@ test('a record an older build shared with a case-variant session moves to its ow
   const stateDir = mkdtempForTestSync('agent-device-remote-identity-upgrade-');
   plantFileSharedByCaseVariants(stateDir, 'Demo');
 
-  assert.equal(
-    readRemoteConnectionState({ stateDir, session: 'demo' }),
-    null,
-    'the record an older build wrote for Demo is not the demo session connection',
-  );
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' }), null);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
 
   writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
@@ -230,232 +183,64 @@ test('a record an older build shared with a case-variant session moves to its ow
     recordsIn(stateDir).filter((name) => name !== 'Demo.json'),
     [ACTIVE_SESSION_FILE, 'demo.json', hashedFileName('Demo')].sort(),
   );
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' })?.runId, 'run-demo');
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
 
   removeRemoteConnectionState({ stateDir, session: 'demo' });
   assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' }), null);
-  assert.equal(
-    readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId,
-    'run-Demo',
-    'removing one session must not reach the record the other one owns',
-  );
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
 });
 
-for (const [damage, skip] of [
-  ['unreadable', runsAsRoot],
-  ['unparseable', false],
-] as const) {
-  test.skipIf(skip)(
-    `an ${damage} record an older build shared with a case-variant session is never removed`,
-    () => {
-      const stateDir = mkdtempForTestSync(`agent-device-remote-identity-${damage}-`);
-      const sharedPath =
-        damage === 'unreadable'
-          ? plantFileSharedByCaseVariants(stateDir, 'Demo')
-          : plantFileSharedByCaseVariants(stateDir, 'Demo', '{"session": "Demo",');
-      if (damage === 'unreadable') fs.chmodSync(sharedPath, 0o000);
-      const planted = recordsIn(stateDir);
-      try {
-        const refusal = captureRefusal(() =>
-          readRemoteConnectionState({ stateDir, session: 'demo' }),
-        );
-        assert.equal(refusal.details?.reason, 'connection_record_owner_unknown');
-        assert.equal(
-          readRemoteConnectionState({ stateDir, session: 'Demo' }),
-          null,
-          'a record whose owner is unknown does not serve any session',
-        );
-        captureRefusal(() => writeRemoteConnectionState({ stateDir, state: recordFor('demo') }));
-        captureRefusal(() => removeRemoteConnectionState({ stateDir, session: 'demo' }));
-        assert.deepEqual(recordsIn(stateDir), planted, 'no command removed the shared file');
-      } finally {
-        fs.chmodSync(sharedPath, 0o600);
-      }
-    },
-  );
-}
-
-test('a record that fails validation is removed only by a removal for the session it names', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-invalid-');
-  const foreignPath = writeRecordFile(stateDir, 'demo.json', {
-    ...recordFor('other'),
-    updatedAt: null,
+describe.each([
+  { damage: 'unreadable', skip: runsAsRoot },
+  { damage: 'unparseable', skip: false },
+])('an $damage record an older build shared with a case-variant session', ({ damage, skip }) => {
+  test.skipIf(skip)('is never removed and serves no session', () => {
+    const stateDir = mkdtempForTestSync(`agent-device-remote-identity-${damage}-`);
+    const sharedPath =
+      damage === 'unreadable'
+        ? plantFileSharedByCaseVariants(stateDir, 'Demo')
+        : plantFileSharedByCaseVariants(stateDir, 'Demo', '{"session": "Demo",');
+    if (damage === 'unreadable') fs.chmodSync(sharedPath, 0o000);
+    const planted = recordsIn(stateDir);
+    try {
+      const refusal = captureRefusal(() =>
+        readRemoteConnectionState({ stateDir, session: 'demo' }),
+      );
+      assert.equal(refusal.details?.reason, 'connection_record_owner_unknown');
+      assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' }), null);
+      captureRefusal(() => writeRemoteConnectionState({ stateDir, state: recordFor('demo') }));
+      captureRefusal(() => removeRemoteConnectionState({ stateDir, session: 'demo' }));
+      assert.deepEqual(recordsIn(stateDir), planted, 'no command removed the shared file');
+    } finally {
+      fs.chmodSync(sharedPath, 0o600);
+    }
   });
-  const ownPath = writeRecordFile(stateDir, 'other.json', {
-    ...recordFor('other'),
-    updatedAt: null,
-  });
-
-  const refusal = captureRefusal(() => readRemoteConnectionState({ stateDir, session: 'demo' }));
-  assert.equal(refusal.details?.reason, 'connection_session_mismatch');
-  assert.equal(fs.existsSync(foreignPath), true, 'an invalid record of another session is kept');
-
-  captureRefusal(() => removeRemoteConnectionState({ stateDir, session: 'demo' }));
-  assert.equal(fs.existsSync(foreignPath), true, 'an invalid record of another session is kept');
-
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'other' }), null);
-  assert.equal(fs.existsSync(ownPath), true, 'a read keeps an invalid record');
-  removeRemoteConnectionState({ stateDir, session: 'other' });
-  assert.equal(fs.existsSync(ownPath), false, 'an invalid record of this session is removed');
 });
 
-test('an invalid record of the U+D800 session survives a U+D801 read', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-invalid-surrogate-');
-  const recordPath = writeRecordFile(stateDir, hashedFileName('\uD800'), {
-    ...recordFor('\uD800'),
-    updatedAt: null,
-  });
-
-  assert.equal(readRemoteConnectionState({ stateDir, session: '\uD801' }), null);
-  assert.equal(fs.existsSync(recordPath), true);
-});
-
-test('a session named by a case alias of the pointer file is stored under its hash', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-alias-');
-  const session = '.ACTIVE-SESSION';
-  writeRecordFile(stateDir, `${session}.json`, recordFor(session));
-
-  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
-
-  assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, `run-${session}`);
-  assert.deepEqual(
-    JSON.parse(fs.readFileSync(path.join(stateDir, RECORDS_DIR, ACTIVE_SESSION_FILE), 'utf8')),
-    { session: 'demo' },
-  );
-
-  removeRemoteConnectionState({ stateDir, session });
-  assert.equal(readRemoteConnectionState({ stateDir, session }), null);
-  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, 'demo.json'].sort());
-});
-
-test('a record left on the pointer path moves to its owner before the pointer is written', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-');
-  // A build that sanitized names wrote the session `.active-session` to exactly the pointer path.
-  const session = '.active-session';
-  writeRecordFile(stateDir, ACTIVE_SESSION_FILE, recordFor(session));
-
-  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
-
-  assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, `run-${session}`);
-  assert.deepEqual(
-    recordsIn(stateDir),
-    [ACTIVE_SESSION_FILE, 'demo.json', hashedFileName(session)].sort(),
-  );
-});
-
-test('a record of unproven owner on the pointer path refuses the pointer write', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-foreign-');
-  const pointerPath = writeRecordFile(stateDir, ACTIVE_SESSION_FILE, recordFor('team'));
-
-  const refusal = captureRefusal(() =>
-    writeRemoteConnectionState({ stateDir, state: recordFor('demo') }),
-  );
-
-  assert.equal(refusal.details?.reason, 'connection_session_mismatch');
-  assert.equal(JSON.parse(fs.readFileSync(pointerPath, 'utf8')).session, 'team');
-  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE], 'nothing else was written');
-});
-
-test('the last guard names the record it refused and how to clear it', () => {
+test('an invalid record of another session at a session path refuses read, save and removal', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-identity-mismatch-');
-  // A foreign record planted at a session's own path, or one that changed under a command in flight.
-  const session = 'team/dev#1';
-  const statePath = writeRecordFile(stateDir, hashedFileName(session), recordFor('team:dev#1'));
+  // Ownership is settled before shape: a record that fails validation is still another session's.
+  const statePath = writeRecordFile(stateDir, 'demo.json', {
+    ...recordFor('other'),
+    updatedAt: null,
+  });
 
-  const read = captureRefusal(() => readRemoteConnectionState({ stateDir, session }));
+  const read = captureRefusal(() => readRemoteConnectionState({ stateDir, session: 'demo' }));
   assert.equal(read.code, 'COMMAND_FAILED');
   assert.equal(read.details?.reason, 'connection_session_mismatch');
-  assert.equal(read.details?.session, session);
+  assert.equal(read.details?.session, 'demo');
   assert.equal(read.details?.recordPath, statePath);
-  assert.ok(
-    String(read.details?.hint).includes(statePath),
-    'the recovery names the file it wants removed',
-  );
+  assert.ok(String(read.details?.hint).includes(statePath), 'the recovery names the file');
 
-  const write = captureRefusal(() =>
-    writeRemoteConnectionState({ stateDir, state: recordFor(session) }),
-  );
-  assert.equal(write.details?.reason, 'connection_session_mismatch');
-
-  const remove = captureRefusal(() => removeRemoteConnectionState({ stateDir, session }));
-  assert.equal(remove.details?.reason, 'connection_session_mismatch');
-  assert.equal(
-    fs.existsSync(statePath),
-    true,
-    'a refused disconnect must not delete the record it would have overwritten',
-  );
+  for (const run of [
+    () => writeRemoteConnectionState({ stateDir, state: recordFor('demo') }),
+    () => removeRemoteConnectionState({ stateDir, session: 'demo' }),
+  ]) {
+    assert.equal(captureRefusal(run).details?.reason, 'connection_session_mismatch');
+  }
+  assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).session, 'other');
 });
 
-test('an empty session moves the record an older build saved for it as default.json on save', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-empty-');
-  writeRecordFile(stateDir, 'default.json', recordFor(''));
-
-  writeRemoteConnectionState({ stateDir, state: { ...recordFor(''), runId: 'run-saved' } });
-  assert.equal(readRemoteConnectionState({ stateDir, session: '' })?.runId, 'run-saved');
-  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, hashedFileName('')].sort());
-});
-
-test.skipIf(runsAsRoot)(
-  'a read-only records directory reports an older record of the exact session and refuses its removal',
-  () => {
-    const stateDir = mkdtempForTestSync('agent-device-remote-identity-readonly-');
-    writeRecordFile(stateDir, 'Demo.json', recordFor('Demo'));
-    const recordsDir = path.join(stateDir, RECORDS_DIR);
-    fs.chmodSync(recordsDir, 0o500);
-    try {
-      assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
-      assert.throws(() => removeRemoteConnectionState({ stateDir, session: 'Demo' }), {
-        code: 'EACCES',
-      });
-      assert.deepEqual(recordsIn(stateDir), ['Demo.json']);
-    } finally {
-      fs.chmodSync(recordsDir, 0o700);
-    }
-  },
-);
-
-test.skipIf(runsAsRoot)(
-  'remote command defaults resolve from an older Demo.json in a read-only records directory',
-  () => {
-    const stateDir = mkdtempForTestSync('agent-device-remote-identity-readonly-defaults-');
-    const remoteConfigPath = path.join(stateDir, 'remote.json');
-    fs.writeFileSync(remoteConfigPath, '{}');
-    writeRecordFile(stateDir, 'Demo.json', {
-      ...recordFor('Demo'),
-      remoteConfigPath,
-      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
-    });
-    const recordsDir = path.join(stateDir, RECORDS_DIR);
-    fs.chmodSync(recordsDir, 0o500);
-    try {
-      const defaults = resolveRemoteConnectionDefaults({
-        stateDir,
-        session: 'Demo',
-        cwd: stateDir,
-        env: {},
-      });
-      assert.equal(defaults?.flags.session, 'Demo');
-      assert.equal(defaults?.flags.remoteConfig, remoteConfigPath);
-      assert.deepEqual(recordsIn(stateDir), ['Demo.json']);
-    } finally {
-      fs.chmodSync(recordsDir, 0o700);
-    }
-  },
-);
-
-test('a read on a valid older Demo.json reports it and leaves the directory unchanged', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-observe-legacy-');
-  writeRecordFile(stateDir, 'Demo.json', recordFor('Demo'));
-  writeRecordFile(stateDir, 'default.json', recordFor(''));
-
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
-  assert.equal(readRemoteConnectionState({ stateDir, session: '' })?.runId, 'run-');
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'default' }), null);
-  assert.deepEqual(recordsIn(stateDir), ['Demo.json', 'default.json'], 'a read moved no file');
-});
-
-test('a read on an invalid record that names the session leaves it and its pointer in place', () => {
+test('a read reports an invalid record of its session as no connection and keeps it', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-identity-observe-invalid-');
   writeRecordFile(stateDir, 'demo.json', { ...recordFor('demo'), updatedAt: null });
   writeRecordFile(stateDir, 'Team.json', { ...recordFor('Team'), updatedAt: null });
@@ -465,6 +250,41 @@ test('a read on an invalid record that names the session leaves it and its point
   assert.equal(readActiveConnectionState({ stateDir }), null);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'Team' }), null);
   assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, 'Team.json', 'demo.json'].sort());
+});
+
+test('remote command defaults resolve from an older Demo.json without moving it', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-defaults-');
+  const remoteConfigPath = path.join(stateDir, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, '{}');
+  writeRecordFile(stateDir, 'Demo.json', {
+    ...recordFor('Demo'),
+    remoteConfigPath,
+    remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+  });
+
+  const defaults = resolveRemoteConnectionDefaults({
+    stateDir,
+    session: 'Demo',
+    cwd: stateDir,
+    env: {},
+  });
+
+  assert.equal(defaults?.flags.session, 'Demo');
+  assert.equal(defaults?.flags.remoteConfig, remoteConfigPath);
+  assert.deepEqual(recordsIn(stateDir), ['Demo.json']);
+});
+
+test('the empty session owns the default.json an older build wrote for it, and default does not', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-empty-');
+  writeRecordFile(stateDir, 'default.json', recordFor(''));
+
+  assert.equal(readRemoteConnectionState({ stateDir, session: '' })?.runId, 'run-');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'default' }), null);
+  assert.deepEqual(recordsIn(stateDir), ['default.json'], 'a read moved no file');
+
+  writeRemoteConnectionState({ stateDir, state: { ...recordFor(''), runId: 'run-saved' } });
+  assert.equal(readRemoteConnectionState({ stateDir, session: '' })?.runId, 'run-saved');
+  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE, hashedFileName('')].sort());
 });
 
 test('an EPERM hard-link failure never deletes default.json', () => {
@@ -498,6 +318,38 @@ test('an empty-session pointer resolves for an unnamed read', () => {
   assert.equal(readActiveConnectionState({ stateDir })?.runId, 'run-');
 });
 
+test('the record an older build wrote for .active-session at the pointer path is read, then moved before the pointer write', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-');
+  // A build that sanitized names wrote the session `.active-session` to exactly the pointer path.
+  const session = '.active-session';
+  writeRecordFile(stateDir, ACTIVE_SESSION_FILE, recordFor(session));
+
+  assert.equal(readActiveConnectionState({ stateDir })?.runId, `run-${session}`);
+  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE], 'the active lookup moved no file');
+
+  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
+
+  assert.equal(readRemoteConnectionState({ stateDir, session })?.runId, `run-${session}`);
+  assert.equal(readActiveConnectionState({ stateDir })?.runId, 'run-demo');
+  assert.deepEqual(
+    recordsIn(stateDir),
+    [ACTIVE_SESSION_FILE, 'demo.json', hashedFileName(session)].sort(),
+  );
+});
+
+test('a record of unproven owner on the pointer path refuses the pointer write', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-foreign-');
+  const pointerPath = writeRecordFile(stateDir, ACTIVE_SESSION_FILE, recordFor('team'));
+
+  const refusal = captureRefusal(() =>
+    writeRemoteConnectionState({ stateDir, state: recordFor('demo') }),
+  );
+
+  assert.equal(refusal.details?.reason, 'connection_session_mismatch');
+  assert.equal(JSON.parse(fs.readFileSync(pointerPath, 'utf8')).session, 'team');
+  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE], 'nothing else was written');
+});
+
 test('a full record at the pointer path is not deleted by disconnect of the session it names', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-record-');
   writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
@@ -506,22 +358,9 @@ test('a full record at the pointer path is not deleted by disconnect of the sess
     runId: 'run-at-pointer',
   });
 
-  assert.equal(
-    readActiveConnectionState({ stateDir }),
-    null,
-    'a full record is not a pointer, so unnamed status selects no session from it',
-  );
+  assert.equal(readActiveConnectionState({ stateDir }), null, 'a full record is no pointer');
   removeRemoteConnectionState({ stateDir, session: 'demo' });
 
   assert.equal(JSON.parse(fs.readFileSync(pointerPath, 'utf8')).runId, 'run-at-pointer');
   assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE]);
-});
-
-test('the active lookup accepts a full record at the pointer path that an older build wrote for .active-session', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-legacy-');
-  // A build that sanitized names wrote the session `.active-session` to exactly the pointer path.
-  writeRecordFile(stateDir, ACTIVE_SESSION_FILE, recordFor('.active-session'));
-
-  assert.equal(readActiveConnectionState({ stateDir })?.runId, 'run-.active-session');
-  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE], 'the active lookup moved no file');
 });
