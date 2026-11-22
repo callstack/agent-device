@@ -75,10 +75,11 @@ const DIAGNOSTICS_RECORD_ID = new RegExp(`^[a-f0-9]{32}-(${UNLEASED_RECORD}|[a-f
 export function claimRequestDiagnosticsRecord(req: Pick<DaemonRequest, 'flags' | 'meta'>): void {
   const leaseId = resolveLeaseScope(req).leaseId;
   // A lease id that reaches a message, and not a lease field, is removed from the record too.
-  const canonical = normalizeLeaseId(leaseId);
-  if (leaseId !== undefined && canonical) {
-    registerDiagnosticSensitiveValue(canonical);
+  if (leaseId !== undefined) {
+    // A malformed id is no credential, but the record still never echoes what the caller sent.
     registerDiagnosticSensitiveValue(leaseId.trim());
+    const canonical = normalizeLeaseId(leaseId);
+    if (canonical) registerDiagnosticSensitiveValue(canonical);
   }
   if (getDiagnosticsMeta().recordId) return;
   const owner = leaseId === undefined ? UNLEASED_RECORD : leaseVerifier(leaseId);

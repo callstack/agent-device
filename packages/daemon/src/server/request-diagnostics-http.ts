@@ -141,29 +141,22 @@ async function handleRequestDiagnostics(
     }
 
     const owner = diagnosticsRecordOwner(ref.requestId);
+    // A record of unknown ownership, such as one that an earlier release wrote, is not served.
+    if (owner === null) {
+      sendRestJsonError(res, normalizeError(missingRecordError(ref)));
+      return;
+    }
     const presentedLeaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
     const presented = typeof presentedLeaseId === 'string' ? presentedLeaseId : undefined;
-    if (owner !== null && !requestHoldsOutputLease(owner, presented)) {
+    if (!requestHoldsOutputLease(owner, presented)) {
       sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
       return;
     }
 
     const recordPath = resolveRecordPath(ref);
-    // A record of unknown ownership, such as one that an earlier release wrote, is not served.
-    const stats = owner === null ? null : await statRecord(recordPath);
+    const stats = await statRecord(recordPath);
     if (!stats) {
-      sendRestJsonError(
-        res,
-        normalizeError(
-          new AppError(
-            'SESSION_NOT_FOUND',
-            `No diagnostics record for request ${ref.requestId} in session ${ref.session}`,
-            {
-              hint: 'The daemon keeps a request record only for the session it ran in; re-run the command against this daemon to produce a fresh one.',
-            },
-          ),
-        ),
-      );
+      sendRestJsonError(res, normalizeError(missingRecordError(ref)));
       return;
     }
 
@@ -187,4 +180,14 @@ async function statRecord(recordPath: string): Promise<fs.Stats | null> {
   } catch {
     return null;
   }
+}
+
+function missingRecordError(ref: { session: string; requestId: string }): AppError {
+  return new AppError(
+    'SESSION_NOT_FOUND',
+    `No diagnostics record for request ${ref.requestId} in session ${ref.session}`,
+    {
+      hint: 'The daemon keeps a request record only for the session it ran in; re-run the command against this daemon to produce a fresh one.',
+    },
+  );
 }
