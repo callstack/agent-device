@@ -1,22 +1,21 @@
 import http from 'node:http';
 import https from 'node:https';
+import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 
 import { runTransportChild } from './install-source-network-transport-tls.fixtures.ts';
 import {
   APPROVED_ADDRESS,
   APPROVED_HOSTNAME,
-  ARTIFACT_BODY,
-  authoritiesWithoutPorts,
-  createTlsArtifactOrigin,
   errorShape,
   FIXTURE_ALPN_PROTOCOLS,
   forwardConnect,
-  listen,
   readTlsFixturePair,
-  requestsWithoutPorts,
+  startLoopbackLabBase,
   trackSockets,
   type ErrorShape,
+  type LabMark,
+  type LoopbackLabBase,
   type ObservedRequest,
   type TransportSubject,
 } from './install-source-network-transport.fixtures.ts';
@@ -55,37 +54,22 @@ export function authHttpProxyEnvironment(proxyPort: number): NodeJS.ProcessEnv {
   return { http_proxy: proxy, https_proxy: proxy };
 }
 
-type ProxyAuthLabMark = {
-  requests: number;
-  connect: number;
-  proxyHandshakes: number;
-  plainProxySockets: number;
-  tlsProxySockets: number;
-};
+/** The shared lab markers, plus the TLS-proxy handshakes only this suite counts. */
+type ProxyAuthLabMark = LabMark & { handshakes: number };
 
-export type ProxyAuthLab = {
-  originPort: number;
-  tlsOriginPort: number;
+export type ProxyAuthLab = Omit<LoopbackLabBase, 'mark'> & {
   /** Plain-HTTP CONNECT proxy demanding the fixture credential. */
   proxyPort: number;
   /** TLS CONNECT proxy demanding the fixture credential, for the `https` proxy scheme. */
   tlsProxyPort: number;
   mark(): ProxyAuthLabMark;
-  requestsSince(mark: ProxyAuthLabMark): ObservedRequest[];
-  connectAuthoritiesSince(mark: ProxyAuthLabMark): string[];
+  /** The `Proxy-Authorization` values the proxies received, after `mark`. */
   proxyAuthorizationsSince(mark: ProxyAuthLabMark): (string | undefined)[];
   /** The SNI names the TLS proxy accepted at its handshakes, after `mark`. */
   proxySniSince(mark: ProxyAuthLabMark): (string | undefined)[];
   /** The ALPN protocols the TLS proxy negotiated at its handshakes, after `mark`. */
   proxyAlpnSince(mark: ProxyAuthLabMark): (string | undefined)[];
-  liveProxySocketsSince(mark: ProxyAuthLabMark): number;
-  settleSince(mark: ProxyAuthLabMark): Promise<void>;
-  dropProxySockets(): void;
-  close(): Promise<void>;
 };
-
-const SETTLE_DEADLINE_MS = 700;
-const SETTLE_POLL_MS = 20;
 
 /** What the TLS proxy observed at one client handshake. */
 type TlsProxyHandshake = {
@@ -115,23 +99,8 @@ function handleConnect(
 
 export async function startProxyAuthLab(root: string): Promise<ProxyAuthLab> {
   const { key, cert } = readTlsFixturePair(root);
-  const requests: ObservedRequest[] = [];
   const proxyHandshakes: TlsProxyHandshake[] = [];
   const record = { authorities: [] as string[], authorizations: [] as (string | undefined)[] };
-
-  const origin = http.createServer((request, response) => {
-    requests.push({
-      method: request.method ?? '',
-      url: request.url ?? '',
-      host: request.headers.host,
-    });
-    response.writeHead(200, { 'content-type': 'application/octet-stream' });
-    response.end(ARTIFACT_BODY);
-  });
-  const originPort = await listen(origin);
-
-  const tlsOrigin = createTlsArtifactOrigin({ key, cert });
-  const tlsOriginPort = await listen(tlsOrigin);
 
   const proxy = http.createServer((_request, response) => {
     response.writeHead(501).end();
@@ -139,78 +108,48 @@ export async function startProxyAuthLab(root: string): Promise<ProxyAuthLab> {
   proxy.on('connect', (request, clientSocket, head) =>
     handleConnect(record, request, clientSocket, head),
   );
-  const proxySockets = trackSockets(proxy);
-  const proxyPort = await listen(proxy);
 
   // The same CONNECT proxy behind TLS: an `https://` proxy URL must reach this listener. It
   // advertises the fixture ALPN protocols, so the handshake can evidence what the client offered.
-  const tlsProxyServer = https.createServer(
+  const tlsProxy = https.createServer(
     { key, cert, ALPNProtocols: FIXTURE_ALPN_PROTOCOLS },
     (_request, response) => {
       response.writeHead(501).end();
     },
   );
-  tlsProxyServer.on('connect', (request, clientSocket, head) =>
+  tlsProxy.on('connect', (request, clientSocket, head) =>
     handleConnect(record, request, clientSocket, head),
   );
-  tlsProxyServer.on('tlsClientError', () => {});
+  tlsProxy.on('tlsClientError', () => {});
   // Records what each client presented at the handshake, so a case can prove the proxy dial offered
   // the proxy host as SNI and offered the transport's application protocol. A handshake without SNI
   // or without a negotiated protocol records `undefined`.
-  tlsProxyServer.on('secureConnection', (socket) =>
+  tlsProxy.on('secureConnection', (socket) =>
     proxyHandshakes.push({
       sni: typeof socket.servername === 'string' ? socket.servername : undefined,
       alpn: typeof socket.alpnProtocol === 'string' ? socket.alpnProtocol : undefined,
     }),
   );
-  const tlsProxySockets = trackSockets(tlsProxyServer);
-  const tlsProxyPort = await listen(tlsProxyServer);
+
+  const base = await startLoopbackLabBase({
+    root,
+    proxies: () => [
+      { server: proxy, sockets: trackSockets(proxy) },
+      { server: tlsProxy, sockets: trackSockets(tlsProxy) },
+    ],
+    connectAuthorities: () => record.authorities,
+  });
 
   return {
-    originPort,
-    tlsOriginPort,
-    proxyPort,
-    tlsProxyPort,
-    mark: () => ({
-      requests: requests.length,
-      connect: record.authorities.length,
-      proxyHandshakes: proxyHandshakes.length,
-      plainProxySockets: proxySockets.highestId(),
-      tlsProxySockets: tlsProxySockets.highestId(),
-    }),
-    requestsSince: (mark) => requestsWithoutPorts(requests.slice(mark.requests)),
-    connectAuthoritiesSince: (mark) =>
-      authoritiesWithoutPorts(record.authorities.slice(mark.connect)),
+    ...base,
+    proxyPort: (proxy.address() as AddressInfo).port,
+    tlsProxyPort: (tlsProxy.address() as AddressInfo).port,
+    mark: () => ({ ...base.mark(), handshakes: proxyHandshakes.length }),
     proxyAuthorizationsSince: (mark) => record.authorizations.slice(mark.connect),
     proxySniSince: (mark) =>
-      proxyHandshakes.slice(mark.proxyHandshakes).map((handshake) => handshake.sni),
+      proxyHandshakes.slice(mark.handshakes).map((handshake) => handshake.sni),
     proxyAlpnSince: (mark) =>
-      proxyHandshakes.slice(mark.proxyHandshakes).map((handshake) => handshake.alpn),
-    liveProxySocketsSince: (mark) =>
-      proxySockets.liveSince(mark.plainProxySockets) +
-      tlsProxySockets.liveSince(mark.tlsProxySockets),
-    settleSince: async (mark) => {
-      const deadline = Date.now() + SETTLE_DEADLINE_MS;
-      while (
-        Date.now() < deadline &&
-        (proxySockets.liveSince(mark.plainProxySockets) > 0 ||
-          tlsProxySockets.liveSince(mark.tlsProxySockets) > 0)
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
-      }
-    },
-    dropProxySockets: () => {
-      proxySockets.destroyAll();
-      tlsProxySockets.destroyAll();
-    },
-    close: async () => {
-      for (const server of [origin, tlsOrigin, proxy, tlsProxyServer]) {
-        (server as http.Server).closeAllConnections?.();
-        server.close();
-      }
-      proxySockets.destroyAll();
-      tlsProxySockets.destroyAll();
-    },
+      proxyHandshakes.slice(mark.handshakes).map((handshake) => handshake.alpn),
   };
 }
 

@@ -79,11 +79,26 @@ export type LoopbackLab = {
   close(): Promise<void>;
 };
 
-type LabMark = {
+export type LabMark = {
   requests: number;
   connect: number;
-  proxySockets: number;
+  proxySockets: number[];
 };
+
+/**
+ * The lab slice `observeRequest` reads: the per-case markers, what the origin and the proxy
+ * recorded, and the proxy socket census. Any lab that answers these questions can be observed, so
+ * each lab owns only the listeners its cases need.
+ */
+export type ObservationLab = Pick<
+  LoopbackLab,
+  | 'mark'
+  | 'requestsSince'
+  | 'connectAuthoritiesSince'
+  | 'liveProxySocketsSince'
+  | 'settleSince'
+  | 'dropProxySockets'
+>;
 
 export function listen(server: net.Server): Promise<number> {
   return new Promise((resolve) => {
@@ -159,17 +174,37 @@ export function forwardConnect(port: number, clientSocket: Duplex, head: Buffer)
   clientSocket.on('error', () => upstream.destroy());
 }
 
-export async function startLoopbackLab(root: string): Promise<LoopbackLab> {
-  const { key, cert } = readTlsFixturePair(root);
+/** One proxy listener of a lab: its tracked sockets and the number of proxies the lab runs. */
+export type ProxyFixture = {
+  server: net.Server;
+  sockets: TrackedSockets;
+};
+
+/**
+ * The lifecycle every loopback lab shares: the origin that serves the artifact, the TLS origin that
+ * echoes its handshake, the proxy listeners the cases dial, and the per-case markers, slices,
+ * socket census and settling over their logs. A lab supplies only the proxy listeners whose tunnel
+ * behavior its cases exercise.
+ */
+export async function startLoopbackLabBase(params: {
+  /** Loopback certificate fixtures live under this repository root. */
+  root: string;
+  proxies: () => ProxyFixture[];
+  /** Tunnel requests the proxies recorded, in order, as `host:port` authorities. */
+  connectAuthorities: () => string[];
+}): Promise<LoopbackLabBase> {
+  const { key, cert } = readTlsFixturePair(params.root);
   const requests: ObservedRequest[] = [];
-  const connectAuthorities: string[] = [];
 
   const origin = http.createServer((request, response) => {
     requests.push({
       method: request.method ?? '',
       url: request.url ?? '',
       host: request.headers.host,
-      custom: request.headers['x-custom'] as string | undefined,
+      // Recorded only when present, so a case that names no custom header compares equal.
+      ...(request.headers['x-custom'] === undefined
+        ? {}
+        : { custom: request.headers['x-custom'] as string }),
     });
     if (request.url === '/redirect') {
       response.writeHead(302, { location: 'http://cdn.invalid/final' });
@@ -190,12 +225,94 @@ export async function startLoopbackLab(root: string): Promise<LoopbackLab> {
   const tlsSockets = trackSockets(tlsOrigin);
   const tlsOriginPort = await listen(tlsOrigin);
 
+  const proxies = params.proxies();
+  for (const proxy of proxies) await listen(proxy.server);
+
+  return {
+    originPort,
+    tlsOriginPort,
+    mark: () => ({
+      requests: requests.length,
+      connect: params.connectAuthorities().length,
+      proxySockets: proxies.map((proxy) => proxy.sockets.highestId()),
+    }),
+    requestsSince: (mark) => requestsWithoutPorts(requests.slice(mark.requests)),
+    connectAuthoritiesSince: (mark) =>
+      authoritiesWithoutPorts(params.connectAuthorities().slice(mark.connect)),
+    liveProxySocketsSince: (mark) =>
+      proxies.reduce(
+        (live, proxy, index) => live + proxy.sockets.liveSince(mark.proxySockets[index] ?? 0),
+        0,
+      ),
+    settleSince: async (mark) => {
+      const deadline = Date.now() + SETTLE_DEADLINE_MS;
+      while (
+        Date.now() < deadline &&
+        proxies.some((proxy, index) => proxy.sockets.liveSince(mark.proxySockets[index] ?? 0) > 0)
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
+      }
+    },
+    dropProxySockets: () => {
+      for (const proxy of proxies) proxy.sockets.destroyAll();
+    },
+    close: async () => {
+      for (const server of [origin, tlsOrigin, ...proxies.map((proxy) => proxy.server)]) {
+        (server as Partial<http.Server>).closeAllConnections?.();
+        server.close();
+      }
+      originSockets.destroyAll();
+      tlsSockets.destroyAll();
+      for (const proxy of proxies) proxy.sockets.destroyAll();
+    },
+  };
+}
+
+export type LoopbackLabBase = Omit<
+  LoopbackLab,
+  'refusalPort' | 'silentPort' | 'stallerPort' | 'stalledConnectPort' | 'proxyPort'
+>;
+
+export async function startLoopbackLab(root: string): Promise<LoopbackLab> {
+  const connectAuthorities: string[] = [];
+  const refusalPorts = new Set<number>();
+  const stalledConnectPorts = new Set<number>();
+
+  const proxy = http.createServer((_request, response) => {
+    response.writeHead(501).end();
+  });
+  proxy.on('connect', (request, clientSocket, head) => {
+    const authority = request.url ?? '';
+    connectAuthorities.push(authority);
+    const port = Number(authority.split(':').at(-1));
+    if (stalledConnectPorts.has(port)) {
+      clientSocket.once('end', () => clientSocket.destroy());
+      clientSocket.resume();
+      return;
+    }
+    if (refusalPorts.has(port)) {
+      clientSocket.write('HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\n\r\n');
+      clientSocket.end();
+      return;
+    }
+    forwardConnect(port, clientSocket, head);
+  });
+
+  const base = await startLoopbackLabBase({
+    root,
+    proxies: () => [{ server: proxy, sockets: trackSockets(proxy) }],
+    connectAuthorities: () => connectAuthorities,
+  });
+
+  // Reachable origin the proxy refuses for CONNECT: a working tunnel would answer 200 here, so a
+  // refusal that reaches it would prove the transport dialed around the proxy.
   const refusal = http.createServer((_request, response) => {
     response.writeHead(200);
     response.end('refused-origin-was-reached');
   });
   const refusalSockets = trackSockets(refusal);
   const refusalPort = await listen(refusal);
+  refusalPorts.add(refusalPort);
 
   const silent = http.createServer(() => {});
   const silentSockets = trackSockets(silent);
@@ -208,8 +325,6 @@ export async function startLoopbackLab(root: string): Promise<LoopbackLab> {
   const stallerSockets = trackSockets(staller);
   const stallerPort = await listen(staller);
 
-  const refusedPorts = new Set([refusalPort]);
-
   // Reachable origin used only for the stalled-CONNECT case: dialing it directly answers 200, so
   // a response there would prove the tunnel was built when the proxy is meant to swallow it.
   const stalledConnect = http.createServer((_request, response) => {
@@ -218,66 +333,25 @@ export async function startLoopbackLab(root: string): Promise<LoopbackLab> {
   });
   const stalledConnectSockets = trackSockets(stalledConnect);
   const stalledConnectPort = await listen(stalledConnect);
-  const stalledConnectPorts = new Set([stalledConnectPort]);
-
-  const proxy = http.createServer((_request, response) => {
-    response.writeHead(501).end();
-  });
-  const proxySockets = trackSockets(proxy);
-  proxy.on('connect', (request, clientSocket, head) => {
-    const authority = request.url ?? '';
-    connectAuthorities.push(authority);
-    const port = Number(authority.split(':').at(-1));
-    if (stalledConnectPorts.has(port)) {
-      clientSocket.once('end', () => clientSocket.destroy());
-      clientSocket.resume();
-      return;
-    }
-    if (refusedPorts.has(port)) {
-      clientSocket.write('HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\n\r\n');
-      clientSocket.end();
-      return;
-    }
-    forwardConnect(port, clientSocket, head);
-  });
-  const proxyPort = await listen(proxy);
+  stalledConnectPorts.add(stalledConnectPort);
 
   return {
-    originPort,
-    tlsOriginPort,
+    ...base,
     refusalPort,
     silentPort,
     stallerPort,
     stalledConnectPort,
-    proxyPort,
-    mark: () => ({
-      requests: requests.length,
-      connect: connectAuthorities.length,
-      proxySockets: proxySockets.highestId(),
-    }),
-    requestsSince: (mark) => requestsWithoutPorts(requests.slice(mark.requests)),
-    connectAuthoritiesSince: (mark) =>
-      authoritiesWithoutPorts(connectAuthorities.slice(mark.connect)),
-    liveProxySocketsSince: (mark) => proxySockets.liveSince(mark.proxySockets),
-    settleSince: async (mark) => {
-      const deadline = Date.now() + SETTLE_DEADLINE_MS;
-      while (Date.now() < deadline && proxySockets.liveSince(mark.proxySockets) > 0) {
-        await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
-      }
-    },
-    dropProxySockets: () => proxySockets.destroyAll(),
+    proxyPort: (proxy.address() as net.AddressInfo).port,
     close: async () => {
-      for (const server of [origin, tlsOrigin, refusal, silent, staller, stalledConnect, proxy]) {
+      await base.close();
+      for (const server of [refusal, silent, staller, stalledConnect]) {
         (server as http.Server).closeAllConnections?.();
         server.close();
       }
-      originSockets.destroyAll();
-      tlsSockets.destroyAll();
       refusalSockets.destroyAll();
       silentSockets.destroyAll();
       stallerSockets.destroyAll();
       stalledConnectSockets.destroyAll();
-      proxySockets.destroyAll();
     },
   };
 }
@@ -383,7 +457,7 @@ export async function observeRequest(
     headers?: Record<string, string>;
     signal: AbortSignal;
     environment: NodeJS.ProcessEnv;
-    lab: LoopbackLab;
+    lab: ObservationLab;
     readBody?: 'none';
     caseDeadlineMs?: number;
   },

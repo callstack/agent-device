@@ -45,6 +45,7 @@
   },
   "devDependencies": {
     "@agent-device/test-kit": "workspace:*",
-    "ipaddr.js": "^2.5.0"
+    "ipaddr.js": "^2.5.0",
+    "socks": "^2.8.11"
   }
 }

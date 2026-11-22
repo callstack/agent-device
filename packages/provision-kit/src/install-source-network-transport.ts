@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net, { type Socket } from 'node:net';
 import tls from 'node:tls';
+import type { SocksRemoteHost } from 'socks';
 
 /** The only application protocol this transport speaks, so it is the only one it offers at TLS. */
 const HTTP_1_1_ALPN = 'http/1.1';
@@ -100,7 +101,91 @@ export async function requestApprovedUrl(params: {
   }
 }
 
+/** The SOCKS5 proxy schemes this transport dials, matching the proxy selectors that name them. */
+const SOCKS5_PROTOCOLS = new Set(['socks:', 'socks5:']);
+/** The port a SOCKS proxy URL means when it names none. */
+const DEFAULT_SOCKS_PORT = 1080;
+/** The SOCKS5 client's own proxy-type discriminator. */
+const SOCKS5_PROXY_TYPE = 5 as const;
+
 async function connectThroughProxy(
+  proxy: URL,
+  authority: string,
+  signal: AbortSignal,
+): Promise<Socket> {
+  if (SOCKS5_PROTOCOLS.has(proxy.protocol)) {
+    return await connectThroughSocks5Proxy(proxy, authority, signal);
+  }
+  return await connectThroughHttpProxy(proxy, authority, signal);
+}
+
+/**
+ * Dials the tunnel through a SOCKS5 proxy. The connector receives the approved address as its
+ * destination, so it never resolves the URL host, and the proxy credentials come from the proxy
+ * URL's userinfo. The transport owns the dial to the proxy and awaits it, so a proxy that is down
+ * fails with the socket's own errno code; the connector then reports the handshake result, and the
+ * caller signal owns the deadline: aborting destroys the socket mid-handshake, and the handshake
+ * rejects with the caller's own reason. `socks` is loaded only on this route, so a download that
+ * names no SOCKS proxy never evaluates it.
+ */
+async function connectThroughSocks5Proxy(
+  proxy: URL,
+  authority: string,
+  signal: AbortSignal,
+): Promise<Socket> {
+  const { SocksClient } = await import('socks');
+  const proxyHost = stripBrackets(proxy.hostname);
+  const proxyPort = Number(proxy.port || DEFAULT_SOCKS_PORT);
+  const socket = net.connect({ host: proxyHost, port: proxyPort });
+  const onAbort = () => socket.destroy();
+  signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    await once(socket, 'connect');
+    signal.throwIfAborted();
+    const established = await SocksClient.createConnection({
+      command: 'connect',
+      proxy: {
+        host: proxyHost,
+        port: proxyPort,
+        type: SOCKS5_PROXY_TYPE,
+        ...socksProxyCredentials(proxy),
+      },
+      destination: parseSocksDestination(authority),
+      existing_socket: socket,
+    });
+    signal.throwIfAborted();
+    return established.socket;
+  } catch (error) {
+    await closeSocket(socket);
+    signal.throwIfAborted();
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
+function socksProxyCredentials(proxy: URL): { userId?: string; password?: string } {
+  if (!proxy.username && !proxy.password) return {};
+  return {
+    userId: decodeURIComponent(proxy.username),
+    password: decodeURIComponent(proxy.password),
+  };
+}
+
+/** Splits a tunnel authority into the SOCKS destination the transport hands the connector. */
+function parseSocksDestination(authority: string): SocksRemoteHost {
+  if (!authority.startsWith('[')) {
+    const colon = authority.lastIndexOf(':');
+    return { host: authority.slice(0, colon), port: Number(authority.slice(colon + 1)) };
+  }
+  const close = authority.indexOf(']');
+  return {
+    host: authority.slice(1, close),
+    port: Number(authority.slice(close + 2)),
+  };
+}
+
+async function connectThroughHttpProxy(
   proxy: URL,
   authority: string,
   signal: AbortSignal,

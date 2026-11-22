@@ -1730,7 +1730,7 @@ agent-device install-from-source https://example.com/builds/app.aab --platform a
 - Repeat `--header <name:value>` for authenticated or signed downloads. Sensitive headers are not forwarded to other origins.
 - For a network failure during the download, `--json` reports `COMMAND_FAILED` with the system code in `error.details.networkErrorCode` when available. A phase timeout reports `connect-timeout`, `header-timeout`, or `body-timeout` in the same field. A caller cancellation has its own error reason.
 - `--retain-paths` keeps the downloaded and extracted files for 15 minutes. Use `--retention-ms <ms>` to set an integer duration from 1 to 2,147,483,647 milliseconds.
-- Limits: at most five redirects, no HTTPS-to-HTTP downgrade, 2 GiB download, 4 GiB extracted, 100,000 entries, and three nested archive layers. Links and special archive entries are rejected. `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` are honored. These match the Node.js client's `installFromSource()` checks.
+- Limits: at most five redirects, no HTTPS-to-HTTP downgrade, 2 GiB download, 4 GiB extracted, 100,000 entries, and three nested archive layers. Links and special archive entries are rejected. `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` are honored. A proxy URL may use the `http`, `https`, `socks5`, or `socks` scheme, with optional `user:password@` credentials. These match the Node.js client's `installFromSource()` checks.
 
 ### Install a GitHub Actions artifact
 
