@@ -2,6 +2,7 @@ import {
   AppError,
   createRequestCanceledError,
   discloseDispatch,
+  KEYBOARD_DISMISS_REASONS,
   toAppErrorCode,
   type AppErrorCode,
   type DispatchDisclosure,
@@ -284,7 +285,7 @@ export const RUNNER_ERROR_CODES = {
   // is never attempted, so the refusal proves nothing was pressed.
   KEYBOARD_DISMISS_UNAVAILABLE: {
     dispatched: 'no',
-    reason: 'keyboard_dismiss_unavailable',
+    reason: KEYBOARD_DISMISS_REASONS.unavailable.reason,
     diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
   },
   // A Return attempt on the focused input could not be confirmed. The row keeps `unknown`: the

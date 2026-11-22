@@ -336,11 +336,23 @@ export const DAEMON_LIFECYCLE_REASONS = {
 } as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /**
- * The refusal for a `daemon.json` whose owner field this build cannot place. No daemon answers it: a
- * runtime always knows whether it owns itself, so `unknown` is a verdict about a file, and only a reader
- * can reach it.
+ * Why a reader of `daemon.json` (`daemon stop`, a client replacing its daemon, a replay's cleanup)
+ * leaves a registered daemon in place. No daemon answers these: they are verdicts the reader reaches.
  */
-export const DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON = 'daemon-owner-unrecognized';
+export const DAEMON_RETIREMENT_REASONS = {
+  /**
+   * A runtime always knows whether it owns itself, so an owner this build cannot place is a verdict
+   * about a file, and only a reader can reach it.
+   */
+  // The daemon record states an owner this build cannot prove, so `daemon stop` signaled nothing
+  // and a client did not replace that daemon. Stop the process by its own means and remove its
+  // daemon.json, or update agent-device if a newer build wrote the record.
+  ownerUnrecognized: { reason: 'daemon-owner-unrecognized' },
+  // A daemon was asked to retire, by `daemon stop`, by a client replacing it, or by cleanup after a
+  // replay, and the retirement could not be confirmed: its ownership, lock, record or cleanup stayed
+  // unresolved. `details.retirement` says which; state and diagnostics stay in the state directory.
+  retirementUnconfirmed: { reason: 'daemon_retirement_unconfirmed' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
 
 /** The daemon instance a lifecycle request is addressed to; any other instance refuses it. */
 export type DaemonLifecycleFence = Readonly<{

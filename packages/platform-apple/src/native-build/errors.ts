@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, REQUEST_CANCELED_REASONS } from '@agent-device/kernel/errors';
 
 export type NativeBuildFailureKind = 'cancelled' | 'timeout' | 'unsupported';
 
@@ -27,7 +27,7 @@ export class NativeBuildError extends AppError {
         ...details,
         nativeBuildFailure: kind,
         nativeBuildFailureCode: code,
-        ...(kind === 'cancelled' ? { reason: 'request_canceled' } : {}),
+        ...(kind === 'cancelled' ? { reason: REQUEST_CANCELED_REASONS.canceled.reason } : {}),
       },
       cause,
     );

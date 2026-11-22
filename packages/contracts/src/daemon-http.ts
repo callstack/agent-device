@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
 // proxy, and every client that talks to them: the base path, the tenant, lease
@@ -137,6 +138,14 @@ export const DAEMON_REQUEST_MAX_BYTES = 64 * 1024 * 1024;
 export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
 export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';
 export const DAEMON_HTTP_INSTANCE_MISMATCH_HEADER = 'x-agent-device-instance-mismatch';
+
+/** Why a daemon, the proxy, or a client refuses a request addressed to another daemon instance. */
+export const DAEMON_INSTANCE_REASONS = {
+  // The daemon or proxy behind the remote URL was replaced since the client last read its health,
+  // so it refused a request addressed to the earlier instance. The client re-reads health and
+  // retries once; this reaches the caller when the retry was refused too.
+  instanceMismatch: { reason: 'remote_instance_mismatch' },
+} as const satisfies ReasonTable<'remote connection'>;
 
 export function buildDaemonInstanceMismatchRpcResponse<Id>(
   id: Id,

@@ -2,6 +2,7 @@ import type {
   Rect,
   SnapshotAddressableNode,
   SnapshotCoveringNode,
+  SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
 import type { ReasonTable } from '@agent-device/kernel/errors';
 
@@ -69,6 +70,28 @@ export const INTERACTION_ERROR_REASONS = {
   // Every tappable region of the target belongs to one of its interactive children.
   coveredByInteractiveDescendants: { reason: 'covered_by_interactive_descendants' },
 } as const satisfies ReasonTable<'interaction'>;
+
+/**
+ * Why `find` refuses a capture whose verdict is sparse. The daemon and command-runtime `find`
+ * paths both raise it; the runner's own wording moves to `details.verdictReason`.
+ */
+const FIND_READ_REASONS = {
+  // The capture came back sparse, so no selector could be resolved against it.
+  snapshotUnreadable: { reason: 'find_snapshot_unreadable' },
+} as const satisfies ReasonTable<'find'>;
+
+/** The message and details both `find` routes publish when they refuse a sparse capture. */
+export function sparseFindRefusal(verdict: SnapshotQualityVerdict) {
+  return {
+    message: 'find could not read the current accessibility tree',
+    details: {
+      reason: FIND_READ_REASONS.snapshotUnreadable.reason,
+      verdictReason: verdict.reason,
+      verdictReasonCode: verdict.reasonCode,
+      hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
+    },
+  } as const;
+}
 
 /** The part of a covered node a refusal reports. */
 type CoveredNodeFacts = Pick<SnapshotAddressableNode, 'ref' | 'interactionBlocked' | 'coveredBy'>;

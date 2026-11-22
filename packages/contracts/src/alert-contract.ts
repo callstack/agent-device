@@ -37,13 +37,12 @@ export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
- * code), the macOS helper as details.reason — and so does the tree-based Android acting leg
- * (through the shared driver), as this `details.reason` paired with `dispatched:
- * 'no'`. Retry and the fallback hint key on these, never on the message text: a transport,
- * runner or helper failure must never read as an absent alert.
+ * code), the macOS helper as `ALERT_REFUSAL_REASONS.notFound` in details.reason — and so does the
+ * tree-based Android acting leg (through the shared driver), as that `details.reason` paired with
+ * `dispatched: 'no'`. Retry and the fallback hint key on these, never on the message text: a
+ * transport, runner or helper failure must never read as an absent alert.
  */
 export const ALERT_NOT_FOUND_RUNNER_CODE = 'ALERT_NOT_FOUND';
-export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 
 /**
  * The Apple XCUITest runner could not complete required alert acquisition: a query failed,
@@ -53,12 +52,23 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
 
 /**
- * The tree-based acting leg's refusals, raised by the shared tree driver in
- * `capture-kit/alert-tree-driver.ts`: before anything was pressed (no candidate, or no single
- * choice), and after a press the confirm window never settled. The pre-press rows answer with
- * `dispatched: 'no'`; callers branch on `error.details.reason` instead of the prose.
+ * The alert family's refusals. The tree-based acting leg raises most of them through the shared
+ * tree driver in `capture-kit/alert-tree-driver.ts`: before anything was pressed (no alert, no
+ * candidate, or no single choice), and after a press the confirm window never settled. The
+ * pre-press rows answer with `dispatched: 'no'`; callers branch on `error.details.reason` instead
+ * of the prose.
  */
 export const ALERT_REFUSAL_REASONS = {
+  // No alert was visible to `alert accept` or `alert dismiss`, from the tree-based driver or the
+  // macOS helper, so nothing was pressed. Retry once the alert shows, or inspect `snapshot -i`.
+  notFound: { reason: 'alert-not-found' },
+  /**
+   * A backend that ends the window on a typed refusal, such as the Apple runner's
+   * `ALERT_UNRESOLVED` for an unreadable prompt, reports that refusal instead. A caller tells a
+   * timed-out wait from a transport failure by reason, not by message.
+   */
+  // `alert wait` saw no actionable alert within its window.
+  waitTimeout: { reason: 'alert-wait-timeout' },
   /**
    * The acting leg (`alert accept|dismiss`) refuses after seeing an alert: the visible buttons
    * name no single choice for the asked-for action. `dispatched: 'no'` states the refusal ran
@@ -85,14 +95,6 @@ export const ALERT_REFUSAL_REASONS = {
   // A press went out but the confirm window never settled whether the alert is gone.
   windowExpired: { reason: 'alert-window-expired' },
 } as const satisfies ReasonTable<'alert'>;
-
-/**
- * `alert wait` saw no actionable alert within its window and no stronger typed failure applies. A
- * backend that ends the window on a typed refusal, such as the Apple runner's `ALERT_UNRESOLVED`
- * for an unreadable prompt, reports that refusal instead. A caller tells a timed-out wait from a
- * transport failure by reason, not by message.
- */
-export const ALERT_WAIT_TIMEOUT_REASON = 'alert-wait-timeout';
 
 /** What an `alert get` capture resolved to, typed so clients switch on states, not messages. */
 export type AlertStatusKind = 'visible' | 'none' | 'undecided';

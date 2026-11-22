@@ -18,6 +18,10 @@ export const PLUGIN_REASONS = {
   setupFailed: { reason: 'plugin_setup_failed' },
   // A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`.
   reservedProvider: { reason: 'reserved_provider' },
+  // The plugin package or what its code returns breaks the plugin contract: an invalid manifest,
+  // package version, provider id, credentials or connection, no default factory or `setup(host)`,
+  // or a runtime or WebDriver descriptor that lacks a required field.
+  invalidPlugin: { reason: 'invalid_plugin' },
 } as const satisfies ReasonTable<'plugins'>;
 
 /** One {@link PLUGIN_REASONS} spelling a plugin refusal may carry. */
@@ -44,7 +48,7 @@ export type PluginManifest = {
 const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
 
 function invalidManifest(message: string): AppError {
-  return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
+  return new AppError('INVALID_ARGS', message, { reason: PLUGIN_REASONS.invalidPlugin.reason });
 }
 
 export function assertLocalConnectionCapabilities(

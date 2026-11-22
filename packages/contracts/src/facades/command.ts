@@ -20,6 +20,7 @@ export {
   readOptionalNumber,
 } from '../input-validation.ts';
 export {
+  APP_DEVICE_REASONS,
   IOS_SAFARI_BUNDLE_ID,
   isDeepLinkTarget,
   isWebUrl,

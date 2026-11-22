@@ -1,7 +1,11 @@
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatchAfterSteps,
+  KEYBOARD_DISMISS_REASONS,
+} from '@agent-device/kernel/errors';
 
 import { sleep } from './adb.ts';
 import {
@@ -38,8 +42,6 @@ const ANDROID_IME_FLAG_NO_ENTER_ACTION = 0x40000000;
 const ANDROID_KEYBOARD_DISMISS_MAX_ATTEMPTS = 2;
 const ANDROID_KEYBOARD_DISMISS_RETRY_DELAY_MS = 120;
 const ANDROID_KEYCODE_ESCAPE = '111';
-/** Reason shared with an Apple runner that refuses automatic dismissal before dispatch. */
-const ANDROID_KEYBOARD_DISMISS_UNAVAILABLE_REASON = 'keyboard_dismiss_unavailable';
 const ANDROID_KEYBOARD_VISIBILITY_KEYS = [
   'mInputShown',
   'mIsInputViewShown',
@@ -150,7 +152,7 @@ export async function dismissAndroidKeyboardWithAdb(
       'Android keyboard dismiss is unavailable for the current IME without back navigation.',
       {
         // The Escape key events went out. The final state alone cannot prove what they did.
-        reason: ANDROID_KEYBOARD_DISMISS_UNAVAILABLE_REASON,
+        reason: KEYBOARD_DISMISS_REASONS.unavailable.reason,
         dispatched: 'unknown',
         attempts,
         inputType: state.inputType,

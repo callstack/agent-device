@@ -16,7 +16,7 @@ import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diag
 import {
   AppError,
   isRequestCanceledError,
-  REQUEST_CANCELED_REASON,
+  REQUEST_CANCELED_REASONS,
 } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
@@ -333,7 +333,7 @@ function rethrowCancelledFailure(failure: SnapshotSourceFailure, signal: AbortSi
   // own reason is that same typed value, never the bridge's internal `abort-signal` code.
   throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
     ...failure.details,
-    reason: REQUEST_CANCELED_REASON,
+    reason: REQUEST_CANCELED_REASONS.canceled.reason,
   });
 }
 
