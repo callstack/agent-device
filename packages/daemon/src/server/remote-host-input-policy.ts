@@ -2,7 +2,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { validateAndNormalizeBatchSteps } from '@agent-device/command-registry/batch';
 import { DEFAULT_BATCH_MAX_STEPS } from '@agent-device/contracts/command';
-import { resolveSessionIsolationMode } from '../core/config.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { remoteScriptOpen } from '../core/session-script-publication-capability.ts';
 
@@ -22,7 +21,6 @@ const HOST_PATH_FIELDS = [
 
 /** Remote callers choose client destinations; only the daemon chooses host output paths. */
 export function restrictRemoteHostInputs(request: DaemonRequest): DaemonRequest {
-  assertPerfReportHostInput(request);
   if (!request.internal?.publicNetworkOnly) return request;
   const { cwd: _cwd, ...meta } = request.meta ?? {};
   const command = request.command;
@@ -49,27 +47,6 @@ export function restrictRemoteHostInputs(request: DaemonRequest): DaemonRequest 
     ...(request.input ? { input } : {}),
     meta,
   });
-}
-
-function assertPerfReportHostInput(request: DaemonRequest): void {
-  if (!hasExplicitPerfReportSource(request)) return;
-  const isolation = resolveSessionIsolationMode(
-    request.meta?.sessionIsolation ?? request.flags?.sessionIsolation,
-  );
-  if (request.internal?.publicNetworkOnly || isolation === 'tenant') {
-    throw remoteHostInputDenied('tracePath');
-  }
-}
-
-function hasExplicitPerfReportSource(request: DaemonRequest): boolean {
-  const args = request.positionals;
-  return (
-    request.command === 'perf' &&
-    args?.[0]?.toLowerCase() === 'cpu' &&
-    args[1]?.toLowerCase() === 'profile' &&
-    args[2]?.toLowerCase() === 'report' &&
-    Boolean(args[6])
-  );
 }
 
 function assertRemoteHostToolingInputs(

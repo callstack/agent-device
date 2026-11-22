@@ -268,6 +268,19 @@ test('a request that a leased session refused reads its own record, which names 
   expect(served).not.toContain(OTHER_LEASE_ID);
 });
 
+test('a non-string lease claim reaches lease admission and gets an unleased diagnostics record', async () => {
+  if (!world) return;
+  const refused = await world.send('press', SESSION, { leaseId: 42 });
+  expect(refused.error?.data).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
+    diagnosticsRecord: {
+      session: world.sessionName,
+      requestId: expect.stringMatching(/-unleased$/),
+    },
+  });
+});
+
 test('two requests that reuse one request id get one record each', async () => {
   if (!world) return;
   const requestId = 'reused-request-id';

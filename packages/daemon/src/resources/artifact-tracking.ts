@@ -106,7 +106,8 @@ const DIAGNOSTICS_RECORD_ID = new RegExp(`^[a-f0-9]{32}-(${UNLEASED_RECORD}|[a-f
  * id names no record, so two requests never share one, and a record has one owner or none.
  */
 export function claimRequestDiagnosticsRecord(req: Pick<DaemonRequest, 'flags' | 'meta'>): void {
-  const leaseId = resolveLeaseScope(req).leaseId;
+  const claim = resolveLeaseScope(req).leaseId;
+  const leaseId = typeof claim === 'string' ? claim : undefined;
   // A lease id that reaches a message, and not a lease field, is removed from the record too.
   if (leaseId !== undefined) {
     // A malformed id is no credential, but the record still never echoes what the caller sent.

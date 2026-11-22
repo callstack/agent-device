@@ -178,18 +178,21 @@ async function executeAdmittedPerfPlan(
       return await startPerfCapture(params, session, runtime, plan.request);
     }
     case 'profile-report': {
-      const explicit = plan.request.tracePath
-        ? resolveExplicitPerfSource(params, plan.request.tracePath)
+      const isXctrace = plan.request.kind === 'xctrace';
+      const requestedPath = plan.request.tracePath
+        ? expandSessionPath(plan.request.tracePath, requestCwd(params.req, params.host))
         : undefined;
+      const explicit =
+        isXctrace && requestedPath ? resolveExplicitPerfSource(requestedPath) : undefined;
       const saved = session.lastPerfProfile;
       const retained =
-        plan.request.kind === 'xctrace' &&
         explicit &&
         saved &&
+        saved.leaseVerifier !== null &&
         !samePerfSource(explicit, saved.profile.outPath)
           ? undefined
           : saved;
-      const tracePath = explicit?.path ?? retained?.profile.outPath;
+      const tracePath = requestedPath ?? retained?.profile.outPath;
       assertPerfOutputOwner(params.req, retained?.leaseVerifier);
       const last = retained?.profile;
       if (!tracePath) {
@@ -204,7 +207,10 @@ async function executeAdmittedPerfPlan(
           'perf cpu profile report requires a stopped profile trace; stop the active capture first.',
         );
       }
-      const source = explicit ?? readPerfSource(tracePath);
+      if (!isXctrace && (!last || last.type !== 'cpu-profile' || !isAndroidProfileHandoff(last))) {
+        throw new AppError('INVALID_ARGS', 'Stopped Simpleperf profile metadata is malformed.');
+      }
+      const source = isXctrace ? (explicit ?? readPerfSource(tracePath)) : undefined;
       if (source) assertPerfSourceLease(params, source);
       const runtime = await bindDevice(device, plan.use);
       const outPath = resolveNativeOutPath(params, plan.request.outPath, 'cpu-report.json');
@@ -373,8 +379,7 @@ function resolveStoppedCaptureTenant(req: DaemonRequest, session: SessionState, 
   return readString(stored) ?? session.lease?.tenantId ?? req.meta?.tenantId;
 }
 
-function resolveExplicitPerfSource(params: PerfRuntimeHandlerParams, requestedPath: string) {
-  const tracePath = expandSessionPath(requestedPath, requestCwd(params.req, params.host));
+function resolveExplicitPerfSource(tracePath: string) {
   const source = readPerfSource(tracePath);
   if (!source) {
     throw new AppError('INVALID_ARGS', 'tracePath must name a readable stopped profile trace.', {

@@ -12,7 +12,10 @@ import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { DAEMON_HTTP_TENANT_HEADER } from '@agent-device/contracts/daemon-http';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosAppSession,
+} from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
 import { screenshotCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
@@ -34,7 +37,7 @@ function reportFixture() {
   const sessionStore = makeSessionStore('daemon-perf-report-session-');
   const leaseRegistry = new LeaseRegistry();
   const gateway = screenshotRuntimeFixture().gateway;
-  const inspectFacts = vi.fn<typeof gateway.inspectFacts>(async (...args) => {
+  const inspectFacts: typeof gateway.inspectFacts = async (...args) => {
     const facts = await gateway.inspectFacts(...args);
     return {
       ...facts,
@@ -44,11 +47,13 @@ function reportFixture() {
         perfNativeCaptureStart: { available: true },
       },
     };
-  });
-  const perfProfileReport = vi.fn(async ({ outPath }: { outPath: string }) => {
-    fs.writeFileSync(outPath, 'generated-report');
-    return { outPath };
-  });
+  };
+  const perfProfileReport = vi.fn<PerfRuntimeOperations['perfProfileReport']>(
+    async ({ outPath }) => {
+      fs.writeFileSync(outPath, 'generated-report');
+      return { outPath };
+    },
+  );
   const handler = createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: screenshotCommandSurface,
@@ -103,7 +108,6 @@ function reportFixture() {
     profilePath,
     retainProfile,
     perfProfileReport,
-    inspectFacts,
   };
 }
 
@@ -217,42 +221,126 @@ test('perf stop retains the session lease tenant for an unleased producer', asyn
   });
 });
 
-test.each(['public without a lease', 'tenant-scoped under another lease'])(
-  'perf report refuses an explicit host trace path from a %s request before runtime admission',
-  async (origin) => {
-    const fixture = reportFixture();
-    const isPublic = origin === 'public without a lease';
-    const scope = { tenantId, runId: 'perf', leaseBackend: 'android-instance' } as const;
-    const producer = fixture.leaseRegistry.allocateLease({ ...scope, runId: 'producer' });
-    fixture.retainProfile(isPublic ? 'capture' : `${tenantId}:capture`, producer.leaseId);
-    const explicitPath = fixture.profilePath + '-external';
-    fs.mkdirSync(explicitPath);
-    const meta = isPublic
-      ? {}
-      : {
-          ...scope,
-          leaseId: fixture.leaseRegistry.allocateLease(scope).leaseId,
-          sessionIsolation: 'tenant',
-        };
-    await withHttp(fixture.handler, async (post) => {
-      const body = await post(
+test('public-network perf report uses the session capture despite an explicit host path', async () => {
+  const fixture = reportFixture();
+  fixture.retainProfile('capture');
+  const explicitPath = fixture.profilePath + '-external';
+  fs.mkdirSync(explicitPath);
+  await withHttp(fixture.handler, async (post) => {
+    successfulData(
+      await post({
+        command: 'perf',
+        session: 'capture',
+        positionals: [...positionals, '', '', explicitPath],
+      }),
+    );
+  });
+  expect(fixture.perfProfileReport).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      tracePath: fs.realpathSync(fixture.profilePath),
+    }),
+  );
+});
+
+test('a locally admitted tenant-isolated perf report can select an independent xctrace source', async () => {
+  const fixture = reportFixture();
+  const scope = { tenantId, runId: 'perf', leaseBackend: 'ios-simulator' } as const;
+  const lease = fixture.leaseRegistry.allocateLease(scope);
+  const name = `${tenantId}:capture`;
+  fixture.retainProfile(name, lease.leaseId);
+  fixture.sessionStore.update(fixture.sessionStore.lookup(name)!, { lease: sessionLeaseOf(lease) });
+  const explicitPath = fixture.profilePath + '-external';
+  fs.mkdirSync(explicitPath);
+  await withHttp(fixture.handler, async (post) => {
+    successfulData(
+      await post(
         {
           command: 'perf',
           session: 'capture',
           positionals: [...positionals, '', '', explicitPath],
-          meta,
+          meta: { ...scope, leaseId: lease.leaseId, sessionIsolation: 'tenant' },
         },
-        isPublic,
-      );
-      expect(body.error?.data).toMatchObject({
-        code: 'INVALID_ARGS',
-        details: { reason: 'REMOTE_HOST_INPUT_DENIED', field: 'tracePath' },
-      });
-      expect(fixture.inspectFacts).not.toHaveBeenCalled();
-      expect(fixture.perfProfileReport).not.toHaveBeenCalled();
-    });
-  },
-);
+        false,
+      ),
+    );
+  });
+  expect(fixture.perfProfileReport).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      tracePath: fs.realpathSync(explicitPath),
+      profile: undefined,
+      template: undefined,
+    }),
+  );
+});
+
+test('an independent local xctrace source keeps the unleased session handoff and template', async () => {
+  const fixture = reportFixture();
+  fixture.retainProfile('capture');
+  const explicitPath = fixture.profilePath + '-external';
+  fs.mkdirSync(explicitPath);
+  await withHttp(fixture.handler, async (post) => {
+    successfulData(
+      await post(
+        {
+          command: 'perf',
+          session: 'capture',
+          positionals: [...positionals, '', '', explicitPath],
+        },
+        false,
+      ),
+    );
+  });
+  expect(fixture.perfProfileReport).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      tracePath: fs.realpathSync(explicitPath),
+      profile: expect.objectContaining({ outPath: fixture.profilePath }),
+      template: 'Time Profiler',
+    }),
+  );
+});
+
+test('a local Simpleperf report uses the stopped handoff when its export has moved', async () => {
+  const fixture = reportFixture();
+  const formerPath = path.join(fixture.profilePath, 'cpu.perf.data');
+  fs.writeFileSync(formerPath, 'fixture');
+  fs.renameSync(formerPath, path.join(fixture.profilePath, 'moved.perf.data'));
+  const profile = {
+    kind: 'simpleperf',
+    mode: 'cpu-profile',
+    type: 'cpu-profile',
+    outPath: formerPath,
+    packageName: 'com.example.app',
+    appPid: '1712',
+    profilerPid: '6804',
+    remotePath: '/data/local/tmp/cpu.perf.data',
+  } as const;
+  fixture.sessionStore.publish(
+    'capture',
+    makeAndroidSession('capture', {
+      appBundleId: profile.packageName,
+      lastPerfProfile: { profile, leaseVerifier: null },
+    }),
+  );
+  await withHttp(fixture.handler, async (post) => {
+    successfulData(
+      await post(
+        {
+          command: 'perf',
+          session: 'capture',
+          positionals: ['cpu', 'profile', 'report', 'simpleperf', '', '', 'cpu.perf.data'],
+          meta: { cwd: fixture.profilePath },
+        },
+        false,
+      ),
+    );
+  });
+  expect(fixture.perfProfileReport).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      tracePath: formerPath,
+      profile,
+    }),
+  );
+});
 
 test.each(['HTTP request', 'direct daemon request'])(
   'an unleased %s perf report is downloadable by the requester tenant',
