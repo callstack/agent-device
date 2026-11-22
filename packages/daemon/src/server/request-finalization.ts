@@ -109,6 +109,7 @@ function registerDownloadableArtifacts(
         tenantId: delivered
           ? delivered.tenantId
           : (captureOutputTenantId(data) ?? req.meta?.tenantId),
+        leaseId: req.internal?.admittedLease?.leaseId,
         artifactType: artifact.artifactType,
         fileName: artifact.fileName,
         ...(artifact.deleteAfterDownload === false ? { deleteAfterDownload: false } : {}),

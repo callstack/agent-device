@@ -18,6 +18,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
+  DAEMON_HTTP_LEASE_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
 } from '@agent-device/contracts/daemon-http';
@@ -287,7 +288,10 @@ test.each(['marker', 'auth-hook', 'batch'] as const)(
         const artifact = data?.artifacts?.[0];
         expect(artifact?.artifactId).toBeTypeOf('string');
         const download = await fetch(`${base}/artifacts/${artifact?.artifactId}`, {
-          headers: { authorization: 'Bearer test-token' },
+          headers: {
+            authorization: 'Bearer test-token',
+            ...(lease ? { [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId } : {}),
+          },
         });
         expect(download.status).toBe(200);
         const bytes = Buffer.from(await download.arrayBuffer());
@@ -400,7 +404,7 @@ test.each(['local', 'local-client-destination', 'remote'] as const)(
           cleanupDownloadableArtifact(artifactId!);
         } else {
           expect(artifactId).toBeUndefined();
-          const inventory = await listDownloadableArtifacts(undefined, {});
+          const inventory = await listDownloadableArtifacts({}, {});
           expect(
             inventory.some(
               ({ filename }) => filename === 'caller.mp4' || filename === 'copied.mp4',
@@ -925,7 +929,11 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
           path.join(sessionStore.resolveSessionDir('tenant-b:capture'), 'test-artifacts'),
         );
         const download = await fetch(`${baseUrl}/artifacts/${second.artifactId}`, {
-          headers: { authorization: 'Bearer test-token', 'x-tenant': 'tenant-b' },
+          headers: {
+            authorization: 'Bearer test-token',
+            'x-tenant': 'tenant-b',
+            [DAEMON_HTTP_LEASE_HEADER]: leases.get('tenant-b')!.leaseId,
+          },
         });
         expect(download.status).toBe(200);
         const archive = gunzipSync(Buffer.from(await download.arrayBuffer()));
@@ -942,7 +950,11 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
         expect(forbidden.status).toBe(401);
         for (const artifact of [first, third]) {
           const own = await fetch(`${baseUrl}/artifacts/${artifact.artifactId}`, {
-            headers: { authorization: 'Bearer test-token', 'x-tenant': 'tenant-a' },
+            headers: {
+              authorization: 'Bearer test-token',
+              'x-tenant': 'tenant-a',
+              [DAEMON_HTTP_LEASE_HEADER]: leases.get('tenant-a')!.leaseId,
+            },
           });
           expect(own.status).toBe(200);
           await own.arrayBuffer();

@@ -184,10 +184,10 @@ export function unavailableConnectPluginError(
 }
 
 /**
- * The capabilities a provider declares: the daemon's own routing for `proxy`, `cloud` and no
- * provider, or a loaded plugin's declaration. Undefined when the provider's plugin is not loaded.
+ * Reads routing capabilities, a loaded plugin's declaration, or the provider catalog without
+ * loading a plugin. Returns undefined for providers with no available declaration.
  */
-function declaredConnectionCapabilities(
+export function declaredConnectionCapabilities(
   provider: string | undefined,
   env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities | undefined {
@@ -197,19 +197,6 @@ function declaredConnectionCapabilities(
   return (
     pluginConnectionCapabilities(provider, env) ?? providerPluginConnectionCapabilities(provider)
   );
-}
-
-/**
- * Whether a provider forgets an ended connection lease, answered without loading any plugin: the
- * provider's own declaration when this process has it, then the plugin catalog's copy of it. A
- * provider that neither knows keeps its lease.
- */
-export function providerForgetsEndedConnectionLease(
-  provider: string | undefined,
-  env: NodeJS.ProcessEnv,
-): boolean {
-  const declared = declaredConnectionCapabilities(provider, env);
-  return declared?.forgetsEndedConnectionLease === true;
 }
 
 /** Installed providers declare their capabilities; the rest is the daemon's own routing. */

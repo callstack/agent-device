@@ -13,6 +13,7 @@ import {
   requireTenantOwnedEntry,
   type TenantOwnedResourceKind,
 } from '../core/tenant-owned-entry.ts';
+import { leasedOutputRefusal, requestHoldsOutputLease } from './lease-registry-scope.ts';
 
 // --- Downloadable artifact tracking ---
 
@@ -53,6 +54,7 @@ type ArtifactDownload = {
 type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
+  leaseId?: string;
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
@@ -94,6 +96,8 @@ const pendingUploads = () => artifactTracking().uploads;
 export type DownloadableArtifactRegistration = {
   artifactPath: string;
   tenantId?: string;
+  /** The lease that produced the artifact. Only a request that sends this id lists or downloads it. */
+  leaseId?: string;
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
@@ -103,6 +107,9 @@ export type DownloadableArtifactRegistration = {
 };
 
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
+
+/** What a request presents to list or download artifacts. */
+export type DownloadableArtifactReader = { tenantId?: string; leaseId?: string };
 
 type PreparedDownloadableArtifact = {
   artifactPath: string;
@@ -121,10 +128,11 @@ export type OpenedDownloadableArtifact = PreparedDownloadableArtifact & {
 /**
  * Registers one file for download and returns its id. A file the same tenant can already download
  * returns its existing entry unchanged: two ids for one file would each delete it after their own
- * download.
+ * download. A file that a lease registered keeps that entry for every later registration, so a
+ * request without that lease cannot register the file again and read it.
  */
 export function trackDownloadableArtifact(params: DownloadableArtifactRegistration): string {
-  const existingId = findTrackedArtifactId(params.artifactPath, params.tenantId);
+  const existingId = findTrackedArtifactId(params);
   if (existingId) return existingId;
   const artifactId = crypto.randomUUID();
   const createdAt = Date.now();
@@ -141,6 +149,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
   pendingArtifacts().set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
+    ...(params.leaseId !== undefined ? { leaseId: params.leaseId } : {}),
     artifactType: params.artifactType,
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
@@ -155,16 +164,12 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
 }
 
 function findTrackedArtifactId(
-  artifactPath: string,
-  tenantId: string | undefined,
+  owner: Pick<DownloadableArtifactRegistration, 'artifactPath' | 'tenantId' | 'leaseId'>,
 ): string | undefined {
   for (const [artifactId, entry] of pendingArtifacts()) {
-    if (
-      !entry.cleanupRequested &&
-      entry.artifactPath === artifactPath &&
-      entry.tenantId === tenantId
-    )
-      return artifactId;
+    if (entry.cleanupRequested || entry.artifactPath !== owner.artifactPath) continue;
+    if (entry.leaseId !== undefined) return artifactId;
+    if (entry.tenantId === owner.tenantId && owner.leaseId === undefined) return artifactId;
   }
   return undefined;
 }
@@ -178,13 +183,13 @@ function findArtifactSourceCleanup(artifactPath: string): ArtifactSourceCleanup 
 
 export async function openDownloadableArtifact(
   artifactId: string,
-  tenantId: string | undefined,
+  reader: DownloadableArtifactReader,
   hostEnv: NodeJS.ProcessEnv,
   signal?: AbortSignal,
 ): Promise<OpenedDownloadableArtifact> {
   if (signal?.aborted) throw createRequestCanceledError();
   const artifacts = pendingArtifacts();
-  const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
+  const { entry, stat } = readDownloadableArtifactEntry(artifactId, reader);
   const download: ArtifactDownload = {
     controller: new AbortController(),
     release: () => {
@@ -243,12 +248,12 @@ function cancelArtifactDownload(
 }
 
 export async function listDownloadableArtifacts(
-  tenantId: string | undefined,
+  reader: DownloadableArtifactReader,
   hostEnv: NodeJS.ProcessEnv,
 ): Promise<DaemonArtifactInventoryEntry[]> {
   const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts()) {
-    if (!canReadArtifact(entry, tenantId)) continue;
+    if (!canReadArtifact(entry, reader)) continue;
     let stat: fs.Stats;
     try {
       stat = fs.statSync(entry.artifactPath);
@@ -289,14 +294,17 @@ async function prepareArtifactPayloadForInventory(
 
 function readDownloadableArtifactEntry(
   artifactId: string,
-  tenantId: string | undefined,
+  reader: DownloadableArtifactReader,
 ): { entry: ArtifactEntry; stat: fs.Stats } {
   const entry = requireTenantOwnedEntry(
     pendingArtifacts(),
     artifactId,
-    tenantId,
+    reader.tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
   );
+  if (!requestHoldsOutputLease(entry.leaseId, reader.leaseId)) {
+    throw leasedOutputRefusal(DOWNLOADABLE_ARTIFACT_RESOURCE.label);
+  }
   if (entry.cleanupRequested) {
     throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
@@ -435,8 +443,12 @@ function archiveFilename(fileName: string): string {
   return `${fileName}.tar.gz`;
 }
 
-function canReadArtifact(entry: ArtifactEntry, tenantId: string | undefined): boolean {
-  return !entry.cleanupRequested && (!entry.tenantId || entry.tenantId === tenantId);
+function canReadArtifact(entry: ArtifactEntry, reader: DownloadableArtifactReader): boolean {
+  return (
+    !entry.cleanupRequested &&
+    (!entry.tenantId || entry.tenantId === reader.tenantId) &&
+    requestHoldsOutputLease(entry.leaseId, reader.leaseId)
+  );
 }
 
 function safeArtifactFilename(fileName: string | undefined, fallback: string): string {

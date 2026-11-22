@@ -17,7 +17,7 @@ Idle reap then shuts the daemon down within one more idle window.
 
 A session cannot outlive the lease under which it was opened.
 When the lease is released, expires, or its provider reports the instance ended, the daemon tears the session down under its execution locks and clears its device claim.
-Any teardown of a leased session, including `close`, finishes an active recording. A finished export at a remote temp path then belongs to the lease's tenant as a downloadable artifact, like the artifact of any `record stop` (ADR 0024 2.5).
+Any teardown of a leased session, including `close`, finishes an active recording. A finished export at a remote temp path then stays a downloadable artifact of that lease, like the artifact of any `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
 A release is a tenant `lease_release` or a host `DELETE /admin/leases/<lease-id>`.
 The daemon sweeps for expired leases every second.
@@ -55,6 +55,7 @@ Nested requests record on the ledger of the outermost request, so a step reply n
 If a close finds its lease already inactive, it reports that lease as ended.
 A client never sends a release after such a request.
 If a client stores the lease id, it forgets that id when the reply names it.
+The CLI keeps the id of an ended proxy lease apart, and sends it only on `artifacts` while the connection holds no lease.
 A gateway that relays the reply reads the lease end from it.
 
 Close and lease-end teardown take the same execution locks.
@@ -100,6 +101,16 @@ An allocate that repeats the labels of a live lease without that lease's id is r
 A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
 Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.
 On a leased session, these commands do not bind the session, refresh its recording, deliver its script, renew its lease, end it, or write request events to it.
+
+Output of a request that acted under a lease belongs to that lease.
+This applies to a downloadable artifact and to a request diagnostics record.
+The daemon gives such output only to a request that sends the lease id.
+The `artifacts` RPC reads the lease id from the request. `GET /artifacts`, `GET /artifacts/<id>`, and the diagnostics route read the `x-agent-device-lease-id` header, which the proxy forwards.
+This rule applies for as long as the daemon keeps the output, also after the lease ends. The lifetime of the output does not change.
+An inventory omits an artifact of another lease.
+A download or a diagnostics read without the lease id fails with `UNAUTHORIZED`, reason `LEASE_OUTPUT_MISMATCH`, and `field: 'leaseId'`.
+If a later request registers a file that a lease already registered, the file stays with that lease.
+Output of a request that acted under no lease keeps the tenant rule.
 
 ## Admitted request work
 

@@ -14,8 +14,8 @@ import {
 } from './handlers/record-runtime-response.ts';
 
 /**
- * Keeps the export of a recording that a leased session's teardown finished, so the tenant can
- * still download it (ADR 0024 rule 1). Remote admission marks session-owned output in the durable
+ * Keeps the export of a recording that a leased session's teardown finished, so a request that sends
+ * the ended lease's id can still download it (ADR 0024 rule 1). Remote admission marks session-owned output in the durable
  * envelope. Remote client exports served by local HTTP use the generated daemon temp path.
  * A local caller's export already sits at the path that the caller named.
  */
@@ -37,6 +37,7 @@ export function retainLeasedSessionRecording(
         trackDownloadableArtifact({
           artifactPath: artifact.path!,
           tenantId: lease.tenantId,
+          leaseId: lease.leaseId,
           artifactType: artifact.artifactType,
           fileName: artifact.fileName,
           sessionName,

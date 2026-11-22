@@ -16,15 +16,19 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
+import readline from 'node:readline';
 import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { isSafeSessionSegment } from '@agent-device/host-kit/session-paths';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { decodeUriSegment } from './http-request-target.ts';
 import {
   isTenantAddressableSessionName,
   type TenantSessionNamespace,
 } from '../core/session-tenant-scope.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
+import { leasedOutputRefusal, requestHoldsOutputLease } from '../resources/lease-registry-scope.ts';
+import { REQUEST_LEASE_DIAGNOSTIC_PHASE } from '../sessions/lease-lifecycle.ts';
 
 const REQUEST_DIAGNOSTICS_CONTENT_TYPE = 'application/x-ndjson';
 
@@ -152,7 +156,16 @@ async function handleRequestDiagnostics(
       return;
     }
 
-    const stream = fs.createReadStream(recordPath);
+    // The bytes that the lease check read are the bytes served, so a later stamp cannot be skipped.
+    const leaseIds = await readRequestDiagnosticsLeases(recordPath, stats.size);
+    const presentedLeaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
+    const presented = typeof presentedLeaseId === 'string' ? presentedLeaseId : undefined;
+    if (!leaseIds.every((leaseId) => requestHoldsOutputLease(leaseId, presented))) {
+      sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
+      return;
+    }
+
+    const stream = fs.createReadStream(recordPath, { end: stats.size - 1 });
     res.statusCode = 200;
     res.setHeader('content-type', REQUEST_DIAGNOSTICS_CONTENT_TYPE);
     res.setHeader('content-length', String(stats.size));
@@ -168,8 +181,36 @@ async function handleRequestDiagnostics(
 async function statRecord(recordPath: string): Promise<fs.Stats | null> {
   try {
     const stats = await fs.promises.stat(recordPath);
-    return stats.isFile() ? stats : null;
+    return stats.isFile() && stats.size > 0 ? stats : null;
   } catch {
     return null;
+  }
+}
+
+/** The leases stamped in the first `byteLength` bytes of a request diagnostics record. */
+async function readRequestDiagnosticsLeases(
+  recordPath: string,
+  byteLength: number,
+): Promise<string[]> {
+  const leaseIds: string[] = [];
+  const lines = readline.createInterface({
+    input: fs.createReadStream(recordPath, { end: byteLength - 1 }),
+  });
+  for await (const line of lines) {
+    if (!line.includes(REQUEST_LEASE_DIAGNOSTIC_PHASE)) continue;
+    const leaseId = readStampedLease(line);
+    if (leaseId !== undefined) leaseIds.push(leaseId);
+  }
+  return leaseIds;
+}
+
+function readStampedLease(line: string): string | undefined {
+  try {
+    const event = JSON.parse(line) as { phase?: unknown; data?: { leaseId?: unknown } };
+    if (event.phase !== REQUEST_LEASE_DIAGNOSTIC_PHASE) return undefined;
+    // A stamp that cannot be read still marks the record as leased.
+    return typeof event.data?.leaseId === 'string' ? event.data.leaseId : '';
+  } catch {
+    return undefined;
   }
 }

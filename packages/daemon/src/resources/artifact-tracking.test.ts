@@ -57,7 +57,7 @@ test.each(['cleanup', 'expiry'] as const)(
       } finally {
         timers.mockRestore();
       }
-      listing = runtime.run(() => listDownloadableArtifacts(undefined, process.env));
+      listing = runtime.run(() => listDownloadableArtifacts({}, process.env));
       await started;
       expect(fs.existsSync(archivePath)).toBe(true);
       if (trigger === 'expiry') {
@@ -99,7 +99,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
     const id = runtime.run(() =>
       trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
     );
-    const first = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const first = await runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     downloads.push(first);
     expect(gunzipSync(await buffer(first.stream)).includes(expected)).toBe(true);
     await closed(first.stream);
@@ -107,7 +107,7 @@ test('a missing cached directory archive is rebuilt from the live source', async
     const oldArchive = String(first.stream.path);
     fs.unlinkSync(oldArchive);
     expect(fs.existsSync(artifactPath)).toBe(true);
-    const second = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const second = await runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     downloads.push(second);
     expect(gunzipSync(await buffer(second.stream)).includes(expected)).toBe(true);
     await closed(second.stream);
@@ -155,12 +155,12 @@ test('cancelling the archive builder preserves a second download waiting for its
       trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
     );
     const timerIndex = timers.mock.calls.length;
-    const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const first = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     openings.push(first);
     void first.catch(() => {});
     const cancelFirst = timers.mock.calls[timerIndex]![0];
     await started;
-    const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    const second = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
     openings.push(second);
     void second.catch(() => {});
     runtime.run(cancelFirst);
@@ -242,7 +242,7 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
         trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
       );
       const timers = vi.spyOn(globalThis, 'setTimeout');
-      const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const first = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
       openings.push(first);
       void first.catch(() => {});
       const deadline = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
@@ -253,7 +253,7 @@ test.each(['deadline-aborted', 'late-aborted'] as const)(
       expect(deadline).toBeTypeOf('function');
       runtime.run(() => deadline!());
       await cancelled;
-      const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const second = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
       openings.push(second);
       void second.catch(() => {});
       finishAborted();
@@ -313,9 +313,7 @@ test.each(['before opening', 'while archiving'] as const)(
         trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
       );
       if (phase === 'before opening') caller.abort(reason);
-      opening = runtime.run(() =>
-        openDownloadableArtifact(id, undefined, process.env, caller.signal),
-      );
+      opening = runtime.run(() => openDownloadableArtifact(id, {}, process.env, caller.signal));
       void opening.catch(() => {});
       if (phase === 'while archiving') caller.abort(reason);
       const error = await opening.catch((error: unknown) => error);
@@ -369,9 +367,9 @@ test('disposing every archive waiter aborts the shared build and removes its tem
     const id = runtime.run(() =>
       trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
     );
-    openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
+    openings.push(runtime.run(() => openDownloadableArtifact(id, {}, process.env)));
     await started;
-    openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
+    openings.push(runtime.run(() => openDownloadableArtifact(id, {}, process.env)));
     for (const opening of openings) void opening.catch(() => {});
     runtime.dispose();
     await aborted(archiveSignal);
@@ -477,15 +475,11 @@ test.each(['old-first', 'new-first'] as const)(
       runtime.run(() => trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }));
     try {
       const firstId = track();
-      downloads.push(
-        await runtime.run(() => openDownloadableArtifact(firstId, undefined, process.env)),
-      );
+      downloads.push(await runtime.run(() => openDownloadableArtifact(firstId, {}, process.env)));
       runtime.run(() => cleanupDownloadableArtifact(firstId));
       const secondId = track();
       expect(secondId).not.toBe(firstId);
-      downloads.push(
-        await runtime.run(() => openDownloadableArtifact(secondId, undefined, process.env)),
-      );
+      downloads.push(await runtime.run(() => openDownloadableArtifact(secondId, {}, process.env)));
       runtime.run(() => cleanupDownloadableArtifact(secondId));
       for (const download of downloads) download.stream.resume();
       await reads.untilPending(2);
@@ -544,7 +538,7 @@ test.each(['expiry-first', 'deadline-first'] as const)(
       const expire = timers.mock.calls.at(-1)![0];
       const expiryTimer = timers.mock.results.at(-1)!.value;
       const timerIndex = timers.mock.calls.length;
-      const opening = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const opening = runtime.run(() => openDownloadableArtifact(id, {}, process.env));
       const deadline = timers.mock.calls[timerIndex]![0];
       download = await opening;
       const archiveDir = path.dirname(String(download.stream.path));
@@ -659,7 +653,7 @@ test.each(
       );
     const open = async (id: string) => {
       const artifact: OpenedDownloadableArtifact = await runtime.run(() =>
-        openDownloadableArtifact(id, 'tenant-a', process.env),
+        openDownloadableArtifact(id, { tenantId: 'tenant-a' }, process.env),
       );
       downloads.push(artifact);
       return artifact;

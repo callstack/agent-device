@@ -12,7 +12,10 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { resolveScreenRecordingStopRecovery } from '@agent-device/capture-kit/screen-recording-stop-recovery';
-import { buildRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
+import {
+  DAEMON_HTTP_LEASE_HEADER,
+  buildRemoteTempArtifactPath,
+} from '@agent-device/contracts/daemon-http';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type {
   ScreenRecordingCompletion,
@@ -51,11 +54,13 @@ vi.mock('../../resources/artifact-tracking.ts', async (importOriginal) => {
 });
 
 const TENANT = 'tenant-a';
+const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+const OWNER = { tenantId: TENANT, leaseId: LEASE_ID };
 const ADDRESS = `${TENANT}:checkout-flow`;
 const createdPaths: string[] = [];
 
 afterEach(async () => {
-  for (const { id } of await listDownloadableArtifacts(TENANT, process.env)) {
+  for (const { id } of await listDownloadableArtifacts(OWNER, process.env)) {
     cleanupDownloadableArtifact(id);
   }
   for (const filePath of createdPaths.splice(0)) fs.rmSync(filePath, { force: true });
@@ -91,7 +96,7 @@ function publishRecordingSession(
     ...(options.leased === false
       ? {}
       : {
-          lease: { leaseId: 'lease-1', tenantId: TENANT, runId: 'run-1', backend: 'ios-simulator' },
+          lease: { leaseId: LEASE_ID, tenantId: TENANT, runId: 'run-1', backend: 'ios-simulator' },
         }),
   });
   const completion: ScreenRecordingCompletion = {
@@ -156,14 +161,14 @@ async function teardown(sessionStore: SessionStore) {
   });
 }
 
-test('a leased session teardown keeps the remote recording export downloadable by its tenant', async () => {
+test('a leased session teardown keeps the remote recording export downloadable by its lease', async () => {
   const sessionStore = makeSessionStore('agent-device-leased-recording-');
   const recordingExport = remoteRecordingExport();
   publishRecordingSession(sessionStore, recordingExport);
 
   await teardown(sessionStore);
 
-  const artifacts = await listDownloadableArtifacts(TENANT, process.env);
+  const artifacts = await listDownloadableArtifacts(OWNER, process.env);
   expect(artifacts).toEqual([
     expect.objectContaining({
       artifactType: 'screen-recording',
@@ -176,16 +181,17 @@ test('a leased session teardown keeps the remote recording export downloadable b
       sessionName: 'checkout-flow',
     }),
   ]);
-  expect(await listDownloadableArtifacts('tenant-b', process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts({ tenantId: 'tenant-b' }, process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts({ tenantId: TENANT }, process.env)).toEqual([]);
 });
 
-test('a retained recording is deleted once its tenant downloads it', async (t) => {
+test('a retained recording is deleted once its lease holder downloads it', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const sessionStore = makeSessionStore('agent-device-leased-recording-download-');
   const recordingExport = remoteRecordingExport();
   publishRecordingSession(sessionStore, recordingExport);
   await teardown(sessionStore);
-  const [video] = await listDownloadableArtifacts(TENANT, process.env);
+  const [video] = await listDownloadableArtifacts(OWNER, process.env);
   const server = http.createServer((req, res) => {
     tryHandleDownloadableArtifactHttpRoute({
       req,
@@ -196,12 +202,21 @@ test('a retained recording is deleted once its tenant downloads it', async (t) =
   });
   const port = await listenOnLoopback(server);
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/artifacts/${video!.id}`);
+    const url = `http://127.0.0.1:${port}/artifacts/${video!.id}`;
+    const refused = await fetch(url);
+    expect(refused.status).toBe(401);
+    expect(await refused.json()).toMatchObject({
+      code: 'UNAUTHORIZED',
+      reason: 'LEASE_OUTPUT_MISMATCH',
+      field: 'leaseId',
+    });
+
+    const response = await fetch(url, { headers: { [DAEMON_HTTP_LEASE_HEADER]: LEASE_ID } });
 
     expect(await response.text()).toBe('video');
     await vi.waitFor(() => expect(fs.existsSync(recordingExport.outPath)).toBe(false));
     expect(
-      (await listDownloadableArtifacts(TENANT, process.env)).map((a) => a.artifactType),
+      (await listDownloadableArtifacts(OWNER, process.env)).map((a) => a.artifactType),
     ).toEqual(['screen-recording-telemetry']);
   } finally {
     await closeLoopbackServer(server);
@@ -214,11 +229,11 @@ test('a retained recording nobody downloads is deleted when it expires', async (
   const recordingExport = remoteRecordingExport();
   publishRecordingSession(sessionStore, recordingExport);
   await teardown(sessionStore);
-  expect(await listDownloadableArtifacts(TENANT, process.env)).toHaveLength(2);
+  expect(await listDownloadableArtifacts(OWNER, process.env)).toHaveLength(2);
 
   await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
 
-  expect(await listDownloadableArtifacts(TENANT, process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
   expect(fs.existsSync(recordingExport.outPath)).toBe(false);
   expect(fs.existsSync(recordingExport.telemetryPath)).toBe(false);
 });
@@ -232,7 +247,7 @@ test('a failed teardown finish runs forced cleanup and keeps nothing for downloa
   await expect(teardown(sessionStore)).rejects.toThrow(/recording: .*failed to stop recording/);
 
   expect(forceCleanup).toHaveBeenCalledOnce();
-  expect(await listDownloadableArtifacts(TENANT, process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
 });
 
 test('a leased teardown that cannot register the export deletes it instead of leaking it', async () => {
@@ -243,7 +258,7 @@ test('a leased teardown that cannot register the export deletes it instead of le
 
   await teardown(sessionStore);
 
-  expect(await listDownloadableArtifacts(TENANT, process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
   expect(fs.existsSync(recordingExport.outPath)).toBe(false);
   expect(fs.existsSync(recordingExport.telemetryPath)).toBe(false);
 });
@@ -252,7 +267,7 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
   const sessionStore = makeSessionStore('agent-device-leased-recording-replay-');
   publishRecordingSession(sessionStore, remoteRecordingExport());
   await teardown(sessionStore);
-  const retained = await listDownloadableArtifacts(TENANT, process.env);
+  const retained = await listDownloadableArtifacts(OWNER, process.env);
 
   const recovery = resolveScreenRecordingStopRecovery({
     sessionName: ADDRESS,
@@ -276,10 +291,12 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
   expect(replayed.ok && replayed.data?.artifacts?.map((a) => a.artifactId)).toEqual(
     retained.map((a) => a.id),
   );
-  expect(await listDownloadableArtifacts(TENANT, process.env)).toEqual([
+  expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([
     expect.objectContaining({ id: retained[0]!.id, sessionName: 'checkout-flow' }),
     expect.objectContaining({ id: retained[1]!.id, sessionName: 'checkout-flow' }),
   ]);
+  // The replay names no lease, so it registers no second way to the files.
+  expect(await listDownloadableArtifacts({ tenantId: TENANT }, process.env)).toEqual([]);
 });
 
 test.each([undefined, '/client/local-copy.mp4'])(
@@ -291,7 +308,7 @@ test.each([undefined, '/client/local-copy.mp4'])(
 
     await teardown(sessionStore);
 
-    expect(await listDownloadableArtifacts(TENANT, process.env)).toEqual([]);
+    expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
     expect(fs.readFileSync(recordingExport.outPath, 'utf8')).toBe('video');
   },
 );
@@ -303,8 +320,8 @@ test('an unleased session teardown registers nothing for a remote export', async
 
   await teardown(sessionStore);
 
-  expect(await listDownloadableArtifacts(TENANT, process.env)).toEqual([]);
-  expect(await listDownloadableArtifacts(undefined, process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts(OWNER, process.env)).toEqual([]);
+  expect(await listDownloadableArtifacts({}, process.env)).toEqual([]);
   expect(fs.existsSync(recordingExport.outPath)).toBe(true);
 });
 
@@ -316,7 +333,7 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
     });
     harness.session.lease = {
       backend: 'ios-simulator',
-      leaseId: 'lease-1',
+      leaseId: LEASE_ID,
       tenantId: TENANT,
       runId: 'run-1',
     };
@@ -337,7 +354,7 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
 
     await teardown(harness.sessionStore);
 
-    const artifacts = await listDownloadableArtifacts(TENANT, process.env);
+    const artifacts = await listDownloadableArtifacts(OWNER, process.env);
     expect(artifacts).toEqual([
       expect.objectContaining({
         artifactType: 'screen-recording',
@@ -345,7 +362,7 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
         sessionName: 'checkout-flow',
       }),
     ]);
-    expect(await listDownloadableArtifacts('tenant-b', process.env)).toEqual([]);
+    expect(await listDownloadableArtifacts({ tenantId: 'tenant-b' }, process.env)).toEqual([]);
     expect(fs.readFileSync(output, 'utf8')).toBe('session-owned-video');
     expect(
       screenRecordingResourceStore.read(
