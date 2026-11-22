@@ -158,7 +158,7 @@ export const LINUX_COMMAND_EVIDENCE: RepositoryEvidence = {
 };
 export const LINUX_PROVIDER_EVIDENCE: RepositoryEvidence = {
   path: 'test/integration/provider-scenarios/linux-desktop.test.ts',
-  test: 'Provider-backed integration Linux desktop flow uses semantic desktop and input providers',
+  test: 'Provider-backed integration Linux desktop flow drives the desktop tools through its host',
 };
 export const LINUX_RUNTIME_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-linux/src/runtime.test.ts',

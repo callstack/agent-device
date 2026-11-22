@@ -12,7 +12,6 @@ import type {
   WebPlatformRegistration,
 } from '@agent-device/contracts/platform-plugin';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import type {
   DetachedCommandLaunch,
@@ -274,13 +273,7 @@ export type PlatformSetup<Family extends Platform = Platform> = Family extends P
           : Family extends 'harmonyos'
             ? Readonly<{ operations: HarmonyPlatformOperations }>
             : Family extends 'linux'
-              ? Readonly<{
-                  withRequestProvider<T>(
-                    provider: LinuxToolProvider,
-                    task: () => Promise<T>,
-                  ): Promise<T>;
-                  operations: LinuxPlatformOperations;
-                }>
+              ? Readonly<{ operations: LinuxPlatformOperations }>
               : unknown)
   : never;
 

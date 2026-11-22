@@ -5,10 +5,7 @@ import type {
   DetachedCommandExit,
   HostOperatingSystem,
 } from '@agent-device/contracts/platform-runtime-host';
-import type {
-  LinuxCommandOptions,
-  LinuxCommandResult,
-} from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxCommandOptions, LinuxCommandResult } from './tool-provider-types.ts';
 
 /**
  * The plugin's route to host commands, bound to the `PlatformHost` the core handed `setup()`. The

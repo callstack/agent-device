@@ -2,7 +2,6 @@ import type { ManagedWebBackend } from './managed-web-backend.ts';
 import type { DoctorCheck } from './doctor.ts';
 import type { HostDiagnosticsContext } from './host-diagnostics.ts';
 import type { InventoryPlatformModule, PlatformModuleRegistry } from './platform-module.ts';
-import type { LinuxToolProvider } from './linux-tool-provider.ts';
 import type { MacOsPlatformLeafSelection } from './macos-platform-leaf.ts';
 import type { PlatformRuntimeModule } from './platform-runtime-operations.ts';
 import type { WebProvider } from './web-provider.ts';
@@ -146,9 +145,9 @@ export type HarmonyPlatformSelection = Readonly<{
 
 /**
  * What the core asks of the Linux plugin: the toolchain probe that answers `doctor --platform
- * linux`, and the request scope the family owns. The desktop capture and every interaction the
- * family runs go through the registration's runtime and interactor, which use the host the plugin
- * was set up with.
+ * linux`. Every other Linux operation — the desktop capture, every interaction, and the host tool
+ * provider they all run through — the package owns, because it runs them through the host it was
+ * set up with. The provider never leaves the package, so the core names none of its vocabulary.
  */
 export type LinuxPlatformOperations = Readonly<{
   toolchainCheck(): Promise<DoctorCheck>;
@@ -159,7 +158,6 @@ export type LinuxPlatformRegistration = Readonly<{
   inventoryModule: InventoryPlatformModule<'linux'>;
   runtimeModule: PlatformRuntimeModule & { readonly family: 'linux' };
   createInteractor: PlatformPlugin['createInteractor'];
-  withRequestProvider<T>(provider: LinuxToolProvider, task: () => Promise<T>): Promise<T>;
   operations: LinuxPlatformOperations;
 }>;
 

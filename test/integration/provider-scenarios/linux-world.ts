@@ -4,7 +4,6 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import { createDeviceInventoryHost } from '../../../src/platform-runtime-host.ts';
 import { linuxSelectionFixture } from '../../../src/platform-runtime-linux-provider.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_LINUX } from './fixtures.ts';
 import {
@@ -12,29 +11,42 @@ import {
   restoreEnv,
   type ProviderScenarioHarness,
 } from './harness.ts';
-import type { FlatToolCall } from './providers.ts';
+import {
+  createLinuxScenarioHost,
+  type LinuxScenarioAnswer,
+  type LinuxScenarioCommand,
+  type LinuxScenarioHost,
+} from './linux-host.fixtures.ts';
+
+/** The desktop tools the scripted X11 session has installed. */
+const SCRIPTED_X11_TOOLS = ['xdotool', 'wmctrl', 'gnome-calculator', 'xclip', 'scrot', 'python3'];
 
 export type LinuxDesktopWorld = {
   daemon: ProviderScenarioHarness;
   localLinuxDevices: DeviceInfo[];
-  toolCalls: Array<[string, string[]]>;
-  desktopCalls: Array<[string, string]>;
-  semanticCalls: FlatToolCall[];
+  /** Every host command the family ran, with its argv and stdin. */
+  commands: LinuxScenarioHost['commands'];
+  /** Every host command the family ran, as `[executable, ...argv]`. */
+  toolCalls: Array<[string, ...string[]]>;
+  /** Every detached launch the family asked the host for, as `[executable, ...argv]`. */
+  launches: Array<[string, ...string[]]>;
+  /** Every path the family asked the host to check before using it. */
+  probedPaths: string[];
   close: () => Promise<void>;
 };
 
 /**
  * The Linux family served by the installed plugin, with one scripted desktop in front of it.
  *
- * The scenario hands the daemon a Linux tool provider, so every request runs against the provider it
- * scoped rather than against a desktop. The provider is the contract's vocabulary, so this file names
- * no Linux implementation: the plugin resolves it through its own selection, which is what registers
- * the family's runtime and interactor here.
+ * The family runs every desktop intent through the `PlatformHost` its plugin was set up with, so the
+ * scenario scripts that host: which desktop tools exist, what each command answers, and what the
+ * session's clipboard holds. The real inventory, runtime, interactor and tool selection answer for
+ * the request, so the scenario proves the family's own route to the desktop, and its recorded argv is
+ * the evidence.
  */
 export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
-  const previousSessionType = process.env.XDG_SESSION_TYPE;
-  const previousWaylandDisplay = process.env.WAYLAND_DISPLAY;
   const previousAuthHook = process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+  delete process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
   const previousPlatform = process.platform;
 
   // The plugin's inventory reports the local desktop only for a Linux host, so the scenario proves
@@ -42,113 +54,18 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   assert.deepEqual(await discoverLocalLinuxInventory(), []);
   Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-  process.env.XDG_SESSION_TYPE = 'x11';
-  delete process.env.WAYLAND_DISPLAY;
-  delete process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
-
   const localLinuxDevices = await discoverLocalLinuxInventory();
-  const toolCalls: Array<[string, string[]]> = [];
-  const desktopCalls: Array<[string, string]> = [];
-  const semanticCalls: FlatToolCall[] = [];
-  let clipboardText = '';
 
-  const linuxToolProvider: LinuxToolProvider = {
-    // The display decision the scripted desktop stands for; the family selects its tools by it.
-    display: { detectDisplayServer: () => 'x11' },
-    runCommand: async (cmd, args) => {
-      toolCalls.push([cmd, [...args]]);
-      return { stdout: '', stderr: '', exitCode: 0 };
-    },
-    whichCommand: async (cmd) =>
-      cmd === 'gnome-calculator' || cmd === 'xdotool' || cmd === 'wmctrl',
-    // The scripted desktop owns app launches, so the detached launcher is never reached.
-    launchDetached: (cmd) => {
-      throw new Error(`the Linux world launches apps through its desktop: ${cmd}`);
-    },
-    // Interaction pacing belongs to the scripted desktop too: the scenario asserts the intent, not
-    // the wall clock.
-    sleep: async () => {},
-    desktop: {
-      openTarget: async (target) => {
-        desktopCalls.push(['open', target]);
-      },
-      closeApp: async (app) => {
-        desktopCalls.push(['close', app]);
-      },
-    },
-    accessibility: {
-      captureTree: async (surface) => {
-        semanticCalls.push(['accessibility', surface]);
-        return {
-          nodes: linuxCalculatorSnapshotNodes(),
-          truncated: false,
-          surface,
-        };
-      },
-    },
-    clipboard: {
-      readText: async () => {
-        semanticCalls.push(['clipboard', 'read']);
-        return clipboardText;
-      },
-      writeText: async (text) => {
-        semanticCalls.push(['clipboard', 'write', text]);
-        clipboardText = text;
-      },
-    },
-    screenshot: {
-      capture: async (outPath, options) => {
-        semanticCalls.push([
-          'screenshot',
-          outPath,
-          String(options?.fullscreen ?? ''),
-          String(options?.stabilize ?? ''),
-          String(options?.surface ?? ''),
-        ]);
-        fs.writeFileSync(outPath, validPng());
-      },
-    },
-    input: {
-      click: async (x, y, button) => {
-        semanticCalls.push(['input', 'click', String(x), String(y), button]);
-      },
-      doubleClick: async (x, y) => {
-        semanticCalls.push(['input', 'double-click', String(x), String(y)]);
-      },
-      longPress: async (x, y, durationMs) => {
-        semanticCalls.push(['input', 'long-press', String(x), String(y), String(durationMs)]);
-      },
-      drag: async (x1, y1, x2, y2, durationMs) => {
-        semanticCalls.push([
-          'input',
-          'drag',
-          String(x1),
-          String(y1),
-          String(x2),
-          String(y2),
-          String(durationMs),
-        ]);
-      },
-      scroll: async (direction, options) => {
-        semanticCalls.push([
-          'input',
-          'scroll',
-          direction,
-          String(options?.amount ?? ''),
-          String(options?.pixels ?? ''),
-        ]);
-      },
-      typeText: async (text, options) => {
-        semanticCalls.push(['input', 'type', text, String(options?.delayMs ?? 0)]);
-      },
-      key: async (combo) => {
-        semanticCalls.push(['input', 'key', combo]);
-      },
-    },
-  };
+  // The desktop's own state: the text its selection holds, which the clipboard tools read back.
+  const desktop = { clipboard: '' };
+  const host = createLinuxScenarioHost({
+    tools: SCRIPTED_X11_TOOLS,
+    env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
+    respond: (command) => answerScriptedDesktop(command, desktop),
+  });
 
   const daemon = await createProviderScenarioHarness({
-    linuxToolProvider: () => linuxToolProvider,
+    linuxPlatformHost: host.host,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_LINUX],
   });
 
@@ -156,19 +73,100 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   return {
     daemon,
     localLinuxDevices,
-    toolCalls,
-    desktopCalls,
-    semanticCalls,
+    commands: host.commands,
+    toolCalls: host.toolCalls,
+    launches: host.launches,
+    probedPaths: host.probedPaths,
     close: async () => {
       if (closed) return;
       closed = true;
       await daemon.close();
+      await host.dispose();
       Object.defineProperty(process, 'platform', { value: previousPlatform, configurable: true });
-      restoreEnv('XDG_SESSION_TYPE', previousSessionType);
-      restoreEnv('WAYLAND_DISPLAY', previousWaylandDisplay);
       restoreEnv('AGENT_DEVICE_HTTP_AUTH_HOOK', previousAuthHook);
     },
   };
+}
+
+/**
+ * Answers one command as the scripted X11 desktop would: the AT-SPI helper prints the calculator's
+ * tree, the clipboard tools read and write the session selection, and the capture tool writes a PNG.
+ * Every other command is a synthesized input event or a window action, which succeed silently.
+ */
+function answerScriptedDesktop(
+  command: LinuxScenarioCommand,
+  desktop: { clipboard: string },
+): LinuxScenarioAnswer {
+  switch (command.command) {
+    case 'python3':
+      return { stdout: scriptedAtspiTree(command.args), exitCode: 0 };
+    case 'xclip':
+      // The tool's own selection model: `-o` reads it, and text on stdin replaces it.
+      if (command.args.includes('-o')) return { stdout: desktop.clipboard, exitCode: 0 };
+      desktop.clipboard = command.stdin ?? '';
+      return { stdout: '', exitCode: 0 };
+    case 'scrot':
+      fs.writeFileSync(scriptedCapturePath(command), scriptedPng());
+      return { stdout: '', exitCode: 0 };
+    default:
+      return { stdout: '', exitCode: 0 };
+  }
+}
+
+/** The capture tool's output path: its last non-flag argument. */
+function scriptedCapturePath(command: LinuxScenarioCommand): string {
+  const destination = [...command.args].reverse().find((arg) => !arg.startsWith('-'));
+  assert.ok(destination, 'the scripted capture tool was called without a destination');
+  return destination;
+}
+
+/** A capture the request can publish: the same image every other scenario's fake desktop writes. */
+function scriptedPng(): Buffer {
+  return validPng();
+}
+
+/**
+ * The calculator window the AT-SPI helper reports: its frame and two buttons, in the helper's own
+ * vocabulary. `--surface` tells the helper — and therefore the scenario — which surface was asked for.
+ */
+function scriptedAtspiTree(args: readonly string[]): string {
+  const surfaceAt = args.indexOf('--surface');
+  const surface = surfaceAt >= 0 ? args[surfaceAt + 1] : undefined;
+  return JSON.stringify({
+    nodes: [
+      {
+        index: 0,
+        role: 'frame',
+        label: 'Calculator',
+        rect: { x: 0, y: 0, width: 320, height: 480 },
+        enabled: true,
+        hittable: true,
+        depth: 0,
+      },
+      {
+        index: 1,
+        role: 'push button',
+        label: '5',
+        rect: { x: 40, y: 80, width: 40, height: 40 },
+        enabled: true,
+        hittable: true,
+        depth: 1,
+        parentIndex: 0,
+      },
+      {
+        index: 2,
+        role: 'push button',
+        label: 'Clear',
+        rect: { x: 90, y: 80, width: 70, height: 40 },
+        enabled: true,
+        hittable: true,
+        depth: 1,
+        parentIndex: 0,
+      },
+    ],
+    truncated: false,
+    surface,
+  });
 }
 
 const inventoryScope: PlatformRequestScope = Object.freeze({
@@ -184,47 +182,4 @@ async function discoverLocalLinuxInventory(): Promise<DeviceInfo[]> {
     createDeviceInventoryHost({ env: { ...process.env }, cwd: process.cwd() }),
   );
   return [...(await source.discover({ platform: 'linux' }, inventoryScope))];
-}
-
-function linuxCalculatorSnapshotNodes(): Array<{
-  index: number;
-  role: string;
-  label: string;
-  rect: { x: number; y: number; width: number; height: number };
-  enabled: boolean;
-  hittable: boolean;
-  depth: number;
-  parentIndex?: number;
-}> {
-  return [
-    {
-      index: 0,
-      role: 'frame',
-      label: 'Calculator',
-      rect: { x: 0, y: 0, width: 320, height: 480 },
-      enabled: true,
-      hittable: true,
-      depth: 0,
-    },
-    {
-      index: 1,
-      role: 'push button',
-      label: '5',
-      rect: { x: 40, y: 80, width: 40, height: 40 },
-      enabled: true,
-      hittable: true,
-      depth: 1,
-      parentIndex: 0,
-    },
-    {
-      index: 2,
-      role: 'push button',
-      label: 'Clear',
-      rect: { x: 90, y: 80, width: 70, height: 40 },
-      enabled: true,
-      hittable: true,
-      depth: 1,
-      parentIndex: 0,
-    },
-  ];
 }

@@ -54,9 +54,6 @@ test('Apple provider scope uses the request device for Apple tool calls', async 
           },
         });
       },
-      linuxToolProvider: () => {
-        throw new Error('Linux provider should not apply to an iOS session');
-      },
     },
     async () => await runXcrun(buildSimctlArgsForDevice(IOS_SIMULATOR, ['list', 'devices', '-j'])),
   );
@@ -169,9 +166,6 @@ test('web provider scope uses the context device', async () => {
       webProvider: ({ device, session }) => {
         calls.push(`${session?.name}:${device.id}`);
         return webProvider;
-      },
-      linuxToolProvider: () => {
-        throw new Error('Linux provider should not apply to a web session');
       },
     },
     async () => await (await scopedWebProvider()).open('https://example.test'),

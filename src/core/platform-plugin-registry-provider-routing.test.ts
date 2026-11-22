@@ -26,7 +26,6 @@ import {
   WEB_DESKTOP_DEVICE,
 } from '@agent-device/test-kit';
 import { builtinPlatformPlugins } from './interactors/builtin-platform-plugin-set.ts';
-import { linuxSelectionFixture } from '../platform-runtime-linux-provider.fixtures.ts';
 import { vegaSelectionFixture } from '../platform-runtime-vega-provider.fixtures.ts';
 import { webSelectionFixture } from '../platform-runtime-web-provider.fixtures.ts';
 import {
@@ -39,7 +38,6 @@ const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'appleRunnerProvider',
   'appleToolProvider',
   'vegaToolProvider',
-  'linuxToolProvider',
   'webProvider',
 ];
 const UNGATED_KEYS = [
@@ -49,7 +47,7 @@ const UNGATED_KEYS = [
 
 function gatedResolversByHand(
   device: DeviceInfo,
-  served: Partial<Record<'linux' | 'vega' | 'web', boolean>> = {},
+  served: Partial<Record<'vega' | 'web', boolean>> = {},
 ): Set<PlatformGatedProviderResolverKey> {
   const applies = new Set<PlatformGatedProviderResolverKey>();
   if (device.platform === 'android') applies.add('androidAdbProvider');
@@ -60,7 +58,6 @@ function gatedResolversByHand(
   // An optional family this process does not serve is never asked for a provider: its selection is
   // absent, so there is no scope to enter and a resolver may otherwise open a session nothing closes.
   if (device.platform === 'vega' && served.vega === true) applies.add('vegaToolProvider');
-  if (device.platform === 'linux' && served.linux === true) applies.add('linuxToolProvider');
   // Web is the exception: its resolver has no session or process to open, so it runs for a web device
   // either way, and only the scope entry needs the selection.
   if (device.platform === 'web') applies.add('webProvider');
@@ -103,11 +100,7 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ...buildDeviceMatrix(),
 ];
 
-const PLUGIN_OWNED_KEYS: PlatformGatedProviderResolverKey[] = [
-  'linuxToolProvider',
-  'vegaToolProvider',
-  'webProvider',
-];
+const PLUGIN_OWNED_KEYS: PlatformGatedProviderResolverKey[] = ['vegaToolProvider', 'webProvider'];
 const BUILT_IN_KEYS = GATED_KEYS.filter((key) => !PLUGIN_OWNED_KEYS.includes(key));
 
 test('built-in provider facets retain the former routing', () => {
@@ -148,7 +141,6 @@ test('root provider composition asks an optional family only when the process se
   // Served families are supplied here; a family the process does not serve is the same run with its
   // selection left out, and then its resolver must not run at all.
   const served = {
-    linux: linuxSelectionFixture(),
     vega: vegaSelectionFixture(),
     web: webSelectionFixture(),
   };
@@ -164,7 +156,6 @@ test('root provider composition asks an optional family only when the process se
         appleRunnerProvider: spy('appleRunnerProvider'),
         appleToolProvider: spy('appleToolProvider'),
         vegaToolProvider: spy('vegaToolProvider'),
-        linuxToolProvider: spy('linuxToolProvider'),
         webProvider: spy('webProvider'),
         appleRunnerScreenRecordingTransport: spy('appleRunnerScreenRecordingTransport'),
         appleSimulatorScreenRecordingTransport: spy('appleSimulatorScreenRecordingTransport'),
@@ -179,15 +170,13 @@ test('root provider composition asks an optional family only when the process se
       };
       await createRequestPlatformProviders({
         providers,
-        ...(serves ? { linux: served.linux, vega: served.vega, web: served.web } : {}),
+        ...(serves ? { vega: served.vega, web: served.web } : {}),
       }).run(context, async () => {});
 
       const gatedInvoked = new Set(GATED_KEYS.filter((key) => invoked.has(key)));
       assert.deepEqual(
         [...gatedInvoked].sort(),
-        [
-          ...gatedResolversByHand(device, serves ? { linux: true, vega: true, web: true } : {}),
-        ].sort(),
+        [...gatedResolversByHand(device, serves ? { vega: true, web: true } : {})].sort(),
         `gated resolvers invoked for ${device.id}`,
       );
       for (const key of UNGATED_KEYS) {
