@@ -126,6 +126,22 @@ test('disconnecting one of two case-variant sessions leaves the other record', (
   );
 });
 
+test('a session that wrote under its hash keeps its record after the shared file is removed', () => {
+  const stateDir = mkdtempForTestSync('agent-device-remote-identity-alias-gone-');
+  const shared = plantRecordSharedByCaseVariants(stateDir, 'Demo');
+  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
+
+  for (const name of [shared, path.join(path.dirname(shared), 'demo.json')]) {
+    fs.rmSync(name, { force: true });
+  }
+
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'demo' })?.runId,
+    'run-demo',
+    'a session must keep finding the record it wrote under its hash',
+  );
+});
+
 test('a session name that cannot be a filename is stored under its hash', () => {
   const stateDir = mkdtempForTestSync('agent-device-remote-identity-hashed-');
   const session = 'team/dev#1';

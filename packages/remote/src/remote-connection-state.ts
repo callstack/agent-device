@@ -559,10 +559,12 @@ function remoteConnectionStatePath(options: { stateDir: string; session: string 
   // separator — is stored by hash, so it can never take the active-session pointer's file either.
   if (/^[a-z0-9_-][a-z0-9._-]*$/.test(options.session)) {
     const plain = path.join(recordsDir, `${options.session}.json`);
+    const hashed = hashedRemoteConnectionStatePath(recordsDir, options.session);
+    // A session that once found another session's record on its plain path wrote under its hash.
+    // Keep finding that record after the other session's file is gone.
+    if (sessionNamedBy(hashed) === options.session) return hashed;
     const recorded = sessionNamedBy(plain);
-    return recorded !== undefined && recorded !== options.session
-      ? hashedRemoteConnectionStatePath(recordsDir, options.session)
-      : plain;
+    return recorded !== undefined && recorded !== options.session ? hashed : plain;
   }
 
   const canonical = hashedRemoteConnectionStatePath(recordsDir, options.session);
