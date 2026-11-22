@@ -36,7 +36,13 @@ function createPluginHost(
     nodeVersion: 'v24.0.0',
     temporaryDirectory: '/tmp',
     processId: 4242,
-    isExecutableOnPath: async (executable) => (tools === undefined ? false : tools.has(executable)),
+    // The host's PATH probe: the tool list stands in for what the host resolves, so a test names the
+    // desktop tools rather than writing executables.
+    isExecutableOnPath: async (executable) =>
+      tools === undefined ? false : tools.has(executable.split('/').pop() ?? executable),
+    // Only the AT-SPI helper this package ships is asked of this probe; the install carries it unless
+    // a test names a broken one.
+    isFilePresent: async () => true,
     // The family tracks no host process records: `close` ends an app through the desktop tools.
     processes: {
       list: async () => [],
@@ -61,6 +67,10 @@ function createPluginHost(
     launchDetached: async (executable, args) => {
       input.launches?.push({ executable, args });
       return { pid: 4242, exited: Promise.resolve({ pid: 4242, exitCode: 0 }) };
+    },
+    // This family streams no command: `close` ends an app through the desktop tools.
+    startBackgroundCommand: async () => {
+      throw new Error('the Linux family streams no host process');
     },
     emitDiagnostic: () => {},
     withDiagnosticTimer: async (_phase, operation) => await operation(),
@@ -158,9 +168,9 @@ test('the toolchain check probes the host the plugin was set up with', async () 
   const probed: string[] = [];
   const registration = setupLinuxPlatform({
     ...host,
-    isFileExecutable: async (candidate) => {
-      probed.push(candidate);
-      return await host.isFileExecutable(candidate);
+    isExecutableOnPath: async (executable) => {
+      probed.push(executable);
+      return await host.isExecutableOnPath(executable);
     },
   });
 
@@ -168,11 +178,9 @@ test('the toolchain check probes the host the plugin was set up with', async () 
 
   assert.equal(check.id, 'toolchain');
   assert.equal(check.status, 'pass');
-  // The probe is the host's, over the host PATH, for the tools the X11 session needs.
-  assert.deepEqual(
-    probed,
-    tools.map((tool) => `/opt/tools/${tool}`),
-  );
+  // The probe is the host's PATH probe, asked for the tools the X11 session needs. The host searches
+  // its own `PATH` for each name, so the family names a tool and never assembles a path of its own.
+  assert.deepEqual(probed, tools);
 });
 
 test('the toolchain check reports the tools the host is missing', async () => {
@@ -285,6 +293,26 @@ test('a request-scoped provider answers the interactor instead of the setup host
     desktop: {
       openTarget: async () => {},
       closeApp: async () => {},
+    },
+    // The parts this request never reaches: reading one would mean the tap went somewhere the test
+    // did not script, so the assertion is the throw.
+    clipboard: {
+      readText: async () => {
+        throw new Error('this request reads no clipboard');
+      },
+      writeText: async () => {
+        throw new Error('this request writes no clipboard');
+      },
+    },
+    screenshot: {
+      capture: async () => {
+        throw new Error('this request captures no screenshot');
+      },
+    },
+    accessibility: {
+      captureTree: async () => {
+        throw new Error('this request captures no tree');
+      },
     },
   };
   const interactor = await registration.createInteractor(

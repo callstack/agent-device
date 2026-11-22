@@ -64,6 +64,7 @@ async function startStore(env: HostEnvironment['env'], builtins: readonly Plugin
         throw new Error('setup must not start a process');
       },
       isFileExecutable: async () => false,
+      isFilePresent: async () => false,
       isExecutableOnPath: async () => false,
       processes: {
         list: async () => [],
@@ -78,6 +79,14 @@ async function startStore(env: HostEnvironment['env'], builtins: readonly Plugin
       },
       emitDiagnostic: () => {},
       withDiagnosticTimer: async (_phase, run) => await run(),
+      // The managed process service and the detached launcher are part of every plugin host. No
+      // family this test serves uses either: the web plugin under test only names its state dir.
+      startBackgroundCommand: async () => {
+        throw new Error('setup must not keep a command running');
+      },
+      launchDetached: async () => {
+        throw new Error('setup must not launch a detached process');
+      },
     },
     adaptWebDriver: async () => {
       throw new Error('unexpected WebDriver');
