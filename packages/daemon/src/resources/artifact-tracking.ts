@@ -341,7 +341,7 @@ function readOutputIdentity(artifactPath: string): string | undefined {
 }
 
 /** Keeps the report source owner independently of the downloadable copy and latest handoff. */
-export function retainXctraceReportSource(source: string, leaseVerifier: string | null): void {
+export function retainPerfReportSource(source: string, leaseVerifier: string | null): void {
   const canonical = fs.realpathSync(source);
   const stat = fs.statSync(canonical);
   artifactTracking().retainedPerformanceSources.set(canonical, {

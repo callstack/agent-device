@@ -46,7 +46,7 @@ import {
   admittedOutputLeaseVerifier,
   assertTrackedPerformanceSourceLease,
   leasedOutputRefusal,
-  retainXctraceReportSource,
+  retainPerfReportSource,
 } from '../../../resources/artifact-tracking.ts';
 import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import {
@@ -210,14 +210,15 @@ async function executeAdmittedPerfPlan(
       if (!isXctrace && (!last || last.type !== 'cpu-profile' || !isAndroidProfileHandoff(last))) {
         throw new AppError('INVALID_ARGS', 'Stopped Simpleperf profile metadata is malformed.');
       }
-      const source = isXctrace ? (explicit ?? readPerfSource(tracePath)) : undefined;
+      const source =
+        isXctrace || requestedPath ? (explicit ?? readPerfSource(tracePath)) : undefined;
       if (source) assertPerfSourceLease(params, source);
       const runtime = await bindDevice(device, plan.use);
       const outPath = resolveNativeOutPath(params, plan.request.outPath, 'cpu-report.json');
       const data = await runtime.operations.perfProfileReport({
         appId: session.appBundleId,
         kind: plan.request.kind,
-        tracePath: source?.path ?? tracePath,
+        tracePath: isXctrace ? (source?.path ?? tracePath) : tracePath,
         outPath,
         template: plan.request.template ?? (last?.kind === 'xctrace' ? last.template : undefined),
         profile: last,
@@ -349,8 +350,7 @@ async function stopPerfCapture(
   const daemonOwned = outPath !== undefined && metadata?.remoteCaptureOutputPath === outPath;
   if (request.area === 'cpu') {
     const profile = readProfileHandoff(completion);
-    if (daemonOwned && profile.kind === 'xctrace')
-      retainXctraceReportSource(profile.outPath, owner);
+    if (daemonOwned) retainPerfReportSource(profile.outPath, owner);
     params.sessionStore.update(params.ref, {
       lastPerfProfile: { profile, leaseVerifier: owner },
     });

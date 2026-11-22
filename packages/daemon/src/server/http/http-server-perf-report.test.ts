@@ -7,6 +7,7 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type {
   PerfRuntimeOperations,
   PerfNativeCaptureLiveHandle,
+  PerfNativeCaptureSnapshot,
 } from '@agent-device/contracts/perf-runtime';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { DAEMON_HTTP_TENANT_HEADER } from '@agent-device/contracts/daemon-http';
@@ -114,21 +115,28 @@ function reportFixture() {
 function fixtureCapture(device: DeviceInfo): PerfRuntimeOperations['perfNativeCaptureStart'] {
   return async (input) => {
     let outPath = input.outPath;
-    const snapshot = () => ({
-      kind: 'xctrace' as const,
-      mode: 'cpu-profile' as const,
-      appBundleId: input.appId,
-      template: 'Time Profiler',
-      outPath,
-    });
+    const snapshot = (): PerfNativeCaptureSnapshot =>
+      input.kind === 'simpleperf'
+        ? simpleperfHandoff(outPath)
+        : {
+            kind: 'xctrace',
+            mode: 'cpu-profile',
+            appBundleId: input.appId,
+            template: 'Time Profiler',
+            outPath,
+          };
     const handle: PerfNativeCaptureLiveHandle = {
       inspect: snapshot,
       setOutputPath: (value) => {
         outPath = value;
       },
       finish: async () => {
-        fs.mkdirSync(outPath, { recursive: true });
-        fs.writeFileSync(path.join(outPath, 'sample'), 'fixture');
+        if (input.kind === 'simpleperf') {
+          fs.writeFileSync(outPath, 'fixture');
+        } else {
+          fs.mkdirSync(outPath, { recursive: true });
+          fs.writeFileSync(path.join(outPath, 'sample'), 'fixture');
+        }
         return { status: 'completed', result: snapshot() };
       },
       forceCleanup: async () => ({ status: 'cleaned' }),
@@ -150,51 +158,71 @@ function fixtureCapture(device: DeviceInfo): PerfRuntimeOperations['perfNativeCa
   };
 }
 
-function captureRequest(action: 'start' | 'stop', meta = {}) {
+function captureRequest(action: 'start' | 'stop', meta = {}, kind = 'xctrace') {
   return {
     command: 'perf',
     session: 'capture',
-    positionals: ['cpu', 'profile', action, 'xctrace'],
+    positionals: ['cpu', 'profile', action, kind],
     meta,
   };
 }
 
-test('explicit perf reports check the source and identity of an older daemon-owned xctrace capture', async () => {
-  const fixture = reportFixture();
-  fixture.sessionStore.publish('capture', makeIosAppSession('capture'));
-  fixture.sessionStore.publish('reporter', makeIosAppSession('reporter'));
-  const scope = { tenantId, runId: 'producer', leaseBackend: 'android-instance' } as const;
-  const meta = { ...scope, leaseId: fixture.leaseRegistry.allocateLease(scope).leaseId };
-  await withHttp(fixture.handler, async (post) => {
-    const complete = async () => {
-      successfulData(await post(captureRequest('start', meta)));
-      const result = successfulData(await post(captureRequest('stop', meta)));
-      return result.outPath as string;
-    };
-    const older = await complete();
-    expect(await complete()).not.toBe(older);
-    const moved = older + '-moved';
-    fs.renameSync(older, moved);
-    fs.mkdirSync(older);
-    const report = (source: string, owner = {}) =>
-      post(
-        {
-          command: 'perf',
-          session: 'reporter',
-          positionals: [...positionals, '', '', source],
-          meta: owner,
+test.each(['xctrace', 'simpleperf'] as const)(
+  'explicit %s reports check the path and identity of an older daemon-owned source',
+  async (kind) => {
+    const fixture = reportFixture();
+    const makeSession = kind === 'xctrace' ? makeIosAppSession : makeAndroidSession;
+    fixture.sessionStore.publish(
+      'capture',
+      makeSession('capture', { appBundleId: 'com.example.app' }),
+    );
+    const reporter = fixture.sessionStore.publish('reporter', makeSession('reporter'));
+    if (kind === 'simpleperf') {
+      fixture.sessionStore.update(reporter, {
+        lastPerfProfile: {
+          profile: simpleperfHandoff(path.join(fixture.profilePath, 'local.perf.data')),
+          leaseVerifier: null,
         },
-        false,
-      );
-    const refusals = [await report(older), await report(moved)];
-    expect(refusals.map((body) => body.error?.data?.details?.reason)).toEqual([
-      'LEASE_OUTPUT_MISMATCH',
-      'LEASE_OUTPUT_MISMATCH',
-    ]);
-    expect(fixture.perfProfileReport).not.toHaveBeenCalled();
-    successfulData(await report(moved, meta));
-  });
-});
+      });
+    }
+    const scope = { tenantId, runId: 'producer', leaseBackend: 'android-instance' } as const;
+    const meta = { ...scope, leaseId: fixture.leaseRegistry.allocateLease(scope).leaseId };
+    await withHttp(fixture.handler, async (post) => {
+      const complete = async () => {
+        successfulData(await post(captureRequest('start', meta, kind)));
+        const result = successfulData(await post(captureRequest('stop', meta, kind)));
+        const artifactId = result.artifacts?.[0]?.artifactId;
+        expect(artifactId).toBeTypeOf('string');
+        cleanupDownloadableArtifact(artifactId!);
+        return result.outPath as string;
+      };
+      const older = await complete();
+      expect(await complete()).not.toBe(older);
+      const moved = older + '-moved';
+      fs.renameSync(older, moved);
+      if (kind === 'xctrace') fs.mkdirSync(older);
+      else fs.writeFileSync(older, 'replacement');
+      const report = (source: string, owner = {}) =>
+        post(
+          {
+            command: 'perf',
+            session: 'reporter',
+            positionals: ['cpu', 'profile', 'report', kind, '', '', source],
+            meta: owner,
+          },
+          false,
+        );
+
+      const refusals = [await report(older), await report(moved)];
+      expect(refusals.map((body) => body.error?.data?.details?.reason)).toEqual([
+        'LEASE_OUTPUT_MISMATCH',
+        'LEASE_OUTPUT_MISMATCH',
+      ]);
+      expect(fixture.perfProfileReport).not.toHaveBeenCalled();
+      successfulData(await report(moved, meta));
+    });
+  },
+);
 
 test('perf stop retains the session lease tenant for an unleased producer', async () => {
   const fixture = reportFixture();
@@ -299,21 +327,25 @@ test('an independent local xctrace source keeps the unleased session handoff and
   );
 });
 
-test('a local Simpleperf report uses the stopped handoff when its export has moved', async () => {
-  const fixture = reportFixture();
-  const formerPath = path.join(fixture.profilePath, 'cpu.perf.data');
-  fs.writeFileSync(formerPath, 'fixture');
-  fs.renameSync(formerPath, path.join(fixture.profilePath, 'moved.perf.data'));
-  const profile = {
+function simpleperfHandoff(outPath: string) {
+  return {
     kind: 'simpleperf',
     mode: 'cpu-profile',
     type: 'cpu-profile',
-    outPath: formerPath,
+    outPath,
     packageName: 'com.example.app',
     appPid: '1712',
     profilerPid: '6804',
     remotePath: '/data/local/tmp/cpu.perf.data',
   } as const;
+}
+
+test('a local Simpleperf report uses the stopped handoff when its export has moved', async () => {
+  const fixture = reportFixture();
+  const formerPath = path.join(fixture.profilePath, 'cpu.perf.data');
+  fs.writeFileSync(formerPath, 'fixture');
+  fs.renameSync(formerPath, path.join(fixture.profilePath, 'moved.perf.data'));
+  const profile = simpleperfHandoff(formerPath);
   fixture.sessionStore.publish(
     'capture',
     makeAndroidSession('capture', {
