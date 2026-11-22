@@ -185,6 +185,13 @@ function combineHarmonySignals(
 /** A module.json5 ability name: a letter, then letters, digits, `_`, or `.`. */
 const HARMONY_ABILITY_NAME = /^[A-Za-z][A-Za-z0-9_.]*$/;
 
+/**
+ * aa start's typed refusal when a secure keyguard blocks the launch. The unlock
+ * attempt fails on a locked unit, so no launch happened and the foreground poll
+ * never runs; the failure belongs to the open-not-foreground class.
+ */
+const HARMONY_LOCKED_SCREEN_LAUNCH_ERROR = /Error Code: ?10106102/;
+
 /** Why a HarmonyOS app-open argument is refused before any device is touched. */
 const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
   // --activity is not an ability name the module.json5 format can carry.
@@ -229,6 +236,16 @@ export async function openHarmonyApp(
   if (launchTarget.module) words.push('-m', launchTarget.module);
   const result = await runHarmonyShell(device, words, { signal: options?.signal });
   if (!result.stdout.includes('start ability successfully')) {
+    if (HARMONY_LOCKED_SCREEN_LAUNCH_ERROR.test(result.stdout)) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `HarmonyOS refused to launch ${bundleId}: the device screen is locked`,
+        {
+          reason: 'open-not-foreground',
+          hint: 'Unlock the device screen, then run the open again.',
+        },
+      );
+    }
     throw new AppError('COMMAND_FAILED', `Failed to start ${bundleId}`, {
       details: { output: result.stdout.trim() },
     });

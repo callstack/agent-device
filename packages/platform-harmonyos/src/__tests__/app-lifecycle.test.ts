@@ -314,6 +314,28 @@ test('HarmonyOS launch resolves module metadata and reports missing launch data'
   await assert.rejects(() => openHarmonyApp(DEVICE, 'com.example.missing'), /launchable ability/);
 });
 
+test('openHarmonyApp classifies the locked-screen launch refusal as open-not-foreground', async () => {
+  mockRunCmd.mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: [
+      'error: failed to start ability.',
+      'Error Code:10106102  Error Message:The device screen is locked during the application launch, unlock screen failed.',
+    ].join('\n'),
+    stderr: '',
+  });
+
+  await assert.rejects(
+    () => openHarmonyApp(DEVICE, 'com.example.application', { activity: 'EntryAbility' }),
+    (error: unknown) => {
+      assert(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'open-not-foreground');
+      assert.match(error.details?.hint ?? '', /Unlock the device screen/);
+      return true;
+    },
+  );
+});
+
 function missionDump(packageName: string, state: string): string {
   return [
     'User ID #100',
