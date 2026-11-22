@@ -81,13 +81,30 @@ test.each([
     delete profile.daemonBaseUrl;
     fs.writeFileSync(remoteConfig, JSON.stringify(profile));
 
+    const token = 'adc_live_profile_refusal_token';
     const result = await runCliCapture(
-      ['connect', '--remote-config', remoteConfig, '--session', 'ci', ...extra, '--json'],
+      [
+        'connect',
+        '--remote-config',
+        remoteConfig,
+        '--session',
+        'ci',
+        '--daemon-auth-token',
+        token,
+        ...extra,
+        '--json',
+      ],
       { cwd: project, env: { HOME: home, AGENT_DEVICE_STATE_DIR: stateDir } },
     );
 
     assert.equal(result.code, 1);
     assertLimrunPluginMissing(result.stdout);
+    const { error } = JSON.parse(result.stdout);
+    assert.equal(typeof error.logPath, 'string');
+    const log = fs.readFileSync(error.logPath, 'utf8');
+    assert.match(log, /cli_plugin_refused/);
+    assert.ok(!log.includes(token));
+    assert.ok(!log.includes('--daemon-auth-token'));
     assert.equal(vi.mocked(resolveRemoteAuthForCli).mock.calls.length, 0);
     assert.equal(result.calls.length, 0);
     assert.deepEqual(snapshotTree(path.join(stateDir, 'remote-connections')), {});
@@ -474,4 +491,31 @@ test('cloud reconnect reuses an equivalent legacy profile on a remote daemon wit
   assert.equal(state?.leaseProvider, 'limrun');
   assert.equal(state?.remoteConfigPath, configPath);
   assert.deepEqual(fs.readdirSync(configDir), ['cloud-0123456789abcdef.json']);
+  const { data } = JSON.parse(result.stdout);
+  assert.equal(data.verification.status, 'verified');
+  assert.deepEqual(data.nextSteps, [
+    'agent-device apps --session cloud-limrun',
+    'agent-device open <uploaded-asset-name> --session cloud-limrun',
+  ]);
+  assert.deepEqual(data.leasePreparation.nextSteps, data.nextSteps);
+});
+
+test('a daemon-backed Limrun profile keeps configured status and uploaded asset guidance', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = limrunProfile(project, ' limrun ');
+  const result = await runCliCapture(
+    ['connect', '--remote-config', remoteConfig, '--session', 'ci', '--json'],
+    { cwd: project, env: { HOME: home, AGENT_DEVICE_STATE_DIR: stateDir } },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.deepEqual(result.calls, []);
+  const { data } = JSON.parse(result.stdout);
+  assert.equal(data.verification.status, 'configured');
+  assert.deepEqual(data.nextSteps, [
+    'agent-device apps --session ci',
+    'agent-device open <uploaded-asset-name> --session ci',
+  ]);
+  assert.deepEqual(data.leasePreparation.nextSteps, data.nextSteps);
 });

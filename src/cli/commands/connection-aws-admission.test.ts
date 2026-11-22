@@ -69,3 +69,57 @@ test.each(['missing', 'failed'] as const)(
     assert.deepEqual(snapshot.calls, []);
   },
 );
+
+test.each([undefined, 'arn:aws:devicefarm:us-west-2:123:upload:demo'])(
+  'configured AWS Device Farm connect gives guidance based on the effective app ARN %s',
+  async (awsAppArn) => {
+    const { home, env } = pluginHome();
+    const stateDir = path.join(home, 'state');
+    const remoteConfigPath = path.join(home, 'aws remote.json');
+    const daemonBaseUrl = 'https://daemon.example.test';
+    fs.writeFileSync(
+      remoteConfigPath,
+      JSON.stringify({
+        tenant: 'team',
+        runId: 'run-1',
+        leaseProvider: 'aws-device-farm',
+        leaseBackend: 'android-instance',
+        platform: 'android',
+        awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
+        awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device:device-a',
+      }),
+    );
+    const result = await runCliCapture(
+      [
+        'connect',
+        '--remote-config',
+        remoteConfigPath,
+        '--daemon-base-url',
+        daemonBaseUrl,
+        '--state-dir',
+        stateDir,
+        '--session',
+        'checkout',
+        '--json',
+        ...(awsAppArn ? ['--aws-app-arn', awsAppArn] : []),
+      ],
+      { cwd: home, env },
+    );
+    assert.equal(result.code, null, result.stdout + result.stderr);
+    assert.deepEqual(result.calls, []);
+    const { data } = JSON.parse(result.stdout);
+    assert.equal(data.verification.status, 'configured');
+    assert.deepEqual(data.leasePreparation.nextSteps, data.nextSteps);
+    if (awsAppArn) {
+      assert.deepEqual(data.nextSteps, [
+        'agent-device open <package-id> --relaunch --session checkout',
+      ]);
+    } else {
+      assert.equal(data.app.status, 'missing');
+      assert.match(data.leasePreparation.message, /awsAppArn/);
+      assert.deepEqual(data.nextSteps, [
+        `agent-device connect --remote-config '${remoteConfigPath}' --daemon-base-url ${daemonBaseUrl} --force --session checkout`,
+      ]);
+    }
+  },
+);

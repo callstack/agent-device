@@ -1,5 +1,8 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import type {
+  ProviderConnectionResource,
+  ProviderConnectionVerification,
+} from '@agent-device/contracts/remote';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
@@ -30,7 +33,7 @@ export type ConfiguredConnectionVerification = {
   provider?: never;
   project?: never;
   device?: never;
-  app?: never;
+  app?: ProviderConnectionResource;
 };
 
 export type ConnectVerification = ProviderConnectionVerification | ConfiguredConnectionVerification;

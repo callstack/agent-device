@@ -114,7 +114,7 @@ export const connectCommand: ClientCommandHandler = async ({
     host,
   );
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state, host);
-  const readiness = presentConnectReadiness(state, verification, host.env);
+  const readiness = presentConnectReadiness(state, verification, host.env, connectFlags);
 
   await writeCommandOutput(
     connectFlags,

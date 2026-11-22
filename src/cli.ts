@@ -377,9 +377,8 @@ async function resolveRunContextOrExit(
             configuredSession: parsed.flags.session,
           });
     if (base.command === 'connect' && flags.remoteConfig) {
-      const { admitConnectProfileProvider } =
-        await import('./cli/connection/provider-admission.ts');
-      await admitConnectProfileProvider(
+      const { admitConnectProfileWithDiagnostics } = await import('./cli/connect-preflight.ts');
+      await admitConnectProfileWithDiagnostics(
         parsed.remoteConfigLeaseProvider,
         flags.daemonBaseUrl,
         base.host,

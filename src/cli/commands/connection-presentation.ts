@@ -2,7 +2,11 @@ import {
   fingerprint,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
+import type {
+  ConfiguredConnectionVerification,
+  ConnectVerification,
+} from '../connection/connect-provider-adapters.ts';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
@@ -35,6 +39,14 @@ export function buildLeasePreparationNotice(
   env: NodeJS.ProcessEnv,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
+  if (isConfiguredAwsConnection(state, verification) && verification.app?.status === 'missing') {
+    return {
+      status: 'deferred',
+      nextSteps: buildConnectWorkflow(state, verification, env).nextSteps,
+      message:
+        'Set awsAppArn to the uploaded app ARN in the remote config, then reconnect before opening the app.',
+    };
+  }
   const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
   const leaseKind = capabilities.leaseKind;
   if (leaseKind === 'proxy') {
@@ -53,7 +65,7 @@ export function buildLeasePreparationNotice(
         'No live device session has been created. Run apps to inspect uploaded assets without allocating; open <uploaded-asset-name> creates the instance.',
     };
   }
-  if (leaseKind === 'direct-device-provider') {
+  if (leaseKind === 'direct-device-provider' || isConfiguredAwsConnection(state, verification)) {
     return {
       status: 'deferred',
       nextSteps: buildConnectWorkflow(state, verification, env).nextSteps,
@@ -83,14 +95,44 @@ export function presentConnectReadiness(
   state: RemoteConnectionState,
   verification: ConnectVerification,
   env: NodeJS.ProcessEnv,
+  flags: Pick<CliFlags, 'awsAppArn'> = {},
 ): ConnectReadiness {
+  const configured =
+    isConfiguredAwsConnection(state, verification) && !flags.awsAppArn
+      ? {
+          ...verification,
+          app: {
+            status: 'missing' as const,
+            message: 'Attach an uploaded app before allocating a device.',
+          },
+        }
+      : verification;
   return {
-    ...verification,
+    ...configured,
     preparationMessage:
-      buildLeasePreparationNotice(state, verification, env)?.message ??
+      buildLeasePreparationNotice(state, configured, env)?.message ??
       'No live device session has been created.',
-    ...buildConnectWorkflow(state, verification, env),
+    ...buildConnectWorkflow(state, configured, env),
   };
+}
+
+function isConfiguredAwsConnection(
+  state: RemoteConnectionState,
+  verification: ConnectVerification | undefined,
+): verification is ConfiguredConnectionVerification {
+  return (
+    state.leaseProvider === 'aws-device-farm' &&
+    verification !== undefined &&
+    'status' in verification &&
+    verification.status === 'configured'
+  );
+}
+
+function reconnectRemoteProfile(state: RemoteConnectionState): string {
+  const config = shellQuoteIfNeeded(state.remoteConfigPath);
+  const daemonUrl = state.daemon?.baseUrl;
+  const daemon = daemonUrl ? ` --daemon-base-url ${shellQuoteIfNeeded(daemonUrl)}` : '';
+  return `agent-device connect --remote-config ${config}${daemon} --force`;
 }
 
 export function renderConnectSuccess(options: {
@@ -250,10 +292,7 @@ function buildUnscopedConnectWorkflow(
       ],
     };
   }
-  if (!verification && leaseKind === 'direct-device-provider') {
-    return { nextSteps: defaultDirectProviderLifecycle() };
-  }
-  if (connectionProviderCapabilities(verification?.provider, env).supportsDeferredAppSelection) {
+  if (capabilities.supportsDeferredAppSelection) {
     return {
       nextSteps: ['agent-device apps', 'agent-device open <uploaded-asset-name>'],
       ...(requiresInstall(verification)
@@ -264,6 +303,12 @@ function buildUnscopedConnectWorkflow(
           }
         : {}),
     };
+  }
+  if (isConfiguredAwsConnection(state, verification) && verification.app?.status === 'missing') {
+    return { nextSteps: [reconnectRemoteProfile(state)] };
+  }
+  if (!verification && leaseKind === 'direct-device-provider') {
+    return { nextSteps: defaultDirectProviderLifecycle() };
   }
   const appMissing = verification?.app?.status === 'missing';
   return {
@@ -361,7 +406,8 @@ function appIdPlaceholder(platform: RemoteConnectionState['platform']): string {
 
 function missingAppLabel(state: RemoteConnectionState, env: NodeJS.ProcessEnv): string {
   const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
-  if (capabilities.requiresAppAttachment) return 'not attached';
+  if (state.leaseProvider === 'aws-device-farm' || capabilities.requiresAppAttachment)
+    return 'not attached';
   if (capabilities.supportsDeferredAppSelection) {
     return 'not installed yet';
   }
