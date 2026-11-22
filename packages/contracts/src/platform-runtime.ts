@@ -7,7 +7,7 @@ import {
   type DeviceTarget,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { PlatformModuleMetadata } from './platform-module.ts';
 import type { PlatformRequestScope } from './platform-runtime-host.ts';
 import type { ApplicationLifecycleResourceLifecycle } from './application-lifecycle-runtime.ts';
@@ -162,6 +162,16 @@ export function sameRuntimeOwner(left: RuntimeOwnerRef, right: RuntimeOwnerRef):
 }
 
 export type RuntimeProviderMode = 'local' | 'transport-composed' | 'provider-runtime';
+
+/**
+ * Every `details.reason` a hosted provider's runtime owner publishes when it refuses to serve a
+ * request. More than one provider raises these, so the row lives with the runtime contract the
+ * providers all bind through.
+ */
+export const PROVIDER_RUNTIME_REASONS = {
+  // The provider's session for the device ended, so the runtime has nothing left to serve.
+  sessionUnavailable: { reason: 'provider-session-unavailable' },
+} as const satisfies ReasonTable<'provider runtime'>;
 
 export type RuntimeDeviceShape = Readonly<{
   family: Platform;

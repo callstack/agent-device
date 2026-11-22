@@ -6,6 +6,7 @@ import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-oc
 import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 import type { RevylPlatform } from './device.ts';
 import type { RevylSession } from './revyl-session.ts';
+import { REVYL_OUTCOME_REASONS } from './revyl-client.ts';
 
 /** Reads one Revyl worker's accessibility tree and the box its actions measure. */
 export type RevylSnapshotReader = Readonly<{
@@ -102,7 +103,7 @@ function invalidIosHierarchy(cause?: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'Revyl returned an iOS hierarchy that is not an accessibility node tree.',
-    { reason: 'provider-response-invalid' },
+    { reason: REVYL_OUTCOME_REASONS.responseInvalid.reason },
     cause,
   );
 }

@@ -1,7 +1,15 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+
+/** Why a Limrun app sync failed. */
+const LIMRUN_APP_SYNC_REASONS = {
+  // The app-sync session of this lease has ended, so no further sync runs on it.
+  appSyncRetired: { reason: 'limrun_app_sync_retired' },
+  // App sync or local cache maintenance failed; check the device for the app before retrying.
+  appSyncFailed: { reason: 'limrun_app_sync_failed' },
+} as const satisfies ReasonTable<'limrun provider'>;
 
 /** One lease retains only its latest artifact's basis, even when materialization paths change. */
 export class LimrunSyncCache {
@@ -17,7 +25,7 @@ export class LimrunSyncCache {
   ): Promise<Value> {
     if (this.retired) {
       throw new AppError('COMMAND_FAILED', 'Limrun app sync session has ended.', {
-        reason: 'limrun_app_sync_retired',
+        reason: LIMRUN_APP_SYNC_REASONS.appSyncRetired.reason,
       });
     }
     const operation = this.pending.then(async () => {
@@ -43,7 +51,7 @@ export class LimrunSyncCache {
           'COMMAND_FAILED',
           'Limrun app sync failed.',
           {
-            reason: 'limrun_app_sync_failed',
+            reason: LIMRUN_APP_SYNC_REASONS.appSyncFailed.reason,
             platform,
             installablePath,
           },

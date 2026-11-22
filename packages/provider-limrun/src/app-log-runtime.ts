@@ -13,6 +13,7 @@ import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-ru
 import {
   type DeviceBinding,
   providerRuntimeOwner,
+  PROVIDER_RUNTIME_REASONS,
   sameRuntimeOwner,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
@@ -121,7 +122,7 @@ export function createLimrunPlatformRuntimeOwner(
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Limrun provider session is no longer live for the selected device',
-          { reason: 'provider-session-unavailable' },
+          { reason: PROVIDER_RUNTIME_REASONS.sessionUnavailable.reason },
         );
       }
       return bindLimrunAppLogs(

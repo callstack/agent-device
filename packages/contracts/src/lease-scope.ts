@@ -516,6 +516,8 @@ export const LEASE_REASONS = {
   scopeMismatch: { reason: 'LEASE_SCOPE_MISMATCH' },
   // The lease was allocated with an owner scope that the request does not repeat.
   scopeRequired: { reason: 'LEASE_SCOPE_REQUIRED' },
+  // The device instance behind the lease ended outside the daemon, which ends the lease with it.
+  instanceEnded: { reason: 'provider-instance-ended' },
 } as const satisfies ReasonTable<'leases'>;
 
 /**
@@ -544,9 +546,6 @@ export function isInactiveLeaseError(error: unknown): boolean {
   );
 }
 
-/** The reason a provider gives when the device instance behind a lease ended outside the daemon. */
-export const PROVIDER_INSTANCE_ENDED = 'provider-instance-ended';
-
 /** Whether `error` says the provider's device instance ended, which ends its lease. */
 export function isProviderInstanceEndedError(error: unknown): boolean {
   return (
@@ -554,7 +553,7 @@ export function isProviderInstanceEndedError(error: unknown): boolean {
     error !== null &&
     (error as Readonly<{ code?: unknown }>).code === 'COMMAND_FAILED' &&
     (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason ===
-      PROVIDER_INSTANCE_ENDED
+      LEASE_REASONS.instanceEnded.reason
   );
 }
 

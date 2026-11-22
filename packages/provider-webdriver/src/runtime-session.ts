@@ -4,7 +4,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   createCloudWebDriverCapabilities,
@@ -22,6 +22,20 @@ import type {
   CloudWebDriverRuntimeOptions,
 } from './runtime.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
+
+/** Why a provider WebDriver session could not be allocated or cleaned up. */
+const WEBDRIVER_SESSION_REASONS = {
+  // The provider did not create the WebDriver session within the session-creation budget.
+  sessionCreateTimeout: { reason: 'provider_session_create_timeout' },
+  // Releasing the lease interrupted the allocation; `details.cleanup` reports how cleanup ended.
+  sessionReleasedDuringAllocation: { reason: 'provider_session_released_during_allocation' },
+  // The WebDriver runtime could not finish the allocation: shutdown was in progress or done.
+  sessionShutdownDuringAllocation: { reason: 'provider_session_shutdown_during_allocation' },
+  // The lease is still releasing its previous session, so a new allocation gets no session.
+  sessionReleaseInProgress: { reason: 'provider_session_release_in_progress' },
+  // Shutdown could not confirm that all WebDriver sessions and provider resources were cleaned up.
+  sessionCleanupIncomplete: { reason: 'provider_session_cleanup_incomplete' },
+} as const satisfies ReasonTable<'webdriver provider'>;
 
 export type WebDriverProviderSession = Readonly<{
   lease: DeviceLease;
@@ -653,7 +667,7 @@ function sessionCreateTimeoutError(
     'COMMAND_FAILED',
     `${provider} did not create the WebDriver session within ${String(timeoutMs)}ms.`,
     {
-      reason: 'provider_session_create_timeout',
+      reason: WEBDRIVER_SESSION_REASONS.sessionCreateTimeout.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -688,8 +702,8 @@ function refusalForTeardown(
     {
       reason:
         by === 'release'
-          ? 'provider_session_released_during_allocation'
-          : 'provider_session_shutdown_during_allocation',
+          ? WEBDRIVER_SESSION_REASONS.sessionReleasedDuringAllocation.reason
+          : WEBDRIVER_SESSION_REASONS.sessionShutdownDuringAllocation.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -730,7 +744,7 @@ function refusalForTeardownInProgress(
     'DEVICE_IN_USE',
     `${provider} is releasing lease ${lease.leaseId} and allocated no WebDriver session for it.`,
     {
-      reason: 'provider_session_release_in_progress',
+      reason: WEBDRIVER_SESSION_REASONS.sessionReleaseInProgress.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -752,7 +766,7 @@ function allocationRefusedAfterShutdown(provider: string, lease: DeviceLease): A
     'COMMAND_FAILED',
     `${provider} is shut down and created no WebDriver session for lease ${lease.leaseId}.`,
     {
-      reason: 'provider_session_shutdown_during_allocation',
+      reason: WEBDRIVER_SESSION_REASONS.sessionShutdownDuringAllocation.reason,
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
@@ -797,7 +811,7 @@ function shutdownLeftSessionsRunning(
     'COMMAND_FAILED',
     `${provider} left ${String(outcomes.length)} WebDriver session(s) running after shutdown: ${providerSessionIds.join(', ')}.`,
     {
-      reason: 'provider_session_cleanup_incomplete',
+      reason: WEBDRIVER_SESSION_REASONS.sessionCleanupIncomplete.reason,
       provider,
       providerSessionIds,
       cleanup: 'uncertain',
