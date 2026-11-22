@@ -184,3 +184,22 @@ function failNextTreeStamp(code: string): void {
   });
   onTestFinished(() => stamp.mockRestore());
 }
+
+test('a rebuild unlinks a symlinked cache key without touching what it points at', async () => {
+  withoutRunnerDerivedPathEnv();
+  const cached = removeCacheEntryAfterTest(await ensureXctestrunArtifact(IOS_SIMULATOR, {}));
+  const outside = mkdtempForTestSync('agent-device-outside-cache-');
+  const outsideFile = path.join(outside, 'keep.txt');
+  fs.writeFileSync(outsideFile, 'not the cache\n');
+  fs.rmSync(cached.derived, { recursive: true });
+  fs.symlinkSync(outside, cached.derived);
+
+  await markRunnerXctestrunArtifactBadForRun(cached, 'runner health failed twice');
+  const rebuilt = await ensureXctestrunArtifact(IOS_SIMULATOR, {
+    forceRunnerXctestrunRebuild: true,
+  });
+
+  assert.equal(fs.readFileSync(outsideFile, 'utf8'), 'not the cache\n');
+  assert.deepEqual(fs.readdirSync(outside), ['keep.txt']);
+  assert.equal(fs.lstatSync(rebuilt.derived).isDirectory(), true);
+});

@@ -246,11 +246,17 @@ export function requireCertifiedRunnerCacheArtifacts(
 /**
  * Removes the cache metadata, the build scratch, and every runner tree no session can be reading.
  * A tree another session may launch from survives (see `listLiveRunnerTrees`); with the metadata
- * gone, nothing resolves it again. A directory named `derived` loses only its Xcode entries.
+ * gone, nothing resolves it again. A directory named `derived` loses only its Xcode entries. A cache
+ * key that is a symlink is unlinked, never walked, so the rebuild makes a real key directory.
  */
 export async function cleanRunnerDerivedArtifacts(derived: string): Promise<void> {
   try {
-    if (!fs.existsSync(derived)) return;
+    const entry = fs.lstatSync(derived, { throwIfNoEntry: false });
+    if (!entry) return;
+    if (entry.isSymbolicLink() && path.basename(derived) !== 'derived') {
+      fs.rmSync(derived, { force: true });
+      return;
+    }
     const { listLiveRunnerTrees, removeRunnerCacheEntriesExcept } =
       await import('./runner-cache-trim.ts');
     const kept = new Set(listLiveRunnerTrees(derived));
