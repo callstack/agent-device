@@ -29,7 +29,7 @@ const DEVICE_SHELL_REASONS = {
   emptyWordUnsupported: { reason: 'hdc-empty-word-unsupported' },
   // `hdc` double-quotes every element, so a shell fragment cannot reach the device as a script.
   shellFragmentUnsupported: { reason: 'hdc-shell-fragment-unsupported' },
-  // A `shell`/`exec-out` command was dispatched that `deviceShellArgv` did not build.
+  // A `shell`/`exec-out` command the device-shell builder did not build was refused before dispatch.
   unguardedArgv: { reason: 'unguarded-device-shell-argv' },
 } as const satisfies ReasonTable<'device shell'>;
 

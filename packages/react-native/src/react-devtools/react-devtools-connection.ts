@@ -3,7 +3,6 @@ import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   REACT_DEVTOOLS_ALREADY_PROFILING,
-  REACT_DEVTOOLS_REASONS,
   type ReactDevtoolsFailureReason,
 } from './react-devtools-reasons.ts';
 import {
@@ -231,12 +230,12 @@ const RUNTIME_FAILURES: Record<ReactDevtoolsFailureReason, { message: string; hi
 };
 
 /**
- * The table row for one answer from the injected runtime, or `undefined` for a spelling this build
- * does not declare. The runtime states its own reason, so it is untrusted text until a row confirms
- * it.
+ * Whether an answer from the injected runtime is a declared reason. `RUNTIME_FAILURES` has one entry
+ * per `REACT_DEVTOOLS_REASONS` row, so its own keys are exactly the declared spellings; the runtime
+ * states its own reason, so it is untrusted text until this check passes.
  */
-function declaredRuntimeReason(reason: string): ReactDevtoolsFailureReason | undefined {
-  return Object.values(REACT_DEVTOOLS_REASONS).find((row) => row.reason === reason)?.reason;
+function isDeclaredRuntimeReason(reason: string): reason is ReactDevtoolsFailureReason {
+  return Object.hasOwn(RUNTIME_FAILURES, reason);
 }
 
 /**
@@ -246,13 +245,13 @@ function declaredRuntimeReason(reason: string): ReactDevtoolsFailureReason | und
  * through `details.runtimeReason` and the message, and a caller branching on a reason sees none.
  */
 export function runtimeFailure(result: RuntimeFailure): AppError {
-  const known = declaredRuntimeReason(result.reason);
-  if (known) {
-    const wording = RUNTIME_FAILURES[known];
+  const reason = result.reason;
+  if (isDeclaredRuntimeReason(reason)) {
+    const wording = RUNTIME_FAILURES[reason];
     return new AppError(
       'COMMAND_FAILED',
       result.detail ? `${wording.message} ${result.detail}` : wording.message,
-      { reason: known, hint: wording.hint },
+      { reason, hint: wording.hint },
     );
   }
   return new AppError(

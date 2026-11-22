@@ -246,7 +246,7 @@ These reasons can come from more than one command.
 | --- | --- |
 | `hdc-empty-word-unsupported` | `hdc` drops an empty element, so the device command would lose an operand. |
 | `hdc-shell-fragment-unsupported` | `hdc` double-quotes every element, so a shell fragment cannot reach the device as a script. |
-| `unguarded-device-shell-argv` | A `shell`/`exec-out` command was dispatched that `deviceShellArgv` did not build. |
+| `unguarded-device-shell-argv` | A `shell`/`exec-out` command the device-shell builder did not build was refused before dispatch. |
 
 ### Foldable panels
 
