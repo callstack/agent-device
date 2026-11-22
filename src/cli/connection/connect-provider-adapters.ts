@@ -11,7 +11,6 @@ import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
   isConnectProviderName,
   primeProviderConnection,
-  usesProxyConnectShortcut,
   type ConnectProvider,
 } from './provider-policy.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
@@ -113,7 +112,7 @@ export async function resolveConnectProviderProfile(options: {
     };
   }
   const provider =
-    options.provider ?? (usesProxyConnectShortcut(options.flags) ? 'proxy' : 'cloud');
+    options.provider ?? (shouldUseProxyConnectShortcut(options.flags) ? 'proxy' : 'cloud');
   const context = {
     flags: options.flags,
     stateDir: options.stateDir,
@@ -193,4 +192,16 @@ export async function verifyResolvedConnectProvider(
   if (adapter) return await adapter.verify(context);
   const connection = await providerConnection(resolved.provider, host);
   return await connection.verify(context);
+}
+
+function shouldUseProxyConnectShortcut(flags: CliFlags): boolean {
+  if (!flags.daemonBaseUrl || flags.tenant || flags.runId || flags.leaseId || flags.leaseBackend) {
+    return false;
+  }
+  try {
+    const url = new URL(flags.daemonBaseUrl);
+    return url.pathname.replace(/\/+$/, '').endsWith('/agent-device');
+  } catch {
+    return false;
+  }
 }

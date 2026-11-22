@@ -142,19 +142,6 @@ export const PLUGIN_INSTALLATION_REASONS = {
 } as const satisfies Record<string, string>;
 
 /**
- * Whether an error is one of the typed refusals a provider plugin admission answers with. A route
- * that failed with either keeps no cloud auth state: the user installs or repairs the plugin first.
- */
-export function isProviderPluginRefusal(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  const reason = error.details?.reason;
-  return (
-    reason === PLUGIN_INSTALLATION_REASONS.notInstalled ||
-    reason === PLUGIN_INSTALLATION_REASONS.unavailable
-  );
-}
-
-/**
  * The typed outcome for a platform family a composition does not have (ADR 0034). An optional family
  * reports `plugin-not-installed` with the package that provides it and its installation command,
  * before any device binding. The required families and unknown names have no catalog row, so they

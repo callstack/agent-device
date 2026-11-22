@@ -598,12 +598,7 @@ test('a rewritten CLI session replaces the file, so a reader never sees a partia
     }
     assert.equal(readCliSession({ stateDir: tempRoot })?.id, 'session-second');
     if (process.platform !== 'win32') assert.equal(fs.statSync(sessionPath).mode & 0o077, 0);
-    // The auth guard's own revision record stands beside the session it governs, so that directory
-    // holds exactly those two names and nothing else.
-    assert.deepEqual(fs.readdirSync(path.dirname(sessionPath)).sort(), [
-      'cli-session.json',
-      'cli-session.revision.json',
-    ]);
+    assert.deepEqual(fs.readdirSync(path.dirname(sessionPath)), [path.basename(sessionPath)]);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

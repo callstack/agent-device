@@ -1,14 +1,12 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { RemoteConnectionRequestMetadata } from '@agent-device/remote/remote-connection-state';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { CLOUD_LEASE_PROVIDER } from '@agent-device/contracts/lease-scope';
 import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { parseRawArgs } from '../parser/args.ts';
 import {
   connectionLeaseProvider,
   primeProviderConnection,
   requiresOwnProviderAdmission,
-  usesProxyConnectShortcut,
 } from './provider-policy.ts';
 
 type AdmissionContext = Readonly<{
@@ -53,27 +51,6 @@ export async function admitConnectProviderNamedInArguments(
   const provider = connectProviderNamedInArguments(argv, host);
   if (!requiresOwnProviderAdmission(provider)) return;
   await primeProviderConnection(provider, host.env);
-}
-
-/**
- * Whether `connect` holds a login it approves until the provider it discovers is admitted.
- *
- * Only the route that reads its profile from the cloud control plane learns its provider after it
- * authenticates, and so is the one that can approve a login that provider then refuses. A `connect`
- * that names a provider, or passes an explicit profile, admits that provider before it authenticates,
- * so neither can hold a refused login.
- */
-export function defersConnectLogin(context: {
-  command: string;
-  flags: CliFlags;
-  positionals: readonly string[];
-}): boolean {
-  if (context.command !== 'connect') return false;
-  const namedProvider = context.positionals[0];
-  if (namedProvider !== undefined) return namedProvider === CLOUD_LEASE_PROVIDER;
-  if (context.flags.remoteConfig !== undefined) return false;
-  // A daemon whose URL is its own proxy endpoint is connected directly, without a profile.
-  return !usesProxyConnectShortcut(context.flags);
 }
 
 function connectProviderNamedInArguments(

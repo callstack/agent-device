@@ -1,5 +1,4 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import type { CliFlags } from '@agent-device/contracts/command';
 import {
   pluginConnectionInventory,
   pluginConnectionCapabilities,
@@ -83,22 +82,6 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
   return failures.length === 0
     ? names
     : `${names}. Plugins that failed to load: ${failures.join('; ')}`;
-}
-
-/**
- * The `connect` shortcut that connects straight to a named proxy daemon through its own proxy
- * endpoint, instead of reading a connection profile from the cloud control plane.
- */
-export function usesProxyConnectShortcut(flags: CliFlags): boolean {
-  if (!flags.daemonBaseUrl || flags.tenant || flags.runId || flags.leaseId || flags.leaseBackend) {
-    return false;
-  }
-  try {
-    const url = new URL(flags.daemonBaseUrl);
-    return url.pathname.replace(/\/+$/, '').endsWith('/agent-device');
-  } catch {
-    return false;
-  }
 }
 
 /**

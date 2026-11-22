@@ -59,7 +59,7 @@ import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
-import { resolveRemoteAuthForCli, withDeferredLogin } from './cli/auth-session.ts';
+import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -185,7 +185,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         debugOutputEnabled,
       });
       registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
-      const logTail: { stop: (() => void) | null } = { stop: null };
+      let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
           await exitAfterFlush(await runReactDevtoolsCli(ctx));
@@ -208,47 +208,39 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
         });
-        // A `connect` that learns its provider from the profile it fetches holds a login it approves
-        // until that provider is admitted; every other command saves a login as soon as it is approved.
-        const { defersLoginUntilProviderAdmission } = await import('./cli/connect-preflight.ts');
-        await withDeferredLogin(
-          { defersLogin: await defersLoginUntilProviderAdmission(ctx) },
-          async () => {
-            await resolveRemoteContext(ctx, transport);
-            registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
-            if (command === 'cdp') {
-              await exitAfterFlush(
-                await runAgentCdpCommand(positionals, {
-                  flags: ctx.effectiveFlags,
-                  runtime: ctx.resolvedRuntime,
-                  cwd: host.cwd,
-                  env: host.env,
-                }),
-              );
-              return;
-            }
-            logTail.stop = maybeStartDaemonLogTail(ctx);
-            const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
-            const commandProgress = createCommandProgressState();
-            const client = createAgentDeviceClient(buildClientConfig(ctx), {
-              host: ctx.host,
-              devicePin: ctx.devicePin,
-              transport: createCliDaemonTransport({
-                host,
-                command,
-                flags: ctx.effectiveFlags,
-                replayTestReporterRuntime,
-                commandProgress,
-                transport,
-              }),
-            });
-            await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
-          },
-        );
+        await resolveRemoteContext(ctx, transport);
+        registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
+        if (command === 'cdp') {
+          await exitAfterFlush(
+            await runAgentCdpCommand(positionals, {
+              flags: ctx.effectiveFlags,
+              runtime: ctx.resolvedRuntime,
+              cwd: host.cwd,
+              env: host.env,
+            }),
+          );
+          return;
+        }
+        logTailStopper = maybeStartDaemonLogTail(ctx);
+        const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
+        const commandProgress = createCommandProgressState();
+        const client = createAgentDeviceClient(buildClientConfig(ctx), {
+          host: ctx.host,
+          devicePin: ctx.devicePin,
+          transport: createCliDaemonTransport({
+            host,
+            command,
+            flags: ctx.effectiveFlags,
+            replayTestReporterRuntime,
+            commandProgress,
+            transport,
+          }),
+        });
+        await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
       } catch (error) {
-        await handleRunCliFailure(error, ctx, logTail.stop);
+        await handleRunCliFailure(error, ctx, logTailStopper);
       } finally {
-        logTail.stop?.();
+        if (logTailStopper) logTailStopper();
       }
     },
   );
