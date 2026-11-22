@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import net from 'node:net';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   androidCaptureFailureReasonDetail,
@@ -62,11 +62,31 @@ export function androidSnapshotHelperSessionLaunchArgs(
   const socketName = `${ANDROID_SNAPSHOT_HELPER_SESSION_SOCKET_PREFIX}${port}`;
   return { socketName, forwardTarget: `localabstract:${socketName}` };
 }
-const SESSION_REQUEST_TIMEOUT_REASON = 'android_snapshot_helper_session_request_timeout';
+/**
+ * The `error.details.reason` the persistent snapshot-helper session protocol states: why a command
+ * never reached the helper, or why the helper that answers is not the one this session launched. The
+ * session serves the snapshot capture and the helper-backed touch commands, so the owner is the
+ * helper, not one command.
+ */
+const SNAPSHOT_HELPER_SESSION_REASONS = {
+  // The helper accepted the session request but sent no answer before the command deadline.
+  requestTimeout: { reason: 'android_snapshot_helper_session_request_timeout' },
+  // The listener could not prove the session secret, so it is not the helper this session launched.
+  peerUnverified: { reason: 'android_snapshot_helper_session_peer_unverified' },
+  // The helper process never reported readiness before the readiness budget ran out.
+  readyTimeout: { reason: 'android_snapshot_helper_session_ready_timeout' },
+  // The readiness record the helper sent does not prove this session's protocol, socket, or secret.
+  readyMalformed: { reason: 'android_snapshot_helper_session_ready_malformed' },
+  // The helper process ended before it reported readiness.
+  exitedBeforeReady: { reason: 'android_snapshot_helper_session_exited_before_ready' },
+} as const satisfies ReasonTable<'android snapshot helper'>;
 
 /** The helper accepted the session request but sent no answer before the command deadline. */
 export function isAndroidSnapshotHelperSessionRequestTimeout(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === SESSION_REQUEST_TIMEOUT_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === SNAPSHOT_HELPER_SESSION_REASONS.requestTimeout.reason
+  );
 }
 
 /**
@@ -75,14 +95,15 @@ export function isAndroidSnapshotHelperSessionRequestTimeout(error: unknown): bo
  */
 export type AndroidSnapshotHelperSessionEndpoint = { port: number; secret: Buffer };
 
-const SESSION_PEER_UNVERIFIED_REASON = 'android_snapshot_helper_session_peer_unverified';
-
 /**
  * The listener did not prove the session secret, so it is not the helper this session launched
  * (another process can bind a freed abstract name). No command byte was sent to it.
  */
 export function isAndroidSnapshotHelperSessionPeerUnverified(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === SESSION_PEER_UNVERIFIED_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === SNAPSHOT_HELPER_SESSION_REASONS.peerUnverified.reason
+  );
 }
 
 const SERVER_LABEL = 'agent-device-session-server|';
@@ -122,7 +143,7 @@ export function sendAndroidSnapshotHelperSessionCommand(
           command: command.split(' ', 1)[0],
           timeoutMs,
           port,
-          reason: SESSION_REQUEST_TIMEOUT_REASON,
+          reason: SNAPSHOT_HELPER_SESSION_REASONS.requestTimeout.reason,
           // Before a proven hello the command never left this process.
           ...(phase === 'proven' ? {} : { dispatched: 'no' }),
         }),
@@ -144,13 +165,13 @@ export function sendAndroidSnapshotHelperSessionCommand(
       socket.destroy();
       emitDiagnostic({
         level: 'warn',
-        phase: SESSION_PEER_UNVERIFIED_REASON,
+        phase: SNAPSHOT_HELPER_SESSION_REASONS.peerUnverified.reason,
         data: { port, command: command.split(' ', 1)[0] },
       });
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session peer is unverified', {
           port,
-          reason: SESSION_PEER_UNVERIFIED_REASON,
+          reason: SNAPSHOT_HELPER_SESSION_REASONS.peerUnverified.reason,
           dispatched: 'no',
           // How much of the unverified answer was kept: never more than one hello line.
           receivedBytes: hello.length,
@@ -230,10 +251,6 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   return parseAndroidSnapshotHelperSessionSnapshotResponse(response, requestId);
 }
 
-const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';
-const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exited_before_ready';
-const SESSION_READY_MALFORMED_REASON = 'android_snapshot_helper_session_ready_malformed';
-
 type ReadinessOutcome =
   | { kind: 'ready'; commands: ReadonlySet<string>; secret: Buffer }
   | { kind: 'failed'; error: AppError };
@@ -281,7 +298,7 @@ function classifyReadinessRecord(
     return {
       kind: 'failed',
       error: new AppError('COMMAND_FAILED', 'Android snapshot helper readiness is malformed', {
-        reason: SESSION_READY_MALFORMED_REASON,
+        reason: SNAPSHOT_HELPER_SESSION_REASONS.readyMalformed.reason,
       }),
     };
   }
@@ -323,7 +340,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session did not become ready', {
           instrumentation: record.current(),
           timeoutMs,
-          reason: SESSION_READY_TIMEOUT_REASON,
+          reason: SNAPSHOT_HELPER_SESSION_REASONS.readyTimeout.reason,
         }),
       );
     }, timeoutMs);
@@ -380,7 +397,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
             exitCode: code,
             signal: exitSignal,
             instrumentation: record.exitResult() ?? record.current(),
-            reason: SESSION_EXITED_BEFORE_READY_REASON,
+            reason: SNAPSHOT_HELPER_SESSION_REASONS.exitedBeforeReady.reason,
           }),
         );
       });

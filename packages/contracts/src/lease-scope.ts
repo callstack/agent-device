@@ -514,6 +514,8 @@ export const LEASE_REASONS = {
   deviceSpecUnsupported: { reason: 'device-spec-unsupported' },
   // A device-spec key was given a value of the wrong type.
   deviceSpecInvalid: { reason: 'device-spec-invalid' },
+  // The device instance behind the lease ended outside the daemon, which ends the lease with it.
+  instanceEnded: { reason: 'provider-instance-ended' },
 } as const satisfies ReasonTable<'leases'>;
 
 /**
@@ -542,9 +544,6 @@ export function isInactiveLeaseError(error: unknown): boolean {
   );
 }
 
-/** The reason a provider gives when the device instance behind a lease ended outside the daemon. */
-export const PROVIDER_INSTANCE_ENDED = 'provider-instance-ended';
-
 /** Whether `error` says the provider's device instance ended, which ends its lease. */
 export function isProviderInstanceEndedError(error: unknown): boolean {
   return (
@@ -552,7 +551,7 @@ export function isProviderInstanceEndedError(error: unknown): boolean {
     error !== null &&
     (error as Readonly<{ code?: unknown }>).code === 'COMMAND_FAILED' &&
     (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason ===
-      PROVIDER_INSTANCE_ENDED
+      LEASE_REASONS.instanceEnded.reason
   );
 }
 

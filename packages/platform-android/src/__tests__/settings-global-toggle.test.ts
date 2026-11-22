@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { setAndroidGlobalToggle, type AndroidGlobalToggle } from '../settings-global-toggle.ts';
+import {
+  ANDROID_GLOBAL_TOGGLE_REASONS,
+  setAndroidGlobalToggle,
+  type AndroidGlobalToggle,
+} from '../settings-global-toggle.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import { underFakeTimers } from './test-utils/fake-timers.ts';
 
@@ -13,8 +17,8 @@ const TOGGLE: AndroidGlobalToggle<'example'> = {
   stateKey: 'example',
   parseRow: (storedValue) =>
     storedValue === '1' ? 'enabled' : storedValue === '0' ? 'disabled' : undefined,
-  notAppliedReason: 'example-not-applied',
-  unreadableReason: 'example-unreadable',
+  notAppliedReason: ANDROID_GLOBAL_TOGGLE_REASONS.mobileDataNotApplied.reason,
+  unreadableReason: ANDROID_GLOBAL_TOGGLE_REASONS.mobileDataUnreadable.reason,
   sampleIntervalMs: 300,
   hint: 'Read example_on.',
 };
@@ -32,7 +36,7 @@ test('the sample taken after the settle window runs out still answers with the t
       ).rejects.toMatchObject({
         code: 'COMMAND_FAILED',
         details: {
-          reason: 'example-not-applied',
+          reason: ANDROID_GLOBAL_TOGGLE_REASONS.mobileDataNotApplied.reason,
           example: 'disabled',
           storedValue: '0',
           dispatched: 'unknown',
