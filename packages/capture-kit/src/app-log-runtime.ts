@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogCompletion,
   AppLogLiveHandle,
@@ -54,7 +55,7 @@ export function createAppLogRecoveryOperations<Descriptor extends object>(implem
       }
       return {
         status: 'cleanup-pending',
-        reason: 'manual-recovery-required',
+        reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
         message: decoded.message,
       };
     },

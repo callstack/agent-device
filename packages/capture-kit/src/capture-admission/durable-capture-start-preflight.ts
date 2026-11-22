@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import {
   capitalizeDurableCaptureLabel,
   type DurableCaptureRecordDefinition,
@@ -91,7 +91,7 @@ function assertNoConflictingManifest<K extends string, C>(
     'COMMAND_FAILED',
     `${capitalizeDurableCaptureLabel(articleFor(definition.displayName))} ${definition.displayName} resource for this ${otherDevice ? 'session' : 'device'} has not reached a confirmed terminal state`,
     {
-      reason: 'cleanup-unconfirmed',
+      reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
       session,
       hint: otherDevice
         ? `The open ${definition.displayName} record of session "${session}" is on device "${otherDevice}". Stop it in that session, or start this one under another session name.`

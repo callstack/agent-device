@@ -1,4 +1,8 @@
-import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
+import type {
+  CleanupOutcome,
+  ResourceUnreattachableReason,
+} from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   ScreenRecordingRuntimeOperations,
@@ -81,7 +85,8 @@ export async function reattachAndroidRecording(params: {
 }) {
   const { host, transport, device, input } = params;
   const parsed = androidScreenRecordingDescriptorCodec.decode(input.envelope.descriptor.body);
-  if (parsed.status !== 'decoded') return unreattachable('descriptor-invalid');
+  if (parsed.status !== 'decoded')
+    return unreattachable(DURABLE_RESOURCE_REASONS.descriptorInvalid.reason);
   const recovered = await readDescriptorEvidence({
     transport,
     device,
@@ -91,8 +96,8 @@ export async function reattachAndroidRecording(params: {
   if (recovered.status !== 'matched')
     return unreattachable(
       recovered.status === 'transport-unavailable'
-        ? 'transport-not-reattachable'
-        : 'ownership-fence-lost',
+        ? DURABLE_RESOURCE_REASONS.transportNotReattachable.reason
+        : DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
     );
   return await reattachEvidence({
     host,
@@ -113,7 +118,10 @@ export async function cleanupAndroidRecording(params: {
     params.input.envelope.descriptor.body,
   );
   if (parsed.status !== 'decoded')
-    return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
+    };
   const recovered = await readDescriptorEvidence({
     transport: params.transport,
     device: params.device,
@@ -122,8 +130,8 @@ export async function cleanupAndroidRecording(params: {
   });
   if (recovered.status !== 'matched')
     return recovered.status === 'transport-unavailable'
-      ? { status: 'cleanup-pending', reason: 'owner-unavailable' }
-      : { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+      ? { status: 'cleanup-pending', reason: DURABLE_RESOURCE_REASONS.ownerUnavailable.reason }
+      : { status: 'cleanup-pending', reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason };
   return await cleanupVerifiedAndroidEvidence(
     params.transport,
     recovered.evidence,
@@ -154,13 +162,13 @@ async function reattachEvidence(params: {
         },
       };
     return unreattachable(
-      'ownership-fence-lost',
+      DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
       'Android recording completed evidence still names a live or unverifiable recorder.',
     );
   }
   if (evidence.pendingRemotePath !== undefined)
     return unreattachable(
-      'transport-not-reattachable',
+      DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
       'Android recording launch was interrupted before its process identity was committed.',
     );
   const active = evidence.chunks.at(-1);
@@ -175,7 +183,7 @@ async function reattachEvidence(params: {
   // pull it when the device answers again instead of being told a loss nobody observed (ADR 0024).
   if (running !== 'owned-alive' && (await transport.exists(active.remotePath)) === false)
     return unreattachable(
-      'transport-not-reattachable',
+      DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
       'Android recording process ended before its artifact could be recovered.',
     );
   const inputForHandle = inputFromDescriptor(
@@ -261,10 +269,7 @@ function inputFromDescriptor(
   };
 }
 
-function unreattachable(
-  reason: 'descriptor-invalid' | 'transport-not-reattachable' | 'ownership-fence-lost',
-  message?: string,
-) {
+function unreattachable(reason: ResourceUnreattachableReason, message?: string) {
   return {
     status: 'unreattachable' as const,
     reason,

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
@@ -49,7 +49,7 @@ export function createHarmonyScreenRecordingOperations(params: {
       await startHarmonyRecording({ host, device, owner, input, signal }),
     screenRecordingReattach: async () => ({
       status: 'unreattachable' as const,
-      reason: 'transport-not-reattachable' as const,
+      reason: DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
       message: 'HarmonyOS recordings cannot be reattached after daemon restart.',
     }),
     screenRecordingCleanup: async (input) =>
@@ -277,7 +277,7 @@ async function cleanupLiveHarmonyDescriptor(
   if (failure !== undefined) {
     return {
       status: 'cleanup-pending',
-      reason: 'transport-failed',
+      reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
       message: failure instanceof Error ? failure.message : 'HarmonyOS recording cleanup failed',
     };
   }

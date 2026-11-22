@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogLiveHandle,
   AppLogLiveSnapshot,
@@ -115,7 +116,7 @@ function createPollerHandle(
         state = 'failed';
         return {
           status: 'cleanup-pending',
-          reason: 'transport-failed',
+          reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
           message: `${options.provider} app-log cleanup did not settle every owned resource`,
         } as const;
       }

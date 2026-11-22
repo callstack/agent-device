@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import path from 'node:path';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
@@ -246,12 +247,12 @@ export function allowsDurableCaptureDescriptorCleanup(
   reason: ResourceUnreattachableReason,
 ): boolean {
   switch (reason) {
-    case 'descriptor-invalid':
-    case 'descriptor-version-unsupported':
-    case 'ownership-fence-lost':
+    case DURABLE_RESOURCE_REASONS.descriptorInvalid.reason:
+    case DURABLE_RESOURCE_REASONS.descriptorVersionUnsupported.reason:
+    case DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason:
       return false;
-    case 'owner-unavailable':
-    case 'transport-not-reattachable':
+    case DURABLE_RESOURCE_REASONS.ownerUnavailable.reason:
+    case DURABLE_RESOURCE_REASONS.transportNotReattachable.reason:
       return true;
   }
 }

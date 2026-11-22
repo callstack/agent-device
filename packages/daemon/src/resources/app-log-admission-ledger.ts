@@ -5,7 +5,7 @@ import {
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import {
   createDurableCaptureAdmissionLedger,
   type DurableCaptureAdmissionLedger,
@@ -74,7 +74,7 @@ export function createAppLogAdmissionLedger(
           'COMMAND_FAILED',
           'A retained legacy app-log marker prevents replacement capture',
           {
-            reason: 'cleanup-unconfirmed',
+            reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
             hint: 'Inspect and remove the retained app-log.pid only after manually confirming its process is gone.',
           },
         );

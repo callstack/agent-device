@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogCompletion,
   AppLogLiveHandle,
@@ -28,7 +29,7 @@ export async function reattachCleanupOnlyAppLogProcess(
   if (marker.status === 'invalid') {
     return {
       status: 'unreattachable',
-      reason: 'ownership-fence-lost',
+      reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
       message: marker.message,
     };
   }
@@ -38,9 +39,12 @@ export async function reattachCleanupOnlyAppLogProcess(
     return { status: 'missing' };
   }
   if (ownership === 'ownership-lost') {
-    return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+    return { status: 'unreattachable', reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason };
   }
-  return { status: 'unreattachable', reason: 'transport-not-reattachable' };
+  return {
+    status: 'unreattachable',
+    reason: DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
+  };
 }
 
 /** Cleans only complete, still-owned marker evidence; uncertain evidence remains fail-closed. */
@@ -51,7 +55,7 @@ export async function cleanupManagedAppLogProcess(
   if (!pidPath) {
     return {
       status: 'cleanup-pending',
-      reason: 'manual-recovery-required',
+      reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
       message: 'App-log process marker path is missing',
     };
   }
@@ -60,7 +64,7 @@ export async function cleanupManagedAppLogProcess(
   if (marker.status === 'invalid') {
     return {
       status: 'cleanup-pending',
-      reason: 'manual-recovery-required',
+      reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
       message: marker.message,
     };
   }
@@ -86,5 +90,5 @@ async function readManagedMarker(
 }
 
 function ownershipLostCleanup(): CleanupOutcome {
-  return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+  return { status: 'cleanup-pending', reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason };
 }

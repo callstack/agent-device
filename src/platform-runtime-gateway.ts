@@ -29,7 +29,12 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  type ReasonTable,
+  DURABLE_RESOURCE_REASONS,
+} from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -37,8 +42,8 @@ export type PlatformRuntimeProviderRegistration = Readonly<{
 }>;
 
 // Why the gateway refuses a request it will not route at all. A refusal the routing decision reaches
-// (an unsupported mode, an owner that is gone) is the runtime contract's own vocabulary, declared in
-// `@agent-device/contracts/platform-runtime` next to the facts that carry it.
+// (an unsupported mode, an owner that is gone) is the runtime contract's own vocabulary: the runtime
+// facts in `@agent-device/contracts/platform-runtime` and the durable outcomes in kernel errors.
 const PLATFORM_RUNTIME_GATEWAY_REASONS = {
   // The gateway is closed, so the command reached no runtime owner.
   shutDown: { reason: 'runtime-gateway-shut-down' },
@@ -384,7 +389,7 @@ function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: Device
 
 function ownerUnavailable(owner: RuntimeOwnerRef): AppError {
   return new AppError('UNSUPPORTED_OPERATION', 'The exact platform runtime owner is unavailable.', {
-    reason: 'owner-unavailable',
+    reason: DURABLE_RESOURCE_REASONS.ownerUnavailable.reason,
     owner: runtimeOwnerKey(owner),
   });
 }
