@@ -198,14 +198,6 @@ class CloudWebDriverRuntimeImplementation implements CloudWebDriverRuntime {
     return await this.deployment.installApp(device, app, appPath, installOptions);
   }
 
-  async installInstallablePath(
-    device: DeviceInfo,
-    installablePath: string,
-    installOptions?: ProviderDeviceInstallOptions,
-  ): Promise<ProviderDeviceInstallResult | undefined> {
-    return await this.deployment.installInstallablePath(device, installablePath, installOptions);
-  }
-
   async shutdown(): Promise<void> {
     await this.sessions.shutdown();
   }

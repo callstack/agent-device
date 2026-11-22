@@ -62,8 +62,31 @@ type SavedReactProfile = {
   notes: string[];
 };
 
-type StartResult = { ok: true; attach: string } | RuntimeFailure;
+/**
+ * What the runtime answers when `profile start` finds a recording already running. The start reports
+ * it as a success, so the spelling is not a published error reason and has no reason table row.
+ */
+const ALREADY_PROFILING = 'already-profiling';
+
+/** `ok: false` in shape; `elapsedMs` is measured on the device clock. */
+type AlreadyRecordingResult = {
+  ok: false;
+  reason: typeof ALREADY_PROFILING;
+  elapsedMs?: number;
+};
+
+type StartResult = { ok: true; attach: string } | AlreadyRecordingResult | RuntimeFailure;
 type StopResult = ({ ok: true; failures: string[] } & RawReactProfile) | RuntimeFailure;
+
+/**
+ * Whether the answer to `profile start` reports an already-running recording. The reason is untrusted
+ * text until this says so, which is what lets the caller read `elapsedMs` from it.
+ */
+function isAlreadyRecording(
+  result: AlreadyRecordingResult | RuntimeFailure,
+): result is AlreadyRecordingResult {
+  return result.reason === ALREADY_PROFILING;
+}
 
 function isReactProfileSubcommand(value: string | undefined): value is ReactProfileSubcommand {
   return REACT_PROFILE_SUBCOMMANDS.includes(value as ReactProfileSubcommand);
@@ -152,7 +175,7 @@ async function startProfile(
   return await withAppRuntime(args, options, async (session, target) => {
     const result = await callRuntime<StartResult>(session, 'start');
     const app = targetAppId(target);
-    if (!result.ok && result.reason === 'already-profiling') {
+    if (!result.ok && isAlreadyRecording(result)) {
       return {
         app,
         alreadyProfiling: true,

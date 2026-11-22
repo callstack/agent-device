@@ -23,7 +23,6 @@ import {
   openHarmonyApp,
   parseHarmonyBundleList,
   parseHarmonyLaunchTarget,
-  resolveHarmonyArchiveBundleName,
 } from '../app-lifecycle.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 
@@ -78,53 +77,6 @@ test('parseHarmonyIsSystemApp reads Bundle Manager application metadata', () => 
   assert.equal(parseHarmonyIsSystemApp(JSON.stringify({ appInfo: { isSystemApp: false } })), false);
   assert.equal(parseHarmonyIsSystemApp('bundle metadata unavailable'), undefined);
 });
-
-test('resolveHarmonyArchiveBundleName reads module metadata through unzip', async () => {
-  mockRunCmd.mockResolvedValue({
-    exitCode: 0,
-    stdout: JSON.stringify({ app: { bundleName: 'com.example.application' } }),
-    stderr: '',
-  } as Awaited<ReturnType<typeof runCmd>>);
-
-  await assert.doesNotReject(async () => {
-    assert.equal(
-      await resolveHarmonyArchiveBundleName('/tmp/example.hap'),
-      'com.example.application',
-    );
-  });
-  assert.deepEqual(mockRunCmd.mock.calls[0]?.slice(0, 2), [
-    'unzip',
-    ['-p', '/tmp/example.hap', 'module.json'],
-  ]);
-});
-
-test('resolveHarmonyArchiveBundleName forwards the binding signal to in-flight unzip', async () => {
-  const controller = new AbortController();
-  const abortReason = new Error('request cancelled during Harmony archive resolution');
-  mockRunCmd.mockImplementationOnce(async (_command, _args, options) => {
-    assert.equal(options?.signal, controller.signal);
-    return await rejectWhenAborted(options?.signal);
-  });
-
-  const pending = resolveHarmonyArchiveBundleName('/tmp/example.hap', controller.signal);
-  controller.abort(abortReason);
-
-  await assert.rejects(pending, (error: unknown) => error === abortReason);
-});
-
-async function rejectWhenAborted(signal: AbortSignal | undefined): Promise<never> {
-  return await new Promise<never>((_resolve, reject) => {
-    if (!signal) {
-      reject(new Error('archive resolver did not receive the binding signal'));
-      return;
-    }
-    if (signal.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-  });
-}
 
 test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async () => {
   mockRunCmd

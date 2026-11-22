@@ -1,7 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
 import { runHarmonyShell } from './hdc.ts';
 import { invalidateHarmonyGestureViewport } from './snapshot.ts';
 
@@ -30,35 +29,11 @@ interface HarmonyBundleDump {
   }>;
 }
 
-interface HarmonyArchiveModule {
-  app?: { bundleName?: string };
-}
-
 const HARMONY_APP_INVENTORY_TIMEOUT_MS = 60_000;
 const HARMONY_APP_METADATA_CONCURRENCY = 4;
 
 interface HarmonyAppListOptions {
   signal?: AbortSignal;
-}
-
-/** Reads the bundle identity embedded in a signed HAP archive. */
-export async function resolveHarmonyArchiveBundleName(
-  archivePath: string,
-  signal?: AbortSignal,
-): Promise<string | undefined> {
-  const result = await runCmd('unzip', ['-p', archivePath, 'module.json'], {
-    allowFailure: true,
-    timeoutMs: 15_000,
-    signal,
-  });
-  if (result.exitCode !== 0 || result.stdout.trim().length === 0) return undefined;
-  try {
-    const manifest = JSON.parse(result.stdout) as HarmonyArchiveModule;
-    const bundleName = manifest.app?.bundleName?.trim();
-    return bundleName || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /** Extracts the launchable page ability from `bm dump -n <bundle>`. */

@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar-stream';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  ARCHIVE_REASONS,
   ArchiveBudget,
   archiveError,
   createExtractedDirectory,
@@ -46,7 +47,7 @@ export async function extractTarArchive(options: TarOptions): Promise<void> {
       const manifestEntry = manifest.shift();
       if (!manifestEntry || !sameArchiveManifestEntry(manifestEntry, actualEntry)) {
         throw archiveError(
-          'ARCHIVE_MANIFEST_MISMATCH',
+          ARCHIVE_REASONS.manifestMismatch.reason,
           'Archive contents changed after inspection',
         );
       }
@@ -60,7 +61,10 @@ export async function extractTarArchive(options: TarOptions): Promise<void> {
     throw cancellationOwnedFailure(options.signal, error);
   }
   if (manifest.length !== 0) {
-    throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
+    throw archiveError(
+      ARCHIVE_REASONS.manifestMismatch.reason,
+      'Archive contents changed after inspection',
+    );
   }
   reservation.finish();
 }
@@ -128,11 +132,14 @@ function readTarKind(type: tar.Headers['type']): 'directory' | 'file' {
   if (type === 'file' || type === 'contiguous-file' || type == null) return 'file';
   if (type === 'link' || type === 'symlink') {
     throw archiveError(
-      'ARCHIVE_UNSAFE_ENTRY',
+      ARCHIVE_REASONS.unsafeEntry.reason,
       'Uploaded app bundle archive cannot contain symlinks or hard links',
     );
   }
-  throw archiveError('ARCHIVE_UNSAFE_ENTRY', 'Archive contains a link or special entry');
+  throw archiveError(
+    ARCHIVE_REASONS.unsafeEntry.reason,
+    'Archive contains a link or special entry',
+  );
 }
 
 function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry | undefined {
@@ -141,7 +148,7 @@ function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry |
   const kind = readTarKind(header.type);
   const size = kind === 'directory' ? 0 : (header.size ?? 0);
   if (!Number.isSafeInteger(size) || size < 0) {
-    throw archiveError('ARCHIVE_INVALID_ENTRY', 'Archive entry has an invalid size');
+    throw archiveError(ARCHIVE_REASONS.invalidEntry.reason, 'Archive entry has an invalid size');
   }
   return { name, kind, size, mode: extractedEntryMode(kind, header.mode) };
 }

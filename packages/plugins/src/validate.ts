@@ -4,6 +4,7 @@ import { isProviderId } from './discovery.ts';
 import {
   assertCredentialVariables,
   assertLocalConnectionCapabilities,
+  PLUGIN_REASONS,
   ROUTING_PROVIDER_IDENTITIES,
 } from './manifest.ts';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
@@ -16,7 +17,7 @@ export function validateAgentDevicePlugin(value: unknown): AgentDevicePlugin {
   if (!isRecord(value)) throw invalidPlugin('Plugin factory must return a plugin object');
   if (value.apiVersion !== PROVIDER_PLUGIN_API_VERSION) {
     throw new AppError('INVALID_ARGS', 'Plugin does not declare a compatible provider contract', {
-      reason: 'incompatible_plugin',
+      reason: PLUGIN_REASONS.incompatiblePlugin.reason,
       apiVersion: PROVIDER_PLUGIN_API_VERSION,
       hint: `Install a plugin release supporting provider plugin apiVersion ${PROVIDER_PLUGIN_API_VERSION}.`,
     });
@@ -26,7 +27,7 @@ export function validateAgentDevicePlugin(value: unknown): AgentDevicePlugin {
   }
   if (ROUTING_PROVIDER_IDENTITIES.includes(value.provider)) {
     throw new AppError('INVALID_ARGS', `Provider id is reserved for routing: ${value.provider}`, {
-      reason: 'reserved_provider',
+      reason: PLUGIN_REASONS.reservedProvider.reason,
       provider: value.provider,
     });
   }

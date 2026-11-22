@@ -20,7 +20,11 @@ import {
 } from '@agent-device/contracts/plugin-inventory';
 import { describePluginFailure } from './inventory.ts';
 import { isProviderId } from './discovery.ts';
-import { ROUTING_PROVIDER_IDENTITIES } from './manifest.ts';
+import {
+  PLUGIN_REASONS,
+  ROUTING_PROVIDER_IDENTITIES,
+  type PluginFailureReason,
+} from './manifest.ts';
 import { assertProviderRuntime, invalidPlugin, validateAgentDevicePlugin } from './validate.ts';
 
 /**
@@ -124,14 +128,14 @@ export async function resolveProviderPlugins(
       slot.provider = readProviderId(raw) ?? candidate.provider;
       slot.plugin = validateAgentDevicePlugin(raw);
     } catch (error) {
-      slot.failure = asPluginFailure(error, 'plugin_load_failed');
+      slot.failure = asPluginFailure(error, PLUGIN_REASONS.loadFailed.reason);
     }
     if (slot.provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(slot.provider))
       continue;
     if (claimed.has(slot.provider)) {
       slot.plugin = undefined;
       slot.failure ??= new AppError('INVALID_ARGS', `Duplicate provider plugin: ${slot.provider}`, {
-        reason: 'duplicate_provider',
+        reason: PLUGIN_REASONS.duplicateProvider.reason,
         provider: slot.provider,
       });
     } else claimed.add(slot.provider);
@@ -169,7 +173,7 @@ export async function startProviderRegistry(
     try {
       await setUpSlot(slot, slot.plugin, env, policy);
     } catch (error) {
-      slot.failure = asPluginFailure(error, 'plugin_setup_failed');
+      slot.failure = asPluginFailure(error, PLUGIN_REASONS.setupFailed.reason);
       slot.registration = undefined;
     }
   }
@@ -268,7 +272,7 @@ async function cleanUpRejectedSetup(result: unknown): Promise<void> {
 }
 
 /** A thrown value that is not already typed becomes a typed failure the inventory can key on. */
-function asPluginFailure(error: unknown, reason: 'plugin_load_failed' | 'plugin_setup_failed') {
+function asPluginFailure(error: unknown, reason: PluginFailureReason) {
   if (error instanceof AppError) {
     return typeof error.details?.reason === 'string'
       ? error

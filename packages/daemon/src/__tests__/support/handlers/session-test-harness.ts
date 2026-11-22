@@ -123,9 +123,9 @@ const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
 const mockReleaseRunnerOnClose = vi.mocked(releaseIosRunnerOnClose);
 const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
-export const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
+const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const mockCleanupRetainedMaterializedPaths = vi.mocked(cleanupRetainedMaterializedPathsForSession);
-export const mockRunCmd = vi.mocked(runCmd);
+const mockRunCmd = vi.mocked(runCmd);
 /** The retired dispatcher's snapshot leg, now an owned test double (R58). */
 export const mockDispatch = legacyDispatchCapture;
 const mockResolveIosApp = vi.mocked(resolveIosApp);
