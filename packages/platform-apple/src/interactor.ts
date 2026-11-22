@@ -409,8 +409,7 @@ function assertReportedRunnerSnapshotNodes(
 /**
  * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
  * quality verdict, and the disclosure when this capture's own command had to bring the session app
- * back to the foreground (#2682). In-place system-surface disclosures (#2438) are derived once from
- * `SnapshotState.systemSurface` at the shared consumer seams (`systemSurfaceDisclosure`).
+ * back to the foreground (#2682).
  */
 function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
   const warnings: string[] = [];

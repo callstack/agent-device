@@ -250,16 +250,11 @@ async function captureRuntimeSnapshot(
       ...(options.observeOnly === undefined ? {} : { observeOnly: options.observeOnly }),
     },
   );
-  const annotations = snapshotCaptureAnnotationsFrom(result);
-  const systemSurface =
-    result.snapshot.systemSurface ?? androidSnapshotSystemSurface(annotations.androidSnapshot);
-  const presented = ensureSnapshotPresentationKey(result.snapshot, options);
   const snapshot = copySnapshotClickabilityEvidence(
     result.snapshot,
-    systemSurface && presented.systemSurface === undefined
-      ? { ...presented, systemSurface }
-      : presented,
+    ensureSnapshotPresentationKey(result.snapshot, options),
   );
+  const annotations = snapshotCaptureAnnotationsFrom(result);
   const warningTime = now(runtime);
   return {
     snapshot,
@@ -355,7 +350,10 @@ function buildSnapshotWarnings(params: {
   );
   if (reactNativeOverlayWarning) warnings.push(reactNativeOverlayWarning);
 
-  const systemSurfaceWarning = systemSurfaceDisclosure(params.snapshot.systemSurface);
+  const systemSurfaceWarning = systemSurfaceDisclosure(
+    params.snapshot.systemSurface ??
+      androidSnapshotSystemSurface(params.annotations.androidSnapshot),
+  );
   if (systemSurfaceWarning) warnings.push(systemSurfaceWarning);
 
   const recentDropWarning = formatRecentSnapshotDropWarning(params);
