@@ -1,6 +1,5 @@
 import type http from 'node:http';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { HUMAN_CONTROL_REASONS } from '../resources/human-control-contract.ts';
 
 export type NormalizedHttpError = ReturnType<typeof normalizeError>;
 
@@ -20,7 +19,7 @@ export function statusCodeForNormalizedError(error: {
     case 'REPAIR_SESSION_EXPIRED':
       return 404;
     case 'DEVICE_IN_USE':
-      return error.details?.reason === HUMAN_CONTROL_REASONS.active.reason ? 423 : 500;
+      return error.details?.reason === 'human_control_active' ? 423 : 500;
     case 'COMMAND_FAILED':
       // A TTL registry cannot tell an expired id from one that never existed,
       // so a gone resource is 404 rather than 410.
