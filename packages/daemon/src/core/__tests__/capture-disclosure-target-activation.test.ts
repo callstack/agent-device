@@ -92,7 +92,7 @@ test('surface and foreground disclosures ride one response together', () => {
   const response = withCaptureDisclosures({
     response: okResponse({ nodes: [] }),
     consumedTree: {
-      iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+      systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
       targetActivation: FACT,
     },
     captureProof: { targetActivation: FACT },

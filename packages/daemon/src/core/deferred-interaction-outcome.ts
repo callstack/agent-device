@@ -4,7 +4,7 @@ import type { PostOpenObservation } from '@agent-device/contracts/application-li
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
 import { formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
+import type { SnapshotState, SnapshotSystemSurface } from '@agent-device/contracts/snapshot-model';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
   captureAndroidFreshnessRecoveredAttempt,
@@ -119,13 +119,23 @@ export function markDeferredInteractionOutcome(
  */
 function restTree(snapshot: SnapshotState | undefined): SurfaceScopedNodes | undefined {
   if (!snapshot) return undefined;
+  const surfaceBundleId = systemSurfaceBundleId(snapshot.systemSurface);
   return {
     nodes: snapshot.nodes,
-    ...(snapshot.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
-      : {}),
+    ...(surfaceBundleId ? { surfaceBundleId } : {}),
     ...(snapshot.presentedSurface ? { presentedSurface: snapshot.presentedSurface } : {}),
   };
+}
+
+function systemSurfaceBundleId(surface: SnapshotSystemSurface | undefined): string | undefined {
+  if (surface === undefined) return undefined;
+  switch (surface.kind) {
+    case 'android-system-overlay':
+      return undefined;
+    case 'web-auth':
+    case 'payment':
+      return surface.bundleId;
+  }
 }
 
 /** Whether this mutation left an unsettled surface for the capture side to steady. */

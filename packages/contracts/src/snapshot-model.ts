@@ -18,6 +18,7 @@ import {
   type SnapshotProducerRegistry,
   type SnapshotProvenance,
 } from './snapshot-producers.ts';
+import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
 
 export {
   isSnapshotBackend,
@@ -88,6 +89,15 @@ export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefi
   );
 }
 
+/**
+ * An occluding system surface a capture shows instead of app content, one shape for every platform.
+ * Android reports an overlay (notification shade, quick settings) without a host identity. iOS
+ * reports the registered in-place host it serves (#2438).
+ */
+export type SnapshotSystemSurface =
+  | Readonly<{ kind: 'android-system-overlay' }>
+  | IosSystemSurfaceProvenance;
+
 export type SnapshotState = {
   nodes: SnapshotNode[];
   createdAt: number;
@@ -101,22 +111,17 @@ export type SnapshotState = {
   /** Opaque equality key for iOS acquisition and presentation lineage. */
   comparisonKey?: string;
   /**
-   * Android: the capture is an occluding system surface (notification shade, quick settings)
-   * rather than app content. Consumers that surface this tree to the agent must disclose the
-   * occlusion (see `@agent-device/contracts/android-system-surface-disclosure`).
+   * The occluding system surface this capture describes instead of app content. Consumers that
+   * surface this tree to the agent disclose it through
+   * `@agent-device/contracts/system-surface-disclosure`. Two captures that name different iOS
+   * hosts describe different surfaces and are never compared as the same presentation.
    */
-  systemSurfaceOnly?: boolean;
+  systemSurface?: SnapshotSystemSurface;
   /**
    * Android: the producer proved this capture a complete read of the current hierarchy, taken after
    * it cleared the platform node cache. Absent proves nothing.
    */
   freshTraversal?: true;
-  /**
-   * iOS: the bundle id of the in-place system surface this capture describes (a web sign-in sheet
-   * presented over the app, #2438). Two captures that disagree here describe different surfaces and
-   * must never be compared as the same presentation; consumers that surface the tree disclose it.
-   */
-  iosSystemSurfaceBundleId?: string;
   /**
    * iOS: whether this capture read a modal presentation over the app's own content (#3565), decided
    * on the acquired tree before interactive filtering, compaction, depth, or scope, so every view of

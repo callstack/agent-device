@@ -26,7 +26,9 @@ test('the mint carries no presented surface a capture never read', () => {
 
 test('the mint carries the system surface the nodes describe', () => {
   expect(
-    surfaceScopedNodes(snapshot({ iosSystemSurfaceBundleId: 'com.apple.SafariViewService' })),
+    surfaceScopedNodes(
+      snapshot({ systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' } }),
+    ),
   ).toEqual({ nodes, surfaceBundleId: 'com.apple.SafariViewService' });
 });
 
