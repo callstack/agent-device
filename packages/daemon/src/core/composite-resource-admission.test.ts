@@ -5,7 +5,11 @@ import { seedExistingCapture } from './composite-resource-existing.fixtures.ts';
 import fs from 'node:fs';
 import { IOS_SIMULATOR, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
-import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
+import {
+  resourceAdmissionWorld,
+  assertRpcOk,
+  publishLeasedFixture,
+} from './composite-resource-admission.fixtures.ts';
 
 const unsupported = [
   ['perf', ['memory', 'snapshot'], 'perf:memory-snapshot'],
@@ -203,14 +207,7 @@ test.each([
         runId: 'run-a',
         retainOnClose,
       });
-      world.sessionStore.update(world.ref, {
-        lease: {
-          leaseId: lease.leaseId,
-          tenantId: lease.tenantId,
-          runId: lease.runId,
-          backend: lease.backend,
-        },
-      });
+      publishLeasedFixture(world, lease);
       const script = path.join(world.daemon.stateDir, 'provider-close.ad');
       const response = await world.call(
         composite,
@@ -817,14 +814,7 @@ test.each(['batch', 'replay'] as const)(
     try {
       const attachLease = (world: typeof allowed) => {
         const lease = world.leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
-        world.sessionStore.update(world.ref, {
-          lease: {
-            leaseId: lease.leaseId,
-            tenantId: lease.tenantId,
-            runId: lease.runId,
-            backend: lease.backend,
-          },
-        });
+        publishLeasedFixture(world, lease);
         return lease;
       };
       const allowedLease = attachLease(allowed);

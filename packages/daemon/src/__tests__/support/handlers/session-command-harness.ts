@@ -122,6 +122,7 @@ export async function handleSessionCommands(
   const { lifecycleOperationsLoader, ...commandParams } = params;
   return await handleProductionSessionCommands({
     ...commandParams,
+    withSessionExecutionLock: params.withSessionExecutionLock ?? withTestSessionLock,
     requestScope: params.requestScope ?? createPlatformRequestScope(params.req),
     req: await withClientReplayScriptSources(params.req),
     inspectFacts: params.inspectFacts ?? mockInspectDeviceRuntimeFacts,
@@ -303,3 +304,6 @@ function supportsDeployment(device: DeviceInfo): boolean {
   }
   return device.platform === 'android' || device.platform === 'harmonyos';
 }
+
+export const withTestSessionLock: import('../../../core/session-store.ts').WithSessionExecutionLock =
+  async (_address, task) => await task(async () => {});

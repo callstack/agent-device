@@ -26,7 +26,7 @@ import { createDaemonRuntimePolicy } from '../execution/runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../core/runtime-session.ts';
 import { isInteractiveObservation } from '../core/session-action-recorder.ts';
 import { setCommandSnapshot } from '../execution/session-snapshot.ts';
-import { SessionStore } from '../core/session-store.ts';
+import { SessionCoordinator, SessionStore } from '../core/session-store.ts';
 import {
   resolveBoundSnapshotCaptureRuntime,
   type SnapshotRuntimeRouteParams,
@@ -151,6 +151,9 @@ async function createSnapshotRuntime(params: {
   accessibilityAudit?: AccessibilityAuditRuntimeOperations['accessibilityAudit'];
 }) {
   const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
+  const slot = params.ref
+    ? undefined
+    : new SessionCoordinator(sessionStore).reserve(req, sessionName);
   const sessions = createDaemonRuntimeSessionStore({
     sessionName,
     sessionStore,
@@ -189,7 +192,7 @@ async function createSnapshotRuntime(params: {
         keepCurrentSnapshot,
         issuesCompleteRefFrame(req),
       );
-      return ref ?? sessionStore.publish(sessionName, nextSession);
+      return ref ?? slot!.publish(nextSession).current()!;
     },
   });
   const runtime = await params.createCommandSurface({

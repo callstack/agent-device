@@ -6,7 +6,7 @@ import type {
   ScriptDeliveryFailure,
 } from '@agent-device/kernel/contracts';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import type { SessionStore } from './session-store.ts';
+import type { AuthorizedSession } from './session-store.ts';
 import { asDaemonDeliveredArtifact } from './capture-output-ownership.ts';
 import type { SessionState } from './session-state.ts';
 import {
@@ -292,17 +292,17 @@ function withRemoteScriptVersion(
  * the action keeps its success and the response discloses the failed delivery.
  */
 export function remoteScriptVersionDelivery(
-  sessionStore: SessionStore,
-  sessionName: string,
+  before: SessionState | undefined,
+  authorized: AuthorizedSession | undefined,
 ): (response: DaemonResponse) => DaemonResponse {
-  const before = sessionStore.lookup(sessionName)?.session;
   const actionCountBefore = before && remoteScriptDelivery(before) ? before.actions.length : 0;
   return (response) => {
     if (!response.ok) return response;
-    const ref = sessionStore.lookup(sessionName);
+    const ref = authorized?.current();
     const delivery = remoteScriptDelivery(ref?.session);
-    if (!ref || !delivery || ref.session.actions.length === actionCountBefore) return response;
-    const result = sessionStore.writeRemoteScriptVersion(ref);
+    if (!authorized || !ref || !delivery || ref.session.actions.length === actionCountBefore)
+      return response;
+    const result = authorized.writeScriptVersion();
     if (result.written) {
       const stamped = stampNextRevision(ref.session) ?? delivery;
       return withRemoteScriptVersion(response, stamped, { path: result.path });

@@ -43,7 +43,7 @@ import {
   screenRecordingManifestIsTerminal,
 } from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import { resolveSessionScope } from '../session-routing.ts';
-import type { SessionStore } from '../../core/session-store.ts';
+import { type SessionStore, SessionCoordinator } from '../../core/session-store.ts';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
@@ -97,6 +97,7 @@ export type RecordRuntimeHandlerParams = Readonly<{
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  sessionRef?: SessionRef;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   bindExactDevice: BindExactDeviceRuntime;
@@ -120,7 +121,7 @@ async function handleRecordCommandUnsafe(
   params: RecordRuntimeHandlerParams,
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
-  const existingRef = sessionStore.lookup(sessionName);
+  const existingRef = params.sessionRef ?? sessionStore.lookup(sessionName);
   const existingSession = existingRef?.session;
   const { plan, scope } = resolveRecordPlan(req, existingSession);
   // The app-scope refusal states what a start needs beyond a device, so it answers only for a
@@ -258,7 +259,12 @@ async function startRecording(
   }
   const draft = ref
     ? undefined
-    : bindRecordOnlyScreenRecording(params.sessionStore, params.sessionName, session);
+    : bindRecordOnlyScreenRecording(
+        params.sessionStore,
+        params.sessionName,
+        session,
+        new SessionCoordinator(params.sessionStore).reserve(params.req, params.sessionName),
+      );
   const binding = ref ? bindSessionScreenRecording(params.sessionStore, ref) : draft!.binding;
   binding.assertAdoptable();
   const admission = await params.bindDevice(session.device, screenRecordingAdmissionUse);

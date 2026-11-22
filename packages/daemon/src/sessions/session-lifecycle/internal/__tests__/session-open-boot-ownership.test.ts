@@ -1,3 +1,4 @@
+import { SessionCoordinator } from '../../../../core/session-store.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { completeOpenCommand } from '../session-open-execution.ts';
@@ -80,6 +81,16 @@ test.each(['recording', 'launch', 'cancel'] as const)(
           session: 'provisional',
           meta: { requestId },
           internal: {
+            openSlot: new SessionCoordinator(store).reserve(
+              {
+                token: 't',
+                command: 'open',
+                session: 'provisional',
+                positionals: [],
+                meta: { requestId },
+              },
+              'provisional',
+            ),
             openLifecycle: {
               beforeDispatch: async () => {
                 if (failure === 'recording')

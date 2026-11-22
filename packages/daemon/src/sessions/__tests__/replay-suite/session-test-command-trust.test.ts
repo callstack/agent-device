@@ -56,6 +56,7 @@ async function forwardedCommands(publicNetworkOnly?: true): Promise<readonly Rep
       createReplaySession(sessionName, logPath, sessionStore),
     invoke: (async () => ({ ok: true as const, data: {} })) as DaemonInvokeFn,
     dependencies: replayDaemonDependencies,
+    runAttempt: async (_name, _requestId, task) => await task(),
     cleanupSession: async () => {},
     ...(publicNetworkOnly === undefined ? {} : { publicNetworkOnly }),
   };

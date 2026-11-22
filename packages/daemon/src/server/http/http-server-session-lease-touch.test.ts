@@ -1,3 +1,6 @@
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
+import * as retry from '@agent-device/host-kit/retry';
+import { heldKeyedLockKeys } from '@agent-device/kernel/keyed-lock';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -42,6 +45,7 @@ import {
 
 const TENANT = 'e2b';
 const SESSION = 'agentA';
+const UNLEASED = { sessionIsolation: 'none', tenantId: undefined };
 const LEASE_TTL_MS = 60_000;
 const OWNER_SCOPE = {
   tenantId: TENANT,
@@ -97,14 +101,14 @@ async function startDaemon(daemonPolicy?: DaemonPolicy) {
     ttlMs: LEASE_TTL_MS,
   });
   const sessionName = tenantScopedSessionName(TENANT, SESSION);
-  const publishLeasedSession = (address: string): SessionRef => {
+  const publishLeasedSession = (address: string, backend = lease.backend): SessionRef => {
     const session = makeIosAppSession(address, {
       sessionScope: { kind: 'tenant', id: TENANT },
       lease: {
         leaseId: lease.leaseId,
         tenantId: TENANT,
         runId: OWNER_SCOPE.runId,
-        backend: lease.backend,
+        backend,
         leaseProvider: OWNER_SCOPE.leaseProvider,
         clientId: OWNER_SCOPE.clientId,
         deviceKey: OWNER_SCOPE.deviceKey,
@@ -698,7 +702,7 @@ test.each([
 );
 
 test.each(['doctor', 'capabilities', 'artifacts'] as const)(
-  '%s leaves no start when open leases the existing session before the handler read',
+  '%s leaves no start when a leased replacement opens before the handler read',
   async (command) => {
     const daemon = world;
     if (!daemon) return;
@@ -709,10 +713,12 @@ test.each(['doctor', 'capabilities', 'artifacts'] as const)(
     );
     hooks.beforeDispatch = async () => {
       hooks.beforeDispatch = undefined;
+      const closed = await daemon.send('close', [], UNLEASED, { session: sessionName });
+      expect(closed.result?.ok, JSON.stringify(closed)).toBe(true);
       const opened = await daemon.send('open', ['com.example.app'], owner);
       expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
       const current = sessionStore.lookup(sessionName);
-      expect(current?.lifetime).toBe(ref.lifetime);
+      expect(current?.lifetime).not.toBe(ref.lifetime);
       expect(current?.session.lease?.leaseId).toBe(owner.leaseId);
     };
 
@@ -728,15 +734,14 @@ test.each(['doctor', 'capabilities', 'artifacts'] as const)(
 
 test('devices with no lease id is still refused at the address of a macos-app leased session', async () => {
   if (!world) return;
-  const { session } = world.publishLeasedSession(world.sessionName);
-  session.lease = { ...session.lease!, backend: 'macos-app' };
+  const { session } = world.publishLeasedSession(world.sessionName, 'macos-app');
 
   const devices = await world.send('devices', [], {});
 
   // The app lease admits only the commands that opt into it, and `devices` does not.
   expect(devices.result, JSON.stringify(devices)).toBeUndefined();
   expect(devices.error?.data?.code).toBe('INVALID_ARGS');
-  expect(session.lease.backend).toBe('macos-app');
+  expect(session.lease?.backend).toBe('macos-app');
 });
 
 test('devices with no lease id delivers no script of a leased session that records one', async () => {
@@ -812,8 +817,8 @@ function writeSuite(): { flags: Record<string, unknown>; positionals: string[] }
 // A direct RPC caller chooses the suite session and request id, and so the attempt address.
 const SUITE_SESSION = 'suite';
 const SUITE_REQUEST_ID = 'chosen';
-const attemptAddress = (): string =>
-  `${tenantScopedSessionName(TENANT, SUITE_SESSION)}:test:${SUITE_REQUEST_ID}:1-flow:attempt-1`;
+const attemptAddress = (session = tenantScopedSessionName(TENANT, SUITE_SESSION)): string =>
+  `${session}:test:${SUITE_REQUEST_ID}:1-flow:attempt-1`;
 
 test('a test suite of another client neither records nor closes a leased session at its attempt address', async () => {
   if (!world) return;
@@ -848,4 +853,139 @@ test('a test suite with the lease id runs on and closes its leased attempt sessi
 
   expect(response.result?.data, JSON.stringify(response)).toMatchObject({ passed: 1, failed: 0 });
   expect(world.sessionStore.get(attemptAddress())).toBeUndefined();
+});
+
+test('a leased reopen of a live unleased session refuses before binding the launch runtime', async () => {
+  if (!world) return;
+  const { sessionStore, runtime, owner } = world;
+  const unleased = await world.send('open', ['com.example.app'], UNLEASED);
+  expect(unleased.result?.ok, JSON.stringify(unleased)).toBe(true);
+  const incumbent = sessionStore.lookup(SESSION)!;
+  expect(incumbent.session.lease).toBeUndefined();
+  runtime.bind.mockClear();
+
+  expectLeaseIdRefusal(
+    await world.send('open', ['com.example.other'], { ...owner, sessionIsolation: 'none' }),
+  );
+  expect(runtime.bind).not.toHaveBeenCalled();
+  expect(sessionStore.lookup(SESSION)?.lifetime).toBe(incumbent.lifetime);
+
+  const reopened = await world.send('open', ['com.example.other'], UNLEASED);
+  expect(reopened.result?.ok, JSON.stringify(reopened)).toBe(true);
+  expect(sessionStore.lookup(SESSION)?.lifetime).toBe(incumbent.lifetime);
+});
+
+test('first open commits its script revision under the session lock before close and replacement', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  const { sessionStore, leaseRegistry, hooks } = daemon;
+  const reachedDispatch = deferred();
+  const continueDispatch = deferred();
+  const realWrite = sessionStore.writeRemoteScriptVersion.bind(sessionStore);
+  const written: SessionRef[] = [];
+  vi.spyOn(sessionStore, 'writeRemoteScriptVersion').mockImplementation((ref) => {
+    expect(heldKeyedLockKeys(getLeaseRegistryExecutionLocks(leaseRegistry))).toContain(
+      `session:${SESSION}`,
+    );
+    written.push(ref);
+    return realWrite(ref);
+  });
+  hooks.beforeDispatch = async () => {
+    hooks.beforeDispatch = undefined;
+    reachedDispatch.resolve();
+    await continueDispatch.promise;
+  };
+  const publicationId = 'first-open-publication';
+  const opened = daemon.send(
+    'open',
+    ['com.example.app'],
+    { ...UNLEASED, scriptPublicationId: publicationId },
+    {
+      flags: { saveScript: true },
+    },
+  );
+  const dispatched = await Promise.race([
+    reachedDispatch.promise.then(() => true),
+    opened.then(() => false),
+  ]);
+  expect(dispatched, JSON.stringify(dispatched ? undefined : await opened)).toBe(true);
+  const closed = daemon.send('close', [], UNLEASED);
+  continueDispatch.resolve();
+
+  const response = await opened;
+  expect(response.result?.data?.artifacts, JSON.stringify(response)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ scriptPublicationId: publicationId, scriptRevision: 1 }),
+    ]),
+  );
+  expect((await closed).result?.ok).toBe(true);
+  expect(written).toHaveLength(1);
+
+  const replacement = await daemon.send('open', ['com.example.other'], UNLEASED);
+  expect(replacement.result?.ok, JSON.stringify(replacement)).toBe(true);
+  expect(sessionStore.lookup(SESSION)?.lifetime).not.toBe(written[0]?.lifetime);
+});
+
+test('delayed suite recording and cleanup leave a replacement attempt lifetime intact', async () => {
+  const daemon = world;
+  if (!daemon) return;
+  const name = attemptAddress(SUITE_SESSION);
+  const session = makeIosAppSession(name, { sessionScope: { kind: 'tenant', id: TENANT } });
+  session.screenRecording = makeTestScreenRecordingResource(session, { scope: 'device' });
+  screenRecordingResourceStore.write(
+    screenRecordingResourceStore.resolvePath(daemon.sessionStore.resolveSessionDir(name)),
+    session.screenRecording.envelope,
+  );
+  const original = daemon.sessionStore.publish(name, session);
+  const tailStarted = deferred();
+  const finishTail = deferred();
+  const sleep = retry.sleep;
+  vi.spyOn(retry, 'sleep').mockImplementation(async (ms) => {
+    if (ms !== 3_000) return await sleep(ms);
+    tailStarted.resolve();
+    await finishTail.promise;
+  });
+
+  const suite = writeSuite();
+  const response = daemon.send(
+    'test',
+    suite.positionals,
+    { ...UNLEASED, requestId: SUITE_REQUEST_ID },
+    {
+      session: SUITE_SESSION,
+      flags: suite.flags,
+    },
+  );
+  const reachedTail = await Promise.race([
+    tailStarted.promise.then(() => true),
+    response.then(() => false),
+  ]);
+  expect(reachedTail, JSON.stringify(reachedTail ? undefined : await response)).toBe(true);
+  let replacement: SessionRef | undefined;
+  let replacementCapture: typeof session.screenRecording;
+  try {
+    const closed = await daemon.send('close', [], UNLEASED, { session: name });
+    expect(closed.result?.ok, JSON.stringify(closed)).toBe(true);
+    const opened = await daemon.send('open', ['com.example.replacement'], UNLEASED, {
+      session: name,
+    });
+    expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+    replacement = daemon.sessionStore.lookup(name);
+    expect(replacement?.lifetime).not.toBe(original.lifetime);
+    if (!replacement) throw new Error('Expected a replacement lifetime');
+    replacementCapture = makeTestScreenRecordingResource(replacement.session, { scope: 'device' });
+    screenRecordingResourceStore.write(
+      screenRecordingResourceStore.resolvePath(daemon.sessionStore.resolveSessionDir(name)),
+      replacementCapture.envelope,
+    );
+    daemon.sessionStore.update(replacement, { screenRecording: replacementCapture });
+  } finally {
+    finishTail.resolve();
+    await response;
+  }
+
+  expect((await response).result?.data).toMatchObject({ passed: 1, failed: 0 });
+  expect(replacement).toBeDefined();
+  expect(daemon.sessionStore.lookup(name)?.lifetime).toBe(replacement?.lifetime);
+  expect(daemon.sessionStore.get(name)?.screenRecording).toBe(replacementCapture);
 });

@@ -56,6 +56,7 @@ import {
 import {
   createRequestExecutionScope,
   finalizeRequestExecutionScope,
+  getLeaseRegistryExecutionLocks,
   type LockedRequestScope,
   prepareLockedRequestScope,
   type RequestExecutionScope,
@@ -126,9 +127,8 @@ import {
 } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
-// ---------------------------------------------------------------------------
-// Request handler API
-// ---------------------------------------------------------------------------
+import { createSessionExecutionLock } from './request-execution-locks.ts';
+import { withSessionScriptPublication } from './request-binding.ts';
 
 export type RequestRouterDeps = {
   /** The environment and working directory every request of this daemon runs with. */
@@ -207,6 +207,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     daemonPolicy,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
+  const withSessionExecutionLock = createSessionExecutionLock(
+    getLeaseRegistryExecutionLocks(leaseRegistry),
+  );
   const deviceShutdownDenied =
     daemonPolicy !== undefined && isDaemonPolicyCapabilityDenied(daemonPolicy, 'device-shutdown');
   const deviceInventoryGateways = daemonPolicy
@@ -415,11 +418,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerScope: RequestPlatformProviderScope;
     allowReplayActions: boolean;
   }): Promise<DaemonResponse> {
-    const { lockedScope, providerScope, allowReplayActions } = params;
-    return await discloseRequestDispatch(
-      lockedScope.req,
-      lockedScope.dispatchLedger,
-      async () => await routeLockedRequest({ lockedScope, providerScope, allowReplayActions }),
+    const { lockedScope } = params;
+    return await withSessionScriptPublication(sessionStore, lockedScope, (req) =>
+      discloseRequestDispatch(req, lockedScope.dispatchLedger, () =>
+        routeLockedRequest({ ...params, lockedScope: { ...lockedScope, req } }),
+      ),
     );
   }
 
@@ -481,6 +484,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger,
       hostDiagnostics,
+      withSessionExecutionLock,
       resolveSessionRef: lockedScope.resolveSessionRef,
       requestScope,
       retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,

@@ -18,7 +18,7 @@ import type {
   BindExactDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
-import type { SessionStore } from '../../core/session-store.ts';
+import { type SessionStore, type WithSessionExecutionLock } from '../../core/session-store.ts';
 import type { ResolveRequestSessionRef } from '../request-admission.ts';
 
 export type SessionCommandInput = {
@@ -44,6 +44,7 @@ export type SessionCommandInput = {
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   resolveSessionRef?: ResolveRequestSessionRef;
+  withSessionExecutionLock?: WithSessionExecutionLock;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;

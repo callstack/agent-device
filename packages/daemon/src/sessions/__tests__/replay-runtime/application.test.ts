@@ -67,6 +67,7 @@ function testCommand(
     ...replayCommand(req, root, sessionStore, invoke),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
+    runAttempt: async (_name, _requestId, task) => await task(),
     cleanupSession: async () => {},
   };
 }

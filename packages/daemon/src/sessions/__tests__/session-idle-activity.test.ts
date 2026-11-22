@@ -1,3 +1,5 @@
+import { sessionLeaseOf } from '../../core/lease-context.ts';
+import type { SessionState } from '../../core/session-state.ts';
 /**
  * #2833: the request path reports session activity by finishing UNDER the session's execution lock —
  * the same lock an expiry must take before settling. That is what makes the stamp and the verdict
@@ -53,9 +55,9 @@ function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   };
 }
 
-function storeWithSession() {
+function storeWithSession(lease?: SessionState['lease']) {
   const sessionStore = makeSessionStore('agent-device-idle-activity-');
-  sessionStore.publish('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default', { lease }));
   return sessionStore;
 }
 
@@ -82,21 +84,9 @@ test('a command that completes under the session lock stamps the session it ran 
 test.each([false, true])(
   'a request refused at lease admission reports no activity (leased=%s)',
   async (leased) => {
-    const sessionStore = storeWithSession();
     const leaseRegistry = new LeaseRegistry();
     const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
-    const ref = sessionStore.lookup('default');
-    if (!ref) throw new Error('missing test session');
-    if (leased) {
-      sessionStore.update(ref, {
-        lease: {
-          leaseId: lease.leaseId,
-          tenantId: lease.tenantId,
-          runId: lease.runId,
-          backend: lease.backend,
-        },
-      });
-    }
+    const sessionStore = storeWithSession(leased ? sessionLeaseOf(lease) : undefined);
     const scope = await withDiagnosticsScope({ command: 'home', logPath: LOG_PATH }, () =>
       createRequestExecutionScope({
         host: createTestHostEnvironment(),

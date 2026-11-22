@@ -41,7 +41,7 @@ import {
   createRequestCanceledError,
   readDispatchDisclosure,
 } from '@agent-device/kernel/errors';
-import { SessionStore } from '../../../core/session-store.ts';
+import { SessionStore, type SessionOpenRequest } from '../../../core/session-store.ts';
 import {
   countConfiguredRuntimeHints,
   openApplicationRuntimeHints,
@@ -239,7 +239,7 @@ export async function renewOpenSessionClaim(
 
 // fallow-ignore-next-line complexity
 export async function completeOpenCommand(params: {
-  req: DaemonRequest;
+  req: SessionOpenRequest;
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
@@ -280,7 +280,7 @@ export async function completeOpenCommand(params: {
     tookOverDeviceClaim,
     selection,
   } = params;
-  requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
+  requireOpenSessionAdmission(req, sessionStore, existingRef);
   const existingSession = existingRef ? sessionStore.requireCurrent(existingRef) : undefined;
   const freshnessBaseline = existingSession?.snapshot;
   const shouldRelaunch = req.flags?.relaunch === true;
@@ -312,7 +312,7 @@ export async function completeOpenCommand(params: {
   });
   if (provisionalSession.type === 'response') return provisionalSession;
   const openDispatchRef = provisionalSession.ref;
-  requireOpenSessionAdmission(sessionStore, sessionName, openDispatchRef);
+  requireOpenSessionAdmission(req, sessionStore, openDispatchRef);
   const openDispatchSession = openDispatchRef
     ? sessionStore.requireCurrent(openDispatchRef)
     : undefined;
@@ -362,7 +362,7 @@ export async function completeOpenCommand(params: {
     };
   }
 
-  requireOpenSessionAdmission(sessionStore, sessionName, openDispatchRef);
+  requireOpenSessionAdmission(req, sessionStore, openDispatchRef);
   if (existingRef) {
     markDeferredInteractionOutcome({
       session: sessionStore.requireCurrent(existingRef),
@@ -455,7 +455,7 @@ export async function completeOpenCommand(params: {
 }
 
 async function prepareOpenDispatchSession(params: {
-  req: DaemonRequest;
+  req: SessionOpenRequest;
   sessionName: string;
   sessionStore: SessionStore;
   device: DeviceInfo;
@@ -495,7 +495,7 @@ async function prepareOpenDispatchSession(params: {
   const lifecycleResponse = await beforeDispatch();
   if (lifecycleResponse && !lifecycleResponse.ok)
     return { type: 'response', response: lifecycleResponse };
-  requireOpenSessionAdmission(sessionStore, sessionName, ref);
+  requireOpenSessionAdmission(req, sessionStore, ref);
   return { type: 'session', ref: sessionStore.refresh(ref) };
 }
 
@@ -536,7 +536,7 @@ async function acquireDeviceClaimForOwner(params: {
 
 export async function openNewSessionWithDeviceClaim(params: {
   host: HostEnvironment;
-  req: DaemonRequest;
+  req: SessionOpenRequest;
   startupDeadlineAtMs: number | undefined;
   sessionName: string;
   logPath: string;
@@ -569,7 +569,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     selection,
     platformServices,
   } = params;
-  requireOpenSessionAdmission(sessionStore, sessionName, undefined);
+  requireOpenSessionAdmission(req, sessionStore, undefined);
   const conflict = findSessionDeviceConflict({ req, device, sessionStore });
   if (conflict) return { type: 'response', response: conflict };
 
@@ -600,7 +600,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       env: params.host.env,
     });
   try {
-    requireOpenSessionAdmission(sessionStore, sessionName, undefined);
+    requireOpenSessionAdmission(req, sessionStore, undefined);
     const details = await prepareOpenCommandDetails({
       req,
       startupDeadlineAtMs: params.startupDeadlineAtMs,

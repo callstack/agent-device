@@ -477,6 +477,7 @@ Rules:
 
 Remote connection providers use the same lifecycle:
   connect -> install/open -> commands -> close -> disconnect
+  Close a live session before reopening it under a different lease.
 
 Providers:
   Cloud: agent-device connect or agent-device connect cloud discovers the agent-device cloud profile.

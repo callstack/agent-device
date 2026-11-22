@@ -1,3 +1,4 @@
+import { SessionCoordinator } from '../../../../core/session-store.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { publishOpenSession } from '../session-open-state.ts';
@@ -68,7 +69,7 @@ test('a re-open of a session that never armed records nothing', () => {
 function firstOpen(bootOwnership: CloseBootOwnership) {
   const store = makeSessionStore();
   return publishOpenSession({
-    req: { token: 't', command: 'open', positionals: [], session: 's' },
+    req: firstOpenRequest(store),
     sessionStore: store,
     sessionName: 's',
     device: IOS_SIMULATOR,
@@ -161,7 +162,7 @@ test.each(bootOwnershipFacts)(
 test('#4791: an open the platform disproved records no boot and the reason close reports', () => {
   const store = makeSessionStore();
   const next = publishOpenSession({
-    req: { token: 't', command: 'open', positionals: [], session: 's' },
+    req: firstOpenRequest(store),
     sessionStore: store,
     sessionName: 's',
     device: IOS_SIMULATOR,
@@ -238,3 +239,8 @@ test('#4791: a disproved re-open cannot take back a boot an earlier open of the 
   assert.equal(next.bootedByOpen, true);
   assert.equal(next.bootOwnerUnverified, undefined);
 });
+
+function firstOpenRequest(store: ReturnType<typeof makeSessionStore>) {
+  const req = { token: 't', command: 'open', positionals: [], session: 's' };
+  return { ...req, internal: { openSlot: new SessionCoordinator(store).reserve(req, 's') } };
+}

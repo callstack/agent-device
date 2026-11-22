@@ -9,6 +9,13 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
+import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import type { DaemonRequest } from './daemon-request.ts';
+import {
+  LEASE_ADMISSION_REASONS,
+  assertRequestHoldsSessionLease,
+  sessionLeaseOf,
+} from './lease-context.ts';
 import {
   devicesOverlap,
   deviceIdentity,
@@ -39,6 +46,7 @@ import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-pub
 import {
   effectiveWriteForce,
   remoteScriptDelivery,
+  remoteScriptVersionDelivery,
 } from './session-script-publication-capability.ts';
 import {
   isUncommittedRepairSession,
@@ -62,7 +70,8 @@ import {
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
 type SessionEntry = { current: SessionState };
-type SessionPatch = Partial<SessionState> | ((current: SessionState) => Partial<SessionState>);
+type SessionUpdate = Partial<Omit<SessionState, 'lease'>>;
+type SessionPatch = SessionUpdate | ((current: SessionState) => SessionUpdate);
 export type RetainedExecutionHost = Readonly<{
   address: string;
   device: SessionState['device'];
@@ -161,7 +170,7 @@ export class SessionStore {
     const current = this.requireCurrent(ref);
     const entry = this.sessions.get(ref.address)!;
     const changes = typeof patch === 'function' ? patch(current) : patch;
-    const next = { ...current, ...changes };
+    const next = { ...current, ...changes, lease: current.lease };
     entry.current = next;
     return next;
   }
@@ -586,4 +595,103 @@ export class SessionStore {
   resolveEventLogPath(sessionName: string): string {
     return resolveSessionEventLogPath(this.resolveSessionDir(sessionName));
   }
+}
+
+const sessionAuthority: unique symbol = Symbol();
+const openAuthority: unique symbol = Symbol();
+
+export type AuthorizedSession = Readonly<{
+  [sessionAuthority]: true;
+  current(): SessionRef | undefined;
+  writeScriptVersion(): ReturnType<SessionStore['writeRemoteScriptVersion']>;
+}>;
+
+export type AuthorizedOpenSlot = Readonly<{
+  [openAuthority]: true;
+  assertPublishable(): void;
+  canPersist(): boolean;
+  publish(draft: Omit<SessionState, 'lease'>): AuthorizedSession;
+}>;
+
+export type WithSessionExecutionLock = <T>(
+  address: string,
+  task: (holdDevice: (deviceId: string) => Promise<void>) => Promise<T>,
+) => Promise<T>;
+
+export class SessionCoordinator {
+  readonly #store: SessionStore;
+
+  constructor(store: SessionStore) {
+    this.#store = store;
+  }
+
+  pin(req: DaemonRequest, address: string): SessionRef | undefined {
+    const ref = this.#store.lookup(address);
+    assertRequestHoldsSessionLease(req, ref?.session);
+    return ref;
+  }
+
+  authorize(req: DaemonRequest, ref: SessionRef, active: () => boolean): AuthorizedSession {
+    const session = this.#store.requireCurrent(ref);
+    assertRequestHoldsSessionLease(req, session);
+    return this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));
+  }
+
+  reserve(req: DaemonRequest, address: string): AuthorizedOpenSlot {
+    const admitted = req.internal?.admittedLease;
+    const lease = admitted && sessionLeaseOf(admitted);
+    let published = false;
+    const active = () => req.internal?.sessionAuthorityActive?.() !== false;
+    const assertPublishable = () => {
+      if (published) throw new TypeError('Session slot has already published');
+      this.#store.assertPublishable(address);
+      if (!active()) throw new TypeError('Session slot is no longer active');
+    };
+    assertPublishable();
+    return {
+      [openAuthority]: true,
+      assertPublishable,
+      canPersist: () => !published && !this.#store.get(address),
+      publish: (draft) => {
+        assertPublishable();
+        throwIfRequestCanceled(req.meta?.requestId);
+        const ref = this.#store.publish(address, { ...draft, lease });
+        published = true;
+        const authority = this.bind(ref, () => active() && !isRequestCanceled(req.meta?.requestId));
+        req.internal?.onSessionPublished?.(remoteScriptVersionDelivery(undefined, authority));
+        return authority;
+      },
+    };
+  }
+
+  private bind(ref: SessionRef, active: () => boolean): AuthorizedSession {
+    const current = () =>
+      active() && this.#store.resolveCurrent(ref) ? this.#store.refresh(ref) : undefined;
+    return {
+      [sessionAuthority]: true,
+      current,
+      writeScriptVersion: () => {
+        if (!current()) throw new TypeError('Session authority is no longer active');
+        return this.#store.writeRemoteScriptVersion(ref);
+      },
+    };
+  }
+}
+
+export function assertSameOpenOwner(req: DaemonRequest, session: SessionState): void {
+  if (session.lease?.leaseId === req.internal?.admittedLease?.leaseId) return;
+  throw new AppError('UNAUTHORIZED', 'Close the session before opening it under another lease.', {
+    reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
+    field: 'leaseId',
+  });
+}
+
+export type SessionOpenRequest = DaemonRequest & {
+  internal?: { openSlot?: AuthorizedOpenSlot };
+};
+
+export function requireSessionOpenSlot(req: SessionOpenRequest): AuthorizedOpenSlot {
+  const slot = req.internal?.openSlot;
+  if (!slot) throw new TypeError('Session creation requires an open slot');
+  return slot;
 }

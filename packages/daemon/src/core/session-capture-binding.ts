@@ -4,8 +4,8 @@ import type {
   DurableCaptureSessionResource,
 } from '@agent-device/capture-kit/durable-capture';
 import { AppError } from '@agent-device/kernel/errors';
+import { type AuthorizedOpenSlot, type SessionStore } from './session-store.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
-import type { SessionStore } from './session-store.ts';
 
 export function bindSessionCapture<K extends string, H extends AsyncDisposable>(
   sessionStore: SessionStore,
@@ -63,6 +63,7 @@ export function bindRecordOnlyScreenRecording(
   sessionStore: SessionStore,
   address: string,
   draft: SessionRef['session'],
+  slot: AuthorizedOpenSlot,
 ) {
   let published:
     | Readonly<{
@@ -78,14 +79,14 @@ export function bindRecordOnlyScreenRecording(
         session: address,
       });
     }
-    sessionStore.assertPublishable(address);
+    slot.assertPublishable();
   };
   const binding: ReturnType<typeof bindSessionScreenRecording> = Object.freeze({
     address,
     sessionDir: sessionStore.resolveSessionDir(address),
     read: () => published?.binding.read(),
     assertAdoptable,
-    canPersist: () => !published && sessionStore.lookup(address) === undefined,
+    canPersist: slot.canPersist,
     adopt: (screenRecording) => {
       assertAdoptable();
       if (draft.screenRecording) {
@@ -94,7 +95,7 @@ export function bindRecordOnlyScreenRecording(
           session: address,
         });
       }
-      const ref = sessionStore.publish(address, draft);
+      const ref = slot.publish(draft).current()!;
       const binding = bindSessionScreenRecording(sessionStore, ref);
       binding.adopt(screenRecording);
       published = Object.freeze({ ref, binding });

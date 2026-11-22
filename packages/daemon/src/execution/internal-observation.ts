@@ -26,6 +26,7 @@ type BoundInternalObservationSession = Readonly<{
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
   signal?: AbortSignal;
+  isActive?: () => boolean;
 }>;
 
 /**
@@ -37,7 +38,11 @@ export function bindInternalObservationAuthority(
   params: BoundInternalObservationSession,
 ): ReplayObservationAuthority {
   return {
-    store: (snapshot) => storeInternalObservation(params, snapshot),
+    store: (snapshot) => {
+      if (params.isActive?.() === false)
+        throw new Error('Internal observation authority has ended.');
+      return storeInternalObservation(params, snapshot);
+    },
     finalize: (evidence, projection) =>
       finalizeClientRefPublication({
         ...params,
@@ -91,6 +96,7 @@ function finalizeClientRefPublication(params: {
   evidence: ReplayObservationEvidence;
   projection: ReplayRefPublicationProjection;
   signal?: AbortSignal;
+  isActive?: () => boolean;
 }): ReplayRefPublicationResult {
   const lineage = evidenceLineage.get(params.evidence);
   // Evidence is a one-shot capability. Consume it before every outcome,
@@ -101,7 +107,8 @@ function finalizeClientRefPublication(params: {
   if (refs.size === 0) return { published: false, reason: 'empty' };
   if (params.signal?.aborted === true) return { published: false, reason: 'cancelled' };
 
-  const session = lineage && resolveCurrentLineage(params, lineage);
+  const session =
+    params.isActive?.() !== false && lineage && resolveCurrentLineage(params, lineage);
   if (!lineage || !session) {
     return { published: false, reason: 'stale-capture' };
   }
