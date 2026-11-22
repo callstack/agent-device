@@ -296,6 +296,7 @@ export class WebDriverSessionManager {
     const prepared = await this.prepareSession(lease, req);
     const client = new WebDriverClient({
       clientVersion: this.options.clientVersion,
+      diagnostics: this.options.diagnostics,
       endpoint: prepared.endpoint,
       auth: prepared.auth,
       headers: prepared.headers,

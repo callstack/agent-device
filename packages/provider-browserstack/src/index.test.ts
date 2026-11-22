@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import browserstack from './index.ts';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
@@ -31,6 +32,7 @@ function host(env: Record<string, string | undefined>): ProviderPluginHost {
     runHostCommand: async () => {
       throw new Error('host command unused');
     },
+    diagnostics: { emit: () => {} },
     createError: (code, message, details) => new AppError(code, message, details),
   };
 }
@@ -38,19 +40,45 @@ function host(env: Record<string, string | undefined>): ProviderPluginHost {
 function capturedAuthorization(): { read(): string | undefined } {
   let authorization: string | undefined;
   globalThis.fetch = async (_input, init) => {
-    authorization = new Headers(init?.headers).get('authorization') ?? undefined;
-    return new Response(JSON.stringify({}));
+    if (init?.method === 'POST') {
+      authorization = new Headers(init.headers).get('authorization') ?? undefined;
+      return Response.json({ value: { sessionId: 'SESSION1', capabilities: {} } });
+    }
+    return Response.json({ value: null });
   };
   return { read: () => authorization };
 }
 
-async function listArtifacts(
+async function allocate(
   provider: Extract<AgentDevicePlugin['contributes'][number], { kind: 'provider' }>,
   env: Record<string, string>,
 ) {
-  const setup = await provider.setup(host(env));
-  if (!('webDriver' in setup)) throw new Error('BrowserStack sets up a WebDriver descriptor');
-  await setup.webDriver.listArtifacts!({ provider: 'browserstack', providerSessionId: 'SESSION1' });
+  const { runtime } = await provider.setup(host(env));
+  try {
+    const allocation = await (runtime as ProviderDeviceRuntime).leaseLifecycle.allocate!(
+      {
+        leaseId: 'lease-1',
+        tenantId: 'tenant',
+        runId: 'run',
+        backend: 'android-instance',
+        leaseProvider: 'browserstack',
+        createdAt: 1,
+        heartbeatAt: 1,
+        expiresAt: 2,
+      },
+      {
+        flags: {
+          platform: 'android',
+          device: 'Pixel 8',
+          providerOsVersion: '14',
+          providerApp: 'bs://app-id',
+        },
+      },
+    );
+    assert.equal(allocation?.providerSessionId, 'SESSION1');
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 const basic = (username: string, accessKey: string) =>
@@ -72,20 +100,6 @@ test('the plugin declares its provider, capabilities and credential variables', 
     supportsDirectPortReverse: false,
     usesCloudWebDriverLease: true,
   });
-});
-
-test('setup builds a WebDriver descriptor that reads its hub endpoint from the environment', async () => {
-  const setup = await providerOf(browserstack()).setup(
-    host({
-      BROWSERSTACK_USERNAME: 'user',
-      BROWSERSTACK_ACCESS_KEY: 'key',
-      BROWSERSTACK_WEBDRIVER_ENDPOINT: 'https://hub.test/wd/hub/',
-    }),
-  );
-  if (!('webDriver' in setup)) throw new Error('BrowserStack sets up a WebDriver descriptor');
-  assert.equal(setup.webDriver.provider, 'browserstack');
-  assert.equal(setup.webDriver.endpoint, 'https://hub.test/wd/hub/');
-  assert.equal(setup.webDriver.profileFields.provider, 'browserstack');
 });
 
 test('the plugin declares the BrowserStack variables only when it reads credentials from the environment', () => {
@@ -113,29 +127,29 @@ test('credentials passed as options replace the environment, which stays the fal
   const captured = capturedAuthorization();
   const env = { BROWSERSTACK_USERNAME: 'env-user', BROWSERSTACK_ACCESS_KEY: 'env-key' };
 
-  await listArtifacts(
+  await allocate(
     providerOf(browserstack({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
     env,
   );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(
+  await allocate(
     providerOf(browserstack({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
     {},
   );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(providerOf(browserstack()), env);
+  await allocate(providerOf(browserstack()), env);
   assert.equal(captured.read(), basic('env-user', 'env-key'));
-  await assert.rejects(listArtifacts(providerOf(browserstack()), {}), { code: 'INVALID_ARGS' });
+  await assert.rejects(allocate(providerOf(browserstack()), {}), { code: 'INVALID_ARGS' });
 });
 
 test('a credentials object missing one key falls back to the environment for that key', async () => {
   const captured = capturedAuthorization();
-  await listArtifacts(providerOf(browserstack({ credentials: { username: 'opt-user' } })), {
+  await allocate(providerOf(browserstack({ credentials: { username: 'opt-user' } })), {
     BROWSERSTACK_USERNAME: 'env-user',
     BROWSERSTACK_ACCESS_KEY: 'env-key',
   });
   assert.equal(captured.read(), basic('opt-user', 'env-key'));
-  await listArtifacts(providerOf(browserstack({ credentials: { accessKey: 'opt-key' } })), {
+  await allocate(providerOf(browserstack({ credentials: { accessKey: 'opt-key' } })), {
     BROWSERSTACK_USERNAME: 'env-user',
     BROWSERSTACK_ACCESS_KEY: 'env-key',
   });
@@ -161,7 +175,7 @@ test.each([
       providerApp: 'bs://app-id',
     } as const;
     const plugin = browserstack({ credentials });
-    const [resolve, artifacts] = await Promise.allSettled([
+    const [resolve, allocation] = await Promise.allSettled([
       Promise.resolve().then(() =>
         providerOf(plugin).connection!.resolve({
           flags,
@@ -171,12 +185,12 @@ test.each([
           host: host(env),
         }),
       ),
-      listArtifacts(providerOf(plugin), env),
+      allocate(providerOf(plugin), env),
     ]);
     assert.equal(resolve.status, 'rejected');
     if (resolve.status === 'rejected') assert.equal(resolve.reason.code, 'INVALID_ARGS');
-    assert.equal(artifacts.status, 'rejected');
-    if (artifacts.status === 'rejected') assert.equal(artifacts.reason.code, 'INVALID_ARGS');
+    assert.equal(allocation.status, 'rejected');
+    if (allocation.status === 'rejected') assert.equal(allocation.reason.code, 'INVALID_ARGS');
     assert.deepEqual(providerOf(plugin).credentials, { variables });
     assert.equal(fetch.mock.calls.length, 0);
   },

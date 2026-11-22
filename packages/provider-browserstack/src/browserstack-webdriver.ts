@@ -1,7 +1,8 @@
-import type { ProviderPluginHost } from 'agent-device/plugins';
-import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
+import type { PluginRuntimeSetup, ProviderPluginHost } from 'agent-device/plugins';
 import {
   buildCloudWebDriverBaseCapabilities,
+  createCloudWebDriverRuntime,
+  type CloudWebDriverRuntimeOptions,
   readFlag,
   requireFlag,
   requireRequest,
@@ -25,10 +26,16 @@ import { PROVIDER, requireBrowserStackCredentials } from './providers.ts';
 
 const SERVICE = 'BrowserStack';
 
-/** The BrowserStack WebDriver descriptor the host drives through its shared engine. */
-export function createBrowserStackWebDriver(host: ProviderPluginHost): WebDriverPluginOptions {
+export async function setupBrowserStack(host: ProviderPluginHost): Promise<PluginRuntimeSetup> {
+  const runtime = await createCloudWebDriverRuntime(createBrowserStackWebDriver(host));
+  return { runtime, platformModule: runtime.platformRuntimeModule };
+}
+
+function createBrowserStackWebDriver(host: ProviderPluginHost): CloudWebDriverRuntimeOptions {
   const { env, clientVersion } = host;
-  const webDriver: WebDriverPluginOptions = {
+  return {
+    clientVersion: host.clientVersion,
+    diagnostics: host.diagnostics,
     provider: PROVIDER,
     profileFields: BROWSERSTACK_PROFILE_FIELDS,
     platform: 'android',
@@ -89,5 +96,4 @@ export function createBrowserStackWebDriver(host: ProviderPluginHost): WebDriver
       };
     },
   };
-  return webDriver;
 }

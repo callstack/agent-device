@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ProviderProfileField } from '@agent-device/contracts/provider-profile-fields';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 export function pluginHome() {
@@ -70,31 +69,6 @@ function recordSelection(
   fs.writeFileSync(configPath, JSON.stringify(config));
 }
 
-const CONSUMED_PROFILE_FIELDS: Record<ProviderProfileField, 'consumed'> = {
-  providerApp: 'consumed',
-  providerOsVersion: 'consumed',
-  providerDeviceType: 'consumed',
-  providerProject: 'consumed',
-  providerBuild: 'consumed',
-  providerSessionName: 'consumed',
-  providerDeviceOrientation: 'consumed',
-  providerGeoLocation: 'consumed',
-  providerTimezone: 'consumed',
-  providerAppiumVersion: 'consumed',
-  providerLanguage: 'consumed',
-  providerLocale: 'consumed',
-  providerNetworkProfile: 'consumed',
-  providerCustomNetwork: 'consumed',
-  providerNoResignApp: 'consumed',
-  providerNetworkLogs: 'consumed',
-  providerNetworkHosts: 'consumed',
-  awsProjectArn: 'consumed',
-  awsDeviceArn: 'consumed',
-  awsAppArn: 'consumed',
-  awsRegion: 'consumed',
-  awsInteractionMode: 'consumed',
-};
-
 /**
  * A plugin factory module. `extra` is spliced into the provider contribution, so a test can add
  * `connection` or override `credentials`; `shutdownFile` is written when the runtime shuts down.
@@ -122,32 +96,4 @@ export function pluginSource(
         })
       }]
     });`;
-}
-
-/** A `{ webDriver }` factory with a total field declaration; `refused` fields the engine must refuse. */
-export function webDriverPluginSource(
-  provider: string,
-  refused: readonly ProviderProfileField[] = [],
-) {
-  const fields = {
-    ...CONSUMED_PROFILE_FIELDS,
-    ...Object.fromEntries(refused.map((field) => [field, 'refused'])),
-  };
-  const webDriver = {
-    provider,
-    endpoint: 'https://webdriver.test/wd/hub/',
-    platform: 'android',
-    deviceName: provider,
-    profileFields: { provider, label: provider, fields },
-    requestPolicy: { retryAttempts: 0 },
-  };
-  return `export default () => ({
-    apiVersion: 3,
-    contributes: [{
-      kind: 'provider',
-      provider: ${JSON.stringify(provider)},
-      credentials: { variables: [] },
-      setup: async () => ({ webDriver: ${JSON.stringify(webDriver)} }),
-    }],
-  });`;
 }

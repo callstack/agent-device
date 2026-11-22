@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import type { DiagnosticEventInput } from '@agent-device/contracts/host-diagnostics';
 import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
@@ -91,6 +92,7 @@ export type WebDriverTransportOptions = {
   endpoint: string | URL;
   auth?: WebDriverAuth;
   headers?: Record<string, string>;
+  diagnostics?: Readonly<{ emit(event: DiagnosticEventInput): void }>;
   /** Session creation is the client's phase; the transport sees only per-request policy. */
   requestPolicy?: Omit<WebDriverRequestPolicy, 'sessionCreateTimeoutMs'>;
 };
@@ -133,8 +135,10 @@ export class WebDriverTransport {
   private readonly endpoint: URL;
   private readonly headers: Record<string, string>;
   private readonly requestPolicy: ResolvedWebDriverRequestPolicy;
+  private readonly diagnostics: WebDriverTransportOptions['diagnostics'];
 
   constructor(options: WebDriverTransportOptions) {
+    this.diagnostics = options.diagnostics;
     this.endpoint = withTrailingSlash(new URL(options.endpoint));
     this.headers = {
       ...agentDeviceRequestHeaders(options.clientVersion),
@@ -217,7 +221,7 @@ export class WebDriverTransport {
     const payload = parsed.json;
     const error = webdriverError(status, payload);
     if (isWebDriverRouteUnsupported(error)) {
-      emitWebDriverDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
+      this.emitDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
         method,
         path,
         status,
@@ -225,6 +229,10 @@ export class WebDriverTransport {
       });
     }
     throw error;
+  }
+
+  emitDiagnostic(phase: string, data: Record<string, unknown>): void {
+    this.diagnostics?.emit({ level: 'debug', phase, data });
   }
 
   private async fetchWebDriver(
@@ -454,16 +462,6 @@ function w3cErrorCode(payload: unknown): string | undefined {
   const code =
     value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
   return typeof code === 'string' ? code : undefined;
-}
-
-/**
- * Records a debug event in the request diagnostics. The emitter loads on demand because the
- * events are rare and the transport sits in the provider's eager import closure.
- */
-export function emitWebDriverDiagnostic(phase: string, data: Record<string, unknown>): void {
-  void import('@agent-device/host-kit/diagnostics')
-    .then(({ emitDiagnostic }) => emitDiagnostic({ level: 'debug', phase, data }))
-    .catch(() => undefined);
 }
 
 /**

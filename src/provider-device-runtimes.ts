@@ -12,7 +12,6 @@ import type {
 } from '@agent-device/contracts/plugin-inventory';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
-import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   platforms: ProviderRegistry['platforms'];
@@ -40,7 +39,6 @@ export async function createDaemonProviderRuntimeComposition(
     await import('@agent-device/plugins/store');
   const candidates = await storePluginCandidates(host.env);
   return await composeProviderRuntime(host, candidates, {
-    ...PROVIDER_PLUGIN_POLICY,
     platformHost,
     assertSelectionCurrent: createPluginSelectionGuard(candidates, host.env),
   });
@@ -53,7 +51,6 @@ export async function createEmbeddedProviderRuntimeComposition(
   platformHost: PlatformHost,
 ): Promise<ProviderRuntimeComposition> {
   return await composeProviderRuntime(host, candidates, {
-    ...PROVIDER_PLUGIN_POLICY,
     platformHost,
   });
 }

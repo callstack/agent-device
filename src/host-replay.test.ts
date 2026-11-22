@@ -126,11 +126,7 @@ async function startReplayFixtureRegistry({ kind, id }: PluggedClaim) {
       ),
     ),
     host,
-    {
-      adaptWebDriver: async () => {
-        throw new Error('Replay fixture cannot start providers');
-      },
-    },
+    {},
     'replay-backends',
   );
 }

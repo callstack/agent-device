@@ -106,12 +106,7 @@ export {
   trackLoopbackSockets,
   waitForHttpOk,
 } from './loopback.ts';
-export {
-  pluginHome,
-  selectPlugin,
-  pluginSource,
-  webDriverPluginSource,
-} from './plugin.fixtures.ts';
+export { pluginHome, selectPlugin, pluginSource } from './plugin.fixtures.ts';
 export {
   formatRef,
   type GeneratedRef,

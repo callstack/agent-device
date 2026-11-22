@@ -93,11 +93,7 @@ export async function openReplayBackend(id: ReplayBackendId, host: HostEnvironme
       ),
     ),
     host,
-    {
-      adaptWebDriver: async () => {
-        throw new AppError('INVALID_ARGS', 'Client replay scope cannot start a provider');
-      },
-    },
+    {},
     'replay-backends',
   );
   try {

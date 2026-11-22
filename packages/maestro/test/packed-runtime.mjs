@@ -48,11 +48,7 @@ async function registry() {
   const registry = await startProviderRegistry(
     await resolveProviderPlugins([{ source: 'embedder', load: () => maestroPlugin() }]),
     { env: {}, cwd: '/' },
-    {
-      adaptWebDriver: async () => {
-        throw new Error('not a provider');
-      },
-    },
+    {},
     'replay-backends',
   );
   return {

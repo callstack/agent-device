@@ -1,3 +1,4 @@
+import type { DiagnosticEventInput } from '@agent-device/contracts/host-diagnostics';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -14,6 +15,8 @@ export type ProviderPluginHost = Readonly<{
   env: Readonly<Record<string, string | undefined>>;
   options: Readonly<Record<string, unknown>>;
   clientVersion: string;
+  /** Uses the active host request at the time of the call. */
+  diagnostics: Readonly<{ emit(event: DiagnosticEventInput): void }>;
   createError(code: AppErrorCode, message: string, details?: AppErrorDetails): AppError;
   /** Runs in the supplied host cwd/env; ambient process values are not added. */
   runHostCommand: RunHostCommand;
@@ -29,14 +32,16 @@ export type ReplaySetupHost = Readonly<{
   createError(code: AppErrorCode, message: string, details?: AppErrorDetails): AppError;
 }>;
 
-export function createPluginHost(
+export async function createPluginHost(
   host: HostEnvironment,
   options: Record<string, unknown> | undefined,
-): ProviderPluginHost {
+): Promise<ProviderPluginHost> {
+  const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
   return Object.freeze({
     env: Object.freeze({ ...host.env }),
     options: Object.freeze({ ...options }),
     clientVersion: readVersion(),
+    diagnostics: Object.freeze({ emit: emitDiagnostic }),
     createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async (command, args) => {
       const { runCmd } = await import('@agent-device/host-kit/command');

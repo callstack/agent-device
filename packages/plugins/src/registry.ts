@@ -16,14 +16,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
-import type {
-  Contribution,
-  PluginConnection,
-  PluginSetupResult,
-  PluginWebDriverSetup,
-  ProviderContribution,
-  WebDriverDescriptor,
-} from './contract.ts';
+import type { Contribution, PluginConnection, ProviderContribution } from './contract.ts';
 import type { RegisteredConnection } from './connection.ts';
 import { createPluginHost, createReplaySetupHost } from './host.ts';
 import {
@@ -84,17 +77,9 @@ export function claimProviderIds(providers: readonly string[]): PluginCandidate[
   }));
 }
 
-/**
- * What the composing root decides for every registry, so this package names no provider: how a
- * plugin's `{ webDriver }` descriptor becomes a runtime.
- */
 export type PluginRegistryPolicy = Readonly<{
   platformHost?: PlatformHost;
   assertSelectionCurrent?(packageName: string): void;
-  adaptWebDriver(
-    descriptor: WebDriverDescriptor,
-    context: Readonly<{ clientVersion: string }>,
-  ): Promise<Pick<ProviderRegistration, 'runtime' | 'platformModule'>>;
 }>;
 
 export type ProviderRegistration = Readonly<{
@@ -335,7 +320,7 @@ type RegistryScope = 'all' | 'replay-backends' | 'platforms';
 export async function startProviderRegistry(
   resolved: ResolvedProviderPlugins,
   host: HostEnvironment,
-  policy: PluginRegistryPolicy,
+  policy: PluginRegistryPolicy = {},
   scope: RegistryScope = 'all',
 ): Promise<ProviderRegistry> {
   const claims = resolved.slots.flatMap((slot) =>
@@ -423,7 +408,7 @@ async function setUpClaim(
 ): Promise<void> {
   const contribution = claim.contribution;
   if (contribution.kind === 'provider') {
-    if (scope === 'all') await setUpProviderClaim(claim, contribution, host, policy);
+    if (scope === 'all') await setUpProviderClaim(claim, contribution, host);
     return;
   }
   if (contribution.kind === 'platform') {
@@ -620,15 +605,15 @@ export function withConnectionHost(
 ): RegisteredConnection {
   return {
     capabilities: connection.capabilities,
-    resolve: (context) =>
-      connection.resolve({
+    resolve: async (context) =>
+      await connection.resolve({
         ...context,
-        host: createPluginHost({ env: context.env, cwd: context.cwd }, hostOptions),
+        host: await createPluginHost({ env: context.env, cwd: context.cwd }, hostOptions),
       }),
-    verify: (context) =>
-      connection.verify({
+    verify: async (context) =>
+      await connection.verify({
         ...context,
-        host: createPluginHost({ env: context.env, cwd: context.cwd }, hostOptions),
+        host: await createPluginHost({ env: context.env, cwd: context.cwd }, hostOptions),
       }),
   };
 }
@@ -637,17 +622,15 @@ async function setUpProviderClaim(
   claim: Claim,
   contribution: ProviderContribution,
   host: HostEnvironment,
-  policy: PluginRegistryPolicy,
 ): Promise<void> {
-  const pluginHost = createPluginHost(host, claim.slot.candidate.hostOptions);
+  const pluginHost = await createPluginHost(host, claim.slot.candidate.hostOptions);
   const result = await contribution.setup(pluginHost);
   try {
-    const { runtime, platformModule } = await buildRegistration(
-      contribution,
-      result,
-      pluginHost.clientVersion,
-      policy,
-    );
+    if (!isRecord(result))
+      throw invalidPlugin(`Plugin setup must return a runtime: ${contribution.provider}`);
+    const runtime = result.runtime as ProviderDeviceRuntime;
+    const platformModule = result.platformModule as PlatformRuntimeProviderModule;
+    assertProviderRuntime(contribution.provider, runtime, platformModule);
     const dispose = result.dispose?.bind(result);
     claim.registration = {
       provider: contribution.provider,
@@ -660,35 +643,6 @@ async function setUpProviderClaim(
     await cleanUpRejectedSetup(result);
     throw error;
   }
-}
-
-async function buildRegistration(
-  contribution: ProviderContribution,
-  result: PluginSetupResult,
-  clientVersion: string,
-  policy: PluginRegistryPolicy,
-): Promise<Pick<ProviderRegistration, 'runtime' | 'platformModule'>> {
-  if (!isRecord(result))
-    throw invalidPlugin(`Plugin setup must return a runtime: ${contribution.provider}`);
-  if (isWebDriverSetup(result)) {
-    if (result.webDriver?.provider !== contribution.provider) {
-      throw invalidPlugin(
-        `WebDriver plugin provider does not match its declaration: ${contribution.provider}`,
-      );
-    }
-    return await policy.adaptWebDriver(result.webDriver, { clientVersion });
-  }
-  // The public contract names only what registration reads; the host checks the facets it calls.
-  const { runtime, platformModule } = result as unknown as {
-    runtime: ProviderDeviceRuntime;
-    platformModule: PlatformRuntimeProviderModule;
-  };
-  assertProviderRuntime(contribution.provider, runtime, platformModule);
-  return { runtime, platformModule };
-}
-
-function isWebDriverSetup(result: PluginSetupResult): result is PluginWebDriverSetup {
-  return 'webDriver' in result;
 }
 
 async function cleanUpRejectedSetup(result: unknown): Promise<void> {
