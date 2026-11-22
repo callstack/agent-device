@@ -449,9 +449,9 @@ export const INTERACTOR_BINDING_REFUSAL_REASONS = {
 } as const satisfies ReasonTable<'interactor binding'>;
 
 /**
- * Why `keyboard dismiss` leaves a visible keyboard up. Declared here because the Apple runner
- * contract and the Android input-state reader share no lighter module, and either would otherwise
- * grow its eager closure.
+ * Why `keyboard dismiss` leaves a visible keyboard up. The Apple runner's `RUNNER_ERROR_CODES` row
+ * writes the same spelling as a literal, which the runner refusal docs guard reads. Declared here
+ * because `contracts/keyboard` would grow the Android input-state reader's eager closure.
  */
 export const KEYBOARD_DISMISS_REASONS = {
   // The keyboard stayed up: the Apple runner found no dismiss key and pressed nothing, or the Android
