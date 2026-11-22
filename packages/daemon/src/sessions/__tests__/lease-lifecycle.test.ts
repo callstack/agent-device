@@ -84,7 +84,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
 
   const cleaned = await cleanupExpiredLeasedSession({
     env: process.env,
-    sessionName: 'default',
+    ref: sessionStore.lookup('default'),
     sessionStore,
     leaseRegistry,
     teardownSession,

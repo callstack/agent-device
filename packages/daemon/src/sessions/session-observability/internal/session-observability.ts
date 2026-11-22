@@ -32,6 +32,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
+import { assertRequestHoldsSessionLease } from '../../../core/lease-context.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -137,6 +138,8 @@ async function handleEventsCommand(params: ObservabilityInput): Promise<DaemonRe
   const { req, sessionName, sessionStore } = params;
   try {
     await sessionStore.flushEvents(sessionName);
+    // `events` holds no session lock, so a leased session can open here after admission.
+    assertRequestHoldsSessionLease(req, sessionStore.get(sessionName));
     return {
       ok: true,
       data: sessionStore.readEvents(sessionName, {

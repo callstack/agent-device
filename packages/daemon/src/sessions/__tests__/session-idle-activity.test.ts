@@ -79,20 +79,26 @@ test('a command that completes under the session lock stamps the session it ran 
   expect(sessionStore.get('default')?.lastActivityAtMs).toBeGreaterThan(0);
 });
 
-test('a standalone request refused at lease admission reports no activity', async () => {
+test.each([
+  { name: 'ordinary failed lease admission retains', leased: false },
+  // A request without the lease id of the session must not keep that session alive.
+  { name: 'a refusal for the session lease id leaves no', leased: true },
+])('$name session activity stamp', async ({ leased }) => {
   const sessionStore = storeWithSession();
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
   const ref = sessionStore.lookup('default');
   if (!ref) throw new Error('missing test session');
-  sessionStore.update(ref, {
-    lease: {
-      leaseId: lease.leaseId,
-      tenantId: lease.tenantId,
-      runId: lease.runId,
-      backend: lease.backend,
-    },
-  });
+  if (leased) {
+    sessionStore.update(ref, {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        backend: lease.backend,
+      },
+    });
+  }
   const scope = await withDiagnosticsScope({ command: 'home', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
       host: createTestHostEnvironment(),
@@ -100,7 +106,10 @@ test('a standalone request refused at lease admission reports no activity', asyn
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
       platformRequestScope: platformRequestScopeFixture(),
-      req: makeRequest({ command: 'home', meta: { leaseId: 'foreign-lease' } }),
+      req: makeRequest({
+        command: 'home',
+        meta: { leaseId: 'f'.repeat(32), tenantId: 'tenant-a', runId: 'run-a' },
+      }),
       sessionStore,
       leaseRegistry,
     }),
@@ -109,7 +118,8 @@ test('a standalone request refused at lease admission reports no activity', asyn
   await expect(scope.runLocked(async () => 'unreachable')).rejects.toMatchObject({
     code: 'UNAUTHORIZED',
   });
-  expect(sessionStore.get('default')?.lastActivityAtMs).toBeUndefined();
+  if (leased) expect(sessionStore.get('default')?.lastActivityAtMs).toBeUndefined();
+  else expect(sessionStore.get('default')?.lastActivityAtMs).toBeGreaterThan(0);
 });
 
 test('a lock-exempt inventory command reports no activity, even against a claim-holding session', async () => {

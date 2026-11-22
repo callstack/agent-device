@@ -63,7 +63,7 @@ test('expired leases remove owned sessions before the next command and free capa
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: platformRequestScopeFixture(),
-    req: makeRequest({ command: 'snapshot' }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -121,7 +121,11 @@ test.each(['rebuild', 'retire'] as const)(
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
       platformRequestScope: platformRequestScopeFixture(),
-      req: makeRequest({ session: address, flags: { session: address } }),
+      req: makeRequest({
+        session: address,
+        flags: { session: address },
+        meta: { leaseId: lease.leaseId },
+      }),
       sessionStore: store,
       leaseRegistry: leases,
       platformResourceCleanup: {

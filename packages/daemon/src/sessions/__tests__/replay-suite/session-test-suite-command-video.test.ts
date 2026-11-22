@@ -272,6 +272,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
   const video = createReplayTestVideoOwner({
     platformServices: daemonPlatformServicesFixture(),
     sessionStore,
+    lookupSession: (name) => sessionStore.lookup(name),
     bindDevice: unavailableBindDevice,
     bindExactDevice: unavailableBindExactDevice,
     screenRecordingAdmissionLedger,

@@ -26,7 +26,7 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
-import type { SessionState } from '../core/session-state.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
@@ -130,6 +130,33 @@ export function resolveRequestSessionName(params: {
   );
   assertRequestTenantAdmission(unscopedReq, sessionStore.get(sessionName));
   return sessionName;
+}
+
+/**
+ * The session that a request acts through at its address. A request reaches a session that holds
+ * a lease only when it sends the id of that lease. A command that ignores the session lease gets
+ * no session there, so it stays detached from it.
+ */
+export function resolveRequestSessionRef(
+  req: DaemonRequest,
+  ref: SessionRef | undefined,
+): SessionRef | undefined {
+  if (ref?.session.lease && ignoresSessionLease(req.command)) return undefined;
+  assertRequestHoldsSessionLease(req, ref?.session);
+  return ref;
+}
+
+/** Whether a request may write to the event log of its address: only a session it acts through. */
+export function requestMayRecordSessionEvents(
+  req: DaemonRequest,
+  ref: SessionRef | undefined,
+): boolean {
+  if (!ref?.session.lease) return true;
+  try {
+    return resolveRequestSessionRef(req, ref) !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 export function assertRequestLeaseAdmission(

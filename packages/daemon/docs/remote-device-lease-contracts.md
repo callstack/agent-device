@@ -75,6 +75,12 @@ A request on that session, including `close`, `artifacts`, and other admission-e
 Lease heartbeat and release name the lease id too.
 If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reason `LEASE_SESSION_MISMATCH`, and `field: 'leaseId'`.
 The daemon never fills a missing lease id from the session.
+The daemon checks the lease id before the request reads, changes, or ends the session.
+A refused request writes no request event to that session and does not stamp its activity.
+A command that holds no session lock, such as `doctor` or `events`, is checked again when it reads the session.
+A `test` suite reads, records, and closes an attempt session only with the lease id that the suite sent.
+After the lease deadline, a request that sends the lease id of the session ends that session.
+A request without that lease id is refused and ends nothing. The lease sweep ends the session, and a new owner can then open that session name.
 Tenant, run id, lease backend, client id, device key, and lease provider are labels.
 The daemon refuses a label that differs from the session lease. A missing label is not a refusal and grants nothing.
 The daemon compares each value that a request sends for a label: the value in `meta`, the value in `flags`, and each alias of a param.
@@ -84,6 +90,7 @@ When an auth hook attests the tenant, the attested tenant routes the request. Th
 An allocate that repeats the labels of a live lease without that lease's id is refused as contention, with `DEVICE_IN_USE` and reason `DEVICE_LEASE_BUSY`. It returns no lease id. If the live lease has no device key, a label that contradicts it stays a scope mismatch, with `UNAUTHORIZED` and reason `LEASE_SCOPE_MISMATCH`. A repeat of a live lease with a device key is `DEVICE_LEASE_BUSY` whatever its client id says. Only an allocate that sends the id of its live lease gets that lease back.
 A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
 Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.
+On a leased session, these commands do not bind the session, refresh its recording, end it, or write request events to it.
 
 ## Admitted request work
 

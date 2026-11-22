@@ -55,14 +55,15 @@ export async function releaseExpiredProviderLease(
 
 export async function cleanupExpiredLeasedSession(params: {
   env: HostEnvironment['env'];
-  sessionName: string;
+  /** The session the request holds the lease of; a request that holds none ends no session. */
+  ref: SessionRef | undefined;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
   /** A composite request refuses an expired lease rather than tear its session down mid-run. */
   refuseTeardown?: boolean;
 }): Promise<boolean> {
-  const ref = params.sessionStore.lookup(params.sessionName);
+  const { ref } = params;
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
   if (

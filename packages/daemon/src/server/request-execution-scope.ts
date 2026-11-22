@@ -31,7 +31,9 @@ import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
   assertRequestTenantAdmission,
+  requestMayRecordSessionEvents,
   resolveRequestSessionName,
+  resolveRequestSessionRef,
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
@@ -182,6 +184,8 @@ export type RequestExecutionScope = AsyncDisposable & {
   startedAtMs: number;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
+  /** Writes the request-finished event, unless the request may not write to its session. */
+  recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
   /** Root-composed platform services for this request's asks that bind no device runtime. */
@@ -286,15 +290,26 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  const shouldRecordRequestEvents = shouldRecordEventForRequest(scopedReq);
-  if (shouldRecordRequestEvents) {
+  // Each event write checks the session then at the address, so a request that is refused for
+  // the session lease, before or under the session lock, leaves no event in that session.
+  const recordsRequestEvents =
+    shouldRecordEventForRequest(scopedReq) &&
+    requestMayRecordSessionEvents(scopedReq, sessionStore.lookup(sessionName));
+  if (recordsRequestEvents) {
+    sessionStore.recordEvent(sessionName, buildRequestStartedEvent({ req: scopedReq }));
+  }
+  const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
+    if (!recordsRequestEvents) return;
+    if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
     sessionStore.recordEvent(
       sessionName,
-      buildRequestStartedEvent({
-        req: scopedReq,
+      buildRequestFinishedEvent({
+        req,
+        response,
+        durationMs: Math.max(0, Date.now() - startedAtMs),
       }),
     );
-  }
+  };
   try {
     const devicePin = scopedReq.meta?.devicePin;
     const pinPolicy = devicePin
@@ -387,16 +402,20 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
+      recordFinished,
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
-        const existingRef = sessionStore.lookup(sessionName);
-        const session = existingRef?.session;
-        assertRequestTenantAdmission(unscopedReq, session);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
+        // The session under the lock governs. A refusal here comes before the request inspects a
+        // resource, ends an expired session or stamps session activity.
+        const lockedRef = sessionStore.lookup(sessionName);
+        assertRequestTenantAdmission(unscopedReq, lockedRef?.session);
+        assertProviderLeaseRequestNamesSession(scopedReq, lockedRef?.session);
+        const existingRef = resolveRequestSessionRef(scopedReq, lockedRef);
         let admissionCompleted = false;
         try {
-          assertProviderLeaseRequestNamesSession(scopedReq, session);
+          const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
             : undefined;
@@ -462,7 +481,7 @@ export async function createRequestExecutionScope(params: {
           throwIfRequestCanceled(scopedReq.meta?.requestId);
           await cleanupExpiredLeasedSession({
             env: params.host.env,
-            sessionName,
+            ref: existingRef,
             sessionStore,
             leaseRegistry,
             refuseTeardown: command === 'batch' || command === 'replay' || boundedStep,
@@ -532,36 +551,18 @@ export async function createRequestExecutionScope(params: {
       [Symbol.asyncDispose]: disposeBindings,
     };
     requestScopeFinalizers.set(scope, (response) => {
-      if (shouldRecordRequestEvents) {
-        sessionStore.recordEvent(
-          sessionName,
-          buildRequestFinishedEvent({
-            req: scopedReq,
-            response,
-            durationMs: Math.max(0, Date.now() - startedAtMs),
-          }),
-        );
-      }
+      recordFinished(scopedReq, response);
       return response;
     });
     return scope;
   } catch (error) {
-    if (shouldRecordRequestEvents) {
-      sessionStore.recordEvent(
-        sessionName,
-        buildRequestFinishedEvent({
-          req: scopedReq,
-          response: {
-            ok: false,
-            error: normalizeError(error, {
-              diagnosticId: getDiagnosticsMeta().diagnosticId,
-              logPath: requestLogPath,
-            }),
-          },
-          durationMs: Math.max(0, Date.now() - startedAtMs),
-        }),
-      );
-    }
+    recordFinished(scopedReq, {
+      ok: false,
+      error: normalizeError(error, {
+        diagnosticId: getDiagnosticsMeta().diagnosticId,
+        logPath: requestLogPath,
+      }),
+    });
     throw error;
   }
 }
@@ -719,7 +720,7 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const seededRef = sessionStore.lookup(scope.sessionName);
+  const seededRef = resolveRequestSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
   if (seededRef) {
     // A composite's resource health is checked by its admitted steps; the outer read can invalidate a durable recording.
     if (scope.command !== 'batch' && scope.command !== 'replay') {
@@ -742,16 +743,7 @@ export async function prepareLockedRequestScope(params: {
   const finalize = (handled: DaemonResponse): DaemonResponse => {
     const response = deliverRemoteScript(handled);
     const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);
-    if (shouldRecordEventForRequest(lockedReq)) {
-      sessionStore.recordEvent(
-        scope.sessionName,
-        buildRequestFinishedEvent({
-          req: lockedReq,
-          response: finalized,
-          durationMs: Math.max(0, Date.now() - scope.startedAtMs),
-        }),
-      );
-    }
+    scope.recordFinished(lockedReq, finalized);
     return finalized;
   };
   requestScopeFinalizers.set(scope, finalize);
