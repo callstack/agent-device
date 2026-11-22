@@ -726,6 +726,13 @@ These reasons can come from more than one command.
 | `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
 
+### Remote connections
+
+| Reason | Meaning |
+| --- | --- |
+| `connection_session_mismatch` | A saved connection file cannot be used for the session a command named: it names another session, a record from an older build cannot move to its session file because that file already exists, or the active-session pointer path holds a record whose owner is unproven. The refused file is kept, and so is the occupied session file. |
+| `connection_record_owner_unknown` | The session's own saved connection file, or the active-session pointer, could not be read or parsed, so no session is known to own it. It was neither replaced nor removed. |
+
 ### Remote daemon
 
 | Reason | Meaning |
