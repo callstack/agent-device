@@ -4,6 +4,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
+import { mayNameSession } from '../session-routing.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
 import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
 
@@ -88,6 +89,7 @@ export function remoteConnectionChecks(
 }
 
 export function sessionChecks(
+  req: DaemonRequest,
   sessionStore: SessionStore,
   sessionName: string,
   session: SessionState | undefined,
@@ -95,13 +97,17 @@ export function sessionChecks(
 ): DoctorCheck[] {
   // Candidates report their ADDRESS — the string `close --session` actually accepts — and the
   // current session is excluded by address too: two cwd-scoped sessions share the name
-  // `default`, so a name compare would hide them from each other (#2031/#1394).
+  // `default`, so a name compare would hide them from each other (#2031/#1394). A session of
+  // another proxy client is not listed at all: the doctor reports it the way it reports nothing
+  // (#4923).
+  const nameableToRequest = (candidate: SessionState) => mayNameSession(req, candidate);
   const sameDeviceSessions = session
     ? sessionStore
         .listRefs()
         .filter(
           (candidate) =>
             candidate.address !== sessionName &&
+            nameableToRequest(candidate.session) &&
             candidate.session.device.platform === session.device.platform &&
             candidate.session.device.id === session.device.id,
         )
