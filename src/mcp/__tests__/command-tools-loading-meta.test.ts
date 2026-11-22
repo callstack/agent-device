@@ -37,7 +37,10 @@ test('search keywords add only words the tool name and description lack', () => 
 });
 
 // Always-loaded schemas land in every run's first prompt, so their total size is a per-run cost.
-const ALWAYS_LOADED_BUDGET_BYTES = 22 * 1024;
+// 22.5 KiB: main's drift through #4513/#4581/#4586 left the old 22 KiB line with 30 bytes of
+// headroom, and #4293's review requires both HarmonyOS open-failure reasons on the --foreground
+// input description, which no compression could fit under it.
+const ALWAYS_LOADED_BUDGET_BYTES = 22.5 * 1024;
 
 test('the always-loaded tools stay within their byte budget', () => {
   const bytes = Buffer.byteLength(

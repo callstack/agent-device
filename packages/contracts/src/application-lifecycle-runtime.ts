@@ -49,6 +49,11 @@ export type ApplicationLifecycleExecution = Readonly<{
   launchConsole?: string;
   launchArgs?: readonly string[];
   clearAppState?: boolean;
+  /**
+   * `open --foreground` with an app target. A launch-verified owner treats "the launched app never
+   * held the foreground" as this open's failure instead of a success beside a warning.
+   */
+  foreground?: boolean;
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
@@ -144,7 +149,30 @@ export type OpenApplicationTiming = Readonly<{
   postOpenObservation?: PostOpenObservation;
   /** Why the observation could not run; present exactly when it is `probe-failed`. */
   postOpenObservationFailure?: PostOpenObservationFailure;
+  /**
+   * Present when the owner verified after its dispatch which app holds the foreground, and the
+   * launched app never did. An unconfirmed read under `open --foreground` fails the open instead.
+   */
+  foregroundVerification?: OpenForegroundVerification;
 }>;
+
+/**
+ * What an owner learned when it verified after its dispatch which app holds the foreground, and
+ * the launched app never held it. A launch dispatch can report success while a system surface (a
+ * lock screen is the typical one) keeps the launched app behind it, so the verification is a
+ * bounded poll of the platform's own foreground read. It is present only when unconfirmed, and
+ * its state names what the probe actually saw:
+ *
+ * - `other-foreground`: a read succeeded and named another app in the foreground.
+ * - `no-foreground`: a read succeeded and no mission is foreground. A lock screen is the typical
+ *   cause; unlock the device and retry.
+ * - `probe-failed`: no read in the budget produced a parsed mission list. Check the device
+ *   connection; this claims nothing about the launched app.
+ */
+export type OpenForegroundVerification =
+  | Readonly<{ state: 'other-foreground'; foregroundPackage: string }>
+  | Readonly<{ state: 'no-foreground' }>
+  | Readonly<{ state: 'probe-failed' }>;
 
 /**
  * What an app open learned about the launched app before it returned. A local iOS Simulator asks
