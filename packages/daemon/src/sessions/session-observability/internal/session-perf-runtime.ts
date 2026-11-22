@@ -188,7 +188,7 @@ async function executeAdmittedPerfPlan(
       const retained =
         explicit &&
         saved &&
-        saved.leaseVerifier !== null &&
+        !canReadPerfOutput(params.req, saved.leaseVerifier) &&
         !samePerfSource(explicit, saved.profile.outPath)
           ? undefined
           : saved;
@@ -429,9 +429,12 @@ function readPerfSource(tracePath: string): PerfReportSource | undefined {
   }
 }
 
+function canReadPerfOutput(req: DaemonRequest, owner: string | null | undefined): boolean {
+  return !owner || owner === admittedOutputLeaseVerifier(req);
+}
+
 function assertPerfOutputOwner(req: DaemonRequest, owner: string | null | undefined): void {
-  if (owner && owner !== admittedOutputLeaseVerifier(req))
-    throw leasedOutputRefusal('Performance capture');
+  if (!canReadPerfOutput(req, owner)) throw leasedOutputRefusal('Performance capture');
 }
 
 async function publishXctraceDownload(

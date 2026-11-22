@@ -270,7 +270,7 @@ test('public-network perf report uses the session capture despite an explicit ho
   );
 });
 
-test('a locally admitted tenant-isolated perf report can select an independent xctrace source', async () => {
+test('a tenant-isolated local xctrace report keeps the same-lease handoff for an independent source', async () => {
   const fixture = reportFixture();
   const scope = { tenantId, runId: 'perf', leaseBackend: 'ios-simulator' } as const;
   const lease = fixture.leaseRegistry.allocateLease(scope);
@@ -295,8 +295,8 @@ test('a locally admitted tenant-isolated perf report can select an independent x
   expect(fixture.perfProfileReport).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({
       tracePath: fs.realpathSync(explicitPath),
-      profile: undefined,
-      template: undefined,
+      profile: expect.objectContaining({ outPath: fixture.profilePath }),
+      template: 'Time Profiler',
     }),
   );
 });
