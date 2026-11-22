@@ -62,6 +62,7 @@ async function createProviderAndroidHost(runOnHost: RunOnHost): Promise<Provider
       mechanics.androidAdbInvocation(mechanics.androidAdbSerialTarget(serial), command),
     hostAdbInvocation: (command) =>
       mechanics.androidAdbInvocation(mechanics.androidAdbHostTarget(), command),
+    classifyAdbFailure: mechanics.classifyAdbFailure,
     adbError: (message, result, invocation) =>
       mechanics.androidAdbResultError(
         message,

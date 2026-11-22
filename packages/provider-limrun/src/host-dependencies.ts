@@ -48,6 +48,7 @@ export async function createLimrunRuntimeDependencies(
       forceStopApp: android.forceStopApp,
       deviceAdbInvocation: android.deviceAdbInvocation,
       hostAdbInvocation: android.hostAdbInvocation,
+      classifyAdbFailure: android.classifyAdbFailure,
       adbError: async (message, result, invocation) =>
         android.adbError(message, result, invocation),
     },

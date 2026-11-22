@@ -6,6 +6,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   androidAdbHostTarget,
+  classifyAdbFailure,
   androidAdbInvocation,
   androidAdbSerialTarget,
   serializeAndroidAdbInvocation,
@@ -368,6 +369,7 @@ test('a failed device adb command hands the addressed invocation to the root ada
     ...fixture.dependencies,
     android: {
       ...fixture.dependencies.android,
+      classifyAdbFailure,
       adbError: async (message, _result, invocation) => {
         handed.push(invocation);
         return new AppError('COMMAND_FAILED', message);
@@ -451,6 +453,7 @@ function createContractFixture() {
         androidAdbInvocation(androidAdbSerialTarget(serial), command),
       hostAdbInvocation: (command: readonly string[]) =>
         androidAdbInvocation(androidAdbHostTarget(), command),
+      classifyAdbFailure,
       adbError: async (message: string) => new AppError('COMMAND_FAILED', message),
     },
     host: {

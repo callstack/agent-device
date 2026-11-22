@@ -1,4 +1,7 @@
-import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
+import {
+  captureDiagnostics,
+  makeRunnerSession as makeLocalRunnerSession,
+} from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import { RunnerCommandAccounting } from '../runner-session-types.ts';
 import { afterEach, test, vi } from 'vitest';
@@ -119,6 +122,30 @@ test('a command still in flight surfaces without invalidating the session', asyn
 
   await assert.rejects(result, (error: unknown) => error instanceof AppError);
   assert.equal(invalidate.mock.calls.length, 0);
+});
+
+test('a provider token equal to an in-flight state cannot reach the lost reply or diagnostics', async () => {
+  const token = 'started';
+  const logs = await captureDiagnostics(async () => {
+    const { result, invalidate } = await runRecovery({
+      script: [{ kind: 'ok', data: { lifecycleState: token } }],
+      scrubText: (text) => text.replaceAll(token, '[REDACTED]'),
+    });
+    await assert.rejects(result, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.recovery, 'command_still_in_flight');
+      assert.equal(error.details?.lifecycleState, '[REDACTED]');
+      assert.ok(!error.message.includes(token));
+      assert.ok(!String(error.details?.hint).includes(token));
+      return true;
+    });
+    assert.equal(invalidate.mock.calls.length, 0);
+  });
+  const decision = logs
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((event) => event.phase === 'ios_runner_command_invalidation_decision');
+  assert.equal(decision?.data.lifecycleState, '[REDACTED]');
 });
 
 test('an unknown lifecycle state invalidates the session and says so', async () => {

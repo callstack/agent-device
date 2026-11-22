@@ -46,6 +46,7 @@ export type ProviderAndroidHost = Readonly<{
   deviceAdbInvocation(serial: string, command: readonly string[]): AndroidAdbInvocation;
   /** Addresses one server-level command, which selects no device. */
   hostAdbInvocation(command: readonly string[]): AndroidAdbInvocation;
+  classifyAdbFailure: AndroidMechanics['classifyAdbFailure'];
   adbError(
     message: string,
     result: Parameters<AndroidMechanics['androidAdbResultError']>[1],

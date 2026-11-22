@@ -325,6 +325,7 @@ function limrunDependencies(): LimrunRuntimeDependencies {
         target: { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } },
         command,
       }),
+      classifyAdbFailure: () => undefined,
       adbError: async (message) => new Error(message) as never,
     },
     host: {

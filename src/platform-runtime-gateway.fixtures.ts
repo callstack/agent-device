@@ -1,3 +1,4 @@
+import { classifyAdbFailure } from '@agent-device/platform-android/mechanics';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import {
@@ -273,6 +274,7 @@ export const limrunTestDependencies: LimrunRuntimeDependencies = {
       target: { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } },
       command,
     }),
+    classifyAdbFailure,
     adbError: async () => {
       throw new Error('unused');
     },

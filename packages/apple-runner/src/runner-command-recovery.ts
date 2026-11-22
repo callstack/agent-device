@@ -328,25 +328,25 @@ function handleRunnerCommandStatusRecovery(
     };
   }
 
+  const publishedState = scrubText?.(lifecycleState) ?? lifecycleState;
   if (RUNNER_IN_FLIGHT_LIFECYCLE_STATES.has(lifecycleState)) {
     return {
       type: 'skipInvalidation',
       reason: 'command_still_in_flight',
-      lifecycleState,
+      lifecycleState: publishedState,
       lostReply: {
         recovery: 'command_still_in_flight',
-        lifecycleState,
-        message: `Runner command "${command.command}" is still ${lifecycleState} after the transport response was lost.`,
+        lifecycleState: publishedState,
+        message: `Runner command "${command.command}" is still ${publishedState} after the transport response was lost.`,
         hint: inFlightAfterLostResponseHint(
           command.command,
-          lifecycleState,
+          publishedState,
           readReadinessPreflightRecoveryDetails(transportError),
         ),
       },
     };
   }
 
-  const publishedState = scrubText?.(lifecycleState) ?? lifecycleState;
   return {
     type: 'retainInvalidation',
     reason: lifecycleState ? 'unknown_lifecycle_state' : 'missing_lifecycle_state',

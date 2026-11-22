@@ -4,6 +4,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   androidAdbHostTarget,
+  classifyAdbFailure,
+  getAndroidKeyboardStatusWithAdb,
   androidAdbInvocation,
   androidAdbSerialTarget,
   serializeAndroidAdbInvocation,
@@ -286,6 +288,7 @@ function androidDependencies(
         androidAdbInvocation(androidAdbSerialTarget(serial), command),
       hostAdbInvocation: (command: readonly string[]) =>
         androidAdbInvocation(androidAdbHostTarget(), command),
+      classifyAdbFailure,
       adbError: async (message: string) => new Error(message),
       createPortReverse: async () => reverse,
     } as unknown as LimrunRuntimeDependencies['android'],
@@ -317,6 +320,7 @@ test('redacts failed ADB result text and preserves the exit and binary output', 
     stdout: 'stdout [REDACTED]',
     stderr: 'stderr [REDACTED]',
     stdoutBuffer,
+    failure: null,
   });
   expect(result.stdoutBuffer).toBe(stdoutBuffer);
 });
@@ -344,5 +348,26 @@ test('redacts thrown ADB errors while preserving typed failure details', async (
     message: 'ADB failed [REDACTED]',
     details: { stderr: 'connection refused [REDACTED]', exitCode: 17, status: 502 },
     cause: { message: 'transport [REDACTED]' },
+  });
+});
+
+test('an offline ADB result keeps its typed keyboard failure after token redaction', async () => {
+  const dependencies = androidDependencies();
+  dependencies.host.runAdb = async () => ({
+    exitCode: 1,
+    stdout: '',
+    stderr: 'error: device offline',
+  });
+  const session = await createLimrunAndroidSession(
+    { ...ANDROID_SESSION_OPTIONS, token: 'offline' },
+    dependencies,
+  );
+  await expect(getAndroidKeyboardStatusWithAdb(session.adbProvider.exec)).rejects.toMatchObject({
+    details: {
+      adbFailure: 'device_offline',
+      adbHostRefusal: true,
+      retriable: true,
+      stderr: 'error: device [REDACTED]',
+    },
   });
 });

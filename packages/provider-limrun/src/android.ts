@@ -295,7 +295,7 @@ async function runLimrunAndroidAdbAtSerial(
 }
 
 export async function runLimrunAndroidAdbCommand(
-  dependencies: Pick<LimrunRuntimeDependencies, 'host'>,
+  dependencies: Pick<LimrunRuntimeDependencies, 'android' | 'host'>,
   token: string,
   invocation: AndroidAdbInvocation,
   options?: LimrunAdbCommandOptions,
@@ -309,8 +309,13 @@ export async function runLimrunAndroidAdbCommand(
   }
   if (result.exitCode === 0) return result;
   const { safeInstanceErrorText } = await import('./error-text.ts');
+  const failure =
+    result.failure === undefined
+      ? (dependencies.android.classifyAdbFailure(result.stderr, result.stdout) ?? null)
+      : result.failure;
   return {
     ...result,
+    failure,
     stdout: safeInstanceErrorText(result.stdout, [token]),
     stderr: safeInstanceErrorText(result.stderr, [token]),
   };
