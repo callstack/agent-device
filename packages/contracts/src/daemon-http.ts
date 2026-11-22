@@ -145,7 +145,8 @@ export const DAEMON_TRANSPORT_REASONS = {
   failure: { reason: 'daemon_transport_failure' },
   // The daemon did not answer within the request's budget; `details.timeoutMs` is that budget.
   timeout: { reason: 'daemon_transport_timeout' },
-  // A message the daemon sent is not a daemon response envelope; `details.line` carries what arrived.
+  // A message the daemon sent is not a daemon response envelope; `details.line`, when present,
+  // carries what arrived.
   replyInvalid: { reason: 'daemon_response_invalid' },
   // The response body could not be read before the connection ended.
   replyUnreadable: { reason: 'daemon_response_read_failure' },
