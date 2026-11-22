@@ -56,7 +56,7 @@ import {
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
-  claimRemoteConnectionState,
+  claimRemoteConnectionDefaults,
   remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
@@ -655,6 +655,7 @@ async function dispatchCliCommand(
       replayTestReporterRuntime,
       commandProgress,
       leaseDevice: ctx.leaseDevice,
+      claimedConnection: ctx.connectionDefaults?.claimed,
     })
   ) {
     return;
@@ -779,11 +780,7 @@ function resolveActiveConnectionDefaults(options: {
   stateDir: string;
   session: string | undefined;
   remoteConfig?: string;
-}): {
-  flags: Partial<CliFlags>;
-  runtime?: SessionRuntimeHints;
-  connection?: RemoteConnectionRequestMetadata;
-} | null {
+}) {
   if (
     options.command === 'connect' ||
     options.command === 'connection' ||
@@ -791,16 +788,16 @@ function resolveActiveConnectionDefaults(options: {
   ) {
     return null;
   }
-  if (options.command === 'disconnect') claimRemoteConnectionState(options);
-  const defaults = resolveRemoteConnectionDefaults({
+  const request = {
     stateDir: options.stateDir,
     session: options.session,
     remoteConfig: options.remoteConfig,
     cwd: options.host.cwd,
     env: options.host.env,
-    validateRemoteConfigHash: options.command !== 'disconnect',
-  });
-  return defaults;
+  };
+  return options.command === 'disconnect'
+    ? claimRemoteConnectionDefaults(request)
+    : resolveRemoteConnectionDefaults(request);
 }
 
 // A command that cannot take a session runs on no remote connection. Reading, authenticating or

@@ -350,17 +350,43 @@ test('a record of unproven owner on the pointer path refuses the pointer write',
   assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE], 'nothing else was written');
 });
 
-test('a full record at the pointer path is not deleted by disconnect of the session it names', () => {
-  const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-record-');
-  writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
-  const pointerPath = writeRecordFile(stateDir, ACTIVE_SESSION_FILE, {
-    ...recordFor('demo'),
-    runId: 'run-at-pointer',
-  });
+describe.each([
+  { owner: 'demo', ownSessionRecord: 'demo.json', activeRunId: undefined },
+  // `.ACTIVE-SESSION.json` is the older name of `.ACTIVE-SESSION`, so the record looks like that
+  // session's. Only the checked move may remove it, and the move refuses the occupied hashed path.
+  {
+    owner: '.ACTIVE-SESSION',
+    ownSessionRecord: hashedFileName('.ACTIVE-SESSION'),
+    activeRunId: 'run-.ACTIVE-SESSION',
+  },
+])(
+  'a full record at the pointer path that names $owner',
+  ({ owner, ownSessionRecord, activeRunId }) => {
+    test('is not deleted by removal of that session', () => {
+      const stateDir = mkdtempForTestSync('agent-device-remote-identity-pointer-record-');
+      writeRecordFile(stateDir, ownSessionRecord, recordFor(owner));
+      const pointerPath = writeRecordFile(stateDir, ACTIVE_SESSION_FILE, {
+        ...recordFor(owner),
+        runId: 'run-at-pointer',
+      });
+      assert.equal(readActiveConnectionState({ stateDir })?.runId, activeRunId);
+      // On a case-insensitive volume `.ACTIVE-SESSION.json` opens the pointer file. A case-sensitive
+      // volume keeps the names apart, so the removal reaches the pointer without the checked move.
+      const readFileSync = fs.readFileSync;
+      const read = vi.spyOn(fs, 'readFileSync').mockImplementation(((file, ...rest) => {
+        if (path.basename(String(file)) === '.ACTIVE-SESSION.json') {
+          throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+        }
+        return readFileSync(file, ...rest);
+      }) as typeof fs.readFileSync);
+      try {
+        removeRemoteConnectionState({ stateDir, session: owner });
+      } finally {
+        read.mockRestore();
+      }
 
-  assert.equal(readActiveConnectionState({ stateDir }), null, 'a full record is no pointer');
-  removeRemoteConnectionState({ stateDir, session: 'demo' });
-
-  assert.equal(JSON.parse(fs.readFileSync(pointerPath, 'utf8')).runId, 'run-at-pointer');
-  assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE]);
-});
+      assert.equal(JSON.parse(fs.readFileSync(pointerPath, 'utf8')).runId, 'run-at-pointer');
+      assert.deepEqual(recordsIn(stateDir), [ACTIVE_SESSION_FILE]);
+    });
+  },
+);

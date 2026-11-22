@@ -220,6 +220,8 @@ type RemoteConnectionDefaults = {
   flags: Partial<CliFlags>;
   runtime?: SessionRuntimeHints;
   connection?: RemoteConnectionRequestMetadata;
+  /** Set only by {@link claimRemoteConnectionDefaults}: the record it claimed, or `null` for none. */
+  claimed?: RemoteConnectionState | null;
 };
 
 const REMOTE_CONNECTION_STATE_REASONS = {
@@ -412,8 +414,15 @@ function removeRemoteConnectionStateFile(
   statePath: string,
 ): void {
   fs.rmSync(statePath, { force: true });
+  // Only a pointer is removed here. A full record an older build wrote at the pointer path leaves only
+  // through the checked move in migrateLegacyRemoteConnectionState.
   const activePath = activeConnectionStatePath(options.stateDir);
-  if (activeRecordOwner(options.stateDir) === options.session) {
+  const active = readRecordFile(activePath);
+  if (
+    active.kind === 'owned' &&
+    active.session === options.session &&
+    isActiveSessionPointer(active.record)
+  ) {
     fs.rmSync(activePath, { force: true });
   }
 }
@@ -474,8 +483,42 @@ export function resolveRemoteConnectionDefaults(options: {
   env: Record<string, string | undefined>;
   validateRemoteConfigHash?: boolean;
 }): RemoteConnectionDefaults | null {
+  return remoteConnectionDefaults(selectRemoteConnectionState(options), options);
+}
+
+/**
+ * The defaults for `disconnect`, taken from the record {@link claimRemoteConnectionState} claims.
+ *
+ * The returned `claimed` record also drives the teardown, so the record is resolved once. A leased
+ * record is refused when the caller named no session. The defaults are empty when no record is
+ * claimed or the record connects through another `remoteConfig` than the one requested.
+ */
+export function claimRemoteConnectionDefaults(options: {
+  stateDir: string;
+  session: string | undefined;
+  remoteConfig?: string;
+  cwd: string;
+  env: Record<string, string | undefined>;
+}): RemoteConnectionDefaults {
+  const claimed = claimRemoteConnectionState(options);
+  if (claimed) requireLeasedConnectionSession(claimed, options.session);
+  const selected = claimed && matchesRequestedRemoteConfig(claimed, options) ? claimed : null;
+  const defaults = remoteConnectionDefaults(selected, {
+    ...options,
+    validateRemoteConfigHash: false,
+  });
+  return { flags: {}, ...defaults, claimed };
+}
+
+function remoteConnectionDefaults(
+  state: RemoteConnectionState | null,
+  options: {
+    cwd: string;
+    env: Record<string, string | undefined>;
+    validateRemoteConfigHash?: boolean;
+  },
+): RemoteConnectionDefaults | null {
   const validateRemoteConfigHash = options.validateRemoteConfigHash ?? true;
-  const state = selectRemoteConnectionState(options);
   if (!state) return null;
   if (
     validateRemoteConfigHash &&

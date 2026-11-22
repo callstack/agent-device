@@ -336,11 +336,28 @@ function scopeConnectProfile(
   };
 }
 
-export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
+/**
+ * The record moves to its session's own path before any teardown, so a record this command cannot
+ * remove is refused before its session closes or its lease ends. The CLI claims it before it builds
+ * the client, and that claim is the one torn down.
+ */
+function claimDisconnectTarget(
+  claimedConnection: RemoteConnectionState | null | undefined,
+  stateDir: string,
+  session: string | undefined,
+): RemoteConnectionState | null {
+  if (claimedConnection !== undefined) return claimedConnection;
+  return claimRemoteConnectionState({ stateDir, session });
+}
+
+export const disconnectCommand: ClientCommandHandler = async ({
+  flags,
+  client,
+  host,
+  claimedConnection,
+}) => {
   const stateDir = resolveConnectionStateDir(flags, host);
-  // The record moves to its session's own path before any teardown, so a record this command cannot
-  // remove is refused before its session closes or its lease ends.
-  const state = claimRemoteConnectionState({ stateDir, session: flags.session });
+  const state = claimDisconnectTarget(claimedConnection, stateDir, flags.session);
   if (!state) {
     await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
     return true;
