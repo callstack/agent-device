@@ -138,29 +138,38 @@ function writeStoredConnection(
   });
 }
 
-// The daemon reuses a lease for a matching run binding (tenant, run, backend, provider, device), so
-// two sessions whose allocations would bind the same run end up sharing one lease.
-async function leaseIdsOnRealDaemon(allocations: CapturedDaemonRequest[]): Promise<string[]> {
+// The reader replays each captured allocation exactly as the CLI sent it, so it proves what the
+// daemon answers that caller. An owner that sends the lease id of a live run binding gets that
+// lease back; a caller that repeats the binding's labels without that id is refused as contention.
+async function replayLeaseAllocationsOnRealDaemon(
+  allocations: CapturedDaemonRequest[],
+): Promise<Array<{ leaseId?: string; error?: unknown }>> {
   const daemon = await startPublicDaemonRuntime({ serverMode: 'http' });
   try {
     const client = createAgentDeviceClient({
       daemonBaseUrl: daemon.baseUrl,
       daemonAuthToken: daemon.runtime.token,
       daemonTransport: 'http',
-      session: 'lease-reader',
     });
-    const leaseIds = [];
+    const results: Array<{ leaseId?: string; error?: unknown }> = [];
     for (const allocate of allocations) {
-      const lease = await client.leases.allocate({
-        tenant: String(scopeOf(allocate, 'tenantId')),
-        runId: String(scopeOf(allocate, 'runId')),
-        leaseBackend: 'android-instance',
-        leaseProvider: 'proxy',
-        clientId: String(scopeOf(allocate, 'clientId')),
-      });
-      leaseIds.push(lease.leaseId);
+      const requestedLeaseId = scopeOf(allocate, 'leaseId');
+      try {
+        const lease = await client.leases.allocate({
+          tenant: String(scopeOf(allocate, 'tenantId')),
+          runId: String(scopeOf(allocate, 'runId')),
+          leaseBackend: 'android-instance',
+          leaseProvider: 'proxy',
+          clientId: String(scopeOf(allocate, 'clientId')),
+          session: String(allocate.session),
+          ...(requestedLeaseId === undefined ? {} : { leaseId: String(requestedLeaseId) }),
+        });
+        results.push({ leaseId: lease.leaseId });
+      } catch (error) {
+        results.push({ error });
+      }
     }
-    return leaseIds;
+    return results;
   } finally {
     await daemon.close();
   }
@@ -192,6 +201,7 @@ test('the Node client is refused a provider lease until it names a session', asy
     assert.ok(leaseId);
     const namedPerCall = await createAgentDeviceClient(connection).leases.allocate({
       ...lease,
+      leaseId,
       session: 'agent-a',
     });
     assert.equal(namedPerCall.leaseId, leaseId);
@@ -216,11 +226,15 @@ test("a second agent on the same proxy never reaches the first agent's connectio
   await connectProxy(shared, 'agent-b');
   const openB = await runAgentCommand(shared, ['open', 'com.example', '--session', 'agent-b']);
   assert.equal(openB.code, null, openB.stdout);
-  const [leaseOfA, leaseOfB] = await leaseIdsOnRealDaemon([
+  const [first, second] = await replayLeaseAllocationsOnRealDaemon([
     allocationOf(openA),
     allocationOf(openB),
   ]);
-  assert.notEqual(leaseOfA, leaseOfB);
+  assert.ok(first && second);
+  assert.equal(first.error, undefined, String(first.error));
+  assert.equal(second.error, undefined, String(second.error));
+  assert.ok(first.leaseId && second.leaseId);
+  assert.notEqual(first.leaseId, second.leaseId);
 
   // The pointer now names B's connection; a command that names no session must never reach it.
   const batchSteps = '[{"command":"snapshot","input":{}}]';
@@ -483,7 +497,10 @@ function writeLeasedProfile(workspace: Workspace): string {
   return remoteConfig;
 }
 
-test('sessions sharing one leased profile get leases of their own, and one session keeps its own', async () => {
+// The same session in a fresh state dir has no saved lease id, so its CLI re-open allocates with a
+// fresh id under the same labels. The daemon refuses that as contention (#4909): the labels are not
+// the credential, the lease id is, and the fresh state has lost it.
+test('sessions sharing one leased profile get leases of their own, and a fresh-state re-open is refused', async () => {
   const shared = workspace();
   const remoteConfig = writeLeasedProfile(shared);
   const openA = await runAgentCommand(shared, [
@@ -518,13 +535,49 @@ test('sessions sharing one leased profile get leases of their own, and one sessi
   ]);
   assert.equal(openAAgain.code, null, openAAgain.stdout);
 
-  const [leaseA, leaseB, leaseAAgain] = await leaseIdsOnRealDaemon([
+  const [first, second, again] = await replayLeaseAllocationsOnRealDaemon([
     allocationOf(openA),
     allocationOf(openB),
     allocationOf(openAAgain),
   ]);
-  assert.notEqual(leaseA, leaseB);
-  assert.equal(leaseAAgain, leaseA);
+  assert.ok(first && second && again);
+  assert.equal(first.error, undefined, String(first.error));
+  assert.equal(second.error, undefined, String(second.error));
+  assert.ok(first.leaseId && second.leaseId);
+  assert.notEqual(first.leaseId, second.leaseId);
+  // The fresh-state re-open repeats agent-a's labels with a new id and no credential.
+  assert.equal(again.leaseId, undefined);
+  const refusal = again.error as { code?: string; details?: { leaseId?: string; reason?: string } };
+  assert.equal(refusal.code, 'DEVICE_IN_USE');
+  assert.equal(refusal.details?.reason, 'DEVICE_LEASE_BUSY');
+  assert.equal(refusal.details?.leaseId, undefined);
+
+  fs.rmSync(shared.root, { recursive: true, force: true });
+});
+
+// The credential is the lease id: a re-open that replays the CLI's allocation, which names its id,
+// gets that same lease back instead of contention.
+test('a re-open that sends the lease id it saved gets its live lease back', async () => {
+  const shared = workspace();
+  const remoteConfig = writeLeasedProfile(shared);
+  const openA = await runAgentCommand(shared, [
+    'open',
+    'com.example',
+    '--session',
+    'agent-a',
+    '--remote-config',
+    remoteConfig,
+  ]);
+  assert.equal(openA.code, null, openA.stdout);
+  const allocation = allocationOf(openA);
+  const savedLeaseId = scopeOf(allocation, 'leaseId');
+  assert.equal(typeof savedLeaseId, 'string');
+
+  const [created, resumed] = await replayLeaseAllocationsOnRealDaemon([allocation, allocation]);
+  assert.ok(created && resumed);
+  assert.equal(created.error, undefined, String(created.error));
+  assert.equal(resumed.error, undefined, String(resumed.error));
+  assert.equal(resumed.leaseId, savedLeaseId);
 
   fs.rmSync(shared.root, { recursive: true, force: true });
 });
