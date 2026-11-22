@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +11,8 @@ import {
   summarizeCliSession,
   writeCliSession,
 } from '../auth-session.ts';
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import * as hostKitFile from '@agent-device/host-kit/file';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import {
   mkdtempForTestSync,
   recordCommandSpawns,
@@ -162,11 +163,302 @@ test('remote auth refreshes a stored CLI session into an agent token', async () 
   assert.deepEqual(bodies, [
     {
       refreshCredential: 'adc_refresh_secret',
+      acceptsRotatedRefreshCredential: true,
       tenant: 'acme',
       runId: 'run-123',
       daemonBaseUrl: 'https://bridge.agent-device.dev',
     },
   ]);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('remote auth stores a refresh credential that the cloud rotated', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-rotate-');
+  const session = {
+    version: 1 as const,
+    id: 'session-rotate',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_old',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    expiresAt: '2026-12-01T00:00:00.000Z',
+  };
+  writeCliSession({ stateDir: tempRoot, session });
+  const sent: unknown[] = [];
+  const responses = [
+    { accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_new' },
+    { accessToken: 'adc_agent_2' },
+  ];
+  const refresh = () =>
+    resolveRemoteAuth({
+      command: 'snapshot',
+      flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+      stateDir: tempRoot,
+      allowInteractiveLogin: false,
+      env: {},
+      io: {
+        now: () => Date.parse('2026-02-01T00:00:00.000Z'),
+        fetch: async (_url, init) => {
+          sent.push(JSON.parse(String(init?.body)).refreshCredential);
+          return jsonResponse(responses.shift());
+        },
+      },
+    });
+
+  assert.equal((await refresh()).flags.daemonAuthToken, 'adc_agent_1');
+  assert.deepEqual(readCliSession({ stateDir: tempRoot }), {
+    ...session,
+    refreshCredential: 'adc_refresh_new',
+  });
+  // The next command sends the rotated credential; a response without one keeps it.
+  assert.equal((await refresh()).flags.daemonAuthToken, 'adc_agent_2');
+  assert.deepEqual(sent, ['adc_refresh_old', 'adc_refresh_new']);
+  assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+/**
+ * A refresh writes only when the file still holds what it sent, so a session the refresh did not
+ * write keeps whatever it holds. These changes happen while the refresh holds the session lock, so
+ * they are made by a writer that takes no lock: an older CLI build, or an edit of the file. The
+ * cooperating sibling's ordering, a logout or a store that completes before the lock is taken, is
+ * covered in auth-session-refresh.test.ts.
+ */
+test('a rotated credential does not replace a session another writer changed', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-rotate-race-');
+  const session = {
+    version: 1 as const,
+    id: 'session-race',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_old',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  const refreshWhile = (
+    change: () => void,
+    response: object,
+    stderr?: { write: (chunk: string) => boolean },
+  ) =>
+    resolveRemoteAuth({
+      command: 'snapshot',
+      flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+      stateDir: tempRoot,
+      allowInteractiveLogin: false,
+      env: {},
+      io: {
+        stderr,
+        fetch: async () => {
+          change();
+          return jsonResponse(response);
+        },
+      },
+    });
+  const rotated = { accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_late' };
+
+  // Another writer stored its own rotated credential first.
+  writeCliSession({ stateDir: tempRoot, session });
+  const other = { ...session, refreshCredential: 'adc_refresh_other' };
+  await refreshWhile(() => writeCliSession({ stateDir: tempRoot, session: other }), rotated);
+  assert.deepEqual(readCliSession({ stateDir: tempRoot }), other);
+
+  // A removal that took the file away stays a removal.
+  writeCliSession({ stateDir: tempRoot, session });
+  await refreshWhile(() => fs.rmSync(resolveCliSessionPath(tempRoot)), rotated);
+  assert.equal(readCliSession({ stateDir: tempRoot }), null);
+
+  // A cloud that returns the same credential causes no write.
+  writeCliSession({ stateDir: tempRoot, session });
+  const before = fs.statSync(resolveCliSessionPath(tempRoot)).ino;
+  await refreshWhile(() => {}, {
+    accessToken: 'adc_agent_2',
+    refreshCredential: 'adc_refresh_old',
+  });
+  assert.equal(fs.statSync(resolveCliSessionPath(tempRoot)).ino, before);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('logout without a stored session takes no lock and writes nothing', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-logout-empty-');
+
+  assert.equal(await removeCliSession({ stateDir: tempRoot }), false);
+  assert.equal(fs.existsSync(path.dirname(resolveCliSessionPath(tempRoot))), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a stored rotation is kept when the lock release fails, and the warning is best effort', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-release-');
+  const session = {
+    version: 1 as const,
+    id: 'session-release',
+    cloudBaseUrl: 'https://cloud.example',
+    refreshCredential: 'adc_refresh_old',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  const failingRelease = async () => {
+    throw new Error('lock standing under a spent claim');
+  };
+  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
+  const refresh = (stderr: { write: (chunk: string) => boolean }) =>
+    resolveRemoteAuth({
+      command: 'snapshot',
+      flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+      stateDir: tempRoot,
+      allowInteractiveLogin: false,
+      env: {},
+      io: {
+        stderr,
+        fetch: async () =>
+          jsonResponse({ accessToken: 'adc_agent_1', refreshCredential: 'adc_refresh_new' }),
+      },
+    });
+
+  try {
+    writeCliSession({ stateDir: tempRoot, session });
+    acquire.mockResolvedValueOnce(failingRelease);
+    const warnings: string[] = [];
+    const result = await refresh({ write: (chunk) => warnings.push(chunk) > 0 });
+    assert.equal(result.flags.daemonAuthToken, 'adc_agent_1');
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+    assert.match(warnings.join(''), /lock could not be released cleanly/);
+
+    // A stderr that throws does not fail the change either.
+    writeCliSession({ stateDir: tempRoot, session });
+    acquire.mockResolvedValueOnce(failingRelease);
+    const thrown = await refresh({
+      write: () => {
+        throw new Error('EPIPE');
+      },
+    });
+    assert.equal(thrown.flags.daemonAuthToken, 'adc_agent_1');
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_new');
+  } finally {
+    acquire.mockRestore();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a timed-out session lock wait keeps a login waiting and fails a refresh read with its reason', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-lock-timeout-');
+  const timeout = new AppError('COMMAND_FAILED', 'Timed out waiting for cloud CLI session file', {
+    reason: 'process_lock_timeout',
+  });
+  const acquire = vi.spyOn(hostKitFile, 'acquireProcessLock');
+  const warnings: string[] = [];
+  const stderr = { write: (chunk: string) => warnings.push(chunk) > 0 };
+  try {
+    writeCliSession({
+      stateDir: tempRoot,
+      session: {
+        version: 1,
+        id: 'session-timeout',
+        cloudBaseUrl: 'https://cloud.example',
+        refreshCredential: 'adc_refresh_old',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    // A refresh read is repeatable, so a wait that times out is the command's failure: no request is
+    // sent, nothing is stored, and the command does not queue forever behind the lock.
+    acquire.mockRejectedValueOnce(timeout);
+    let refreshes = 0;
+    await assert.rejects(
+      async () =>
+        await resolveRemoteAuth({
+          command: 'snapshot',
+          flags: { ...baseFlags, daemonBaseUrl: 'https://bridge.agent-device.dev' },
+          stateDir: tempRoot,
+          allowInteractiveLogin: false,
+          env: {},
+          io: {
+            stderr,
+            fetch: async () => {
+              refreshes += 1;
+              return jsonResponse({
+                accessToken: 'adc_agent_1',
+                refreshCredential: 'adc_refresh_new',
+              });
+            },
+          },
+        }),
+      (error: unknown) => normalizeError(error).details?.reason === 'process_lock_timeout',
+    );
+    assert.equal(refreshes, 0);
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_old');
+    assert.equal(warnings.length, 0);
+
+    // An approved login is not repeatable, so its save waits as long as the lock is held.
+    acquire.mockRejectedValueOnce(timeout);
+    let approvals = 0;
+    await loginWithDeviceAuth({
+      stateDir: tempRoot,
+      flags: baseFlags,
+      env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+      io: {
+        stdinIsTTY: true,
+        stdoutIsTTY: true,
+        stderr,
+        openBrowser: async () => {},
+        fetch: async (url) => {
+          if (String(url).endsWith('/device-auth/start')) {
+            approvals += 1;
+            return jsonResponse({
+              deviceCode: 'device-secret',
+              userCode: 'ABCD-EFGH',
+              verificationUri: 'https://cloud.example/authorize',
+              expiresIn: 600,
+              interval: 1,
+            });
+          }
+          return jsonResponse({
+            status: 'approved',
+            accessToken: 'adc_agent_login',
+            cliSession: { id: 'session-login', refreshCredential: 'adc_refresh_login' },
+          });
+        },
+      },
+    });
+    assert.equal(approvals, 1);
+    assert.equal(readCliSession({ stateDir: tempRoot })?.refreshCredential, 'adc_refresh_login');
+    assert.equal(
+      warnings.filter((line) => line.startsWith('Waiting for another agent-device process')).length,
+      1,
+    );
+  } finally {
+    acquire.mockRestore();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('device login does not print a user code that carries control characters', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-code-');
+  let stderr = '';
+  await loginWithDeviceAuth({
+    stateDir: tempRoot,
+    flags: baseFlags,
+    env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
+    io: {
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+      stderr: {
+        write: (chunk: string) => {
+          stderr += chunk;
+          return true;
+        },
+      },
+      openBrowser: async () => {},
+      fetch: async (url) =>
+        String(url).endsWith('/start')
+          ? jsonResponse({
+              deviceCode: 'device-secret',
+              userCode: 'AB\u001b[2JCD',
+              verificationUri: 'https://cloud.example/authorize',
+              interval: 1,
+            })
+          : jsonResponse({
+              status: 'approved',
+              accessToken: 'adc_agent_login',
+              cliSession: { id: 'session-code', refreshCredential: 'adc_refresh_login' },
+            }),
+    },
+  });
+  assert.equal(stderr, 'Opening https://cloud.example/authorize...\n');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -261,6 +553,8 @@ test('device login opens browser, stores CLI session, and returns agent token', 
     flags: baseFlags,
     env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example' },
     io: {
+      // Pinned before the approved token's expiry: past it, the login exchanges that token.
+      now: () => Date.parse('2026-02-01T00:00:00.000Z'),
       stdinIsTTY: true,
       stdoutIsTTY: true,
       stderr: {
@@ -305,7 +599,7 @@ test('device login opens browser, stores CLI session, and returns agent token', 
   assert.equal(login.accessToken, 'adc_agent_login');
   assert.deepEqual(opened, ['https://cloud.example/device?user_code=ABCD-EFGH']);
   assert.match(stderr, /Opening https:\/\/cloud\.example\/authorize/);
-  assert.doesNotMatch(stderr, /ABCD-EFGH/);
+  assert.match(stderr, /Confirm that the browser shows this code: ABCD-EFGH\n/);
   assert.deepEqual(requests, [
     'https://cloud.example/api/control-plane/device-auth/start',
     'https://cloud.example/api/control-plane/device-auth/poll',
@@ -324,7 +618,7 @@ test('device login opens browser, stores CLI session, and returns agent token', 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('auth summary and logout do not expose stored refresh credentials', () => {
+test('auth summary and logout do not expose stored refresh credentials', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-auth-summary-');
   writeCliSession({
     stateDir: tempRoot,
@@ -340,7 +634,7 @@ test('auth summary and logout do not expose stored refresh credentials', () => {
   const status = summarizeCliSession({ stateDir: tempRoot });
   assert.equal(status.authenticated, true);
   assert.equal(JSON.stringify(status).includes('adc_refresh_hidden'), false);
-  assert.equal(removeCliSession({ stateDir: tempRoot }), true);
+  assert.equal(await removeCliSession({ stateDir: tempRoot }), true);
   assert.equal(summarizeCliSession({ stateDir: tempRoot }).authenticated, false);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

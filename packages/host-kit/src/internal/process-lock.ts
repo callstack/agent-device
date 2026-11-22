@@ -288,7 +288,7 @@ function publishClaim(
 ): GuardedAcquisitionOutcome {
   const { lockDirPath, owner } = params;
   try {
-    fs.mkdirSync(lockDirPath);
+    fs.mkdirSync(lockDirPath, { mode: 0o700 });
   } catch (error) {
     if (errorCode(error) !== 'EEXIST') throw error;
     return { status: 'unproven' };
@@ -296,6 +296,8 @@ function publishClaim(
   const claimToken = crypto.randomUUID();
   const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
   try {
+    // The umask narrows a created mode, so the owner-only mode is set exactly.
+    fs.chmodSync(lockDirPath, 0o700);
     writeProcessLockOwner(ownerFilePath, claim);
   } catch (error) {
     try {
@@ -556,6 +558,8 @@ function writeProcessLockOwner(ownerFilePath: string, owner: ProcessLockOwnerRec
   publishFileSync({
     destination: ownerFilePath,
     contents: JSON.stringify(owner),
+    mode: 0o600,
+    exactMode: true,
   });
 }
 
@@ -618,6 +622,8 @@ function clearLockDirectory(
       publishFileSync({
         destination: ownerFilePath,
         contents: JSON.stringify(owner),
+        mode: 0o600,
+        exactMode: true,
         publish: 'link-exclusive',
       });
     } catch {}

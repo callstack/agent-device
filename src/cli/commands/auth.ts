@@ -36,7 +36,7 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags, ho
     return true;
   }
   if (subcommand === 'logout') {
-    const removed = removeCliSession({ stateDir });
+    const removed = await removeCliSession({ stateDir });
     await writeCommandOutput(flags, { authenticated: false, removed }, () =>
       removed ? 'Removed stored cloud CLI session.' : 'No stored cloud CLI session.',
     );
