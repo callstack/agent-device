@@ -76,12 +76,13 @@ Lease heartbeat and release name the lease id too.
 If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reason `LEASE_SESSION_MISMATCH`, and `field: 'leaseId'`.
 The daemon never fills a missing lease id from the session.
 The daemon checks the lease id before the request reads, changes, or ends the session.
-A request writes request events to the session journal only after that check. Thus, a refused request writes none. It also does not stamp session activity.
+A request writes request events to the session journal only after that check. Thus, a request that is refused for the session lease id writes none, and it does not stamp session activity.
+A request that sends the lease id of the session and is refused later, for example a `batch` after the lease deadline, can write its events and stamp activity.
 A command that holds no session lock (`doctor`, `events`, `capabilities`, `artifacts`) is checked again when it reads the session, and so is `apps`. It does not refresh the recording of that session.
 A `test` suite reads, records, and closes an attempt session only with the lease id that the suite sent.
 After the lease deadline, a request that holds the session lock and sends the lease id of the session ends that session.
-A request that sends a different active lease also ends that expired session under its locks, and then runs as the new owner. Its reply does not name the expired lease.
-A `batch`, a `replay`, and a bounded step do not end the session. They are refused with `LEASE_NOT_FOUND`, and the lease sweep ends the session.
+A request that sends a different active lease, and that lease admission accepts for a new session, also ends that expired session under its locks. It then runs as the new owner. Its reply and its diagnostics do not name the expired lease.
+A `batch`, a `replay`, and a bounded step do not end the session, and the lease sweep ends it. With the expired lease id, they are refused with `LEASE_NOT_FOUND`. With a different active lease, they are refused with `LEASE_SESSION_MISMATCH`.
 A request without an active lease is refused and ends nothing. The lease sweep ends the session.
 A command that holds no session lock ends no session. It leaves the expired session to the lease-end teardown.
 Tenant, run id, lease backend, client id, device key, and lease provider are labels.

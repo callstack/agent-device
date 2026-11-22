@@ -167,7 +167,7 @@ export type RequestRouterDeps = {
   createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup: PlatformResourceCleanup;
   /** Ends the resources of a session whose lease expired, for a request that holds its locks. */
-  settleExpiredSession?: SessionTeardown;
+  settleExpiredSession: SessionTeardown;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
   daemonPolicy?: DaemonPolicy;

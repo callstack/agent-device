@@ -285,6 +285,20 @@ test('a new owner opens the session right after the lease deadline, before the s
   expect(world.expiryTeardown).not.toHaveBeenCalled();
 });
 
+test('a new owner that lease admission would refuse does not end the expired session', async () => {
+  if (!world) return;
+  const ref = world.publishLeasedSession(world.sessionName);
+  const { clientId: _omitted, ...successor } = world.allocateOtherClient('ios:mobile:SIM-002');
+  world.passLeaseDeadline();
+
+  // A proxy open of a new session needs the client id.
+  const opened = await world.send('open', ['com.example.app'], successor);
+
+  expect(opened.error?.data?.code, JSON.stringify(opened)).toBe('INVALID_ARGS');
+  expect(world.sessionStore.lookup(world.sessionName)?.lifetime).toBe(ref.lifetime);
+  expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
+});
+
 test('doctor with the lease id after the deadline leaves the session to the lease-end owner', async () => {
   if (!world) return;
   const ref = world.publishLeasedSession(world.sessionName);
@@ -308,6 +322,25 @@ test('the owner request after the deadline ends its own expired session', async 
   expect(snapshot.error?.data?.code, JSON.stringify(snapshot)).toBe('UNAUTHORIZED');
   expect(snapshot.error?.data?.details?.reason).not.toBe('LEASE_SESSION_MISMATCH');
   expect(world.sessionStore.get(world.sessionName)).toBeUndefined();
+});
+
+test('devices still checks the recording of a session that holds no lease', async () => {
+  if (!world) return;
+  const session = makeIosAppSession(world.sessionName, {
+    sessionScope: { kind: 'tenant', id: TENANT },
+  });
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    runnerSessionId: 'runner-0',
+  });
+  world.sessionStore.publish(world.sessionName, session);
+
+  const devices = await world.send('devices', [], {});
+
+  expect(world.observeRunnerSession).toHaveBeenCalledTimes(1);
+  expect(devices.error?.message, JSON.stringify(devices)).toBe(
+    'iOS runner session restarted during recording',
+  );
 });
 
 test('devices with no lease id stays detached from a leased session and its recording', async () => {
@@ -413,21 +446,15 @@ test('capabilities with no lease id reads nothing from a leased session opened d
   expect(JSON.stringify(capabilities.result?.data)).not.toContain('appstate');
 });
 
-test('doctor with the lease id reports its leased session and leaves its recording alone', async () => {
+test('doctor with the lease id reports its leased session', async () => {
   if (!world) return;
-  const { session } = world.publishLeasedSession(world.sessionName);
-  session.screenRecording = makeTestScreenRecordingResource(session, {
-    backend: 'runner AVAssetWriter',
-    runnerSessionId: 'runner-0',
-  });
+  world.publishLeasedSession(world.sessionName);
 
   const doctor = await world.send('doctor', [], world.owner);
 
   expect(doctor.result?.ok, JSON.stringify(doctor)).toBe(true);
   expect(JSON.stringify(doctor.result?.data)).toContain(world.sessionName);
   expect(world.hostDiagnostics.deviceChecks).toHaveBeenCalledTimes(1);
-  // Doctor holds no session lock, so it does not refresh the recording.
-  expect(world.observeRunnerSession).not.toHaveBeenCalled();
   expect(await world.requestEvents(world.sessionName)).toEqual([
     'request.started',
     'request.finished',

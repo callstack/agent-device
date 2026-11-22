@@ -1,9 +1,9 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { LEASE_REASONS, leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import { assertLeaseScopeMatch, leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
+import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
@@ -104,9 +104,11 @@ export async function endLeasedSession(
   teardownSession: SessionTeardown,
   reason: LeaseEndReason,
   env: HostEnvironment['env'],
+  /** Only the daemon log names the lease id. A request record can reach another client. */
+  daemonScope = false,
 ): Promise<void> {
   const session = ref.session;
-  const leaseId = session.lease?.leaseId;
+  const leaseId = daemonScope ? session.lease?.leaseId : undefined;
   emitDiagnostic({
     level: 'info',
     phase: 'leased_session_ended',
@@ -143,6 +145,7 @@ type LockedSessionParams = {
   teardown: ExpiredSessionTeardown;
   holdDeviceLock: (deviceId: string) => Promise<void>;
   teardownSession: SessionTeardown;
+  admission: Readonly<{ providerAppCatalog?: ProviderAppCatalog; daemonPolicy?: DaemonPolicy }>;
 };
 
 /**
@@ -179,9 +182,14 @@ async function endExpiredSessionForSuccessor(
   await params.holdDeviceLock(ref.session.device.id);
   // The wait for the device lock can outlast the successor lease or the session. Both are checked
   // again here, with no await before the teardown starts.
-  const successor = successorLease();
-  if (!successor || !params.sessionStore.resolveCurrent(ref)) return false;
-  assertLeaseScopeMatch(successor, leaseScopeToHeartbeatRequest(successorScope));
+  if (!successorLease() || !params.sessionStore.resolveCurrent(ref)) return false;
+  // The admission rules of a fresh session, with no lease change: a successor that admission
+  // would refuse ends nothing.
+  assertRequestLeaseAdmission(params.req, leaseRegistry, undefined, {
+    ...params.admission,
+    env: params.env,
+    inspectOnly: true,
+  });
   await endLeasedSession(
     ref,
     params.sessionStore,

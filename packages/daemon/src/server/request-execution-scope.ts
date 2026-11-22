@@ -52,6 +52,7 @@ import {
   existingSessionExecutionLockKeys,
   prepareLockedRequestBinding,
   resolveRequestExecutionLockPlan,
+  sessionExecutionLockKey,
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
 import {
@@ -84,7 +85,7 @@ import {
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
-import type { SessionState } from '../core/session-state.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -199,6 +200,8 @@ export type RequestExecutionScope = AsyncDisposable & {
   runnerLogPath: string;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
+  /** For a request without the session lock: runs `task` under it, unless a request holds it. */
+  tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
   /** Writes the request-finished event, unless the request may not write to its session. */
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -414,6 +417,11 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
       retainDeviceExecutionLock: async (deviceId) =>
         await requestExecutionLocks.retainDevice(deviceId),
+      tryRunUnderSessionLock: async (task) => {
+        const key = sessionExecutionLockKey(sessionName);
+        if (!executionLocks.has(key))
+          await withRequestExecutionLockKeys(executionLocks, [key], task);
+      },
       bindDevice: runtimeBindings.bindDevice,
       inspectFacts: runtimeBindings.inspectFacts,
       bindExactDevice: runtimeBindings.bindExactDevice,
@@ -442,6 +450,7 @@ export async function createRequestExecutionScope(params: {
           req: scopedReq,
           sessionName,
           holdDeviceLock: scope.retainDeviceExecutionLock,
+          admission: params,
         });
         if (attachesToSession) recordStarted();
         let admissionCompleted = false;
@@ -677,14 +686,24 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const seededRef = resolveRequestSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
-  if (seededRef) {
+  const readSessionRef = (): SessionRef | undefined =>
+    resolveRequestSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
+  // A request that holds the session lock keeps the lifetime that it captures here.
+  let seededRef = readSessionRef();
+  if (!shouldLockSessionExecution(scope.command)) {
+    // Without the session lock, an open can attach a lease to this session while the runner is
+    // observed. Thus the refresh takes the lock and reads the session again. It yields to a
+    // request that holds the lock, which checks the recording itself.
+    await scope.tryRunUnderSessionLock(async () => {
+      const ref = readSessionRef();
+      if (ref) await refreshRecordingHealth(sessionStore, ref, scope.platformServices);
+    });
+    seededRef = readSessionRef();
+  } else if (seededRef && scope.command !== 'batch' && scope.command !== 'replay') {
     // A composite's resource health is checked by its admitted steps; the outer read can invalidate a durable recording.
-    // Without the session lock, an open can attach a lease to this session while the refresh waits.
-    const refreshes = scope.command !== 'batch' && scope.command !== 'replay';
-    if (refreshes && shouldLockSessionExecution(scope.command)) {
-      await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
-    }
+    await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
+  }
+  if (seededRef) {
     scope.throwIfCanceled();
     sessionStore.requireCurrent(seededRef);
   }
@@ -850,6 +869,7 @@ export function createLeaseSessionEnd(params: {
                 teardownSession,
                 reason,
                 params.env,
+                true,
               );
             },
           ),

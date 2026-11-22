@@ -21,10 +21,15 @@ import {
   withDisplacedLeaseClaims,
 } from '../core/lease-context.ts';
 import {
+  LEASE_REASONS,
   leaseScopeToHeartbeatRequest,
   remoteSessionRequiredError,
 } from '@agent-device/contracts/lease-scope';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import {
+  assertLeaseScopeMatch,
+  normalizeLeaseAdmissionRequest,
+} from '../resources/lease-registry-scope.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
@@ -166,6 +171,8 @@ export function assertRequestLeaseAdmission(
     env: HostEnvironment['env'];
     providerAppCatalog?: ProviderAppCatalog;
     daemonPolicy?: DaemonPolicy;
+    /** Runs the same rules and changes no lease: no registry sweep and no renewal. */
+    inspectOnly?: boolean;
   }>,
 ): DeviceLease | undefined {
   // An admission-exempt command still acts on its session, so it must hold the session lease too.
@@ -178,7 +185,7 @@ export function assertRequestLeaseAdmission(
   if (!sessionLease) assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   if (options.daemonPolicy?.requiredLeaseBackend) {
     const leased = Boolean(resolveSessionLeaseScope(req, session).leaseId);
-    const lease = leased ? admitLease(req, leaseRegistry, session, options.env) : undefined;
+    const lease = leased ? admitLease(req, leaseRegistry, session, options) : undefined;
     assertDaemonPolicyAdmitsLease(options.daemonPolicy, lease);
     return lease;
   }
@@ -190,7 +197,7 @@ export function assertRequestLeaseAdmission(
     return undefined;
   }
   if (runsWithoutLease(req, sessionLease, requestLeaseScope)) return undefined;
-  return admitLease(req, leaseRegistry, session, options.env);
+  return admitLease(req, leaseRegistry, session, options);
 }
 
 /**
@@ -217,16 +224,41 @@ function admitLease(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session: SessionState | undefined,
-  env: HostEnvironment['env'],
+  options: Readonly<{ env: HostEnvironment['env']; inspectOnly?: boolean }>,
 ): DeviceLease {
-  const leaseScope = resolveSessionLeaseScope(req, session);
-  leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
+  const admission = leaseScopeToHeartbeatRequest(resolveSessionLeaseScope(req, session));
+  const lease = options.inspectOnly
+    ? inspectAdmittedLease(leaseRegistry, admission)
+    : renewAdmittedLease(leaseRegistry, admission);
+  assertMacOsAppLeaseAdmitsRequest(lease, req, session, options.env);
+  if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
+  return lease;
+}
+
+function renewAdmittedLease(
+  leaseRegistry: LeaseRegistry,
+  admission: ReturnType<typeof leaseScopeToHeartbeatRequest>,
+): DeviceLease {
+  leaseRegistry.assertLeaseAdmission(admission);
   // Admission renews for the window the lease already carries, or the window this request named.
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
   // that rented a device for longer than the default lost it on the next admitted command (#2946).
-  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-  assertMacOsAppLeaseAdmitsRequest(lease, req, session, env);
-  if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
+  return leaseRegistry.heartbeatLease(admission);
+}
+
+/** The registry checks of {@link renewAdmittedLease} on the lease as it is: no sweep, no renewal. */
+function inspectAdmittedLease(
+  leaseRegistry: LeaseRegistry,
+  admission: ReturnType<typeof leaseScopeToHeartbeatRequest>,
+): DeviceLease {
+  const scope = normalizeLeaseAdmissionRequest(admission);
+  const lease = leaseRegistry.inspectActiveLease(scope.leaseId);
+  if (!lease) {
+    throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+      reason: LEASE_REASONS.notFound.reason,
+    });
+  }
+  assertLeaseScopeMatch(lease, scope);
   return lease;
 }
 

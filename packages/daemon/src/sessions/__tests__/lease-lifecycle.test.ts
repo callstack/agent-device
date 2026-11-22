@@ -121,6 +121,7 @@ test('resolveLockedRequestSessionRef ends nothing when the successor lease expir
         now = 1_060;
       },
       teardownSession,
+      admission: {},
     }),
   ).rejects.toMatchObject({ details: { reason: 'LEASE_SESSION_MISMATCH' } });
 

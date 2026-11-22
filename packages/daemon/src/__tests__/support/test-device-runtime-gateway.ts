@@ -220,6 +220,7 @@ export function createRequestHandler(
     | 'claimRecoveryGateway'
     | 'androidObservation'
     | 'platformResourceCleanup'
+    | 'settleExpiredSession'
   > &
     Partial<
       Pick<
@@ -230,6 +231,7 @@ export function createRequestHandler(
         | 'claimRecoveryGateway'
         | 'androidObservation'
         | 'platformResourceCleanup'
+        | 'settleExpiredSession'
       >
     >,
 ) {
@@ -240,18 +242,19 @@ export function createRequestHandler(
     claimRecoveryGateway = daemonClaimRecoveryGatewayFixture(),
     androidObservation = clearAndroidObservationFixture,
     platformResourceCleanup = platformResourceCleanupFixture(),
-    ...rest
-  } = deps;
-  const handle = createProductionRequestHandler({
     // The resource half of the daemon-owned settle, over this handler's cleanup fixture.
-    settleExpiredSession: async (ref: SessionRef) =>
+    settleExpiredSession = async (ref: SessionRef) =>
       await teardownSessionResources({
         appLog: 'run',
         ref,
         sessionStore: deps.sessionStore,
         platformCleanup: platformResourceCleanup,
       }),
+    ...rest
+  } = deps;
+  const handle = createProductionRequestHandler({
     ...rest,
+    settleExpiredSession,
     androidObservation,
     platformResourceCleanup,
     platformServices,
