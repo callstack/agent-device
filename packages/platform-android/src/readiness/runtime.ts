@@ -131,7 +131,15 @@ async function launchHeldByOtherOwner(
   if (!heldByOther) return false;
   try {
     return await heldByOther(device);
-  } catch {
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_emulator_launch_ownership_unanswered',
+      data: {
+        device: device.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
     return true;
   }
 }

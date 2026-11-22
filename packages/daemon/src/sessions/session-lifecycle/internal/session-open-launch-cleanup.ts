@@ -92,7 +92,7 @@ async function stopUnownedLaunch(params: {
   // An open that lost the booted device to another owner must leave that owner's emulator running,
   // whatever its own failure was. These ownership answers precede the reasons this open could keep the
   // launch for itself, so a kept launch reports the reason that kept it.
-  if (findSessionHoldingDevice(sessionStore, device.id, params.sessionName)) {
+  if (holdsDeviceInAnotherSession(params)) {
     return keepLaunchForDeviceInUse();
   }
   if (await claimHeldByAnotherOwner(params)) {

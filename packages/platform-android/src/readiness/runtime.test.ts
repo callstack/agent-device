@@ -739,23 +739,26 @@ test('a boot whose discovery fails before the deadline asks about the AVD this r
 });
 
 test('a boot whose owner question cannot be answered keeps the launched emulator running', async () => {
-  const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }], {
-    launched: true,
-  });
-  const heldByOther = vi.fn(async () => {
-    throw new Error('claim state unreadable');
-  });
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    const { host, terminate } = probeHost([{ stdout: '', stderr: 'error: closed', exitCode: 1 }], {
+      launched: true,
+    });
+    const heldByOther = vi.fn(async () => {
+      throw new Error('claim state unreadable');
+    });
 
-  await expect(
-    ensureAndroidReady(
-      host,
-      stoppedAvd(),
-      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
-      new AbortController().signal,
-    ),
-  ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
-  // Nobody could say who owns the emulator, so nothing is signaled to it (#4764 rule).
-  expect(terminate).not.toHaveBeenCalled();
+    await expect(
+      ensureAndroidReady(
+        host,
+        stoppedAvd(),
+        { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'BOOT_COMMAND_FAILED' } });
+    // Nobody could say who owns the emulator, so nothing is signaled to it (#4764 rule).
+    expect(terminate).not.toHaveBeenCalled();
+    expect(countDiagnosticEventsByPhase(['android_emulator_launch_ownership_unanswered'])).toBe(1);
+  });
 });
 
 test('a host that refuses the stop still reports the boot failure and records the refusal', async () => {
