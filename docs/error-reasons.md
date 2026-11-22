@@ -12,6 +12,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `alert-not-found` | No alert was visible to `alert accept` or `alert dismiss`, from the tree-based driver or the macOS helper, so nothing was pressed. Retry once the alert shows, or inspect `snapshot -i`. |
+| `alert-wait-timeout` | `alert wait` saw no actionable alert within its window. |
 | `alert_button_undecided` | The sheet's buttons name no single choice for the asked-for action. |
 | `alert_capture_undecided` | The capture is alert-shaped but resolves to no single alert. |
 | `alert-window-expired` | A press went out but the confirm window never settled whether the alert is gone. |
@@ -48,6 +50,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `fill_text_stdin_in_batch` | A batch step asked `fill` to read its text from stdin, which a step does not have. Run that fill on its own with `--text-stdin`. |
 | `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
 
 ### `clipboard`
@@ -60,6 +63,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
 | `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
@@ -145,6 +149,12 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `ARTIFACT_BYTE_LIMIT` | The response declared or carried more bytes than the artifact budget allows. |
 | `source_materialization_deadline_exceeded` | The aggregate or handed-down materialization budget ran out before the source was ready. |
 
+### `keyboard`
+
+| Reason | Meaning |
+| --- | --- |
+| `keyboard_dismiss_unavailable` | The keyboard stayed up: the Apple runner leaves a visible keyboard alone and presses nothing, or the Android IME stayed visible after Escape key events, which may have reached the app. `details.dispatched` says which. |
+
 ### `logs`
 
 | Reason | Meaning |
@@ -157,6 +167,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `launch-console-owner-unadmitted` | --launch-console was asked for on an app-launch owner that cannot stream a console. |
+| `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
 | `claim-lost-during-open` | The device lost the claim this open was made with; close the session and open the device again. |
 | `runtime-hints-operation-missing` | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them. |
 | `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
@@ -193,6 +204,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `plugin_load_failed` | The plugin's manifest or code could not be read, resolved, or loaded. |
 | `plugin_setup_failed` | The plugin's `setup(host)` threw, or registering what it returned failed. |
 | `reserved_provider` | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`. |
+| `invalid_plugin` | The plugin package or what its code returns breaks the plugin contract: an invalid manifest, package version, provider id, credentials or connection, no default factory or `setup(host)`, or a runtime or WebDriver descriptor that lacks a required field. |
 
 ### `prepare`
 
@@ -557,6 +569,8 @@ These reasons can come from more than one command.
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
 | `daemon_shutting_down` | The daemon has begun to leave, so it refuses every new request; retry against a new daemon. |
+| `daemon-owner-unrecognized` | The daemon record states an owner this build cannot prove, so `daemon stop` signaled nothing and a client did not replace that daemon. Stop the process by its own means and remove its daemon.json, or update agent-device if a newer build wrote the record. |
+| `daemon_retirement_unconfirmed` | A daemon was asked to retire, by `daemon stop`, by a client replacing it, or by cleanup after a replay, and the retirement could not be confirmed: its ownership, lock, record or cleanup stayed unresolved. `details.retirement` says which; state and diagnostics stay in the state directory. |
 | `daemon_exit_unconfirmed` | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified. |
 | `repair_evidence_invalid` | The repair tombstone file exists but does not parse into a valid marker. |
 | `daemon_registration_refused` | Another daemon holds this state directory, or its registration could not be proven free, so this daemon did not start; `details.status` says which. |
@@ -780,6 +794,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `runtime-contract-invalid` | A platform runtime broke its own contract: an owner advertised an operation it cannot perform, runtime registrations conflict, are missing or do not match the selected device, or a capture runtime returned a durable record for another session or device. Report the device and command. |
 | `runtime-gateway-shut-down` | The gateway is closed, so the command reached no runtime owner. |
 | `platform-owner-shutdown-failed` | One or more runtime owners failed to shut down; `details.failures` keeps each owner's error and cleanup stays unconfirmed. |
 
@@ -817,6 +832,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
 | `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
@@ -858,6 +874,7 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `duplicate_request_id` | A request arrived with an id another request is still in flight under. |
+| `request_canceled` | The caller canceled the request or disconnected before the work finished, so the command stopped waiting, including on a snapshot, native build, provider request, device start or install. A provider device start already submitted may keep running. No retry is needed unless the cancellation was unintended. |
 
 ### Request execution
 

@@ -4748,12 +4748,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ### `alert`
 
-| Reason                       | Meaning                                                                                                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `alert_button_undecided`     | The sheet’s buttons name no single choice for the asked-for action.                                                                                                |
-| `alert_capture_undecided`    | The capture is alert-shaped but resolves to no single alert.                                                                                                       |
-| `alert-window-expired`       | A press went out but the confirm window never settled whether the alert is gone.                                                                                   |
-| `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; the command refuses it before running and never shortens it. `details.maxWaitWindowMs` names the limit. |
+| Reason                       | Meaning                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alert-not-found`            | No alert was visible to `alert accept` or `alert dismiss`, from the tree-based driver or the macOS helper, so nothing was pressed. Retry once the alert shows, or inspect `snapshot -i`. |
+| `alert-wait-timeout`         | `alert wait` saw no actionable alert within its window.                                                                                                                                  |
+| `alert_button_undecided`     | The sheet’s buttons name no single choice for the asked-for action.                                                                                                                      |
+| `alert_capture_undecided`    | The capture is alert-shaped but resolves to no single alert.                                                                                                                             |
+| `alert-window-expired`       | A press went out but the confirm window never settled whether the alert is gone.                                                                                                         |
+| `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; the command refuses it before running and never shortens it. `details.maxWaitWindowMs` names the limit.                       |
 
 ### `audit`
 
@@ -4786,6 +4788,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason                                   | Meaning                                                                                                                                                                                                                                                                                                   |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fill_text_stdin_in_batch`               | A batch step asked `fill` to read its text from stdin, which a step does not have. Run that fill on its own with `--text-stdin`.                                                                                                                                                                          |
 | `bounded_composite_resource_unsupported` | The composite refused this step before dispatch because it must run as its own command, such as a recording, trace, log, audio or perf capture. `details.shape` names the refused operation or option, and `details.standaloneCommandName` the public command to run instead. Earlier steps may have run. |
 
 ### `clipboard`
@@ -4796,12 +4799,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ### `close`
 
-| Reason                                | Meaning                                                                               |
-| ------------------------------------- | ------------------------------------------------------------------------------------- |
-| `android-app-close-timeout`           | A stop fence ended before the app left the foreground or its killed processes exited. |
-| `android-process-probe-unavailable`   | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
-| `MACOS_APP_TERMINATION_TIMEOUT`       | The macOS app was still running after every termination attempt.                      |
-| `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text.         |
+| Reason                                | Meaning                                                                                                                                                                                                                                                                                        |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app-device-scope`                    | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
+| `android-app-close-timeout`           | A stop fence ended before the app left the foreground or its killed processes exited.                                                                                                                                                                                                          |
+| `android-process-probe-unavailable`   | `adb pidof` or the resumed-activity read did not answer, so process state is unknown.                                                                                                                                                                                                          |
+| `MACOS_APP_TERMINATION_TIMEOUT`       | The macOS app was still running after every termination attempt.                                                                                                                                                                                                                               |
+| `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text.                                                                                                                                                                                                                  |
 
 ### `connect`
 
@@ -4883,6 +4887,12 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `ARTIFACT_BYTE_LIMIT`                      | The response declared or carried more bytes than the artifact budget allows.             |
 | `source_materialization_deadline_exceeded` | The aggregate or handed-down materialization budget ran out before the source was ready. |
 
+### `keyboard`
+
+| Reason                         | Meaning                                                                                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `keyboard_dismiss_unavailable` | The keyboard stayed up: the Apple runner leaves a visible keyboard alone and presses nothing, or the Android IME stayed visible after Escape key events, which may have reached the app. `details.dispatched` says which. |
+
 ### `logs`
 
 | Reason                                | Meaning                                                                                                                                                    |
@@ -4892,25 +4902,26 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ### `open`
 
-| Reason                                   | Meaning                                                                                                |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `launch-console-owner-unadmitted`        | –launch-console was asked for on an app-launch owner that cannot stream a console.                     |
-| `claim-lost-during-open`                 | The device lost the claim this open was made with; close the session and open the device again.        |
-| `runtime-hints-operation-missing`        | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them.     |
-| `android_port_reverse_rebind_refused`    | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces.               |
-| `invalid-android-activity-component`     | The `--activity` value is not an Android component name.                                               |
-| `android-launch-not-foreground`          | The app the helper launched never reached the foreground before the launch budget ran out.             |
-| `android-app-close-timeout`              | A stop fence ended before the app left the foreground or its killed processes exited.                  |
-| `android-process-probe-unavailable`      | `adb pidof` or the resumed-activity read did not answer, so process state is unknown.                  |
-| `ios-simulator-openurl-timeout`          | CoreSimulator did not answer `simctl openurl` in time, so the URL open failed.                         |
-| `system-surface-host-not-openable`       | The bundle hosts an iOS system surface, which `open` refuses to launch as an app.                      |
-| `launch_confirmation_foreign_app`        | iOS asks to open another app’s URL scheme instead of the session app’s.                                |
-| `launch_confirmation_unanswered`         | The Simulator has not completed the launch URL; an “Open in” prompt may still be waiting.              |
-| `invalid-harmony-ability-name`           | –activity is not an ability name the module.json5 format can carry.                                    |
-| `open-not-foreground`                    | The launch was refused (a locked screen) or the poll answered without the app.                         |
-| `open-foreground-probe-unreadable`       | The poll’s every read failed, so the foreground question stayed unanswered.                            |
-| `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
-| `foreground_app_ambiguous`               | `open --foreground` found no single running app to bring forward on the selected simulator.            |
+| Reason                                   | Meaning                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `launch-console-owner-unadmitted`        | –launch-console was asked for on an app-launch owner that cannot stream a console.                                                                                                                                                                                                             |
+| `app-device-scope`                       | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
+| `claim-lost-during-open`                 | The device lost the claim this open was made with; close the session and open the device again.                                                                                                                                                                                                |
+| `runtime-hints-operation-missing`        | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them.                                                                                                                                                                                             |
+| `android_port_reverse_rebind_refused`    | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces.                                                                                                                                                                                                       |
+| `invalid-android-activity-component`     | The `--activity` value is not an Android component name.                                                                                                                                                                                                                                       |
+| `android-launch-not-foreground`          | The app the helper launched never reached the foreground before the launch budget ran out.                                                                                                                                                                                                     |
+| `android-app-close-timeout`              | A stop fence ended before the app left the foreground or its killed processes exited.                                                                                                                                                                                                          |
+| `android-process-probe-unavailable`      | `adb pidof` or the resumed-activity read did not answer, so process state is unknown.                                                                                                                                                                                                          |
+| `ios-simulator-openurl-timeout`          | CoreSimulator did not answer `simctl openurl` in time, so the URL open failed.                                                                                                                                                                                                                 |
+| `system-surface-host-not-openable`       | The bundle hosts an iOS system surface, which `open` refuses to launch as an app.                                                                                                                                                                                                              |
+| `launch_confirmation_foreign_app`        | iOS asks to open another app’s URL scheme instead of the session app’s.                                                                                                                                                                                                                        |
+| `launch_confirmation_unanswered`         | The Simulator has not completed the launch URL; an “Open in” prompt may still be waiting.                                                                                                                                                                                                      |
+| `invalid-harmony-ability-name`           | –activity is not an ability name the module.json5 format can carry.                                                                                                                                                                                                                            |
+| `open-not-foreground`                    | The launch was refused (a locked screen) or the poll answered without the app.                                                                                                                                                                                                                 |
+| `open-foreground-probe-unreadable`       | The poll’s every read failed, so the foreground question stayed unanswered.                                                                                                                                                                                                                    |
+| `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe.                                                                                                                                                                                         |
+| `foreground_app_ambiguous`               | `open --foreground` found no single running app to bring forward on the selected simulator.                                                                                                                                                                                                    |
 
 ### `orientation`
 
@@ -4924,13 +4935,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 ### `plugins`
 
-| Reason                | Meaning                                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------------------------- |
-| `duplicate_provider`  | Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns. |
-| `incompatible_plugin` | The package exports no plugin entry or declares no provider contract this build can load.             |
-| `plugin_load_failed`  | The plugin’s manifest or code could not be read, resolved, or loaded.                                 |
-| `plugin_setup_failed` | The plugin’s `setup(host)` threw, or registering what it returned failed.                             |
-| `reserved_provider`   | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`.                        |
+| Reason                | Meaning                                                                                                                                                                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `duplicate_provider`  | Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns.                                                                                                                                                        |
+| `incompatible_plugin` | The package exports no plugin entry or declares no provider contract this build can load.                                                                                                                                                                    |
+| `plugin_load_failed`  | The plugin’s manifest or code could not be read, resolved, or loaded.                                                                                                                                                                                        |
+| `plugin_setup_failed` | The plugin’s `setup(host)` threw, or registering what it returned failed.                                                                                                                                                                                    |
+| `reserved_provider`   | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`.                                                                                                                                                                               |
+| `invalid_plugin`      | The plugin package or what its code returns breaks the plugin contract: an invalid manifest, package version, provider id, credentials or connection, no default factory or `setup(host)`, or a runtime or WebDriver descriptor that lacks a required field. |
 
 ### `prepare`
 
@@ -5269,36 +5281,38 @@ These reasons can come from more than one command.
 
 ### Daemon lifecycle
 
-| Reason                                | Meaning                                                                                                                                                                          |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `daemon-not-running`                  | An attaching client found no daemon to connect to.                                                                                                                               |
-| `daemon-incompatible`                 | The running daemon does not match the client; `details.daemon` and `details.client` hold both identities.                                                                        |
-| `daemon-drain-timeout`                | A daemon accepted the request to leave but was still running 60 s later and could not be retired.                                                                                |
-| `daemon-contended`                    | Another process started a daemon while this one was starting, and this caller may not retire a daemon it never started.                                                          |
-| `daemon-lifecycle-contended`          | The daemon kept being started or replaced while `ensureDaemon` was judging the state directory.                                                                                  |
-| `daemon_registration_unproven`        | A daemon this client started did not prove through its registration that it owns the process.                                                                                    |
-| `daemon-record-unreadable`            | The `daemon.json` of the state directory cannot identify a usable daemon, so nothing was started, replaced, or signaled.                                                         |
-| `remote_daemon_unavailable`           | The health probe that gates a remote send found no daemon to hand the request to, so `details.dispatched` is `no` and a resend is safe.                                          |
-| `daemon-binding-mismatch`             | A client pinned to one daemon instance reached a state directory registering another one, or none it can read as an address; `details.bound` and `details.registered` hold both. |
-| `DAEMON_POLICY_MISMATCH`              | The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names.                                                                                   |
-| `startup-exited`                      | The daemon process ended before it registered a reachable endpoint.                                                                                                              |
-| `startup-stalled`                     | The daemon stayed registered and reachable but never reported the startup phase that follows.                                                                                    |
-| `startup-ceiling`                     | Startup passed the ceiling its own startup budget allows, so this client stopped waiting.                                                                                        |
-| `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer “which daemon” two different ways.                                                            |
-| `daemon_startup_admission_closed`     | Replay’s admission gate is closed, so no new daemon startup is allowed.                                                                                                          |
-| `daemon_private_state_unowned`        | The private replay state dir does not resolve to the one this host sealed for that capability.                                                                                   |
-| `daemon_private_startup_unowned`      | The observed process is not one of the startups this host launched and tracks.                                                                                                   |
-| `daemon_state_root_unsafe`            | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it.                                                                  |
-| `relative_state_dir_without_cwd`      | The state dir is a relative path and the caller gave no working directory to resolve it from.                                                                                    |
-| `remote_script_artifacts_unsupported` | The remote daemon reports no script-artifacts capability, so it would record to its own disk.                                                                                    |
-| `daemon-busy`                         | The daemon still holds work, so it refused to leave; `details` counts that work.                                                                                                 |
-| `daemon-instance-mismatch`            | The request names a different daemon instance than the one answering it.                                                                                                         |
-| `daemon-owner-embedded`               | A live host process owns this daemon and ends it through its own `close()`.                                                                                                      |
-| `daemon_shutting_down`                | The daemon has begun to leave, so it refuses every new request; retry against a new daemon.                                                                                      |
-| `daemon_exit_unconfirmed`             | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified.                 |
-| `repair_evidence_invalid`             | The repair tombstone file exists but does not parse into a valid marker.                                                                                                         |
-| `daemon_registration_refused`         | Another daemon holds this state directory, or its registration could not be proven free, so this daemon did not start; `details.status` says which.                              |
-| `daemon-clean-not-detached`           | The record does not prove the process is a daemon of its own, so its process tree may be someone else’s work.                                                                    |
+| Reason                                | Meaning                                                                                                                                                                                                                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `daemon-not-running`                  | An attaching client found no daemon to connect to.                                                                                                                                                                                                                                               |
+| `daemon-incompatible`                 | The running daemon does not match the client; `details.daemon` and `details.client` hold both identities.                                                                                                                                                                                        |
+| `daemon-drain-timeout`                | A daemon accepted the request to leave but was still running 60 s later and could not be retired.                                                                                                                                                                                                |
+| `daemon-contended`                    | Another process started a daemon while this one was starting, and this caller may not retire a daemon it never started.                                                                                                                                                                          |
+| `daemon-lifecycle-contended`          | The daemon kept being started or replaced while `ensureDaemon` was judging the state directory.                                                                                                                                                                                                  |
+| `daemon_registration_unproven`        | A daemon this client started did not prove through its registration that it owns the process.                                                                                                                                                                                                    |
+| `daemon-record-unreadable`            | The `daemon.json` of the state directory cannot identify a usable daemon, so nothing was started, replaced, or signaled.                                                                                                                                                                         |
+| `remote_daemon_unavailable`           | The health probe that gates a remote send found no daemon to hand the request to, so `details.dispatched` is `no` and a resend is safe.                                                                                                                                                          |
+| `daemon-binding-mismatch`             | A client pinned to one daemon instance reached a state directory registering another one, or none it can read as an address; `details.bound` and `details.registered` hold both.                                                                                                                 |
+| `DAEMON_POLICY_MISMATCH`              | The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names.                                                                                                                                                                                                   |
+| `startup-exited`                      | The daemon process ended before it registered a reachable endpoint.                                                                                                                                                                                                                              |
+| `startup-stalled`                     | The daemon stayed registered and reachable but never reported the startup phase that follows.                                                                                                                                                                                                    |
+| `startup-ceiling`                     | Startup passed the ceiling its own startup budget allows, so this client stopped waiting.                                                                                                                                                                                                        |
+| `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer “which daemon” two different ways.                                                                                                                                                                            |
+| `daemon_startup_admission_closed`     | Replay’s admission gate is closed, so no new daemon startup is allowed.                                                                                                                                                                                                                          |
+| `daemon_private_state_unowned`        | The private replay state dir does not resolve to the one this host sealed for that capability.                                                                                                                                                                                                   |
+| `daemon_private_startup_unowned`      | The observed process is not one of the startups this host launched and tracks.                                                                                                                                                                                                                   |
+| `daemon_state_root_unsafe`            | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it.                                                                                                                                                                                  |
+| `relative_state_dir_without_cwd`      | The state dir is a relative path and the caller gave no working directory to resolve it from.                                                                                                                                                                                                    |
+| `remote_script_artifacts_unsupported` | The remote daemon reports no script-artifacts capability, so it would record to its own disk.                                                                                                                                                                                                    |
+| `daemon-busy`                         | The daemon still holds work, so it refused to leave; `details` counts that work.                                                                                                                                                                                                                 |
+| `daemon-instance-mismatch`            | The request names a different daemon instance than the one answering it.                                                                                                                                                                                                                         |
+| `daemon-owner-embedded`               | A live host process owns this daemon and ends it through its own `close()`.                                                                                                                                                                                                                      |
+| `daemon_shutting_down`                | The daemon has begun to leave, so it refuses every new request; retry against a new daemon.                                                                                                                                                                                                      |
+| `daemon-owner-unrecognized`           | The daemon record states an owner this build cannot prove, so `daemon stop` signaled nothing and a client did not replace that daemon. Stop the process by its own means and remove its daemon.json, or update agent-device if a newer build wrote the record.                                   |
+| `daemon_retirement_unconfirmed`       | A daemon was asked to retire, by `daemon stop`, by a client replacing it, or by cleanup after a replay, and the retirement could not be confirmed: its ownership, lock, record or cleanup stayed unresolved. `details.retirement` says which; state and diagnostics stay in the state directory. |
+| `daemon_exit_unconfirmed`             | The stop could not confirm the daemon exited: the process stayed alive after the signal, the signal failed, or its start time or identity could not be verified.                                                                                                                                 |
+| `repair_evidence_invalid`             | The repair tombstone file exists but does not parse into a valid marker.                                                                                                                                                                                                                         |
+| `daemon_registration_refused`         | Another daemon holds this state directory, or its registration could not be proven free, so this daemon did not start; `details.status` says which.                                                                                                                                              |
+| `daemon-clean-not-detached`           | The record does not prove the process is a daemon of its own, so its process tree may be someone else’s work.                                                                                                                                                                                    |
 
 ### Daemon policy
 
@@ -5516,10 +5530,11 @@ These reasons can come from more than one command.
 
 ### Platform runtime
 
-| Reason                           | Meaning                                                                                                                    |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `runtime-gateway-shut-down`      | The gateway is closed, so the command reached no runtime owner.                                                            |
-| `platform-owner-shutdown-failed` | One or more runtime owners failed to shut down; `details.failures` keeps each owner’s error and cleanup stays unconfirmed. |
+| Reason                           | Meaning                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime-contract-invalid`       | A platform runtime broke its own contract: an owner advertised an operation it cannot perform, runtime registrations conflict, are missing or do not match the selected device, or a capture runtime returned a durable record for another session or device. Report the device and command. |
+| `runtime-gateway-shut-down`      | The gateway is closed, so the command reached no runtime owner.                                                                                                                                                                                                                              |
+| `platform-owner-shutdown-failed` | One or more runtime owners failed to shut down; `details.failures` keeps each owner’s error and cleanup stays unconfirmed.                                                                                                                                                                   |
 
 ### Process lock
 
@@ -5553,11 +5568,12 @@ These reasons can come from more than one command.
 
 ### Remote connection
 
-| Reason                         | Meaning                                                                                                                                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `REMOTE_SESSION_REQUIRED`      | A command on a leased remote connection, or one that would lease one, named no session.                                                                                                  |
-| `CONNECTION_DEVICE_CONFLICT`   | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
-| `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent.                                                                                   |
+| Reason                         | Meaning                                                                                                                                                                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `remote_instance_mismatch`     | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
+| `REMOTE_SESSION_REQUIRED`      | A command on a leased remote connection, or one that would lease one, named no session.                                                                                                                                                                                 |
+| `CONNECTION_DEVICE_CONFLICT`   | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch.                                                                                |
+| `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent.                                                                                                                                                                  |
 
 ### Remote connections
 
@@ -5593,9 +5609,10 @@ These reasons can come from more than one command.
 
 ### Request cancellation
 
-| Reason                 | Meaning                                                                |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `duplicate_request_id` | A request arrived with an id another request is still in flight under. |
+| Reason                 | Meaning                                                                                                                                                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `duplicate_request_id` | A request arrived with an id another request is still in flight under.                                                                                                                                                                                                                                             |
+| `request_canceled`     | The caller canceled the request or disconnected before the work finished, so the command stopped waiting, including on a snapshot, native build, provider request, device start or install. A provider device start already submitted may keep running. No retry is needed unless the cancellation was unintended. |
 
 ### Request execution
 
