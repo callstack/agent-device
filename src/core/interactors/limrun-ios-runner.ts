@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, TIMEOUT_REASONS } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -218,7 +218,7 @@ export async function createLimrunIosRunner(
       const admissionExpired =
         !signal.aborted &&
         error instanceof AppError &&
-        error.details?.reason === 'operation_deadline_expired';
+        error.details?.reason === TIMEOUT_REASONS.operationDeadline.reason;
       abort.abort(error);
       if (lastConflict && admissionExpired) throw lastConflict;
       throw error;

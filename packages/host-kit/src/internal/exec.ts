@@ -5,9 +5,38 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
+import type {
+  CommandExecutorOverride,
+  CommandHostScope,
+  ExecDetachedChannel,
+  ExecDetachedExit,
+  ExecDetachedProcess,
+} from './exec-types.ts';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+
+export type {
+  CommandExecutorOverride,
+  ExecDetachedChannel,
+  ExecDetachedExit,
+  ExecDetachedProcess,
+} from './exec-types.ts';
+
+/**
+ * The refusals this module answers with when a host command cannot run or its result cannot be
+ * attributed to a host.
+ */
+const HOST_COMMAND_REASONS = {
+  // A command needed the host environment and no `withCommandHost` scope wrapped the call.
+  hostEnvironmentUnscoped: { reason: 'host_environment_unscoped' },
+  // `xcrun` reported that the tool a command asked for is not in the selected developer dir.
+  xcrunToolNotFound: { reason: 'xcrun-tool-not-found' },
+} as const satisfies ReasonTable<'host commands'>;
 
 export type ExecResult = {
   stdout: string;
@@ -62,28 +91,6 @@ type ExecDetachedOptions = ExecOptions & {
   stdio?: StdioOptions;
 };
 
-export type ExecDetachedExit = {
-  pid: number;
-  exitCode?: number;
-  signal?: NodeJS.Signals;
-  error?: string;
-};
-
-/**
- * The child's side of the Node IPC channel, present only when `stdio` includes `'ipc'`. It is
- * unref'd at spawn, so neither the child handle nor the channel keeps this process alive.
- */
-export type ExecDetachedChannel = Readonly<{
-  /** Subscribes to the messages the child sends over its IPC channel. */
-  onMessage(listener: (message: unknown) => void): void;
-}>;
-
-export type ExecDetachedProcess = {
-  pid: number;
-  exited: Promise<ExecDetachedExit>;
-  channel?: ExecDetachedChannel;
-};
-
 /**
  * Background runs have no `timeoutMs`: the callers are long-lived sessions (the
  * Android snapshot helper, the keep-hot xcodebuild runner, app-log capture), and
@@ -103,12 +110,6 @@ export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
 
 const BARE_COMMAND_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const WINDOWS_PATH_EXTENSIONS = ['.com', '.exe', '.bat', '.cmd'];
-export type CommandExecutorOverride = (
-  cmd: string,
-  args: readonly string[],
-  options: ExecOptions,
-) => Promise<ExecResult> | undefined;
-
 const commandExecutorOverrideScope = new AsyncLocalStorage<CommandExecutorOverride | undefined>();
 
 export async function withCommandExecutorOverride<T>(
@@ -123,11 +124,6 @@ export async function withCommandExecutorOverride<T>(
 export async function withoutCommandExecutorOverride<T>(fn: () => Promise<T>): Promise<T> {
   return await commandExecutorOverrideScope.run(undefined, fn);
 }
-
-type CommandHostScope = Readonly<{
-  host: HostEnvironment;
-  requestEnv: EnvMap | undefined;
-}>;
 
 const commandHostScope = new AsyncLocalStorage<CommandHostScope>();
 
@@ -155,7 +151,7 @@ export function commandHostEnvironment(): HostEnvironment {
   const scope = commandHostScope.getStore();
   if (!scope) {
     throw new AppError('COMMAND_FAILED', 'No host environment is bound to this command.', {
-      reason: 'host_environment_unscoped',
+      reason: HOST_COMMAND_REASONS.hostEnvironmentUnscoped.reason,
     });
   }
   return scope.host;
@@ -742,7 +738,7 @@ function xcrunToolNotFoundDetails(stderr: string): Record<string, unknown> {
     ? `DEVELOPER_DIR ${developerDir}`
     : 'the developer dir selected by xcode-select (see xcode-select -p)';
   return {
-    reason: 'xcrun-tool-not-found',
+    reason: HOST_COMMAND_REASONS.xcrunToolNotFound.reason,
     developerDir: developerDir ?? null,
     hint: `xcrun could not find ${tool} in ${source}. Export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer (or your Xcode's path) before running agent-device, or run sudo xcode-select -s /Applications/Xcode.app.`,
   };

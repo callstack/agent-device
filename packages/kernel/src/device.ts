@@ -1,5 +1,18 @@
 import crypto from 'node:crypto';
-import { AppError } from './errors.ts';
+import { AppError, type ReasonTable } from './errors.ts';
+import type {
+  DeviceIdentityFlag,
+  DeviceInfo,
+  DeviceSelector,
+  WebSessionIdentity,
+} from './device-types.ts';
+
+export type {
+  DeviceIdentityFlag,
+  DeviceInfo,
+  DeviceSelector,
+  WebSessionIdentity,
+} from './device-types.ts';
 import type { DeviceIdentity } from './device-identity.ts';
 import type { EnvMap } from './source-value.ts';
 
@@ -44,32 +57,6 @@ export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 export const DEVICE_TARGETS = ['mobile', 'tv', 'desktop'] as const;
 export type DeviceTarget = (typeof DEVICE_TARGETS)[number];
-
-export type DeviceInfo = {
-  platform: Platform;
-  id: string;
-  name: string;
-  kind: DeviceKind;
-  target?: DeviceTarget;
-  // Explicit Apple OS discriminant populated at discovery for Apple devices.
-  // Optional so legacy records (and non-Apple platforms) remain valid.
-  appleOs?: AppleOS;
-  // Presentation-only hardware model and OS version reported by discovery when the
-  // platform tooling exposes them; never part of device identity or selection.
-  model?: string;
-  osVersion?: string;
-  booted?: boolean;
-  simulatorSetPath?: string;
-  // Internal physical-iOS execution backend selected during discovery.
-  // Public device projections strip this field.
-  iosPhysicalDeviceBackend?: 'coredevice' | 'xctest';
-  /**
-   * Set when this device is one app of a host device rather than the host itself (ADR 0035). Its
-   * id is {@link hostAppDeviceId} of the two, so every per-device lock, claim, and session check
-   * treats the app as a device of its own; only {@link devicesOverlap} relates it to its host.
-   */
-  hostApp?: { hostDeviceId: string; bundleId: string };
-};
 
 const HOST_APP_DEVICE_ID_INFIX = ':app:';
 const WEB_SESSION_DEVICE_ID_INFIX = ':session:';
@@ -133,16 +120,23 @@ const SOCKET_FILE_OVERHEAD_BYTES = '/'.length + '.sock'.length;
 const WEB_BACKEND_KEY_MAX_LENGTH =
   SOCKET_PATH_MAX_BYTES - SOCKET_DIR_BYTES - SOCKET_FILE_OVERHEAD_BYTES;
 
-/** A named session with an optional tenant, or an implicit workspace session without a name. */
-export type WebSessionIdentity =
-  | Readonly<{ name: string; namespace?: { kind: 'tenant'; id: string } }>
-  | Readonly<{ kind: 'workspace'; id: string }>;
-
 function webBackendKeyPrefix(tenantId: string | undefined): string {
   if (tenantId === undefined) return WEB_BACKEND_KEY_PREFIX;
   const hash = crypto.createHash('sha256').update(tenantId).digest('hex');
   return `t_${hash.slice(0, WEB_TENANT_KEY_HASH_LENGTH)}_`;
 }
+
+/** The refusal of a daemon whose operator fixed the iOS simulator device set. */
+const SIMULATOR_SET_REASONS = {
+  // The request names an iOS simulator device set other than the one this daemon reaches.
+  outsideDaemonSet: { reason: 'ios_simulator_device_set_outside_daemon_set' },
+} as const satisfies ReasonTable<'device selection'>;
+
+/** The refusal for a web session name the agent-browser backend cannot key on. */
+const WEB_SESSION_NAME_REASONS = {
+  // The session name is longer than the backend key allows or holds a character it rejects.
+  invalid: { reason: 'web_session_name_invalid' },
+} as const satisfies ReasonTable<'web session naming'>;
 
 /** Validate the backend's name and socket limits. Its charset excludes `:` from device-id infixes. */
 function requireWebSessionName(sessionName: string, keyPrefixLength: number): string {
@@ -153,7 +147,7 @@ function requireWebSessionName(sessionName: string, keyPrefixLength: number): st
       'INVALID_ARGS',
       `A web session name must be 1 to ${maxLength} characters of letters, digits, "_" and "-".`,
       {
-        reason: 'web_session_name_invalid',
+        reason: WEB_SESSION_NAME_REASONS.invalid.reason,
         sessionName,
         maxLength,
         hint: 'Pass --session with a name such as "checkout-1".',
@@ -219,14 +213,6 @@ export function devicesOverlap(leftId: string, rightId: string): boolean {
     isHostScopedDeviceOf(leftId, rightId)
   );
 }
-
-export type DeviceSelector = {
-  platform?: PlatformSelector;
-  target?: DeviceTarget;
-  deviceName?: string;
-  udid?: string;
-  serial?: string;
-};
 
 /** Device identity is narrower than platform/target filtering for precedence decisions. */
 export function hasExplicitDeviceIdentitySelector(
@@ -576,7 +562,7 @@ export function resolveRequestAppleSimulatorSetPath(params: {
       'INVALID_ARGS',
       `This daemon only reaches iOS simulators in the set "${operatorSet}" (${DAEMON_IOS_SIMULATOR_DEVICE_SET_ENV}), but the request named --ios-simulator-device-set "${requested}".`,
       {
-        reason: 'ios_simulator_device_set_outside_daemon_set',
+        reason: SIMULATOR_SET_REASONS.outsideDaemonSet.reason,
         hint: `Omit --ios-simulator-device-set, or pass exactly "${operatorSet}".`,
       },
     );
@@ -714,8 +700,6 @@ function deviceNotFoundHint(candidates: DeviceInfo[], value: string, flag?: Devi
 function quoteFoldDeviceName(value: string): string {
   return normalizeDeviceName(value.replaceAll(/[‘’‚‛]/g, "'").replaceAll(/[“”„‟]/g, '"'));
 }
-
-export type DeviceIdentityFlag = 'udid' | 'serial';
 
 /**
  * Which flag carries a device identity on a platform: `udid` addresses Apple devices, `serial`

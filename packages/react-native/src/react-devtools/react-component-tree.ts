@@ -1,5 +1,6 @@
 import { componentName, componentRef, kindLabel } from './react-component.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { REACT_DEVTOOLS_REASONS } from './react-devtools-reasons.ts';
 import { printable } from './react-devtools-text.ts';
 
 /** `[id, name, elementType, parentId, ownerId, key]` for every mounted component. */
@@ -248,7 +249,7 @@ export function resolveNode(tree: ComponentTree, target: string): TreeNode {
     const node = tree.byId.get(id);
     if (!node) {
       throw new AppError('COMMAND_FAILED', `No mounted component has ref ${target}.`, {
-        reason: 'element-not-found',
+        reason: REACT_DEVTOOLS_REASONS.elementNotFound.reason,
         hint: 'Refs change when components remount or the app reloads; run react-devtools find or tree again.',
       });
     }

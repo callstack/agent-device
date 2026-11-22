@@ -22,6 +22,7 @@ import {
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
   isProcessAlive,
+  PROCESS_STOP_REASONS,
   readCurrentOwnerIdentity,
   readProcessCommand,
   readProcessStartTime,
@@ -329,10 +330,10 @@ function companionStopFailure(
   // `identity-unverified` is the one verdict that cannot say "still running": the pid answers
   // `kill(pid, 0)`, and on Windows an exited process does too while its object keeps handles.
   const why =
-    retained.reason === 'identity-unverified'
+    retained.reason === PROCESS_STOP_REASONS.identityUnverified.reason
       ? `${definition.displayName} ${describeUnconfirmedProcessStop(retained.pid, `the ${definition.displayName} this profile started`)}. Stop it yourself, as its owner if needed.`
       : `${definition.displayName} pid ${retained.pid} is still running${
-          retained.reason === 'exit-timeout'
+          retained.reason === PROCESS_STOP_REASONS.exitTimeout.reason
             ? `: it survived ${retained.signal}.`
             : retained.errno === 'EPERM'
               ? `: it refused ${retained.signal} (${retained.errno}), so it belongs to another user or was started with elevated privileges. Stop it as that user, e.g. \`sudo kill ${retained.pid}\`.`
