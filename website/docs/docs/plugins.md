@@ -123,10 +123,9 @@ The factory is called with the package's `options` from `config.json` (`plugins[
 
 The host resolves the `./agent-device` export with import conditions. It falls back to the package's root export only when that subpath does not exist. If the subpath exists but its import or `setup` throws, the plugin is reported as failed and the root export is not tried.
 
-`setup(host)` receives `ProviderPluginHost`: `env`, `options`, `clientVersion`, and `createError` for host-recognized errors. Return one of:
+`setup(host)` receives a `ProviderPluginHost` with `env`, `options`, `clientVersion`, `runHostCommand`, `diagnostics`, and `createError` for host-recognized errors. Build and return `{ runtime, platformModule, dispose? }` using the [provider runtime](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/provider-device-runtime.ts) and [platform module](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/platform-runtime-operations.ts) contracts. The runtime's `provider` and the module owner's `provider` must equal the plugin's `provider`. The module owner must declare `kind: 'provider-runtime'` and a nonempty `instance`.
 
-- `{ runtime, platformModule, dispose? }` implementing the [provider runtime](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/provider-device-runtime.ts) and [platform module](https://github.com/callstack/agent-device/blob/main/packages/contracts/src/platform-runtime-operations.ts) contracts. The runtime's `provider` and the module owner's `provider` must equal the plugin's `provider`, and the module owner must declare `kind: 'provider-runtime'` and a nonempty `instance`.
-- `{ webDriver, dispose? }` for an Appium or WebDriver service. `WebDriverPluginOptions` is available through the type-only `agent-device/plugins/webdriver` import. The host supplies the client version and creates the shared runtime. Provider callbacks prepare sessions, upload apps, and retrieve artifacts.
+If your plugin uses Appium or WebDriver, bundle the engine with your plugin and build the runtime in `setup`. Use `host.diagnostics.emit(event)` to record a diagnostic in the active request log.
 
 The host checks required runtime methods and owner metadata when it sets the plugin up; operation contracts are checked when used. `dispose` runs once after the runtime shuts down. A failing `setup` cleans up its own resources; the host shuts down a runtime it already received if validation then refuses it.
 

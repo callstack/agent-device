@@ -819,7 +819,6 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
-    '@agent-device/host-kit',
     '@agent-device/kernel',
     '@agent-device/xml',
   ]);
@@ -882,8 +881,8 @@ test('the real tree parses, declares, and passes R11', () => {
     'root must declare the selectors workspace dependency',
   );
   assert.ok(
-    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-webdriver'),
-    'root must declare the provider-webdriver workspace dependency',
+    !rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-webdriver'),
+    'core must not depend on the provider-webdriver engine',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-limrun'),

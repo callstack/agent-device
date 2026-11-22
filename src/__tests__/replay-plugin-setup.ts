@@ -20,11 +20,7 @@ beforeEach(async () => {
   registry = await startProviderRegistry(
     await resolveProviderPlugins(await storePluginCandidates(process.env)),
     { env: process.env, cwd: process.cwd() },
-    {
-      adaptWebDriver: async () => {
-        throw new Error('Replay test setup cannot start providers');
-      },
-    },
+    {},
     'replay-backends',
   );
   await bindReplayBackendResolver(registry.resolveReplayBackend, registry.resolveReplayExecution);

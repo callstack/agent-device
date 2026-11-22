@@ -9,8 +9,7 @@
     "tsBuildInfoFile": "./dist-types/index.tsbuildinfo",
     "rootDir": ".",
     "paths": {
-      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"],
-      "agent-device/plugins/webdriver": ["./node_modules/agent-device/src/sdk/plugin-webdriver.ts"]
+      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"]
     }
   },
   "include": ["src"],

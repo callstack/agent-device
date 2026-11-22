@@ -1,6 +1,7 @@
-import type { ProviderPluginHost } from 'agent-device/plugins';
-import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
+import type { PluginRuntimeSetup, ProviderPluginHost } from 'agent-device/plugins';
 import {
+  createCloudWebDriverRuntime,
+  type CloudWebDriverRuntimeOptions,
   readFlag,
   requireRequest,
   requireRequestPlatform,
@@ -20,14 +21,22 @@ import { AWS_DEVICE_FARM_PROVIDER } from './providers.ts';
 
 const SERVICE = 'AWS Device Farm';
 
-/** The AWS Device Farm WebDriver descriptor the host drives through its shared engine. */
-export function createAwsDeviceFarmWebDriver(host: ProviderPluginHost): WebDriverPluginOptions {
+export async function setupAwsDeviceFarm(host: ProviderPluginHost): Promise<PluginRuntimeSetup> {
+  const runtime = await createCloudWebDriverRuntime(createAwsDeviceFarmWebDriver(host));
+  return { runtime, platformModule: runtime.platformRuntimeModule };
+}
+
+export function createAwsDeviceFarmWebDriver(
+  host: ProviderPluginHost,
+): CloudWebDriverRuntimeOptions {
   const { env } = host;
   const runHostCommand = (command: string, args: readonly string[]) =>
     host.runHostCommand(command, args);
   const client = (region: string | undefined) =>
     createAwsCliDeviceFarmClient({ runHostCommand, region });
-  const webDriver: WebDriverPluginOptions = {
+  return {
+    clientVersion: host.clientVersion,
+    diagnostics: host.diagnostics,
     provider: AWS_DEVICE_FARM_PROVIDER,
     profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
     endpoint: 'http://127.0.0.1/',
@@ -65,5 +74,4 @@ export function createAwsDeviceFarmWebDriver(host: ProviderPluginHost): WebDrive
       })({ lease, req, base });
     },
   };
-  return webDriver;
 }

@@ -41,8 +41,11 @@ The current registry is in `packages/plugins/src/registry.ts`.
 
 Each contribution has one kind and a narrow host type for that kind.
 A `provider` declares its provider id, credentials, optional connection, and setup with a provider host.
-Provider setup returns `{ runtime, platformModule, dispose? }` or `{ webDriver, dispose? }`.
-A `{ webDriver }` result remains a data descriptor that the host interprets.
+Provider setup builds its runtime and returns `{ runtime, platformModule, dispose? }`.
+Providers bundle the engines they use.
+The provider host supplies `diagnostics.emit(event)`.
+The emitter uses the host request active at the time of the call, including during lease allocation.
+The host owns the log and redaction.
 The optional `dispose` belongs to that registration.
 A `platform` declares a platform family and setup with a platform host.
 Platform setup returns inventory and runtime modules, request-provider scoping, and named operations.
@@ -151,6 +154,11 @@ Decision history (2026-11-17): the public artifact manager API in [#4615](https:
 Hosts can use the shared manager without adding a runtime helper dependency to plugins.
 
 Decision history (2026-11-19): version 3 replaces the version 2 manifest-free contract to support independently scoped platform and replay contributions.
+
+Decision history (2026-11-22): Version 3 provider setup returns a runtime for every provider ([#4974](https://github.com/callstack/agent-device/issues/4974)).
+The host-side WebDriver descriptor kept an optional engine in every core install.
+Provider plugins now bundle the WebDriver modules they use and emit through the host diagnostics facet.
+This duplicates shared code across those plugin packages and keeps it out of core.
 
 ## Daemon ownership
 

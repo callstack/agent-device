@@ -7,7 +7,6 @@
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
-    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/xml": "workspace:*"
   },
@@ -27,6 +26,7 @@
   },
   "devDependencies": {
     "@agent-device/gestures": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/test-kit": "workspace:*"
   }
 }

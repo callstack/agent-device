@@ -1,8 +1,9 @@
-import type { ProviderPluginHost } from 'agent-device/plugins';
-import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
+import type { PluginRuntimeSetup, ProviderPluginHost } from 'agent-device/plugins';
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import {
   buildCloudWebDriverBaseCapabilities,
+  createCloudWebDriverRuntime,
+  type CloudWebDriverRuntimeOptions,
   readFlag,
   requireFlag,
   requireRequest,
@@ -38,8 +39,12 @@ const TESTMU_CAPABILITY_OVERRIDES = {
   },
 } as const;
 
-/** The TestMu AI WebDriver descriptor the host drives through its shared engine. */
-export function createTestMuWebDriver(host: ProviderPluginHost): WebDriverPluginOptions {
+export async function setupTestMu(host: ProviderPluginHost): Promise<PluginRuntimeSetup> {
+  const runtime = await createCloudWebDriverRuntime(createTestMuWebDriver(host));
+  return { runtime, platformModule: runtime.platformRuntimeModule };
+}
+
+function createTestMuWebDriver(host: ProviderPluginHost): CloudWebDriverRuntimeOptions {
   const env = host.env;
   async function listTestMuArtifactsFromEnv(
     provider: string,
@@ -52,7 +57,9 @@ export function createTestMuWebDriver(host: ProviderPluginHost): WebDriverPlugin
       endpoint: env.TESTMU_API_ENDPOINT,
     });
   }
-  const webDriver: WebDriverPluginOptions = {
+  return {
+    clientVersion: host.clientVersion,
+    diagnostics: host.diagnostics,
     provider: 'testmu',
     profileFields: TESTMU_PROFILE_FIELDS,
     platform: 'android',
@@ -111,7 +118,6 @@ export function createTestMuWebDriver(host: ProviderPluginHost): WebDriverPlugin
       };
     },
   };
-  return webDriver;
 }
 /** Each pool has its own upload API, so each has its own override. */
 function testMuAppUploadEndpoint(

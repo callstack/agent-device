@@ -3,39 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { withPluginConnection } from './load.ts';
-import {
-  pluginHome,
-  selectPlugin,
-  pluginSource,
-  webDriverPluginSource,
-} from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import type { PluginRegistryPolicy } from './registry.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-
-const adaptedDescriptors: string[] = [];
-// This package names no provider: the composing root decides how a descriptor becomes a runtime.
-const FAKE_POLICY: PluginRegistryPolicy = {
-  adaptWebDriver: async (descriptor) => {
-    adaptedDescriptors.push(descriptor.provider);
-    return {
-      runtime: {
-        provider: descriptor.provider,
-        ownsDevice: () => false,
-        getInteractor: () => undefined,
-        deviceInventoryProvider: async () => [],
-        leaseLifecycle: {},
-        shutdown: async () => {},
-      } as unknown as ProviderDeviceRuntime,
-      platformModule: {
-        owner: { kind: 'provider-runtime', provider: descriptor.provider, instance: 'fake' },
-        loadRuntime: async () => {
-          throw new Error('lazy');
-        },
-      },
-    };
-  },
-};
 
 async function startStore(env: NodeJS.ProcessEnv, builtin: readonly string[] = ['limrun']) {
   const { claimProviderIds, resolveProviderPlugins, startProviderRegistry } =
@@ -45,7 +15,7 @@ async function startStore(env: NodeJS.ProcessEnv, builtin: readonly string[] = [
     ...claimProviderIds(builtin),
     ...(await storePluginCandidates(env)),
   ]);
-  return await startProviderRegistry(resolved, { env, cwd: '/' }, FAKE_POLICY);
+  return await startProviderRegistry(resolved, { env, cwd: '/' });
 }
 
 test('a store plugin loads its factory with the selection options and the host error constructor', async () => {
@@ -404,30 +374,19 @@ const LOCAL_CONNECTION = {
   usesCloudWebDriverLease: false,
 };
 
-test('a WebDriver descriptor is adapted by the policy, and a mismatched provider never reaches it', async () => {
+test('a provider setup returning only an obsolete WebDriver descriptor is invalid', async () => {
   const { home, env } = pluginHome();
-  const source = webDriverPluginSource('example');
-  selectPlugin(home, 'example', source);
-  const registry = await startStore(env, []);
-  assert.deepEqual(
-    registry.registrations.map(({ provider, runtime }) => [provider, runtime.provider]),
-    [['example', 'example']],
-  );
-  assert.deepEqual(adaptedDescriptors, ['example']);
-  await registry.close();
-
-  adaptedDescriptors.length = 0;
-  const other = pluginHome();
   selectPlugin(
-    other.home,
+    home,
     'example',
-    // The descriptor names a provider the plugin did not declare.
-    source.replace('"provider":"example","endpoint"', '"provider":"wrong","endpoint"'),
+    `export default () => ({
+    apiVersion: 3, contributes: [{ kind: 'provider', provider: "example", credentials: { variables: [] },
+    setup: () => ({ webDriver: { provider: 'example' } }) }],
+  });`,
   );
-  const mismatched = await startStore(other.env, []);
-  assert.deepEqual(mismatched.registrations, []);
-  assert.equal(mismatched.inventory[0]!.error?.reason, 'invalid_plugin');
-  assert.deepEqual(adaptedDescriptors, []);
+  const registry = await startStore(env, []);
+  assert.deepEqual(registry.registrations, []);
+  assert.equal(registry.inventory[0]!.error?.reason, 'invalid_plugin');
 });
 
 test('a factory returning a primitive is listed as an invalid plugin', async () => {

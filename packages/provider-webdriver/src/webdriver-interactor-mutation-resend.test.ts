@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
@@ -86,6 +86,7 @@ async function connectedWebDriverInteractor(options: {
     clientVersion: '0.0.0-test',
     endpoint: 'http://cloud-webdriver.test/wd/hub/',
     requestPolicy: { timeoutMs: 20, retryDelayMs: 5, sessionCreateTimeoutMs: 20 },
+    diagnostics: { emit: emitDiagnostic },
   });
   if (options.createSession !== false) await client.createSession({ platformName: 'Android' });
   const interactor = createWebDriverInteractor({

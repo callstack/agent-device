@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import testmu from './index.ts';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
@@ -29,6 +30,7 @@ function host(env: Record<string, string | undefined>): ProviderPluginHost {
     runHostCommand: async () => {
       throw new Error('host command unused');
     },
+    diagnostics: { emit: () => {} },
     createError: (code, message, details) => new AppError(code, message, details),
   };
 }
@@ -36,19 +38,45 @@ function host(env: Record<string, string | undefined>): ProviderPluginHost {
 function capturedAuthorization(): { read(): string | undefined } {
   let authorization: string | undefined;
   globalThis.fetch = async (_input, init) => {
-    authorization = new Headers(init?.headers).get('authorization') ?? undefined;
-    return new Response(JSON.stringify({ data: {} }));
+    if (init?.method === 'POST') {
+      authorization = new Headers(init.headers).get('authorization') ?? undefined;
+      return Response.json({ value: { sessionId: 'SESSION1', capabilities: {} } });
+    }
+    return Response.json({ value: null });
   };
   return { read: () => authorization };
 }
 
-async function listArtifacts(
+async function allocate(
   provider: Extract<AgentDevicePlugin['contributes'][number], { kind: 'provider' }>,
   env: Record<string, string>,
 ) {
-  const setup = await provider.setup(host(env));
-  if (!('webDriver' in setup)) throw new Error('TestMu AI sets up a WebDriver descriptor');
-  await setup.webDriver.listArtifacts!({ provider: 'testmu', providerSessionId: 'SESSION1' });
+  const { runtime } = await provider.setup(host(env));
+  try {
+    const allocation = await (runtime as ProviderDeviceRuntime).leaseLifecycle.allocate!(
+      {
+        leaseId: 'lease-1',
+        tenantId: 'tenant',
+        runId: 'run',
+        backend: 'android-instance',
+        leaseProvider: 'testmu',
+        createdAt: 1,
+        heartbeatAt: 1,
+        expiresAt: 2,
+      },
+      {
+        flags: {
+          platform: 'android',
+          device: 'Pixel 8',
+          providerOsVersion: '14',
+          providerApp: 'lt://APP1',
+        },
+      },
+    );
+    assert.equal(allocation?.providerSessionId, 'SESSION1');
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 const basic = (username: string, accessKey: string) =>
@@ -79,19 +107,19 @@ test('credentials passed as options replace the environment, which stays the fal
   const captured = capturedAuthorization();
   const env = { LT_USERNAME: 'env-user', LT_ACCESS_KEY: 'env-key' };
 
-  await listArtifacts(
+  await allocate(
     providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
     env,
   );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(
+  await allocate(
     providerOf(testmu({ credentials: { username: 'opt-user', accessKey: 'opt-key' } })),
     {},
   );
   assert.equal(captured.read(), basic('opt-user', 'opt-key'));
-  await listArtifacts(providerOf(testmu()), env);
+  await allocate(providerOf(testmu()), env);
   assert.equal(captured.read(), basic('env-user', 'env-key'));
-  await assert.rejects(listArtifacts(providerOf(testmu()), {}), { code: 'INVALID_ARGS' });
+  await assert.rejects(allocate(providerOf(testmu()), {}), { code: 'INVALID_ARGS' });
 });
 
 test('connect uses the option credentials without an environment and verifies with them', async () => {
@@ -162,7 +190,7 @@ test('the plugin declares its provider, capabilities and credential variables', 
 
 test('a credentials object missing one key falls back to the environment for that key', async () => {
   const captured = capturedAuthorization();
-  await listArtifacts(providerOf(testmu({ credentials: { username: 'opt-user' } as never })), {
+  await allocate(providerOf(testmu({ credentials: { username: 'opt-user' } as never })), {
     LT_USERNAME: 'env-user',
     LT_ACCESS_KEY: 'env-key',
   });

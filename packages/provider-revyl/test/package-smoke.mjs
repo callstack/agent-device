@@ -1,3 +1,4 @@
+export const provider = 'revyl';
 export const args = [
   '--platform',
   'ios',
