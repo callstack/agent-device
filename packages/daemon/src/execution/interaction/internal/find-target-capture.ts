@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { sparseFindRefusal } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { sparseFindRefusal } from '@agent-device/selectors/interaction-error';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { CaptureProvenance, RequestCaptureProof } from '../../../core/capture-disclosure.ts';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';

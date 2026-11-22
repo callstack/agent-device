@@ -1,10 +1,9 @@
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_MIN_READ_BUDGET_MS,
-  ALERT_NOT_FOUND_REASON,
-  ALERT_WAIT_TIMEOUT_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
   ALERT_POLL_INTERVAL_MS,
+  ALERT_REFUSAL_REASONS,
   ALERT_RUNNER_MAX_BUDGET_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
   DEFAULT_ALERT_TIMEOUT_MS,
@@ -140,7 +139,7 @@ export async function awaitAppleAlert(
   if (isAlertUnresolvedError(lastRetriable)) throw lastRetriable;
   throw new AppError('COMMAND_FAILED', 'alert wait timed out', {
     ...lastRetriable?.details,
-    reason: ALERT_WAIT_TIMEOUT_REASON,
+    reason: ALERT_REFUSAL_REASONS.waitTimeout.reason,
   });
 }
 
@@ -216,7 +215,7 @@ function isAlertNotFoundError(error: unknown): error is AppError {
   const details = error.details ?? {};
   return (
     details['runnerErrorCode'] === ALERT_NOT_FOUND_RUNNER_CODE ||
-    details['reason'] === ALERT_NOT_FOUND_REASON
+    details['reason'] === ALERT_REFUSAL_REASONS.notFound.reason
   );
 }
 

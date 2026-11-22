@@ -1,5 +1,5 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
-import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { APP_DEVICE_REASONS, isDeepLinkTarget } from '@agent-device/contracts/command';
 import { parseAppearanceAction } from '@agent-device/contracts/settings';
 import { isMacOsBundleId, type DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -158,7 +158,7 @@ function assertAppDeviceBundle(device: DeviceInfo, bundleId: string): void {
     'INVALID_ARGS',
     `This session drives ${app.bundleId} as its own device, so it cannot open or close ${bundleId}.`,
     {
-      reason: 'app-device-scope',
+      reason: APP_DEVICE_REASONS.scope.reason,
       bundleId: app.bundleId,
       hint: 'Open the other app in a new --session. To open a link in this app, pass the link alone.',
     },

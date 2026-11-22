@@ -1,6 +1,6 @@
 import { deriveStructuredBatchCommandNames } from './derive.ts';
 import { commandDescriptors } from './registry.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeBatchCommandName } from '@agent-device/contracts/input-validation';
 
 export { normalizeBatchCommandName };
@@ -20,6 +20,13 @@ export type StructuredBatchCommandName = Extract<
   (typeof commandDescriptors)[number],
   { batchable: true }
 >['name'];
+
+/** Why `batch` refuses a step's shape before running any step. */
+export const BATCH_STEP_REASONS = {
+  // A batch step asked `fill` to read its text from stdin, which a step does not have. Run that
+  // fill on its own with `--text-stdin`.
+  fillTextStdin: { reason: 'fill_text_stdin_in_batch' },
+} as const satisfies ReasonTable<'batch'>;
 
 /**
  * The structured-batch allowlist, BUILT from the command-descriptor registry

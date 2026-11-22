@@ -4,7 +4,7 @@ import type {
   InteractionSelectorTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
-import { sparseFindRefusal } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { sparseFindRefusal } from '@agent-device/selectors/interaction-error';
 import type { FindLocator } from '@agent-device/selectors';
 
 export { findNodeByLabel, resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
