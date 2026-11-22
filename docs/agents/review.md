@@ -10,6 +10,14 @@ To verify changed behavior, follow callers and siblings as necessary.
 Apply each check only when the change affects its subject.
 Reopen a resolved concern only when new evidence changes the conclusion.
 
+Make the first review complete.
+Report every finding in one pass.
+If several findings have one cause and one fix, combine them.
+On a later head, verify each open finding against the new head.
+Then trace each changed interaction to its caller-visible outcome.
+Do not look for new findings in code that an earlier review covered.
+On a later head, a design question is advisory.
+
 - Dependencies and ADRs: for each relevant ADR, read its Status and "Rules at a glance" first.
   Without one, read its Decision section, and other sections only for the touched rules.
   Resolve prerequisite conflicts.
@@ -49,6 +57,10 @@ Also assess each new abstraction, dependency, seam, and ownership rule.
 Report only triggering scenarios. Include `file:line`, severity, what breaks, and the fix.
 A finding blocks only if the change breaks the PR's invariant or regresses behavior.
 Send other findings to an issue, adjacent code included.
+Imprecise wording in text that the PR adds does not block.
+It blocks only if a caller who follows it takes an action that fails.
+If CI ran the tests green at the reviewed head, do not ask for a local run.
+From the third round, send a request that enlarges the requirement to the maintainer, not to the author.
 
 If there are no findings, say so. Reject incorrect findings with evidence.
 Prove claims such as "one reader", "pure move", or "no shim left" with search or `git diff -M90%`.
