@@ -156,7 +156,7 @@ test('appendDiagnosticLine ensures the log directory once across appended lines'
   }
 });
 
-test('a record names a lease by its fingerprint and publishes its owners before its first byte', async () => {
+test('a record names a lease by its fingerprint and publishes its owner before its first byte', async () => {
   const logPath = path.join(
     mkdtempForTestSync('agent-device-diag-owners-'),
     'requests',
@@ -164,7 +164,14 @@ test('a record names a lease by its fingerprint and publishes its owners before 
   );
   const leaseId = 'A1B2C3D4E5F60718293A4B5C6D7E8F90';
   const ownersBeforeRecord = await withDiagnosticsScope(
-    { session: 'leased', requestId: 'r1', debug: true, logPath, logOwners: ['owner-a', 'owner-b'] },
+    {
+      session: 'leased',
+      requestId: 'r1',
+      debug: true,
+      logPath,
+      logRecord: { session: 'leased', requestId: 'r1' },
+      logOwner: 'owner-a',
+    },
     async () => {
       const write = vi.spyOn(fs, 'appendFileSync');
       emitDiagnostic({
@@ -184,7 +191,7 @@ test('a record names a lease by its fingerprint and publishes its owners before 
   );
 
   assert.deepEqual(ownersBeforeRecord, [`${logPath}.owners`, logPath, logPath]);
-  assert.equal(fs.readFileSync(diagnosticsRecordOwnersPath(logPath), 'utf8'), 'owner-a\nowner-b\n');
+  assert.equal(fs.readFileSync(diagnosticsRecordOwnersPath(logPath), 'utf8'), 'owner-a\n');
   const record = fs.readFileSync(logPath, 'utf8');
   assert.equal(record.toLowerCase().includes(leaseId.toLowerCase()), false);
   assert.deepEqual(JSON.parse(record.split('\n')[0]!).data, {

@@ -12,10 +12,7 @@ import {
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
-import {
-  claimRequestDiagnosticsRecord,
-  type TrackDownloadableArtifact,
-} from '../resources/artifact-tracking.ts';
+import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -308,7 +305,6 @@ export async function createRequestExecutionScope(params: {
     logPath: requestLog.path,
     logRecord: requestLog.ref,
   });
-  claimRequestDiagnosticsRecord(scopedReq, sessionStore.get(sessionName));
   emitDiagnostic({
     level: 'info',
     phase: 'request_start',

@@ -60,28 +60,20 @@ export function leasedOutputRefusal(label: string): AppError {
 }
 
 /**
- * Fixes who may read a request's diagnostics record before the record gets its first event: the
- * lease id that the request sends, and the lease of the session at the request's address. A reader
- * must send a lease id that matches each of them, so a request that a leased session refuses
- * cannot read what the daemon logged while it refused. A record with no owner keeps the tenant
- * rule.
+ * Makes the lease id that a request sends the owner of that request's diagnostics record. Only a
+ * reader that sends the same lease id is served the record. A request that sends no lease id
+ * leaves a record with no owner, which keeps the tenant rule.
  */
-export function claimRequestDiagnosticsRecord(
-  req: Pick<DaemonRequest, 'flags' | 'meta'>,
-  session: Readonly<{ lease?: Readonly<{ leaseId: string }> | null }> | undefined,
-): void {
-  const leaseIds = [resolveLeaseScope(req).leaseId, session?.lease?.leaseId].filter(
-    (leaseId): leaseId is string => leaseId !== undefined,
-  );
-  if (leaseIds.length === 0) return;
+export function claimRequestDiagnosticsRecord(req: Pick<DaemonRequest, 'flags' | 'meta'>): void {
+  const leaseId = resolveLeaseScope(req).leaseId;
+  if (leaseId === undefined) return;
   // A lease id that reaches a message, and not a lease field, is removed from the record too.
-  for (const leaseId of leaseIds) {
-    const canonical = normalizeLeaseId(leaseId);
-    if (!canonical) continue;
+  const canonical = normalizeLeaseId(leaseId);
+  if (canonical) {
     registerDiagnosticSensitiveValue(canonical);
     registerDiagnosticSensitiveValue(leaseId.trim());
   }
-  updateDiagnosticsScope({ logOwners: [...new Set(leaseIds.map(leaseVerifier))] });
+  updateDiagnosticsScope({ logOwner: leaseVerifier(leaseId) });
 }
 
 // --- Downloadable artifact tracking ---

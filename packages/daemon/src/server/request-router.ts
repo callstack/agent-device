@@ -28,7 +28,10 @@ import {
 } from '@agent-device/kernel/contracts';
 import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
-import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import {
+  claimRequestDiagnosticsRecord,
+  type TrackDownloadableArtifact,
+} from '../resources/artifact-tracking.ts';
 import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
@@ -236,6 +239,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         logPath,
       },
       async () => {
+        claimRequestDiagnosticsRecord(req);
         const run = async () =>
           await withCommandHost(
             { host, requestEnv: requestCommandEnv(req) },

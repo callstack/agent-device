@@ -110,9 +110,9 @@ This rule applies for as long as the daemon keeps the output, also after the lea
 An inventory omits an artifact of another lease.
 A download or a diagnostics read without the lease id fails with `UNAUTHORIZED`, reason `LEASE_OUTPUT_MISMATCH`, and `field: 'leaseId'`.
 If a later request registers a file that a lease already registered, the file stays with that lease.
-The daemon sets the owners of a request diagnostics record before it writes the first event of that record.
-The owners are the lease id that the request sends and the lease of the session at the address of the request.
-A reader must send a lease id that matches each owner. Thus a request that a leased session refuses cannot read its own record.
+The owner of a request diagnostics record is the lease id that the request itself sent. A request that sent no lease id leaves a record with no owner.
+The daemon sets the owner before it writes the first event of that record.
+Thus each caller reads only its own records, also the record of a request that a leased session refused.
 A recording manifest keeps the lease that started the recording. `record stop` under another lease, or under no lease, fails with the same refusal.
 The daemon keeps an owner as the SHA-256 of the lease id, never as the id, and never serves it.
 A request diagnostics record names a lease by the first 8 hex digits of that SHA-256, never by the lease id.

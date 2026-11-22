@@ -41,11 +41,10 @@ type DiagnosticsScopeOptions = {
    */
   logRecord?: DiagnosticsRecordRef;
   /**
-   * Set together with `logPath` when only some readers may be served that record. Each entry is
-   * one opaque owner. They are written to {@link diagnosticsRecordOwnersPath}, one per line,
-   * before the first byte of the record.
+   * The one opaque owner of what this scope writes to its `logRecord`. It is written as a line of
+   * {@link diagnosticsRecordOwnersPath} before the first byte that this scope adds to the record.
    */
-  logOwners?: readonly string[];
+  logOwner?: string;
   /**
    * Set for a log that only the host operator reads, such as the daemon log. It names a lease by
    * its id, which the operator needs to end a rented device. Every other scope names a lease by
@@ -60,7 +59,7 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   flushedLogPath?: string;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
-  logOwnersPublished?: true;
+  logOwnerPublished?: true;
   // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
   // `flushDiagnosticsToSessionFile`, so consumers (e.g. the agent-cost graft)
   // can count phase occurrences for the whole request even in debug mode where
@@ -393,15 +392,17 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
     fs.mkdirSync(dir, { recursive: true });
     scope.ensuredDirectories.add(dir);
   }
-  if (logPath === scope.logPath && scope.logOwners?.length && !scope.logOwnersPublished) {
-    const owners = scope.logOwners.map((owner) => `${owner}\n`).join('');
-    fs.appendFileSync(diagnosticsRecordOwnersPath(logPath), owners, 'utf8');
-    scope.logOwnersPublished = true;
+  if (scope.logRecord && logPath === scope.logPath && scope.logOwner && !scope.logOwnerPublished) {
+    fs.appendFileSync(diagnosticsRecordOwnersPath(logPath), `${scope.logOwner}\n`, 'utf8');
+    scope.logOwnerPublished = true;
   }
   fs.appendFileSync(logPath, line, 'utf8');
 }
 
-/** Where the owners of the record at `logPath` are kept. No reader is served this file. */
+/**
+ * Where the owners of the record at `logPath` are kept, one line for each scope that wrote to the
+ * record with an owner. No reader is served this file.
+ */
 export function diagnosticsRecordOwnersPath(logPath: string): string {
   return `${logPath}.owners`;
 }

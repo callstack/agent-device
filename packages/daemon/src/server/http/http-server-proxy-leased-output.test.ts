@@ -239,19 +239,23 @@ test('only the owner reads the diagnostics record of a request on its leased ses
   expect((await world.get(route, world.leaseId)).status).toBe(200);
 });
 
-test('the record of a request that a leased session refused belongs to the session lease', async () => {
+test('a request that a leased session refused reads its own record, which names no lease id', async () => {
   if (!world) return;
-  const refused = await world.send('press', SESSION, {});
+  const refused = await world.send('press', SESSION, { leaseId: OTHER_LEASE_ID });
   expect(refused.error?.data?.details).toMatchObject({ reason: 'LEASE_SESSION_MISMATCH' });
   const record = refused.error?.data?.diagnosticsRecord;
   expect(record, JSON.stringify(refused)).toBeDefined();
   const route = `/sessions/${encodeURIComponent(record!.session)}/requests/${record!.requestId}/diagnostics`;
 
-  // The refused client is not served what the daemon logged about the session it does not own.
+  // The owner of a record is the lease id that its request sent, not the lease of the session.
   await expectLeasedOutputRefusal(await world.get(route));
-  await expectLeasedOutputRefusal(await world.get(route, OTHER_LEASE_ID));
-  expect((await world.get(route, world.leaseId)).status).toBe(200);
-  expect((await world.get(`${route}.owners`)).status).toBe(404);
+  await expectLeasedOutputRefusal(await world.get(route, world.leaseId));
+  const own = await world.get(route, OTHER_LEASE_ID);
+  expect(own.status).toBe(200);
+  const served = await own.text();
+  expect(served).not.toContain(world.leaseId);
+  expect(served).not.toContain(OTHER_LEASE_ID);
+  expect((await world.get(`${route}.owners`, OTHER_LEASE_ID)).status).toBe(404);
 });
 
 test('a request with no lease on a session with no lease keeps the tenant rule', async () => {
