@@ -6,6 +6,7 @@ import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { androidAdbInvocation, androidAdbSerialTarget } from './adb-transport.ts';
 import { runAndroidHostAdb } from './adb-executor.ts';
 import {
+  BOOT_FAILURE_REASONS,
   bootFailureHint,
   type BootFailureReason,
 } from '@agent-device/provision-kit/boot-diagnostics';
@@ -117,12 +118,12 @@ export function androidBootFailureReason(error: unknown): BootFailureReason {
     appError.details?.adbHostRefusal === true ||
     appError.details?.adbFailure === 'device_unauthorized'
   ) {
-    return 'ADB_TRANSPORT_UNAVAILABLE';
+    return BOOT_FAILURE_REASONS.adbTransportUnavailable.reason;
   }
   if (appError.details?.adbFailure === 'timeout' || isCommandTimeoutError(appError)) {
-    return 'ANDROID_BOOT_TIMEOUT';
+    return BOOT_FAILURE_REASONS.androidBootTimeout.reason;
   }
-  return 'BOOT_COMMAND_FAILED';
+  return BOOT_FAILURE_REASONS.bootCommandFailed.reason;
 }
 
 function throwAndroidBootFailure(params: {
@@ -150,7 +151,8 @@ function normalizedAndroidBootFailureReason(
   params: Parameters<typeof throwAndroidBootFailure>[0],
   appError: AppError,
 ): BootFailureReason {
-  if (isTransientAndroidBootFailure(params.error) || params.timedOut) return 'ANDROID_BOOT_TIMEOUT';
+  if (isTransientAndroidBootFailure(params.error) || params.timedOut)
+    return BOOT_FAILURE_REASONS.androidBootTimeout.reason;
   return androidBootFailureReason(appError);
 }
 
@@ -198,7 +200,7 @@ export function buildAndroidBootError(
     return new AppError('TOOL_MISSING', appError.message, details, appError.cause);
   }
   // A terminal transport failure (an unauthorized device, say) is not a slow boot either.
-  if (reason === 'ADB_TRANSPORT_UNAVAILABLE') {
+  if (reason === BOOT_FAILURE_REASONS.adbTransportUnavailable.reason) {
     return new AppError('COMMAND_FAILED', appError.message, details, appError.cause);
   }
   if (budgetSpent) {

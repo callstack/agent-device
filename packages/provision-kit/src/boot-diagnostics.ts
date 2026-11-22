@@ -1,12 +1,39 @@
-import { asAppError } from '@agent-device/kernel/errors';
-import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
+import { asAppError, type ReasonTable } from '@agent-device/kernel/errors';
 export type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 
+/**
+ * Why a simulator, emulator or XCTest runner failed to start, as {@link classifyBootFailure} and the
+ * platform boot paths classify it. `contracts/boot-failure` lists the subset a host or transport
+ * change can clear.
+ */
+export const BOOT_FAILURE_REASONS = {
+  // The iOS simulator did not finish booting within its budget.
+  iosBootTimeout: { reason: 'IOS_BOOT_TIMEOUT' },
+  // The XCTest runner did not accept a connection: it timed out, refused or dropped the connection.
+  iosRunnerConnectTimeout: { reason: 'IOS_RUNNER_CONNECT_TIMEOUT' },
+  // The XCTest runner for this device is owned by another agent-device daemon, or is still busy
+  // after this session's device lease was admitted.
+  iosRunnerOwnedByOtherDaemon: { reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON' },
+  // Xcode command-line tools are missing or not on PATH.
+  iosToolMissing: { reason: 'IOS_TOOL_MISSING' },
+  // The Android emulator did not finish booting, or its boot poll timed out.
+  androidBootTimeout: { reason: 'ANDROID_BOOT_TIMEOUT' },
+  // adb is missing, its host refused the request, or the device is unauthorized.
+  adbTransportUnavailable: { reason: 'ADB_TRANSPORT_UNAVAILABLE' },
+  // The boot output shows the host ran out of memory or processes, as on an overloaded CI machine.
+  ciResourceStarvationSuspected: { reason: 'CI_RESOURCE_STARVATION_SUSPECTED' },
+  // The XCTest runner cannot be installed because its provisioning profile does not cover the
+  // device. Register the device with the signing team; retrying alone keeps failing.
+  iosRunnerDeviceNotProvisioned: { reason: 'IOS_RUNNER_DEVICE_NOT_PROVISIONED' },
+  // A boot command failed for another reason, including an iOS signing or profile failure; its
+  // stdout and stderr say which.
+  bootCommandFailed: { reason: 'BOOT_COMMAND_FAILED' },
+  // The boot failed with no output or error to classify.
+  unknown: { reason: 'UNKNOWN' },
+} as const satisfies ReasonTable<'device boot'>;
+
 export type BootFailureReason =
-  | InfrastructureBootFailureReason
-  | 'IOS_RUNNER_DEVICE_NOT_PROVISIONED'
-  | 'BOOT_COMMAND_FAILED'
-  | 'UNKNOWN';
+  (typeof BOOT_FAILURE_REASONS)[keyof typeof BOOT_FAILURE_REASONS]['reason'];
 
 type BootDiagnosticContext = {
   platform?: 'ios';
@@ -24,7 +51,7 @@ export function classifyBootFailure(input: {
   const appErr = input.error ? asAppError(input.error) : null;
   const platform = input.context?.platform;
   const phase = input.context?.phase;
-  if (appErr?.code === 'TOOL_MISSING') return 'IOS_TOOL_MISSING';
+  if (appErr?.code === 'TOOL_MISSING') return BOOT_FAILURE_REASONS.iosToolMissing.reason;
   const details = (appErr?.details ?? {}) as Record<string, unknown>;
   const detailMessage = typeof details.message === 'string' ? details.message : undefined;
   const detailStdout = typeof details.stdout === 'string' ? details.stdout : undefined;
@@ -60,13 +87,13 @@ export function classifyBootFailure(input: {
   // specific to a profile that does not cover the target device; generic
   // profile text also appears for unrelated signing failures.
   if (platform === 'ios' && haystack.includes('0xe8008012')) {
-    return 'IOS_RUNNER_DEVICE_NOT_PROVISIONED';
+    return BOOT_FAILURE_REASONS.iosRunnerDeviceNotProvisioned.reason;
   }
   if (
     platform === 'ios' &&
     (haystack.includes('provisioning profile') || haystack.includes('embedded profile'))
   ) {
-    return 'BOOT_COMMAND_FAILED';
+    return BOOT_FAILURE_REASONS.bootCommandFailed.reason;
   }
   if (
     platform === 'ios' &&
@@ -79,14 +106,14 @@ export function classifyBootFailure(input: {
           haystack.includes('fetch failed') ||
           haystack.includes('socket hang up'))))
   ) {
-    return 'IOS_RUNNER_CONNECT_TIMEOUT';
+    return BOOT_FAILURE_REASONS.iosRunnerConnectTimeout.reason;
   }
   if (
     platform === 'ios' &&
     phase === 'boot' &&
     (haystack.includes('timed out') || haystack.includes('timeout'))
   ) {
-    return 'IOS_BOOT_TIMEOUT';
+    return BOOT_FAILURE_REASONS.iosBootTimeout.reason;
   }
   if (
     haystack.includes('resource temporarily unavailable') ||
@@ -94,31 +121,32 @@ export function classifyBootFailure(input: {
     haystack.includes('cannot allocate memory') ||
     haystack.includes('system is low on memory')
   ) {
-    return 'CI_RESOURCE_STARVATION_SUSPECTED';
+    return BOOT_FAILURE_REASONS.ciResourceStarvationSuspected.reason;
   }
-  if (appErr?.code === 'COMMAND_FAILED' || haystack.length > 0) return 'BOOT_COMMAND_FAILED';
-  return 'UNKNOWN';
+  if (appErr?.code === 'COMMAND_FAILED' || haystack.length > 0)
+    return BOOT_FAILURE_REASONS.bootCommandFailed.reason;
+  return BOOT_FAILURE_REASONS.unknown.reason;
 }
 
 export function bootFailureHint(reason: BootFailureReason): string {
   switch (reason) {
-    case 'IOS_BOOT_TIMEOUT':
+    case BOOT_FAILURE_REASONS.iosBootTimeout.reason:
       return 'Retry simulator boot and inspect simctl bootstatus logs; in CI reduce parallel jobs or use a larger runner.';
-    case 'IOS_RUNNER_CONNECT_TIMEOUT':
+    case BOOT_FAILURE_REASONS.iosRunnerConnectTimeout.reason:
       return 'Retry runner startup, inspect xcodebuild logs, and verify simulator responsiveness before command execution.';
-    case 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON':
+    case BOOT_FAILURE_REASONS.iosRunnerOwnedByOtherDaemon.reason:
       return 'Close the owning agent-device session or stop its daemon with retained-runner cleanup before retrying.';
-    case 'IOS_RUNNER_DEVICE_NOT_PROVISIONED':
+    case BOOT_FAILURE_REASONS.iosRunnerDeviceNotProvisioned.reason:
       return 'The XCTest runner cannot be installed on this device: its provisioning profile does not cover it. Register the device with the signing team (Xcode > Settings > Accounts, or add its UDID to the provisioning profile) and retry. Retrying without that will keep failing.';
-    case 'ANDROID_BOOT_TIMEOUT':
+    case BOOT_FAILURE_REASONS.androidBootTimeout.reason:
       return 'Retry emulator startup and verify sys.boot_completed reaches 1; consider increasing startup budget in CI.';
-    case 'ADB_TRANSPORT_UNAVAILABLE':
+    case BOOT_FAILURE_REASONS.adbTransportUnavailable.reason:
       return 'Check adb server/device transport (adb devices -l), restart adb, and ensure the target device is online and authorized.';
-    case 'CI_RESOURCE_STARVATION_SUSPECTED':
+    case BOOT_FAILURE_REASONS.ciResourceStarvationSuspected.reason:
       return 'CI machine may be resource constrained; reduce parallel jobs or use a larger runner.';
-    case 'IOS_TOOL_MISSING':
+    case BOOT_FAILURE_REASONS.iosToolMissing.reason:
       return 'Xcode command-line tools are missing or not in PATH; run xcode-select --install and verify xcrun works.';
-    case 'BOOT_COMMAND_FAILED':
+    case BOOT_FAILURE_REASONS.bootCommandFailed.reason:
       return 'Inspect command stderr/stdout for the failing boot phase and retry after environment validation.';
     default:
       return 'Retry once and inspect verbose logs for the failing phase.';
