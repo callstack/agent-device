@@ -426,8 +426,8 @@ test('nested remote dispatch normalizes host outputs again below HTTP', async ()
   if (response.ok) expect(response.data?.artifacts?.[0]?.artifactId).toBeTypeOf('string');
 });
 
-test.each(
-  (
+test.each([
+  ...(
     [
       { kind: 'simpleperf', area: 'cpu' },
       { kind: 'xctrace', area: 'cpu' },
@@ -440,7 +440,8 @@ test.each(
       origin,
     })),
   ),
-)(
+  { kind: 'simpleperf', area: 'cpu', origin: 'report-requester' } as const,
+])(
   '$origin $kind $area capture keeps producer output ownership through stop',
   async ({ kind, area, origin }) => {
     const root = mkdtempForTestSync('remote-native-perf-');
@@ -464,7 +465,7 @@ test.each(
       };
     };
     const leaseRegistry = new LeaseRegistry();
-    const ownership = nativePerfOwnership(leaseRegistry, origin === 'leased');
+    const { ownership, reporter } = nativePerfOwners(leaseRegistry, origin);
     const handler = createRequestHandler({
       host: createTestHostEnvironment(),
       createCommandSurface: screenshotCommandSurface,
@@ -626,15 +627,12 @@ test.each(
           command: 'perf',
           session: 'capture',
           positionals: positionals('report'),
-          meta: ownership.meta,
+          meta: reporter.meta,
         });
         const reportData = successfulData(report);
-        const reportDownload = await fetch(
+        await reporter.expectReport(
           `${baseUrl}/artifacts/${reportData.artifacts?.[0]?.artifactId}`,
-          { headers: ownership.headers },
         );
-        expect(reportDownload.status).toBe(200);
-        expect(await reportDownload.text()).toBe('generated-report');
       } else await vi.waitFor(() => expect(fs.existsSync(output)).toBe(false));
     });
   },
@@ -921,16 +919,37 @@ function replaceXctraceProfile(kind: string, area: string, output: string): () =
   return () => fs.writeFileSync(profile, 'generated-capture');
 }
 
-function nativePerfOwnership(registry: LeaseRegistry, leased: boolean) {
-  const scope = { tenantId: 'tenant', runId: 'perf', leaseBackend: 'android-instance' } as const;
+function nativePerfOwners(registry: LeaseRegistry, origin: string) {
+  if (origin === 'report-requester') {
+    return {
+      ownership: nativePerfOwnership(registry, false, 'capture-tenant'),
+      reporter: nativePerfOwnership(registry, true, 'report-tenant'),
+    };
+  }
+  const ownership = nativePerfOwnership(registry, origin === 'leased');
+  return { ownership, reporter: ownership };
+}
+
+function nativePerfOwnership(registry: LeaseRegistry, leased: boolean, tenantId?: string) {
+  const scope = {
+    tenantId: tenantId ?? 'tenant',
+    runId: 'perf',
+    leaseBackend: 'android-instance',
+  } as const;
   const lease = leased ? registry.allocateLease(scope) : undefined;
+  const headers = {
+    authorization: 'Bearer test-token',
+    ...(lease || tenantId ? { [DAEMON_HTTP_TENANT_HEADER]: scope.tenantId } : {}),
+  };
+  const leasedHeaders = lease ? { ...headers, [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId } : headers;
   return {
-    meta: lease ? { ...scope, leaseId: lease.leaseId } : {},
-    headers: {
-      authorization: 'Bearer test-token',
-      ...(lease
-        ? { [DAEMON_HTTP_TENANT_HEADER]: scope.tenantId, [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId }
-        : {}),
+    meta: lease ? { ...scope, leaseId: lease.leaseId } : { tenantId },
+    headers: leasedHeaders,
+    expectReport: async (url: string) => {
+      if (lease) expect((await fetch(url, { headers })).status).toBe(401);
+      const download = await fetch(url, { headers: leasedHeaders });
+      expect(download.status).toBe(200);
+      expect(await download.text()).toBe('generated-report');
     },
     refuseUnowned: async (run: () => Promise<{ error?: { data?: unknown } }>) => {
       if (lease)

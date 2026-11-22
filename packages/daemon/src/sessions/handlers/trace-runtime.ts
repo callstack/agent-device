@@ -77,7 +77,7 @@ function stopTrace(
   const session = sessionStore.requireCurrent(ref);
   if (!session.trace) return errorResponse('INVALID_ARGS', 'no active trace');
   const owner = session.trace.leaseVerifier ?? null;
-  if (owner !== admittedOutputLeaseVerifier(req)) throw leasedOutputRefusal('Trace');
+  if (owner && owner !== admittedOutputLeaseVerifier(req)) throw leasedOutputRefusal('Trace');
   updateDiagnosticsScope({ traceLogPath: undefined });
   const outPath = relocateTraceOutput(
     requestCwd(req, host),

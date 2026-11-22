@@ -260,7 +260,6 @@ export type SessionState = {
   lastPerfProfile?: {
     profile: PerfProfileHandoff;
     leaseVerifier: string | null;
-    tenantId?: string;
   };
   /** Native sampler mechanics stay behind the adopted runtime handle. */
   audioProbe?: {

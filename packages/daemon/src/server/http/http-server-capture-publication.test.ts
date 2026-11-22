@@ -214,57 +214,70 @@ test('record stop keeps the unleased producer when the stop runs under a lease',
   );
 });
 
-test('a downloadable trace accepts events and stop only from its producing lease', async () => {
-  const sessionStore = makeSessionStore('leased-trace-session-');
-  sessionStore.publish('capture', makeAndroidSession('capture'));
-  const leaseRegistry = new LeaseRegistry();
-  const scope = { tenantId: 'tenant', runId: 'trace', leaseBackend: 'android-instance' } as const;
-  const { leaseId } = leaseRegistry.allocateLease(scope);
-  const owner = { ...scope, leaseId };
-  const handler = createRequestHandler({
-    host: createTestHostEnvironment(),
-    createCommandSurface: screenshotCommandSurface,
-    logPath: path.join(sessionStore.resolveDaemonStateDir(), 'daemon.log'),
-    token: 'test-token',
-    sessionStore,
-    leaseRegistry,
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    trackDownloadableArtifact,
-  });
-  await withHttp(handler, async (post, base) => {
-    const trace = (action: string, meta = {}) =>
-      post({
-        command: 'trace',
-        session: 'capture',
-        positionals: [action],
-        meta,
-      });
-    successfulData(await trace('start', owner));
-    const wait = (requestId: string, meta = {}) =>
-      post({
-        command: 'wait',
-        session: 'capture',
-        positionals: ['1'],
-        meta: { ...meta, requestId },
-      });
-    successfulData(await wait('trace-other-request', { tenantId: scope.tenantId }));
-    successfulData(await wait('trace-owner-request', owner));
-    expect((await trace('stop', { tenantId: scope.tenantId })).error?.data?.details).toMatchObject({
-      reason: 'LEASE_OUTPUT_MISMATCH',
+test.each(['leased at start', 'leased after start'])(
+  'a downloadable trace preserves producer ownership when the session is %s',
+  async (scenario) => {
+    const sessionStore = makeSessionStore('leased-trace-session-');
+    sessionStore.publish('capture', makeAndroidSession('capture'));
+    const leaseRegistry = new LeaseRegistry();
+    const scope = { tenantId: 'tenant', runId: 'trace', leaseBackend: 'android-instance' } as const;
+    const { leaseId } = leaseRegistry.allocateLease(scope);
+    const owner = { ...scope, leaseId };
+    const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
+      createCommandSurface: screenshotCommandSurface,
+      logPath: path.join(sessionStore.resolveDaemonStateDir(), 'daemon.log'),
+      token: 'test-token',
+      sessionStore,
+      leaseRegistry,
+      deviceInventoryGateways: createTestDeviceInventoryGateways(),
+      trackDownloadableArtifact,
     });
-    const id = successfulData(await trace('stop', owner)).artifacts?.[0]?.artifactId;
-    const url = `${base}/artifacts/${id}`;
-    const headers = {
-      authorization: 'Bearer test-token',
-      [DAEMON_HTTP_TENANT_HEADER]: scope.tenantId,
-    };
-    expect((await fetch(url, { headers })).status).toBe(401);
-    const served = await fetch(url, {
-      headers: { ...headers, [DAEMON_HTTP_LEASE_HEADER]: leaseId },
+    await withHttp(handler, async (post, base) => {
+      const trace = (action: string, meta = {}) =>
+        post({
+          command: 'trace',
+          session: 'capture',
+          positionals: [action],
+          meta,
+        });
+      const leasedAtStart = scenario === 'leased at start';
+      const unleased = { tenantId: scope.tenantId };
+      successfulData(await trace('start', leasedAtStart ? owner : unleased));
+      const wait = (requestId: string, meta = {}) =>
+        post({
+          command: 'wait',
+          session: 'capture',
+          positionals: ['1'],
+          meta: { ...meta, requestId },
+        });
+      if (leasedAtStart) {
+        successfulData(await wait('trace-other-request', unleased));
+        successfulData(await wait('trace-owner-request', owner));
+        expect((await trace('stop', unleased)).error?.data?.details).toMatchObject({
+          reason: 'LEASE_OUTPUT_MISMATCH',
+        });
+      } else {
+        successfulData(await wait('trace-owner-request', unleased));
+        sessionStore.update(sessionStore.lookup('capture')!, {
+          lease: { ...owner, leaseBackend: scope.leaseBackend },
+        });
+        successfulData(await wait('trace-other-request', owner));
+      }
+      const id = successfulData(await trace('stop', owner)).artifacts?.[0]?.artifactId;
+      const url = `${base}/artifacts/${id}`;
+      const headers = {
+        authorization: 'Bearer test-token',
+        [DAEMON_HTTP_TENANT_HEADER]: scope.tenantId,
+      };
+      if (leasedAtStart) expect((await fetch(url, { headers })).status).toBe(401);
+      const served = await fetch(url, {
+        headers: leasedAtStart ? { ...headers, [DAEMON_HTTP_LEASE_HEADER]: leaseId } : headers,
+      });
+      expect(served.status).toBe(200);
+      const log = await served.text();
+      expect(log).toContain('trace-owner-request');
+      expect(log).not.toContain('trace-other-request');
     });
-    expect(served.status).toBe(200);
-    const log = await served.text();
-    expect(log).toContain('trace-owner-request');
-    expect(log).not.toContain('trace-other-request');
-  });
-});
+  },
+);

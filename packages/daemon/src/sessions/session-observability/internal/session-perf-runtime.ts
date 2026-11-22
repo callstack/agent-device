@@ -205,8 +205,7 @@ async function executeAdmittedPerfPlan(
         data: withCaptureOutputOwnership(
           { perf: 'reported', ...data },
           params.req.internal?.publicNetworkOnly ? 'daemon' : 'caller',
-          retained?.tenantId,
-          retained?.leaseVerifier,
+          params.req.internal?.admittedLease?.tenantId,
         ),
       };
     }
@@ -322,7 +321,7 @@ async function stopPerfCapture(
   if (request.area === 'cpu') {
     const profile = readProfileHandoff(completion);
     params.sessionStore.update(params.ref, {
-      lastPerfProfile: { profile, leaseVerifier: owner, tenantId },
+      lastPerfProfile: { profile, leaseVerifier: owner },
     });
   }
   const clientOutPath = params.req.meta?.clientArtifactPaths?.outPath ?? capture.clientOutPath;
