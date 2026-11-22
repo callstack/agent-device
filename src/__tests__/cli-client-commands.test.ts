@@ -169,7 +169,7 @@ test('metro prepare forwards normalized options to client.metro.prepare', async 
         runId: 'run-1',
         leaseId: 'lease-1',
         metroPreparePort: 9090,
-        metroKind: 'expo',
+        kind: 'expo',
         metroRuntimeFile: './.agent-device/metro-runtime.json',
         metroNoReuseExisting: true,
         metroNoInstallDeps: true,
