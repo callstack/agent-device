@@ -45,7 +45,9 @@ test('packaged Cloud WebDriver facade drives provider devices through daemon com
         meta: leaseMeta(lease.leaseId),
       });
 
-      const inferredArtifacts = await daemon.callCommand('artifacts');
+      // The lease owner sends only the lease id: the provider scope comes from the session.
+      const ownerOnly = { meta: { leaseId: lease.leaseId } };
+      const inferredArtifacts = await daemon.callCommand('artifacts', [], {}, ownerOnly);
       const inferredData = assertRpcOk<{
         provider?: string;
         status?: string;
@@ -56,7 +58,7 @@ test('packaged Cloud WebDriver facade drives provider devices through daemon com
       assert.equal(inferredData.providerSessionId, 'wd-1');
 
       server.artifactFailuresRemaining = 1;
-      const unavailableArtifacts = await daemon.callCommand('artifacts');
+      const unavailableArtifacts = await daemon.callCommand('artifacts', [], {}, ownerOnly);
       const unavailableData = assertRpcOk<{
         provider?: string;
         status?: string;

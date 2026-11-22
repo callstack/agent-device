@@ -50,7 +50,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
 
   const req = admitRequestLeaseForLockedScope({
     env: process.env,
-    req: makeRequest({ command: 'snapshot' }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
     sessionName: 'default',
     sessionStore,
     leaseRegistry,

@@ -1,5 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { isTenantOwnedSessionName, normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { resolveSessionIsolationMode } from '../core/config.ts';
 import { tenantScopedSessionName } from '../core/session-tenant-scope.ts';
@@ -12,9 +12,11 @@ import {
 } from '../core/daemon-command-registry.ts';
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
+  assertRequestHoldsSessionLease,
   findMissingProxyLeaseFields,
+  resolveLeaseRefusalScope,
   resolveLeaseScope,
-  resolveRequestOrSessionLeaseScope,
+  resolveSessionLeaseScope,
 } from '../core/lease-context.ts';
 import {
   leaseScopeToHeartbeatRequest,
@@ -28,12 +30,6 @@ import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 /** Names the session a request runs in. */
-const LEASE_ADMISSION_REASONS = {
-  // The lease scope of the request differs from the lease of its session; `details.field` names the
-  // field.
-  sessionMismatch: { reason: 'LEASE_SESSION_MISMATCH' },
-} as const satisfies ReasonTable<'leases'>;
-
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,
@@ -88,14 +84,16 @@ export function assertRequestLeaseAdmission(
     daemonPolicy?: DaemonPolicy;
   }>,
 ): DeviceLease | undefined {
+  // An admission-exempt command still acts on its session, so it must hold the session lease too.
+  assertRequestHoldsSessionLease(req, session);
   if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }
   const requestLeaseScope = resolveLeaseScope(req);
-  assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
+  if (!sessionLease) assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   if (options.daemonPolicy?.requiredLeaseBackend) {
-    const leased = Boolean(resolveRequestOrSessionLeaseScope(req, session).leaseId);
+    const leased = Boolean(resolveSessionLeaseScope(req, session).leaseId);
     const lease = leased ? admitLease(req, leaseRegistry, session, options.env) : undefined;
     assertDaemonPolicyAdmitsLease(options.daemonPolicy, lease);
     return lease;
@@ -107,17 +105,28 @@ export function assertRequestLeaseAdmission(
   ) {
     return undefined;
   }
-  if (req.command === 'human_control' && !sessionLease && !requestLeaseScope.leaseId) {
+  if (runsWithoutLease(req, sessionLease, requestLeaseScope)) return undefined;
+  return admitLease(req, leaseRegistry, session, options.env);
+}
+
+/**
+ * A request outside a leased session and outside tenant isolation runs without a lease unless it
+ * names a scoped lease. Takeover always needs one.
+ */
+function runsWithoutLease(
+  req: DaemonRequest,
+  sessionLease: SessionState['lease'],
+  requestLeaseScope: ReturnType<typeof resolveLeaseScope>,
+): boolean {
+  if (req.command === 'human_control') {
+    if (sessionLease || requestLeaseScope.leaseId) return false;
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'Takeover requires an active remote device lease. Local takeover is not supported.',
     );
   }
-  if (req.command !== 'human_control' && !sessionLease && req.meta?.sessionIsolation !== 'tenant') {
-    if (!requestLeaseScope.leaseId) return undefined;
-    if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
-  }
-  return admitLease(req, leaseRegistry, session, options.env);
+  if (sessionLease || req.meta?.sessionIsolation === 'tenant') return false;
+  return !requestLeaseScope.leaseId || (!requestLeaseScope.tenantId && !requestLeaseScope.runId);
 }
 
 function admitLease(
@@ -126,8 +135,7 @@ function admitLease(
   session: SessionState | undefined,
   env: HostEnvironment['env'],
 ): DeviceLease {
-  assertRequestSessionLeaseMatches(resolveLeaseScope(req), session?.lease);
-  const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
+  const leaseScope = resolveSessionLeaseScope(req, session);
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
   // Admission renews for the window the lease already carries, or the window this request named.
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
@@ -160,7 +168,7 @@ export function isConfinedToAppLease(
   daemonPolicy: DaemonPolicy | undefined,
 ): boolean {
   if (daemonPolicy?.requiredLeaseBackend) return true;
-  const scope = resolveRequestOrSessionLeaseScope(req, session);
+  const scope = resolveLeaseRefusalScope(req, session);
   if (scope.leaseBackend === 'macos-app') return true;
   return (
     scope.leaseId !== undefined && leaseRegistry.inspectLeaseBackend(scope.leaseId) === 'macos-app'
@@ -193,13 +201,20 @@ export function assertProviderLeaseRequestNamesSession(
   if (!req.internal?.sessionOmitted) return;
   const { leaseProvider, leaseId } = ignoresSessionLease(req.command)
     ? resolveLeaseScope(req)
-    : resolveRequestOrSessionLeaseScope(req, session);
+    : resolveLeaseRefusalScope(req, session);
   if (!leaseProvider) return;
   if (leaseId || req.command === 'lease_allocate') throw remoteSessionRequiredError(leaseProvider);
 }
 
-export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {
-  if (isLeaseAdmissionExempt(req.command)) return;
+/**
+ * A fresh proxy open must name the full lease metadata. A request on a session that already holds a
+ * lease skips this: admission checks its lease id under the session lock instead.
+ */
+export function assertRequestLeaseAdmissionPreflight(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+): void {
+  if (isLeaseAdmissionExempt(req.command) || session?.lease) return;
   assertProxyOpenLeaseMetadata(req, resolveLeaseScope(req));
 }
 
@@ -215,33 +230,4 @@ function assertProxyOpenLeaseMetadata(
     'Proxy open requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.',
     { missing },
   );
-}
-
-function assertRequestSessionLeaseMatches(
-  requestLeaseScope: ReturnType<typeof resolveLeaseScope>,
-  sessionLease: SessionState['lease'] | undefined,
-): void {
-  if (!sessionLease) return;
-  assertMatchingLeaseField('leaseId', requestLeaseScope.leaseId, sessionLease.leaseId);
-  assertMatchingLeaseField('tenantId', requestLeaseScope.tenantId, sessionLease.tenantId);
-  assertMatchingLeaseField('runId', requestLeaseScope.runId, sessionLease.runId);
-  assertMatchingLeaseField(
-    'leaseProvider',
-    requestLeaseScope.leaseProvider,
-    sessionLease.leaseProvider,
-  );
-  assertMatchingLeaseField('clientId', requestLeaseScope.clientId, sessionLease.clientId);
-  assertMatchingLeaseField('deviceKey', requestLeaseScope.deviceKey, sessionLease.deviceKey);
-}
-
-function assertMatchingLeaseField(
-  field: string,
-  requestValue?: string,
-  sessionValue?: string,
-): void {
-  if (!requestValue || !sessionValue || requestValue === sessionValue) return;
-  throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
-    reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
-    field,
-  });
 }
