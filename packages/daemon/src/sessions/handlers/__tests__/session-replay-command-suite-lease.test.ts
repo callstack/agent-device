@@ -26,7 +26,12 @@ test('suite-owned test-session close releases a non-retained provider lease thro
   const release = vi.fn(async (_lease: DeviceLease) => ({}));
   const root = mkdtempForTestSync('agent-device-test-suite-provider-lease-');
   fs.writeFileSync(path.join(root, '01-open.ad'), 'context platform=android\nopen "Settings"\n');
-  let leaseId: string | undefined;
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'android-instance',
+    leaseProvider: 'proxy',
+  });
 
   const response = await handleSessionCommands({
     host: createTestHostEnvironment(),
@@ -37,7 +42,7 @@ test('suite-owned test-session close releases a non-retained provider lease thro
       session: 'default',
       command: 'test',
       positionals: [root],
-      meta: { cwd: root, requestId: 'suite-provider-lease' },
+      meta: { cwd: root, requestId: 'suite-provider-lease', leaseId: lease.leaseId },
       flags: {},
     },
     sessionName: 'default',
@@ -46,13 +51,6 @@ test('suite-owned test-session close releases a non-retained provider lease thro
     leaseRegistry,
     leaseLifecycleProvider: { release },
     invoke: async (req) => {
-      const lease = leaseRegistry.allocateLease({
-        tenantId: 'tenant-a',
-        runId: 'run-1',
-        leaseBackend: 'android-instance',
-        leaseProvider: 'proxy',
-      });
-      leaseId = lease.leaseId;
       storeSessionForTest(
         sessionStore,
         makeAndroidSession(req.session, {
@@ -72,5 +70,5 @@ test('suite-owned test-session close releases a non-retained provider lease thro
 
   expect(expectOkData(response).passed).toBe(1);
   expect(release).toHaveBeenCalledOnce();
-  expect(release.mock.calls[0]?.[0]).toMatchObject({ leaseId });
+  expect(release.mock.calls[0]?.[0]).toMatchObject({ leaseId: lease.leaseId });
 });

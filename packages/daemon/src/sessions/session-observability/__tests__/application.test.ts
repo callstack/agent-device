@@ -19,6 +19,7 @@ import { handleSessionCommands } from '../../handlers/session.ts';
 import { handleSessionObservabilityCommands } from '../internal/session-observability.ts';
 
 const mockHandleSessionObservabilityCommands = vi.mocked(handleSessionObservabilityCommands);
+const resolveSessionRef = () => undefined;
 
 beforeEach(() => {
   mockHandleSessionObservabilityCommands.mockClear();
@@ -44,6 +45,7 @@ async function run(command: DaemonRequest['command']): Promise<DaemonResponse | 
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-observability-route.log',
     sessionStore: makeSessionStore('agent-device-session-observability-route-'),
+    resolveSessionRef,
     invoke: async () => ({ ok: true, data: {} }),
     reconcileOrphanedDeviceClaim: async () => ({
       status: 'retained' as const,
@@ -69,6 +71,7 @@ test('observability commands retain their route response and narrow facade input
         'perfCaptureAdmissionLedger',
         'platformServices',
         'req',
+        'resolveSessionRef',
         'sessionName',
         'sessionStore',
         'throwIfCanceled',
@@ -76,6 +79,7 @@ test('observability commands retain their route response and narrow facade input
     );
     expect(forwarded).toMatchObject({
       req: expect.objectContaining({ command }),
+      resolveSessionRef,
       sessionName: 'default',
     });
   }
