@@ -51,7 +51,6 @@ import {
 export type { FindAction, FindLocator } from './internal/find.ts';
 export type { IsPredicate } from './internal/predicates.ts';
 export type {
-  PolicyResolutionOutcome,
   SelectorChainMatchList,
   SelectorMatchOptions,
   SelectorResolution,

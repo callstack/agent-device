@@ -1,7 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
+
+/**
+ * Why a provider plugin was refused: discovery, the manifest, the store, and the registry all
+ * answer from this one table.
+ */
+export const PLUGIN_REASONS = {
+  // Two plugins claim one provider id, or a plugin claims an id that routing or a built-in provider owns.
+  duplicateProvider: { reason: 'duplicate_provider' },
+  // The package exports no plugin entry or declares no provider contract this build can load.
+  incompatiblePlugin: { reason: 'incompatible_plugin' },
+  // The plugin's manifest or code could not be read, resolved, or loaded.
+  loadFailed: { reason: 'plugin_load_failed' },
+  // The plugin's `setup(host)` threw, or registering what it returned failed.
+  setupFailed: { reason: 'plugin_setup_failed' },
+  // A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`.
+  reservedProvider: { reason: 'reserved_provider' },
+} as const satisfies ReasonTable<'plugins'>;
+
+/** One {@link PLUGIN_REASONS} spelling a plugin refusal may carry. */
+export type PluginFailureReason = (typeof PLUGIN_REASONS)[keyof typeof PLUGIN_REASONS]['reason'];
 
 /** Provider ids that name daemon routing, not a runtime a plugin can supply. */
 export const ROUTING_PROVIDER_IDENTITIES: readonly string[] = ['cloud', 'proxy'];
@@ -87,7 +107,7 @@ export function readPluginManifest(directory: string): PluginManifest {
     !declaration.entry.startsWith('./')
   ) {
     throw new AppError('INVALID_ARGS', 'Package does not declare a compatible provider plugin', {
-      reason: 'incompatible_plugin',
+      reason: PLUGIN_REASONS.incompatiblePlugin.reason,
       apiVersion: V1_PLUGIN_API_VERSION,
       hint: `Install a plugin release supporting agentDevicePlugin.apiVersion ${V1_PLUGIN_API_VERSION}.`,
     });
@@ -111,7 +131,7 @@ export function resolvePluginEntry(directory: string, target: string): string {
     }
   } catch {}
   throw new AppError('INVALID_ARGS', 'Plugin entry must be a readable file inside its package', {
-    reason: 'plugin_load_failed',
+    reason: PLUGIN_REASONS.loadFailed.reason,
     directory,
     entry: target,
   });

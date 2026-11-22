@@ -1,11 +1,35 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   MAX_ARCHIVE_ENTRIES,
   MAX_ARCHIVE_EXPANDED_BYTES,
   MAX_ARCHIVE_NESTING_DEPTH,
 } from './artifact-limits.ts';
+
+/**
+ * Why an archive was refused: the limit it broke or the danger its entries carried. The extractors
+ * of both formats answer from this one table through {@link archiveError}.
+ */
+export const ARCHIVE_REASONS = {
+  // The archive holds more entries than the extraction budget allows.
+  entryLimit: { reason: 'ARCHIVE_ENTRY_LIMIT' },
+  // The archive expands past the byte budget its extraction was given.
+  expandedBytesLimit: { reason: 'ARCHIVE_EXPANDED_BYTES_LIMIT' },
+  // An archive entry states a size that is not a usable non-negative integer.
+  invalidEntry: { reason: 'ARCHIVE_INVALID_ENTRY' },
+  // The archive's contents changed between the manifest that reserved the budget and the bytes read.
+  manifestMismatch: { reason: 'ARCHIVE_MANIFEST_MISMATCH' },
+  // The archive nests deeper than the allowed archive-within-archive depth.
+  nestingLimit: { reason: 'ARCHIVE_NESTING_LIMIT' },
+  // The archive holds a link, a special file, or an encrypted entry.
+  unsafeEntry: { reason: 'ARCHIVE_UNSAFE_ENTRY' },
+  // An archive entry's name is absolute, escaping, or otherwise not one relative path.
+  unsafePath: { reason: 'ARCHIVE_UNSAFE_PATH' },
+} as const satisfies ReasonTable<'artifact extraction'>;
+
+/** The reason one {@link archiveError} names. */
+export type ArchiveReason = (typeof ARCHIVE_REASONS)[keyof typeof ARCHIVE_REASONS]['reason'];
 
 export type ArchiveManifestEntry = {
   name: string;
@@ -50,13 +74,19 @@ export class ArchiveBudget {
     const entryCount = validateLimit(input.entryCount, 'entryCount');
     const declaredBytes = validateLimit(input.declaredBytes, 'declaredBytes');
     if (depth < 1 || depth > this.maxDepth) {
-      throw archiveError('ARCHIVE_NESTING_LIMIT', 'Archive nesting depth exceeds the limit');
+      throw archiveError(
+        ARCHIVE_REASONS.nestingLimit.reason,
+        'Archive nesting depth exceeds the limit',
+      );
     }
     if (entryCount > this.maxEntries - this.#entries) {
-      throw archiveError('ARCHIVE_ENTRY_LIMIT', 'Archive contains too many entries');
+      throw archiveError(ARCHIVE_REASONS.entryLimit.reason, 'Archive contains too many entries');
     }
     if (declaredBytes > this.maxBytes - this.#bytes) {
-      throw archiveError('ARCHIVE_EXPANDED_BYTES_LIMIT', 'Archive expands beyond the byte limit');
+      throw archiveError(
+        ARCHIVE_REASONS.expandedBytesLimit.reason,
+        'Archive expands beyond the byte limit',
+      );
     }
     return new ArchiveReservation(
       (bytes) => this.#chargeBytes(bytes),
@@ -69,14 +99,17 @@ export class ArchiveBudget {
   #chargeBytes(bytes: number): void {
     const acceptedBytes = validateLimit(bytes, 'bytes');
     if (acceptedBytes > this.maxBytes - this.#bytes) {
-      throw archiveError('ARCHIVE_EXPANDED_BYTES_LIMIT', 'Archive expands beyond the byte limit');
+      throw archiveError(
+        ARCHIVE_REASONS.expandedBytesLimit.reason,
+        'Archive expands beyond the byte limit',
+      );
     }
     this.#bytes += acceptedBytes;
   }
 
   #commitEntry(): void {
     if (this.#entries >= this.maxEntries) {
-      throw archiveError('ARCHIVE_ENTRY_LIMIT', 'Archive contains too many entries');
+      throw archiveError(ARCHIVE_REASONS.entryLimit.reason, 'Archive contains too many entries');
     }
     this.#entries += 1;
   }
@@ -105,7 +138,10 @@ class ArchiveReservation {
   chargeBytes(bytes: number): void {
     const acceptedBytes = validateLimit(bytes, 'bytes');
     if (acceptedBytes > this.#declaredBytes - this.#actualBytes) {
-      throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
+      throw archiveError(
+        ARCHIVE_REASONS.manifestMismatch.reason,
+        'Archive contents changed after inspection',
+      );
     }
     this.#chargeBudgetBytes(acceptedBytes);
     this.#actualBytes += acceptedBytes;
@@ -113,7 +149,10 @@ class ArchiveReservation {
 
   commitEntry(): void {
     if (this.#actualEntries >= this.#declaredEntries) {
-      throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
+      throw archiveError(
+        ARCHIVE_REASONS.manifestMismatch.reason,
+        'Archive contents changed after inspection',
+      );
     }
     this.#commitBudgetEntry();
     this.#actualEntries += 1;
@@ -124,7 +163,10 @@ class ArchiveReservation {
       this.#actualEntries !== this.#declaredEntries ||
       this.#actualBytes !== this.#declaredBytes
     ) {
-      throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
+      throw archiveError(
+        ARCHIVE_REASONS.manifestMismatch.reason,
+        'Archive contents changed after inspection',
+      );
     }
   }
 }
@@ -155,17 +197,17 @@ export function sameArchiveManifestEntry(
 
 export function normalizeArchiveEntryName(rawName: string): string {
   if (!rawName || rawName.includes('\0') || rawName.includes('\\')) {
-    throw archiveError('ARCHIVE_UNSAFE_PATH', 'Archive contains an unsafe entry path');
+    throw archiveError(ARCHIVE_REASONS.unsafePath.reason, 'Archive contains an unsafe entry path');
   }
   if (path.posix.isAbsolute(rawName) || /^[a-zA-Z]:/.test(rawName) || rawName.startsWith('//')) {
-    throw archiveError('ARCHIVE_UNSAFE_PATH', 'Archive contains an unsafe entry path');
+    throw archiveError(ARCHIVE_REASONS.unsafePath.reason, 'Archive contains an unsafe entry path');
   }
   const normalized = path.posix
     .normalize(rawName)
     .replace(/^(\.\/)+/, '')
     .replace(/\/$/, '');
   if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
-    throw archiveError('ARCHIVE_UNSAFE_PATH', 'Archive contains an unsafe entry path');
+    throw archiveError(ARCHIVE_REASONS.unsafePath.reason, 'Archive contains an unsafe entry path');
   }
   return normalized;
 }
@@ -175,7 +217,10 @@ export function resolveArchiveOutputPath(outputRoot: string, entryName: string):
   const resolvedRoot = path.resolve(outputRoot);
   const resolvedEntry = path.resolve(resolvedRoot, ...normalized.split('/'));
   if (!resolvedEntry.startsWith(`${resolvedRoot}${path.sep}`)) {
-    throw archiveError('ARCHIVE_UNSAFE_PATH', 'Archive entry escapes the extraction root');
+    throw archiveError(
+      ARCHIVE_REASONS.unsafePath.reason,
+      'Archive entry escapes the extraction root',
+    );
   }
   return resolvedEntry;
 }
@@ -221,7 +266,7 @@ export async function createExtractedDirectory(
   await fs.chmod(outputPath, (mode & ~process.umask()) | OWNER_ENTRY_ACCESS.directory);
 }
 
-export function archiveError(reason: string, message: string, cause?: unknown): AppError {
+export function archiveError(reason: ArchiveReason, message: string, cause?: unknown): AppError {
   return new AppError('INVALID_ARGS', message, { reason }, cause);
 }
 

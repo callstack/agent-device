@@ -105,19 +105,6 @@ export const lifecycleDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntime
     shutdown: async () => {},
   });
 
-/** The same gateway shape bound to a caller-supplied lifecycle-ops loader (root composition lanes pass the real fixture). */
-export function createLifecycleDeviceRuntimeGateway(
-  loadLifecycleOperations: LifecycleOperationsLoader,
-): DeviceRuntimeGateway<PlatformRuntimeOperations> {
-  return Object.freeze({
-    inspectFacts: async (device) =>
-      (await lifecycleBindingForTest(device, loadLifecycleOperations)).facts,
-    bind: async ({ device, scope }) =>
-      await lifecycleBindingForTest(device, loadLifecycleOperations, scope.signal),
-    shutdown: async () => {},
-  });
-}
-
 /**
  * A fresh, unfrozen `lifecycleDeviceRuntimeGateway`-equivalent whose `inspectFacts`/`bind` are
  * `vi.fn()` spies. The shared `lifecycleDeviceRuntimeGateway` above is `Object.freeze`d and reused

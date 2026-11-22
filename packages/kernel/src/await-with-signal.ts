@@ -1,4 +1,4 @@
-import { AppError, createRequestCanceledError } from './errors.ts';
+import { AppError, createRequestCanceledError, TIMEOUT_REASONS } from './errors.ts';
 
 /** Cancels the wait while retaining handlers for the underlying operation. */
 export async function awaitWithSignal<T>(
@@ -12,7 +12,7 @@ export async function awaitWithSignal<T>(
         'COMMAND_FAILED',
         'Operation deadline expired',
         {
-          reason: 'operation_deadline_expired',
+          reason: TIMEOUT_REASONS.operationDeadline.reason,
         },
         reason,
       );

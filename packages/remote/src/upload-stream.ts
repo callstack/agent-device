@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { addAbortSignal } from 'node:stream';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   createTransferPhaseWatchdog,
   loadNodeHttpRequester,
@@ -18,6 +18,14 @@ import {
   type UploadProgressStage,
 } from './upload-progress.ts';
 
+/** Why a client-side artifact transfer stops on its own terms. */
+const UPLOAD_TRANSFER_REASONS = {
+  // Preparing the artifact for upload, the read and the hop together, outlived its budget.
+  preparationDeadline: { reason: 'artifact_preparation_deadline_exceeded' },
+  // The upload endpoint answered with a redirect to an origin the caller never named.
+  crossOriginRedirect: { reason: 'cross-origin-redirect' },
+} as const satisfies ReasonTable<'remote transfer'>;
+
 const UPLOAD_PREPARATION_TIMEOUT_MS = 600_000;
 
 export async function withUploadPreparationDeadline<T>(
@@ -30,7 +38,7 @@ export async function withUploadPreparationDeadline<T>(
   const timer = setTimeout(() => {
     deadline.abort(
       new AppError('COMMAND_FAILED', 'Artifact preparation deadline exceeded', {
-        reason: 'artifact_preparation_deadline_exceeded',
+        reason: UPLOAD_TRANSFER_REASONS.preparationDeadline.reason,
         transferPhase: 'preparation',
         timeoutMs: UPLOAD_PREPARATION_TIMEOUT_MS,
       }),
@@ -199,7 +207,7 @@ async function streamFileToHttpRequestAttempt(options: {
         // artifact: neither may follow a hop to an origin the caller did not choose.
         if (redirectedUrl.origin !== options.url.origin) {
           throw new AppError('COMMAND_FAILED', 'Artifact upload refused a cross-origin redirect', {
-            reason: 'cross-origin-redirect',
+            reason: UPLOAD_TRANSFER_REASONS.crossOriginRedirect.reason,
             url: options.url.toString(),
             redirectOrigin: redirectedUrl.origin,
           });

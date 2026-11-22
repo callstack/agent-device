@@ -1,5 +1,9 @@
 import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
-import { stopProcessAndConfirmExit, type ConfirmedProcessStop } from './host-process.ts';
+import {
+  PROCESS_STOP_REASONS,
+  stopProcessAndConfirmExit,
+  type ConfirmedProcessStop,
+} from './host-process.ts';
 import type { OwnedProcessRecordRead, OwnedProcessRecordStore } from './owned-process-record.ts';
 
 const DEFAULT_TERM_TIMEOUT_MS = 1_500;
@@ -183,7 +187,9 @@ function reapOutcomeOf(stop: ConfirmedProcessStop): ReapOutcome {
   // A pid proven to name another process is forgotten as missing, whether or not it was signaled
   // first: nobody watched the recorded process leave.
   if (stop.status === 'stopped') return stop.signal && !stop.reassigned ? 'terminated' : 'missing';
-  return stop.reason === 'identity-unverified' ? 'unconfirmed' : 'survived';
+  return stop.reason === PROCESS_STOP_REASONS.identityUnverified.reason
+    ? 'unconfirmed'
+    : 'survived';
 }
 
 // simctl finalizes a recording only on SIGINT; SIGTERM leaves an unplayable file.

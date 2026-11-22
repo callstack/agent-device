@@ -14,6 +14,7 @@ import { runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
 import {
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
+  PROCESS_STOP_REASONS,
   readConfirmedProcessStopDetails,
   readProcessStartTime,
   stopProcessAndConfirmExit,
@@ -27,6 +28,16 @@ import type {
   MetroBridgeRuntimePayload,
   MetroRuntimeHints,
 } from './metro-types.ts';
+import type {
+  EnvSource,
+  MetroBridgeRequestError,
+  MetroProcessResult,
+  MetroProcessState,
+  PackageManagerConfig,
+  ProxyBridgeRequestOptions,
+  RepackBundlerKind,
+  ResolvedMetroPrepareSettings,
+} from './client-metro-types.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -49,50 +60,7 @@ const DEV_SERVER_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_TERM_TIMEOUT_MS = 1_000;
 const METRO_KILL_TIMEOUT_MS = 1_000;
 
-type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
-type RepackBundlerKind = 'rspack' | 'webpack';
-
 export type { MetroBridgeScope } from '@agent-device/contracts/remote';
-
-type PackageManagerConfig = {
-  command: string;
-  installArgs: string[];
-};
-
-type MetroProcessResult = {
-  pid: number;
-  /** The lifetime the host reported at spawn; a stale pid cannot imitate it. */
-  startTime?: string;
-};
-
-type ResolvedMetroPrepareSettings = {
-  env: EnvSource;
-  cwd: string;
-  projectRoot: string;
-  kind: ResolvedMetroKind;
-  repackBundler: RepackBundlerKind | null;
-  metroPort: number;
-  listenHost: string;
-  statusHost: string;
-  publicBaseUrl: string;
-  proxyBaseUrl: string;
-  proxyBearerToken: string;
-  bridgeScope: MetroBridgeScope | null;
-  startupTimeoutMs: number;
-  probeTimeoutMs: number;
-  reuseExisting: boolean;
-  installProjectDeps: boolean;
-  runtimeFilePath: string | null;
-  logPath: string;
-};
-
-type MetroProcessState = {
-  started: boolean;
-  reused: boolean;
-  pid: number;
-  statusUrl: string;
-};
-
 export type PrepareMetroRuntimeOptions = {
   projectRoot?: string;
   kind?: MetroPrepareKind;
@@ -121,18 +89,6 @@ export type ReloadMetroOptions = {
   bundleUrl?: string;
   runtime?: MetroRuntimeHints;
   timeoutMs?: number | string;
-};
-
-type ProxyBridgeRequestOptions = {
-  baseUrl: string;
-  bearerToken: string;
-  scope: MetroBridgeScope;
-  runtime?: MetroBridgeRuntimePayload;
-  timeoutMs: number;
-};
-
-type MetroBridgeRequestError = Error & {
-  retryable?: boolean;
 };
 
 function normalizeOptionalBaseUrl(input: unknown): string {
@@ -438,9 +394,13 @@ function metroStartupFailure(
   if (stop.status === 'stopped')
     return new AppError('COMMAND_FAILED', message, { logPath: settings.logPath });
   const kept =
-    stop.reason === 'identity-unverified'
+    stop.reason === PROCESS_STOP_REASONS.identityUnverified.reason
       ? describeUnconfirmedProcessStop(pid, 'the process this run started')
-      : `pid ${pid} is still running${stop.reason === 'signal-failed' ? ` and refused ${stop.signal} (${stop.errno})` : ''}`;
+      : `pid ${pid} is still running${
+          stop.reason === PROCESS_STOP_REASONS.signalFailed.reason
+            ? ` and refused ${stop.signal} (${stop.errno})`
+            : ''
+        }`;
   return new AppError('COMMAND_FAILED', `${message} Dev server ${kept}; stop it before retrying.`, {
     logPath: settings.logPath,
     ...confirmedProcessStopDetails(stop, pid),
