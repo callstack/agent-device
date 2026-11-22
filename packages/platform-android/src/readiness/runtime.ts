@@ -145,17 +145,24 @@ async function askHeldByOther(
   try {
     return await heldByOther(device);
   } catch (error) {
-    emitOwnershipUnanswered(device.id, error instanceof Error ? error.message : String(error));
+    emitOwnershipUnanswered(device.id, error);
     return true;
   }
 }
 
-/** Reports the ownership answer this stop could not get, so a kept launch is never silent. */
-function emitOwnershipUnanswered(deviceId: string, reason: string): void {
+/**
+ * Reports the ownership answer this stop could not get, so a kept launch is never silent. `reason` is
+ * the code for why no answer arrived; what the caller threw rides beside it, never inside it.
+ */
+function emitOwnershipUnanswered(deviceId: string, failure: unknown): void {
   emitDiagnostic({
     level: 'warn',
     phase: 'android_emulator_launch_ownership_unanswered',
-    data: { device: deviceId, reason },
+    data: {
+      device: deviceId,
+      reason: 'ownership-query-failed',
+      error: failure instanceof Error ? failure.message : String(failure),
+    },
   });
 }
 

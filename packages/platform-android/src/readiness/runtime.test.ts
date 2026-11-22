@@ -4,9 +4,29 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   countDiagnosticEventsByPhase,
+  emitDiagnostic,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { ensureAndroidReady } from './runtime.ts';
+
+// Spied so a test can read one diagnostic's payload; the real emitter still runs, so the scope's
+// phase tally that other tests count keeps working.
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn(actual.emitDiagnostic) };
+});
+
+function ownershipUnansweredPayload(): Record<string, unknown> {
+  const events = vi
+    .mocked(emitDiagnostic)
+    .mock.calls.map(([diagnostic]) => diagnostic)
+    .filter(
+      (diagnostic) =>
+        (diagnostic as { phase?: string }).phase === 'android_emulator_launch_ownership_unanswered',
+    );
+  expect(events).toHaveLength(1);
+  return (events[0] as { data: Record<string, unknown> }).data;
+}
 
 test('cancellation interrupts Android boot polling and terminates the emulator launched by the request', async () => {
   const controller = new AbortController();
@@ -786,6 +806,12 @@ test('a boot whose owner question cannot be answered keeps the launched emulator
     // Nobody could say who owns the emulator, so nothing is signaled to it (#4764 rule).
     expect(terminate).not.toHaveBeenCalled();
     expect(countDiagnosticEventsByPhase(['android_emulator_launch_ownership_unanswered'])).toBe(1);
+    // `reason` is the code; the caller's own failure text rides beside it, never inside it.
+    expect(ownershipUnansweredPayload()).toEqual({
+      device: 'emulator-5554',
+      reason: 'ownership-query-failed',
+      error: 'claim state unreadable',
+    });
   });
 });
 
