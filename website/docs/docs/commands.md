@@ -2600,6 +2600,8 @@ Exact behavior: `agent-device help disconnect`.
 
 <!-- /generated -->
 
+If a saved connection file cannot be read or parsed, agent-device keeps it and refuses `connect`, `connection status`, and `disconnect` for that session with `connection_record_owner_unknown`. The error names the file. Make it readable, or remove it if no session needs it.
+
 <!-- generated:command auth -->
 
 Manage cloud login state.
