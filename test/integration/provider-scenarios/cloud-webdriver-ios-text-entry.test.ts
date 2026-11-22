@@ -447,7 +447,7 @@ async function openCloudIosSession(daemon: ProviderScenarioHarness): Promise<Dev
   assert.equal(opened.osVersion, '17.2');
   // The prepared cloud session chose iOS. This must become an explicit device leaf before the
   // runtime facts admission; a collapsed record may not borrow support from an owner label.
-  const [session] = await daemon.client().sessions.list();
+  const [session] = await daemon.client().sessions.list({ leaseId: lease.leaseId });
   assert.equal(session?.device.appleOs, 'ios');
   // #4525: the OS the session reports is the one the hub granted (17.2), not the one the request
   // asked for (18), because a caller records what a capture actually ran on.

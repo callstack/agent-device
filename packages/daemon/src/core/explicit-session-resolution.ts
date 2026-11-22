@@ -21,7 +21,8 @@ export function namedSessionNotFoundError(sessionAddress: string): AppError {
     {
       ...namedSessionNotFoundDetails(sessionAddress),
       hint:
-        'Run agent-device session list to see the sessions this daemon holds. ' +
+        'Run agent-device session list to see the sessions visible to this request. ' +
+        'A leased session is listed only through the connection that owns it, or with its lease id. ' +
         "A daemon that was replaced or restarted starts without its predecessor's sessions.",
     } satisfies RefusalDetails<'named_session_not_found'>,
   );
