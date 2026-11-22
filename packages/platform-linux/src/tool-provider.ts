@@ -1,16 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import type {
   LinuxClipboardProvider,
   LinuxDesktopProvider,
   LinuxScreenshotProvider,
   LinuxToolProvider,
-} from '@agent-device/contracts/linux-tool-provider';
+} from './tool-provider-types.ts';
 import { createLinuxAccessibilityProvider } from './atspi-bridge.ts';
 import type { LinuxToolbox } from './toolbox.ts';
 import { createLinuxDisplayConfig } from './display.ts';
-
-export type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
 
 /** The parts a caller may supply over the family's own tool route, each answering one intent. */
 export type LinuxToolProviderOverrides = Partial<Omit<LinuxToolProvider, 'display'>>;
@@ -58,34 +55,6 @@ function withCommandOverrides(
     sleep: overrides.sleep ?? commands.sleep,
     diagnose: commands.diagnose,
   });
-}
-
-/**
- * The request scope the Linux family owns. Root composition resolves a provider for a request and
- * hands it back to the plugin through the registration's `withRequestProvider`, which enters it for
- * the request's work. The interactor and the runtime read the entered provider in preference to the
- * one built from their own host, so a request that owns a display decision and a command route is the
- * only one that answers for it.
- */
-const linuxToolProviderScope = createScopedProvider<
-  LinuxToolProvider | undefined,
-  LinuxToolProvider
->(undefined);
-
-/** The provider this call should use: the one a request scoped, else the caller's own. */
-export function resolveLinuxToolProvider(own: LinuxToolProvider): LinuxToolProvider {
-  return linuxToolProviderScope.resolve() ?? own;
-}
-
-export function hasScopedLinuxToolProvider(): boolean {
-  return linuxToolProviderScope.hasScope();
-}
-
-export async function withLinuxToolProvider<T>(
-  provider: LinuxToolProvider | undefined,
-  fn: () => Promise<T>,
-): Promise<T> {
-  return await linuxToolProviderScope.run(provider, fn);
 }
 
 function createLinuxDesktopProvider(commands: LinuxToolbox['commands']): LinuxDesktopProvider {

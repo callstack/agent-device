@@ -312,10 +312,6 @@
       "types": "./src/macos-platform-leaf.ts",
       "default": "./src/macos-platform-leaf.ts"
     },
-    "./linux-tool-provider": {
-      "types": "./src/linux-tool-provider.ts",
-      "default": "./src/linux-tool-provider.ts"
-    },
     "./vega-tool-provider": {
       "types": "./src/vega-tool-provider.ts",
       "default": "./src/vega-tool-provider.ts"

@@ -9,7 +9,7 @@ import type {
   LinuxPlatformRegistration,
 } from '@agent-device/contracts/platform-plugin';
 import type { LinuxToolbox } from './toolbox.ts';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolProvider } from './tool-provider-types.ts';
 
 const metadata = Object.freeze({
   family: 'linux',
@@ -74,10 +74,6 @@ function linuxPlatformPlugin() {
               const { createLinuxInteractor } = await import('./interactor.ts');
               const { toolbox, provider } = await bind();
               return createLinuxInteractor(toolbox, provider);
-            },
-            withRequestProvider: async <T>(provider: LinuxToolProvider, task: () => Promise<T>) => {
-              const { withLinuxToolProvider } = await import('./tool-provider.ts');
-              return await withLinuxToolProvider(provider, task);
             },
             operations: {
               toolchainCheck: async () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
 import { createLinuxToolProvider } from '../tool-provider.ts';
 import { fillLinux, pressLinux, scrollLinux, sendKey, typeLinux } from '../input-actions.ts';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolProvider } from '../tool-provider-types.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 function x11Stub(): LinuxHostStub {

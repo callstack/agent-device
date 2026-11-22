@@ -2,7 +2,7 @@ import { stampSnapshotIdentity } from '@agent-device/contracts/snapshot-producer
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import { shapeDesktopSurfaceSnapshot } from '@agent-device/capture-kit/snapshot-desktop-projection';
 import { snapshotLinux } from './snapshot.ts';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolProvider } from './tool-provider-types.ts';
 import type { LinuxToolbox } from './toolbox.ts';
 
 /**

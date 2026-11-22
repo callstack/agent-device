@@ -1,6 +1,6 @@
 import { webSelectionFixture } from '../../../src/platform-runtime-web-provider.fixtures.ts';
 import { vegaSelectionFixture } from '../../../src/platform-runtime-vega-provider.fixtures.ts';
-import { linuxSelectionFixture } from '../../../src/platform-runtime-linux-provider.fixtures.ts';
+import { linuxSelectionFromPlatformHost } from '../../../src/platform-runtime-linux-provider.fixtures.ts';
 import { macOsLeafSelectionFixture } from '../../../src/platform-runtime-macos-leaf.fixtures.ts';
 import {
   bindPlatformLeaves,
@@ -58,6 +58,7 @@ import {
 } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from './provider-platform-registrations.ts';
+import type { PlatformHost } from '@agent-device/plugins/contract';
 
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
   recursive: true,
@@ -111,6 +112,12 @@ type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRout
     leaseTtlMs?: number;
     /** Settings the daemon's host reads, on top of the isolated defaults. */
     env?: Readonly<Record<string, string>>;
+    /**
+     * Host to set the Linux plugin up with, which serves the Linux family from it. The family answers
+     * every desktop intent through the host its `setup` receives, so this is the seam a Linux scenario
+     * has: the plugin's own inventory, runtime, interactor and tools run on the host named here.
+     */
+    linuxPlatformHost?: PlatformHost;
   };
 
 // The test the harness serves, so a scenario that needs the Swift cache can skip itself from inside a command.
@@ -164,10 +171,10 @@ export async function createProviderScenarioHarness(
     appleRunnerProvider,
     appleRunnerScreenRecordingTransport,
     appleToolProvider,
-    linuxToolProvider,
     vegaToolProvider,
     webProvider,
     appleSimulatorScreenRecordingTransport,
+    linuxPlatformHost,
     ...dependencyOverrides
   } = deps;
   if (leaseTtlMs !== undefined) env.AGENT_DEVICE_LEASE_TTL_MS = String(leaseTtlMs);
@@ -179,11 +186,11 @@ export async function createProviderScenarioHarness(
     const providerModules =
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
-    // A scenario that resolves a Linux tool provider serves the Linux family through the installed
-    // plugin: the selection is what gives the family its runtime and interactor at all, and what
-    // lets a request scope a provider for it.
-    const linuxSelection = linuxToolProvider
-      ? linuxSelectionFixture(input.host, input.baseDir)
+    // A scenario that names a Linux host serves the Linux family through the installed plugin, set up
+    // with that host: the selection is what gives the family its runtime and interactor, and the host
+    // is what the family's desktop tools run through.
+    const linuxSelection = linuxPlatformHost
+      ? linuxSelectionFromPlatformHost(linuxPlatformHost)
       : undefined;
     const platforms = composePlatformPlugins(
       [
@@ -201,7 +208,7 @@ export async function createProviderScenarioHarness(
       [macOsLeafSelectionFixture(input.host, input.baseDir).get()],
     );
     bindPlatformLeaves(platforms);
-    const { web, vega, linux } = platforms;
+    const { web, vega } = platforms;
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
       platforms,
       host: input.host,
@@ -239,14 +246,12 @@ export async function createProviderScenarioHarness(
           appleRunnerProvider,
           appleRunnerScreenRecordingTransport,
           appleToolProvider: trackedAppleToolProvider,
-          linuxToolProvider,
           vegaToolProvider,
           webProvider,
           appleSimulatorScreenRecordingTransport,
         },
         web,
         vega,
-        linux,
       });
     return Object.freeze({
       ...rootDeps,

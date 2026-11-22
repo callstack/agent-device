@@ -41,9 +41,8 @@ import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolProvider } from './tool-provider-types.ts';
 import { captureLinuxSurfaceSnapshot } from './surface-snapshot.ts';
-import { resolveLinuxToolProvider } from './tool-provider.ts';
 import type { LinuxToolbox } from './toolbox.ts';
 
 const supported = Object.freeze({ available: true } as const);
@@ -165,11 +164,6 @@ export function createLinuxPlatformRuntime(
         throw new AppError('UNSUPPORTED_PLATFORM', 'Linux runtime cannot bind this device');
       }
       const facts = linuxFacts(request.device);
-      // The provider this binding answers with, resolved once: the request scope is already entered
-      // when the runtime gateway binds, so a request that scoped its own provider is the one that
-      // answers for every operation of this binding. Resolving here rather than per call is what keeps
-      // one binding from asking the same question twice.
-      const running = resolveLinuxToolProvider(provider);
       const lifecycle = bindLocalDirectApplicationLifecycle({
         owner: 'Linux',
         openTargetIdentity: 'app-name',
@@ -184,7 +178,7 @@ export function createLinuxPlatformRuntime(
         operations: Object.freeze({
           ...availableApplicationLifecycleOperations(lifecycle, facts.operations),
           ...(facts.operations.captureSnapshot.available
-            ? linuxSnapshotOperations(toolbox, running, request)
+            ? linuxSnapshotOperations(toolbox, provider, request)
             : {}),
           ...linuxInteractionOperations(host, request, facts),
         }),

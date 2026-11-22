@@ -292,11 +292,6 @@
       "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
     },
     {
-      // Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-linux/src/index.ts",
-      "exports": ["createLocalLinuxToolProvider"]
-    },
-    {
       // Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, and the timeout is pinned by the daemon teardown test.
       "file": "packages/platform-web/src/index.ts",
       "exports": [

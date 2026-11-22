@@ -9,7 +9,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLinuxHostStub, type LinuxHostStub } from './toolbox.fixtures.ts';
 import { createLinuxToolProvider } from './tool-provider.ts';
 import { createLinuxPlatformRuntime } from './runtime.ts';
-import type { LinuxSnapshotSurface } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxSnapshotSurface } from './tool-provider-types.ts';
 
 type LegacyLifecycleCell = Readonly<{
   openTarget: boolean;

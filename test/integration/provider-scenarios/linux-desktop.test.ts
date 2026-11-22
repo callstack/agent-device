@@ -1,16 +1,23 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
-import { assertFlatToolCall, assertPngFile } from './assertions.ts';
+import { assertCommandCall, assertPngFile } from './assertions.ts';
 import { PROVIDER_SCENARIO_LINUX } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
 import { createLinuxDesktopWorld } from './linux-world.ts';
 import { runProviderScenario } from './scenario.ts';
 
-test('Provider-backed integration Linux desktop flow uses semantic desktop and input providers', async () => {
+/**
+ * The Linux desktop flow through the installed plugin, with a scripted desktop behind it.
+ *
+ * The scenario's evidence is what the family asked its host to run: each intent becomes the desktop
+ * tool argv the X11 session would see. Every step's response is asserted as before; the host record
+ * proves the request reached the desktop through the plugin's own route rather than a stand-in.
+ */
+test('Provider-backed integration Linux desktop flow drives the desktop tools through its host', async () => {
   await withProviderScenarioResource(
     createLinuxDesktopWorld,
-    async ({ daemon, desktopCalls, localLinuxDevices, semanticCalls, toolCalls }) => {
+    async ({ commands, daemon, launches, localLinuxDevices, probedPaths, toolCalls }) => {
       const screenshotPath = createProviderScenarioTempPath(
         'agent-device-provider-scenario-linux',
         'png',
@@ -208,37 +215,88 @@ test('Provider-backed integration Linux desktop flow uses semantic desktop and i
 
         const close = await daemon.callCommand('close', ['gnome-calculator']);
         assert.equal(close.statusCode, 200, JSON.stringify(close.json));
-        assert.deepEqual(desktopCalls, [
-          ['open', 'gnome-calculator'],
-          ['close', 'gnome-calculator'],
+
+        // The app the scenario opened and closed, as the desktop saw it: an app that outlives the
+        // request is launched detached, and a window is closed by name.
+        assert.deepEqual(launches, [['gnome-calculator']]);
+        assertCommandCall(toolCalls, ['wmctrl', '-c', 'gnome-calculator']);
+
+        // Every capture reads the AT-SPI tree through the helper the package ships, for the surface
+        // the request named. The full argv carries the helper path and the traversal limits, so the
+        // surface is the part this scenario owns.
+        assert.deepEqual([...new Set(toolCalls.flatMap((call) => surfaceAsks(call)))].sort(), [
+          'frontmost-app',
         ]);
-        assertFlatToolCall(semanticCalls, ['accessibility', 'frontmost-app']);
-        assertFlatToolCall(semanticCalls, ['clipboard', 'write', 'linux otp 314159']);
-        assertFlatToolCall(semanticCalls, ['clipboard', 'read']);
-        assertFlatToolCall(semanticCalls, ['screenshot', screenshotPath, 'true', 'false', 'app']);
-        assertFlatToolCall(semanticCalls, ['input', 'click', '60', '100', 'primary']);
-        assertFlatToolCall(semanticCalls, ['input', 'click', '42', '84', 'primary']);
-        assertFlatToolCall(semanticCalls, ['input', 'click', '42', '84', 'secondary']);
-        assertFlatToolCall(semanticCalls, ['input', 'click', '42', '84', 'middle']);
-        assertFlatToolCall(semanticCalls, ['input', 'double-click', '42', '84']);
-        assertFlatToolCall(semanticCalls, ['input', 'long-press', '42', '84', '1']);
-        assertFlatToolCall(semanticCalls, ['input', 'drag', '10', '20', '30', '40', '16']);
-        assertFlatToolCall(semanticCalls, ['input', 'type', 'Seven', '1']);
-        assertFlatToolCall(semanticCalls, ['input', 'type', 'Eight', '1']);
-        assertFlatToolCall(semanticCalls, ['input', 'type', '5', '0']);
-        assertFlatToolCall(semanticCalls, ['input', 'key', 'ctrl+a']);
-        assertFlatToolCall(semanticCalls, ['input', 'key', 'alt+Left']);
-        assertFlatToolCall(semanticCalls, ['input', 'key', 'super+d']);
-        assertFlatToolCall(semanticCalls, ['input', 'scroll', 'down', '', '45']);
-        assertFlatToolCall(semanticCalls, ['input', 'scroll', 'up', '', '']);
-        assert.deepEqual(
-          toolCalls,
-          [],
-          'Expected Linux Provider-backed integration input to stay semantic',
+
+        // The helper is located through the host's own presence check before it runs, and the path
+        // that check settles on is the one the capture executes.
+        const helper = probedPaths.find((probed) => probed.endsWith('atspi-dump.py'));
+        assert.ok(helper, JSON.stringify(probedPaths));
+        assert.ok(
+          toolCalls.some((call) => call[0] === 'python3' && call[1] === helper),
+          JSON.stringify(toolCalls.filter((call) => call[0] === 'python3')),
         );
+
+        // The clipboard round-trips through the X11 selection tool: text in on stdin, read back.
+        const clipboardWrite = commands.find(
+          (call) => call.command === 'xclip' && call.stdin !== undefined,
+        );
+        assert.deepEqual(clipboardWrite?.args, ['-selection', 'clipboard']);
+        assert.equal(clipboardWrite?.stdin, 'linux otp 314159');
+        assertCommandCall(toolCalls, ['xclip', '-selection', 'clipboard', '-o']);
+
+        // Input synthesis is xdotool on this X11 session. The pointer is moved before every click
+        // because the scripted desktop never reports it as already being there.
+        assertCommandCall(toolCalls, ['xdotool', 'mousemove', '--sync', '60', '100']);
+        assertCommandCall(toolCalls, ['xdotool', 'mousemove', '--sync', '42', '84']);
+        assertCommandCall(toolCalls, ['xdotool', 'click', '1']);
+        assertCommandCall(toolCalls, ['xdotool', 'click', '3']);
+        assertCommandCall(toolCalls, ['xdotool', 'click', '2']);
+        assertCommandCall(toolCalls, ['xdotool', 'click', '--repeat', '2', '1']);
+        assertCommandCall(toolCalls, ['xdotool', 'mousedown', '1']);
+        assertCommandCall(toolCalls, ['xdotool', 'mouseup', '1']);
+        assertCommandCall(toolCalls, ['xdotool', 'mousemove', '--sync', '30', '40']);
+        // `fill` focuses the field, selects the old value, then types the replacement at the
+        // requested delay. Both fills use their own text; the ref fill moves to the ref's centre.
+        assertCommandCall(toolCalls, ['xdotool', 'key', '--clearmodifiers', 'ctrl+a']);
+        assertCommandCall(toolCalls, [
+          'xdotool',
+          'type',
+          '--delay',
+          '1',
+          '--clearmodifiers',
+          '--',
+          'Seven',
+        ]);
+        assertCommandCall(toolCalls, [
+          'xdotool',
+          'type',
+          '--delay',
+          '1',
+          '--clearmodifiers',
+          '--',
+          'Eight',
+        ]);
+        assertCommandCall(toolCalls, ['xdotool', 'type', '--clearmodifiers', '--', '5']);
+        // `--pixels 45` is three ~15px wheel clicks, dispatched as one paced batch; the plain scroll
+        // keeps the default five.
+        assertCommandCall(toolCalls, ['xdotool', 'click', '--repeat', '3', '5']);
+        assertCommandCall(toolCalls, ['xdotool', 'click', '--repeat', '5', '4']);
+        // The system buttons are their key combinations.
+        assertCommandCall(toolCalls, ['xdotool', 'key', '--clearmodifiers', 'alt+Left']);
+        assertCommandCall(toolCalls, ['xdotool', 'key', '--clearmodifiers', 'super+d']);
+        // The capture tool writes the destination the request named; the PNG check above is what
+        // proves the artifact, since the tool's own argv carries no full-screen or stabilization flag.
+        assertCommandCall(toolCalls, ['scrot', screenshotPath]);
       } finally {
         fs.rmSync(screenshotPath, { force: true });
       }
     },
   );
 });
+
+/** The `--surface` values one host command names, which only the AT-SPI helper call carries. */
+function surfaceAsks(call: readonly string[]): readonly string[] {
+  const surfaceAt = call.indexOf('--surface');
+  return surfaceAt >= 0 && call[surfaceAt + 1] !== undefined ? [call[surfaceAt + 1]!] : [];
+}

@@ -483,11 +483,10 @@ const PLATFORM_SETUP_CHECKS: Partial<Record<Platform, (value: Record<string, unk
   linux(value) {
     const operations = value.operations;
     if (
-      typeof value.withRequestProvider !== 'function' ||
       !isRecord(operations) ||
       Object.keys(LINUX_OPERATIONS).some((operation) => typeof operations[operation] !== 'function')
     ) {
-      throw invalidPlugin('Linux platform setup must supply request scoping and Linux operations');
+      throw invalidPlugin('Linux platform setup must supply Linux operations');
     }
   },
 };

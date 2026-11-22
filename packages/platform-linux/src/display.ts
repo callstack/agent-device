@@ -1,4 +1,4 @@
-import type { LinuxDisplayServer } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxDisplayServer } from './tool-provider-types.ts';
 
 /** The display decision bound to one host environment. */
 export type LinuxDisplayConfig = Readonly<{
