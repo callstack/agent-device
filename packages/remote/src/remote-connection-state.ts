@@ -30,6 +30,8 @@ import {
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
   parseLeaseDeviceKey,
+  readLeaseProvider,
+  normalizeLeaseProvider,
   remoteSessionRequiredError,
 } from '@agent-device/contracts/lease-scope';
 
@@ -240,6 +242,9 @@ export function readRemoteConnectionState(options: {
     removeInvalidRemoteConnectionState(options);
     return null;
   }
+  if (parsed.leaseProvider !== undefined) {
+    parsed.leaseProvider = readLeaseProvider(parsed.leaseProvider) ?? parsed.leaseProvider;
+  }
   return parsed;
 }
 
@@ -258,7 +263,10 @@ export function writeRemoteConnectionState(options: {
     session: options.state.session,
   });
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  writeJsonFile(statePath, options.state);
+  writeJsonFile(statePath, {
+    ...options.state,
+    leaseProvider: normalizeLeaseProvider(options.state.leaseProvider),
+  });
   options.onSessionRecordCommitted?.();
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });
 }

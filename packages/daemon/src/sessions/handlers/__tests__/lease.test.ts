@@ -835,7 +835,7 @@ test('lease_allocate refuses a provider no registered runtime claims, before rec
         session: 'default',
         command: 'lease_allocate',
         positionals: [],
-        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'testmu' },
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'limrun' },
       },
       sessionName: 'default',
       sessionStore: makeSessionStore('agent-device-unregistered-provider-'),
@@ -846,7 +846,14 @@ test('lease_allocate refuses a provider no registered runtime claims, before rec
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
       assert.equal(error.details?.reason, 'provider-not-registered');
-      assert.equal(error.details?.provider, 'testmu');
+      assert.equal(error.details?.provider, 'limrun');
+      assert.equal(error.details?.package, '@agent-device/limrun');
+      assert.equal(
+        error.details?.installCommand,
+        'agent-device plugins add @agent-device/limrun@nightly-0.22',
+      );
+      assert.match(String(error.details?.hint), /daemon stop/);
+      assert.match(String(error.details?.hint), /embedded host.*plugin factory/);
       assert.deepEqual(error.details?.registeredProviders, ['browserstack']);
       return true;
     },
@@ -888,6 +895,7 @@ test('lease_allocate names the plugin that failed to register when it could have
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.installCommand, undefined);
       assert.deepEqual(error.details?.failedPlugins, [
         {
           provider: 'testmu',

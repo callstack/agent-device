@@ -43,7 +43,7 @@ function snapshotTree(directory: string): Record<string, string> {
   return files;
 }
 
-function limrunProfile(project: string): string {
+function limrunProfile(project: string, leaseProvider = 'limrun'): string {
   const remoteConfig = path.join(project, 'limrun.remote.json');
   fs.writeFileSync(
     remoteConfig,
@@ -51,7 +51,7 @@ function limrunProfile(project: string): string {
       daemonBaseUrl: CLOUD_DAEMON,
       tenant: 'team-a',
       runId: 'run-a',
-      leaseProvider: 'limrun',
+      leaseProvider,
       leaseBackend: 'android-instance',
       platform: 'android',
     }),
@@ -71,11 +71,11 @@ test.each([
   { route: 'non-interactive', extra: ['--no-login'] },
   { route: 'interactive', extra: [] },
 ])(
-  'connect --remote-config with a Limrun profile refuses the missing plugin before $route authentication',
+  'connect --remote-config with a padded Limrun provider refuses the missing plugin before $route authentication',
   async ({ extra }) => {
     const { root, home, project } = makeTempWorkspace();
     const stateDir = path.join(root, 'state');
-    const remoteConfig = limrunProfile(project);
+    const remoteConfig = limrunProfile(project, ' limrun ');
 
     const result = await runCliCapture(
       ['connect', '--remote-config', remoteConfig, '--session', 'ci', ...extra, '--json'],
@@ -279,8 +279,11 @@ test('an open command on a remote Limrun connection allocates with the idle TTL 
 // `connection status` reads the record in this process and dispatches nothing, so a plugin this host
 // lacks is not its answer either. The record still keeps Limrun's preparation, which is what the
 // connect help promises: run `apps` to list uploaded assets, then `open` one by name.
-test('connection status answers for a stored Limrun connection without the plugin and keeps its preparation', async () => {
+test('connection status normalizes a legacy padded Limrun provider and keeps its preparation', async () => {
   const { root, home, project, stateDir } = storedLimrunConnection();
+  const record = path.join(stateDir, 'remote-connections', 'limrun-a.json');
+  const state = JSON.parse(fs.readFileSync(record, 'utf8'));
+  fs.writeFileSync(record, JSON.stringify({ ...state, leaseProvider: ' limrun ' }));
   const before = snapshotTree(stateDir);
 
   const result = await runCliCapture(

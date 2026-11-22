@@ -6,22 +6,18 @@ import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
-import type {
-  DeviceLease,
-  LeaseLifecycleProvider,
-  ProviderAppCatalog,
-} from '@agent-device/contracts/device';
+import type { DeviceLease, LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import { resolveLeaseScope } from '../core/lease-context.ts';
 import {
   assertRequestLeaseAdmission,
   resolveRequestSessionRef,
+  type RequestLeaseAdmissionContext,
   type ResolveRequestSessionRef,
 } from './request-admission.ts';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
-import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
@@ -151,7 +147,7 @@ type LockedSessionParams = {
   teardown: ExpiredSessionTeardown;
   holdDeviceLock: (deviceId: string) => Promise<void>;
   teardownSession: SessionTeardown;
-  admission: Readonly<{ providerAppCatalog?: ProviderAppCatalog; daemonPolicy?: DaemonPolicy }>;
+  admission: RequestLeaseAdmissionContext;
   onSuccessorAdmitted(lease: DeviceLease): void;
   resolveSessionRef?: ResolveRequestSessionRef;
 };
@@ -229,8 +225,7 @@ export function admitRequestLeaseForLockedScope(params: {
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
-  providerAppCatalog?: ProviderAppCatalog;
-  daemonPolicy?: DaemonPolicy;
+  admission?: RequestLeaseAdmissionContext;
   resolveSessionRef?: ResolveRequestSessionRef;
 }): DaemonRequest {
   const {
@@ -244,8 +239,7 @@ export function admitRequestLeaseForLockedScope(params: {
   resolveSessionRef(params.req, addressed);
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, addressed?.session, {
     env: params.env,
-    providerAppCatalog: params.providerAppCatalog,
-    daemonPolicy: params.daemonPolicy,
+    ...params.admission,
   });
   if (!activeLease) return params.req;
   return { ...params.req, internal: { ...params.req.internal, admittedLease: activeLease } };

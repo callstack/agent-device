@@ -1,7 +1,7 @@
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { CLOUD_LEASE_PROVIDER } from '@agent-device/contracts/lease-scope';
+import { CLOUD_LEASE_PROVIDER, normalizeLeaseProvider } from '@agent-device/contracts/lease-scope';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { resolveCloudAccessForConnect } from '../auth-session.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';
@@ -44,7 +44,8 @@ export async function resolveCloudConnectProfile(options: {
   // The control plane chose the provider. It is admitted here, before this route generates or writes
   // any profile or connection record, so a provider whose plugin is missing or broken leaves no
   // connection state behind.
-  await admitDiscoveredProvider(profile.leaseProvider, options.env);
+  const leaseProvider = normalizeLeaseProvider(profile.leaseProvider);
+  await admitDiscoveredProvider(leaseProvider, options.env);
   const clientId = buildConnectClientId(
     options.stateDir,
     auth.cloudBaseUrl,
@@ -56,7 +57,7 @@ export async function resolveCloudConnectProfile(options: {
     provider: 'cloud',
     profile: {
       ...profile,
-      leaseProvider: profile.leaseProvider ?? CLOUD_LEASE_PROVIDER,
+      leaseProvider: leaseProvider ?? CLOUD_LEASE_PROVIDER,
       clientId: profile.clientId ?? clientId,
       runId: profile.runId ?? `cloud-${clientId}`,
     },

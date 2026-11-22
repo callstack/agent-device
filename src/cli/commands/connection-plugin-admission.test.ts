@@ -128,7 +128,7 @@ test('routed status uses capabilities from the supplied host store rather than t
       extra: `connection: { capabilities: ${JSON.stringify(capabilities)}, resolve() {}, verify() { return { provider: 'browserstack', service: 'BrowserStack', verificationMessage: 'verified' }; } },`,
     }),
   );
-  const f = fixture(home);
+  const f = fixture(home, ' browserstack ');
   const capture = beginStdoutCapture();
   const sendToDaemon = vi.fn(async () => {
     throw new Error('unexpected daemon access');
@@ -147,10 +147,9 @@ test('routed status uses capabilities from the supplied host store rather than t
       { sendToDaemon },
       suppliedHost,
     );
-    assert.equal(
-      readRemoteConnectionState({ stateDir: f.stateDir, session: 'default' })?.leaseProvider,
-      provider,
-    );
+    const statePath = path.join(f.stateDir, 'remote-connections', 'default.json');
+    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).leaseProvider, provider);
+    assert.match(capture.read(), /BrowserStack/);
     const statusOutputStart = capture.read().length;
     await runCli(
       ['connection', 'status', '--state-dir', f.stateDir],

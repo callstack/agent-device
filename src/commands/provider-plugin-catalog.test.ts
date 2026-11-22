@@ -1,12 +1,11 @@
-import assert from 'node:assert/strict';
-import { test } from 'vitest';
 import {
   getProviderPluginDeclaration,
   providerPluginAdmission,
   providerPluginDeclarations,
-  providerPluginHelp,
-  providerPluginInstallCommand,
-} from './provider-plugin-catalog.ts';
+} from '@agent-device/contracts/provider-plugin-catalog';
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import { providerPluginHelp, providerPluginInstallCommand } from './provider-plugin-catalog.ts';
 
 const NIGHTLY_0_22 = '0.22.0-nightly-0-22.20261118.187';
 const MAIN_NIGHTLY_0_22 = '0.22.0-nightly.20261118.186';

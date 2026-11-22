@@ -1,4 +1,5 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
+import { readLeaseProvider } from '@agent-device/contracts/lease-scope';
 import {
   pluginConnectionInventory,
   pluginConnectionCapabilities,
@@ -16,8 +17,8 @@ import {
   getProviderPluginDeclaration,
   providerPluginAdmission,
   providerPluginConnectionCapabilities,
-  providerPluginRepairCommand,
-} from '../../commands/provider-plugin-catalog.ts';
+} from '@agent-device/contracts/provider-plugin-catalog';
+import { providerPluginRepairCommand } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
@@ -108,7 +109,7 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
  * a profile verifies the provider it names.
  */
 export function requiresOwnProviderAdmission(provider: string | undefined): boolean {
-  return providerPluginAdmission(provider) === 'provider';
+  return providerPluginAdmission(readLeaseProvider(provider)) === 'provider';
 }
 
 /**
@@ -175,7 +176,7 @@ export function unavailableConnectPluginError(
     'UNSUPPORTED_OPERATION',
     `${declaration.label} requires the ${declaration.package} plugin.`,
     {
-      reason: 'plugin-not-installed',
+      reason: PLUGIN_INSTALLATION_REASONS.notInstalled,
       provider,
       package: declaration.package,
       ...pluginInstallationHint(declaration, readVersion()),

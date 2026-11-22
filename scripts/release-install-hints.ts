@@ -1,3 +1,4 @@
+import { providerPluginDeclarations } from '@agent-device/contracts/provider-plugin-catalog';
 /**
  * Lists, one name per line, every plugin package the checked-out core tells a user to install.
  *
@@ -18,7 +19,6 @@ import {
   getOptionalPlatformPluginDeclaration,
   MACOS_PLATFORM_PLUGIN_DECLARATION,
 } from '@agent-device/contracts/plugin-installation';
-import { providerPluginDeclarations } from '../src/commands/provider-plugin-catalog.ts';
 
 // Totals `ReplayFormat`, so TypeScript refuses a new replay format without an installation row —
 // the same shape the optional-platform catalog enforces.

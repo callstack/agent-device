@@ -502,6 +502,21 @@ export function parseLeaseDeviceKey(
   return { platform: platform!, target: target!, id: id! };
 }
 
+export function readLeaseProvider(raw: unknown): string | undefined {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return /^[a-zA-Z0-9._-]{1,64}$/.test(value) ? value : undefined;
+}
+
+export function normalizeLeaseProvider(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const provider = readLeaseProvider(raw);
+  if (provider) return provider;
+  throw new AppError(
+    'INVALID_ARGS',
+    'Invalid lease provider. Use 1-64 chars: letters, numbers, dot, underscore, hyphen.',
+  );
+}
+
 export function isProxyLeaseScope(scope: LeaseScope): boolean {
   return scope.leaseProvider === PROXY_LEASE_PROVIDER;
 }

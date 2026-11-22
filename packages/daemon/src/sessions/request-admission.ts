@@ -1,3 +1,5 @@
+import { providerRuntimeAdmissionError } from './provider-runtime-admission.ts';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTenantOwnedSessionName, normalizeTenantId } from '@agent-device/contracts/daemon-http';
@@ -158,17 +160,23 @@ export function requestMayRecordSessionEvents(
   return !ignoresSessionLease(req.command) && !compareRequestLeaseClaims(req, ref.session.lease);
 }
 
+export type RequestLeaseAdmissionContext = Readonly<{
+  providerAppCatalog?: ProviderAppCatalog;
+  providerRuntimeIds?: readonly string[];
+  failedPlugins?: readonly PluginInventoryEntry[];
+  daemonPolicy?: DaemonPolicy;
+}>;
+
 export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session: SessionState | undefined,
-  options: Readonly<{
-    env: HostEnvironment['env'];
-    providerAppCatalog?: ProviderAppCatalog;
-    daemonPolicy?: DaemonPolicy;
-    /** Runs the same rules and changes no lease: no registry sweep and no renewal. */
-    inspectOnly?: boolean;
-  }>,
+  options: RequestLeaseAdmissionContext &
+    Readonly<{
+      env: HostEnvironment['env'];
+      /** Runs the same rules and changes no lease: no registry sweep and no renewal. */
+      inspectOnly?: boolean;
+    }>,
 ): DeviceLease | undefined {
   // An admission-exempt command still acts on its session, so it must hold the session lease too.
   assertRequestHoldsSessionLease(req, session);
@@ -187,7 +195,7 @@ export function assertRequestLeaseAdmission(
   if (
     session === undefined &&
     !requestLeaseScope.leaseId &&
-    hasSessionlessLeaseAdmissionExemption(req, options.providerAppCatalog)
+    hasSessionlessLeaseAdmissionExemption(req, options)
   ) {
     return undefined;
   }
@@ -272,14 +280,21 @@ export function isConfinedToAppLease(
 
 function hasSessionlessLeaseAdmissionExemption(
   req: DaemonRequest,
-  providerAppCatalog: ProviderAppCatalog | undefined,
+  options: RequestLeaseAdmissionContext,
 ): boolean {
   const exemption = resolveSessionlessLeaseAdmissionExemption(req);
   if (exemption?.kind === 'unconditional') return true;
-  return (
-    exemption?.kind === 'provider-app-catalog' &&
-    providerAppCatalog?.supports(exemption.provider) === true
+  if (exemption?.kind !== 'provider-app-catalog') return false;
+  const { provider } = exemption;
+  if (options.providerAppCatalog?.supports(provider)) return true;
+  const error = providerRuntimeAdmissionError(
+    provider,
+    'catalog',
+    options.providerRuntimeIds,
+    options.failedPlugins,
   );
+  if (error) throw error;
+  return false;
 }
 
 /**

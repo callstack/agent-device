@@ -37,6 +37,7 @@ function createAppsAdmissionHarness(apps: readonly string[] = []) {
       shutdown: async () => {},
     } satisfies DeviceRuntimeGateway<PlatformRuntimeOperations>,
     providerAppCatalog,
+    providerRuntimeIds: ['limrun', 'browserstack'],
     trackDownloadableArtifact: () => 'artifact-id',
   });
   return { handler, listProviderApps, inspectFacts, bind };
@@ -83,6 +84,26 @@ test.each([
     expect(bind).not.toHaveBeenCalled();
   },
 );
+
+test('tenant apps names the plugin when a managed provider is absent', async () => {
+  const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness();
+  const response = await handler(appsRequest('aws-device-farm'));
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      details: {
+        reason: 'provider-not-registered',
+        package: '@agent-device/aws-device-farm',
+        installCommand: 'agent-device plugins add @agent-device/aws-device-farm@nightly-0.22',
+      },
+    },
+  });
+  expect(listProviderApps).not.toHaveBeenCalled();
+  expect(inspectFacts).not.toHaveBeenCalled();
+  expect(bind).not.toHaveBeenCalled();
+});
 
 test('tenant apps admits the runtime-declared catalog provider without device access', async () => {
   const { handler, listProviderApps, inspectFacts, bind } = createAppsAdmissionHarness([

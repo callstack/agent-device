@@ -323,6 +323,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               platformRequestScope,
               settleExpiredSession,
               providerAppCatalog,
+              providerRuntimeIds,
+              failedPlugins,
               daemonPolicy,
             });
             return await executeRequestScope(scope);
@@ -515,6 +517,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           platformRequestScope: createPlatformRequestScope(scopedReq),
           settleExpiredSession,
           providerAppCatalog,
+          providerRuntimeIds,
+          failedPlugins,
           daemonPolicy,
         });
         // The outer replay keeps its stable session lock plus the device lock

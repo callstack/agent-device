@@ -296,6 +296,10 @@
       "types": "./src/lease-scope.ts",
       "default": "./src/lease-scope.ts"
     },
+    "./provider-plugin-catalog": {
+      "types": "./src/provider-plugin-catalog.ts",
+      "default": "./src/provider-plugin-catalog.ts"
+    },
     "./plugin-installation": {
       "types": "./src/plugin-installation.ts",
       "default": "./src/plugin-installation.ts"

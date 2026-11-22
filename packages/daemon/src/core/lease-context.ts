@@ -19,6 +19,7 @@ import {
   leaseScopeFromRequest,
   leaseScopeToRequestMeta,
   normalizeLeaseId,
+  readLeaseProvider,
   type LeaseClaims,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
@@ -91,7 +92,7 @@ export const LEASE_FIELD_NORMALIZERS = {
   tenantId: normalizeTenantId,
   leaseBackend: (raw) => (typeof raw === 'string' ? readLeaseBackend(raw) : undefined),
   runId: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,128}$/),
-  leaseProvider: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,64}$/),
+  leaseProvider: readLeaseProvider,
   clientId: trimmedLeaseLabel(/^[a-zA-Z0-9._-]{1,128}$/),
   deviceKey: trimmedLeaseLabel(/^[\u0020-\u007E]{1,256}$/),
 } as const satisfies Record<LeaseClaimField, (raw: unknown) => string | undefined>;

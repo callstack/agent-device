@@ -11,7 +11,7 @@ import {
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider } from '@agent-device/contracts/device';
 import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 import {
   emitDiagnostic,
@@ -34,6 +34,7 @@ import {
   requestMayRecordSessionEvents,
   resolveRequestSessionName,
   resolveRequestSessionRef,
+  type RequestLeaseAdmissionContext,
   type ResolveRequestSessionRef,
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
@@ -252,21 +253,21 @@ type LockedRequestScopeResult =
   | { type: 'scope'; scope: LockedRequestScope }
   | { type: 'response'; response: DaemonResponse };
 
-export async function createRequestExecutionScope(params: {
-  host: HostEnvironment;
-  req: DaemonRequest;
-  sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
-  leaseLifecycleProvider?: LeaseLifecycleProvider;
-  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
-  platformServices: DaemonPlatformServices;
-  claimRecoveryGateway: ClaimRecoveryGatewayFactory;
-  platformRequestScope: PlatformRequestScope;
-  /** The daemon-owned teardown of a session whose lease expired (root runtime composition). */
-  settleExpiredSession?: SessionTeardown;
-  providerAppCatalog?: ProviderAppCatalog;
-  daemonPolicy?: DaemonPolicy;
-}): Promise<RequestExecutionScope> {
+export async function createRequestExecutionScope(
+  params: {
+    host: HostEnvironment;
+    req: DaemonRequest;
+    sessionStore: SessionStore;
+    leaseRegistry: LeaseRegistry;
+    leaseLifecycleProvider?: LeaseLifecycleProvider;
+    deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+    platformServices: DaemonPlatformServices;
+    claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+    platformRequestScope: PlatformRequestScope;
+    /** The daemon-owned teardown of a session whose lease expired (root runtime composition). */
+    settleExpiredSession?: SessionTeardown;
+  } & RequestLeaseAdmissionContext,
+): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   const unscopedReq = restrictRemoteHostInputs(params.req);
   const tenantScopedReq = scopeRequestSession(unscopedReq);
@@ -554,8 +555,7 @@ export async function createRequestExecutionScope(params: {
               sessionName,
               sessionStore,
               leaseRegistry,
-              providerAppCatalog: params.providerAppCatalog,
-              daemonPolicy: params.daemonPolicy,
+              admission: params,
               resolveSessionRef: scope.resolveSessionRef,
             });
           }
