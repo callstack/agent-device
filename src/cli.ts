@@ -166,6 +166,10 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
       debug: debugEnabled,
     },
     async () => {
+      // A provider this route cannot supply is refused here: before this run resolves an option that
+      // can carry a credential, and before any credential value is registered for redaction.
+      const { admitConnectProviderOrExit } = await import('./cli/connect-preflight.ts');
+      await admitConnectProviderOrExit(argv, host, { jsonRequested, debugEnabled });
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
         host,
         version,
@@ -312,23 +316,8 @@ async function exitOnParseFailure(
   argv: string[],
   options: { jsonRequested: boolean; debugEnabled: boolean },
 ): Promise<never> {
-  emitDiagnostic({
-    level: 'error',
-    phase: 'cli_parse_failed',
-    data: {
-      error: error instanceof Error ? error.message : String(error),
-    },
-  });
-  const normalized = normalizeError(error, {
-    diagnosticId: getDiagnosticsMeta().diagnosticId,
-    logPath: flushDiagnosticsToSessionFile({ force: true })?.path,
-  });
-  if (options.jsonRequested) {
-    await printJson({ success: false, error: normalized });
-  } else {
-    await printHumanError(normalized, { debugTier: options.debugEnabled, argv });
-  }
-  return await exitAfterFlush(1);
+  const { exitBeforeCommand } = await import('./cli/pre-command-failure.ts');
+  return await exitBeforeCommand(error, argv, options, 'cli_parse_failed');
 }
 
 type CliRunContext = {
@@ -344,6 +333,8 @@ type CliRunContext = {
   daemonPaths: ReturnType<typeof resolveDaemonPaths>;
   sessionName: string;
   connectionDefaults: ReturnType<typeof resolveActiveConnectionDefaults>;
+  /** The lease provider an explicit remote config profile names; the flags do not carry it. */
+  remoteConfigLeaseProvider: string | undefined;
   explicitFlagKeys: Set<FlagKey>;
   // Mutated in place by resolveRemoteContext (auth, materialization) so the
   // failure handler always sees the same state the throwing phase saw.
@@ -417,6 +408,7 @@ async function resolveRunContextOrExit(
       daemonPaths,
       sessionName,
       connectionDefaults,
+      remoteConfigLeaseProvider: parsed.remoteConfigLeaseProvider,
       explicitFlagKeys,
       effectiveFlags,
       resolvedRuntime: connectionDefaults?.runtime,
@@ -460,6 +452,17 @@ async function resolveRemoteContext(
       throw new AppError('INVALID_ARGS', 'batch does not accept positional arguments.');
     }
     ctx.parsedBatchSteps = readBatchSteps(ctx.flags);
+  }
+
+  // A missing provider plugin answers with its install command before any login or auth state, unless
+  // this command dispatches to a configured remote daemon, whose own registration supplies it.
+  if (ctx.command === 'connect' || ctx.effectiveFlags.remoteConfig) {
+    const { admitConnectionProvider } = await import('./cli/connection/provider-admission.ts');
+    await admitConnectionProvider({
+      ...ctx,
+      materializes: shouldMaterializeRemoteConnection(ctx.command),
+      daemonBaseUrl: ctx.effectiveFlags.daemonBaseUrl,
+    });
   }
 
   if (shouldResolveRemoteAuth(ctx.command)) {

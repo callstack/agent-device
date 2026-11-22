@@ -7,7 +7,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { connectionProviderCapabilities } from './provider-policy.ts';
+import { providerForgetsEndedConnectionLease } from './provider-policy.ts';
 import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 
 /**
@@ -29,8 +29,9 @@ export function forgetEndedConnectionLease(
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;
-  if (!connectionProviderCapabilities(state.leaseProvider, host.env).forgetsEndedConnectionLease)
-    return;
+  // `close` and `session` load no plugin store, so this reads what answers without one: the
+  // provider's loaded declaration, then the plugin catalog.
+  if (!providerForgetsEndedConnectionLease(state.leaseProvider, host.env)) return;
   writeRemoteConnectionState({
     stateDir,
     state: { ...state, leaseId: undefined, updatedAt: new Date().toISOString() },

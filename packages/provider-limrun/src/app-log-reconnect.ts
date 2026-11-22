@@ -1,11 +1,12 @@
 import type Limrun from '@limrun/api';
-import { NotFoundError } from '@limrun/api';
 import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader, LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
-import { requireLimrunOrgClient } from './client-options.ts';
+import { fromLimrunOrgApi, isLimrunApiNotFound, requireLimrunOrgClient } from './client-options.ts';
+import { connectLimrunInstanceClient } from './instance-error-scrubbing.ts';
+import { readLimrunAndroidLogs, runLimrunAndroidAdbCommand } from './android.ts';
 import { attachedLimrunInstanceId } from './device.ts';
 import type {
   LimrunAndroidInstanceAccess,
@@ -30,14 +31,9 @@ export async function reconnectLimrunAppLogReader(options: {
     );
   }
   const limrun = requireLimrunOrgClient(options.limrun, 'Reconnecting app logs');
-  try {
-    return options.descriptor.platform === 'ios'
-      ? await reconnectIos({ ...options, limrun })
-      : await reconnectAndroid({ ...options, limrun });
-  } catch (error) {
-    if (error instanceof NotFoundError) return { status: 'missing' };
-    throw error;
-  }
+  return options.descriptor.platform === 'ios'
+    ? await reconnectIos({ ...options, limrun })
+    : await reconnectAndroid({ ...options, limrun });
 }
 
 async function reconnectAttached(
@@ -90,11 +86,7 @@ async function openIosReader(
   descriptor: LimrunAppLogDescriptor,
   dependencies: LimrunRuntimeDependencies,
 ): Promise<LimrunAppLogReconnectOutcome> {
-  const client = await createIosInstanceClient({
-    apiUrl: access.apiUrl,
-    token: access.token,
-    logLevel: 'warn',
-  });
+  const client = await connectLimrunInstanceClient(createIosInstanceClient, access);
   const logs = dependencies.ios.createAppLogReader({ ...access, client });
   const reader: LimrunAppLogReader = {
     platform: 'ios',
@@ -147,12 +139,7 @@ async function openAndroidReader(
   descriptor: LimrunAppLogDescriptor,
   dependencies: LimrunRuntimeDependencies,
 ): Promise<LimrunAppLogReconnectOutcome> {
-  const client = await createAndroidInstanceClient({
-    apiUrl: access.apiUrl,
-    adbUrl: access.adbUrl,
-    token: access.token,
-    logLevel: 'warn',
-  });
+  const client = await connectLimrunInstanceClient(createAndroidInstanceClient, access);
   const rollback = new AsyncCleanupStack();
   let adopted = false;
   rollback.defer(async () => {
@@ -168,7 +155,9 @@ async function openAndroidReader(
       args: readonly string[],
       commandOptions?: Parameters<LimrunRuntimeDependencies['host']['runAdb']>[1],
     ) =>
-      await dependencies.host.runAdb(
+      await runLimrunAndroidAdbCommand(
+        dependencies,
+        access.token,
         dependencies.android.deviceAdbInvocation(serial, args),
         commandOptions,
       );
@@ -178,7 +167,7 @@ async function openAndroidReader(
       instanceId: descriptor.instanceId,
       ownership: descriptor.ownership,
       readLogs: async (_appBundleId, lineLimit) =>
-        await dependencies.android.readLogs(adb, lineLimit),
+        await readLimrunAndroidLogs(dependencies, access.token, adb, lineLimit),
       [Symbol.asyncDispose]: async () => {
         await dependencies.host
           .runAdb(dependencies.android.hostAdbInvocation(['disconnect', serial]), {
@@ -218,7 +207,13 @@ async function selectOwnedActiveInstance<Instance extends ReconnectableLimrunIns
   | Readonly<{ status: 'active'; instance: Instance; apiUrl: string; token: string }>
   | Extract<LimrunAppLogReconnectOutcome, { status: 'missing' | 'ownership-lost' }>
 > {
-  const instance = await load();
+  let instance: Instance;
+  try {
+    instance = await fromLimrunOrgApi(load());
+  } catch (error) {
+    if (isLimrunApiNotFound(error)) return { status: 'missing' };
+    throw error;
+  }
   if (!hasDescriptorOwnership(instance.metadata.labels, descriptor)) {
     return { status: 'ownership-lost' };
   }

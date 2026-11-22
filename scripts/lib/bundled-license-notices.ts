@@ -107,9 +107,7 @@ function attributableDependency(
   const version = typeof manifest.version === 'string' ? manifest.version.trim() : '';
   if (!version) throw new Error(`Bundled dependency ${name} is missing its version.`);
   const license = typeof manifest.license === 'string' ? manifest.license.trim() : '';
-  const licenseText =
-    readNamedFile(directory, /^licen[cs]e/i) ??
-    (name === '@limrun/xdelta3-wasm' ? xdeltaLicenseText(root, version, license) : undefined);
+  const licenseText = readNamedFile(directory, /^licen[cs]e/i);
   if (!license || !licenseText) {
     throw new Error(
       `Bundled dependency ${name}@${version} is missing its license or license text.`,
@@ -141,16 +139,4 @@ function deduplicate(dependencies: readonly NoticeDependency[]): NoticeDependenc
       dependencies.map((dependency) => [`${dependency.name}@${dependency.version}`, dependency]),
     ).values(),
   ];
-}
-
-function xdeltaLicenseText(root: string, version: string, license: string): string {
-  const notices = fs.readFileSync(path.join(root, 'LICENSES/xdelta3-wasm.txt'), 'utf8');
-  if (
-    notices.split(/\r?\n/, 1)[0] !== `@limrun/xdelta3-wasm ${version} source-file notices` ||
-    license !== 'Apache-2.0'
-  )
-    throw new Error(
-      `Refresh LICENSES/xdelta3-wasm.txt for bundled @limrun/xdelta3-wasm@${version}.`,
-    );
-  return notices + '\n' + fs.readFileSync(path.join(root, 'LICENSES/Apache-2.0.txt'), 'utf8');
 }

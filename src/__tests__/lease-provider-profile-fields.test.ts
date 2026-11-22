@@ -12,6 +12,12 @@ import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from '@agent-device/test-kit';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
+
 const limrunInstances = vi.hoisted(() => ({
   iosCreate: vi.fn(async () => {
     throw new Error('a refused allocation must not create a Limrun instance');

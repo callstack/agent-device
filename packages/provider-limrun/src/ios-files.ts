@@ -1,0 +1,232 @@
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import type {
+  AppleToolProvider,
+  AppleToolExecOptions,
+} from '@agent-device/platform-apple/tool-provider';
+import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
+import { downloadLimrunFile } from './download-file.ts';
+import type { LimrunIosHost } from './ios-host.ts';
+
+type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
+type Files = AppleToolProvider['simulatorFiles'];
+type ParsePlist = LimrunIosHost['apple']['tools']['parsePlist'];
+type Container = Parameters<Files['openContainer']>[0];
+
+const LIMRUN_FILE_REASONS = {
+  // The instance returned an unreadable JSON reply for a simulator file operation.
+  invalidResponse: { reason: 'limrun_file_response_invalid' },
+} as const satisfies ReasonTable<'limrun'>;
+
+async function readFileReply<T>(response: Response, signal: AbortSignal): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    signal.throwIfAborted();
+    throw new AppError('COMMAND_FAILED', 'Limrun file operation returned invalid JSON', {
+      reason: LIMRUN_FILE_REASONS.invalidResponse.reason,
+      status: response.status,
+    });
+  }
+}
+
+export function createLimrunSimulatorFiles(
+  session: Session,
+  parsePlist: ParsePlist,
+  lifetime: AbortSignal,
+  requestSignal?: AbortSignal,
+): { simulatorFiles: Files; readInfoPlist: AppleToolProvider['simulatorApps']['readInfoPlist'] } {
+  const signalFor = (signal?: AbortSignal) =>
+    AbortSignal.any(
+      [lifetime, requestSignal, signal].filter((value): value is AbortSignal => Boolean(value)),
+    );
+  const operation = async <T>(
+    options: AppleToolExecOptions,
+    run: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> => {
+    const timeoutMs = options.timeoutMs ?? 15_000;
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const signal = AbortSignal.any(
+      [
+        lifetime,
+        options.requestCancellation === 'ignore' ? undefined : requestSignal,
+        options.signal,
+        deadline,
+      ].filter((value): value is AbortSignal => Boolean(value)),
+    );
+    try {
+      signal.throwIfAborted();
+      return await run(signal);
+    } catch (error) {
+      if (signal.aborted) {
+        if (signal.reason === deadline.reason && deadline.aborted)
+          throw new AppError('COMMAND_FAILED', 'Remote simulator file operation timed out', {
+            timeoutMs,
+          });
+        if (signal.reason instanceof AppError) throw signal.reason;
+        throw createRequestCanceledError(undefined, signal.reason);
+      }
+      throw error;
+    }
+  };
+  const urlFor = (route: string, name: string, container?: Container) => {
+    const url = new URL(`${session.apiUrl.replace(/\/$/, '')}/${route}`);
+    url.searchParams.set(route === 'files/list' ? 'path' : 'name', name);
+    if (container) {
+      url.searchParams.set('bundleId', container.bundleId);
+      url.searchParams.set('containerType', container.containerType);
+    }
+    return url;
+  };
+  const request = async (method: string, url: URL, signal: AbortSignal, body?: Uint8Array) => {
+    signal.throwIfAborted();
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${session.token}`,
+        ...(body ? { 'Content-Type': 'application/octet-stream' } : {}),
+      },
+      body: body as BodyInit | undefined,
+      signal,
+      redirect: 'error',
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new AppError('COMMAND_FAILED', `Limrun file ${method} failed (${response.status})`, {
+        status: response.status,
+      });
+    }
+    return response;
+  };
+  const files: Files = {
+    copyToHost: async (input) => {
+      await downloadLimrunFile({
+        url: urlFor('files', input.sourcePath, input).href,
+        headers: { Authorization: `Bearer ${session.token}` },
+        destinationPath: input.destinationPath,
+        timeoutMs: input.timeoutMs,
+        signal: signalFor(input.signal),
+      });
+    },
+    openContainer: async (container) => {
+      const list = () =>
+        operation(container, async (signal) => {
+          const response = await request('GET', urlFor('files/list', '', container), signal);
+          const result = await readFileReply<{ entries: Array<{ name: string }> }>(
+            response,
+            signal,
+          );
+          return result.entries.map((entry) => entry.name);
+        });
+      try {
+        await list();
+      } catch (error) {
+        if (error instanceof AppError && error.details?.status === 404) return null;
+        throw error;
+      }
+      return {
+        list,
+        remove: (name) =>
+          operation(container, async (signal) => {
+            const response = await request('DELETE', urlFor('files', name, container), signal);
+            await response.body?.cancel();
+          }),
+        ensureDirectory: (directory) =>
+          operation(container, async (signal) => {
+            // Upload creates parents; removing the unique marker leaves the requested directory.
+            const name = `${directory}/.agent-device-${randomUUID()}`;
+            const response = await request(
+              'PUT',
+              urlFor('files', name, container),
+              signal,
+              new Uint8Array(),
+            );
+            await response.body?.cancel();
+            const removed = await request('DELETE', urlFor('files', name, container), signal);
+            await removed.body?.cancel();
+          }),
+      };
+    },
+    stageFile: async (localPath, inputSignal) => {
+      const url = urlFor('files', `agent-device-${randomUUID()}${path.extname(localPath)}`);
+      const remove = () =>
+        operation({ requestCancellation: 'ignore', timeoutMs: 15_000 }, async (signal) => {
+          const response = await request('DELETE', url, signal);
+          await response.body?.cancel();
+        });
+      const result = await operation({ signal: inputSignal }, async (signal) => {
+        const response = await request(
+          'PUT',
+          url,
+          signal,
+          await fs.readFile(localPath, { signal }),
+        );
+        return await readFileReply<{ path: string }>(response, signal);
+      }).catch(async (error: unknown) => {
+        await remove().catch(() => {});
+        throw error;
+      });
+      return {
+        path: result.path,
+        [Symbol.asyncDispose]: remove,
+      };
+    },
+  };
+  const metadata = new Map<string, Record<string, unknown> | null>();
+
+  return {
+    simulatorFiles: files,
+    readInfoPlist: async (input) => {
+      const key = input.bundleId;
+      if (metadata.has(key)) return metadata.get(key)!;
+      const info = await readLimrunAppInfo(
+        session,
+        parsePlist,
+        input.bundleId,
+        signalFor(input.signal),
+        input.timeoutMs,
+      );
+      metadata.set(key, info);
+      return info;
+    },
+  };
+}
+
+export async function readLimrunAppInfo(
+  access: { apiUrl: string; token: string },
+  parsePlist: ParsePlist,
+  bundleId: string,
+  signal: AbortSignal,
+  timeoutMs = 15_000,
+): Promise<Record<string, unknown> | null> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-app-plist-'));
+  try {
+    const destinationPath = path.join(directory, 'Info.plist');
+    const url = new URL(`${access.apiUrl.replace(/\/$/, '')}/files`);
+    url.search = new URLSearchParams({
+      name: 'Info.plist',
+      bundleId,
+      containerType: 'app',
+    }).toString();
+    await downloadLimrunFile({
+      url: url.href,
+      headers: { Authorization: `Bearer ${access.token}` },
+      destinationPath,
+      timeoutMs,
+      signal,
+    });
+    return await parsePlist(await fs.readFile(destinationPath, { signal }));
+  } catch (error) {
+    if (error instanceof AppError && error.details?.statusCode === 404) return null;
+    throw error;
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+}

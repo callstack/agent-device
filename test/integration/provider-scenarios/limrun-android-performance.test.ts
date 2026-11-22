@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { createLimrunRuntime } from '@agent-device/provider-limrun';
-import { createLimrunRuntimeDependencies } from '../../../src/sdk/limrun-runtime-dependencies.ts';
+import { createLimrunRuntime } from '@agent-device/limrun/runtime';
+import { limrunRuntimeDependencies } from '../../../src/provider-plugin-host-capabilities.fixtures.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -41,7 +41,7 @@ vi.mock('@agent-device/host-kit/command', async (original) => ({
 }));
 
 test('Limrun Android memory sampling reaches the allocated session ADB through daemon dispatch', async () => {
-  const dependencies = createLimrunRuntimeDependencies({ env: {}, cwd: process.cwd() });
+  const dependencies = await limrunRuntimeDependencies({ env: {}, cwd: process.cwd() });
   // Plain close stops the session app; the fake device then reports it gone.
   let settingsStopped = false;
   const sessionExec = vi.fn<typeof dependencies.host.runAdb>(async (invocation) => {

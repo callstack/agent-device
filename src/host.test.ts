@@ -12,7 +12,7 @@ import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { AgentDevicePlugin } from './sdk/plugins.ts';
-import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
+import { limrunPluginInventory } from './__tests__/test-utils/limrun-plugin-inventory.ts';
 import { stopRecordedDaemon } from '@agent-device/daemon-client';
 import { startAgentDevice } from './host.ts';
 
@@ -82,8 +82,8 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => {
         shutdown: async () => [],
         inventory: [
           ...(await (
-            await import('./__tests__/test-utils/builtin-plugin-inventory.ts')
-          ).builtinPluginInventory()),
+            await import('./__tests__/test-utils/limrun-plugin-inventory.ts')
+          ).limrunPluginInventory()),
           ...resolved.inventory(),
         ],
       };
@@ -232,7 +232,7 @@ test('a host registers the plugins its embedder imported and reports the invento
       { source: 'embedder', load: expect.any(Function) },
     ]);
     expect(JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')).plugins).toEqual([
-      ...(await builtinPluginInventory()),
+      ...(await limrunPluginInventory()),
       expect.objectContaining({ provider: 'embedder-plugin', state: 'active', source: 'embedder' }),
     ]);
   } finally {

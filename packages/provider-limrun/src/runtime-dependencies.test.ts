@@ -6,6 +6,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   androidAdbHostTarget,
+  classifyAdbFailure,
   androidAdbInvocation,
   androidAdbSerialTarget,
   serializeAndroidAdbInvocation,
@@ -69,6 +70,8 @@ vi.mock('@limrun/api', () => ({
       list: state.assetList,
     };
 
+    readonly apiKey = 'lim_test_key';
+
     constructor(options: { defaultHeaders?: Record<string, string> }) {
       state.constructorOptions.push(options);
     }
@@ -109,12 +112,20 @@ test('heartbeat reports a terminated instance with its typed cause', async () =>
     assert.equal(await timedOut, undefined);
     assert.equal(probeSignal?.aborted, true);
     vi.useRealTimers();
+    state.instanceGet.mockResolvedValueOnce({
+      status: {
+        state: 'terminated',
+        terminationReason: 'InactivityTimeout instance-token lim_test_key',
+      },
+    });
     await assert.rejects(
       runtime.leaseLifecycle.heartbeat!(lease),
       (error: unknown) =>
         error instanceof AppError &&
         error.details?.reason === 'provider-instance-ended' &&
-        error.details.terminationReason === 'InactivityTimeout',
+        error.details.terminationReason === 'InactivityTimeout [REDACTED] [REDACTED]' &&
+        !error.message.includes('instance-token') &&
+        !error.message.includes('lim_test_key'),
     );
   } finally {
     vi.useRealTimers();
@@ -358,6 +369,7 @@ test('a failed device adb command hands the addressed invocation to the root ada
     ...fixture.dependencies,
     android: {
       ...fixture.dependencies.android,
+      classifyAdbFailure,
       adbError: async (message, _result, invocation) => {
         handed.push(invocation);
         return new AppError('COMMAND_FAILED', message);
@@ -441,6 +453,7 @@ function createContractFixture() {
         androidAdbInvocation(androidAdbSerialTarget(serial), command),
       hostAdbInvocation: (command: readonly string[]) =>
         androidAdbInvocation(androidAdbHostTarget(), command),
+      classifyAdbFailure,
       adbError: async (message: string) => new AppError('COMMAND_FAILED', message),
     },
     host: {

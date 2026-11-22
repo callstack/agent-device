@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AppleRunnerRequestOptions } from './apple-runner-request.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Deadline } from './host.ts';
-import type { RunnerCommand } from './runner-contract.ts';
+import type { RunnerCommand, RunnerEndpoint } from './runner-contract.ts';
 import type { RunnerXctestrunArtifactState, RunnerXctestrunCacheKind } from './runner-xctestrun.ts';
 
 export type AppleRunnerCommandOptions = AppleRunnerRequestOptions & {
@@ -70,6 +70,8 @@ export type AppleRunnerPrewarmExecutor = (
 ) => Promise<void>;
 
 export type AppleRunnerProvider = {
+  /** Projects diagnostic data from nested replies decoded by the user of this provider. */
+  diagnostics?: NonNullable<RunnerEndpoint['http']>['diagnostics'];
   /**
    * Executes a runner protocol command for an already resolved Apple target.
    * Scoped providers may adapt this call to a request-local transport.

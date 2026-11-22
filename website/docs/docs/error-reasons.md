@@ -203,6 +203,22 @@ These reasons can come from more than one command.
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
 
+### Limrun
+
+| Reason | Meaning |
+| --- | --- |
+| `limrun_api_unauthorized` | The account key was refused or lacks access to what was asked for. |
+| `limrun_api_not_found` | The account API has nothing under the identifier the request named. |
+| `limrun_api_rate_limited` | The account API is taking this key's requests too fast to answer them. |
+| `limrun_api_failed` | The account API refused the request for a reason with no separate recovery. |
+| `limrun_download_empty_body` | The instance answered the download with no body at all, so nothing could reach disk. |
+| `limrun_download_http_error` | The instance refused the download; its HTTP status answers for the refusal. |
+| `limrun_download_timeout` | The transfer's own deadline passed before the file reached disk. |
+| `limrun_download_failed` | The transfer failed before it could ask the instance for the file. |
+| `limrun_instance_command_failed` | The instance refused or could not answer the command; its text, with this session's credential removed, is the message. |
+| `limrun_file_response_invalid` | The instance returned an unreadable JSON reply for a simulator file operation. |
+| `limrun_runner_snapshot_unavailable` | The runner's own capture failure is answered over: the recovery is to reopen this session, not to inspect the simulator. |
+
 ### Macos helper
 
 | Reason | Meaning |

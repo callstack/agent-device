@@ -289,26 +289,35 @@ function assertSnapshotBridgeTargetIdentity(
 export function acceptSnapshotBridgeEnvelope(
   envelope: SnapshotBridgeEnvelope,
   expected: Readonly<{ requestId: string; pid: number; generation: string }>,
+  scrubText?: (text: string) => string,
 ): SnapshotBridgeEnvelope {
-  assertSnapshotBridgeEnvelope(envelope, expected.requestId);
-  // A refusal of the request itself, such as bounds-invalid, names no target, so it is typed before
-  // identity can read its missing pid as a stale target.
-  if (envelope.ok !== true) bridgeFailureFromEnvelope(envelope);
-  assertSnapshotBridgeTargetIdentity(envelope, expected);
-  if (typeof envelope.truncated !== 'boolean') {
-    throw snapshotSourceError('malformed-tree', 'truncated-invalid');
+  try {
+    assertSnapshotBridgeEnvelope(envelope, expected.requestId);
+    // A request refusal can name no target, so classify it before reading identity.
+    if (envelope.ok !== true) bridgeFailureFromEnvelope(envelope, scrubText);
+    assertSnapshotBridgeTargetIdentity(envelope, expected);
+    if (typeof envelope.truncated !== 'boolean') {
+      throw snapshotSourceError('malformed-tree', 'truncated-invalid');
+    }
+    return envelope;
+  } catch (error) {
+    // The source timer emits the message before the router reads the typed failure.
+    if (scrubText && error instanceof Error) error.message = scrubText(error.message);
+    throw error;
   }
-  return envelope;
 }
 
-export function bridgeFailureFromEnvelope(envelope: SnapshotBridgeEnvelope): never {
+export function bridgeFailureFromEnvelope(
+  envelope: SnapshotBridgeEnvelope,
+  scrubText?: (text: string) => string,
+): never {
   const kind = envelope.error_kind;
   const code = typeof envelope.error_code === 'string' ? envelope.error_code : 'guest-error';
   const message = typeof envelope.error === 'string' ? envelope.error : undefined;
   const surfaceHostExecutable =
     typeof envelope.surfaceHostExecutable === 'string' ? envelope.surfaceHostExecutable : undefined;
   const details = {
-    ...(message ? { guestMessage: message.slice(0, 1024) } : {}),
+    ...(message ? { guestMessage: (scrubText?.(message) ?? message).slice(0, 1024) } : {}),
     ...(surfaceHostExecutable ? { surfaceHostExecutable } : {}),
   };
   if (kind === 'unsupported') throw snapshotSourceError('unsupported', code, details);

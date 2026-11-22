@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,12 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from '@agent-device/test-kit';
+
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('./test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
 
 test('Limrun apps lists uploaded assets without allocating an instance', async () => {
   const { root, home, project } = makeTempWorkspace();
@@ -48,6 +54,71 @@ test('Limrun apps lists uploaded assets without allocating an instance', async (
   assert.equal(result.calls[0]?.flags?.leaseId, undefined);
   assert.equal(result.calls[0]?.flags?.leaseProvider, 'limrun');
   assert.equal(readActiveConnectionState({ stateDir })?.leaseId, undefined);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('materializing a named Limrun connection leaves the newer active connection active and writes nothing', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const limrunConfig = path.join(project, 'limrun.remote.json');
+  fs.writeFileSync(limrunConfig, '{}', 'utf8');
+  const otherConfig = path.join(project, 'other.remote.json');
+  fs.writeFileSync(otherConfig, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  const now = new Date().toISOString();
+  const base = { version: 1 as const, connectedAt: now, updatedAt: now };
+  // A is a pending Limrun connection; B, saved after it, is providerless and holds the pointer.
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      ...base,
+      session: 'limrun-a',
+      remoteConfigPath: limrunConfig,
+      remoteConfigHash: hashRemoteConfigFile(limrunConfig),
+      tenant: 'limrun',
+      runId: 'run-a',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'limrun',
+      platform: 'android',
+    },
+  });
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      ...base,
+      session: 'other-b',
+      remoteConfigPath: otherConfig,
+      remoteConfigHash: hashRemoteConfigFile(otherConfig),
+      tenant: 'team-b',
+      runId: 'run-b',
+    },
+  });
+  const connections = path.join(stateDir, 'remote-connections');
+  const snapshot = () =>
+    Object.fromEntries(
+      fs
+        .readdirSync(connections, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => [
+          path.relative(connections, path.join(entry.parentPath, entry.name)),
+          fs.readFileSync(path.join(entry.parentPath, entry.name), 'utf8'),
+        ]),
+    );
+  const before = snapshot();
+
+  const result = await runCliCapture(
+    ['apps', '--session', 'limrun-a', '--state-dir', stateDir, '--json'],
+    {
+      cwd: project,
+      env: { HOME: home },
+      defaultResponse: { ok: true, data: { apps: ['Example.apk'] } },
+    },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.equal(result.calls[0]?.flags?.leaseProvider, 'limrun');
+  assert.equal(readActiveConnectionState({ stateDir })?.session, 'other-b');
+  assert.deepEqual(snapshot(), before);
 
   fs.rmSync(root, { recursive: true, force: true });
 });

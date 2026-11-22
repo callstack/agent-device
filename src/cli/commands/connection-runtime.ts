@@ -17,8 +17,10 @@ import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
+  admitProviderForRoute,
+  connectionLeaseProvider,
   connectionProviderCapabilities,
-  primeProviderConnection,
+  providerRouteForConnection,
 } from '../connection/provider-policy.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
@@ -85,7 +87,18 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   }
 
-  await primeProviderConnection(providerOf(existingState, remoteConfig.profile), host.env);
+  // A connection driven by a configured remote daemon needs no plugin here: that daemon's own
+  // provider registration supplies the runtime, and this command only leases and dispatches. Its
+  // connection metadata still has to be read and saved, so the profile is loaded either way.
+  const provider = connectionLeaseProvider(existingState, remoteConfig.profile.leaseProvider);
+  await admitProviderForRoute(
+    provider,
+    providerRouteForConnection({
+      daemonBaseUrl: mergedFlags.daemonBaseUrl,
+      env: host.env,
+    }),
+    host.env,
+  );
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(
@@ -181,14 +194,6 @@ async function persistMaterializedConnection(options: {
     }
   }
   await stopMetroCleanup(options.metroCleanupToStop);
-}
-
-// A stored connection names its provider; before one exists, the remote config profile does.
-function providerOf(
-  existingState: Pick<RemoteConnectionState, 'leaseProvider'> | null | undefined,
-  profile: Pick<RemoteConnectionState, 'leaseProvider'>,
-): string | undefined {
-  return existingState?.leaseProvider ?? profile.leaseProvider;
 }
 
 function createRemoteConnectionStateFromFlags(

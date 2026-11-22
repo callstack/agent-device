@@ -137,6 +137,8 @@ export const MACOS_PLATFORM_PLUGIN_DECLARATION = Object.freeze({
 /** The `error.details.reason` a caller reads when a capability needs a plugin that is not installed. */
 export const PLUGIN_INSTALLATION_REASONS = {
   notInstalled: 'plugin-not-installed',
+  /** The plugin is selected but cannot supply its provider, so its configuration is repaired. */
+  unavailable: 'plugin-unavailable',
 } as const satisfies Record<string, string>;
 
 /**

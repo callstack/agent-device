@@ -22,6 +22,7 @@ export function createLaunchedAppleRunnerProvider(
   env: NodeJS.ProcessEnv,
 ) {
   return {
+    diagnostics: launcher.endpoint.http?.diagnostics,
     runCommand: (target: DeviceInfo, command: RunnerCommand, options: AppleRunnerCommandOptions) =>
       executeRunnerCommand(target, command, { ...options, launcher }),
     prepare: (target: DeviceInfo, options: AppleRunnerPrepareOptions) =>

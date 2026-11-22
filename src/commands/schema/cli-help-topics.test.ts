@@ -410,7 +410,8 @@ test('usageForCommand resolves remote help topic', async () => {
     help,
     /AWS Device Farm \(plugin, install separately\): install the @agent-device\/aws-device-farm plugin/,
   );
-  assert.match(help, /Limrun: agent-device connect limrun/);
+  assert.match(help, /Limrun \(plugin, install separately\): agent-device connect limrun/);
+  assert.match(help, /agent-device plugins add @agent-device\/limrun/);
   assert.match(help, /It does not create an App Automate session/);
   assert.match(help, /It does not create a remote access session/);
   assert.match(help, /It does not create an instance/);
