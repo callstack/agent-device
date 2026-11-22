@@ -61,6 +61,33 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   expect(leaseRegistry.listActiveLeases()[0]?.expiresAt).toBe(62_000);
 });
 
+test('admitRequestLeaseForLockedScope admits a command that ignores the session lease in its own scope', () => {
+  const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
+  const leaseRegistry = new LeaseRegistry();
+  const own = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-b' });
+  const sessionLease = {
+    leaseId: 'a'.repeat(32),
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    leaseBackend: 'macos-app',
+  } as const;
+  sessionStore.publish('default', makeIosSession('default', { lease: sessionLease }));
+
+  const req = admitRequestLeaseForLockedScope({
+    env: process.env,
+    req: makeRequest({
+      command: 'devices',
+      meta: { leaseId: own.leaseId, tenantId: 'tenant-a', runId: 'run-b' },
+    }),
+    sessionName: 'default',
+    sessionStore,
+    leaseRegistry,
+  });
+
+  expect(req.internal?.admittedLease).toBeUndefined();
+  expect(sessionStore.get('default')?.lease).toEqual(sessionLease);
+});
+
 test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-lease-lifecycle-');
@@ -88,6 +115,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
     sessionStore,
     leaseRegistry,
     teardownSession,
+    teardown: 'inline',
   });
 
   expect(cleaned).toBe(true);

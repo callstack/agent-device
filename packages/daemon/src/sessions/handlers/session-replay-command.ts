@@ -120,7 +120,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   };
   const video = createReplayTestVideoOwner({
     sessionStore,
-    lookupSession: lookupAttemptSession,
+    assertSuiteMayActOn: lookupAttemptSession,
     bindDevice,
     platformServices,
     bindExactDevice,
@@ -196,10 +196,14 @@ export function createReplaySession(
   };
   // One read set for both views: the narrowed one the port binds over, and the full-record one the
   // repair coordinator writes through.
+  const getRuntimeHints = (): ReturnType<SessionStore['getRuntimeHints']> => {
+    lookup();
+    return store.getRuntimeHints(name);
+  };
   const reads = {
     get: () => lookup()?.session,
     lookup,
-    getRuntimeHints: () => store.getRuntimeHints(name),
+    getRuntimeHints,
     ensureSessionDir: () => store.ensureSessionDir(name),
   };
   let captureCell:
@@ -272,7 +276,7 @@ export function createReplaySession(
         req: request,
         sessionStore: {
           getRuntimeHints: (requestedSessionName) =>
-            requestedSessionName === name ? store.getRuntimeHints(name) : undefined,
+            requestedSessionName === name ? getRuntimeHints() : undefined,
         },
         sessionName: name,
         device,

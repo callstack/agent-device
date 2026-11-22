@@ -7,7 +7,6 @@ import type {
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import type { SessionRef } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { ReplayTestVideoOwner } from '@agent-device/replay-port/command-types';
 
@@ -15,8 +14,8 @@ type ReplayRecordVideoRequest = Parameters<ReplayTestVideoOwner['record']>[0];
 
 export type ReplayTestVideoOwnerParams = Readonly<{
   sessionStore: SessionStore;
-  /** Checks that the suite may act on the attempt session before `record` reaches it. */
-  lookupSession: (sessionName: string) => SessionRef | undefined;
+  /** Refuses an attempt session that holds a lease the suite did not send. */
+  assertSuiteMayActOn: (sessionName: string) => unknown;
   bindDevice?: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   bindExactDevice?: BindExactDeviceRuntime;
@@ -31,7 +30,7 @@ export function createReplayTestVideoOwner(
 ): ReplayTestVideoOwner | undefined {
   const {
     sessionStore,
-    lookupSession,
+    assertSuiteMayActOn,
     bindDevice,
     platformServices,
     bindExactDevice,
@@ -51,7 +50,7 @@ export function createReplayTestVideoOwner(
     return undefined;
   }
   const record: ReplayTestVideoOwner['record'] = async (request) => {
-    lookupSession(request.sessionName);
+    assertSuiteMayActOn(request.sessionName);
     return await handleRecordCommand({
       req: recordRequest(request),
       sessionName: request.sessionName,

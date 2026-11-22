@@ -146,16 +146,40 @@ export function resolveRequestSessionRef(
   return ref;
 }
 
-/** Whether a request may write to the event log of its address: only a session it acts through. */
+/**
+ * The sessions that write to the journal of an address: the session at that address, and any
+ * session whose address maps to the same session directory.
+ */
+function journalSessionRefs(sessionStore: SessionStore, address: string): SessionRef[] {
+  const directory = sessionStore.resolveSessionDir(address);
+  return sessionStore
+    .listRefs()
+    .filter((ref) => sessionStore.resolveSessionDir(ref.address) === directory);
+}
+
+/** Whether a request may write to the journal of its address: it acts through each leased owner. */
 export function requestMayRecordSessionEvents(
   req: DaemonRequest,
-  ref: SessionRef | undefined,
+  sessionStore: SessionStore,
+  address: string,
 ): boolean {
-  if (!ref?.session.lease) return true;
   try {
-    return resolveRequestSessionRef(req, ref) !== undefined;
+    return journalSessionRefs(sessionStore, address).every(
+      (ref) => !ref.session.lease || resolveRequestSessionRef(req, ref) !== undefined,
+    );
   } catch {
     return false;
+  }
+}
+
+/** Refuses a read of the journal of an address, unless the request holds each lease that owns it. */
+export function assertRequestMayReadSessionJournal(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+  address: string,
+): void {
+  for (const ref of journalSessionRefs(sessionStore, address)) {
+    assertRequestHoldsSessionLease(req, ref.session);
   }
 }
 

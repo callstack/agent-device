@@ -15,7 +15,10 @@ import {
   createLifecycleDeviceRuntimeGatewaySpies,
   createRequestHandler,
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
+import {
+  authoringPublication,
+  makeIosAppSession,
+} from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
@@ -330,7 +333,7 @@ test('devices with no lease id stays detached from a leased session and its reco
   );
 });
 
-test.each(['doctor', 'events'])(
+test.each(['doctor', 'events', 'capabilities'])(
   '%s with no lease id returns nothing from a leased session opened after its admission',
   async (command) => {
     if (!world) return;
@@ -343,8 +346,40 @@ test.each(['doctor', 'events'])(
 
     expect(world.hostDiagnostics.deviceChecks).not.toHaveBeenCalled();
     expect(world.runtime.inspectFacts).not.toHaveBeenCalled();
+    // The request arrived at an empty address, and still leaves no event for the new session.
+    expect(await world.requestEvents(sessionName)).toEqual([]);
   },
 );
+
+test('a request at an address that shares the journal of a leased session reads and writes none of it', async () => {
+  if (!world) return;
+  // Both addresses map to the session directory `e2b_agent_A`.
+  const leased = tenantScopedSessionName(TENANT, 'agent:A');
+  world.publishLeasedSession(leased);
+  const other = { session: 'agent/A' };
+
+  const devices = await world.send('devices', [], {}, other);
+  expect(devices.result?.ok, JSON.stringify(devices)).toBe(true);
+  expectLeaseIdRefusal(await world.send('events', [], {}, other));
+
+  expect(await world.requestEvents(leased)).toEqual([]);
+});
+
+test('devices with no lease id delivers no script of a leased session that records one', async () => {
+  if (!world) return;
+  const { session } = world.publishLeasedSession(world.sessionName);
+  session.scriptPublication = authoringPublication('armed', { remote: true });
+  // The owner records an action while `devices` runs.
+  world.hooks.beforeDispatch = () => {
+    session.actions.push({ ts: Date.now(), command: 'home', positionals: [], flags: {} });
+  };
+
+  const devices = await world.send('devices', [], {});
+
+  expect(devices.result?.ok, JSON.stringify(devices)).toBe(true);
+  expect(JSON.stringify(devices)).not.toContain('publication-0001');
+  expect(session.scriptPublication).toEqual(authoringPublication('armed', { remote: true }));
+});
 
 test('capabilities with no lease id reads nothing from a leased session opened during its device selection', async () => {
   if (!world) return;
@@ -371,15 +406,25 @@ test('capabilities with no lease id reads nothing from a leased session opened d
   expect(JSON.stringify(capabilities.result?.data)).not.toContain('appstate');
 });
 
-test('doctor with the lease id reports its leased session', async () => {
+test('doctor with the lease id reports its leased session and leaves its recording alone', async () => {
   if (!world) return;
-  world.publishLeasedSession(world.sessionName);
+  const { session } = world.publishLeasedSession(world.sessionName);
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    runnerSessionId: 'runner-0',
+  });
 
   const doctor = await world.send('doctor', [], world.owner);
 
   expect(doctor.result?.ok, JSON.stringify(doctor)).toBe(true);
   expect(JSON.stringify(doctor.result?.data)).toContain(world.sessionName);
   expect(world.hostDiagnostics.deviceChecks).toHaveBeenCalledTimes(1);
+  // Doctor holds no session lock, so it does not refresh the recording.
+  expect(world.observeRunnerSession).not.toHaveBeenCalled();
+  expect(await world.requestEvents(world.sessionName)).toEqual([
+    'request.started',
+    'request.finished',
+  ]);
 });
 
 function writeSuite(): { flags: Record<string, unknown>; positionals: string[] } {

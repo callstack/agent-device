@@ -12,7 +12,6 @@ import {
 } from '@agent-device/device-selection/device-inventory-context';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { assertRequestHoldsSessionLease } from '../../core/lease-context.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';
@@ -21,6 +20,7 @@ import {
   type DoctorDeviceInventory,
   resolveDoctorDeviceForAppCheck,
 } from './session-doctor-device.ts';
+import { resolveRequestSessionRef } from '../request-admission.ts';
 import { probeMetro } from './session-doctor-metro.ts';
 import {
   readDoctorOptions,
@@ -66,8 +66,7 @@ export async function handleDoctorCommand(params: {
   const hostDiagnostics = requireHostDiagnostics(params.hostDiagnostics);
 
   // Doctor holds no session lock, so a leased session can open here after admission.
-  const session = sessionStore.get(sessionName);
-  assertRequestHoldsSessionLease(req, session);
+  const session = resolveRequestSessionRef(req, sessionStore.lookup(sessionName))?.session;
   const options = readDoctorOptions(req, session);
   const stateDir = resolveDoctorStateDir(sessionStore, sessionName);
   const checks: DoctorCheck[] = [];

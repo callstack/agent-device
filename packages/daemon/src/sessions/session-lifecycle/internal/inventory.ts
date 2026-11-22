@@ -66,7 +66,8 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
-import { assertRequestHoldsSessionLease, resolveLeaseScope } from '../../../core/lease-context.ts';
+import { resolveLeaseScope } from '../../../core/lease-context.ts';
+import { resolveRequestSessionRef } from '../../request-admission.ts';
 import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
@@ -284,8 +285,10 @@ async function capabilitiesInventoryResponse(params: {
   platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
   // `capabilities` holds no session lock, so a leased session can open here after admission.
-  const session = params.sessionStore.get(params.sessionName);
-  assertRequestHoldsSessionLease(params.req, session);
+  const session = resolveRequestSessionRef(
+    params.req,
+    params.sessionStore.lookup(params.sessionName),
+  )?.session;
   const resolution = await resolveInventoryCommandDevice({ ...params, session });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
