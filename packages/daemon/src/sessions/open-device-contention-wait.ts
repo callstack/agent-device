@@ -167,7 +167,7 @@ export function findSessionDeviceConflict(params: {
 
 /** Whether a refusal may name this holding session to this request. */
 function heldSessionNaming(req: DaemonRequest, holder: SessionState): HeldSessionNaming {
-  return mayNameSession(req, holder) ? 'named' : 'anonymous';
+  return mayNameSession(req, holder, 'device-recovery') ? 'named' : 'anonymous';
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };
@@ -193,7 +193,7 @@ function createOpenDeviceWait(params: {
         type: 'command',
         status: 'progress',
         message: `Waiting for ${holding.session.device.name}: ${
-          mayNameSession(req, holding.session)
+          mayNameSession(req, holding.session, 'device-recovery')
             ? `held by session "${holding.address}"`
             : 'held by another session'
         } (${Math.round(deadline.elapsedMs())}ms of the ${Math.round(budgetMs)}ms wait budget used)`,

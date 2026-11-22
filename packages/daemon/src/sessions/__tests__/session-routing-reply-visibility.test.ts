@@ -158,9 +158,7 @@ test('a refusal without a claim owner passes through', () => {
   expect(dropInvisibleClaimOwner(request(), store, response)).toBe(response);
 });
 
-// The naming rule: another proxy client's leased or tenant-scoped session is the only thing a
-// local caller may not be told. A local session of another workspace keeps its address (#2580).
-test('a tenant-scoped request learns only sessions it may list; a local request keeps #2580', () => {
+test('only local device recovery names an unlistable local session', () => {
   const store = storeWithLeasedSession();
   const own = { session: 'e2b:agentA', workspace: '/w', stateDir: store.resolveDaemonStateDir() };
 
@@ -180,7 +178,23 @@ test('a tenant-scoped request learns only sessions it may list; a local request 
     createdAt: 0,
     actions: [],
   };
-  expect(mayNameSession(request(), foreignWorkspaceSession)).toBe(false);
+  const cwdRequest = {
+    ...request({
+      cwd: mkdtempForTestSync('agent-device-reply-visibility-cwd-'),
+      tenantId: undefined,
+      sessionIsolation: undefined,
+    }),
+    session: 'default',
+  };
+  expect(mayNameSession(request(), foreignWorkspaceSession, 'device-recovery')).toBe(false);
+  expect(mayNameSession(cwdRequest, foreignWorkspaceSession)).toBe(false);
+  expect(mayNameSession(cwdRequest, foreignWorkspaceSession, 'device-recovery')).toBe(true);
   expect(mayNameSession(LOCAL_REQUEST, foreignWorkspaceSession)).toBe(true);
+  expect(
+    mayNameSession(
+      { ...LOCAL_REQUEST, internal: { publicNetworkOnly: true } },
+      foreignWorkspaceSession,
+    ),
+  ).toBe(false);
   expect(mayNameSession(request(), store.get('e2b:agentA')!)).toBe(false);
 });

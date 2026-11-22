@@ -57,6 +57,24 @@ type RpcBody = {
   };
 };
 
+async function sendCommand(
+  url: string,
+  token: string,
+  params: Record<string, unknown>,
+): Promise<RpcBody> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'agent_device.command',
+      params,
+    }),
+  });
+  return (await response.json()) as RpcBody;
+}
+
 let world: Awaited<ReturnType<typeof startProxiedDaemon>> | undefined;
 let previousClaimsDir: string | undefined;
 let claimsDir: string;
@@ -114,7 +132,16 @@ async function startProxiedDaemon() {
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => [DEVICE],
     }),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway: {
+      ...lifecycleDeviceRuntimeGateway,
+      inspectFacts: async (device) => {
+        const facts = await lifecycleDeviceRuntimeGateway.inspectFacts(device);
+        return {
+          ...facts,
+          operations: { ...facts.operations, shutdownTarget: { available: true } },
+        };
+      },
+    },
     trackDownloadableArtifact: () => 'artifact-id',
   });
   const daemon = await createDaemonHttpServer({
@@ -135,36 +162,27 @@ async function startProxiedDaemon() {
     peerLeaseId: peerLease.leaseId,
     holderSessionName,
     sessionStore,
+    sendLocal: (params: Record<string, unknown>) =>
+      sendCommand(`http://127.0.0.1:${daemonPort}/rpc`, 'daemon-token', params),
     /** Sends `command` as `session` with the given lease metadata and flags. */
-    send: async (
+    send: (
       session: string,
       command: string,
       params: { meta?: Record<string, unknown>; flags?: Record<string, unknown> } = {},
       positionals: string[] = [],
-    ) => {
-      const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${PROXY_TOKEN}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'agent_device.command',
-          params: {
-            session,
-            command,
-            positionals,
-            flags: params.flags ?? {},
-            meta: {
-              tenantId: TENANT,
-              sessionIsolation: 'tenant',
-              sessionExplicit: true,
-              ...params.meta,
-            },
-          },
-        }),
-      });
-      return (await response.json()) as RpcBody;
-    },
+    ) =>
+      sendCommand(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, PROXY_TOKEN, {
+        session,
+        command,
+        positionals,
+        flags: params.flags ?? {},
+        meta: {
+          tenantId: TENANT,
+          sessionIsolation: 'tenant',
+          sessionExplicit: true,
+          ...params.meta,
+        },
+      }),
     /** Writes the live claim this daemon would have left for its holder session on this device. */
     seedHolderClaim: async () => {
       const acquired = await acquireDeviceClaim({
@@ -319,4 +337,41 @@ test('a shared-token proxy client without tenant isolation does not learn a loca
 
   expect(refusal.error?.data?.code, JSON.stringify(refusal)).toBe('DEVICE_IN_USE');
   expect(JSON.stringify(refusal)).not.toContain(localHolder);
+});
+
+test('implicit shutdown names a cwd-scoped holder only in its own workspace', async () => {
+  if (!world) return;
+  world.sessionStore.retire(world.sessionStore.lookup(world.holderSessionName)!);
+  const holderCwd = mkdtempForTestSync('agent-device-shutdown-holder-');
+  const otherCwd = mkdtempForTestSync('agent-device-shutdown-other-');
+  const flags = { platform: 'ios', udid: DEVICE.id };
+  const opened = await world.sendLocal({
+    command: 'open',
+    positionals: ['com.example.app'],
+    flags,
+    meta: { cwd: holderCwd },
+  });
+  expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+  const holder = world.sessionStore.findByDevice(DEVICE.id)!;
+  expect(holder.session.sessionScope?.kind).toBe('cwd');
+  expect(holder.session.lease).toBeUndefined();
+
+  const refused = await world.sendLocal({
+    command: 'shutdown',
+    flags,
+    meta: { cwd: otherCwd },
+  });
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('DEVICE_IN_USE');
+  expect(JSON.stringify(refused)).not.toContain(holder.address);
+
+  const ownRefusal = await world.sendLocal({
+    command: 'shutdown',
+    flags,
+    meta: { cwd: holderCwd },
+  });
+  expect(ownRefusal.error?.data).toMatchObject({
+    code: 'DEVICE_IN_USE',
+    hint: `Run agent-device close --shutdown --session ${holder.address}`,
+    details: { session: holder.address },
+  });
 });

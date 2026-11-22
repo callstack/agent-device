@@ -183,18 +183,16 @@ waits:
 agent-device open Demo --platform android --wait 60000
 ```
 
-If the wait runs out while the device is still busy, `open` fails with `DEVICE_IN_USE` and names the
-session address that holds it; `close --session <address>` releases it. Each waiting `open` gets its
-full wait: if another waiter gets the device first, the rest keep waiting for what is left of their own
-budget, so several agents can queue on one device.
+If the wait runs out while the device is still busy, `open` fails with `DEVICE_IN_USE`.
+If the reply names the holder, its owner can run `close --session <address>` to release the device.
+Each waiting `open` gets its full wait. If another waiter gets the device first, the rest keep
+waiting for the time left in their own budgets.
 
-Behind a shared proxy token, every client is the same tenant and one client cannot see another's
-leased session. Refusals about that holder — a session with a lease, or any tenant-scoped session
-the caller does not already see — say only that another session holds the device, in the message,
-the details, and the wait progress; `session list` shows each caller what it may close. A caller
-that carries the holder's lease id is the lease's owner and still gets the name. A session of
-another local workspace keeps its named address everywhere: that address is how its owner closes it
-from that folder.
+Behind a shared proxy token, all clients share a tenant. A proxy client can see the holder's address
+in a refusal or in wait progress if it can list the holder and the holder has a lease or a tenant
+scope. To see the address of a leased holder, the caller must send that holder's lease id.
+Open contention and claim conflicts can show the address of an unleased session in another
+workspace to a local caller. The owner can use that address to close the session from its workspace.
 
 `--wait` waits only for another session. A device claimed by another workspace's
 daemon is never waited for; `open` fails at once and names the command that releases it.

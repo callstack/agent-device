@@ -371,15 +371,24 @@ export type ClaimOwnerRef = Readonly<{
  * Whether a reply may name `session` to this request. A remote caller (admitted as
  * `publicNetworkOnly`, as every proxy client is) or a tenant-scoped one learns only a session it may
  * list that is leased or tenant-scoped: on a proxy shared under one token, any other name is another
- * client's (#4923). A local request follows the listing rule, with #2580's exception: a local session
- * of another workspace keeps its address, the handle its owner uses to close it from that folder.
+ * client's (#4923). For device recovery, a local caller can also learn the address of an unleased
+ * local session in another workspace. Its owner uses that address to close it from that folder (#2580).
  */
-export function mayNameSession(req: DaemonRequest, session: SessionState): boolean {
+export function mayNameSession(
+  req: DaemonRequest,
+  session: SessionState,
+  mode: 'listed' | 'device-recovery' = 'listed',
+): boolean {
   const listed = createSessionVisibilityPredicate(req)(session);
   if (!isLocalCaller(req)) {
     return listed && (session.lease !== undefined || session.sessionScope?.kind === 'tenant');
   }
-  return listed || (session.lease === undefined && session.sessionScope?.kind !== 'tenant');
+  return (
+    listed ||
+    (mode === 'device-recovery' &&
+      session.lease === undefined &&
+      session.sessionScope?.kind !== 'tenant')
+  );
 }
 
 /** A caller on this host: neither admitted from the public network nor scoped to a tenant. */
@@ -390,11 +399,9 @@ function isLocalCaller(req: DaemonRequest): boolean {
 /**
  * Whether a reply may name the session a host-global device claim records as its owner.
  *
- * A claim of this daemon whose label resolves follows `mayNameSession`. To a local request, a claim
- * of another daemon on this host and a label that names no stored session (a transient command's
- * claim, or a claim that outlived its session) keep their owner: that is the documented
- * cross-worktree recovery. A remote or tenant-scoped request learns neither: on a proxy shared under
- * one token, those owners are not sessions it may list (#4923).
+ * A claim of this daemon whose label resolves follows the device recovery naming rule.
+ * A local caller can also see the owner of a claim from another daemon on this host or a claim
+ * without a stored session. A remote or tenant-scoped caller can see only listable owners (#4923).
  */
 export function claimOwnerVisible(
   req: DaemonRequest,
@@ -406,7 +413,7 @@ export function claimOwnerVisible(
     return localRequest;
   }
   const ref = sessionStore.lookup(owner.session);
-  return ref ? mayNameSession(req, ref.session) : localRequest;
+  return ref ? mayNameSession(req, ref.session, 'device-recovery') : localRequest;
 }
 
 /**
