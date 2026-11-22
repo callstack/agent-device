@@ -151,10 +151,11 @@ const SAFE_CAUSE_DETAIL_KEYS = [
   'snapshotQuality',
   'supportedOn',
   'systemSurface',
+  'verdictReasonCode',
 ] as const;
 
 // Free text a cause may echo from the device, such as a sparse capture verdict, so it is scrubbed.
-const SCRUBBED_CAUSE_DETAIL_KEYS = ['verdictReason', 'verdictReasonCode'] as const;
+const SCRUBBED_CAUSE_DETAIL_KEYS = ['verdictReason'] as const;
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
