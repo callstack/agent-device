@@ -1637,7 +1637,8 @@ agent-device install-from-source https://example.com/builds/app.aab --platform a
 - A URL may point to an Android `.apk` or `.aab`, or to an archive with one `.apk`, `.aab`, `.ipa`, or iOS `.app`.
 - Sensitive `--header` values are not forwarded to other origins.
 - `--retain-paths` keeps the downloaded and extracted files for a while, so you can inspect them.
-- Downloads follow at most five redirects, never downgrade HTTPS to HTTP, and are size-limited. `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` are honored.
+- For a network failure during the download, `--json` reports `COMMAND_FAILED` with the system code in `error.details.networkErrorCode` when available. A phase timeout reports `connect-timeout`, `header-timeout`, or `body-timeout` in the same field. A caller cancellation has its own error reason.
+- Limits: at most five redirects, no HTTPS-to-HTTP downgrade, 2 GiB download, 4 GiB extracted, 100,000 entries, and three nested archive layers. Links and special archive entries are rejected. `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` are honored. A proxy URL may use the `http`, `https`, `socks5`, or `socks` scheme, with optional `user:password@` credentials. These match the Node.js client's `installFromSource()` checks.
 
 ### Install a GitHub Actions artifact
 

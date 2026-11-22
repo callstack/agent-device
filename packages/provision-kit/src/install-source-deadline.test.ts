@@ -194,6 +194,7 @@ test('a DNS approval stall reports the connect phase timeout', async () => {
     assert.deepEqual(error.details, {
       reason: 'transfer_phase_timeout',
       transferPhase: 'connect',
+      networkErrorCode: 'connect-timeout',
       timeoutMs: 30_000,
     });
     assert.ok(isRequestCanceledError(error.cause));
