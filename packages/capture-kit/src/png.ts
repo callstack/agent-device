@@ -9,7 +9,7 @@ export { PNG };
  * `details.decoderError`.
  */
 export const IMAGE_DECODE_REASONS = {
-  // The bytes carry a PNG signature but the PNG decoder could not read them.
+  // The input could not be decoded as PNG: its signature is missing or its body is corrupt.
   pngDecodeFailed: { reason: 'png_decode_failed' },
   // The bytes carry a JPEG signature but the JPEG decoder could not read them.
   jpegDecodeFailed: { reason: 'jpeg_decode_failed' },

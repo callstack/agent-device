@@ -290,6 +290,7 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'find_snapshot_unreadable');
       assert.equal(details?.verdictReason, 'sparse tree');
+      assert.equal(details?.verdictReasonCode, 'sparse-tree');
       assert.match(String(details?.hint ?? ''), /snapshot quality verdict is sparse/);
       return true;
     },

@@ -570,7 +570,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `png_decode_failed` | The bytes carry a PNG signature but the PNG decoder could not read them. |
+| `png_decode_failed` | The input could not be decoded as PNG: its signature is missing or its body is corrupt. |
 | `jpeg_decode_failed` | The bytes carry a JPEG signature but the JPEG decoder could not read them. |
 
 ### Interaction
