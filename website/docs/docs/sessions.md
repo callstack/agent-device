@@ -183,19 +183,25 @@ waits:
 agent-device open Demo --platform android --wait 60000
 ```
 
-If the wait runs out while the device is still busy, `open` fails with `DEVICE_IN_USE` and names the
-session address that holds it; `close --session <address>` releases it. Each waiting `open` gets its
-full wait: if another waiter gets the device first, the rest keep waiting for what is left of their own
-budget, so several agents can queue on one device.
+If the wait runs out while the device is still busy, `open` fails with `DEVICE_IN_USE`.
+If the reply names the holder, its owner can run `close --session <address>` to release the device.
+Each waiting `open` gets its full wait. If another waiter gets the device first, the rest keep
+waiting for the time left in their own budgets.
 
-`--wait` waits only for another session. A device claimed by another workspace's
-daemon is never waited for; `open` fails at once and names the command that releases it.
+Behind a shared proxy token, all clients share a tenant. A proxy client can see the holder's address
+in a refusal or in wait progress if it can list the holder and the holder has a lease or a tenant
+scope. To see the address of a leased holder, the caller must send that holder's lease id.
+Open contention and claim conflicts can show the address of an unleased session in another
+workspace to a local caller. The owner can use that address to close the session from its workspace.
+
+`--wait` waits only for another session. If another workspace's daemon holds the claim,
+`open` fails at once.
 Device-mutating commands like `install` and `reinstall` don't wait either: while a
 session other than yours holds the device, they fail at once with `DEVICE_IN_USE`.
 Copying the owner's `--session` address doesn't change that — the claim must also
 record your workspace, so a command run from another checkout is refused even under
-the owner's name. The error names the owner when the claim is readable; when it
-isn't, `agent-device device status` shows what holds the device.
+the owner's name. The error shows the owner and its state directory only if you can see the owner.
+If the error omits the owner, follow its recovery hint.
 
 ## Release a device another session or workspace holds
 

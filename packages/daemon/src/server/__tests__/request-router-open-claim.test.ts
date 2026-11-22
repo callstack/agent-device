@@ -231,6 +231,8 @@ test('an owner reopen that lost the device mid-flight reports the loss instead o
     expect(reopened.ok).toBe(false);
     if (!reopened.ok) {
       expect(reopened.error.code).toBe('DEVICE_IN_USE');
+      // The claim belongs to another daemon's state dir, so its recorded owner stays: the caller
+      // has to reach it through that workspace (#4923 keeps the cross-worktree recovery).
       expect(reopened.error.message).toContain('shared');
     }
     expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.ownerToken).toBe(

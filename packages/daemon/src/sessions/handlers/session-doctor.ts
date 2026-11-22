@@ -77,7 +77,7 @@ export async function handleDoctorCommand(params: {
       evidence: { version: readVersion(), stateDir },
     },
     ...remoteConnectionChecks(req, { required: options.remote }),
-    ...sessionChecks(sessionStore, sessionName, session, { remote: options.remote }),
+    ...sessionChecks(req, sessionStore, sessionName, session, { remote: options.remote }),
   );
 
   if (options.remote) {
