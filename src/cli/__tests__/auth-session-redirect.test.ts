@@ -23,7 +23,13 @@ const START = 'https://cloud.example/api/control-plane/device-auth/start';
 const POLL = 'https://cloud.example/api/control-plane/device-auth/poll';
 const REFRESH = 'https://cloud.example/api/control-plane/cli-session/refresh';
 
-type SentRequest = { url: string; method?: string; body?: unknown; redirect?: RequestRedirect };
+type SentRequest = {
+  url: string;
+  method?: string;
+  body?: unknown;
+  contentType?: string | null;
+  redirect?: RequestRedirect;
+};
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -47,6 +53,7 @@ function fakeCloud(routes: Record<string, () => Response>) {
       url: String(url),
       method: init?.method,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body,
+      contentType: new Headers(init?.headers).get('content-type'),
       redirect: init?.redirect,
     });
     return routes[String(url)]?.() ?? new Response('{}', { status: 404 });
@@ -242,19 +249,151 @@ test('a refresh follows three same-origin redirects and refuses a fourth', async
   });
 });
 
-test('a refresh refuses a 301, 302 or 303 instead of resending the POST as a GET', async () => {
-  await withStateDir(async (stateDir) => {
-    for (const status of [301, 302, 303]) {
-      const cloud = fakeCloud({ [REFRESH]: () => redirect(status, '/unlock') });
+const requestShape = ({ url, method, body, contentType }: SentRequest) => ({
+  url,
+  method,
+  body,
+  contentType,
+});
+const sentAsGet = (url: string) => ({ url, method: 'GET', body: undefined, contentType: null });
+const flagFields = {
+  tenant: 'acme',
+  runId: 'run-123',
+  daemonBaseUrl: 'https://bridge.agent-device.dev',
+};
+const postedAs = (body: Record<string, unknown>) => ({
+  method: 'POST',
+  body,
+  contentType: 'application/json',
+});
+const postedStart = postedAs({ client: 'agent-device', ...flagFields });
+const postedPoll = postedAs({ deviceCode: 'device-secret' });
+const postedRefresh = postedAs({
+  refreshCredential: 'adc_refresh_stored',
+  acceptsRotatedRefreshCredential: true,
+  ...flagFields,
+});
 
-      await assert.rejects(
-        () => refresh(stateDir, cloud.fetch),
-        hasReason('cloud_auth_redirect_unsupported'),
-      );
-      assert.deepEqual(
-        cloud.sent.map(({ url }) => url),
-        [REFRESH],
-      );
-    }
+for (const status of [301, 302, 303]) {
+  test(`a login follows a same-origin ${status} at device-auth start and poll as a GET without the body`, async () => {
+    await withStateDir(async (stateDir) => {
+      const cloud = fakeCloud({
+        [START]: () => redirect(status, '/v2/device-auth/start'),
+        'https://cloud.example/v2/device-auth/start': startAnswer,
+        [POLL]: () => redirect(status, 'https://cloud.example/v2/device-auth/poll'),
+        'https://cloud.example/v2/device-auth/poll': pollAnswer,
+      });
+
+      const result = await login(stateDir, cloud.fetch);
+
+      assert.equal(result.accessToken, 'adc_agent_login');
+      assert.deepEqual(cloud.sent.map(requestShape), [
+        { url: START, ...postedStart },
+        sentAsGet('https://cloud.example/v2/device-auth/start'),
+        { url: POLL, ...postedPoll },
+        sentAsGet('https://cloud.example/v2/device-auth/poll'),
+      ]);
+    });
+  });
+
+  test(`a refresh follows a same-origin ${status} as a GET without the credential`, async () => {
+    await withStateDir(async (stateDir) => {
+      const cloud = fakeCloud({
+        [REFRESH]: () => redirect(status, '/unlock'),
+        'https://cloud.example/unlock': () => jsonResponse({ accessToken: 'adc_agent_fresh' }),
+      });
+
+      const result = await refresh(stateDir, cloud.fetch);
+
+      assert.equal(result.flags.daemonAuthToken, 'adc_agent_fresh');
+      assert.deepEqual(cloud.sent.map(requestShape), [
+        { url: REFRESH, ...postedRefresh },
+        sentAsGet('https://cloud.example/unlock'),
+      ]);
+    });
+  });
+}
+
+test('a refresh keeps the POST through a 307 and continues as a GET after a 303', async () => {
+  await withStateDir(async (stateDir) => {
+    const cloud = fakeCloud({
+      [REFRESH]: () => redirect(307, '/a'),
+      'https://cloud.example/a': () => redirect(303, '/b'),
+      'https://cloud.example/b': () => redirect(307, '/c'),
+      'https://cloud.example/c': () => jsonResponse({ accessToken: 'adc_agent_fresh' }),
+    });
+
+    const result = await refresh(stateDir, cloud.fetch);
+
+    assert.equal(result.flags.daemonAuthToken, 'adc_agent_fresh');
+    assert.deepEqual(cloud.sent.map(requestShape), [
+      { url: REFRESH, ...postedRefresh },
+      { url: 'https://cloud.example/a', ...postedRefresh },
+      sentAsGet('https://cloud.example/b'),
+      sentAsGet('https://cloud.example/c'),
+    ]);
+  });
+});
+
+const CREDENTIAL_REDIRECT_MESSAGE =
+  'Cloud auth endpoint redirected the request to a URL with a username or password.';
+
+async function assertCredentialRedirectRefused(
+  attempt: () => Promise<unknown>,
+  secret: string,
+): Promise<void> {
+  await assert.rejects(attempt, (error: unknown) => {
+    const normalized = normalizeError(error);
+    assert.equal(normalized.message, CREDENTIAL_REDIRECT_MESSAGE);
+    assert.equal(normalized.details?.reason, 'cloud_auth_redirect_unsupported');
+    assert.equal(JSON.stringify(normalized).includes(secret), false);
+    return true;
+  });
+}
+
+test('a login refuses a redirect with a username or password at device-auth start before it is followed', async () => {
+  await withStateDir(async (stateDir) => {
+    const cloud = fakeCloud({
+      [START]: () => redirect(307, 'https://user:start-secret@cloud.example/v2/device-auth/start'),
+    });
+
+    await assertCredentialRedirectRefused(() => login(stateDir, cloud.fetch), 'start-secret');
+    assert.deepEqual(
+      cloud.sent.map(({ url }) => url),
+      [START],
+    );
+  });
+});
+
+test('a login refuses a poll redirect that echoes the device code as a username', async () => {
+  await withStateDir(async (stateDir) => {
+    const cloud = fakeCloud({
+      [START]: startAnswer,
+      [POLL]: () => redirect(308, 'https://device-secret@cloud.example/v2/device-auth/poll'),
+    });
+
+    await assertCredentialRedirectRefused(() => login(stateDir, cloud.fetch), 'device-secret');
+    assert.deepEqual(
+      cloud.sent.map(({ url }) => url),
+      [START, POLL],
+    );
+    assert.equal(readCliSession({ stateDir }), null);
+  });
+});
+
+test('a refresh refuses a redirect that echoes the refresh credential as a password', async () => {
+  await withStateDir(async (stateDir) => {
+    const cloud = fakeCloud({
+      [REFRESH]: () => redirect(307, 'https://session:adc_refresh_stored@cloud.example/unlock'),
+    });
+
+    await assertCredentialRedirectRefused(
+      () => refresh(stateDir, cloud.fetch),
+      'adc_refresh_stored',
+    );
+    assert.deepEqual(
+      cloud.sent.map(({ url }) => url),
+      [REFRESH],
+    );
   });
 });

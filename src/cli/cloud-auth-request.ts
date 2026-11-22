@@ -4,8 +4,8 @@ import { readCloudJsonResponse } from './cloud-response.ts';
 const HTTP_TIMEOUT_MS = 15_000;
 const MAX_CLOUD_AUTH_REDIRECTS = 3;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-// Fetch keeps the method and body only for these. A 301, 302 or 303 would turn the POST into a GET.
-const METHOD_PRESERVING_REDIRECT_STATUSES = new Set([307, 308]);
+// Fetch turns a POST into a GET without a body on these. A 307 or 308 keeps the method and body.
+const GET_REDIRECT_STATUSES = new Set([301, 302, 303]);
 
 /** Every `details.reason` a cloud auth request publishes about a redirect it does not follow. */
 const CLOUD_AUTH_REQUEST_REASONS = {
@@ -14,16 +14,17 @@ const CLOUD_AUTH_REQUEST_REASONS = {
   crossOriginRedirect: { reason: 'cloud_auth_redirect_cross_origin', commands: ['connect'] },
   // A cloud auth request was redirected more than three times within its origin.
   redirectLimit: { reason: 'cloud_auth_redirect_limit', commands: ['connect'] },
-  // A cloud auth request got a redirect that cannot keep its POST: a 301, 302 or 303, or one with
-  // no readable Location.
+  // A cloud auth request got a redirect with no readable Location, or with a Location that carries
+  // a username or password. The request was not sent there.
   unsupportedRedirect: { reason: 'cloud_auth_redirect_unsupported', commands: ['connect'] },
 } as const satisfies ReasonTable<'auth'>;
 
 /**
  * Posts JSON to a cloud auth endpoint and reads the JSON answer. Every auth request carries a
  * credential or a device code, so a redirect is followed only to the origin of the original request,
- * at most three times, and only with a 307 or 308, which keep the method and body. Any other redirect
- * fails with a typed reason before anything is sent again.
+ * at most three times, and never to a target with a username or password. A 307 or 308 keeps the
+ * POST and its body. A 301, 302 or 303 continues the chain as a GET without the body. Any other
+ * redirect fails with a typed reason before anything is sent again.
  */
 export async function postCloudAuthJson<T>(options: {
   baseUrl: string;
@@ -41,14 +42,20 @@ export async function postCloudAuthJson<T>(options: {
   // One timeout covers the whole redirect chain.
   const signal = AbortSignal.timeout(HTTP_TIMEOUT_MS);
   let url = requestUrl;
+  let sendsBody = true;
   for (let redirects = 0; ; redirects += 1) {
-    const response = await fetchImpl(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body,
-      redirect: 'manual',
-      signal,
-    });
+    const response = await fetchImpl(
+      url,
+      sendsBody
+        ? {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body,
+            redirect: 'manual',
+            signal,
+          }
+        : { method: 'GET', redirect: 'manual', signal },
+    );
     if (!isRedirect(response)) {
       return await readCloudJsonResponse<T>(response, {
         invalidJsonMessage: `Cloud auth endpoint returned invalid JSON (${response.status}).`,
@@ -58,6 +65,7 @@ export async function postCloudAuthJson<T>(options: {
     }
     await response.body?.cancel().catch(() => undefined);
     url = readRedirectTarget(response, url, requestUrl, redirects);
+    if (GET_REDIRECT_STATUSES.has(response.status)) sendsBody = false;
   }
 }
 
@@ -74,9 +82,18 @@ function readRedirectTarget(
   const { status } = response;
   const location = response.headers.get('location');
   const target = location ? parseUrl(location, current) : undefined;
-  if (!METHOD_PRESERVING_REDIRECT_STATUSES.has(status) || !target) {
+  if (!target) {
     throw redirectRefusal(
-      'Cloud auth endpoint answered with a redirect that cannot keep the request.',
+      'Cloud auth endpoint answered with a redirect that has no readable Location.',
+      CLOUD_AUTH_REQUEST_REASONS.unsupportedRedirect.reason,
+      status,
+      requestUrl,
+    );
+  }
+  // Fetch rejects such a URL with an error that quotes it, and the target can echo a credential.
+  if (target.username || target.password) {
+    throw redirectRefusal(
+      'Cloud auth endpoint redirected the request to a URL with a username or password.',
       CLOUD_AUTH_REQUEST_REASONS.unsupportedRedirect.reason,
       status,
       requestUrl,
