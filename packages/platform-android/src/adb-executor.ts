@@ -2,6 +2,7 @@ export {
   androidAdbResultError,
   attachAdbFailureHint,
   classifyAndroidAdbFailure as classifyAdbFailure,
+  type AndroidAdbFailureClassification,
 } from './adb-failure.ts';
 export { runAndroidHostAdb, withAndroidHostAdbTransport } from './adb-host.ts';
 export { createAndroidPortReverseManager } from './adb-port-reverse.ts';

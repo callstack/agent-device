@@ -61,6 +61,8 @@ export type RunnerSnapshotBridge = SnapshotSourceChannel<RunnerSnapshotBridgeTar
 export function createRunnerSnapshotBridge(
   options: Readonly<{ device: DeviceInfo; provider: AppleRunnerProvider }>,
 ): RunnerSnapshotBridge {
+  const { diagnostics } = options.provider;
+  const scrubText = diagnostics?.scrubText;
   let targets = new Map<string, RunnerSnapshotBridgeTarget>();
   // The runner admits one bridge read at a time and refuses an overlapping one at once, so it alone
   // owns that order: a read a cancelled capture left running costs the next capture its bridge read,
@@ -103,7 +105,8 @@ export function createRunnerSnapshotBridge(
       },
       AbortSignal.any([signal, AbortSignal.timeout(TARGET_READ_TIMEOUT_MS)]),
     );
-    const target = readTarget(envelope, { requestId, appBundleId, targetId });
+    const rawTarget = readTarget(envelope, { requestId, appBundleId, targetId }, scrubText);
+    const target = publishTarget(rawTarget, captureTargets.get(targetId), scrubText);
     captureTargets.set(targetId, target);
     return target;
   };
@@ -128,6 +131,7 @@ export function createRunnerSnapshotBridge(
         const requestId = randomUUID();
         const remainingMs = remainingSnapshotSourceMs(read.deadline, 'bridge-request-deadline');
         const readDeadline = AbortSignal.timeout(remainingMs);
+        const wireGeneration = `${target.pid}:${target.processStartTime}`;
         let envelope: SnapshotBridgeEnvelope;
         try {
           envelope = await send(
@@ -135,7 +139,7 @@ export function createRunnerSnapshotBridge(
             {
               verb: 'describe',
               requestId,
-              generation: target.generation,
+              generation: wireGeneration,
               expectedPid: target.pid,
               expectedProcessStartTime: target.processStartTime,
               maxDepth: read.maxDepth,
@@ -159,11 +163,14 @@ export function createRunnerSnapshotBridge(
         }
         // A read that met a new process fails as a stale target; the route then refreshes the target,
         // which replaces the cached one.
-        return acceptSnapshotBridgeEnvelope(envelope, {
-          requestId,
-          pid: target.pid,
-          generation: target.generation,
-        });
+        const accepted = acceptSnapshotBridgeEnvelope(
+          envelope,
+          { requestId, pid: target.pid, generation: wireGeneration },
+          scrubText,
+        );
+        return target.generation === wireGeneration
+          ? accepted
+          : { ...accepted, generation: target.generation };
       },
       // The runner owns everything this transport reaches; the runner session closes it.
       close: async () => targets.clear(),
@@ -171,6 +178,7 @@ export function createRunnerSnapshotBridge(
   });
   return Object.freeze({
     source,
+    diagnostics,
     servesDevice: hasSimulatorBridge,
     resolveTarget,
     refreshTarget,
@@ -193,8 +201,8 @@ function parseRunnerEnvelope(data: Record<string, unknown>): SnapshotBridgeEnvel
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
-  } catch (error) {
-    throw snapshotSourceError('malformed-tree', 'response-not-json', {}, error);
+  } catch {
+    throw snapshotSourceError('malformed-tree', 'response-not-json');
   }
   if (!isRecord(parsed)) throw snapshotSourceError('malformed-tree', 'response-not-object');
   return parsed;
@@ -203,6 +211,7 @@ function parseRunnerEnvelope(data: Record<string, unknown>): SnapshotBridgeEnvel
 function readTarget(
   envelope: SnapshotBridgeEnvelope,
   expected: Readonly<{ requestId: string; appBundleId: string; targetId: string }>,
+  scrubText?: (text: string) => string,
 ): RunnerSnapshotBridgeTarget {
   const pid = envelope.pid;
   const processStartTime = envelope.processStartTime;
@@ -218,12 +227,13 @@ function readTarget(
     const code = typeof envelope.error_code === 'string' ? envelope.error_code : 'target-invalid';
     if (code === 'bridge-reader-wedged')
       throw snapshotSourceError('timeout', 'bridge-reader-wedged');
+    const publishedCode = scrubText?.(code) ?? code;
     throw new AppError(
       'COMMAND_FAILED',
-      `Unable to resolve the foreground app in the runner (${code}).`,
+      `Unable to resolve the foreground app in the runner (${publishedCode}).`,
       {
         reason: SNAPSHOT_BRIDGE_REASONS.targetUnavailable.reason,
-        bridgeFailureCode: code,
+        bridgeFailureCode: publishedCode,
         appBundleId: expected.appBundleId,
       },
     );
@@ -235,6 +245,18 @@ function readTarget(
     processStartTime,
     generation: `${pid}:${processStartTime}`,
   });
+}
+
+// Keep wire identity for validation and an opaque generation when the wire value names a credential.
+function publishTarget(
+  target: RunnerSnapshotBridgeTarget,
+  previous: RunnerSnapshotBridgeTarget | undefined,
+  scrubText?: (text: string) => string,
+): RunnerSnapshotBridgeTarget {
+  if (!scrubText || scrubText(target.generation) === target.generation) return target;
+  if (previous?.pid === target.pid && previous.processStartTime === target.processStartTime)
+    return previous;
+  return Object.freeze({ ...target, generation: randomUUID() });
 }
 
 function validateTarget(target: RunnerSnapshotBridgeTarget): void {

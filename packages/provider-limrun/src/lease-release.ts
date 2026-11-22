@@ -3,7 +3,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
 import { CAPTURE_OPEN_BUDGET_MS } from './capture-lifecycle.ts';
-import { deleteLimrunInstance } from './client-options.ts';
+import { deleteLimrunInstance, fromLimrunOrgApi } from './client-options.ts';
 import type { LimrunBudgetOutcome } from './lifecycle-budget.ts';
 import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
 import type {
@@ -414,10 +414,11 @@ async function releaseLabeledInstances(
   const platform = platformForLimrunLeaseBackend(lease.backend);
   if (!platform || !limrun) return undefined;
   const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
-  const instances =
+  const instances = await fromLimrunOrgApi(
     platform === 'ios'
-      ? await limrun.iosInstances.list({ labelSelector })
-      : await limrun.androidInstances.list({ labelSelector });
+      ? limrun.iosInstances.list({ labelSelector })
+      : limrun.androidInstances.list({ labelSelector }),
+  );
   const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
   const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
   const confirmed: string[] = [];

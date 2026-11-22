@@ -1,7 +1,7 @@
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   connectionWorkspace,
@@ -10,6 +10,13 @@ import {
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { forgetEndedConnectionLease } from './ended-lease.ts';
+import { primeProviderConnection } from './provider-policy.ts';
+
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('../../__tests__/test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
 
 bindTestCommandHost();
 
@@ -74,7 +81,9 @@ test('the stored lease stays unless the reply ends that lease at response level'
   for (const reply of replies) assert.equal(storedLeaseIdAfter(reply), LEASE_ID);
 });
 
-test('an ended host-allocated lease stays stored', () => {
+test('an ended host-allocated lease stays stored', async () => {
+  // A provider declares in code that it forgets an ended lease, so its plugin loads first.
+  await primeProviderConnection('limrun', createTestHostEnvironment().env);
   const reply: DaemonResponse = { ok: true, data: { endedLeases: [...ENDED] } };
   assert.equal(
     storedLeaseIdAfter(reply, { leaseBackend: 'macos-app', platform: 'macos' }),

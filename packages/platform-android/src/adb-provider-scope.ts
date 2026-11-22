@@ -184,7 +184,10 @@ async function attemptAdb(
 /** Whether the host adb refused the command for an offline device, as a result. */
 function isOfflineRefusalResult(result: AndroidAdbExecutorResult): boolean {
   if (result.exitCode === 0) return false;
-  const failure = classifyAndroidAdbFailure(result.stderr, result.stdout);
+  const failure =
+    result.failure === undefined
+      ? classifyAndroidAdbFailure(result.stderr, result.stdout)
+      : result.failure;
   return isDeviceOfflineHostRefusal(failure?.reason, failure?.hostRefusal);
 }
 

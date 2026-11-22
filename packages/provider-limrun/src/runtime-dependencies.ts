@@ -6,6 +6,8 @@ import type {
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { InstanceClient as LimrunIosClient } from '@limrun/api/ios-client';
 import type {
+  AndroidAdbExecutorResult,
+  AndroidAdbFailureClassification,
   AndroidAdbInvocation,
   AndroidTextInjectionRequest,
 } from '@agent-device/platform-android/mechanics';
@@ -36,12 +38,10 @@ export type LimrunAdbCommandOptions = {
   signal?: AbortSignal;
 };
 
-export type LimrunAdbCommandResult = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  stdoutBuffer?: Buffer;
-};
+export type LimrunAdbCommandResult = Pick<
+  AndroidAdbExecutorResult,
+  'exitCode' | 'stdout' | 'stderr' | 'stdoutBuffer' | 'failure'
+>;
 
 export type LimrunAdbExecutor = (
   args: readonly string[],
@@ -147,6 +147,7 @@ export type LimrunAndroidRuntimeAdapter = {
    * Builds the failure an ADB command answered with. The invocation is what was asked of adb; how
    * it is named in the error belongs to whoever renders it, not to this provider.
    */
+  classifyAdbFailure(stderr: string, stdout: string): AndroidAdbFailureClassification | undefined;
   adbError(
     message: string,
     result: LimrunAdbCommandResult,

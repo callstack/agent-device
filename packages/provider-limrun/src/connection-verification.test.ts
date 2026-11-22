@@ -84,6 +84,44 @@ test('Limrun verification classifies authentication failures', async () => {
   );
 });
 
+// The CLI prints an error's `cause`, and core redacts only by pattern: a body that echoes a
+// credential without a recognizable key name survives it. These wrappers answer with their own typed
+// summary, status and hint, so nothing the endpoint said leaves them.
+test('Limrun verification answers a service failure without the SDK error it wraps', async () => {
+  mockState.androidList.mockRejectedValueOnce(
+    Object.assign(
+      new Error(
+        'Unexpected server response: 500 {"detail":"key lim_verification_secret_9 denied"}',
+      ),
+      { status: 500 },
+    ),
+  );
+
+  await assert.rejects(
+    verifyLimrunConnection({
+      apiKey: 'lim_verification_secret_9',
+      clientVersion: '1.2.3',
+      platform: 'android',
+    }),
+    (error: unknown) => {
+      const appError = error as {
+        code?: string;
+        message?: string;
+        details?: unknown;
+        cause?: unknown;
+      };
+      assert.equal(appError.code, 'COMMAND_FAILED');
+      assert.equal(appError.message, 'Limrun connection verification failed.');
+      assert.deepEqual(appError.details, {
+        status: 500,
+        hint: 'Check Limrun service access, LIMRUN_REGION, and network connectivity, then retry.',
+      });
+      assert.equal(appError.cause, undefined);
+      return true;
+    },
+  );
+});
+
 test('Limrun verification connects to an attached instance instead of the control plane', async () => {
   const android = { apiUrl: 'https://attached.example/api', token: 'tok', adbUrl: 'wss://adb' };
   const result = await verifyLimrunConnection({
@@ -124,9 +162,11 @@ test('Limrun verification names the variables to check when an instance rejects 
     await assert.rejects(
       verifyLimrunConnection({ clientVersion: '1.2.3', instances, platform }),
       (error: unknown) => {
-        assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+        const appError = error as { code?: string; cause?: unknown };
+        assert.equal(appError.code, 'COMMAND_FAILED');
         assert.match(JSON.stringify(error), variables);
         assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
+        assert.equal(appError.cause, undefined);
         return true;
       },
     );

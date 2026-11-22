@@ -131,8 +131,10 @@ test('the instance delete asks the SDK for one attempt, so a lost answer is not 
   try {
     const deleted = await deleteLimrunInstance(clientFor(server), 'android', 'android-instance-1');
     assert.deepEqual(routes, ['DELETE /v1/android_instances/android-instance-1']);
-    assert.match(String(deleted.failure), /connection|socket|abort|fetch|closed/i);
-    assert.ok(deleted.cause !== undefined, 'the refusal is reported, not swallowed');
+    assert.equal(deleted.failure, 'Limrun organization request failed.');
+    assert.ok(deleted.cause instanceof AppError);
+    assert.equal(deleted.cause.details?.reason, 'limrun_api_failed');
+    assert.equal(deleted.cause.cause, undefined);
   } finally {
     await server.close();
   }

@@ -1,32 +1,24 @@
 import path from 'node:path';
-import type { PluginConnection, ProviderOnlyPlugin } from '@agent-device/plugins/contract';
-import type { ProviderPluginHost } from '@agent-device/plugins/host';
+import type { PluginConnection, ProviderAgentDevicePlugin } from 'agent-device/plugins';
+import type { DeviceProviderPluginHost } from 'agent-device/plugins/device-host';
 import { limrunCredentialDeclaration, requireLimrunCredentials } from './credentials.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES, LIMRUN_PROVIDER } from './device.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 export type LimrunPluginOptions = Readonly<{
   /**
-   * Builds the runtime's host and platform adapters for one setup host. The provider names what a
-   * runtime needs; whoever composes the host supplies how those needs are served, so the runtime
-   * graph stays free of platform implementation.
+   * Builds the runtime's host and platform adapters for one setup host. Defaults to the adapters
+   * the host's own capabilities answer.
    */
-  createDependencies(
-    host: ProviderPluginHost,
+  createDependencies?(
+    host: DeviceProviderPluginHost,
   ): LimrunRuntimeDependencies | Promise<LimrunRuntimeDependencies>;
-  /**
-   * The daemon's own state directory. Each lease's `--provider-network-logs` HAR file is written
-   * beside the session files under it; without it the capture is unavailable.
-   */
-  stateDir?: string;
 }>;
 
-/**
- * Limrun's own `connect` callbacks, exported so the built-in composition can wire them to a CLI call
- * without reading the plugin declaration back. Each callback loads the SDK only when it runs.
- */
-export const LIMRUN_CONNECTION: PluginConnection = {
+const LIMRUN_CONNECTION: PluginConnection = {
   capabilities: LIMRUN_CONNECTION_CAPABILITIES,
+  // The connect callbacks load when the first `connect` runs them, so a process that only lists or
+  // fingerprints this provider evaluates none of them.
   resolve: async (context) =>
     await (await import('./connection.ts')).createLimrunConnection().resolve(context),
   verify: async (context) =>
@@ -42,8 +34,7 @@ export const LIMRUN_CONNECTION: PluginConnection = {
  * list, fingerprint, or route a `connect` to the provider: the connection's flags and credential
  * reading, the runtime, and its host adapters all load in the path that asks for them.
  */
-export function limrunPlugin(options: LimrunPluginOptions): ProviderOnlyPlugin {
-  const { createDependencies, stateDir } = options;
+export function limrunPlugin(options: LimrunPluginOptions = {}): ProviderAgentDevicePlugin {
   return {
     apiVersion: 3,
     contributes: [
@@ -51,23 +42,25 @@ export function limrunPlugin(options: LimrunPluginOptions): ProviderOnlyPlugin {
         kind: 'provider',
         provider: LIMRUN_PROVIDER,
         credentials: limrunCredentialDeclaration(),
-        // The connect callbacks are the provider's own and load when the first `connect` runs them,
-        // so a process that only lists or fingerprints this provider evaluates none of them.
         connection: LIMRUN_CONNECTION,
-        setup: async (host) => {
+        setup: async (host: DeviceProviderPluginHost) => {
           const credentials = requireLimrunCredentials(host.env);
           const [register, dependencies] = await Promise.all([
             import('./runtime.ts'),
-            Promise.resolve(createDependencies(host)),
+            options.createDependencies
+              ? options.createDependencies(host)
+              : import('./host-dependencies.ts').then((module) =>
+                  module.createLimrunRuntimeDependencies(host),
+                ),
           ]);
           return register.createLimrunRuntime(
             {
               ...credentials,
-              ...(stateDir === undefined
+              ...(host.stateDir === undefined
                 ? {}
                 : {
-                    // HAR captures land beside the session files, under the daemon's own state dir.
-                    networkHarDir: path.join(stateDir, 'network-har'),
+                    // HAR captures land beside the session files, under the daemon's state dir.
+                    networkHarDir: path.join(host.stateDir, 'network-har'),
                   }),
             },
             dependencies,

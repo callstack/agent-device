@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import {
@@ -11,6 +11,12 @@ import {
   unexpectedCommandCall,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+
+vi.mock('@agent-device/plugins/store', async (importOriginal) =>
+  (await import('../../__tests__/test-utils/limrun-plugin-store.ts')).storeWithLimrunInstalled(
+    importOriginal as () => Promise<typeof import('@agent-device/plugins/store')>,
+  ),
+);
 
 for (const platform of ['ios', 'android'] as const) {
   const leaseBackend = platform === 'ios' ? 'ios-instance' : 'android-instance';

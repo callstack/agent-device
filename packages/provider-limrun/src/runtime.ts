@@ -44,6 +44,7 @@ import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import {
   deleteLimrunInstance,
   LIMRUN_CLIENT_ID,
+  LIMRUN_ORG_CLIENT_LOGGING,
   limrunUserAgent,
   requireLimrunOrgClient,
 } from './client-options.ts';
@@ -202,6 +203,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       ? new Limrun({
           apiKey: options.apiKey,
           userAgent: limrunUserAgent(dependencies.clientVersion),
+          ...LIMRUN_ORG_CLIENT_LOGGING,
         })
       : undefined;
   }
@@ -792,6 +794,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
     if (terminationReason === undefined) return undefined;
     const { LEASE_REASONS } = await import('@agent-device/contracts/lease-scope');
+    // `terminationReason` is bounded and scrubbed by its reader; `readLimrunTerminationReason` is the only
+    // route that can name it here, so the published line is one line.
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
       reason: LEASE_REASONS.instanceEnded.reason,
       terminationReason,
@@ -966,7 +970,7 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
  */
 async function readLimrunTerminationReason(
   limrun: Limrun,
-  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId'>,
+  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId' | 'token'>,
   requestSignal: AbortSignal | undefined,
 ): Promise<string | undefined> {
   const expiry = new AbortController();
@@ -983,8 +987,18 @@ async function readLimrunTerminationReason(
       return undefined;
     }
     if (answer.value.status.state !== 'terminated') return undefined;
-    return answer.value.status.terminationReason ?? 'Unknown';
+    // The termination reason is the account API's own text, and this request carries the account key in
+    // its header, so it goes through the same reader as an instance's error body before it is published.
+    // It is read here rather than imported at the top: the runtime façade keeps its merge-base closure
+    // (ADR-0027), and this is the only route that publishes the account API's text.
+    const { safeTerminationReason } = await import('./error-text.ts');
+    return safeTerminationReason(answer.value.status.terminationReason, [
+      limrun.apiKey ?? undefined,
+      session.token,
+    ]);
   } catch {
     return undefined;
   }
 }
+
+export type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';

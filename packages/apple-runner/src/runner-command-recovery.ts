@@ -262,6 +262,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
     };
   }
 
+  const scrubText = session.endpoint.http?.diagnostics?.scrubText;
   const lifecycleState = typeof status.lifecycleState === 'string' ? status.lifecycleState : '';
   // Terminal evidence says the runner finished *this* command, so that command's abandoned charge pays
   // off and no other's does. `accepted`, `started`, and a state this daemon cannot name all keep the
@@ -273,7 +274,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
     data: {
       command: command.command,
       commandId: command.commandId,
-      lifecycleState,
+      lifecycleState: scrubText?.(lifecycleState) ?? lifecycleState,
       ...readinessPreflight,
       // Whether this terminal evidence discharged a debt. Absent when the state is not terminal, so
       // nothing was attempted; `false` when the command held no abandoned charge to pay.
@@ -286,6 +287,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
     command,
     transportError,
     options,
+    scrubText,
   );
 }
 
@@ -295,6 +297,7 @@ function handleRunnerCommandStatusRecovery(
   command: RunnerCommand,
   transportError: AppError,
   options: AppleRunnerCommandOptions,
+  scrubText?: (text: string) => string,
 ): RunnerTransportRecovery {
   if (lifecycleState === 'completed') {
     return handleCompletedRunnerStatus(status, command, transportError);
@@ -307,6 +310,7 @@ function handleRunnerCommandStatusRecovery(
     // surrenders its budget to a condition that clears on its own.
     const classification = classifyRunnerReportedError(
       typeof status.lifecycleErrorCode === 'string' ? status.lifecycleErrorCode : undefined,
+      scrubText,
     );
     return {
       type: 'skipInvalidation',
@@ -319,22 +323,24 @@ function handleRunnerCommandStatusRecovery(
         command,
         transportError,
         options,
+        scrubText,
       ),
     };
   }
 
+  const publishedState = scrubText?.(lifecycleState) ?? lifecycleState;
   if (RUNNER_IN_FLIGHT_LIFECYCLE_STATES.has(lifecycleState)) {
     return {
       type: 'skipInvalidation',
       reason: 'command_still_in_flight',
-      lifecycleState,
+      lifecycleState: publishedState,
       lostReply: {
         recovery: 'command_still_in_flight',
-        lifecycleState,
-        message: `Runner command "${command.command}" is still ${lifecycleState} after the transport response was lost.`,
+        lifecycleState: publishedState,
+        message: `Runner command "${command.command}" is still ${publishedState} after the transport response was lost.`,
         hint: inFlightAfterLostResponseHint(
           command.command,
-          lifecycleState,
+          publishedState,
           readReadinessPreflightRecoveryDetails(transportError),
         ),
       },
@@ -344,11 +350,11 @@ function handleRunnerCommandStatusRecovery(
   return {
     type: 'retainInvalidation',
     reason: lifecycleState ? 'unknown_lifecycle_state' : 'missing_lifecycle_state',
-    lifecycleState,
+    lifecycleState: publishedState,
     lostReply: {
       recovery: 'lifecycle_state_not_recoverable',
-      lifecycleState,
-      cause: `lifecycle status was ${lifecycleState ? `"${lifecycleState}"` : 'missing'}`,
+      lifecycleState: publishedState,
+      cause: `lifecycle status was ${publishedState ? `"${publishedState}"` : 'missing'}`,
       hint: unknownLifecycleStateHint(command.command),
     },
   };
@@ -392,13 +398,16 @@ function runnerStatusFailureError(
   command: RunnerCommand,
   transportError: AppError,
   options: AppleRunnerCommandOptions,
+  scrubText: (text: string) => string = (text) => text,
 ): AppError {
   const errorMessage =
     typeof status.lifecycleErrorMessage === 'string'
-      ? status.lifecycleErrorMessage
+      ? scrubText(status.lifecycleErrorMessage)
       : 'Runner command failed';
   const hint =
-    typeof status.lifecycleErrorHint === 'string' ? status.lifecycleErrorHint : undefined;
+    typeof status.lifecycleErrorHint === 'string'
+      ? scrubText(status.lifecycleErrorHint)
+      : undefined;
   const readinessPreflight = readReadinessPreflightRecoveryDetails(transportError);
   return new AppError(
     classification.code,

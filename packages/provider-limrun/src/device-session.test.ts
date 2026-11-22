@@ -36,7 +36,7 @@ const TEST_DEPENDENCIES = {
       wasVisible: false,
       dismissed: false,
     }),
-    readLogs: async () => 'log line\n',
+    readLogs: async () => 'log line android-instance-token\n',
   },
   host: { ...baseDependencies.host, runAdb: async () => adbResult(''), downloadFile },
 } satisfies LimrunRuntimeDependencies;
@@ -167,7 +167,7 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   });
   assert.equal((await session.getKeyboardState()).visible, false);
   assert.equal((await session.dismissKeyboard()).dismissed, false);
-  assert.equal(await session.readLogs(20), 'log line\n');
+  assert.equal(await session.readLogs(20), 'log line [REDACTED]\n');
   assert.equal(await session.installRemoteApp('https://assets.example/android.apk'), undefined);
   await session.pressKey('KEYCODE_ENTER', ['shift']);
   await session.startRecording({ recordingId: 'recording-id', quality: 7 });
@@ -268,3 +268,22 @@ function commandExecution(
 function adbResult(stdout: string) {
   return { stdout, stderr: '', exitCode: 0, stdoutBuffer: undefined };
 }
+
+test('iOS install verification errors redact the SDK identifier and inventory', async () => {
+  const rawSession = iosSession({
+    deviceInfo: { screenWidth: 402, screenHeight: 874 },
+    listApps: async () => [
+      { bundleId: 'com.example.echo.ios-instance-token', name: 'Existing', installType: 'User' },
+    ],
+    installApp: async () => ({ bundleId: 'ios-instance-token' }),
+  });
+  const session = createLimrunDeviceSession(rawSession);
+  if (session.platform !== 'ios') throw new Error('Expected iOS');
+  await assert.rejects(session.installRemoteApp('https://assets.example/example.zip'), {
+    details: {
+      resultBundleId: '[REDACTED]',
+      requestedBundleId: undefined,
+      installedUserApps: ['com.example.echo.[REDACTED]'],
+    },
+  });
+});

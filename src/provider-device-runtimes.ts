@@ -11,7 +11,6 @@ import type {
   PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
-import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
 
 export type ProviderRuntimeComposition = Readonly<{
   platforms: ProviderRegistry['platforms'];
@@ -28,7 +27,7 @@ export type ProviderRuntimeComposition = Readonly<{
 }>;
 
 /**
- * The daemon's providers from one registry: built-in providers, then the plugin store. A plugin
+ * The daemon's providers from one registry: the built-in platforms, then the plugin store. A plugin
  * that cannot register is listed in the inventory; the others still register.
  */
 export async function createDaemonProviderRuntimeComposition(
@@ -44,7 +43,7 @@ export async function createDaemonProviderRuntimeComposition(
   });
 }
 
-/** Composes built-ins followed by supplied candidates without reading the plugin store. */
+/** Composes the built-in platforms followed by supplied candidates without reading the plugin store. */
 export async function createEmbeddedProviderRuntimeComposition(
   host: HostEnvironment,
   candidates: readonly PluginCandidate[],
@@ -63,12 +62,14 @@ async function composeProviderRuntime(
   const { resolveProviderPlugins, startProviderRegistry } =
     await import('@agent-device/plugins/registry');
   const { builtinPlatformCandidates } = await import('./platform-runtime/platform-plugins.ts');
-  const resolved = await resolveProviderPlugins([
-    ...builtinPlatformCandidates(),
-    ...builtinProviderCandidates(host),
-    ...candidates,
-  ]);
-  const registry = await startProviderRegistry(resolved, host, policy);
+  const resolved = await resolveProviderPlugins([...builtinPlatformCandidates(), ...candidates]);
+  const registry = await startProviderRegistry(resolved, host, {
+    ...policy,
+    hostCapabilities: async (environment) =>
+      (await import('./provider-plugin-host-capabilities.ts')).createProviderHostCapabilities(
+        environment,
+      ),
+  });
   return Object.freeze({
     platforms: registry.platforms,
     platformLeaves: registry.platformLeaves,

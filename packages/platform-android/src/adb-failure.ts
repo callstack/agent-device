@@ -195,9 +195,13 @@ import type { AndroidAdbExecutorResult } from './adb-transport.ts';
  * are not adb command failures or that carry no recognized failure signal; an
  * existing hint or retriable verdict is never overwritten.
  */
-export function attachAdbFailureHint<T>(error: T): T {
+export function attachAdbFailureHint<T>(
+  error: T,
+  resultFailure?: AndroidAdbFailureClassification | null,
+): T {
   if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return error;
-  const classification = classifyAdbCommandError(error);
+  const classification =
+    resultFailure === undefined ? classifyAdbCommandError(error) : resultFailure;
   if (!classification) return error;
   error.details = {
     ...error.details,
@@ -258,7 +262,7 @@ function classifyAdbCommandError(error: AppError): AndroidAdbFailureClassificati
  */
 export function androidAdbResultError(
   message: string,
-  result: Pick<AndroidAdbExecutorResult, 'exitCode' | 'stdout' | 'stderr'>,
+  result: Pick<AndroidAdbExecutorResult, 'exitCode' | 'stdout' | 'stderr' | 'failure'>,
   details?: Record<string, unknown>,
 ): AppError {
   const failureDetails =
@@ -271,7 +275,10 @@ export function androidAdbResultError(
           processExitError: true,
           ...details,
         };
-  return attachAdbFailureHint(new AppError('COMMAND_FAILED', message, failureDetails));
+  return attachAdbFailureHint(
+    new AppError('COMMAND_FAILED', message, failureDetails),
+    result.failure,
+  );
 }
 
 export function withAdbFailureHints<Args extends unknown[], Result>(
