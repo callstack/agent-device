@@ -169,21 +169,26 @@ function pickSafeCauseDetails(
     const value = readStringDetail(details, key);
     if (value !== undefined) safe[key] = scrubReplayVarValues(value, scrubVars);
   }
-  if (
-    details.reason === 'session_cleanup_incomplete' &&
-    Array.isArray(details.failedSteps) &&
-    details.failedSteps.every((step) => typeof step === 'string')
-  ) {
-    safe.failedSteps = details.failedSteps.map((step: string) =>
-      scrubReplayVarValues(step, scrubVars),
-    );
-  }
-  if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
-    if (details.dispatched === 'no') safe.dispatched = 'no';
-    const shape = readStringDetail(details, 'shape');
-    if (shape !== undefined) safe.shape = shape;
-    const commandName = readStringDetail(details, 'standaloneCommandName');
-    if (commandName !== undefined) safe.standaloneCommandName = commandName;
-  }
+  return { ...safe, ...pickCleanupFailedSteps(details, scrubVars), ...pickBoundedRefusal(details) };
+}
+
+function pickCleanupFailedSteps(
+  details: Record<string, unknown>,
+  scrubVars: readonly ReplayVarScrubEntry[],
+): Record<string, unknown> {
+  const steps = details.failedSteps;
+  if (details.reason !== 'session_cleanup_incomplete' || !Array.isArray(steps)) return {};
+  if (!steps.every((step) => typeof step === 'string')) return {};
+  return { failedSteps: steps.map((step: string) => scrubReplayVarValues(step, scrubVars)) };
+}
+
+function pickBoundedRefusal(details: Record<string, unknown>): Record<string, unknown> {
+  if (details.reason !== BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) return {};
+  const safe: Record<string, unknown> = {};
+  if (details.dispatched === 'no') safe.dispatched = 'no';
+  const shape = readStringDetail(details, 'shape');
+  if (shape !== undefined) safe.shape = shape;
+  const commandName = readStringDetail(details, 'standaloneCommandName');
+  if (commandName !== undefined) safe.standaloneCommandName = commandName;
   return safe;
 }
