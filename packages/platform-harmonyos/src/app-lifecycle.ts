@@ -198,6 +198,14 @@ const HARMONY_LIFECYCLE_REFUSAL_REASONS = {
   invalidAbilityName: { reason: 'invalid-harmony-ability-name' },
 } as const satisfies ReasonTable<'open'>;
 
+/** Why a HarmonyOS open reports that the launched app did not take the foreground. */
+const HARMONY_OPEN_FOREGROUND_REASONS = {
+  // The launch was refused (a locked screen) or the poll answered without the app.
+  notForeground: { reason: 'open-not-foreground' },
+  // The poll's every read failed, so the foreground question stayed unanswered.
+  probeUnreadable: { reason: 'open-foreground-probe-unreadable' },
+} as const satisfies ReasonTable<'open'>;
+
 function requireHarmonyAbilityName(ability: string): void {
   if (HARMONY_ABILITY_NAME.test(ability)) return;
   throw new AppError('INVALID_ARGS', `Invalid HarmonyOS ability name: ${ability}`, {
@@ -241,7 +249,7 @@ export async function openHarmonyApp(
         'COMMAND_FAILED',
         `HarmonyOS refused to launch ${bundleId}: the device screen is locked`,
         {
-          reason: 'open-not-foreground',
+          reason: HARMONY_OPEN_FOREGROUND_REASONS.notForeground.reason,
           hint: 'Unlock the device screen, then run the open again.',
         },
       );
@@ -396,7 +404,7 @@ function openForegroundHardFailure(
         'COMMAND_FAILED',
         `The launch dispatch for ${bundleId} succeeded, but the request deadline passed before the foreground probe could read the device`,
         {
-          reason: 'open-foreground-probe-unreadable',
+          reason: HARMONY_OPEN_FOREGROUND_REASONS.probeUnreadable.reason,
           hint: 'The request deadline is too tight for a foreground read: run the open again with more budget.',
         },
       );
@@ -406,7 +414,7 @@ function openForegroundHardFailure(
       'COMMAND_FAILED',
       `The launch dispatch for ${bundleId} succeeded, but the foreground probe could not read the device within ${window}s`,
       {
-        reason: 'open-foreground-probe-unreadable',
+        reason: HARMONY_OPEN_FOREGROUND_REASONS.probeUnreadable.reason,
         hint: 'Check the device connection, then run the open again.',
       },
     );
@@ -418,7 +426,7 @@ function openForegroundHardFailure(
       ? `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground before the request deadline`
       : `The launch dispatch for ${bundleId} succeeded, but HarmonyOS did not show it in the foreground within 5s`,
     {
-      reason: 'open-not-foreground',
+      reason: HARMONY_OPEN_FOREGROUND_REASONS.notForeground.reason,
       hint: 'Unlock the device screen, then run the open again.',
       ...(verification.state === 'other-foreground'
         ? { foregroundPackage: verification.foregroundPackage }

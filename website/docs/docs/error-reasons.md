@@ -172,6 +172,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
 | `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
 | `invalid-harmony-ability-name` | --activity is not an ability name the module.json5 format can carry. |
+| `open-not-foreground` | The launch was refused (a locked screen) or the poll answered without the app. |
+| `open-foreground-probe-unreadable` | The poll's every read failed, so the foreground question stayed unanswered. |
 | `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
 | `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 
