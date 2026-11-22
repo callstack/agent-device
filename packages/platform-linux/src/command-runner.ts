@@ -1,24 +1,25 @@
-import path from 'node:path';
 import type { PlatformHost } from 'agent-device/plugins';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import type { HostOperatingSystem } from '@agent-device/contracts/platform-runtime-host';
+import type {
+  DetachedCommandExit,
+  HostOperatingSystem,
+} from '@agent-device/contracts/platform-runtime-host';
 import type {
   LinuxCommandOptions,
   LinuxCommandResult,
-  LinuxDetachedExit,
 } from '@agent-device/contracts/linux-tool-provider';
 
 /**
  * The plugin's route to host commands, bound to the `PlatformHost` the core handed `setup()`. The
- * core owns the spawn environment, the exec trace and the filesystem probe, so a `--debug` log shows
- * what this family ran under its request id, and a tool the host cannot execute answers the same way
- * for an availability probe as for the spawn that probe authorized.
+ * core owns the spawn environment, the exec trace and every host probe, so a `--debug` log shows what
+ * this family ran under its request id, and a tool the host cannot execute answers the same way for
+ * the availability probe as for the spawn that probe authorized.
  *
- * Every spawn and every availability check goes through that host rather than this bundle's own copy
- * of the host kit: the daemon's command scope never enters the bundled copy, so a spawn made from it
- * would run with the daemon process environment instead of the host environment captured for the
- * request, and would drop the family's traces.
+ * Every spawn, availability check and file probe goes through that host rather than this bundle's own
+ * copy of the host kit: the daemon's command scope never enters the bundled copy, so a spawn made
+ * from it would run with the daemon process environment instead of the host environment captured for
+ * the request, and would drop the family's traces.
  */
 export type LinuxCommandRunner = Readonly<{
   run(
@@ -28,8 +29,16 @@ export type LinuxCommandRunner = Readonly<{
   ): Promise<LinuxCommandResult>;
   /** The operating system of the host the family was set up with. */
   hostOs: HostOperatingSystem;
-  /** True when the host resolves `cmd` on its `PATH`, or when `cmd` names an executable path. */
+  /**
+   * True when the host can execute `cmd`: it looks a bare name up in the host `PATH` and asks an
+   * absolute path of the host filesystem. One host primitive answers both shapes.
+   */
   which(cmd: string): Promise<boolean>;
+  /**
+   * True when the host has `path` at all, executable or not. The family asks this of the helper it
+   * ships beside its own code: the file is not a host tool, so its absence names a broken install.
+   */
+  isFilePresent(path: string): Promise<boolean>;
   /**
    * Starts `cmd` detached with its output discarded and answers how it ended. A desktop app outlives
    * the command that opened it, so nothing awaits this beyond its exit report.
@@ -37,7 +46,7 @@ export type LinuxCommandRunner = Readonly<{
   launchDetached(
     cmd: string,
     args: readonly string[],
-  ): Readonly<{ exited: Promise<LinuxDetachedExit> }>;
+  ): Readonly<{ exited: Promise<DetachedCommandExit> }>;
   /** Records one family diagnostic in the request's diagnostic store. */
   diagnose(
     event: Readonly<{
@@ -50,67 +59,25 @@ export type LinuxCommandRunner = Readonly<{
   sleep(milliseconds: number): Promise<void>;
 }>;
 
-/** Why the family refuses instead of opening an app: the host it was set up with cannot start a
- * process that outlives the request. Published on the wire, so it is named here, not at the call. */
-const LINUX_LAUNCH_REFUSAL_REASONS = {
-  hostLaunchUnavailable: 'host-launch-unavailable',
-} as const satisfies Record<string, string>;
-
-const BARE_COMMAND_NAME = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
-
 export function createLinuxCommandRunner(host: PlatformHost): LinuxCommandRunner {
   const env = host.env;
   return Object.freeze({
     run: async (cmd, args, options) => await host.runCommand(cmd, [...args], { ...options, env }),
     hostOs: host.hostOs,
-    which: async (cmd) => await hostResolvesExecutable(host, env, cmd),
-    launchDetached: (cmd, args) => {
-      // A host that cannot start a process outliving the request cannot open a desktop app: waiting
-      // on a spawned binary would hold the request open for the app's whole life, so the family
-      // refuses on the spot rather than approximating it with a blocking spawn.
-      if (!host.launchDetached) {
-        throw new AppError('UNSUPPORTED_OPERATION', `Cannot start ${cmd} on this host.`, {
-          reason: LINUX_LAUNCH_REFUSAL_REASONS.hostLaunchUnavailable,
-          command: cmd,
-        });
-      }
-      return {
-        exited: host
-          .launchDetached(cmd, [...args], { env })
-          .then((launched) => launched.exited)
-          .catch((error: unknown) => ({ pid: 0, error: normalizeError(error).message })),
-      };
-    },
+    // One host primitive answers both shapes: `whichCmd` behind it asks an absolute path of the
+    // filesystem and looks a bare name up in the host `PATH`, so a probe and the spawn it authorizes
+    // read one environment and one authority (ADR 0019).
+    which: async (cmd) => await host.isExecutableOnPath(cmd),
+    isFilePresent: async (path) => await host.isFilePresent(path),
+    launchDetached: (cmd, args) => ({
+      // The host owns the detached spawn, so the exit it reports arrives through the request's own
+      // exec trace. A spawn that could not start rejects; that is an exit with `error`.
+      exited: host
+        .launchDetached(cmd, [...args], { env })
+        .then((launched) => launched.exited)
+        .catch((error: unknown) => ({ pid: 0, error: normalizeError(error).message })),
+    }),
     diagnose: (event) => host.emitDiagnostic(event),
     sleep: async (milliseconds) => await sleep(milliseconds),
   });
-}
-
-/**
- * Whether the host can execute `cmd`. An absolute name is asked of the host directly; a bare name is
- * looked up in the host `PATH` entries through the same host authority, so a probe and a spawn cannot
- * disagree about a tool, and neither reads the filesystem on its own (ADR 0019).
- */
-async function hostResolvesExecutable(
-  host: PlatformHost,
-  env: Readonly<Record<string, string | undefined>>,
-  cmd: string,
-): Promise<boolean> {
-  const candidate = cmd.trim();
-  if (!candidate || candidate.includes('\0')) return false;
-  if (candidate.startsWith('/')) return await host.isFileExecutable(candidate);
-  // A bare name only: a relative path such as `../../tmp/tool` would resolve outside every PATH entry.
-  if (!BARE_COMMAND_NAME.test(candidate)) return false;
-  const directories = (env.PATH ?? '')
-    .split(path.delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  for (const directory of directories) {
-    if (await host.isFileExecutable(joinHostPath(directory, candidate))) return true;
-  }
-  return false;
-}
-
-function joinHostPath(directory: string, file: string): string {
-  return path.join(directory, file);
 }

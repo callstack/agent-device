@@ -65,6 +65,26 @@ export type HostCommandRunner = Readonly<{
   run(request: HostCommandRequest, signal?: AbortSignal): Promise<HostCommandResult>;
 }>;
 
+/**
+ * How a process the host started detached ended: a start failure, a non-zero exit, or a signal.
+ * Declared once here rather than by its shape in each contract that reports one, because a host that
+ * starts a detached process, a family that launches through that host, and the host's own exec module
+ * all answer the same question. It names `signal` as a `string` rather than as Node's `Signals`, so a
+ * consumer that writes a plugin reads this declaration without Node's own type packages.
+ */
+export type DetachedCommandExit = Readonly<{
+  pid: number;
+  exitCode?: number;
+  signal?: string;
+  error?: string;
+}>;
+
+/** What the host answered a detached launch: the process it started and how that process ended. */
+export type DetachedCommandLaunch = Readonly<{
+  pid: number;
+  exited: Promise<DetachedCommandExit>;
+}>;
+
 export type AppleXcrunTool = 'simctl' | 'devicectl' | 'xctrace';
 
 declare const scopedSimctlArgs: unique symbol;

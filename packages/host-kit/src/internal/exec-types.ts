@@ -1,3 +1,4 @@
+import type { DetachedCommandExit, DetachedCommandLaunch } from '@agent-device/contracts/platform-runtime-host';
 import type { ExecOptions, ExecResult } from './exec.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -7,12 +8,7 @@ import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value'
  * imports this module at runtime, so it adds no module to any import closure. A background run's
  * shape, which names the child handle, stays in `exec.ts`.
  */
-export type ExecDetachedExit = {
-  pid: number;
-  exitCode?: number;
-  signal?: NodeJS.Signals;
-  error?: string;
-};
+export type ExecDetachedExit = DetachedCommandExit;
 
 /**
  * The child's side of the Node IPC channel, present only when `stdio` includes `'ipc'`. It is
@@ -23,9 +19,7 @@ export type ExecDetachedChannel = Readonly<{
   onMessage(listener: (message: unknown) => void): void;
 }>;
 
-export type ExecDetachedProcess = {
-  pid: number;
-  exited: Promise<ExecDetachedExit>;
+export type ExecDetachedProcess = DetachedCommandLaunch & {
   channel?: ExecDetachedChannel;
 };
 
