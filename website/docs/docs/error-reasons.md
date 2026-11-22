@@ -15,7 +15,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; `details.maxWaitWindowMs` names the limit. |
+| `alert-wait-window-too-long` | `alert wait` was given a longer window than it can honour; the command refuses it before running and never shortens it. `details.maxWaitWindowMs` names the limit. |
 
 ### `audit`
 
@@ -27,7 +27,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must run as its own command; `details.standaloneCommandName` names that command. |
+| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
 
 ### `close`
 
@@ -165,7 +165,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
-| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must run as its own command; `details.standaloneCommandName` names that command. |
+| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
 
 ### `screenshot`
 
@@ -233,7 +233,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must run as its own command; `details.standaloneCommandName` names that command. |
+| `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
 
 ### `wait`
 

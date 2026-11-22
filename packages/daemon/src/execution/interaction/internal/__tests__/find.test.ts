@@ -244,6 +244,7 @@ test('handleFindCommands click tries query-scoped full retry before failing spar
     details: {
       reason: 'find_snapshot_unreadable',
       verdictReason: 'sparse tree',
+      verdictReasonCode: 'sparse-tree',
       hint: expect.stringContaining('snapshot quality verdict is sparse'),
     },
   });

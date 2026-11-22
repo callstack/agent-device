@@ -34,14 +34,8 @@ import { runtimeExecutionFromContext } from '../../core/snapshot-runtime-capture
 import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel/contracts';
 
 const ALERT_WAIT_REASONS = {
-  /**
-   * The request envelope is a timer too, and it is armed above the window with the daemon-result
-   * margin, so past that ceiling the wait would be cut off mid-window or misfire at 1 ms. The
-   * command refuses the window before anything runs; it never shortens the window the caller asked
-   * for.
-   */
-  // `alert wait` was given a longer window than it can honour; `details.maxWaitWindowMs` names the
-  // limit.
+  // `alert wait` was given a longer window than it can honour; the command refuses it before
+  // running and never shortens it. `details.maxWaitWindowMs` names the limit.
   windowTooLong: { reason: 'alert-wait-window-too-long' },
 } as const satisfies ReasonTable<'alert'>;
 

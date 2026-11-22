@@ -326,9 +326,10 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
 
 /** Why a bounded composite (`batch`, a replay, or a `test` script) refuses one of its steps. */
 export const BOUNDED_COMPOSITE_REASONS = {
-  /** The refused composite step did not dispatch; earlier steps may already have dispatched. */
-  // The step drives a long-lived resource (a recording, trace, log, or perf capture), so it must
-  // run as its own command; `details.standaloneCommandName` names that command.
+  // The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a
+  // session resource awaiting recovery), so it must run as its own command; `details.shape` names
+  // the refused operation and `details.standaloneCommandName` the command. The refused step did
+  // not dispatch; earlier steps may have.
   resourceUnsupported: {
     reason: 'bounded_composite_resource_unsupported',
     commands: ['replay', 'test'],
