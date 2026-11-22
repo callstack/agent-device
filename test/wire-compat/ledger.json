@@ -155,7 +155,7 @@
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:3f3b6c01601c54ab2c76c8cb0946de623da4d24ba32254c75ae8a3993f66adcf",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
     "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:6d9aba219e6fafbdbcef76d30ed99fbb4f61dcc525242a0a76c3dc1bdacd24e2",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:6ba52a8f4bf87286ec237d07d14c1c064248716facd5f002435bb0ebd0ef0a91",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:a3945e32095da7e0e3390294c37cf5eb8a0d302608131031b05b2d55af9da0bc",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -501,8 +501,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:6ba52a8f4bf87286ec237d07d14c1c064248716facd5f002435bb0ebd0ef0a91",
-      "rationale": "#4518 and #4661 change client-side destination selection. Remote record stop still uses the current request destination, a plain name, or a generated name in cwd. Other captures can decline a non-string fallback filename locally. Daemons send the same artifact fields with the same framing."
+      "digest": "sha256:a3945e32095da7e0e3390294c37cf5eb8a0d302608131031b05b2d55af9da0bc",
+      "rationale": "#4518 and #4661 change client-side destination selection. Remote record stop still uses the current request destination, a plain name, or a generated name in cwd. Other captures can decline an explicit non-string or drive-qualified fallback name locally. Daemons send the same artifact fields with the same framing."
     },
     {
       "declaration": "packages/daemon/src/server/http/http-server.ts#MAX_HTTP_RPC_BODY_BYTES",
