@@ -77,7 +77,7 @@ If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reas
 The daemon never fills a missing lease id from the session.
 Tenant, run id, lease backend, client id, device key, and lease provider are labels.
 The daemon refuses a label that differs from the session lease. A missing label is not a refusal and grants nothing.
-An allocate that repeats the labels of a live lease without that lease's id is refused as contention, with `DEVICE_IN_USE` and reason `DEVICE_LEASE_BUSY`. It returns no lease id. Only an allocate that sends the id of its live lease gets that lease back.
+An allocate that repeats the labels of a live lease without that lease's id is refused as contention, with `DEVICE_IN_USE` and reason `DEVICE_LEASE_BUSY`. It returns no lease id. A label that contradicts the live lease stays a scope mismatch, with `UNAUTHORIZED` and reason `LEASE_SCOPE_MISMATCH`. Only an allocate that sends the id of its live lease gets that lease back.
 A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
 Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.
 

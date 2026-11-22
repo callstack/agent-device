@@ -203,7 +203,9 @@ export class LeaseRegistry {
   /**
    * An allocation that repeats the labels of a live run binding without that binding's lease id
    * claims a lease it cannot prove it owns, so it is refused like any other contention. The lease id
-   * is the credential, and labels a caller can guess are not one (#4909).
+   * is the credential, and labels a caller can guess are not one (#4909). A label that disagrees
+   * with the live lease stays the scope mismatch the daemon already refused; only labels that all
+   * agree reach the binding, and it is reaching the binding without the id that is refused here.
    */
   private assertNoRunBindingLease(request: NormalizedAllocateLeaseRequest): void {
     const bindingKey = leaseRunBindingKey(request);
@@ -214,6 +216,7 @@ export class LeaseRegistry {
       this.runBindings.delete(bindingKey);
       return;
     }
+    if (!existingLease.deviceKey) assertLeaseScopeMatch(existingLease, request);
     throw deviceLeaseBusyError(existingLease);
   }
 

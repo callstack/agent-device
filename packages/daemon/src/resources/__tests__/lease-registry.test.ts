@@ -207,23 +207,27 @@ test('an expired provider lease keeps its id and provider session from a caller-
 
 test('an allocation that repeats the run labels without the lease id is refused', () => {
   let now = 1_000;
-  const registry = new LeaseRegistry({
-    now: () => now,
-    defaultLeaseTtlMs: 10_000,
-  });
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
   const first = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-
   now = 2_000;
+
+  // The refusal names no lease id: a caller that does not hold one gets nothing back.
   const error = captureThrown(() =>
     registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' }),
   );
-
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'DEVICE_IN_USE');
   assert.equal(error.details?.reason, 'DEVICE_LEASE_BUSY');
-  // The refusal names no lease id: a caller that does not hold one gets nothing back.
   assert.equal(error.details?.leaseId, undefined);
   assert.equal(registry.inspectActiveLease(first.leaseId)?.heartbeatAt, 1_000);
+
+  // A label that contradicts the live device-less lease stays the scope mismatch it was.
+  const mismatch = captureThrown(() =>
+    registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', clientId: 'client-b' }),
+  );
+  assert.ok(mismatch instanceof AppError);
+  assert.equal(mismatch.code, 'UNAUTHORIZED');
+  assert.equal(mismatch.details?.reason, 'LEASE_SCOPE_MISMATCH');
 });
 
 test('only a refresh that sends the lease id turns retainOnClose on for the run lease', () => {
