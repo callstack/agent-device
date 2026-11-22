@@ -21,6 +21,7 @@ import webPlatformPlugin from './index.ts';
 import type { PlatformHost } from 'agent-device/plugins';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { runCmd, isExecutablePath, whichCmd } from '@agent-device/host-kit/command';
+import { hostFileExists } from '@agent-device/host-kit/host-file';
 
 function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
   const host = {
@@ -29,6 +30,7 @@ function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
     stateDir,
     runCommand: runCmd,
     isFileExecutable: isExecutablePath,
+    isFilePresent: hostFileExists,
     isExecutableOnPath: async (executable: string) => await whichCmd(executable, process.env),
     // The reaper and the record probe are the only host process reads this family makes, and both are
     // stood in for below, so the port itself has nothing to answer.
@@ -46,6 +48,13 @@ function cleanupWebBrowserOrphansForDaemonStartup(stateDir: string) {
         throw new Error('this suite stands the install lock in for');
       },
     } satisfies PlatformHost['processes'],
+    // This suite runs the startup cleanup only: it neither streams a command nor starts a detached one.
+    startBackgroundCommand: async () => {
+      throw new Error('startup cleanup starts no host process');
+    },
+    launchDetached: async () => {
+      throw new Error('startup cleanup starts no detached process');
+    },
     emitDiagnostic,
     withDiagnosticTimer,
   };

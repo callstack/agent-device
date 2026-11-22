@@ -225,15 +225,3 @@ test('the command runner streams with the same toolchain environment it runs wit
   await stream.terminate();
   assert.equal((await stream.wait).exitCode, 0);
 });
-
-test('the command runner refuses to stream on a host with no managed process service', async () => {
-  const host = { ...createHarmonyHostStub().host, startBackgroundCommand: undefined };
-  const commands = createHarmonyCommandRunner(host);
-
-  await assert.rejects(
-    commands.start('hdc', ['shell', 'hilog'], {
-      output: { write: async () => {}, [Symbol.asyncDispose]: async () => {} },
-    }),
-    (error: unknown) => asAppError(error).code === 'UNSUPPORTED_OPERATION',
-  );
-});
