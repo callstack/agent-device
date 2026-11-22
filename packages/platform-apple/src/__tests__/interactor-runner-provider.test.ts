@@ -337,6 +337,22 @@ test('a message-less runner capture leaves its disclosures to the verdict', asyn
   assert.deepEqual(result.quality?.collapsedLeafIndexes, [1]);
 });
 
+test('a runner system-surface capture carries provenance without duplicating the disclosure warning', async () => {
+  const systemSurface = { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' } as const;
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({
+      ...runnerResultFor({ command: 'snapshot' }),
+      systemSurface,
+    }),
+  });
+
+  const result = presentedSnapshot(await interactor.snapshot());
+
+  assert.deepEqual(result.systemSurface, systemSurface);
+  assert.equal('warnings' in result, false);
+});
+
 test('macOS app snapshots preserve runner nodes outside the iOS presentation engine', async () => {
   const nodes = [{ index: 0, type: 'Other', value: 'checkbox, unchecked' }];
   const interactor = createAppleInteractor(MACOS_DEVICE, {}, createLiveTestHostEnvironment(), {

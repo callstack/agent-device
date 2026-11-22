@@ -10,7 +10,7 @@ import {
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSameSnapshotPresentation } from '@agent-device/kernel/snapshot';
-import { normalizeType } from '@agent-device/contracts/snapshot';
+import { androidSnapshotSystemSurface, normalizeType } from '@agent-device/contracts/snapshot';
 import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import type {
   PresentedSurface,
@@ -352,9 +352,7 @@ function buildSnapshotWarnings(params: {
 
   const systemSurfaceWarning = systemSurfaceDisclosure(
     params.snapshot.systemSurface ??
-      (params.annotations.androidSnapshot?.systemSurfaceOnly === true
-        ? { kind: 'android-system-overlay' }
-        : undefined),
+      androidSnapshotSystemSurface(params.annotations.androidSnapshot),
   );
   if (systemSurfaceWarning) warnings.push(systemSurfaceWarning);
 

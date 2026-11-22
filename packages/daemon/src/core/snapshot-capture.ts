@@ -18,6 +18,7 @@ import {
   type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import {
+  androidSnapshotSystemSurface,
   type SnapshotCaptureProvenance,
   type SnapshotState,
 } from '@agent-device/contracts/snapshot-model';
@@ -152,9 +153,8 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
   // The one seam where snapshot state and capture annotations meet: consumers that only keep the
   // SnapshotState (selector-backed find/wait, session-stored snapshots) must still learn that the
   // capture is an occluding system surface, so the disclosure is not lost with the annotations.
-  if (annotations.androidSnapshot?.systemSurfaceOnly === true) {
-    snapshot.systemSurface = { kind: 'android-system-overlay' };
-  }
+  const androidSurface = androidSnapshotSystemSurface(annotations.androidSnapshot);
+  if (androidSurface) snapshot.systemSurface = androidSurface;
   if (provesFreshAndroidTraversal(annotations.androidSnapshot)) snapshot.freshTraversal = true;
   return { data, snapshot, annotations };
 }
