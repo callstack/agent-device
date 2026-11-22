@@ -2,7 +2,6 @@ import {
   createRequestCanceledError,
   discloseDispatch,
   AppError,
-  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { Deadline, resolveIosPhysicalDeviceControl } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -10,7 +9,10 @@ import {
   createRunnerCommandRouteResolver,
   type RunnerCommandRoute,
 } from './runner-command-route.ts';
-import { isUsbmuxDeviceUnattachedError } from './runner-error-classification.ts';
+import {
+  isUsbmuxDeviceUnattachedError,
+  RUNNER_EXCHANGE_REASONS,
+} from './runner-error-classification.ts';
 import {
   type RunnerCommand,
   requireTokenEnforcingRunner,
@@ -18,11 +20,6 @@ import {
   type RunnerEndpoint,
 } from './runner-contract.ts';
 import { usbmuxRunnerTransport } from './runner-usbmux.ts';
-
-const RUNNER_TRANSPORT_REASONS = {
-  // The HTTP forwarder in front of the runner answered 502, 503 or 504.
-  forwardingUnavailable: { reason: 'runner_forwarding_unavailable' },
-} as const satisfies ReasonTable<'apple runner'>;
 
 export const RUNNER_COMMAND_TIMEOUT_MS = 45_000;
 
@@ -121,7 +118,7 @@ export async function postRunnerCommandOverRoute(
   if (endpoint.http && [502, 503, 504].includes(response.status)) {
     await response.body?.cancel();
     throw new AppError('COMMAND_FAILED', 'Runner HTTP forwarding is unavailable', {
-      reason: RUNNER_TRANSPORT_REASONS.forwardingUnavailable.reason,
+      reason: RUNNER_EXCHANGE_REASONS.forwardingUnavailable.reason,
       status: response.status,
     });
   }

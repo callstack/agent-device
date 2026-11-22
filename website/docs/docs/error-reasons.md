@@ -361,6 +361,7 @@ These reasons can come from more than one command.
 | `runner_sequence_invalid` | The daemon refused a runner action sequence before sending it, so nothing reached the device. |
 | `runner_session_ownership_changed` | Another request took over the Apple runner session before this command was sent. |
 | `runner_reply_lost` | A mutation's reply was lost and status recovery found no result, so it may have run; observe the screen before acting again. |
+| `runner_forwarding_unavailable` | The HTTP forwarder in front of the runner answered 502, 503 or 504. |
 | `bundle_identifier_already_registered` | The runner's bundle identifier is taken; set AGENT_DEVICE_IOS_BUNDLE_ID to a unique value. |
 | `signing_no_development_team` | The runner build needs a development team for signing. |
 | `signing_provisioning_profile_missing` | No installed provisioning profile covers the runner, or the one found is unusable. |
@@ -380,7 +381,6 @@ These reasons can come from more than one command.
 | `runner_sequence_orientation_unavailable` | The runner did not report the orientation of a press series; inspect the screen before continuing. |
 | `runner_start_budget_exhausted` | Starting the Apple runner took longer than its start budget; the next request starts over. |
 | `apple_toolchain_unreadable` | The Xcode toolchain version files the runner cache is keyed on could not be read. |
-| `runner_forwarding_unavailable` | The HTTP forwarder in front of the runner answered 502, 503 or 504. |
 | `apple_runner_host_unbound` | The Apple runner was asked for its host before the daemon bound one. |
 
 ### Artifact extraction

@@ -54,6 +54,8 @@ export const RUNNER_EXCHANGE_REASONS = {
   // A mutation's reply was lost and status recovery found no result, so it may have run;
   // observe the screen before acting again.
   replyLost: { reason: 'runner_reply_lost' },
+  // The HTTP forwarder in front of the runner answered 502, 503 or 504.
+  forwardingUnavailable: { reason: 'runner_forwarding_unavailable' },
 } as const satisfies ReasonTable<'apple runner'>;
 
 type RunnerErrorMatch = {
@@ -349,10 +351,10 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: { retryable: false, connectRetry: false },
   },
   {
-    reason: 'runner_forwarding_unavailable',
+    reason: RUNNER_EXCHANGE_REASONS.forwardingUnavailable.reason,
     match: {
       code: 'COMMAND_FAILED',
-      details: (details) => details.reason === 'runner_forwarding_unavailable',
+      details: (details) => details.reason === RUNNER_EXCHANGE_REASONS.forwardingUnavailable.reason,
     },
     verdicts: {
       retryable: true,
