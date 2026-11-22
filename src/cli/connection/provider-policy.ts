@@ -14,12 +14,26 @@ import { readVersion } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   getProviderPluginDeclaration,
+  providerPluginAdmission,
+  providerPluginConnectionCapabilities,
   providerPluginRepairCommand,
-  LIMRUN,
 } from '../../commands/provider-plugin-catalog.ts';
 import { ROUTING_PROVIDER_IDENTITIES } from '@agent-device/plugins/contract';
 
 export type ConnectProvider = string;
+
+/**
+ * What a route on a remote connection needs from the provider's plugin.
+ *
+ * `drives-connection`: this process drives the connection, so only a working local plugin can serve
+ * it. `dispatches-to-remote-daemon`: the command sends its request to a configured remote daemon,
+ * whose own provider registration answers for the provider here. `reads-connection-record`: the
+ * route reads stored connection state and does neither.
+ */
+export type ProviderRoute =
+  | 'drives-connection'
+  | 'dispatches-to-remote-daemon'
+  | 'reads-connection-record';
 
 function remoteDaemonConnection(
   leaseKind: 'proxy' | 'remote-provider',
@@ -49,7 +63,9 @@ export function connectionLeaseProvider(
 
 /**
  * Loads the plugin store before the first synchronous capability lookup for a provider, because a
- * plugin declares its capabilities in code, not in its manifest.
+ * plugin declares its capabilities in code, not in its manifest. A provider this host has no working
+ * plugin for refuses here: only the loaded plugin can drive a connection, and the catalog's copy of
+ * its declaration is not a runtime.
  */
 export async function primeProviderConnection(
   provider: string | undefined,
@@ -60,21 +76,6 @@ export async function primeProviderConnection(
   if (pluginConnectionCapabilities(provider, env) !== undefined) return;
   const unavailable = unavailableConnectPluginError(provider, env);
   if (unavailable) throw unavailable;
-}
-
-/**
- * Loads the plugin store and reads a provider's declared capabilities, without refusing a provider
- * this host has no working plugin for. A command that dispatches to a configured remote daemon uses
- * it where the daemon's own provider registration answers for the provider, so a plugin this host
- * lacks is not that command's answer; the plugin is still read when the host has it, so a connection
- * keeps the capabilities its provider declares.
- */
-export async function primeProviderConnectionWithoutRefusal(
-  provider: string | undefined,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<void> {
-  if (provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(provider)) return;
-  await primePluginConnections(env);
 }
 
 export function isConnectProviderName(
@@ -100,28 +101,52 @@ export function connectProviderNamesForError(env: NodeJS.ProcessEnv = process.en
 }
 
 /**
- * Whether a route admits `provider` itself before it authenticates or writes anything. The core ships
- * no Limrun runtime, so only the plugin supplies that provider, and a route that needs it here refuses
- * it early. Every other provider name keeps this release's starting behavior: the connect handler
- * admits a named provider, and the adapter that reads a profile verifies the provider it names.
+ * Whether a route admits `provider` itself before it authenticates or writes anything. The catalog
+ * declares this per provider: `'provider'` means the core ships no runtime for it, so only its plugin
+ * can supply it and a route that needs it here refuses it early. `'route'`, the default, keeps this
+ * release's starting behavior: the connect handler admits a named provider, and the adapter that reads
+ * a profile verifies the provider it names.
  */
 export function requiresOwnProviderAdmission(provider: string | undefined): boolean {
-  return provider === LIMRUN.provider;
+  return providerPluginAdmission(provider) === 'provider';
 }
 
 /**
- * Whether a command on a remote connection needs the provider's plugin in this process. A configured
- * remote daemon owns its own provider registration and answers for the provider, so a command that
- * dispatches there needs no local plugin: it authenticates and sends its request. A connection with
- * no configured daemon is driven from here, where the plugin is the only thing that can drive it.
- * The daemon client treats any configured base URL as a remote daemon, so the test is its own: a
- * base URL is set.
+ * Loads the plugin store for a route on a remote connection, and refuses only where this host has to
+ * supply the provider and cannot. A command that dispatches to a configured remote daemon is answered
+ * by the daemon's own provider registration, so a plugin this host lacks is not that command's answer.
+ * `connection status` reads a stored record and dispatches nothing: it needs no runtime here, only the
+ * provider's declared capabilities, which its loaded plugin answers, or the plugin catalog's copy of
+ * that declaration when the plugin is absent. Every other route is driven by this host, where only a
+ * working plugin can serve it. All routes load the store when they can, so a connection keeps the
+ * capabilities its provider declares.
  */
-export function connectionNeedsLocalProviderRuntime(
-  daemonBaseUrl: string | undefined,
-  env: NodeJS.ProcessEnv,
-): boolean {
-  return (daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL) === undefined;
+export async function admitProviderForRoute(
+  provider: string | undefined,
+  route: ProviderRoute,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  if (provider === undefined || ROUTING_PROVIDER_IDENTITIES.includes(provider)) return;
+  await primePluginConnections(env);
+  if (route === 'dispatches-to-remote-daemon') return;
+  if (route === 'reads-connection-record' && declaredConnectionCapabilities(provider, env)) return;
+  if (pluginConnectionCapabilities(provider, env) !== undefined) return;
+  const unavailable = unavailableConnectPluginError(provider, env);
+  if (unavailable) throw unavailable;
+}
+
+/**
+ * The route a command on a remote connection takes: a configured daemon base URL answers there, and no
+ * base URL means this process drives the connection. The daemon client reads the same two settings and
+ * treats an empty base URL as none, so this does too, and the daemon URL of a stored record counts.
+ */
+export function providerRouteForConnection(options: {
+  daemonBaseUrl: string | undefined;
+  env: NodeJS.ProcessEnv;
+}): ProviderRoute {
+  return (options.daemonBaseUrl ?? options.env.AGENT_DEVICE_DAEMON_BASE_URL)
+    ? 'dispatches-to-remote-daemon'
+    : 'drives-connection';
 }
 
 export function unavailableConnectPluginError(
@@ -169,7 +194,9 @@ function declaredConnectionCapabilities(
   if (provider === 'proxy') return remoteDaemonConnection('proxy');
   if (provider === undefined || provider === 'cloud')
     return remoteDaemonConnection('remote-provider');
-  return pluginConnectionCapabilities(provider, env);
+  return (
+    pluginConnectionCapabilities(provider, env) ?? providerPluginConnectionCapabilities(provider)
+  );
 }
 
 /**
@@ -182,9 +209,7 @@ export function providerForgetsEndedConnectionLease(
   env: NodeJS.ProcessEnv,
 ): boolean {
   const declared = declaredConnectionCapabilities(provider, env);
-  if (declared) return declared.forgetsEndedConnectionLease === true;
-  if (provider === undefined) return false;
-  return getProviderPluginDeclaration(provider)?.forgetsEndedConnectionLease === true;
+  return declared?.forgetsEndedConnectionLease === true;
 }
 
 /** Installed providers declare their capabilities; the rest is the daemon's own routing. */

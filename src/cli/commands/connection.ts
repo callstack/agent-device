@@ -20,12 +20,11 @@ import {
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
+  admitProviderForRoute,
   connectProviderNamesForError,
-  connectionNeedsLocalProviderRuntime,
   connectionProviderCapabilities,
   isConnectProviderName,
   primeProviderConnection,
-  primeProviderConnectionWithoutRefusal,
   unavailableConnectPluginError,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
@@ -411,13 +410,10 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
-  // A connection whose daemon is remote is answered there, so its provider's plugin is not needed to
-  // read this record; the plugin's own declaration is used when this host has it.
-  if (connectionNeedsLocalProviderRuntime(state.daemon?.baseUrl, host.env)) {
-    await primeProviderConnection(state.leaseProvider, host.env);
-  } else {
-    await primeProviderConnectionWithoutRefusal(state.leaseProvider, host.env);
-  }
+  // Reading a stored record dispatches nothing, so a plugin this host lacks is not this command's
+  // answer; the provider's declared capabilities come from the plugin when it is loaded, and from the
+  // plugin catalog's copy of the declaration when it is not.
+  await admitProviderForRoute(state.leaseProvider, 'reads-connection-record', host.env);
   const leasePreparation = buildLeasePreparationNotice(state, undefined, host.env);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state, host);
   await writeCommandOutput(

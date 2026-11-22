@@ -2,6 +2,7 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,
@@ -203,6 +204,104 @@ test('an explicit Limrun remote config with a remote daemon dispatches without t
     result.calls.map((call) => call.command),
     ['lease_allocate', 'snapshot'],
   );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// Limrun owns its lease policy on this route too: the plugin catalog declares its capabilities, so a
+// host without the plugin still defers app selection, bounds the lease with Limrun's idle TTL, and
+// names the app `open` should preinstall. Without the declaration these commands would allocate on
+// `apps`, send the daemon's default TTL, and drop the app.
+test('a fresh apps command on a remote Limrun connection defers allocation without the plugin', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = limrunProfile(project);
+
+  const result = await runCliCapture(
+    ['apps', '--session', 'ci', '--remote-config', remoteConfig, '--state-dir', stateDir, '--json'],
+    {
+      cwd: project,
+      env: { HOME: home, AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'adc_live_remote_daemon_token_1348' },
+      defaultResponse: { ok: true, data: { apps: [] } },
+    },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.deepEqual(
+    result.calls.map((call) => call.command),
+    ['apps'],
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('an open command on a remote Limrun connection allocates with the idle TTL and initial app without the plugin', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const stateDir = path.join(root, 'state');
+  const remoteConfig = limrunProfile(project);
+
+  const result = await runCliCapture(
+    [
+      'open',
+      'com.example.app',
+      '--session',
+      'ci',
+      '--remote-config',
+      remoteConfig,
+      '--state-dir',
+      stateDir,
+      '--json',
+    ],
+    {
+      cwd: project,
+      env: { HOME: home, AGENT_DEVICE_DAEMON_AUTH_TOKEN: 'adc_live_remote_daemon_token_1348' },
+      defaultResponse: {
+        ok: true,
+        data: {
+          lease: {
+            leaseId: 'lease-ci',
+            tenantId: 'team-a',
+            runId: 'run-a',
+            backend: 'android-instance',
+            leaseProvider: 'limrun',
+          },
+        },
+      },
+    },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  const allocation = result.calls.find((call) => call.command === 'lease_allocate');
+  assert.ok(allocation, `expected a lease_allocate in ${JSON.stringify(result.calls)}`);
+  assert.equal(allocation.meta?.leaseTtlMs, REMOTE_LEASE_IDLE_TTL_MS);
+  assert.equal(allocation.flags?.providerApp, 'com.example.app');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// `connection status` reads the record in this process and dispatches nothing, so a plugin this host
+// lacks is not its answer either. The record still keeps Limrun's preparation, which is what the
+// connect help promises: run `apps` to list uploaded assets, then `open` one by name.
+test('connection status answers for a stored Limrun connection without the plugin and keeps its preparation', async () => {
+  const { root, home, project, stateDir } = storedLimrunConnection();
+  const before = snapshotTree(stateDir);
+
+  const result = await runCliCapture(
+    ['connection', 'status', '--session', 'limrun-a', '--state-dir', stateDir, '--json'],
+    { cwd: project, env: { HOME: home } },
+  );
+
+  assert.equal(result.code, null, result.stdout + result.stderr);
+  assert.equal(result.calls.length, 0, 'status dispatches nothing');
+  const { data: status } = JSON.parse(result.stdout) as {
+    data: {
+      leaseProvider?: string;
+      leasePreparation?: { status?: string; message?: string };
+    };
+  };
+  assert.equal(status.leaseProvider, 'limrun');
+  // App selection stays deferred to `apps`, which is what Limrun declares. Answered from generic
+  // capabilities, the same record promises an allocation on the next device command instead.
+  assert.equal(status.leasePreparation?.status, 'deferred');
+  assert.match(status.leasePreparation?.message ?? '', /Run apps to inspect uploaded assets/);
+  assert.deepEqual(snapshotTree(stateDir), before);
   fs.rmSync(root, { recursive: true, force: true });
 });
 

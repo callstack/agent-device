@@ -1,3 +1,4 @@
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
   type PluginReleaseDeclaration,
@@ -6,15 +7,28 @@ import {
   pluginRepairCommand,
 } from '@agent-device/contracts/plugin-installation';
 
+/** What a route must do about a provider whose plugin this host cannot supply. */
+export type ProviderAdmissionPolicy = 'provider' | 'route';
+
 type ProviderPluginDeclaration = PluginReleaseDeclaration &
   Readonly<{
     provider: string;
     label: string;
     /**
-     * The plugin's own `forgetsEndedConnectionLease` declaration, readable without loading the
-     * plugin. A command that loads no plugin store reads it for a connection that records no policy.
+     * The plugin's own `connection.capabilities` declaration, readable without loading the plugin. A
+     * connection's lease policy comes from its provider on every route, including one whose plugin
+     * this host does not load, so the same command behaves the same with or without it installed.
+     * `provider-policy.test.ts` keeps this copy equal to the plugin's own declaration.
      */
-    forgetsEndedConnectionLease?: boolean;
+    connectionCapabilities?: ConnectionProviderCapabilities;
+    /**
+     * Whether a route that needs this provider admits it itself before it authenticates or writes
+     * anything. `'provider'` means only the plugin can supply the provider, because the core ships no
+     * runtime for it, so a route driving a connection here refuses a provider it has no plugin for.
+     * `'route'`, the default, keeps this release's starting behavior: the `connect` handler admits a
+     * named provider, and the adapter that reads a profile verifies the provider it names.
+     */
+    admission?: ProviderAdmissionPolicy;
   }>;
 
 export const AWS_DEVICE_FARM: ProviderPluginDeclaration = {
@@ -36,7 +50,18 @@ export const LIMRUN: ProviderPluginDeclaration = {
   package: '@agent-device/limrun',
   label: 'Limrun',
   nightlyTag: 'nightly-0.22',
-  forgetsEndedConnectionLease: true,
+  admission: 'provider',
+  connectionCapabilities: {
+    leaseKind: 'direct-device-provider',
+    requiresAppAttachment: false,
+    requiresRemoteDaemon: false,
+    supportsArtifacts: false,
+    supportsDeferredAppSelection: true,
+    supportsDirectPortReverse: true,
+    usesCloudWebDriverLease: false,
+    holdsCloudDevice: true,
+    forgetsEndedConnectionLease: true,
+  },
 };
 
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
@@ -58,6 +83,26 @@ export function getProviderPluginDeclaration(
   provider: string,
 ): ProviderPluginDeclaration | undefined {
   return PROVIDER_PLUGIN_CATALOG.find((plugin) => plugin.provider === provider);
+}
+
+/**
+ * The capabilities a plugin provider declares, read from the catalog without loading the plugin or
+ * its store. Undefined for a provider the catalog does not list.
+ */
+export function providerPluginConnectionCapabilities(
+  provider: string | undefined,
+): ConnectionProviderCapabilities | undefined {
+  return provider === undefined
+    ? undefined
+    : getProviderPluginDeclaration(provider)?.connectionCapabilities;
+}
+
+/** How a route treats a provider it must admit itself; see `ProviderAdmissionPolicy`. */
+export function providerPluginAdmission(provider: string | undefined): ProviderAdmissionPolicy {
+  return (
+    (provider === undefined ? undefined : getProviderPluginDeclaration(provider)?.admission) ??
+    'route'
+  );
 }
 
 export function providerPluginInstallCommand(

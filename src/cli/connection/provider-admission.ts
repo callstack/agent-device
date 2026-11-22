@@ -4,10 +4,10 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { parseRawArgs } from '../parser/args.ts';
 import {
+  admitProviderForRoute,
   connectionLeaseProvider,
-  connectionNeedsLocalProviderRuntime,
   primeProviderConnection,
-  primeProviderConnectionWithoutRefusal,
+  providerRouteForConnection,
   requiresOwnProviderAdmission,
 } from './provider-policy.ts';
 
@@ -40,11 +40,11 @@ export async function admitConnectionProvider(context: AdmissionContext): Promis
     context.remoteConfigLeaseProvider,
   );
   if (!requiresOwnProviderAdmission(provider)) return;
-  if (connectionNeedsLocalProviderRuntime(context.daemonBaseUrl, context.host.env)) {
-    await primeProviderConnection(provider, context.host.env);
-    return;
-  }
-  await primeProviderConnectionWithoutRefusal(provider, context.host.env);
+  await admitProviderForRoute(
+    provider,
+    providerRouteForConnection({ daemonBaseUrl: context.daemonBaseUrl, env: context.host.env }),
+    context.host.env,
+  );
 }
 
 /**

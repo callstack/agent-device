@@ -17,11 +17,10 @@ import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
+  admitProviderForRoute,
   connectionLeaseProvider,
-  connectionNeedsLocalProviderRuntime,
   connectionProviderCapabilities,
-  primeProviderConnection,
-  primeProviderConnectionWithoutRefusal,
+  providerRouteForConnection,
 } from '../connection/provider-policy.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
@@ -92,11 +91,14 @@ export async function materializeRemoteConnectionForCommand(options: {
   // provider registration supplies the runtime, and this command only leases and dispatches. Its
   // connection metadata still has to be read and saved, so the profile is loaded either way.
   const provider = connectionLeaseProvider(existingState, remoteConfig.profile.leaseProvider);
-  if (connectionNeedsLocalProviderRuntime(mergedFlags.daemonBaseUrl, host.env)) {
-    await primeProviderConnection(provider, host.env);
-  } else {
-    await primeProviderConnectionWithoutRefusal(provider, host.env);
-  }
+  await admitProviderForRoute(
+    provider,
+    providerRouteForConnection({
+      daemonBaseUrl: mergedFlags.daemonBaseUrl,
+      env: host.env,
+    }),
+    host.env,
+  );
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(

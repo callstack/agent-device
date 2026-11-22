@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   getProviderPluginDeclaration,
+  providerPluginAdmission,
   providerPluginDeclarations,
   providerPluginHelp,
   providerPluginInstallCommand,
@@ -68,6 +69,17 @@ test('the catalog exposes every row, so the release check sees every install hin
   for (const plugin of declarations) {
     assert.equal(getProviderPluginDeclaration(plugin.provider), plugin);
   }
+});
+
+test('the catalog names which plugin providers a route must admit itself', () => {
+  // Limrun is the one provider the core ships no runtime for, so a route driving its connection
+  // refuses it without the plugin. Every other row keeps the route's own admission.
+  assert.equal(providerPluginAdmission('limrun'), 'provider');
+  for (const provider of ['aws-device-farm', 'browserstack', 'revyl', 'testmu', 'webos', 'tizen']) {
+    assert.equal(providerPluginAdmission(provider), 'route', provider);
+  }
+  assert.equal(providerPluginAdmission(undefined), 'route');
+  assert.equal(providerPluginAdmission('unknown-provider'), 'route');
 });
 
 test('help gives nightly and stable users the same plugin selectors as recovery', () => {
