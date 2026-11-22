@@ -34,6 +34,7 @@ import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
+  assertRequestTenantAdmission,
   scopeRequestSession,
 } from '../sessions/request-admission.ts';
 import { isBoundedCompositeRequest } from '../core/lease-context.ts';
@@ -396,12 +397,13 @@ export async function createRequestExecutionScope(params: {
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
+        const existingRef = sessionStore.lookup(sessionName);
+        const session = existingRef?.session;
+        assertRequestTenantAdmission(scopedReq, session);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
         let admissionCompleted = false;
         try {
-          const existingRef = sessionStore.lookup(sessionName);
-          const session = existingRef?.session;
           assertProviderLeaseRequestNamesSession(scopedReq, session);
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')

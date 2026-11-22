@@ -8,7 +8,6 @@ import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmission,
   isConfinedToAppLease,
-  scopeRequestSession,
 } from '../request-admission.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -773,21 +772,4 @@ test('an unnamed request on a session whose lease has no provider is not refused
     makeRequest({ command: 'snapshot', internal: { sessionOmitted: true } }),
     session,
   );
-});
-
-test('a command that ignores the session lease refuses a malformed tenant at routing', () => {
-  for (const command of ['session_list', 'devices']) {
-    assert.throws(
-      () =>
-        scopeRequestSession({
-          token: 't',
-          session: 'default',
-          command,
-          positionals: [],
-          flags: {},
-          meta: { tenantId: 'not a tenant' },
-        }),
-      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
-    );
-  }
 });

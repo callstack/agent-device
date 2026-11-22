@@ -31,22 +31,14 @@ import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 /**
- * Names the session a request runs in. Without tenant isolation the name resolves without a tenant,
- * so admission refuses a malformed tenant after the session lease check; a command that ignores the
- * session lease is refused here. Under tenant isolation the
- * first string carrier routes the request, and a meta tenant that it replaces stays a lease claim.
+ * Under tenant isolation, the first string carrier routes the request. A meta tenant that it
+ * replaces stays a lease claim.
  */
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,
   );
-  if (isolation !== 'tenant') {
-    // A command that ignores the session lease never reaches that check, so it refuses here.
-    if (ignoresSessionLease(req.command)) {
-      requireWellFormedTenant(req.meta?.tenantId ?? req.flags?.tenant);
-    }
-    return req;
-  }
+  if (isolation !== 'tenant') return req;
   const declaredTenant: unknown = req.meta?.tenantId;
   const tenant = requireWellFormedTenant(
     typeof declaredTenant === 'string' ? declaredTenant : req.flags?.tenant,
@@ -70,15 +62,26 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   );
 }
 
-function requireWellFormedTenant(rawTenant: unknown): string | undefined {
+function requireWellFormedTenant(
+  rawTenant: unknown,
+  beforeRefusal?: () => void,
+): string | undefined {
   const tenant = normalizeTenantId(rawTenant);
   if (rawTenant && !tenant) {
+    beforeRefusal?.();
     throw new AppError(
       'INVALID_ARGS',
       'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
     );
   }
   return tenant;
+}
+
+/** A malformed tenant on a leased session gets the typed lease refusal. */
+export function assertRequestTenantAdmission(req: DaemonRequest, session?: SessionState): void {
+  requireWellFormedTenant(req.meta?.tenantId ?? req.flags?.tenant, () => {
+    assertRequestHoldsSessionLease(req, session);
+  });
 }
 
 export function assertRequestLeaseAdmission(
@@ -93,7 +96,6 @@ export function assertRequestLeaseAdmission(
 ): DeviceLease | undefined {
   // An admission-exempt command still acts on its session, so it must hold the session lease too.
   assertRequestHoldsSessionLease(req, session);
-  requireWellFormedTenant(req.meta?.tenantId ?? req.flags?.tenant);
   if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }

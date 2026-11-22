@@ -1,16 +1,18 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
   IOS_SIMULATOR,
   closeLoopbackServer,
   createTestHostEnvironment,
+  deviceClaimFilePath,
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createDaemonHttpServer } from './http-server.ts';
 import { createSocketServer, listenNetServer } from './transport.ts';
@@ -21,8 +23,12 @@ import {
 import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { retainOrphanedDeviceClaims } from '../../__tests__/support/device-claim-store.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
+import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
+import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 
 // One proxy token for every client, as an integrator that runs many sandboxes behind one proxy has.
 const PROXY_TOKEN = 'shared-proxy-token';
@@ -431,6 +437,86 @@ test('the owner is admitted and listed under another spelling of its lease id an
 });
 
 // A tenant that routing replaces, or that routing cannot read, is still a claim on the lease.
+
+test('unattested HTTP routes by the tenant flag and compares the numeric meta tenant', async () => {
+  if (!world) return;
+  const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+  const flags = { tenant: TENANT };
+
+  expectLeaseFieldRefusal(
+    await world.send('snapshot', [], { ...owner, tenantId: 5 }, flags),
+    'tenantId',
+  );
+  const snapshot = await world.send('snapshot', [], { ...owner, tenantId: undefined }, flags);
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+});
+
+test('malformed tenant polling leaves an unleased session and its claim eligible for idle expiry', async () => {
+  if (!world) return;
+  const { sessionStore, leaseRegistry } = world;
+  const stateDir = sessionStore.resolveDaemonStateDir();
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', path.join(stateDir, 'claims'));
+  const env = { ...process.env, AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS: '1000' };
+  const idleExpiryMs = resolveSessionIdleExpiryMs(env);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const openedAt = Date.now();
+  const controller = createSessionIdleExpiry({
+    env,
+    sessionStore,
+    idleExpiryMs,
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    settleSession: async () => {},
+  });
+  try {
+    const claim = await acquireDeviceClaim({
+      env,
+      device: IOS_SIMULATOR,
+      session: SESSION,
+      workspace: stateDir,
+      stateDir,
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    if (claim.status !== 'acquired') throw new Error(`Expected a test claim, got ${claim.status}`);
+    const claimPath = deviceClaimFilePath(claim.ownership.deviceKey);
+    const session = makeIosAppSession(SESSION, {
+      createdAt: openedAt,
+      deviceClaim: claim.ownership,
+    });
+    sessionStore.publish(SESSION, session);
+    expect(fs.existsSync(claimPath)).toBe(true);
+    controller.noteSessionsChanged();
+    for (const fraction of [0.25, 0.5, 0.75]) {
+      vi.setSystemTime(openedAt + idleExpiryMs * fraction);
+      const refused = await world.send('snapshot', [], {
+        tenantId: 'not a tenant',
+        sessionIsolation: undefined,
+      });
+      expect(refused.error?.data?.code).toBe('INVALID_ARGS');
+      controller.noteSessionsChanged();
+    }
+    expect(session.lastActivityAtMs).toBeUndefined();
+    vi.setSystemTime(openedAt + idleExpiryMs);
+    controller.noteSessionsChanged();
+    await vi.waitFor(() => expect(sessionStore.get(SESSION)).toBeUndefined());
+    expect(fs.existsSync(claimPath)).toBe(false);
+  } finally {
+    controller.cancel();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  }
+});
+
+test.each(['session_list', 'devices'])(
+  '%s refuses a malformed tenant over HTTP',
+  async (command) => {
+    if (!world) return;
+    const response = await world.send(command, [], {
+      tenantId: 'not a tenant',
+      sessionIsolation: undefined,
+    });
+    expect(response.error?.data?.code).toBe('INVALID_ARGS');
+  },
+);
 
 test('a null meta tenant that tenant routing replaces is refused on the socket, direct and in a batch', async () => {
   if (!world) return;

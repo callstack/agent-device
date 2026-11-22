@@ -687,7 +687,10 @@ function stampAdmittedIdentity(
       sessionIsolation: tenantTrust.attested ? 'tenant' : daemonRequest.meta?.sessionIsolation,
     },
   };
-  if (admitted.flags?.tenant !== undefined) {
+  if (
+    admitted.flags?.tenant !== undefined &&
+    (tenantTrust.attested || typeof daemonRequest.meta?.tenantId === 'string')
+  ) {
     admitted = { ...admitted, flags: { ...admitted.flags, tenant: tenantTrust.tenantId } };
   }
   // The trusted tenant routes the request. A tenant the caller declared is still a lease claim.
