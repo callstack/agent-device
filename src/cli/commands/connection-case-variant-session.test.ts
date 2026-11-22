@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { withCapturedStdoutAsync } from '@agent-device/test-kit';
-import { hashRemoteConfigFile } from '@agent-device/remote/remote-connection-state';
+import {
+  hashRemoteConfigFile,
+  readRemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
 import {
   connectionWorkspace,
   createTestClient,
@@ -75,7 +78,7 @@ for (const [name, run] of [
       'agent-device-connection-case-variant-',
     );
     fs.writeFileSync(remoteConfigPath, '{}');
-    const sharedPath = plantRecordSharedByCaseVariants({
+    plantRecordSharedByCaseVariants({
       stateDir,
       remoteConfigPath,
       session: 'Demo',
@@ -93,10 +96,10 @@ for (const [name, run] of [
     const payload = JSON.parse(stdout).data;
     assert.equal(payload.connected, false);
     assert.equal(payload.session, 'demo');
-    assert.deepEqual(
-      JSON.parse(fs.readFileSync(sharedPath, 'utf8')).session,
-      'Demo',
-      'answering for one session leaves the record the other one owns in place',
+    assert.equal(
+      readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId,
+      'run-Demo',
+      'answering for one session keeps the record the other one owns',
     );
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
