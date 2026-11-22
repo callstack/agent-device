@@ -805,19 +805,14 @@ async function startDaemonRuntimeOnHost(
     const ownerClose = await settleWithin(
       () =>
         withDaemonDiagnosticsScope({ logPath }, async () => {
-          await Promise.all([
-            Promise.resolve()
-              .then(async () => await deviceRuntimeGateway.shutdown())
-              .catch(async (error: unknown) => {
-                gatewayShutdownFailed = true;
-                await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
-                  error: normalizeError(error),
-                });
-              }),
-            claimRecoveryDisposals.drain(),
-          ]);
-          // Re-drain after root gateway shutdown: an abandoned request can compose a recovery
-          // gateway while root shutdown is in progress, after an initially empty drain returned.
+          await Promise.resolve()
+            .then(async () => await deviceRuntimeGateway.shutdown())
+            .catch(async (error: unknown) => {
+              gatewayShutdownFailed = true;
+              await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
+                error: normalizeError(error),
+              });
+            });
           await claimRecoveryDisposals.drain();
         }),
       options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
