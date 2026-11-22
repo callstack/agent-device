@@ -741,3 +741,27 @@ test.each(
     }
   },
 );
+
+test('a file download streams from the descriptor whose identity was checked', async () => {
+  const root = mkdtempForTestSync('artifact-descriptor-');
+  const source = path.join(root, 'capture.mp4');
+  fs.writeFileSync(source, 'recorded-video');
+  const id = trackDownloadableArtifact({ artifactPath: source, artifactType: 'screen-recording' });
+  const checked = vi.spyOn(fs, 'fstatSync');
+  const streams = vi.spyOn(fs, 'createReadStream');
+  try {
+    const opened = await openDownloadableArtifact(id, {}, process.env);
+    try {
+      expect(checked.mock.calls[0]?.[0]).toBeTypeOf('number');
+      expect(streams).toHaveBeenCalledWith(source, { fd: checked.mock.calls[0]?.[0] });
+      expect((await buffer(opened.stream)).toString()).toBe('recorded-video');
+    } finally {
+      opened.stream.destroy();
+      opened.release();
+    }
+  } finally {
+    streams.mockRestore();
+    checked.mockRestore();
+    cleanupDownloadableArtifact(id);
+  }
+});

@@ -144,19 +144,19 @@ async function handleRequestDiagnostics(
     }
 
     const owner = diagnosticsRecordOwner(ref.requestId);
-    const presentedLeaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
-    const presented = typeof presentedLeaseId === 'string' ? presentedLeaseId : undefined;
-    if (owner !== null && !requestHoldsOutputLease(owner, presented)) {
-      sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
-      return;
+    let recordPath = resolveRecordPath(ref, 'request-records');
+    let stats = owner === null ? null : await statRecord(recordPath);
+    if (stats && owner !== null) {
+      const leaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
+      if (!requestHoldsOutputLease(owner, typeof leaseId === 'string' ? leaseId : undefined)) {
+        sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
+        return;
+      }
+    } else {
+      // Only the host can attest a legacy record by moving it out of the old request-id namespace.
+      recordPath = resolveRecordPath(ref, 'requests-unleased');
+      stats = await statRecord(recordPath);
     }
-
-    // Only the host can attest a legacy record by moving it out of the old request-id namespace.
-    const recordPath = resolveRecordPath(
-      ref,
-      owner === null ? 'requests-unleased' : 'request-records',
-    );
-    const stats = await statRecord(recordPath);
     if (!stats) {
       sendRestJsonError(res, normalizeError(missingRecordError(ref)));
       return;

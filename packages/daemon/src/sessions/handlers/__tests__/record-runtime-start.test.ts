@@ -50,12 +50,12 @@ test('record start without a path records a remote caller default on the daemon 
     ok: true,
     data: { outPath: '/client/project/recording-1.mp4' },
   });
-  expect(harness.runtime.start).toHaveBeenCalledWith(
-    expect.objectContaining({
-      outputPath: expect.stringMatching(/^\/tmp\/agent-device-recording-\d+-[a-z0-9]+\.mp4$/),
-      clientOutputPath: '/client/project/recording-1.mp4',
-    }),
+  const [input] = harness.runtime.start.mock.calls[0]!;
+  expect(path.dirname(input.outputPath)).toBe(
+    harness.sessionStore.resolveSessionDir(harness.sessionName),
   );
+  expect(path.basename(input.outputPath)).toMatch(/^recording-[a-f0-9-]{36}\.mp4$/);
+  expect(input.clientOutputPath).toBe('/client/project/recording-1.mp4');
 });
 
 test.each(['linux', 'vega'] as const)(

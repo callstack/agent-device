@@ -10,16 +10,15 @@ import {
   trackDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
 import {
-  isDaemonOwnedRecordingOutput,
+  isLegacyRemoteRecordingOutput,
   recordingStopArtifacts,
   recordingOutputLeaseVerifier,
 } from './handlers/record-runtime-response.ts';
 
 /**
  * Keeps the export of a recording that a leased session's teardown finished, so a request that sends
- * the ended lease's id can still download it (ADR 0024 rule 1). Remote admission marks session-owned output in the durable
- * envelope. Remote client exports served by local HTTP use the generated daemon temp path.
- * A local caller's export already sits at the path that the caller named.
+ * the producing lease's id can still download it (ADR 0024 rule 1). The durable envelope marks
+ * daemon-owned exports. A caller-owned export stays at the path the caller named.
  */
 export function retainLeasedSessionRecording(
   ref: SessionRef,
@@ -27,12 +26,12 @@ export function retainLeasedSessionRecording(
   metadata: DurableResourceEnvelope['metadata'],
 ): void {
   const lease = ref.session.lease;
-  if (!lease || !isDaemonOwnedRecordingOutput(completion, metadata?.remoteCaptureOutput === true))
+  if (!lease || metadata?.remoteCaptureOutput !== true || isLegacyRemoteRecordingOutput(completion))
     return;
   const owner = recordingOutputLeaseVerifier(metadata);
   if (owner === undefined) return;
   const storedTenant = metadata?.remoteCaptureTenantId;
-  const tenantId = typeof storedTenant === 'string' ? storedTenant : undefined;
+  const tenantId = typeof storedTenant === 'string' ? storedTenant : lease.tenantId;
   const sessionName = tenantPublicSessionName(lease.tenantId, ref.address);
   const artifacts = recordingStopArtifacts(completion).filter(
     (artifact) => typeof artifact.path === 'string',

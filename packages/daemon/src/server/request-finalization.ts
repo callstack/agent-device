@@ -99,13 +99,12 @@ function registerDownloadableArtifacts(
   if (!data) return data;
   const admittedLeaseId = req.internal?.admittedLease?.leaseId;
   const producer = captureOutputLeaseVerifier(data);
-  const owner =
-    producer === undefined ? admittedLeaseId && leaseVerifier(admittedLeaseId) : producer;
-  const producerTenant = captureOutputTenantId(data);
-  const tenantId = producer === undefined ? (producerTenant ?? req.meta?.tenantId) : producerTenant;
+  const admittedOwner = admittedLeaseId && leaseVerifier(admittedLeaseId);
+  const tenantId = captureOutputTenantId(data) ?? req.meta?.tenantId;
   const register = (artifact: PendingArtifact): DaemonArtifact => {
     const artifactPath = artifact.path as string;
     const delivered = daemonDeliveredArtifact(artifact);
+    const owner = delivered || producer === undefined ? admittedOwner : producer;
     return {
       field: artifact.field,
       // Omitted (not null/undefined-valued) when untyped, matching the

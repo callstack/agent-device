@@ -240,13 +240,16 @@ export type SessionState = {
    */
   deferredSurface?: DeferredSurface;
   snapshotDiagnostics?: SnapshotDiagnosticsState;
+  /** Remote traces accept request-scoped diagnostics instead of persistent runner streams. */
   trace?: {
-    outPath: string;
     clientOutPath?: string;
-    remoteCaptureOutputPath?: string;
     remoteCaptureTenantId?: string;
+    leaseVerifier?: string | null;
     startedAt: number;
-  };
+  } & (
+    | { outPath: string; remoteCaptureOutputPath?: never }
+    | { outPath?: never; remoteCaptureOutputPath: string }
+  );
   /** Native profiling mechanics stay behind one exact-owner durable handle. */
   perfCapture?: {
     clientOutPath?: string;
@@ -254,7 +257,11 @@ export type SessionState = {
     envelope: DurableResourceEnvelope<'perf-capture'>;
   };
   /** Last stopped CPU-profile coordinates retained for report in the same live session. */
-  lastPerfProfile?: PerfProfileHandoff;
+  lastPerfProfile?: {
+    profile: PerfProfileHandoff;
+    leaseVerifier: string | null;
+    tenantId?: string;
+  };
   /** Native sampler mechanics stay behind the adopted runtime handle. */
   audioProbe?: {
     handle: AudioProbeLiveHandle;

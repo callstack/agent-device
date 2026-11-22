@@ -302,14 +302,18 @@ test('legacy diagnostics are served only from the host-verified namespace', asyn
   if (await skipWhenLoopbackUnavailable(t)) return;
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
     writeRecord(sessionsDir, 'default', RECORD_ID, 'requests');
-    writeRecord(sessionsDir, 'default', 'verified-legacy', 'requests-unleased');
+    const reservedId = `${'b'.repeat(32)}-${'c'.repeat(64)}`;
+    writeRecord(sessionsDir, 'default', reservedId, 'requests-unleased');
     const headers = { authorization: 'Bearer daemon-secret' };
     const unknown = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), { headers });
     expect(unknown.status).toBe(404);
-    const verified = await fetch(diagnosticsUrl(baseUrl, 'default', 'verified-legacy'), {
+    const verified = await fetch(diagnosticsUrl(baseUrl, 'default', reservedId), {
       headers,
     });
     expect(verified.status).toBe(200);
     expect(await verified.text()).toBe(RECORD);
+    writeRecord(sessionsDir, 'default', reservedId);
+    const current = await fetch(diagnosticsUrl(baseUrl, 'default', reservedId), { headers });
+    expect(current.status).toBe(401);
   });
 });

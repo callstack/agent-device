@@ -44,7 +44,7 @@ export type ReplaySessionState = Readonly<{
   device: DeviceInfo;
   appBundleId?: string;
   actions: SessionAction[];
-  trace?: Readonly<{ outPath: string }>;
+  trace?: Readonly<{ outPath?: string }>;
   /** Read for presence only: an active recording means replay video must not start another. */
   screenRecording?: object;
   snapshotDiagnostics?: Pick<SnapshotDiagnosticsState, 'samples'>;

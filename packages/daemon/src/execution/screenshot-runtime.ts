@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import { rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -253,6 +254,7 @@ async function executeScreenshot(
       })),
     };
     if (!privatePath || !publishedPath) return result;
+    if (isRemoteTempArtifactPath(publishedPath, 'screenshot', '.png')) return result;
     await publishScreenshotFile(privatePath, publishedPath, params.dispatchContext.signal);
     return {
       ...result,

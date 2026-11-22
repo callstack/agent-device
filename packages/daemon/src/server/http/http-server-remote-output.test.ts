@@ -13,7 +13,10 @@ import type {
 } from '@agent-device/contracts/perf-runtime';
 import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
+import {
+  DAEMON_HTTP_LEASE_HEADER,
+  DAEMON_HTTP_TENANT_HEADER,
+} from '@agent-device/contracts/daemon-http';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -432,7 +435,7 @@ test.each(
       { kind: 'xctrace', area: 'trace' },
     ] as const
   ).flatMap((capture) =>
-    (['remote', 'local', 'remote-local-stop', 'relocated'] as const).map((origin) => ({
+    (['remote', 'local', 'remote-local-stop', 'relocated', 'leased'] as const).map((origin) => ({
       ...capture,
       origin,
     })),
@@ -460,13 +463,15 @@ test.each(
         },
       };
     };
+    const leaseRegistry = new LeaseRegistry();
+    const ownership = nativePerfOwnership(leaseRegistry, origin === 'leased');
     const handler = createRequestHandler({
       host: createTestHostEnvironment(),
       createCommandSurface: screenshotCommandSurface,
       logPath: path.join(root, 'daemon.log'),
       token: 'test-token',
       sessionStore,
-      leaseRegistry: new LeaseRegistry(),
+      leaseRegistry,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       deviceRuntimeGateway: {
         ...base,
@@ -563,18 +568,22 @@ test.each(
           command: 'perf',
           session: 'capture',
           positionals: positionals('start'),
+          meta: ownership.meta,
           ...(origin === 'local' ? { flags: { out: callerOutput } } : {}),
         },
         origin !== 'local',
       );
       expect(successfulData(started).artifacts).toBeUndefined();
+      await ownership.refuseUnowned(() =>
+        post({ command: 'perf', session: 'capture', positionals: positionals('stop') }),
+      );
       const stopped = await post(
         {
           command: 'perf',
           session: 'capture',
           positionals: positionals('stop'),
           ...(origin === 'relocated' ? { flags: { out: callerOutput } } : {}),
-          meta: { clientArtifactPaths: { outPath: '/client/capture' } },
+          meta: { ...ownership.meta, clientArtifactPaths: { outPath: '/client/capture' } },
         },
         origin !== 'remote-local-stop' && origin !== 'relocated',
       );
@@ -596,7 +605,7 @@ test.each(
       const output = stoppedData.outPath as string;
       const restoreProfile = replaceXctraceProfile(kind, area, output);
       const download = await fetch(`${baseUrl}/artifacts/${artifact?.artifactId}`, {
-        headers: { authorization: 'Bearer test-token' },
+        headers: ownership.headers,
       });
       expect(download.status).toBe(200);
       const payload = Buffer.from(await download.arrayBuffer());
@@ -610,15 +619,19 @@ test.each(
         expect(
           fs.readFileSync(kind === 'xctrace' ? path.join(output, 'capture.bin') : output, 'utf8'),
         ).toBe('generated-capture');
+        await ownership.refuseUnowned(() =>
+          post({ command: 'perf', session: 'capture', positionals: positionals('report') }),
+        );
         const report = await post({
           command: 'perf',
           session: 'capture',
           positionals: positionals('report'),
+          meta: ownership.meta,
         });
         const reportData = successfulData(report);
         const reportDownload = await fetch(
           `${baseUrl}/artifacts/${reportData.artifacts?.[0]?.artifactId}`,
-          { headers: { authorization: 'Bearer test-token' } },
+          { headers: ownership.headers },
         );
         expect(reportDownload.status).toBe(200);
         expect(await reportDownload.text()).toBe('generated-report');
@@ -906,4 +919,24 @@ function replaceXctraceProfile(kind: string, area: string, output: string): () =
   const profile = path.join(output, 'capture.bin');
   fs.writeFileSync(profile, 'later-profile');
   return () => fs.writeFileSync(profile, 'generated-capture');
+}
+
+function nativePerfOwnership(registry: LeaseRegistry, leased: boolean) {
+  const scope = { tenantId: 'tenant', runId: 'perf', leaseBackend: 'android-instance' } as const;
+  const lease = leased ? registry.allocateLease(scope) : undefined;
+  return {
+    meta: lease ? { ...scope, leaseId: lease.leaseId } : {},
+    headers: {
+      authorization: 'Bearer test-token',
+      ...(lease
+        ? { [DAEMON_HTTP_TENANT_HEADER]: scope.tenantId, [DAEMON_HTTP_LEASE_HEADER]: lease.leaseId }
+        : {}),
+    },
+    refuseUnowned: async (run: () => Promise<{ error?: { data?: unknown } }>) => {
+      if (lease)
+        expect((await run()).error?.data).toMatchObject({
+          details: { reason: 'LEASE_OUTPUT_MISMATCH' },
+        });
+    },
+  };
 }

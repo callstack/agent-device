@@ -86,7 +86,7 @@
     "packages/daemon/src/server/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:58fc1eb61b082b64eb9714ae76ef6f3ff44102a72736db52ce0b9214dca7f509",
-    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:a374824d0af99b2a40f95a4a4f9981f4446a5dd7df427f3fdc9852350f4b73b8",
+    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:c5cdf275ff5f00b4edbd7c1d456465da340505dc07199ece624ce0fd645d2a78",
     "packages/daemon/src/server/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
@@ -315,7 +315,7 @@
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics",
-      "digest": "sha256:a374824d0af99b2a40f95a4a4f9981f4446a5dd7df427f3fdc9852350f4b73b8",
+      "digest": "sha256:c5cdf275ff5f00b4edbd7c1d456465da340505dc07199ece624ce0fd645d2a78",
       "rationale": "The existing locator and NDJSON response keep their shape. Only the server storage lookup and lease authorization change."
     },
     {

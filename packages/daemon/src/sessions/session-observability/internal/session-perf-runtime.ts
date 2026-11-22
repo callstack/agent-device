@@ -40,6 +40,10 @@ import { requestCwd } from '../../../core/context.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
 import { withCaptureOutputOwnership } from '../../../core/capture-output-ownership.ts';
+import {
+  admittedOutputLeaseVerifier,
+  leasedOutputRefusal,
+} from '../../../resources/artifact-tracking.ts';
 import { recordSessionAction } from '../../../core/session-action-recorder.ts';
 import {
   admitRuntimePlan,
@@ -170,8 +174,10 @@ async function executeAdmittedPerfPlan(
       return await startPerfCapture(params, session, runtime, plan.request);
     }
     case 'profile-report': {
+      const retained = session.lastPerfProfile;
+      assertPerfOutputOwner(params.req, retained?.leaseVerifier);
       const runtime = await bindDevice(device, plan.use);
-      const last = session.lastPerfProfile;
+      const last = retained?.profile;
       const tracePath = plan.request.tracePath ?? last?.outPath;
       if (!tracePath) {
         throw new AppError(
@@ -199,7 +205,8 @@ async function executeAdmittedPerfPlan(
         data: withCaptureOutputOwnership(
           { perf: 'reported', ...data },
           params.req.internal?.publicNetworkOnly ? 'daemon' : 'caller',
-          session.lease?.tenantId ?? params.req.meta?.tenantId,
+          retained?.tenantId,
+          retained?.leaseVerifier,
         ),
       };
     }
@@ -229,13 +236,12 @@ async function startPerfCapture(
       : request.kind === 'perfetto'
         ? 'app.perfetto-trace'
         : 'cpu.perf.data';
-  const outPath =
-    request.kind === 'xctrace' && params.req.internal?.publicNetworkOnly
-      ? path.join(
-          params.sessionStore.ensureSessionDir(params.sessionName),
-          `${randomUUID()}-${fallback}`,
-        )
-      : resolveNativeOutPath(params, request.outPath, fallback);
+  const outPath = params.req.internal?.publicNetworkOnly
+    ? path.join(
+        params.sessionStore.ensureSessionDir(params.sessionName),
+        `${randomUUID()}-${fallback}`,
+      )
+    : resolveNativeOutPath(params, request.outPath, fallback);
   const resourcePath = perfCaptureDurableResource.store.resolvePath(
     params.sessionStore.resolveSessionDir(params.sessionName),
   );
@@ -259,7 +265,7 @@ async function startPerfCapture(
     outPath,
     fence,
   });
-  const tenantId = session.lease?.tenantId ?? params.req.meta?.tenantId;
+  const tenantId = params.req.internal?.admittedLease?.tenantId ?? params.req.meta?.tenantId;
   await adoptStartedPerfCapture({
     admissionLedger: requirePerfCaptureAdmissionLedger(params),
     binding,
@@ -267,16 +273,15 @@ async function startPerfCapture(
     owner: runtime.owner,
     fence,
     pendingHandle: started.pendingHandle,
-    envelope: params.req.internal?.publicNetworkOnly
-      ? {
-          ...started.envelope,
-          metadata: {
-            ...started.envelope.metadata,
-            remoteCaptureOutputPath: outPath,
-            ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
-          },
-        }
-      : started.envelope,
+    envelope: {
+      ...started.envelope,
+      metadata: {
+        ...started.envelope.metadata,
+        ...(params.req.internal?.publicNetworkOnly ? { remoteCaptureOutputPath: outPath } : {}),
+        ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
+        remoteCaptureLease: admittedOutputLeaseVerifier(params.req),
+      },
+    },
     throwIfCanceled: params.throwIfCanceled,
   });
   return { ok: true, data: started.response };
@@ -298,6 +303,10 @@ async function stopPerfCapture(
 ): Promise<DaemonResponse> {
   const capture = session.perfCapture;
   if (!capture) return errorResponse('INVALID_ARGS', 'no active native perf capture');
+  const metadata = capture.envelope.metadata;
+  const owner = readString(metadata?.remoteCaptureLease) ?? null;
+  assertPerfOutputOwner(params.req, owner);
+  const tenantId = readString(metadata?.remoteCaptureTenantId);
   const snapshot = capture.handle.inspect();
   const mismatchMessage = perfCaptureStopMismatch(snapshot, request);
   if (mismatchMessage) return errorResponse('INVALID_ARGS', mismatchMessage);
@@ -312,16 +321,13 @@ async function stopPerfCapture(
   });
   if (request.area === 'cpu') {
     const profile = readProfileHandoff(completion);
-    params.sessionStore.update(params.ref, { lastPerfProfile: profile });
+    params.sessionStore.update(params.ref, {
+      lastPerfProfile: { profile, leaseVerifier: owner, tenantId },
+    });
   }
   const clientOutPath = params.req.meta?.clientArtifactPaths?.outPath ?? capture.clientOutPath;
-  const tenantId =
-    typeof capture.envelope.metadata?.remoteCaptureTenantId === 'string'
-      ? capture.envelope.metadata.remoteCaptureTenantId
-      : session.lease?.tenantId;
   const outPath = readString(completion.outPath);
-  const daemonOwned =
-    outPath !== undefined && capture.envelope.metadata?.remoteCaptureOutputPath === outPath;
+  const daemonOwned = outPath !== undefined && metadata?.remoteCaptureOutputPath === outPath;
   const artifacts =
     daemonOwned && completion.kind === 'xctrace'
       ? [await publishXctraceDownload(outPath, clientOutPath, request.area === 'cpu')]
@@ -336,8 +342,14 @@ async function stopPerfCapture(
       },
       daemonOwned ? 'daemon' : 'caller',
       tenantId,
+      owner,
     ),
   };
+}
+
+function assertPerfOutputOwner(req: DaemonRequest, owner: string | null | undefined): void {
+  if (owner && owner !== admittedOutputLeaseVerifier(req))
+    throw leasedOutputRefusal('Performance capture');
 }
 
 async function publishXctraceDownload(

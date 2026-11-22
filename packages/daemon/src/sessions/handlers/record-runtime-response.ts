@@ -22,14 +22,10 @@ export function recordingOutputLeaseVerifier(
   return undefined;
 }
 
-export function isDaemonOwnedRecordingOutput(
-  completion: ScreenRecordingCompletion,
-  remoteCaptureOutput: boolean,
-): boolean {
+export function isLegacyRemoteRecordingOutput(completion: ScreenRecordingCompletion): boolean {
   return (
-    remoteCaptureOutput ||
-    (completion.clientOutPath !== undefined &&
-      isRemoteTempArtifactPath(completion.outPath, 'recording', path.extname(completion.outPath)))
+    completion.clientOutPath !== undefined &&
+    isRemoteTempArtifactPath(completion.outPath, 'recording', path.extname(completion.outPath))
   );
 }
 

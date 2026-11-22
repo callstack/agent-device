@@ -17,7 +17,7 @@ Idle reap then shuts the daemon down within one more idle window.
 
 A session cannot outlive the lease under which it was opened.
 When the lease is released, expires, or its provider reports the instance ended, the daemon tears the session down under its execution locks and clears its device claim.
-Any teardown of a leased session, including `close`, finishes an active recording. A finished export at a remote temp path then stays a downloadable artifact of that lease, like the artifact of any `record stop` (ADR 0024 2.5).
+Any teardown of a leased session, including `close`, finishes an active recording. A daemon-owned export stays downloadable under its producing owner, as with `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
 A release is a tenant `lease_release` or a host `DELETE /admin/leases/<lease-id>`.
 The daemon sweeps for expired leases every second.
@@ -124,7 +124,7 @@ An event that the daemon writes outside a request goes to the daemon log, which 
 Output of a request that acted under no lease keeps the tenant rule.
 
 Before you restore access to a legacy diagnostics record, verify its full contents came from unleased requests and contain no lease credentials. Move the file from the session's `requests` directory to its `requests-unleased` directory. Keep its filename.
-Before you restore access to a legacy recording, verify that the producing request was unleased. Set `metadata.remoteCaptureLease` to `"unleased"` in its recording manifest.
+Before you restore access to a legacy recording in the daemon session directory, verify that the producing request was unleased. The daemon refuses replay from legacy remote temp paths. Set `metadata.remoteCaptureLease` to `"unleased"` in its recording manifest.
 
 ## Admitted request work
 

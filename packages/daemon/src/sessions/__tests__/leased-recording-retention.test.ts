@@ -12,10 +12,7 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { resolveScreenRecordingStopRecovery } from '@agent-device/capture-kit/screen-recording-stop-recovery';
-import {
-  DAEMON_HTTP_LEASE_HEADER,
-  buildRemoteTempArtifactPath,
-} from '@agent-device/contracts/daemon-http';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type {
   ScreenRecordingCompletion,
@@ -71,13 +68,19 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-type RecordingExport = { outPath: string; clientOutPath?: string; telemetryPath: string };
+type RecordingExport = {
+  outPath: string;
+  clientOutPath?: string;
+  telemetryPath: string;
+  daemonOwned?: true;
+};
 
 function remoteRecordingExport(): RecordingExport {
-  const outPath = buildRemoteTempArtifactPath('recording', 'mp4');
+  const outPath = path.join(mkdtempForTestSync('daemon-recording-export-'), 'checkout.mp4');
   return {
     outPath,
     clientOutPath: '/Users/client/checkout.mp4',
+    daemonOwned: true,
     telemetryPath: deriveRecordingTelemetryPath(outPath),
   };
 }
@@ -146,7 +149,8 @@ function publishRecordingSession(
     descriptor: { version: 1, body: { recordingId: 'checkout-flow' } },
     metadata: {
       phase: 'active',
-      remoteCaptureTenantId: TENANT,
+      ...(recordingExport.daemonOwned ? { remoteCaptureOutput: true } : {}),
+      ...(options.unleasedProducer ? {} : { remoteCaptureTenantId: TENANT }),
       remoteCaptureLease:
         options.leased === false || options.unleasedProducer ? 'unleased' : leaseVerifier(LEASE_ID),
     },
@@ -407,6 +411,7 @@ test('teardown keeps the recording unleased when the session later acquired a le
 
   await teardown(sessionStore);
 
+  expect(await listDownloadableArtifacts({ tenantId: 'tenant-b' }, process.env)).toEqual([]);
   const artifacts = await listDownloadableArtifacts({ tenantId: TENANT }, process.env);
   expect(artifacts).toEqual(
     expect.arrayContaining([

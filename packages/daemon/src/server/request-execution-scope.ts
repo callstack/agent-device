@@ -13,6 +13,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
+  requestTraceLogPath,
   requestDiagnosticsRecordId,
   type TrackDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
@@ -755,7 +756,7 @@ export async function prepareLockedRequestScope(params: {
   const deliverRemoteScript = ignoresSessionLease(scope.command)
     ? (response: DaemonResponse) => response
     : remoteScriptVersionDelivery(sessionStore, scope.sessionName);
-  updateDiagnosticsScope({ traceLogPath: existingSession?.trace?.outPath });
+  updateDiagnosticsScope({ traceLogPath: requestTraceLogPath(lockedReq, existingSession?.trace) });
   const finalize = (handled: DaemonResponse): DaemonResponse => {
     const response = deliverRemoteScript(handled);
     const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);

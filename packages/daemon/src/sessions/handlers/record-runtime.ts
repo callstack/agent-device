@@ -71,14 +71,14 @@ import {
   recordingExtensionForPlatform,
   resolveRecordingOutputPaths,
 } from '@agent-device/capture-kit/recording-output-path';
-import { buildRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
+import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import { randomUUID } from 'node:crypto';
 import {
   buildRecordingStartResponse,
   buildRecordingStartedAction,
   buildRecordingStopResponse,
   buildRecordingUnsupportedResponse,
-  isDaemonOwnedRecordingOutput,
+  isLegacyRemoteRecordingOutput,
   recordingOutputLeaseVerifier,
   UNLEASED_CAPTURE,
 } from './record-runtime-response.ts';
@@ -291,7 +291,7 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
-    envelope: withCaptureOwner(started.envelope, params.req),
+    envelope: withCaptureOwner(started.envelope, params.req, outputPaths.daemonOwned === true),
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
@@ -319,6 +319,7 @@ async function startRecording(
 function withCaptureOwner(
   envelope: DurableResourceEnvelope<'screen-recording'>,
   req: DaemonRequest,
+  daemonOwned: boolean,
 ): DurableResourceEnvelope<'screen-recording'> {
   const lease = req.internal?.admittedLease;
   const tenantId = lease?.tenantId ?? req.meta?.tenantId;
@@ -327,7 +328,7 @@ function withCaptureOwner(
     ...envelope,
     metadata: {
       ...envelope.metadata,
-      ...(req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
+      ...(daemonOwned ? { remoteCaptureOutput: true } : {}),
       ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
       remoteCaptureLease: leaseId ? leaseVerifier(leaseId) : UNLEASED_CAPTURE,
     },
@@ -354,7 +355,8 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
   };
 }
 
-type RecordingStartPaths = RecordingOutputPaths & Readonly<{ clientOutputPath?: string }>;
+type RecordingStartPaths = RecordingOutputPaths &
+  Readonly<{ clientOutputPath?: string; daemonOwned?: true }>;
 
 function resolveRecordingStartPaths(
   req: DaemonRequest,
@@ -364,7 +366,13 @@ function resolveRecordingStartPaths(
 ): RecordingStartPaths {
   const requestedPath = req.positionals?.[1];
   const clientOutputPath = req.meta?.clientArtifactPaths?.outPath;
-  if (req.internal?.publicNetworkOnly) {
+  const remotePlaceholder =
+    requestedPath !== undefined &&
+    isRemoteTempArtifactPath(requestedPath, 'recording', path.extname(requestedPath));
+  if (
+    req.internal?.publicNetworkOnly ||
+    (clientOutputPath !== undefined && (requestedPath === undefined || remotePlaceholder))
+  ) {
     const extension = recordingExtensionForPlatform(platform);
     return {
       ...resolveRecordingOutputPaths({
@@ -372,22 +380,10 @@ function resolveRecordingStartPaths(
         platform,
         cwd: hostCwd,
       }),
+      daemonOwned: true,
       ...(clientOutputPath === undefined
         ? {}
         : { clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension) }),
-    };
-  }
-  if (requestedPath === undefined && clientOutputPath !== undefined) {
-    // A remote caller that names no path cannot know the session platform's extension, so it sends
-    // its local destination without one; its cwd does not exist on this host.
-    const extension = recordingExtensionForPlatform(platform);
-    return {
-      ...resolveRecordingOutputPaths({
-        requestedPath: buildRemoteTempArtifactPath('recording', extension),
-        platform,
-        cwd: hostCwd,
-      }),
-      clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension),
     };
   }
   return {
@@ -456,19 +452,7 @@ async function stopRecording(
   }
   const completion = stopped.completion;
   const response = buildRecordingStopResponse(completion);
-  const resourcePath = screenRecordingDurableResource.resourcePath(
-    params.sessionStore,
-    params.sessionName,
-  );
-  const record = screenRecordingDurableResource.store.read(resourcePath);
-  const daemonOwned = isDaemonOwnedRecordingOutput(
-    completion,
-    record.status === 'decoded' && record.envelope.metadata?.remoteCaptureOutput === true,
-  );
-  if (daemonOwned && leaseOwner === undefined) throw leasedOutputRefusal('Recording');
-  const storedTenant =
-    record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureTenantId : undefined;
-  const tenantId = typeof storedTenant === 'string' ? storedTenant : undefined;
+  const { daemonOwned, tenantId } = readRecordingOutput(params, completion, leaseOwner);
   if (stopped.recordsSessionAction) {
     recordSessionAction(params.sessionStore, ref, params.req, params.req.command, {
       action: 'stop',
@@ -494,6 +478,27 @@ async function stopRecording(
         ),
       }
     : response;
+}
+
+function readRecordingOutput(
+  params: RecordRuntimeHandlerParams,
+  completion: ScreenRecordingCompletion,
+  leaseOwner: string | null | undefined,
+): { daemonOwned: boolean; tenantId?: string } {
+  const resourcePath = screenRecordingDurableResource.resourcePath(
+    params.sessionStore,
+    params.sessionName,
+  );
+  const record = screenRecordingDurableResource.store.read(resourcePath);
+  const daemonOwned =
+    record.status === 'decoded' && record.envelope.metadata?.remoteCaptureOutput === true;
+  if (isLegacyRemoteRecordingOutput(completion) || (daemonOwned && leaseOwner === undefined)) {
+    throw leasedOutputRefusal('Recording');
+  }
+  const storedTenant =
+    record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureTenantId : undefined;
+  const tenantId = typeof storedTenant === 'string' ? storedTenant : undefined;
+  return { daemonOwned, tenantId };
 }
 
 /**

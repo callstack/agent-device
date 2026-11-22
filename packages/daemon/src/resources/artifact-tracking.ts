@@ -24,6 +24,7 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../core/daemon-request.ts';
+import type { SessionState } from '../core/session-state.ts';
 import { resolveLeaseScope } from '../core/lease-context.ts';
 import { normalizeLeaseId } from './lease-registry-scope.ts';
 
@@ -39,6 +40,20 @@ const LEASED_OUTPUT_REASONS = {
 export function leaseVerifier(leaseId: string): string {
   const canonical = normalizeLeaseId(leaseId) ?? leaseId.trim();
   return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+export function admittedOutputLeaseVerifier(req: Pick<DaemonRequest, 'internal'>): string | null {
+  const leaseId = req.internal?.admittedLease?.leaseId;
+  return leaseId === undefined ? null : leaseVerifier(leaseId);
+}
+
+export function requestTraceLogPath(
+  req: DaemonRequest,
+  trace: SessionState['trace'],
+): string | undefined {
+  if (!trace || (trace.leaseVerifier ?? null) !== admittedOutputLeaseVerifier(req))
+    return undefined;
+  return trace.remoteCaptureOutputPath ?? trace.outPath;
 }
 
 /**
@@ -341,11 +356,28 @@ export async function openDownloadableArtifact(
         `Artifact path is not a regular file or directory: ${entry.artifactPath}`,
       );
     }
-    const stream = fs.createReadStream(payload.artifactPath);
+    const stream = stat.isFile()
+      ? openRegisteredFile(artifactId, entry)
+      : fs.createReadStream(payload.artifactPath);
     download.stream = stream;
     return { ...payload, stream, signal: download.controller.signal, release: download.release };
   } catch (error) {
     download.release();
+    throw error;
+  }
+}
+
+function openRegisteredFile(artifactId: string, entry: ArtifactEntry): fs.ReadStream {
+  const fd = fs.openSync(entry.artifactPath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || outputIdentity(stat) !== entry.output) {
+      cleanupDownloadableArtifact(artifactId);
+      throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+    }
+    return fs.createReadStream(entry.artifactPath, { fd });
+  } catch (error) {
+    fs.closeSync(fd);
     throw error;
   }
 }
