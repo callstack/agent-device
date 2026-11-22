@@ -116,22 +116,50 @@ async function requestHop(
       onConnected: () => watchdog.arm('response-headers', phases.responseHeaderTimeoutMs),
     });
   } catch (error) {
-    if (phases.isPhaseTimeout(error)) throw error;
-    const reason: unknown = watchdog.signal.reason;
-    if (reason instanceof AppError && phases.isPhaseTimeout(reason)) {
-      throw new AppError(reason.code, reason.message, reason.details, error);
-    }
-    if (error instanceof AppError) throw error;
-    const networkErrorCode = readNetworkErrorCode(error);
-    throw new AppError(
-      'COMMAND_FAILED',
-      networkErrorCode
-        ? `The daemon failed to fetch the app source (network error code: ${networkErrorCode})`
-        : 'The daemon failed to fetch the app source',
-      networkErrorCode ? { networkErrorCode } : undefined,
-      error,
-    );
+    const timeout = phaseTimeout(error, phases);
+    if (timeout) throw timeout;
+    if (isSignalFailure(error, watchdog.signal)) throw watchdog.signal.reason;
+    if (error instanceof AppError && !readNetworkErrorCode(error.cause)) throw error;
+    throw downloadNetworkError(error instanceof AppError ? error.cause : error);
   }
+}
+
+function phaseTimeout(error: unknown, phases: TransferPhaseTools): AppError | undefined {
+  const reason: unknown = phases.watchdog.signal.reason;
+  const timeout = phases.isPhaseTimeout(error) ? error : reason;
+  if (!(timeout instanceof AppError) || !phases.isPhaseTimeout(timeout)) return undefined;
+  const transferPhase = timeout.details?.transferPhase;
+  const networkErrorCode =
+    transferPhase === 'connect'
+      ? 'connect-timeout'
+      : transferPhase === 'response-headers'
+        ? 'header-timeout'
+        : 'body-timeout';
+  return new AppError(
+    timeout.code,
+    timeout.message,
+    { ...timeout.details, networkErrorCode },
+    error === timeout ? timeout.cause : error,
+  );
+}
+
+function isSignalFailure(error: unknown, signal: AbortSignal): boolean {
+  return (
+    signal.aborted &&
+    (error === signal.reason || (error instanceof Error && error.cause === signal.reason))
+  );
+}
+
+function downloadNetworkError(error: unknown): AppError {
+  const networkErrorCode = readNetworkErrorCode(error);
+  return new AppError(
+    'COMMAND_FAILED',
+    networkErrorCode
+      ? `The daemon failed to fetch the app source (network error code: ${networkErrorCode})`
+      : 'The daemon failed to fetch the app source',
+    networkErrorCode ? { networkErrorCode } : undefined,
+    error,
+  );
 }
 
 // Only the code crosses to the caller: a remote daemon's cause message can name
@@ -198,22 +226,28 @@ async function writeResponse(
       callback(null, chunk);
     },
   });
+  let created = false;
+  let failureSource: 'body' | 'file' | undefined;
+  response.body.once('error', () => {
+    failureSource ??= 'body';
+  });
+  const destination = createWriteStream(destinationPath, { flags: 'wx' });
+  destination.once('open', () => {
+    created = true;
+  });
+  destination.once('error', () => {
+    failureSource ??= 'file';
+  });
   try {
-    await pipeline(
-      response.body,
-      progress,
-      byteLimit,
-      createWriteStream(destinationPath, {
-        flags: 'wx',
-      }),
-      { signal: watchdog.signal },
-    );
+    await pipeline(response.body, progress, byteLimit, destination, { signal: watchdog.signal });
     return destinationPath;
   } catch (error) {
-    await fs.rm(destinationPath, { force: true }).catch(() => {});
-    if (phases.isPhaseTimeout(error)) throw error;
-    if (phases.isPhaseTimeout(watchdog.signal.reason)) throw watchdog.signal.reason;
-    throw error;
+    if (created) await fs.rm(destinationPath, { force: true }).catch(() => {});
+    const timeout = phaseTimeout(error, phases);
+    if (timeout) throw timeout;
+    if (isSignalFailure(error, watchdog.signal)) throw watchdog.signal.reason;
+    if (error instanceof AppError || failureSource === 'file') throw error;
+    throw downloadNetworkError(error);
   }
 }
 

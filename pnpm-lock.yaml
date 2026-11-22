@@ -1138,12 +1138,12 @@ importers:
         specifier: workspace:*
         version: link:../kernel
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       ipaddr.js:
         specifier: ^2.5.0
         version: 2.5.0
-      undici:
-        specifier: 7.30.1
-        version: 7.30.1
 
   packages/proxy:
     devDependencies:

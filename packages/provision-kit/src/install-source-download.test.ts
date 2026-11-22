@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   TRANSFER_BODY_INACTIVITY_TIMEOUT_MS,
   TRANSFER_CONNECT_TIMEOUT_MS,
+  TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
   isTransferPhaseTimeoutError,
 } from '@agent-device/host-kit/transport';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
@@ -171,6 +173,51 @@ test('download identifies the daemon as the requester and preserves the network 
   }
 });
 
+test.for(['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ERR_TLS_CERT_ALTNAME_INVALID'])(
+  'download preserves %s while waiting for headers and streaming a partial file',
+  async (code) => {
+    const tempRoot = await mkdtempForTest('agent-device-download-partial-');
+    const restoreLookup = mockApprovedLookup();
+    const transportError = Object.assign(new Error('private transport diagnostic'), { code });
+    const body = new PassThrough();
+    const requester = vi
+      .spyOn(networkTransport, 'requestApprovedUrl')
+      .mockRejectedValueOnce(transportError)
+      .mockResolvedValueOnce(response(200, body));
+    const download = () =>
+      downloadInstallSource({
+        tempDir: tempRoot,
+        url: 'https://example.com/app.apk',
+        signal: new AbortController().signal,
+        environment: {},
+      });
+    const assertCode = (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.deepEqual(error.details, { networkErrorCode: code });
+      assert.equal(error.cause, transportError);
+      assert.ok(!error.message.includes(transportError.message));
+      return true;
+    };
+    try {
+      await assert.rejects(download(), assertCode);
+      const outcome = assert.rejects(download(), assertCode);
+      body.write('partial data');
+      await vi.waitFor(async () => {
+        assert.equal(await fs.readFile(path.join(tempRoot, 'app.apk'), 'utf8'), 'partial data');
+      });
+      body.destroy(transportError);
+      await outcome;
+      assert.deepEqual(await fs.readdir(tempRoot), []);
+    } finally {
+      body.destroy();
+      requester.mockRestore();
+      restoreLookup();
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  },
+);
+
 test('download omits network error codes that are not identifiers', async () => {
   const tempRoot = await mkdtempForTest('agent-device-download-network-error-code-');
   const lookup = vi
@@ -286,23 +333,37 @@ function mockApprovedLookup(): () => void {
   return () => lookup.mockRestore();
 }
 
-function assertPhaseTimeout(error: unknown, phase: string, timeoutMs: number): void {
+function assertPhaseTimeout(
+  error: unknown,
+  phase: string,
+  timeoutMs: number,
+  networkErrorCode: string,
+): void {
   assert.ok(error instanceof AppError, 'phase expiry must stay a typed AppError');
   assert.ok(isTransferPhaseTimeoutError(error), 'phase expiry must keep its typed reason');
   assert.equal(isRequestCanceledError(error), false, 'a phase timeout is not caller cancellation');
   assert.deepEqual(error.details, {
     reason: 'transfer_phase_timeout',
     transferPhase: phase,
+    networkErrorCode,
     timeoutMs,
   });
 }
 
-test('a connect that never completes expires at the adopted connect ceiling with typed evidence', async () => {
+test.for([
+  { phase: 'connect', timeout: TRANSFER_CONNECT_TIMEOUT_MS, code: 'connect-timeout' },
+  {
+    phase: 'response-headers',
+    timeout: TRANSFER_RESPONSE_HEADER_TIMEOUT_MS,
+    code: 'header-timeout',
+  },
+])('a stalled $phase reports $code', async ({ phase, timeout, code }) => {
   const tempRoot = await mkdtempForTest('agent-device-download-connect-stall-');
   const restoreLookup = mockApprovedLookup();
   const requestMock = vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
     (args) =>
       new Promise<never>((_resolve, reject) => {
+        if (phase === 'response-headers') args.onConnected?.();
         args.signal.addEventListener('abort', () => reject(args.signal.reason), {
           once: true,
         });
@@ -316,9 +377,9 @@ test('a connect that never completes expires at the adopted connect ceiling with
       environment: process.env,
     }).catch((error: unknown) => error);
     await flushRealIOMacrotasks();
-    await vi.advanceTimersByTimeAsync(TRANSFER_CONNECT_TIMEOUT_MS + 1);
+    await vi.advanceTimersByTimeAsync(timeout + 1);
     const error = await outcome;
-    assertPhaseTimeout(error, 'connect', TRANSFER_CONNECT_TIMEOUT_MS);
+    assertPhaseTimeout(error, phase, timeout, code);
   } finally {
     requestMock.mockRestore();
     restoreLookup();
@@ -342,7 +403,8 @@ test('a stalled response body expires at the inactivity ceiling even without cal
     await flushRealIOMacrotasks();
     await vi.advanceTimersByTimeAsync(TRANSFER_BODY_INACTIVITY_TIMEOUT_MS + 1);
     const error = await outcome;
-    assertPhaseTimeout(error, 'response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS);
+    assertPhaseTimeout(error, 'response-body', TRANSFER_BODY_INACTIVITY_TIMEOUT_MS, 'body-timeout');
+    assert.deepEqual(await fs.readdir(tempRoot), []);
   } finally {
     requestMock.mockRestore();
     restoreLookup();

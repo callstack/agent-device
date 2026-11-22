@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import http from 'node:http';
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -403,6 +404,43 @@ test('a loopback body that stalls after accepted bytes expires at the inactivity
     }
   } finally {
     watchdog.dispose();
+    await closeServer(server);
+  }
+});
+
+test.for(['headers', 'body'] as const)('a TCP reset during %s keeps ECONNRESET', async (phase) => {
+  let peer: net.Socket | undefined;
+  const server = http.createServer((request, response) => {
+    peer = request.socket;
+    if (phase === 'headers') peer.resetAndDestroy();
+    else response.write('partial');
+  });
+  const port = await listen(server);
+  try {
+    const response = requestApprovedUrl({
+      url: new URL(`http://approved.invalid:${port}/app.apk`),
+      approvedAddress: '127.0.0.1',
+      family: 4,
+      headers: {},
+      signal: AbortSignal.timeout(5_000),
+      environment: {},
+    });
+    if (phase === 'headers') {
+      await assert.rejects(response, { code: 'ECONNRESET' });
+      return;
+    }
+    const { body, close } = await response;
+    try {
+      const [chunk] = await once(body, 'data');
+      assert.equal(String(chunk), 'partial');
+      const error = once(body, 'error');
+      peer!.resetAndDestroy();
+      const [failure] = await error;
+      assert.equal(failure.code, 'ECONNRESET');
+    } finally {
+      await close();
+    }
+  } finally {
     await closeServer(server);
   }
 });

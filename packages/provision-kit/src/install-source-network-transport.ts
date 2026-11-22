@@ -1,5 +1,8 @@
-import net from 'node:net';
-import { Agent, Pool, ProxyAgent, request, type Dispatcher } from 'undici';
+import { once } from 'node:events';
+import http from 'node:http';
+import https from 'node:https';
+import net, { type Socket } from 'node:net';
+import tls from 'node:tls';
 
 export type InstallSourceNetworkResponse = {
   statusCode: number;
@@ -16,41 +19,144 @@ export async function requestApprovedUrl(params: {
   signal: AbortSignal;
   /** The host environment whose proxy variables apply to the request. */
   environment: NodeJS.ProcessEnv;
-  /** Called once the dispatcher's connection to the upstream is established. */
+  /** Called once the upstream TCP connection or TLS session is established. */
   onConnected?: () => void;
 }): Promise<InstallSourceNetworkResponse> {
-  const proxy = resolveProxyForUrl(params.url, params.environment);
-  const dispatcher = proxy
-    ? proxyDispatcher(proxy, params.url, params.onConnected)
-    : directDispatcher(params.approvedAddress, params.family);
-  const dispatchUrl = proxy
-    ? approvedAddressUrl(params.url, params.approvedAddress, params.family)
-    : params.url;
-  // Only undici's Agent emits 'connect' (pinned undici 7.30.1: agent.js/client.js do, the
-  // ProxyAgent dispatcher does not), so the proxy path reports establishment from inside its own
-  // tunnel connector wrap instead of this event.
-  if (!proxy && params.onConnected) dispatcher.once('connect', params.onConnected);
+  const { url, approvedAddress, signal } = params;
+  signal.throwIfAborted();
+  const hostname = stripBrackets(url.hostname);
+  const secure = url.protocol === 'https:';
+  const port = Number(url.port || (secure ? 443 : 80));
+  const proxy = resolveProxyForUrl(url, params.environment);
+  const authority =
+    params.family === 6 ? `[${approvedAddress}]:${port}` : `${approvedAddress}:${port}`;
+  const tunnel = proxy ? await connectThroughProxy(new URL(proxy), authority, signal) : undefined;
+  const socket = secure
+    ? tls.connect({
+        ...(tunnel ? { socket: tunnel } : { host: approvedAddress, port }),
+        ...(net.isIP(hostname) === 0 ? { servername: hostname } : {}),
+        checkServerIdentity: (_host, certificate) => tls.checkServerIdentity(hostname, certificate),
+      })
+    : (tunnel ?? net.connect({ host: approvedAddress, port }));
+  let request: http.ClientRequest | undefined;
+  let body: http.IncomingMessage | undefined;
+  const onAbort = () => {
+    const reason: unknown = signal.reason;
+    const error =
+      reason instanceof Error
+        ? reason
+        : new Error('Install source request aborted', {
+            cause: reason,
+          });
+    if (body && !body.readableEnded) body.destroy(error);
+    else if (!body && request) request.destroy(error);
+    else if (!request) socket.destroy(error);
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
+  const close = async () => {
+    signal.removeEventListener('abort', onAbort);
+    body?.destroy();
+    await Promise.all([closeSocket(socket), tunnel && tunnel !== socket && closeSocket(tunnel)]);
+  };
   try {
-    const requestOptions = {
-      dispatcher,
-      headers: proxy ? { ...params.headers, host: params.url.host } : params.headers,
-      maxRedirections: 0,
-      method: 'GET' as const,
-      signal: params.signal,
-    };
-    const response = await request(dispatchUrl, requestOptions);
-    return {
-      statusCode: response.statusCode,
-      headers: response.headers,
-      body: response.body,
-      close: async () => await closeDispatcher(dispatcher),
-    };
+    if (!tunnel || secure) await once(socket, secure ? 'secureConnect' : 'connect');
+    signal.throwIfAborted();
+    params.onConnected?.();
+    // A connected socket (including a TLS socket) carries the request without a shared agent.
+    request = http.request({
+      method: 'GET',
+      path: `${url.pathname}${url.search}`,
+      headers: { ...params.headers, host: url.host, connection: 'close' },
+      createConnection: () => socket,
+    });
+    const upstream = request;
+    return await new Promise<InstallSourceNetworkResponse>((resolve, reject) => {
+      upstream.on('error', (error) => {
+        if (body) body.destroy(error);
+        else reject(error);
+      });
+      upstream.once('response', (response) => {
+        body = response;
+        // The download can reject the response before attaching its body pipeline.
+        response.on('error', () => {});
+        resolve({
+          statusCode: response.statusCode ?? 0,
+          headers: response.headersDistinct,
+          body: response,
+          close,
+        });
+      });
+      upstream.once('upgrade', () => reject(networkError('Unexpected upgrade response', 'EPROTO')));
+      upstream.end();
+    });
   } catch (error) {
-    await closeDispatcher(dispatcher);
+    await close();
+    throw error;
+  }
+}
+
+async function connectThroughProxy(
+  proxy: URL,
+  authority: string,
+  signal: AbortSignal,
+): Promise<Socket> {
+  const request = createProxyConnectRequest(proxy, authority);
+  const onAbort = () => request.destroy();
+  signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    const connected = once(request, 'connect') as Promise<[http.IncomingMessage, Socket, Buffer]>;
+    request.end();
+    const [response, socket, head] = await connected;
+    if (signal.aborted || response.statusCode !== 200) {
+      await closeSocket(socket);
+      signal.throwIfAborted();
+      throw networkError(
+        `Proxy response (${response.statusCode}) !== 200 when HTTP Tunneling`,
+        'EPROXYTUNNEL',
+      );
+    }
+    if (head.length) socket.unshift(head);
+    return socket;
+  } catch (error) {
+    if (request.socket) await closeSocket(request.socket);
+    signal.throwIfAborted();
     throw error;
   } finally {
-    if (!proxy && params.onConnected) dispatcher.off('connect', params.onConnected);
+    signal.removeEventListener('abort', onAbort);
   }
+}
+
+function createProxyConnectRequest(proxy: URL, authority: string): http.ClientRequest {
+  const secure = proxy.protocol === 'https:';
+  if (!secure && proxy.protocol !== 'http:') {
+    throw new Error('Unsupported install source proxy protocol');
+  }
+  const headers: Record<string, string> = { host: authority };
+  if (proxy.username || proxy.password) {
+    const credentials = `${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`;
+    headers['proxy-authorization'] = `Basic ${Buffer.from(credentials).toString('base64')}`;
+  }
+  const hostname = stripBrackets(proxy.hostname);
+  return (secure ? https : http).request({
+    hostname,
+    port: Number(proxy.port || (secure ? 443 : 80)),
+    method: 'CONNECT',
+    path: authority,
+    headers,
+    agent: false,
+    ...(secure ? { servername: net.isIP(hostname) ? '' : hostname } : {}),
+  });
+}
+
+function networkError(message: string, code: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+async function closeSocket(socket: Socket): Promise<void> {
+  if (socket.closed) return;
+  const closed = new Promise<void>((resolve) => socket.once('close', resolve));
+  socket.destroy();
+  await closed;
 }
 
 export function resolveProxyForUrl(url: URL, environment: NodeJS.ProcessEnv): string | undefined {
@@ -78,67 +184,6 @@ export function matchesNoProxy(url: URL, raw: string | undefined): boolean {
     });
 }
 
-function directDispatcher(address: string, family: 4 | 6): Agent {
-  return new Agent({
-    connect: {
-      lookup: (_hostname, options, callback) => {
-        if (options.all) {
-          callback(null, [{ address, family }]);
-          return;
-        }
-        callback(null, address, family);
-      },
-    },
-  });
-}
-
-function proxyDispatcher(proxyUrl: string, destination: URL, onConnected?: () => void): ProxyAgent {
-  const literalDestination = net.isIP(stripBrackets(destination.hostname)) !== 0;
-  return new ProxyAgent({
-    uri: proxyUrl,
-    proxyTunnel: true,
-    requestTls:
-      destination.protocol === 'https:' && !literalDestination
-        ? { servername: stripBrackets(destination.hostname) }
-        : undefined,
-    // ProxyAgent builds its own inner Agent and never emits 'connect' (pinned undici 7.30.1,
-    // lib/dispatcher/proxy-agent.js), so establishment is reported by wrapping the tunnel
-    // connector the inner factory receives: its callback fires exactly when the upstream
-    // connection through the CONNECT tunnel is established.
-    factory: (origin: string | URL, options: Pool.Options) =>
-      new Pool(origin, withUpstreamConnectedCallback(options, onConnected)),
-  });
-}
-
-type TunnelConnectCallback = (
-  ...args: [error: null, socket: net.Socket] | [error: Error, socket: null]
-) => void;
-type TunnelConnect = (options: unknown, callback: TunnelConnectCallback) => void;
-
-/** Fires `onConnected` once the wrapped connector has established the upstream connection. */
-function withUpstreamConnectedCallback(
-  options: Pool.Options,
-  onConnected?: () => void,
-): Pool.Options {
-  const connect = options.connect;
-  if (!onConnected || typeof connect !== 'function') return options;
-  const tunnelConnect = connect as TunnelConnect;
-  return {
-    ...options,
-    connect: (connectOptions: unknown, callback: TunnelConnectCallback) =>
-      tunnelConnect(connectOptions, (...args) => {
-        if (args[0] === null) onConnected();
-        callback(...args);
-      }),
-  };
-}
-
-function approvedAddressUrl(original: URL, address: string, family: 4 | 6): URL {
-  const approved = new URL(original);
-  approved.hostname = family === 6 ? `[${stripBrackets(address)}]` : address;
-  return approved;
-}
-
 function parseNoProxyToken(token: string): { hostname: string; port?: string } {
   if (token.startsWith('[')) {
     const close = token.indexOf(']');
@@ -157,8 +202,4 @@ function parseNoProxyToken(token: string): { hostname: string; port?: string } {
 
 function stripBrackets(value: string): string {
   return value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
-}
-
-async function closeDispatcher(dispatcher: Dispatcher): Promise<void> {
-  await dispatcher.close();
 }
