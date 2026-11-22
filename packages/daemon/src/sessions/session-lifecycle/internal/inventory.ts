@@ -67,7 +67,10 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import { resolveLeaseScope } from '../../../core/lease-context.ts';
-import { resolveRequestSessionRef } from '../../request-admission.ts';
+import {
+  resolveRequestSessionRef,
+  type ResolveRequestSessionRef,
+} from '../../request-admission.ts';
 import { leaseProviderRequiringRuntime } from '@agent-device/contracts/lease-scope';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
@@ -76,6 +79,7 @@ export type SessionInventoryCommandInput = Readonly<{
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  resolveSessionRef?: ResolveRequestSessionRef;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
@@ -92,19 +96,14 @@ export async function handleSessionInventoryCommands(
     case 'devices':
       return await devicesInventoryResponse(req, params.host.env, sessionStore);
     case 'capabilities':
-      return await capabilitiesInventoryResponse({
-        req,
-        sessionName,
-        sessionStore,
-        inspectFacts: params.inspectFacts,
-        platformServices: params.platformServices,
-      });
+      return await capabilitiesInventoryResponse(params);
     case 'apps':
       return await handleAppsInventory({
         env: params.host.env,
         req,
         sessionName,
         sessionStore,
+        resolveSessionRef: params.resolveSessionRef,
         bindDevice: params.bindDevice,
         platformServices: params.platformServices,
         inspectFacts: params.inspectFacts,
@@ -281,6 +280,7 @@ async function capabilitiesInventoryResponse(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  resolveSessionRef?: ResolveRequestSessionRef;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
@@ -360,23 +360,19 @@ async function handleAppsInventory(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  resolveSessionRef?: ResolveRequestSessionRef;
   bindDevice?: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   providerAppCatalog?: ProviderAppCatalog;
   inspectFacts?: InspectDeviceRuntimeFacts;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, bindDevice, inspectFacts, platformServices } = params;
+  const { req, bindDevice, inspectFacts, platformServices } = params;
   const providerCatalogResponse = await resolveProviderAppCatalogResponse(
     req,
     params.providerAppCatalog,
   );
   if (providerCatalogResponse) return providerCatalogResponse;
-  const resolution = await resolveInventoryCommandDevice({
-    req,
-    sessionName,
-    sessionStore,
-    platformServices,
-  });
+  const resolution = await resolveInventoryCommandDevice(params);
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
   const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
@@ -467,14 +463,21 @@ async function resolveInventoryCommandDevice(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  resolveSessionRef?: ResolveRequestSessionRef;
   platformServices: DaemonPlatformServices;
 }): Promise<
   { device: DeviceInfo; session: ReturnType<SessionStore['get']> } | { response: DaemonResponse }
 > {
-  const { req, sessionName, sessionStore, platformServices } = params;
+  const {
+    req,
+    sessionName,
+    sessionStore,
+    platformServices,
+    resolveSessionRef = resolveRequestSessionRef,
+  } = params;
   // The one lease-checked session read of `apps` and `capabilities`. A leased session can open
   // here after the admission of a command that holds no session lock.
-  const session = resolveRequestSessionRef(req, sessionStore.lookup(sessionName))?.session;
+  const session = resolveSessionRef(req, sessionStore.lookup(sessionName))?.session;
   const flags = req.flags ?? {};
   const response = requireSessionOrExplicitSelector(req.command, session, flags);
   if (response) return { response };

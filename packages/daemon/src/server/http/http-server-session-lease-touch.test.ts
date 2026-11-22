@@ -488,22 +488,32 @@ function deferred() {
   return { promise, resolve };
 }
 
-test.each(['leased', 'unleased', 'opened before dispatch'] as const)(
-  'events shows the doctor start for a session that is %s while the toolchain check is pending',
-  async (scenario) => {
+test.each([
+  { scenario: 'leased', leased: true, openBeforeDispatch: false },
+  { scenario: 'unleased', leased: false, openBeforeDispatch: false },
+  { scenario: 'opened leased before dispatch', leased: true, openBeforeDispatch: true },
+  { scenario: 'opened unleased before dispatch', leased: false, openBeforeDispatch: true },
+])(
+  'events shows the doctor start for a session that is $scenario while the toolchain check is pending',
+  async ({ leased, openBeforeDispatch }) => {
     const daemon = world;
     if (!daemon) return;
-    const { owner, sessionName, sessionStore, hooks } = daemon;
-    const scope = scenario === 'unleased' ? {} : owner;
-    if (scenario === 'leased') daemon.publishLeasedSession(sessionName);
-    if (scenario === 'unleased') sessionStore.publish(sessionName, makeIosAppSession(sessionName));
-    if (scenario === 'opened before dispatch') {
+    const { owner, sessionStore, hooks } = daemon;
+    const sessionName = leased ? daemon.sessionName : SESSION;
+    const scope = leased ? owner : { sessionIsolation: 'none', tenantId: undefined };
+    if (openBeforeDispatch) {
       hooks.beforeDispatch = async () => {
         hooks.beforeDispatch = undefined;
-        const opened = await daemon.send('open', ['com.example.app'], owner);
+        const opened = await daemon.send('open', ['com.example.app'], scope);
         expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
-        expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(owner.leaseId);
+        expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(
+          leased ? owner.leaseId : undefined,
+        );
       };
+    } else if (leased) {
+      daemon.publishLeasedSession(sessionName);
+    } else {
+      sessionStore.publish(sessionName, makeIosAppSession(sessionName));
     }
     const enteredToolchain = deferred();
     const releaseToolchain = deferred();

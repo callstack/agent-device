@@ -20,7 +20,7 @@ import {
   type DoctorDeviceInventory,
   resolveDoctorDeviceForAppCheck,
 } from './session-doctor-device.ts';
-import { resolveRequestSessionRef } from '../request-admission.ts';
+import { resolveRequestSessionRef, type ResolveRequestSessionRef } from '../request-admission.ts';
 import { probeMetro } from './session-doctor-metro.ts';
 import {
   readDoctorOptions,
@@ -58,17 +58,24 @@ export async function handleDoctorCommand(params: {
   /** Opaque provider-scope transport override; the android family narrows it back. */
   androidAdbExecutor?: unknown;
   hostDiagnostics?: HostDiagnostics;
-  recordResolvedSessionStart?: () => void;
+  resolveSessionRef?: ResolveRequestSessionRef;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
-  const { req, sessionName, sessionStore, androidAdbExecutor, inspectFacts, bindDevice } = params;
+  const {
+    req,
+    sessionName,
+    sessionStore,
+    androidAdbExecutor,
+    inspectFacts,
+    bindDevice,
+    resolveSessionRef = resolveRequestSessionRef,
+  } = params;
   if (req.command !== PUBLIC_COMMANDS.doctor) return null;
   const hostDiagnostics = requireHostDiagnostics(params.hostDiagnostics);
 
   // Doctor holds no session lock, so a leased session can open here after admission.
-  const session = resolveRequestSessionRef(req, sessionStore.lookup(sessionName))?.session;
-  if (session?.lease) params.recordResolvedSessionStart?.();
+  const session = resolveSessionRef(req, sessionStore.lookup(sessionName))?.session;
   const options = readDoctorOptions(req, session);
   const stateDir = resolveDoctorStateDir(sessionStore, sessionName);
   const checks: DoctorCheck[] = [];

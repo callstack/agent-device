@@ -34,6 +34,7 @@ import {
   requestMayRecordSessionEvents,
   resolveRequestSessionName,
   resolveRequestSessionRef,
+  type ResolveRequestSessionRef,
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
@@ -202,8 +203,8 @@ export type RequestExecutionScope = AsyncDisposable & {
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   /** For a request without the session lock: runs `task` under it, unless a request holds it. */
   tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
-  /** Writes the start event after a handler checks the lease of a newly resolved session. */
-  recordResolvedSessionStart(): void;
+  /** Resolves an authorized session and starts the journal for a lock-exempt request. */
+  resolveSessionRef: ResolveRequestSessionRef;
   /** Writes the request-finished event, unless the request may not write to its session. */
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -222,7 +223,7 @@ export type LockedRequestScope = {
   sessionName: string;
   logPath: string;
   existingSession: SessionState | undefined;
-  recordResolvedSessionStart(): void;
+  resolveSessionRef: ResolveRequestSessionRef;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
@@ -431,9 +432,13 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
-      recordResolvedSessionStart: () => {
-        resolvedRef = true;
-        recordStarted();
+      resolveSessionRef(req, ref) {
+        const resolved = resolveRequestSessionRef(req, ref);
+        if (resolved) {
+          resolvedRef = true;
+          if (!attachesToSession) recordStarted();
+        }
+        return resolved;
       },
       recordFinished,
       runAdmitted: async (task) => {
@@ -458,9 +463,9 @@ export async function createRequestExecutionScope(params: {
           sessionName,
           holdDeviceLock: scope.retainDeviceExecutionLock,
           admission: params,
+          resolveSessionRef: scope.resolveSessionRef,
         });
-        resolvedRef = existingRef !== undefined;
-        if (attachesToSession || resolvedRef) recordStarted();
+        if (attachesToSession) recordStarted();
         let admissionCompleted = false;
         try {
           const session = existingRef?.session;
@@ -536,6 +541,7 @@ export async function createRequestExecutionScope(params: {
             leaseRegistry,
             providerAppCatalog: params.providerAppCatalog,
             daemonPolicy: params.daemonPolicy,
+            resolveSessionRef: scope.resolveSessionRef,
           });
           scope.req = scopedReq;
           const admittedLease = scopedReq.internal?.admittedLease;
@@ -695,7 +701,7 @@ export async function prepareLockedRequestScope(params: {
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
   const readSessionRef = (): SessionRef | undefined =>
-    resolveRequestSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
+    scope.resolveSessionRef(scope.req, sessionStore.lookup(scope.sessionName));
   // A request that holds the session lock keeps the lifetime that it captures here.
   let seededRef = readSessionRef();
   if (!shouldLockSessionExecution(scope.command)) {
@@ -770,7 +776,7 @@ export async function prepareLockedRequestScope(params: {
       sessionName: scope.sessionName,
       logPath,
       existingSession,
-      recordResolvedSessionStart: scope.recordResolvedSessionStart,
+      resolveSessionRef: scope.resolveSessionRef,
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
       platformServices: scope.platformServices,

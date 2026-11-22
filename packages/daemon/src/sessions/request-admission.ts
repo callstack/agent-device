@@ -145,6 +145,8 @@ export function resolveRequestSessionRef(
   return ref;
 }
 
+export type ResolveRequestSessionRef = typeof resolveRequestSessionRef;
+
 /** Whether a request may write to the journal of its address: only a session it acts through. */
 export function requestMayRecordSessionEvents(
   req: DaemonRequest,

@@ -12,7 +12,11 @@ import type {
   ProviderAppCatalog,
 } from '@agent-device/contracts/device';
 import { resolveLeaseScope } from '../core/lease-context.ts';
-import { assertRequestLeaseAdmission, resolveRequestSessionRef } from './request-admission.ts';
+import {
+  assertRequestLeaseAdmission,
+  resolveRequestSessionRef,
+  type ResolveRequestSessionRef,
+} from './request-admission.ts';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -148,6 +152,7 @@ type LockedSessionParams = {
   holdDeviceLock: (deviceId: string) => Promise<void>;
   teardownSession: SessionTeardown;
   admission: Readonly<{ providerAppCatalog?: ProviderAppCatalog; daemonPolicy?: DaemonPolicy }>;
+  resolveSessionRef?: ResolveRequestSessionRef;
 };
 
 /**
@@ -157,13 +162,13 @@ type LockedSessionParams = {
 export async function resolveLockedRequestSessionRef(
   params: LockedSessionParams,
 ): Promise<SessionRef | undefined> {
-  const { req, sessionName, sessionStore } = params;
+  const { req, sessionName, sessionStore, resolveSessionRef = resolveRequestSessionRef } = params;
   const ref = sessionStore.lookup(sessionName);
   const ended =
     ref !== undefined &&
     params.teardown === 'inline' &&
     (await endExpiredSessionForSuccessor(params, ref));
-  return resolveRequestSessionRef(req, ended ? sessionStore.lookup(sessionName) : ref);
+  return resolveSessionRef(req, ended ? sessionStore.lookup(sessionName) : ref);
 }
 
 /**
@@ -219,11 +224,13 @@ export function admitRequestLeaseForLockedScope(params: {
   leaseRegistry: LeaseRegistry;
   providerAppCatalog?: ProviderAppCatalog;
   daemonPolicy?: DaemonPolicy;
+  resolveSessionRef?: ResolveRequestSessionRef;
 }): DaemonRequest {
-  const { sessionName, sessionStore, leaseRegistry } = params;
+  const { sessionName, sessionStore, leaseRegistry, resolveSessionRef = resolveRequestSessionRef } =
+    params;
   // The addressed session still decides the app-lease veto.
   const addressed = sessionStore.lookup(sessionName);
-  resolveRequestSessionRef(params.req, addressed);
+  resolveSessionRef(params.req, addressed);
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, addressed?.session, {
     env: params.env,
     providerAppCatalog: params.providerAppCatalog,
