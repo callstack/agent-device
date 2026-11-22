@@ -17,6 +17,7 @@ import {
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
 } from '../core/session-selector.ts';
+import { resolveLeaseScope } from '../core/lease-context.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 const IMPLICIT_SESSION_KEY_PREFIX = 'cwd';
@@ -84,10 +85,26 @@ export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
   return scopeRoot ? { kind: 'cwd', id: hashScopeRoot(scopeRoot) } : { kind: 'global-default' };
 }
 
-export function sessionMatchesInventoryScope(
-  session: SessionState,
-  requestScope: SessionScope,
-): boolean {
+/**
+ * Whether a request may see a session at all, i.e. whether listing it or naming it to the caller
+ * leaks another client's activity. Ownership scope decides the first half; a session that holds a
+ * lease is revealed only to the request carrying that lease's id, because on a shared proxy token
+ * the tenant label is a label and any holder of the token can send it (#4908). The request scope
+ * and lease id are resolved once, so one listing judges every session against the same workspace.
+ */
+export function createSessionVisibilityPredicate(
+  req: DaemonRequest,
+): (session: SessionState) => boolean {
+  const requestScope = resolveSessionScope(req);
+  const requestLeaseId = resolveLeaseScope(req).leaseId;
+  return (session) => {
+    if (!sessionMatchesInventoryScope(session, requestScope)) return false;
+    if (session.lease) return requestLeaseId === session.lease.leaseId;
+    return true;
+  };
+}
+
+function sessionMatchesInventoryScope(session: SessionState, requestScope: SessionScope): boolean {
   const sessionScope = session.sessionScope;
   if (!sessionScope) return false;
   if (requestScope.kind === 'tenant') {
@@ -295,6 +312,7 @@ function buildAmbiguousWorkspaceSessionError(candidates: SessionRef[]): AppError
       platforms,
       hint:
         `Run agent-device session list to inspect them. ` +
+        `A leased session is listed only through the connection that owns it, or with its lease id. ` +
         `Add ${platformSelectors} to run in that platform's session, ` +
         `or pass --session <address> copied from that list.`,
     },

@@ -38,7 +38,7 @@ test('provider session retains the allocated device and lease for implicit comma
       }),
     );
 
-    const sessions = await daemon.client().sessions.list();
+    const sessions = await daemon.client().sessions.list({ leaseId: lease.leaseId });
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]?.device.id, runtime.deviceIdForLease(lease.leaseId));
 
