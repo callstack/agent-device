@@ -261,8 +261,11 @@ export function resolveDaemonTransportPreference(
   return 'auto';
 }
 
-/** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
-export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts'] as const;
+/**
+ * What a daemon can do beyond the base RPC contract, published in its `daemon.json`.
+ * `session-lease-id`: a request on a leased session must send that lease's id (ADR 0007).
+ */
+export const DAEMON_CAPABILITIES = ['quiesce', 'script-artifacts', 'session-lease-id'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
 /**

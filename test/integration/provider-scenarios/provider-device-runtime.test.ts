@@ -42,14 +42,16 @@ test('provider session retains the allocated device and lease for implicit comma
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]?.device.id, runtime.deviceIdForLease(lease.leaseId));
 
-    const click = await daemon.callCommand('click', ['10', '20']);
+    // The lease owner sends only the lease id: the device and lease labels come from the session.
+    const ownerOnly = { meta: { leaseId: lease.leaseId } };
+    const click = await daemon.callCommand('click', ['10', '20'], {}, ownerOnly);
     assertRpcOk(click);
     assert.deepEqual(
       runtime.calls.filter((call) => call.type === 'tap').map((call) => call.deviceId),
       [runtime.deviceIdForLease(lease.leaseId)],
     );
 
-    assertRpcOk(await daemon.callCommand('close'));
+    assertRpcOk(await daemon.callCommand('close', [], {}, ownerOnly));
     assert.deepEqual(
       runtime.calls.filter((call) => call.type === 'lease.release').map((call) => call.leaseId),
       [lease.leaseId],

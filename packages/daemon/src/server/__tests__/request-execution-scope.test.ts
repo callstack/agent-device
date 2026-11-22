@@ -194,7 +194,7 @@ test('runLocked rejects tenant requests without an active lease', async () => {
   await expect(scope.runLocked(async () => 'ran')).rejects.toThrow(/Lease is not active/);
 });
 
-test('leased session admission uses stored lease metadata and heartbeats', async () => {
+test('a request that sends only the session lease id is admitted under the stored lease scope', async () => {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry({ now: () => now });
@@ -223,7 +223,7 @@ test('leased session admission uses stored lease metadata and heartbeats', async
   now = 2_000;
 
   const scope = await createTestRequestScope({
-    req: makeRequest({ command: 'snapshot' }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -265,12 +265,12 @@ test('leased session heartbeat is serialized with the request execution lock', a
   );
 
   const first = await createTestRequestScope({
-    req: makeRequest({ command: 'click' }),
+    req: makeRequest({ command: 'click', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
   const second = await createTestRequestScope({
-    req: makeRequest({ command: 'click' }),
+    req: makeRequest({ command: 'click', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -437,7 +437,7 @@ test.each([
   );
 
   const scope = await createTestRequestScope({
-    req: makeRequest({ command: 'snapshot', meta }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId, ...meta } }),
     sessionStore,
     leaseRegistry,
   });
@@ -498,7 +498,7 @@ test('provider lease admission succeeds without a device key', async () => {
   );
 
   const scope = await createTestRequestScope({
-    req: makeRequest({ command: 'snapshot' }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -534,7 +534,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
   );
 
   const slow = await createTestRequestScope({
-    req: makeRequest({ command: 'snapshot' }),
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -543,7 +543,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
   expect(await slow.runLocked(async () => (now = 1_011))).toBe(1_011);
 
   const next = await createTestRequestScope({
-    req: makeRequest({ command: 'screenshot' }),
+    req: makeRequest({ command: 'screenshot', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -574,12 +574,12 @@ test('expired leased session cleanup waits for the request execution lock', asyn
     }),
   );
   const first = await createTestRequestScope({
-    req: makeRequest({ command: 'click', meta: { requestId } }),
+    req: makeRequest({ command: 'click', meta: { leaseId: lease.leaseId, requestId } }),
     sessionStore,
     leaseRegistry,
   });
   const second = await createTestRequestScope({
-    req: makeRequest({ command: 'click' }),
+    req: makeRequest({ command: 'click', meta: { leaseId: lease.leaseId } }),
     sessionStore,
     leaseRegistry,
   });

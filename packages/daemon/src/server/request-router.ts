@@ -108,6 +108,7 @@ import {
 } from '../execution/request-dispatch-disclosure.ts';
 import { recordNestedRequests } from '../core/request-dispatch-ledger.ts';
 import { handDownEndedLeases, reportEndedLeases } from '../core/request-ended-leases.ts';
+import { handDownRequestLeaseScope } from '../core/lease-context.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
@@ -418,14 +419,17 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       cloudArtifactProvider,
       endSessionsForLease,
       providerAppCatalog,
-      invoke: handDownEndedLeases(
-        recordNestedRequests(handleRequest, dispatchLedger),
+      invoke: handDownRequestLeaseScope(
+        handDownEndedLeases(recordNestedRequests(handleRequest, dispatchLedger), lockedScope.req),
         lockedScope.req,
       ),
       invokeReplayAction: allowReplayActions
-        ? recordNestedRequests(
-            createReplayScopedActionInvoker(lockedScope, providerScope),
-            dispatchLedger,
+        ? handDownRequestLeaseScope(
+            recordNestedRequests(
+              createReplayScopedActionInvoker(lockedScope, providerScope),
+              dispatchLedger,
+            ),
+            lockedScope.req,
           )
         : undefined,
       providerScope,

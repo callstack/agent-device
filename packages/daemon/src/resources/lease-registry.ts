@@ -16,6 +16,7 @@ import {
   type NormalizedAllocateLeaseRequest,
   createLeaseTtlResolver,
   normalizeAllocateLeaseRequest,
+  normalizeCallerChosenLeaseId,
   createDeviceLease,
   deviceLeaseBusyError,
   hasAllocatedScope,
@@ -162,7 +163,7 @@ export class LeaseRegistry {
     leaseTtlMs: number;
   } {
     const chosenLeaseId =
-      request.leaseId === undefined ? undefined : normalizeRequiredLeaseId(request.leaseId);
+      request.leaseId === undefined ? undefined : normalizeCallerChosenLeaseId(request.leaseId);
     const normalized = normalizeAllocateLeaseRequest(request);
     this.cleanupExpiredLeases();
     return { chosenLeaseId, normalized, leaseTtlMs: this.resolveLeaseTtlMs(normalized.ttlMs) };
@@ -324,9 +325,14 @@ export class LeaseRegistry {
 
   /** Read active backend without sweeping another lease or mutating owner state. */
   inspectLeaseBackend(leaseId: string): LeaseBackend | undefined {
+    return this.inspectActiveLease(leaseId)?.backend;
+  }
+
+  /** Read an active lease without sweeping another lease or mutating owner state. */
+  inspectActiveLease(leaseId: string): DeviceLease | undefined {
     const id = normalizeLeaseId(leaseId);
     const lease = id ? this.leases.get(id) : undefined;
-    return lease && !this.wouldConsumeExpiredLease(lease, this.now()) ? lease.backend : undefined;
+    return lease && !this.wouldConsumeExpiredLease(lease, this.now()) ? { ...lease } : undefined;
   }
 
   /**

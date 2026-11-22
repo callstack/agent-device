@@ -3,11 +3,8 @@ import { test } from 'vitest';
 import {
   buildSessionLeaseFromRequest,
   resolveRunnerLogicalLeaseContext,
-  resolveRequestOrSessionLeaseScope,
-  type SessionLease,
 } from '../lease-context.ts';
 import { buildLeaseDiagnosticsContext } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '../daemon-request.ts';
 
 test('buildSessionLeaseFromRequest captures complete request lease scope', () => {
   const lease = buildSessionLeaseFromRequest({
@@ -43,54 +40,6 @@ test('buildSessionLeaseFromRequest skips incomplete lease scope', () => {
     }),
     undefined,
   );
-});
-
-test('resolveRequestOrSessionLeaseScope lets explicit request fields override session lease', () => {
-  const sessionLease: SessionLease = {
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseId: 'lease-session',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'proxy',
-    deviceKey: 'device-1',
-    clientId: 'client-a',
-  };
-
-  const scope = resolveRequestOrSessionLeaseScope(
-    {
-      meta: {
-        leaseId: 'lease-request',
-        leaseProvider: 'limrun',
-      },
-    },
-    { lease: sessionLease },
-  );
-
-  assert.deepEqual(scope, {
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseId: 'lease-request',
-    leaseBackend: 'ios-instance',
-    leaseProvider: 'limrun',
-    deviceKey: 'device-1',
-    clientId: 'client-a',
-  });
-});
-
-test('resolveRequestOrSessionLeaseScope accepts deviceLease as session compatibility input', () => {
-  const scope = resolveRequestOrSessionLeaseScope({} satisfies Partial<DaemonRequest>, {
-    deviceLease: {
-      tenantId: 'tenant-a',
-      runId: 'run-1',
-      leaseId: 'lease-session',
-    },
-  });
-
-  assert.deepEqual(scope, {
-    tenantId: 'tenant-a',
-    runId: 'run-1',
-    leaseId: 'lease-session',
-  });
 });
 
 test('buildLeaseDiagnosticsContext strips ttl and empty fields', () => {

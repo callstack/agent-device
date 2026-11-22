@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
+import { LeaseRegistry } from '../lease-registry.ts';
 import {
   createLeaseTtlResolver,
   leaseDeviceBindingKey,
@@ -48,4 +50,28 @@ test('lease TTL normalization retains defaults, limits, and invalid configuratio
   assert.equal(configured(undefined), 1);
   assert.equal(configured(1), 1);
   assert.throws(() => configured(2), { code: 'INVALID_ARGS' });
+});
+
+test('allocateLease refuses a caller-chosen lease id below 128 bits and keeps one at 128 bits', () => {
+  const registry = new LeaseRegistry();
+  assert.throws(
+    () =>
+      registry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseId: '0123456789abcdef0123456789abcde',
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'LEASE_ID_TOO_SHORT',
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseId: '0123456789abcdef0123456789abcdef',
+  });
+  assert.equal(lease.leaseId, '0123456789abcdef0123456789abcdef');
 });
