@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 import { afterEach, expect, test, vi } from 'vitest';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
@@ -16,6 +19,7 @@ import type {
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { AppError } from '@agent-device/kernel/errors';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import {
   createOwnerScopedDeviceClaimReconciler,
   inspectDeviceClaimRecovery,
@@ -24,8 +28,13 @@ import {
   releaseProvenStaleDeviceClaims,
   type DeviceClaimStaleReleaseOutcome,
 } from '@agent-device/daemon-contracts/device-claims';
-import { createUnavailableRuntimeFactsForTest, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createTestHostEnvironment,
+  createUnavailableRuntimeFactsForTest,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { createComposedPlatformRuntimeGateway } from '../platform-runtime-gateway.ts';
+import { runStaleDeviceClaimRelease } from '../platform-runtime-claim-recovery.ts';
 
 const ACQUISITION_DEADLINE_MS = 5_000;
 const DISPOSAL_BUDGET_MS = 5_000;
@@ -252,4 +261,138 @@ test('a loaded owner closes inside the disposal budget and the stale claim clear
   expect(emit).not.toHaveBeenCalledWith(
     expect.objectContaining({ phase: 'device_claim_recovery_dispose_pending' }),
   );
+});
+
+test('runStaleDeviceClaimRelease writes outcomes at the bound and waits for late owner shutdown and diagnostics before returning', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const f = staleClaimWithOpenAppLog();
+  const logPath = path.join(mkdtempForTestSync('claim-recovery-cli-log-'), 'cli.ndjson');
+  let enterDispose!: () => void;
+  const disposeEntered = new Promise<void>((resolve) => {
+    enterDispose = resolve;
+  });
+  let finishDispose!: () => void;
+  const disposeReleased = new Promise<void>((resolve) => {
+    finishDispose = resolve;
+  });
+  const shutdown = vi.fn(async () => {
+    enterDispose();
+    await disposeReleased;
+    throw new AppError('COMMAND_FAILED', 'late CLI owner shutdown failed', {
+      reason: 'platform-owner-shutdown-failed',
+    });
+  });
+  const events: string[] = [];
+  const writtenOutcomes: DeviceClaimStaleReleaseOutcome[][] = [];
+
+  const release = track(
+    withDiagnosticsScope(
+      { session: 'cli', requestId: 'req-cli-stale', command: 'device', debug: false, logPath },
+      async () =>
+        await runStaleDeviceClaimRelease(
+          {},
+          createTestHostEnvironment({ env: f.env }),
+          () => ({
+            reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
+            dispose: async () => {
+              try {
+                await shutdown();
+              } finally {
+                events.push('late-shutdown-finished');
+              }
+            },
+          }),
+          {
+            afterOutcomes: (outcomes) => {
+              events.push('output-written');
+              writtenOutcomes.push(outcomes);
+            },
+          },
+        ),
+    ),
+  );
+
+  await disposeEntered;
+  await vi.advanceTimersByTimeAsync(DISPOSAL_BUDGET_MS);
+  await vi.waitFor(() => expect(events).toEqual(['output-written']));
+  expect(writtenOutcomes).toEqual([
+    [
+      expect.objectContaining<Partial<DeviceClaimStaleReleaseOutcome>>({
+        deviceKey: DEVICE_KEY,
+        status: 'retained',
+        reason: 'app-log-cleanup-pending',
+      }),
+    ],
+  ]);
+  expect(release.settled).toBe(false);
+  expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
+
+  finishDispose();
+  await vi.waitFor(() => expect(release.settled).toBe(true));
+  expect(shutdown).toHaveBeenCalledOnce();
+  expect(events).toEqual(['output-written', 'late-shutdown-finished']);
+  expect(release.value).toEqual(writtenOutcomes[0]);
+  const entries = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> });
+  expect(entries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'device_claim_recovery_dispose_failed',
+        data: expect.objectContaining({
+          afterBudget: true,
+          retainedReason: 'app-log-cleanup-pending',
+        }),
+      }),
+    ]),
+  );
+});
+
+const execFileAsync = promisify(execFile);
+
+test('runStaleDeviceClaimRelease keeps a Node subprocess alive until an unref-backed late disposal finishes', async () => {
+  const f = staleClaimWithOpenAppLog();
+  const recoveryModuleUrl = pathToFileURL(
+    path.resolve(import.meta.dirname, '../platform-runtime-claim-recovery.ts'),
+  ).href;
+  const script = `
+    import { runStaleDeviceClaimRelease } from ${JSON.stringify(recoveryModuleUrl)};
+    await runStaleDeviceClaimRelease(
+      {},
+      { env: process.env, cwd: process.cwd() },
+      () => ({
+        reconcile: async () => ({ status: 'retained', reason: 'app-log-cleanup-pending' }),
+        dispose: async () => {
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 150);
+            timer.unref();
+          });
+          process.stdout.write('LATE_SHUTDOWN_FINISHED\\n');
+        },
+      }),
+      {
+        disposeBudgetMs: 25,
+        afterOutcomes: (outcomes) => {
+          process.stdout.write('OUTPUT_WRITTEN:' + outcomes[0]?.status + ':' + outcomes[0]?.reason + '\\n');
+        },
+      },
+    );
+  `;
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--experimental-strip-types', '--input-type=module', '-e', script],
+    {
+      cwd: path.resolve(import.meta.dirname, '../..'),
+      env: { ...process.env, ...f.env },
+      timeout: 10_000,
+    },
+  );
+  const lines = stdout.trim().split('\n');
+  expect(lines).toEqual([
+    'OUTPUT_WRITTEN:retained:app-log-cleanup-pending',
+    'LATE_SHUTDOWN_FINISHED',
+  ]);
+  expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
 });

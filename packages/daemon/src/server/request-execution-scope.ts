@@ -231,6 +231,7 @@ export async function createRequestExecutionScope(params: {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformServices: DaemonPlatformServices;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  trackClaimRecoveryDisposal?: (disposal: Promise<void>) => void;
   platformRequestScope: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
@@ -351,6 +352,7 @@ export async function createRequestExecutionScope(params: {
           ? (device) => pinPolicy.assertDeviceHonorsPin(devicePin, device, scopedReq.flags)
           : undefined,
       claimRecoveryGateway: params.claimRecoveryGateway,
+      trackClaimRecoveryDisposal: params.trackClaimRecoveryDisposal,
       sessionStore,
     });
 
@@ -576,6 +578,7 @@ function createRequestDeviceAccess(params: {
   daemonPolicy: DaemonPolicy | undefined;
   admitDevicePin: ((device: DeviceInfo) => void) | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  trackClaimRecoveryDisposal?: (disposal: Promise<void>) => void;
   sessionStore: SessionStore;
 }): {
   claimAdmission: DeviceClaimAdmission;
@@ -600,6 +603,7 @@ function createRequestDeviceAccess(params: {
         return createBoundedClaimRecoveryBeforeGateway(params.req)(claim);
       },
       composeGateway: params.claimRecoveryGateway,
+      trackDisposal: params.trackClaimRecoveryDisposal,
     }),
   });
   return {

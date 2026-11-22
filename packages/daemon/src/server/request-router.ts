@@ -142,6 +142,8 @@ export type RequestRouterDeps = {
    * passes it to every reconciler it builds; only root composition can construct a router.
    */
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  /** Process-lifetime owner for post-budget claim-recovery disposals started during requests. */
+  trackClaimRecoveryDisposal?: (disposal: Promise<void>) => void;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
@@ -174,6 +176,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     deviceRuntimeGateway,
     platformServices,
     claimRecoveryGateway,
+    trackClaimRecoveryDisposal,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
     audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
     perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger(),
@@ -298,6 +301,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               deviceRuntimeGateway,
               platformServices,
               claimRecoveryGateway,
+              trackClaimRecoveryDisposal,
               platformRequestScope,
               platformResourceCleanup,
               providerAppCatalog,
@@ -429,6 +433,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           return createBoundedClaimRecoveryBeforeGateway(lockedScope.req)(claim);
         },
         composeGateway: claimRecoveryGateway,
+        trackDisposal: trackClaimRecoveryDisposal,
       }),
       appLogAdmissionLedger,
       audioProbeAdmissionLedger,
@@ -475,6 +480,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           deviceRuntimeGateway,
           platformServices,
           claimRecoveryGateway,
+          trackClaimRecoveryDisposal,
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
           providerAppCatalog,

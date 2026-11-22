@@ -1,5 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
+  createClaimRecoveryDisposalTracker,
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
   inspectDeviceClaimRecovery,
@@ -43,20 +44,40 @@ export async function runStaleDeviceClaimRelease(
   selectors: DeviceClaimSelectors,
   host: HostEnvironment,
   composeRecovery?: OwnerScopedClaimRecoveryComposer,
+  options?: {
+    afterOutcomes?: (outcomes: DeviceClaimStaleReleaseOutcome[]) => Promise<void> | void;
+    disposeBudgetMs?: number;
+  },
 ): Promise<DeviceClaimStaleReleaseOutcome[]> {
   // Settling a transaction can reach runner code; this CLI process runs one host, and the
   // runner reads its configuration from it, entered as the runtime state the daemon route binds.
   const { setAppleRunnerHostEnvironment } =
     await import('@agent-device/platform-apple/runner-owner');
   setAppleRunnerHostEnvironment(host);
-  return await releaseProvenStaleDeviceClaims({
-    selectors,
-    env: host.env,
-    reconcile: createOwnerScopedDeviceClaimReconciler({
-      scope: createRecoveryPlatformScope(),
-      composeGateway: createClaimRecoveryGatewayFor(host),
-      composeRecovery,
-      beforeGateway: inspectDeviceClaimRecovery,
-    }),
-  });
+  const disposals = createClaimRecoveryDisposalTracker();
+  try {
+    const outcomes = await releaseProvenStaleDeviceClaims({
+      selectors,
+      env: host.env,
+      reconcile: createOwnerScopedDeviceClaimReconciler({
+        scope: createRecoveryPlatformScope(),
+        composeGateway: createClaimRecoveryGatewayFor(host),
+        composeRecovery,
+        beforeGateway: inspectDeviceClaimRecovery,
+        trackDisposal: disposals.track,
+        disposeBudgetMs: options?.disposeBudgetMs,
+      }),
+    });
+    await options?.afterOutcomes?.(outcomes);
+    return outcomes;
+  } finally {
+    // An unresolved Promise alone does not keep Node's event loop alive when a pending disposal
+    // awaits an unref'd handle or timer; keep the CLI process alive until tracked disposals drain.
+    const keepAlive = setInterval(() => {}, 60_000);
+    try {
+      await disposals.drain();
+    } finally {
+      clearInterval(keepAlive);
+    }
+  }
 }

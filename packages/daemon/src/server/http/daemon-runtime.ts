@@ -2,6 +2,7 @@ import type { ComposeDaemonRuntimeDeps } from './daemon-runtime-deps.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
+  createClaimRecoveryDisposalTracker,
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
@@ -319,6 +320,7 @@ async function startDaemonRuntimeOnHost(
   }, LEASE_EXPIRY_SWEEP_INTERVAL_MS);
   leaseExpirySweep.unref();
   rollback.onRollback(() => clearInterval(leaseExpirySweep));
+  const claimRecoveryDisposals = createClaimRecoveryDisposalTracker();
   const dispatchRequest = createRequestHandler({
     host,
     logPath,
@@ -337,6 +339,7 @@ async function startDaemonRuntimeOnHost(
     // The facts the deps declare at the top level, offered to the router from that one place.
     deviceRuntimeGateway,
     claimRecoveryGateway: deps.claimRecoveryGateway,
+    trackClaimRecoveryDisposal: claimRecoveryDisposals.track,
     platformResourceCleanup: deps.platformResourceCleanup,
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
@@ -685,6 +688,7 @@ async function startDaemonRuntimeOnHost(
     createOwnerScopedDeviceClaimReconciler({
       scope: createRecoveryPlatformScope(),
       composeGateway: deps.claimRecoveryGateway,
+      trackDisposal: claimRecoveryDisposals.track,
     }),
     baseDir,
     env,
@@ -797,18 +801,29 @@ async function startDaemonRuntimeOnHost(
       },
     );
     expiredProviderLeaseReleaser.shutdown();
-    try {
-      const ownerClose = await settleWithin(
-        () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
-        options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
-      );
-      platformOwners = ownerClose.kind === 'deadline' ? 'pending' : 'closed';
-    } catch (error) {
-      platformOwners = 'failed';
-      await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
-        error: normalizeError(error),
-      });
-    }
+    let gatewayShutdownFailed = false;
+    const ownerClose = await settleWithin(
+      () =>
+        withDaemonDiagnosticsScope({ logPath }, async () => {
+          await Promise.all([
+            Promise.resolve()
+              .then(async () => await deviceRuntimeGateway.shutdown())
+              .catch(async (error: unknown) => {
+                gatewayShutdownFailed = true;
+                await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
+                  error: normalizeError(error),
+                });
+              }),
+            claimRecoveryDisposals.drain(),
+          ]);
+          // Re-drain after root gateway shutdown: an abandoned request can compose a recovery
+          // gateway while root shutdown is in progress, after an initially empty drain returned.
+          await claimRecoveryDisposals.drain();
+        }),
+      options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
+    );
+    platformOwners =
+      ownerClose.kind === 'deadline' ? 'pending' : gatewayShutdownFailed ? 'failed' : 'closed';
     const plugins = await pluginClose.close();
     for (const failure of plugins.failed) {
       await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', {

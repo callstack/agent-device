@@ -12,6 +12,7 @@ export {
   type ClaimRecoveryInspection,
 } from './device-claim-reconciliation.ts';
 export {
+  createClaimRecoveryDisposalTracker,
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecoveryComposer,
 } from './device-claim-owner-recovery.ts';
