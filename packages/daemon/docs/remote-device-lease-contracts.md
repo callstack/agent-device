@@ -78,7 +78,8 @@ The daemon never fills a missing lease id from the session.
 The daemon checks the lease id before the request reads, changes, or ends the session.
 A request writes request events to the session journal only after that check. Thus, a request that is refused for the session lease id writes none, and it does not stamp session activity.
 If a command writes request events and the request has access to an existing session, the daemon records its start before it runs the command.
-For a lock-exempt `doctor`, `capabilities`, or `artifacts` command, the daemon records the start after the handler checks the session lease.
+When a lock-exempt `doctor`, `capabilities`, or `artifacts` command runs its handler, the daemon records the start after the handler checks the session lease.
+If a check refuses the request before the handler reads the session, the daemon can record both events at finish after it checks access to the journal.
 A request that sends the lease id of the session and is refused later, for example a `batch` after the lease deadline, can write its events.
 The daemon checks the lease again when a lock-exempt command or `apps` reads the session.
 If the lock-exempt command has access to the session and can take the session lock immediately, it can refresh the recording.

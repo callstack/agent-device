@@ -38,7 +38,7 @@ import {
   scopeRequestSession,
   withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
-import { isBoundedCompositeRequest } from '../core/lease-context.ts';
+import { isBoundedCompositeRequest, LEASE_ADMISSION_REASONS } from '../core/lease-context.ts';
 import {
   admitRequestLeaseForLockedScope,
   cleanupExpiredLeasedSession,
@@ -320,7 +320,7 @@ export async function createRequestExecutionScope(params: {
   });
   // These handlers recheck the current session after the scope's provisional reads.
   const startsAtHandlerRead = !attachesToSession && HANDLER_JOURNAL_START_COMMANDS.has(command);
-  let recordStartAtFinish = !startsAtHandlerRead;
+  let recordStartAtFinish = true;
   let recordsRequestEvents = false;
   const recordStarted = (ts?: string): void => {
     if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
@@ -330,7 +330,10 @@ export async function createRequestExecutionScope(params: {
     sessionStore.recordEvent(sessionName, ts ? { ...started, ts } : started);
   };
   const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
-    if (recordStartAtFinish) recordStarted(new Date(startedAtMs).toISOString());
+    const reason = response.ok ? undefined : response.error.details?.reason;
+    if (recordStartAtFinish && reason !== LEASE_ADMISSION_REASONS.sessionMismatch.reason) {
+      recordStarted(new Date(startedAtMs).toISOString());
+    }
     if (!recordsRequestEvents) return;
     if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
     sessionStore.recordEvent(

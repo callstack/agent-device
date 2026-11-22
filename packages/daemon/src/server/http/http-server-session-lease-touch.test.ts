@@ -12,6 +12,10 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import {
+  parseDaemonPolicy,
+  type DaemonPolicy,
+} from '@agent-device/daemon-contracts/daemon-policy-file';
 import { createDaemonHttpServer } from './http-server.ts';
 import {
   createLifecycleDeviceRuntimeGatewaySpies,
@@ -68,7 +72,7 @@ afterEach(async () => {
   world = undefined;
 });
 
-async function startDaemon() {
+async function startDaemon(daemonPolicy?: DaemonPolicy) {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-session-lease-touch-');
   const expiryTeardown = vi.fn(async (_ref: SessionRef) => {});
@@ -135,6 +139,7 @@ async function startDaemon() {
     deviceRuntimeGateway: runtime.gateway,
     trackDownloadableArtifact: () => 'artifact-id',
     hostDiagnostics,
+    daemonPolicy,
     platformResourceCleanup: requestTeardown,
     platformServices: daemonPlatformServicesFixture({
       appleSessionObservation: {
@@ -543,6 +548,55 @@ test('devices with no lease id stays detached from a leased session and its reco
   expect(snapshot.error?.message, JSON.stringify(snapshot)).toBe(
     'iOS runner session restarted during recording',
   );
+});
+
+test('events shows the start and failed finish of a policy-refused capabilities request', async () => {
+  if (!world) return;
+  await world.close();
+  world = await startDaemon(
+    parseDaemonPolicy({ version: 1, commands: { deny: ['capabilities'] } }, '/policy.json'),
+  );
+  world.sessionStore.publish(world.sessionName, makeIosAppSession(world.sessionName));
+
+  const refused = await world.send('capabilities', [], {});
+  expect(refused.error?.data?.details?.reason).toBe('DAEMON_POLICY_DENIED');
+
+  const events = await world.send('events', [], {});
+  expect(events.result?.ok).toBe(true);
+  expect(events.result?.data?.events).toMatchObject([
+    { command: 'capabilities', kind: 'request.started' },
+    {
+      command: 'capabilities',
+      kind: 'request.finished',
+      status: 'error',
+      details: { code: 'UNAUTHORIZED' },
+    },
+  ]);
+});
+
+test('events shows the start and failed finish when an invalidated recording blocks capabilities', async () => {
+  if (!world) return;
+  const { session } = world.publishLeasedSession(world.sessionName);
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    runnerSessionId: 'runner-0',
+  });
+
+  const refused = await world.send('capabilities', [], world.owner);
+  expect(world.observeRunnerSession).toHaveBeenCalledTimes(1);
+  expect(refused.error?.data?.code).toBe('COMMAND_FAILED');
+
+  const events = await world.send('events', [], world.owner);
+  expect(events.result?.ok).toBe(true);
+  expect(events.result?.data?.events).toMatchObject([
+    { command: 'capabilities', kind: 'request.started' },
+    {
+      command: 'capabilities',
+      kind: 'request.finished',
+      status: 'error',
+      details: { code: 'COMMAND_FAILED' },
+    },
+  ]);
 });
 
 function deferred() {

@@ -97,7 +97,7 @@ export const LEASE_FIELD_NORMALIZERS = {
 } as const satisfies Record<LeaseClaimField, (raw: unknown) => string | undefined>;
 
 /** The `error.details.reason` values a session-lease refusal publishes. */
-const LEASE_ADMISSION_REASONS = {
+export const LEASE_ADMISSION_REASONS = {
   // The lease scope of the request differs from the lease of its session; `details.field` names the
   // field.
   sessionMismatch: { reason: 'LEASE_SESSION_MISMATCH' },
