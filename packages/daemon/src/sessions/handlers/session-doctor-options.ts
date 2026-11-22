@@ -4,7 +4,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
-import { mayNameSession } from '../reply-session-visibility.ts';
+import { mayNameSession } from '../session-routing.ts';
 import type { DoctorOptions } from './session-doctor-types.ts';
 import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
 

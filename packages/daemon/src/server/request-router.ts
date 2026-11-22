@@ -81,8 +81,10 @@ import {
 } from '@agent-device/selectors/parameterized-recorded-fill';
 import { isConfinedToAppLease, scopeRequestSession } from '../sessions/request-admission.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
-import { dropInvisibleClaimOwner } from '../sessions/reply-session-visibility.ts';
-import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import {
+  dropInvisibleClaimOwner,
+  resolveEffectiveSessionName,
+} from '../sessions/session-routing.ts';
 import { sessionIdleExpiredError } from './session-idle-expiry.ts';
 import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
 import {

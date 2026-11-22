@@ -60,7 +60,7 @@ import {
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
 import { findSessionDeviceConflict } from '../../open-device-contention-wait.ts';
-import { resolvePublicSessionName } from '../../session-routing.ts';
+import { claimOwnerVisible, resolvePublicSessionName } from '../../session-routing.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
   abandonDeviceClaim,
@@ -75,7 +75,6 @@ import {
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
-import { claimOwnerVisible } from '../../reply-session-visibility.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =

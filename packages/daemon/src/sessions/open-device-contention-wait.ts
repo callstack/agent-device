@@ -9,8 +9,7 @@ import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { SessionState } from '../core/session-state.ts';
 import type { HeldSessionNaming, SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
-import { isImplicitSessionScopeConflict } from './session-routing.ts';
-import { mayNameSession } from './reply-session-visibility.ts';
+import { isImplicitSessionScopeConflict, mayNameSession } from './session-routing.ts';
 import {
   buildDeviceInUseBySessionError,
   buildForeignWorkspaceSessionConflict,

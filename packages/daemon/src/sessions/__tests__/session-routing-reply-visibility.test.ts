@@ -5,11 +5,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import {
-  claimOwnerVisible,
-  dropInvisibleClaimOwner,
-  mayNameSession,
-} from '../reply-session-visibility.ts';
+import { claimOwnerVisible, dropInvisibleClaimOwner, mayNameSession } from '../session-routing.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 
 // A reply names the session a host-global device claim records as its owner unless that owner is

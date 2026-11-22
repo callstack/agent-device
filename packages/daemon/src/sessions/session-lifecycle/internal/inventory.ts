@@ -50,8 +50,7 @@ import {
   resolveCommandDevice,
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
-import { createSessionVisibilityPredicate } from '../../session-routing.ts';
-import { claimOwnerVisible } from '../../reply-session-visibility.ts';
+import { claimOwnerVisible, createSessionVisibilityPredicate } from '../../session-routing.ts';
 import type {
   BoundDeviceRuntime,
   RuntimeFacts,
