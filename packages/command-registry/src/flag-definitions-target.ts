@@ -217,7 +217,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'enum',
     enumValues: ['auto', 'react-native', 'expo', 'repack'],
     usageLabel: '--metro-kind auto|react-native|expo|repack',
-    usageDescription: 'metro prepare: detect or force the React Native dev-server launcher kind',
+    usageDescription:
+      'connect: detect or force the React Native dev-server launcher kind for deferred Metro preparation. `metro prepare` reads --kind instead',
     projectConfig: false,
     recorded: false,
   },

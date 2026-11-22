@@ -102,13 +102,13 @@ describe('capture command interface', () => {
   });
 
   test('reads diff snapshot input only', () => {
-    expect(
-      diffCliReader(['snapshot'], flags({ snapshotDepth: 4, out: './diff.json' })),
-    ).toMatchObject({
+    const input = diffCliReader(['snapshot'], flags({ snapshotDepth: 4, out: './diff.json' }));
+    expect(input).toMatchObject({
       kind: 'snapshot',
       depth: 4,
-      out: './diff.json',
     });
+    // `diff snapshot` never writes a file, so the reader carries no out for it.
+    expect(input).not.toHaveProperty('out');
     expectInvalidArgs(() => diffCliReader(['screenshot'], flags()), 'Only diff snapshot');
   });
 

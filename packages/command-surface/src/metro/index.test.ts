@@ -87,6 +87,23 @@ describe('metro command interface', () => {
     });
   });
 
+  test('prepare reads --kind and not the retired --metro-kind alias', () => {
+    expect(
+      metroCliReader(
+        ['prepare'],
+        flags({ metroPublicBaseUrl: 'https://public.example.test', kind: 'expo' }),
+      ),
+    ).toMatchObject({ kind: 'expo' });
+    // The parser refuses --metro-kind for metro, so a value that reaches the reader from
+    // connect's saved profile must not leak into a prepare request either.
+    expect(
+      metroCliReader(
+        ['prepare'],
+        flags({ metroPublicBaseUrl: 'https://public.example.test', metroKind: 'expo' }),
+      ).kind,
+    ).toBeUndefined();
+  });
+
   test('rejects invalid metro input', () => {
     expectInvalidArgs(() => metroCliReader(['start'], flags()), 'metro requires a subcommand');
     expectInvalidArgs(
