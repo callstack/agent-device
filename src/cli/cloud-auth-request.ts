@@ -62,7 +62,7 @@ function readRedirectTarget(
   redirects: number,
 ): URL {
   const location = response.headers.get('location');
-  const target = location ? URL.parse(location, current) : null;
+  const target = location === null ? null : URL.parse(location, current);
   const refusal = describeRefusedRedirect(target, requestUrl, redirects);
   if (target && !refusal) return target;
   throw new AppError('COMMAND_FAILED', `Cloud auth endpoint answered with ${refusal}.`, {

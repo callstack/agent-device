@@ -27,7 +27,7 @@ afterEach(async () => {
 
 async function listen() {
   const received: Received[] = [];
-  const routes = new Map<string, Route>();
+  const routes = new Map<string, Route | Route[]>();
   const server = http.createServer((req, res) => {
     let body = '';
     req.setEncoding('utf8');
@@ -39,7 +39,9 @@ async function listen() {
         body,
         contentType: req.headers['content-type'],
       });
-      const route = routes.get(req.url ?? '');
+      const entry = routes.get(req.url ?? '');
+      // A queue serves its responses in order and keeps repeating the last one.
+      const route = Array.isArray(entry) && entry.length > 1 ? entry.shift() : [entry].flat()[0];
       if (route === undefined) return void res.writeHead(404).end();
       res.writeHead(route.status, route.headers).end(route.body);
     });
@@ -52,7 +54,7 @@ async function listen() {
 
 const redirect = (status: number, location?: string): Route => ({
   status,
-  headers: location ? { location } : {},
+  headers: location === undefined ? {} : { location },
   body: '',
 });
 const answer: Route = {
@@ -86,6 +88,23 @@ test.each([
   expect(await post(cloud.origin)).toEqual({ accessToken: 'adc_agent' });
   expect(cloud.received).toEqual([posted('/start'), followed]);
 });
+
+test.each([
+  [301, fetchedAsGet('/start')],
+  [302, fetchedAsGet('/start')],
+  [303, fetchedAsGet('/start')],
+  [307, posted('/start')],
+  [308, posted('/start')],
+])(
+  'an empty Location on a %i redirects to the same URL, as fetch does',
+  async (status, followed) => {
+    const cloud = await listen();
+    cloud.routes.set('/start', [redirect(status, ''), answer]);
+
+    expect(await post(cloud.origin)).toEqual({ accessToken: 'adc_agent' });
+    expect(cloud.received).toEqual([posted('/start'), followed]);
+  },
+);
 
 test('a chain keeps the POST through a 307 and stays a GET after a 303', async () => {
   const cloud = await listen();
