@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import path from 'node:path';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -283,7 +284,11 @@ async function startAndroidRecording(params: {
         fence: input.fence,
         manifestPath,
       });
-      if (!evidence) return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+      if (!evidence)
+        return {
+          status: 'cleanup-pending',
+          reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+        };
       return await cleanupVerifiedAndroidEvidence(transport, evidence, manifestPath);
     },
   });

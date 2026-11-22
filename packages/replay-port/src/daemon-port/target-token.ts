@@ -8,7 +8,7 @@ export function extractReplayTargetToken(
   action: SessionAction,
   targetRole?: 'source' | 'destination',
 ): string | undefined {
-  const positionals = action.positionals ?? [];
+  const positionals = action.positionals;
   if (action.command === 'gesture') {
     const drag = dragGesturePayloadFromPositionals(positionals);
     return drag ? drag[targetRole ?? 'source'] : undefined;

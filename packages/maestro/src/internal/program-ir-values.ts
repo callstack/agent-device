@@ -70,7 +70,7 @@ export function readMapEntries(
     entries.push({
       key: String(keyValue),
       keyNode,
-      value: pair.value as Node | null,
+      value: pair.value,
     });
   }
   return entries;

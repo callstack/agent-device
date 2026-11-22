@@ -41,18 +41,18 @@ export function appendOpenActionScriptArgs(
   parts: string[],
   action: Pick<SessionAction, 'positionals' | 'flags' | 'runtime'>,
 ): void {
-  for (const positional of action.positionals ?? []) {
+  for (const positional of action.positionals) {
     parts.push(formatScriptArg(positional));
   }
-  if (action.flags?.relaunch) {
+  if (action.flags.relaunch) {
     parts.push('--relaunch');
   }
-  if (action.flags?.surface !== undefined) {
+  if (action.flags.surface !== undefined) {
     parts.push('--surface', action.flags.surface);
   }
-  if (action.flags?.testIme === true) {
+  if (action.flags.testIme === true) {
     parts.push('--test-ime');
-  } else if (action.flags?.testIme === false) {
+  } else if (action.flags.testIme === false) {
     parts.push('--no-test-ime');
   }
   appendRuntimeHintFlags(parts, action.runtime);

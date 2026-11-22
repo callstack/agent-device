@@ -58,7 +58,7 @@ function runAppleAlert(
       (await runMacOsAlertAction(action, { ...target, env })) as Record<string, unknown>;
   }
   return async (action, timeoutMs) =>
-    (await runAppleRunnerCommand(
+    await runAppleRunnerCommand(
       device,
       {
         command: 'alert',
@@ -67,7 +67,7 @@ function runAppleAlert(
         timeoutMs: alertRunnerBudgetMs(timeoutMs),
       },
       runnerOptions,
-    )) as Record<string, unknown>;
+    );
 }
 
 /** The alert `read` settles with, or `undefined` when the backend reports a typed absence. */

@@ -174,3 +174,157 @@ test('disconnect treats an already-inactive lease as released without a failure 
   assert.equal(text.trim(), 'Disconnected remote session "adc-release-inactive".');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+test('disconnect refuses a record it cannot remove before it closes the session or releases the lease', async () => {
+  const { tempRoot, stateDir } = seedReleasableConnection(
+    'agent-device-disconnect-occupied-session-path-',
+    'Demo',
+  );
+  const recordsDir = path.join(stateDir, 'remote-connections');
+  const [hashedName] = fs.readdirSync(recordsDir).filter((name) => name.startsWith('~'));
+  assert.ok(hashedName, 'the new build saves Demo at its hashed path');
+  const hashedPath = path.join(recordsDir, hashedName);
+  // An older build connected Demo under a run of its own and saved it at the name it wrote.
+  const legacyPath = path.join(recordsDir, 'Demo.json');
+  const legacy = JSON.parse(fs.readFileSync(hashedPath, 'utf8'));
+  fs.writeFileSync(
+    legacyPath,
+    JSON.stringify({ ...legacy, runId: 'run-legacy', leaseId: 'lease-legacy' }),
+  );
+  let closed = 0;
+  let released = 0;
+
+  await assert.rejects(
+    disconnectCommand({
+      positionals: [],
+      flags: { json: true, help: false, version: false, stateDir, session: 'Demo' },
+      client: createTestClient({
+        closeSession: async () => {
+          closed += 1;
+          return { session: 'Demo', identifiers: { session: 'Demo' } };
+        },
+        release: async () => {
+          released += 1;
+          return { released: true };
+        },
+      }),
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'connection_session_mismatch',
+  );
+
+  assert.equal(closed, 0);
+  assert.equal(released, 0);
+  assert.equal(JSON.parse(fs.readFileSync(hashedPath, 'utf8')).leaseId, 'lease-1');
+  assert.equal(JSON.parse(fs.readFileSync(legacyPath, 'utf8')).leaseId, 'lease-legacy');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('an unnamed disconnect removes an invalid default record and disconnects the active session', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-disconnect-invalid-default-',
+  );
+  fs.writeFileSync(remoteConfigPath, '{}');
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'demo',
+      remoteConfigPath,
+      tenant: 'acme',
+      runId: 'run-demo',
+      runtime: { platform: 'android', metroPort: 8081 },
+    },
+  });
+  const recordsDir = path.join(stateDir, 'remote-connections');
+  const defaultPath = path.join(recordsDir, 'default.json');
+  const demoPath = path.join(recordsDir, 'demo.json');
+  const activePath = path.join(recordsDir, '.active-session.json');
+  const valid = JSON.parse(fs.readFileSync(demoPath, 'utf8'));
+  fs.writeFileSync(defaultPath, JSON.stringify({ ...valid, session: 'default', updatedAt: null }));
+  const closed: string[] = [];
+
+  const text = await withCapturedStdoutAsync(async () => {
+    await disconnectCommand({
+      positionals: [],
+      flags: { json: false, help: false, version: false, stateDir },
+      client: createTestClient({
+        closeSession: async (request) => {
+          closed.push(request?.session ?? '');
+          return { session: 'demo', identifiers: { session: 'demo' } };
+        },
+      }),
+    });
+  });
+
+  assert.equal(text.trim(), 'Disconnected remote session "demo".');
+  assert.deepEqual(closed, ['demo']);
+  assert.equal(fs.existsSync(defaultPath), false);
+  assert.equal(fs.existsSync(demoPath), false);
+  assert.equal(fs.existsSync(activePath), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test.each([
+  {
+    name: 'its own file',
+    session: 'demo',
+    fileName: 'demo.json',
+    record: { session: 'demo', version: 1, runId: 'run-demo', updatedAt: null },
+  },
+  // An older build saved Demo at the name it wrote, and the record holds only its session.
+  {
+    name: 'its older pointer-shaped file',
+    session: 'Demo',
+    fileName: 'Demo.json',
+    record: { session: 'Demo' },
+  },
+])(
+  'disconnect removes a record at $name that names its session but fails validation',
+  async ({ session, fileName, record }) => {
+    const { tempRoot, stateDir } = connectionWorkspace('agent-device-disconnect-invalid-record-');
+    const recordsDir = path.join(stateDir, 'remote-connections');
+    fs.mkdirSync(recordsDir, { recursive: true });
+    fs.writeFileSync(path.join(recordsDir, fileName), JSON.stringify(record));
+    fs.writeFileSync(path.join(recordsDir, '.active-session.json'), JSON.stringify({ session }));
+
+    const text = await withCapturedStdoutAsync(async () => {
+      await disconnectCommand({
+        positionals: [],
+        flags: { json: false, help: false, version: false, stateDir, session },
+        client: createTestClient(),
+      });
+    });
+
+    assert.equal(text.trim(), `No remote connection for "${session}".`);
+    assert.deepEqual(fs.readdirSync(recordsDir), []);
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  },
+);
+
+// `--session=` names the empty session. Read as an omitted session, it followed the active-session
+// pointer and removed the connection the pointer named for another session.
+test('disconnect --session= with no empty-session record keeps the record the pointer names', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connection-empty-session-',
+  );
+  fs.writeFileSync(remoteConfigPath, '{}');
+  seedConnectionState({
+    stateDir,
+    state: { session: 'Demo', remoteConfigPath, tenant: 'acme', runId: 'run-Demo' },
+  });
+
+  const stdout = await withCapturedStdoutAsync(async () => {
+    // Every call this client answers throws: the command may not reach the daemon.
+    await disconnectCommand({
+      positionals: [],
+      flags: { json: true, help: false, version: false, stateDir, session: '' },
+      client: createTestClient(),
+    });
+  });
+
+  const payload = JSON.parse(stdout).data;
+  assert.equal(payload.connected, false);
+  assert.equal(payload.session, '');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'Demo' })?.runId, 'run-Demo');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});

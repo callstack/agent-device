@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { cleanupChunks, stopOwnedChunks } from './chunks.ts';
@@ -119,7 +120,7 @@ function unprovenWriters(remotePath: string): Error {
 function transportFailure(error: unknown): CleanupOutcome {
   return {
     status: 'cleanup-pending',
-    reason: 'transport-failed',
+    reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
     message: error instanceof Error ? error.message : String(error),
   };
 }

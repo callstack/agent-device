@@ -165,7 +165,7 @@ export async function setIosSetting(
     }
     case 'faceid':
     case 'touchid': {
-      const biometricSetting = normalized as IosBiometricSetting;
+      const biometricSetting = normalized;
       const biometric = IOS_BIOMETRIC_SETTINGS[biometricSetting];
       const action = parseBiometricAction(state, biometricSetting);
       await runIosBiometricSimctlCommand(device, action, {

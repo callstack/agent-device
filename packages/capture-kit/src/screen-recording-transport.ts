@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
@@ -72,13 +73,17 @@ export function transportRecordingDescriptorCodec(backend: string) {
 export function transportRecordingUnreattachable(message: string) {
   return {
     status: 'unreattachable' as const,
-    reason: 'transport-not-reattachable' as const,
+    reason: DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
     message,
   };
 }
 
 export function transportRecordingCleanupPending(message: string): CleanupOutcome {
-  return { status: 'cleanup-pending', reason: 'manual-recovery-required', message };
+  return {
+    status: 'cleanup-pending',
+    reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
+    message,
+  };
 }
 
 /**
@@ -139,7 +144,7 @@ export async function startTransportScreenRecording<Collectible>(params: {
         } catch (error) {
           return {
             status: 'cleanup-pending',
-            reason: 'transport-failed',
+            reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
             message:
               error instanceof Error
                 ? error.message

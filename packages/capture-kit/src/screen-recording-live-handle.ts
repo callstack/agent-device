@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import {
   type CleanupOutcome,
   type DurableCaptureProgress,
@@ -101,9 +101,9 @@ function assertConfirmedCleanup(outcome: CleanupOutcome, cause?: unknown): void 
     outcome.message ?? 'Screen recording cleanup could not be confirmed',
     {
       reason: outcome.reason,
-      retriable: outcome.reason !== 'ownership-fence-lost',
+      retriable: outcome.reason !== DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
       hint:
-        outcome.reason === 'ownership-fence-lost'
+        outcome.reason === DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason
           ? 'Use the current recording owner or recovery record before retrying cleanup.'
           : 'Keep the recovery record and retry cleanup through the exact runtime owner.',
     },

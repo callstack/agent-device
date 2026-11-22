@@ -235,15 +235,15 @@ export function validateAndNormalizeBatchSteps(
     if (step.flags !== undefined && !isRecord(step.flags)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} flags must be an object.`);
     }
-    assertNoTextStdinStep(step.flags as Record<string, unknown> | undefined, index + 1);
+    assertNoTextStdinStep(step.flags, index + 1);
     if (step.input !== undefined && !isRecord(step.input)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} input must be an object.`);
     }
     normalized.push({
       command,
       positionals: positionals as string[],
-      input: step.input as Record<string, unknown> | undefined,
-      flags: (step.flags ?? {}) as Record<string, unknown>,
+      input: step.input,
+      flags: step.flags ?? {},
       runtime: parseBatchStepRuntime(step.runtime, index + 1),
     });
   }
@@ -373,7 +373,7 @@ async function runBatchStep(
 function readBatchFlags(
   flags: BatchFlags | Record<string, unknown> | undefined,
 ): BatchFlags | undefined {
-  return flags as BatchFlags | undefined;
+  return flags;
 }
 
 function batchErrorResponse(

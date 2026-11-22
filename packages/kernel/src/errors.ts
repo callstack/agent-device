@@ -461,6 +461,41 @@ export const KEYBOARD_DISMISS_REASONS = {
   unavailable: { reason: 'keyboard_dismiss_unavailable' },
 } as const satisfies ReasonTable<'keyboard'>;
 
+/**
+ * Why a durable capture (a screen recording, app log, audio probe or perf capture) could not be
+ * cleaned up or reattached. Runtimes return these as the `reason` of a `cleanup-pending` or
+ * `unreattachable` outcome (`contracts/durable-resource`), and the capture mechanics publish that
+ * outcome's reason unchanged. Declared here because the runtime gateway and the capture admission
+ * ledgers also raise them, and kernel errors is the one module all of them already load.
+ */
+export const DURABLE_RESOURCE_REASONS = {
+  // The capture's durable record now belongs to another owner, or its descriptor or evidence no
+  // longer matches the owning session or device, so nothing was signaled or removed. It is not
+  // retried.
+  ownershipFenceLost: { reason: 'ownership-fence-lost' },
+  // The runtime owner the request needs is not available: the platform runtime gateway has no
+  // runtime for the selected owner, or the transport that owns a capture could not be reached to
+  // clean it up.
+  ownerUnavailable: { reason: 'owner-unavailable' },
+  // The device transport failed while a capture was being stopped, collected or cleaned up.
+  transportFailed: { reason: 'transport-failed' },
+  // A capture's cleanup failed or could not be confirmed, so its record is kept for a later retry,
+  // and a new capture on that device is refused until the earlier one is confirmed gone.
+  cleanupUnconfirmed: { reason: 'cleanup-unconfirmed' },
+  // The capture's descriptor or recorded state cannot be read well enough to clean it up
+  // automatically; its record is kept for manual recovery.
+  manualRecoveryRequired: { reason: 'manual-recovery-required' },
+  // The capture's stored descriptor is malformed, or names a device, backend or session paths
+  // other than its owner's, so the capture cannot be reattached.
+  descriptorInvalid: { reason: 'descriptor-invalid' },
+  // The capture's stored descriptor was written in a different descriptor version than this build
+  // reads, so it cannot be reattached; its record is kept.
+  descriptorVersionUnsupported: { reason: 'descriptor-version-unsupported' },
+  // The capture's process or transport cannot be reattached after the daemon restarted, so only
+  // its cleanup can run.
+  transportNotReattachable: { reason: 'transport-not-reattachable' },
+} as const satisfies ReasonTable<'durable captures'>;
+
 const REQUEST_CANCELED_HINT =
   'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
 

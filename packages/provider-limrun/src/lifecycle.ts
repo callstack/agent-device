@@ -45,11 +45,11 @@ export function bindLimrunApplicationLifecycle(
   return Object.freeze({
     ...lifecycle,
     resolveOpenTarget: async (input) =>
-      await lifecycle.resolveOpenTarget!(resolveOpenTargetInput(input, resolve)),
+      await lifecycle.resolveOpenTarget(resolveOpenTargetInput(input, resolve)),
     openApplication: async (input) =>
-      await lifecycle.openApplication!(resolveOpenApplicationInput(input, resolve)),
+      await lifecycle.openApplication(resolveOpenApplicationInput(input, resolve)),
     closeApplication: async (input) =>
-      await lifecycle.closeApplication!(resolveCloseApplicationInput(input, resolve)),
+      await lifecycle.closeApplication(resolveCloseApplicationInput(input, resolve)),
   });
 }
 

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogBackgroundProcess,
   AppLogLiveSnapshot,
@@ -300,7 +300,7 @@ function createAppleProcessHandle(
         state = 'failed';
         return {
           status: 'cleanup-pending',
-          reason: 'transport-failed',
+          reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
           message: 'Apple app-log cleanup did not settle every owned resource',
         } as const;
       }

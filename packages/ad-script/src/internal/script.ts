@@ -123,14 +123,14 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
     }
     const gestureArityError = describeReplayGestureArityError(
       parsed.command,
-      parsed.positionals ?? [],
+      parsed.positionals,
       `line ${index + 1}`,
     );
     if (gestureArityError) throw new AppError('INVALID_ARGS', gestureArityError);
     const gestureFlagError = describeReplayGestureFlagError(
       parsed.command,
-      parsed.positionals ?? [],
-      parsed.flags ?? {},
+      parsed.positionals,
+      parsed.flags,
       `line ${index + 1}`,
     );
     if (gestureFlagError) throw new AppError('INVALID_ARGS', gestureFlagError);

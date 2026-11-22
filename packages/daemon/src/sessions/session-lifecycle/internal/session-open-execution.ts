@@ -20,6 +20,7 @@ import type {
   LaunchConfirmationUnansweredReason,
   OpenApplicationOutcome,
   OpenApplicationTiming,
+  OpenForegroundVerification,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -179,6 +180,28 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
     "of the app's own, such as a permission prompt. Read it with `alert get`. Answer with " +
     '`alert accept` only when it is the launch confirmation; answer any other alert on its own ' +
     'terms.'
+  );
+}
+
+/** What the caller's `open` output says when the probe never read one foreground app. */
+function openProbeUnreadableWarning(): string {
+  return (
+    'The launch dispatch succeeded, but the foreground probe could not read the device within 5s ' +
+    '(open-foreground-probe-unreadable). This claims nothing about whether the app reached the ' +
+    'foreground; check the device connection, then run the open again.'
+  );
+}
+
+/** What the caller's `open` output says when the launched app never held the foreground. */
+function openNotForegroundWarning(verification: OpenForegroundVerification): string {
+  const read =
+    verification.state === 'other-foreground'
+      ? `HarmonyOS read that the foreground app stayed "${verification.foregroundPackage}"`
+      : 'HarmonyOS read no mission in the foreground';
+  return (
+    `The launch dispatch succeeded, but ${read} within 5s of the launch ` +
+    '(open-not-foreground). A lock screen over the device is a typical cause. Unlock the device, ' +
+    'then run the open again.'
   );
 }
 
@@ -392,6 +415,15 @@ export async function completeOpenCommand(params: {
   }
   if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
     appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
+  }
+  const foregroundVerification = outcome.timing.foregroundVerification;
+  if (foregroundVerification) {
+    appendResponseWarning(
+      openResult,
+      foregroundVerification.state === 'probe-failed'
+        ? openProbeUnreadableWarning()
+        : openNotForegroundWarning(foregroundVerification),
+    );
   }
   const nextRef = publishOpenSession({
     req,

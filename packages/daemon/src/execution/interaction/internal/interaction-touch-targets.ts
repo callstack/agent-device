@@ -300,7 +300,7 @@ export function interactionResultExtra(
   const shared = sequence ? { sequence } : {};
   if (result.kind === 'ref') {
     return {
-      ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
+      ref: stripAtPrefix(result.target.ref),
       refLabel: result.refLabel,
       selectorChain: result.selectorChain,
       targetHittable: result.targetHittable,
@@ -313,7 +313,7 @@ export function interactionResultExtra(
   }
   if (result.kind === 'selector') {
     return {
-      selector: result.target?.kind === 'selector' ? result.target.selector : undefined,
+      selector: result.target.selector,
       selectorChain: result.selectorChain,
       refLabel: result.refLabel,
       targetHittable: result.targetHittable,
@@ -332,9 +332,8 @@ export function formatTouchTargetLabel(
   result: PressCommandResult | LongPressCommandResult,
 ): string {
   if (target.kind === 'point') return 'coordinate tap';
-  if (result.kind === 'ref' && result.target?.kind === 'ref') return result.target.ref;
-  if (result.kind === 'selector' && result.target?.kind === 'selector')
-    return result.target.selector;
+  if (result.kind === 'ref') return result.target.ref;
+  if (result.kind === 'selector') return result.target.selector;
   return 'target';
 }
 

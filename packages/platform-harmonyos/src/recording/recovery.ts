@@ -1,3 +1,4 @@
+import { DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
@@ -64,11 +65,11 @@ export function cleanupRecoveredHarmonyRecording(
   return decoded.status === 'decoded'
     ? {
         status: 'cleanup-pending',
-        reason: 'manual-recovery-required',
+        reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
         message:
           'HarmonyOS recorder ownership cannot be proven after daemon restart; no recorder was stopped.',
       }
-    : { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    : { status: 'cleanup-pending', reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason };
 }
 
 function isCanonicalHarmonyRecordingFileName(value: string): boolean {

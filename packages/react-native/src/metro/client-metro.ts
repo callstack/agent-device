@@ -252,7 +252,7 @@ function installDependenciesIfNeeded(
   try {
     runCmdSync(packageManager.command, packageManager.installArgs, {
       cwd: projectRoot,
-      env: env as NodeJS.ProcessEnv,
+      env,
     });
   } catch (error) {
     throw wrapDependencyInstallError(error, packageManager);
@@ -357,7 +357,7 @@ function startMetroProcess(
     // cwd is --project-root; monorepo-root module resolution beyond that is Expo's own behavior.
     pid = runCmdDetached(metro.command, metro.installArgs, {
       cwd: projectRoot,
-      env: env as NodeJS.ProcessEnv,
+      env,
       stdio: ['ignore', logFd, logFd],
     });
   } finally {
@@ -897,7 +897,7 @@ async function configureProxyBridgeViaCompanion(
       launchUrl: normalizeOptionalString(input.launchUrl),
       profileKey: normalizeOptionalString(input.companionProfileKey),
       consumerKey: normalizeOptionalString(input.companionConsumerKey),
-      env: settings.env as NodeJS.ProcessEnv,
+      env: settings.env,
       cwd: settings.cwd,
     });
     companionLogPath = companion.logPath;

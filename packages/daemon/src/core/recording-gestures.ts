@@ -416,7 +416,7 @@ function readDirection(value: unknown): ScrollDirection | undefined {
     case 'down':
     case 'left':
     case 'right':
-      return normalized as ScrollDirection;
+      return normalized;
     default:
       return undefined;
   }

@@ -3,7 +3,7 @@ import {
   resolveApplePlatformName,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
@@ -450,7 +450,7 @@ async function cleanupAppleSimulatorProcess(
   } catch (error) {
     return {
       status: 'cleanup-pending',
-      reason: 'transport-failed',
+      reason: DURABLE_RESOURCE_REASONS.transportFailed.reason,
       message: error instanceof Error ? error.message : 'Apple simulator cleanup failed',
     };
   }
