@@ -601,25 +601,35 @@ test('a refused standalone lease label does not count as session activity', asyn
   expect(session?.lastActivityAtMs).toBeGreaterThan(0);
 });
 
-test('a malformed tenant is refused before a fresh open checks device contention', async () => {
-  if (!world) return;
-  const { sessionStore } = world;
-  expect(sessionStore.findByDevice(IOS_SIMULATOR.id)?.address).toBe(world.sessionName);
-  const findHolder = vi.spyOn(sessionStore, 'findByDevice');
-  try {
-    const response = await world.rpc('agent_device.command', {
-      session: 'fresh',
-      command: 'open',
-      positionals: ['com.example.app'],
-      meta: { tenantId: 'not a tenant', sessionExplicit: true },
-      flags: { platform: 'ios', udid: IOS_SIMULATOR.id, waitMs: 100 },
-    });
-    expect(response.error?.data?.code, JSON.stringify(response)).toBe('INVALID_ARGS');
-    expect(findHolder).not.toHaveBeenCalled();
-  } finally {
-    findHolder.mockRestore();
-  }
-});
+test.each([
+  ['a malformed tenant string', { tenantId: 'not a tenant' }, {}],
+  [
+    'a falsy meta tenant with a valid routing flag',
+    { tenantId: false, sessionIsolation: 'tenant' },
+    { tenant: TENANT },
+  ],
+])(
+  '%s is refused before a fresh open checks device contention',
+  async (_label, meta, tenantFlags) => {
+    if (!world) return;
+    const { sessionStore } = world;
+    expect(sessionStore.findByDevice(IOS_SIMULATOR.id)?.address).toBe(world.sessionName);
+    const findHolder = vi.spyOn(sessionStore, 'findByDevice');
+    try {
+      const response = await world.rpc('agent_device.command', {
+        session: 'fresh',
+        command: 'open',
+        positionals: ['com.example.app'],
+        meta: { ...meta, sessionExplicit: true },
+        flags: { ...tenantFlags, platform: 'ios', udid: IOS_SIMULATOR.id, waitMs: 100 },
+      });
+      expect(response.error?.data?.code, JSON.stringify(response)).toBe('INVALID_ARGS');
+      expect(findHolder).not.toHaveBeenCalled();
+    } finally {
+      findHolder.mockRestore();
+    }
+  },
+);
 
 test('malformed tenant polling leaves an unleased session and its claim eligible for idle expiry', async () => {
   if (!world) return;
