@@ -402,22 +402,38 @@ export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
 }
 
 /**
- * `details.reason` of a request its requester abandoned — an explicit cancel or
- * a client disconnect. One definition, so every layer that must let a
- * cancellation through untouched (retry loops, provider adapters, runner
- * transports) dispatches on the same typed reason.
+ * `details.reason` of a request its requester abandoned. One row, so every layer that must let a
+ * cancellation through untouched (retry loops, provider adapters, runner transports) dispatches on
+ * the same typed reason through {@link isRequestCanceledDetails}.
  */
-export const REQUEST_CANCELED_REASON = 'request_canceled';
+export const REQUEST_CANCELED_REASONS = {
+  // The caller canceled the request or disconnected before the work finished, so the command
+  // stopped waiting, including on a snapshot, native build, provider request, device start or
+  // install. A provider device start already submitted may keep running. No retry is needed unless
+  // the cancellation was unintended.
+  canceled: { reason: 'request_canceled' },
+} as const satisfies ReasonTable<'request cancellation'>;
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
 /**
- * A runtime owner whose facts advertised an operation it cannot actually perform: a contract bug,
- * never a legitimate refusal. Built here, beside the other typed error factories, so every binder
- * that reaches it already has it in its closure; `contracts/runtime-contract-error` is its public
- * subpath for platform packages.
+ * A platform runtime that broke its own contract: a contract bug, never a legitimate refusal.
+ * Declared here, beside the typed error factories, so the gateway, the binders and the durable
+ * capture readers that raise it already have it in their closure.
+ */
+export const RUNTIME_CONTRACT_REASONS = {
+  // A platform runtime broke its own contract: an owner advertised an operation it cannot perform,
+  // runtime registrations conflict, are missing or do not match the selected device, or a capture
+  // runtime returned a durable record for another session or device. Report the device and command.
+  invalid: { reason: 'runtime-contract-invalid' },
+} as const satisfies ReasonTable<'platform runtime'>;
+
+/**
+ * A runtime owner whose facts advertised an operation it cannot actually perform. Built here so
+ * every binder that reaches it already has it in its closure; `contracts/runtime-contract-error` is
+ * its public subpath for platform packages.
  */
 export function createRuntimeContractInvalidError(message: string): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: 'runtime-contract-invalid',
+    reason: RUNTIME_CONTRACT_REASONS.invalid.reason,
     hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
   });
 }
@@ -432,6 +448,18 @@ export const INTERACTOR_BINDING_REFUSAL_REASONS = {
   // The selected provider owns this operation but exposes no bound interactor for it.
   providerInteractorMissing: { reason: 'provider-runtime-interactor-missing' },
 } as const satisfies ReasonTable<'interactor binding'>;
+
+/**
+ * Why `keyboard dismiss` leaves a visible keyboard up. The Apple runner's `RUNNER_ERROR_CODES` row
+ * writes the same spelling as a literal, which the runner refusal docs guard reads. Declared here
+ * because `contracts/keyboard` would grow the Android input-state reader's eager closure.
+ */
+export const KEYBOARD_DISMISS_REASONS = {
+  // The keyboard stayed up: the Apple runner leaves a visible keyboard alone and presses nothing, or
+  // the Android IME stayed visible after Escape key events, which may have reached the app.
+  // `details.dispatched` says which.
+  unavailable: { reason: 'keyboard_dismiss_unavailable' },
+} as const satisfies ReasonTable<'keyboard'>;
 
 /**
  * Why a durable capture (a screen recording, app log, audio probe or perf capture) could not be
@@ -480,7 +508,7 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
   return new AppError(
     'COMMAND_FAILED',
     REQUEST_CANCELED_MESSAGE,
-    { hint: REQUEST_CANCELED_HINT, ...details, reason: REQUEST_CANCELED_REASON },
+    { hint: REQUEST_CANCELED_HINT, ...details, reason: REQUEST_CANCELED_REASONS.canceled.reason },
     cause,
   );
 }
@@ -521,7 +549,7 @@ export function createRequestDeadlineError(details?: AppErrorDetails, cause?: un
  * must not restate the literal.
  */
 export function isRequestCanceledDetails(details: AppErrorDetails | undefined): boolean {
-  return details?.reason === REQUEST_CANCELED_REASON;
+  return details?.reason === REQUEST_CANCELED_REASONS.canceled.reason;
 }
 
 export function isRequestCanceledError(error: unknown): boolean {

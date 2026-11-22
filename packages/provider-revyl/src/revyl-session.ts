@@ -1,4 +1,4 @@
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, REQUEST_CANCELED_REASONS, type ReasonTable } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -249,7 +249,7 @@ function startCanceled(input: RevylStartRequestInput): AppError {
   return new AppError(
     'COMMAND_FAILED',
     'The Revyl device start was canceled before it was ready.',
-    { reason: 'request_canceled', platform: input.platform },
+    { reason: REQUEST_CANCELED_REASONS.canceled.reason, platform: input.platform },
     input.signal?.reason,
   );
 }
@@ -273,7 +273,12 @@ export function revylCallerGaveUp(
     return new AppError(
       'COMMAND_FAILED',
       'The Revyl device start was canceled before it was ready.',
-      { reason: 'request_canceled', platform, providerSessionId, hint: pending },
+      {
+        reason: REQUEST_CANCELED_REASONS.canceled.reason,
+        platform,
+        providerSessionId,
+        hint: pending,
+      },
       budget.signal.reason,
     );
   }

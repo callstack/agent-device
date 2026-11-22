@@ -10,7 +10,7 @@ import {
   type PluginSetupResult,
 } from './contract.ts';
 import { createPluginHost, type ProviderPluginHost } from './host.ts';
-import { resolvePluginEntry, type PluginManifest } from './manifest.ts';
+import { PLUGIN_REASONS, resolvePluginEntry, type PluginManifest } from './manifest.ts';
 
 type LegacyConnection = Pick<PluginConnection, 'resolve' | 'verify'>;
 
@@ -31,7 +31,7 @@ export function adaptLegacyPlugin(
     );
     if (typeof module.default !== 'function')
       throw new AppError('INVALID_ARGS', `Plugin must export a default factory: ${manifest.name}`, {
-        reason: 'invalid_plugin',
+        reason: PLUGIN_REASONS.invalidPlugin.reason,
       });
     return await (module.default as (host: ProviderPluginHost) => unknown)(host);
   };
@@ -50,7 +50,7 @@ export function adaptLegacyPlugin(
         throw new AppError(
           'INVALID_ARGS',
           `Plugin connection must provide resolve and verify: ${manifest.name}`,
-          { reason: 'invalid_plugin' },
+          { reason: PLUGIN_REASONS.invalidPlugin.reason },
         );
       }
       return await run(connection as LegacyConnection);

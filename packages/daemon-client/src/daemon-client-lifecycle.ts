@@ -19,6 +19,7 @@ import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
   resolveDaemonTransportPreference,
+  DAEMON_RETIREMENT_REASONS,
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
@@ -380,7 +381,7 @@ export async function cleanupDaemonAfterRequest(
           'COMMAND_FAILED',
           'Replay completed, but daemon cleanup could not be confirmed.',
           {
-            reason: 'daemon_retirement_unconfirmed',
+            reason: DAEMON_RETIREMENT_REASONS.retirementUnconfirmed.reason,
             retirement: result,
             stateDir: settings.paths.baseDir,
             hint:

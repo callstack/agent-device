@@ -25,6 +25,7 @@ import {
   BATCH_DAEMON_STEP_KEYS,
   INHERITED_PARENT_FLAG_KEYS,
   assertBatchRuntimeCommandAllowed,
+  BATCH_STEP_REASONS,
   normalizeBatchCommandName,
 } from './batch-policy.ts';
 import { resolveCommandRecordingEffect } from './registry.ts';
@@ -262,7 +263,7 @@ function assertNoTextStdinStep(
   throw new AppError(
     'INVALID_ARGS',
     `Batch step ${stepNumber}: fill textStdin is not supported because batch steps have no stdin of their own.`,
-    { reason: 'fill_text_stdin_in_batch' },
+    { reason: BATCH_STEP_REASONS.fillTextStdin.reason },
   );
 }
 

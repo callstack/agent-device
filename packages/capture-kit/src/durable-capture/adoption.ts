@@ -6,7 +6,7 @@ import {
   runtimeOwnerKey,
 } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, RUNTIME_CONTRACT_REASONS } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   createDurableResourceEnvelope,
@@ -135,7 +135,7 @@ function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle
         resourcePath,
         createExpectedEnvelope(definition, params, {
           version: 0,
-          body: { reason: 'runtime-contract-invalid' },
+          body: { reason: RUNTIME_CONTRACT_REASONS.invalid.reason },
         }),
       );
       return true;
@@ -202,7 +202,7 @@ function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<
     'COMMAND_FAILED',
     `${capitalizeDurableCaptureLabel(definition.displayName)} runtime returned an incoherent durable envelope`,
     {
-      reason: 'runtime-contract-invalid',
+      reason: RUNTIME_CONTRACT_REASONS.invalid.reason,
       hint: 'Retain the runtime diagnostics and report the selected device and owner.',
     },
   );

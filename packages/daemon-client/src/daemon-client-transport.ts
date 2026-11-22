@@ -21,6 +21,7 @@ import {
   buildDaemonHttpUrl,
   DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+  DAEMON_INSTANCE_REASONS,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
@@ -539,7 +540,10 @@ function remainingRemoteRequestTimeoutMs(
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'remote_instance_mismatch';
+  return (
+    error instanceof AppError &&
+    error.details?.reason === DAEMON_INSTANCE_REASONS.instanceMismatch.reason
+  );
 }
 
 function isRemoteTransportFailure(error: unknown): boolean {
@@ -863,7 +867,7 @@ async function sendHttpRequest(
           if (timeoutHandle) clearTimeout(timeoutHandle);
           rejectOnce(
             new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
-              reason: 'remote_instance_mismatch',
+              reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
               daemonBaseUrl: info.baseUrl,
             }),
           );

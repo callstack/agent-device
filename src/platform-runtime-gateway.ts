@@ -32,8 +32,9 @@ import {
 import {
   AppError,
   normalizeError,
-  type ReasonTable,
   DURABLE_RESOURCE_REASONS,
+  RUNTIME_CONTRACT_REASONS,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
@@ -396,7 +397,7 @@ function ownerUnavailable(owner: RuntimeOwnerRef): AppError {
 
 function runtimeContractError(message: string, cleanupError?: string): AppError {
   return new AppError('COMMAND_FAILED', message, {
-    reason: 'runtime-contract-invalid',
+    reason: RUNTIME_CONTRACT_REASONS.invalid.reason,
     ...(cleanupError ? { cleanupError } : {}),
   });
 }

@@ -1,4 +1,9 @@
-import { AppError, type AppErrorCode, type ReasonTable } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  REQUEST_CANCELED_REASONS,
+  type AppErrorCode,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -408,7 +413,7 @@ function requestCanceled(request: RevylRequest, cause: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
     `Revyl request ${request.method} ${request.path} was canceled.`,
-    { reason: 'request_canceled', path: request.path },
+    { reason: REQUEST_CANCELED_REASONS.canceled.reason, path: request.path },
     cause,
   );
 }
