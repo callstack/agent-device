@@ -28,8 +28,9 @@ export const APPROVED_HOSTNAME = 'approved.invalid';
 export const APPROVED_ADDRESS = '127.0.0.1';
 export const ARTIFACT_BODY = 'artifact';
 
-const SETTLE_DEADLINE_MS = 700;
-const SETTLE_POLL_MS = 20;
+/** How long a case waits for a resource it expects the transport to release, and how often it looks. */
+export const SETTLE_DEADLINE_MS = 700;
+export const SETTLE_POLL_MS = 20;
 
 export type ObservedRequest = {
   method: string;

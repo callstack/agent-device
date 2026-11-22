@@ -124,9 +124,9 @@ async function connectThroughProxy(
  * destination, so it never resolves the URL host, and the proxy credentials come from the proxy
  * URL's userinfo. The transport owns the dial to the proxy and awaits it, so a proxy that is down
  * fails with the socket's own errno code; the connector then reports the handshake result, and the
- * caller signal owns the deadline: aborting destroys the socket mid-handshake, and the handshake
- * rejects with the caller's own reason. `socks` is loaded only on this route, so a download that
- * names no SOCKS proxy never evaluates it.
+ * caller signal owns the deadline: aborting destroys the socket mid-dial or mid-handshake, and the
+ * await rejects with the caller's own reason. `socks` is loaded only on this route, so a download
+ * that names no SOCKS proxy never evaluates it.
  */
 async function connectThroughSocks5Proxy(
   proxy: URL,
@@ -137,10 +137,16 @@ async function connectThroughSocks5Proxy(
   const proxyHost = stripBrackets(proxy.hostname);
   const proxyPort = Number(proxy.port || DEFAULT_SOCKS_PORT);
   const socket = net.connect({ host: proxyHost, port: proxyPort });
+  // Destroying a dial that never connected can still report a late socket error, and `once` drops
+  // its own error listener as soon as the abort wins the race. The dial keeps one so the abandoned
+  // socket cannot raise an unhandled error after its await already settled.
+  socket.on('error', () => {});
   const onAbort = () => socket.destroy();
   signal.addEventListener('abort', onAbort, { once: true });
   try {
-    await once(socket, 'connect');
+    // The dial's own await must end on the caller's signal: a destroyed socket emits `close`, not
+    // `error`, so without the signal the connect-phase wait would never settle.
+    await once(socket, 'connect', { signal });
     signal.throwIfAborted();
     const established = await SocksClient.createConnection({
       command: 'connect',

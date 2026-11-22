@@ -9,6 +9,8 @@ import * as nodeTransport from './install-source-network-transport.ts';
 import {
   APPROVED_HOSTNAME,
   ARTIFACT_BODY,
+  SETTLE_DEADLINE_MS,
+  SETTLE_POLL_MS,
   TRANSPORT_TEST_TIMEOUT_MS,
   approvedUrl,
   observeRequest,
@@ -137,6 +139,54 @@ test('a refused socks proxy dial is reported as ECONNREFUSED', async (t) => {
   assert.equal(observed.outcome, 'rejection');
   assert.equal(observed.error?.code, 'ECONNREFUSED');
   assert.deepEqual(observed.connectAuthorities, []);
+});
+
+test('an operator abort while the socks proxy dial never connects rejects with the caller error', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // 10.255.255.1 is private space no host on this network answers, so the dial to it neither
+  // connects nor errors and only the caller's signal can end the connect-phase wait. The dial is
+  // the one await on this route the transport cannot end through a request or a body, so the await
+  // itself must carry the signal, and the socket it abandons must be destroyed.
+  const openDialResources = () =>
+    process
+      .getActiveResourcesInfo()
+      // A dial that has not connected holds both the socket and its connect request.
+      .filter((kind) => kind === 'TCPSocketWrap' || kind === 'ConnectWrap').length;
+  const mark = lab.mark();
+  const baselineDialResources = openDialResources();
+  // Node releases a destroyed socket's handle just after it reports the socket closed, so this
+  // settles on the same schedule as the lab's own socket census.
+  const settleDialResources = async () => {
+    const deadline = Date.now() + SETTLE_DEADLINE_MS;
+    let open = openDialResources();
+    while (Date.now() < deadline && open > baselineDialResources) {
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS));
+      open = openDialResources();
+    }
+    return open;
+  };
+
+  const observed = await run({
+    url: approvedUrl(lab.originPort),
+    signal: operatorAbortAfter(150),
+    environment: socksEnvironment('socks5://10.255.255.1:1080'),
+  });
+
+  assert.equal(observed.outcome, 'rejection');
+  assert.equal(observed.error?.message, 'operator stop');
+  assert.equal(
+    lab.greetingsSince(mark),
+    0,
+    'a dial that reached the proxy would have sent the SOCKS greeting',
+  );
+  assert.deepEqual(lab.connectAuthoritiesSince(mark), []);
+  assert.deepEqual(observed.originSaw ?? [], []);
+  assert.equal(observed.liveProxySockets, 0);
+  assert.equal(
+    (await settleDialResources()) - baselineDialResources,
+    0,
+    'the aborted dial must leave no socket open',
+  );
 });
 
 test('an operator abort during the socks handshake rejects with the caller error', async (t) => {
