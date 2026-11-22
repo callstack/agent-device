@@ -101,6 +101,34 @@ test('a non-2xx answer whose body stalls ends at the deadline as the typed timeo
   });
 });
 
+// The instance authenticates with a bearer token and its own error body can echo it unlabeled, so
+// core's pattern redaction cannot see it. The typed status and reason still answer for the failure.
+test('an error body that echoes the instance token publishes it redacted', async () => {
+  const token = 'liminst_5f4dcc3b5aa765d61d8327deb882cf99';
+  const url = await serve((_request, response) => {
+    response.writeHead(500);
+    response.end(`upstream rejected ${token} for this transfer`);
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  let failure: unknown;
+  await downloadLimrunFile({
+    url,
+    headers: { Authorization: `Bearer ${token}` },
+    destinationPath,
+    timeoutMs: 5_000,
+  }).catch((error: AppError) => {
+    failure = error;
+  });
+
+  expect(failure).toBeInstanceOf(AppError);
+  expect((failure as AppError).details).toMatchObject({
+    statusCode: 500,
+    reason: 'limrun_download_http_error',
+  });
+  expect(JSON.stringify((failure as AppError).details)).not.toMatch(token);
+});
+
 test('a failed retry removes the file an earlier attempt left at the destination', async () => {
   const url = await serve((_request, response) => {
     response.writeHead(500);

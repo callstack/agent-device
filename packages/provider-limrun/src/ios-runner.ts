@@ -1,4 +1,5 @@
 import { limrunRunnerError, withLimrunRunnerErrors } from './ios-runner-errors.ts';
+import { safeInstanceErrorText } from './error-text.ts';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import { createLimrunAppleToolProvider } from './ios-tools.ts';
@@ -164,12 +165,19 @@ export async function createLimrunIosRunner(
             launchSignal,
           );
           if (!result.ok) {
+            const responseText = await awaitWithSignal(result.text(), launchSignal).catch(
+              () => undefined,
+            );
             const failure = limrunRunnerError(
               result.status === 409 ? 'limrun_xctest_slot_occupied' : 'limrun_runner_launch_failed',
               `Limrun XCTest launch failed (${result.status})`,
               {
                 status: result.status,
-                response: await awaitWithSignal(result.text(), launchSignal).catch(() => undefined),
+                ...(responseText === undefined
+                  ? {}
+                  : {
+                      response: safeInstanceErrorText(responseText, Object.values(headers)),
+                    }),
               },
             );
             if (result.status === 409) lastConflict = failure;

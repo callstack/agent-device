@@ -4,6 +4,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { safeInstanceErrorText } from './error-text.ts';
 import type { LimrunFileDownload } from './runtime-dependencies.ts';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
@@ -45,7 +46,7 @@ async function httpFailure(response: Response, options: LimrunFileDownload): Pro
     url: options.url,
     statusCode: response.status,
     reason: 'limrun_download_http_error',
-    body: await readBodyPreview(response),
+    body: safeInstanceErrorText(await readBodyPreview(response), Object.values(options.headers)),
   });
 }
 
