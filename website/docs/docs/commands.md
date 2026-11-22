@@ -731,6 +731,7 @@ agent-device snapshot -i --platform apple --target desktop
 - `open <app>` attaches to a copy of the app that is already running, including one you started yourself. A copy still registering with macOS, or copies running from more than one path, can get a second instance.
 - Prefer selectors and `@ref`s over x/y, because window positions shift between runs. Use `click --button secondary` for context menus, then run `snapshot -i` again.
 - On `frontmost-app` and `menubar`, Finder and similar apps read two quick `--count` clicks as a double-click. Pass an `--interval-ms` longer than the system double-click time to keep them apart.
+- macOS desktop automation runs through the optional `@agent-device/macos` plugin (`agent-device plugins add @agent-device/macos`; see [Installation](/docs/installation#macos-desktop-notes)). Without the plugin, a command such as `devices` or `open` that names `--platform macos` answers `UNSUPPORTED_PLATFORM` with `error.details.reason: plugin-not-installed`, the package name, and the install command. A `devices` call that names no platform leaves the Mac out. iOS and tvOS targets do not need the plugin.
 - macOS also supports `clipboard`, `trigger-app-event`, `logs`, `network dump`, `audio probe` (needs Screen Recording permission), `alert`, and part of `settings` (see [Settings helpers](#settings-helpers)).
 - Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `shake`, `fold`, `install`, `reinstall`, `uninstall`, `install-from-source`, and `push`.
 

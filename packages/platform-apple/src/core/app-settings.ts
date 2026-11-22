@@ -19,8 +19,8 @@ import {
   type CommandAttemptFailure,
   type ReasonTable,
 } from '@agent-device/kernel/errors';
-import { setMacOsAppearance } from '../os/macos/apps.ts';
-import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
+import type { MacOsPermissionTarget } from '@agent-device/contracts/macos-platform-leaf';
+import { macOsDesktop } from './macos-desktop.ts';
 import { closeIosApp } from './app-launch.ts';
 import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
@@ -204,7 +204,7 @@ async function setMacOsHostSetting(
   const normalized = MACOS_HOST_SETTINGS.find((name) => name === setting.toLowerCase());
   switch (normalized) {
     case 'appearance':
-      await setMacOsAppearance(state);
+      await macOsDesktop().setAppearance(state);
       return;
     case 'permission': {
       const action = parsePermissionAction(state);
@@ -215,7 +215,7 @@ async function setMacOsHostSetting(
         );
       }
       const permissionTarget = parseMacOsPermissionTarget(options?.permissionTarget);
-      return await runMacOsPermissionAction(action, permissionTarget, env);
+      return await macOsDesktop().runPermissionAction(action, permissionTarget, env);
     }
     case undefined:
       throw new AppError('UNSUPPORTED_OPERATION', `Unsupported macOS setting: ${setting}`);

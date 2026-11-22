@@ -13,7 +13,6 @@ import type {
   ScopedSimctlCommand,
 } from '@agent-device/contracts/platform-runtime-host';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
-import { createLocalAppleMacOsHostProvider } from '../os/macos/host-provider.ts';
 import type {
   AppleMacOsHelperProvider,
   AppleMacOsHostProvider,
@@ -177,12 +176,6 @@ export function createLocalAppleToolProvider(
         : async (args, options) => await runCommand('xcrun', ['devicectl', ...args], options),
     },
     plist,
-    macosHost:
-      provider.macosHost ??
-      createLocalAppleMacOsHostProvider(
-        runCommand,
-        async (plistPath) => await plist.readJson(plistPath),
-      ),
     whichCommand:
       provider.whichCommand ?? (async (cmd) => await whichCmd(cmd, commandHostEnvironment().env)),
   };

@@ -302,6 +302,7 @@ export async function listPlugins(env: NodeJS.ProcessEnv, builtinProviders: read
     ...(entry.provider !== undefined ? { provider: entry.provider } : {}),
     ...(entry.backend !== undefined ? { backend: entry.backend } : {}),
     ...(entry.platform !== undefined ? { platform: entry.platform } : {}),
+    ...(entry.appleOs !== undefined ? { appleOs: entry.appleOs } : {}),
     compatible: entry.state === 'active',
     ...(entry.error ? { error: entry.error } : {}),
   }));

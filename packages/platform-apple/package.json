@@ -43,9 +43,13 @@
       "types": "./src/install-artifact-facade.ts",
       "default": "./src/install-artifact-facade.ts"
     },
-    "./macos": {
-      "types": "./src/macos-facade.ts",
-      "default": "./src/macos-facade.ts"
+    "./macos-desktop": {
+      "types": "./src/macos-desktop-facade.ts",
+      "default": "./src/macos-desktop-facade.ts"
+    },
+    "./macos-leaf": {
+      "types": "./src/macos-leaf.ts",
+      "default": "./src/macos-leaf.ts"
     },
     "./perf": {
       "types": "./src/perf-facade.ts",

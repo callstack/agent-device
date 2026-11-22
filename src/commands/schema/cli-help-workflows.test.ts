@@ -37,6 +37,10 @@ test('usageForCommand resolves debugging help topic', async () => {
   assert.match(help, /agent-device audio probe start 10 1000 --platform android/);
   assert.match(help, /compact rmsDbfs and peakDbfs arrays/);
   assert.match(help, /requires Screen Recording permission/);
+  assert.match(
+    help,
+    /The sampler is the macOS plugin's, so every one of those sessions needs it installed/,
+  );
   assert.match(help, /Physical iOS and Android devices are not supported/);
   assert.match(help, /Memory artifact \(android-hprof\): \/tmp\/app\.hprof \(42MB\)/);
   assert.match(help, /Prefer perf memory sample over raw dumpsys\/leaks output/);

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { iosRunnerOverrides, performGestureApple } from './interactions.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { bindMacOsLeafFixture } from './__tests__/macos-leaf.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from './multitouch-support.ts';
@@ -255,17 +256,17 @@ test('iosRunnerOverrides owns fused repeated presses with deterministic jitter',
   ]);
 });
 
-test('iosRunnerOverrides owns alternate-button presses', async () => {
+test('a macOS alternate-button press goes to the installed leaf with the device-bound runner', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({ clicked: true });
-  const { overrides } = iosRunnerOverrides(
-    MACOS_TEST_DEVICE,
-    {
-      appBundleId: 'com.example.App',
-    },
-    process.env,
-  );
+  const sent = { command: 'mouseClick', x: 1, y: 2, button: 'secondary' } as const;
+  const leaf = bindMacOsLeafFixture({
+    alternateClick: async (runner, _context, runnerOptions) =>
+      await runner.run(sent, runnerOptions),
+  });
+  const context = { appBundleId: 'com.example.App' };
+  const { overrides, runnerOpts } = iosRunnerOverrides(MACOS_TEST_DEVICE, context, process.env);
 
-  await overrides.pressPoint!(
+  const result = await overrides.pressPoint!(
     { x: 100, y: 200 },
     {
       button: 'secondary',
@@ -277,13 +278,16 @@ test('iosRunnerOverrides owns alternate-button presses', async () => {
     },
   );
 
-  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
-    command: 'mouseClick',
-    x: 100,
-    y: 200,
-    button: 'secondary',
-    appBundleId: 'com.example.App',
-  });
+  // The owner hands the leaf the point and the button; the leaf maps them to the wire command.
+  assert.deepEqual(leaf.calls[0]?.args.slice(1), [
+    context,
+    runnerOpts,
+    { x: 100, y: 200 },
+    'secondary',
+  ]);
+  // The capability is bound to this device and reaches the one Apple runner.
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0], [MACOS_TEST_DEVICE, sent, runnerOpts]);
+  assert.deepEqual(result, { clicked: true });
 });
 
 test('iosRunnerOverrides remaps a later chunk failure to global press indices', async () => {
@@ -615,40 +619,25 @@ test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration
   assert.deepEqual(result, { durationMs: 50 });
 });
 
-test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValueOnce({
-    x: 737.5,
-    y: 476.5,
-    referenceWidth: 400,
-    referenceHeight: 800,
+test('a macOS scroll goes to the installed leaf with the device-bound runner', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({ x: 737.5, y: 476.5 });
+  const sent = { command: 'desktopScroll', direction: 'down', pixels: 200 } as const;
+  const leaf = bindMacOsLeafFixture({
+    desktopScroll: async (runner, _context, runnerOptions) => await runner.run(sent, runnerOptions),
   });
-
-  const { overrides } = iosRunnerOverrides(
-    MACOS_TEST_DEVICE,
-    {
-      appBundleId: 'com.example.App',
-    },
-    process.env,
-  );
+  const context = { appBundleId: 'com.example.App' };
+  const { overrides, runnerOpts } = iosRunnerOverrides(MACOS_TEST_DEVICE, context, process.env);
 
   const result = await overrides.scroll('down', { pixels: 200, durationMs: 50 });
 
-  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
-  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
-    command: 'desktopScroll',
-    direction: 'down',
-    pixels: 200,
-    durationMs: 50,
-    appBundleId: 'com.example.App',
-  });
-  assert.deepEqual(result, {
-    x1: 737.5,
-    y1: 476.5,
-    referenceWidth: 400,
-    referenceHeight: 800,
-    pixels: 200,
-    durationMs: 50,
-  });
+  assert.deepEqual(leaf.calls[0]?.args.slice(1), [
+    context,
+    runnerOpts,
+    'down',
+    { pixels: 200, durationMs: 50 },
+  ]);
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls, [[MACOS_TEST_DEVICE, sent, runnerOpts]]);
+  assert.deepEqual(result, { x: 737.5, y: 476.5 });
 });
 
 test('iosRunnerOverrides rejects macOS desktop scroll duration above the shared cap', async () => {

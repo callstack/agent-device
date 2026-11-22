@@ -46,16 +46,14 @@ export function createAudioProbeRuntimeHost(options: {
         bucketMs: number;
         statusPath: string;
       }): Promise<HostAudioCaptureProcess> => {
-        const { startMacOsAudioProbeProcess } = await import('@agent-device/platform-apple/macos');
-        const probe = await startMacOsAudioProbeProcess({ ...input, env: host.env });
-        const marker = await resolveManagedProcessIdentity(probe.child.pid ?? undefined);
+        // The sampler is the macOS helper's, so the installed macOS leaf starts it for every family.
+        const { macOsDesktop } = await import('@agent-device/platform-apple/macos-desktop');
+        const probe = await (await macOsDesktop()).startAudioProbe({ ...input, env: host.env });
+        const marker = await resolveManagedProcessIdentity(probe.pid);
         return Object.freeze({
           ...(marker === undefined ? {} : { marker }),
           wait: probe.wait,
-          terminate: async () => {
-            probe.child.kill('SIGTERM');
-            await probe.wait.catch(() => {});
-          },
+          terminate: probe.terminate,
         });
       },
       inspectProcess: async (marker: ManagedProcessIdentity) => inspectManagedProcess(marker),

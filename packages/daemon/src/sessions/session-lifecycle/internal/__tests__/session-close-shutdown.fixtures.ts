@@ -23,12 +23,9 @@ vi.mock('@agent-device/platform-apple/perf', async (importOriginal) => {
     cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),
   };
 });
-vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-apple/macos')>();
-  return {
-    ...actual,
-    runMacOsAlertAction: vi.fn(async () => {}),
-  };
+vi.mock('@agent-device/platform-apple/macos-desktop', () => {
+  const runAlertAction = vi.fn(async () => ({}));
+  return { macOsDesktop: async () => ({ runAlertAction }) };
 });
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();

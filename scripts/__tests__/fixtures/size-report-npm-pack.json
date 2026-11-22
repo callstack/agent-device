@@ -62,14 +62,6 @@
       "size": 0
     },
     {
-      "path": "apple/macos-helper/Package.swift",
-      "size": 1057
-    },
-    {
-      "path": "apple/macos-helper/Sources/main.swift",
-      "size": 211
-    },
-    {
       "path": "android/snapshot-helper/dist/helper.apk",
       "size": 307
     },
@@ -92,14 +84,6 @@
     {
       "path": "vendor/unknown.bin",
       "size": 78
-    },
-    {
-      "path": "apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift",
-      "size": 426
-    },
-    {
-      "path": "apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift",
-      "size": 426
     }
   ],
   "entryCount": 21,

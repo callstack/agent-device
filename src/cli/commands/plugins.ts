@@ -50,7 +50,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
           ]
         : plugins.map((plugin) =>
             plugin.compatible
-              ? `${plugin.name}@${plugin.version} (${plugin.provider ?? plugin.platform ?? plugin.backend})`
+              ? `${plugin.name}@${plugin.version} (${plugin.provider ?? pluginPlatformLabel(plugin) ?? plugin.backend})`
               : plugin.name === undefined
                 ? `Plugin config unavailable: ${plugin.error?.message}`
                 : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,
@@ -72,3 +72,10 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
   );
   return true;
 };
+
+/** A platform claim as the listing names it: the family, with the leaf it narrows to when it has one. */
+function pluginPlatformLabel(plugin: { platform?: string; appleOs?: string }): string | undefined {
+  return plugin.platform === undefined || plugin.appleOs === undefined
+    ? plugin.platform
+    : `${plugin.platform} ${plugin.appleOs}`;
+}

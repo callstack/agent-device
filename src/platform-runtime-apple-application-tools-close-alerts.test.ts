@@ -5,9 +5,8 @@ import { createAppleApplicationTools } from './platform-runtime-apple-applicatio
 
 const runMacOsAlertAction = vi.hoisted(() => vi.fn());
 
-vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple/macos')>()),
-  runMacOsAlertAction,
+vi.mock('@agent-device/platform-apple/macos-desktop', () => ({
+  macOsDesktop: async () => ({ runAlertAction: runMacOsAlertAction }),
 }));
 
 const MACOS_DEVICE: DeviceInfo = {

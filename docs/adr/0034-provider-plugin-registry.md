@@ -118,7 +118,16 @@ Required families retain completeness checks.
 Optional families may be absent.
 The current composition is in `src/platform-runtime.ts` and the family contract is in `packages/contracts/src/platform-module.ts`.
 macOS desktop remains a leaf under the single `apple` identity.
-How the desktop runtime plugs into that identity is decided in [#4675](https://github.com/callstack/agent-device/issues/4675).
+The managed `@agent-device/macos` package holds that leaf with the claim `{ kind: 'platform', family: 'apple', appleOs: 'macos' }` ([#4675](https://github.com/callstack/agent-device/issues/4675)).
+A `platform` claim key has an optional `appleOs` part for this claim, and no other family uses it.
+The bundled Apple owner keeps the `apple` claim for iOS and tvOS.
+At each macOS branch, the owner calls the operations the installed leaf binds.
+The leaf owns the two macOS app backends, the desktop surfaces, and the Swift helper.
+The owner keeps the one Apple XCTest runner with its macOS wire cases, and gives the leaf a runner capability that is bound to one device.
+The owner also gives the leaf the Apple tool routes of the calling request, so the leaf starts no command of its own.
+When the package is absent, a macOS request returns `plugin-not-installed` with the install command, and discovery that names no platform omits the Mac.
+A leaf of its own family was rejected because device identity would move out of the kernel and split the runner.
+A plugin-owned runner was rejected because it needs a second Swift dispatch, build, and signing pipeline.
 ADR 0019 defines the platform runtime boundary.
 
 Version 2 plugins receive a typed incompatibility outcome without a compatibility shim.

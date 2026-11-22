@@ -9,7 +9,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { testOnlyContentFailures, testOnlyPathFailures } from '../lib/shipped-test-code.ts';
-import { DOCUMENTED_PACK_STUBS } from '../size-report-package.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
@@ -19,7 +18,7 @@ const RUNNER_HOST_APP =
 test('testOnlyPathFailures rejects each test-only directory the packager must not copy', () => {
   const failures = testOnlyPathFailures([
     'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+AlertTests.swift',
-    'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/HelperTests.swift',
+    'macos-helper/Tests/AgentDeviceMacOSHelperTests/HelperTests.swift',
     'dist/src/__tests__/daemon.test.js',
     'dist/fixtures/sample.json',
     'dist/mocks/device-factory.js',
@@ -40,11 +39,10 @@ test('testOnlyPathFailures rejects test-only file names in any shipped language'
   assert.equal(failures.length, 4);
 });
 
-test('testOnlyPathFailures exempts only the two documented PackStubs under Tests/', () => {
-  assert.deepEqual(testOnlyPathFailures([...DOCUMENTED_PACK_STUBS]), []);
+test('testOnlyPathFailures exempts no path under a Tests/ directory', () => {
+  // The macOS helper's pack stubs ship in the @agent-device/macos plugin, so the core has none.
   assert.equal(
-    testOnlyPathFailures(['apple/macos-helper/Tests/AgentDeviceMacOSInputTests/ExtraTests.swift'])
-      .length,
+    testOnlyPathFailures(['macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift']).length,
     1,
   );
 });

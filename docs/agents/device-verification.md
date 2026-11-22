@@ -59,6 +59,7 @@ The first run needs XCUITest automation permission.
 
 When you change Apple targets, synchronize the kernel model, runtime-fact admission, dispatch,
 discovery, and xctestrun preparation. Simulator-set scoping must not hide the host macOS target.
+Before a macOS device check, install `@agent-device/macos`.
 HarmonyOS has no provisioned CI device or HDC. Mocked tests do not replace local hardware evidence.
 Before you run a live smoke harness, read its entry file under `test/integration/` for environment requirements.
 

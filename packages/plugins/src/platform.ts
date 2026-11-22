@@ -13,6 +13,7 @@ import type {
 } from '@agent-device/contracts/platform-plugin';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { MacOsPlatformLeafRegistration } from '@agent-device/contracts/macos-platform-leaf';
 import type {
   HostOperatingSystem,
   OwnedProcessRecord,
@@ -244,6 +245,8 @@ export type PlatformHostProcesses = Readonly<{
     timeoutMs: number;
     /** Names this lock in a timeout or an unverified release, in the request's log. */
     description?: string;
+    /** Ends the wait for a claim the plugin cannot take when the request is cancelled. */
+    signal?: AbortSignal;
     task: () => Promise<T>;
   }): Promise<T>;
 }>;
@@ -304,11 +307,25 @@ export type RegisteredPlatformSetup<Family extends Platform = Platform> = Family
             }>
   : never;
 
-export type PlatformContribution = {
-  [Family in Platform]: Readonly<{
-    kind: 'platform';
-    family: Family;
-    /** Registers modules and operations. Setup itself does not start or install the backend. */
-    setup(host: PlatformHost): PlatformSetup<Family> | Promise<PlatformSetup<Family>>;
-  }>;
-}[Platform];
+export type PlatformContribution =
+  | {
+      [Family in Platform]: Readonly<{
+        kind: 'platform';
+        family: Family;
+        appleOs?: never;
+        /** Registers modules and operations. Setup itself does not start or install the backend. */
+        setup(host: PlatformHost): PlatformSetup<Family> | Promise<PlatformSetup<Family>>;
+      }>;
+    }[Platform]
+  | MacOsPlatformLeafContribution;
+
+/**
+ * The one leaf contribution: macOS desktop automation under the bundled `apple` family. The Apple
+ * owner keeps the family claim and calls what this setup registers at its macOS branches.
+ */
+export type MacOsPlatformLeafContribution = Readonly<{
+  kind: 'platform';
+  family: 'apple';
+  appleOs: 'macos';
+  setup(host: PlatformHost): MacOsPlatformLeafRegistration | Promise<MacOsPlatformLeafRegistration>;
+}>;

@@ -1,14 +1,14 @@
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
-import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
+import { macOsDesktop } from './macos-desktop.ts';
 import { runSimctlForDevice } from './simctl-execution.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
 import type { AppleRunnerCommandOptions } from '@agent-device/apple-runner';
 
 export async function readIosClipboardText(device: DeviceInfo): Promise<string> {
   if (isMacOs(device)) {
-    return await readMacOsClipboardText();
+    return await macOsDesktop().readClipboardText();
   }
   requireSimulatorDevice(device, 'clipboard');
   await ensureBootedSimulator(device);
@@ -31,7 +31,7 @@ export async function writeIosClipboardText(
   runnerOptions?: AppleRunnerCommandOptions,
 ): Promise<void> {
   if (isMacOs(device)) {
-    await writeMacOsClipboardText(text);
+    await macOsDesktop().writeClipboardText(text);
     return;
   }
   requireSimulatorDevice(device, 'clipboard');
