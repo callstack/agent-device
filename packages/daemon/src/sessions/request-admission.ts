@@ -32,7 +32,8 @@ import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 
 /**
  * Names the session a request runs in. Without tenant isolation the name resolves without a tenant,
- * so admission refuses a malformed tenant after the session lease check. Under tenant isolation the
+ * so admission refuses a malformed tenant after the session lease check; a command that ignores the
+ * session lease is refused here. Under tenant isolation the
  * first string carrier routes the request, and a meta tenant that it replaces stays a lease claim.
  */
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
@@ -40,6 +41,10 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,
   );
   if (isolation !== 'tenant') {
+    // A command that ignores the session lease never reaches that check, so it refuses here.
+    if (ignoresSessionLease(req.command)) {
+      requireWellFormedTenant(req.meta?.tenantId ?? req.flags?.tenant);
+    }
     return req;
   }
   const declaredTenant: unknown = req.meta?.tenantId;
