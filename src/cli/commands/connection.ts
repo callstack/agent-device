@@ -336,47 +336,76 @@ function scopeConnectProfile(
   };
 }
 
-export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
-  const session = flags.session ?? 'default';
-  const stateDir = resolveConnectionStateDir(flags, host);
-  // The record moves to its session's own path before any teardown, so a record this command cannot
-  // remove is refused before its session closes or its lease ends.
+/**
+ * The record moves to its session's own path before any teardown, so a record this command cannot
+ * remove is refused before its session closes or its lease ends. Returns undefined after reporting
+ * that no connection exists.
+ */
+async function claimOrReportNothingToRemove(
+  flags: CliFlags,
+  stateDir: string,
+): Promise<RemoteConnectionState | undefined> {
   const claim = claimRemoteConnectionState({ stateDir, session: flags.session });
-  const state = claim?.state;
-  if (!state) {
-    // A record that names its session but fails validation still has a known owner to remove it for.
-    if (claim) removeRemoteConnectionState({ stateDir, session: claim.session });
-    await writeNoRemoteConnectionOutput(flags, session);
-    return true;
-  }
-  requireLeasedConnectionSession(state, flags.session);
-  const connectedSession = state.session;
+  if (claim?.state) return claim.state;
+  // A record that names its session but fails validation still has a known owner to remove it for.
+  if (claim) removeRemoteConnectionState({ stateDir, session: claim.session });
+  await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
+  return undefined;
+}
 
-  let providerData: CloudProviderSessionResult | undefined;
-  if (state.leaseId || state.runtime || state.metro) {
-    try {
-      providerData = (
-        await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown })
-      ).provider;
-    } catch {
-      // Disconnect is idempotent; the session may already be closed.
-    }
+type ConnectionClient = Parameters<ClientCommandHandler>[0]['client'];
+
+type DisconnectTeardown = {
+  providerData: CloudProviderSessionResult | undefined;
+  released: boolean;
+  releaseError: string | undefined;
+};
+
+async function closeConnectedSession(
+  client: ConnectionClient,
+  state: RemoteConnectionState,
+  flags: CliFlags,
+): Promise<CloudProviderSessionResult | undefined> {
+  if (!state.leaseId && !state.runtime && !state.metro) return undefined;
+  try {
+    return (await client.sessions.close({ session: state.session, shutdown: flags.shutdown }))
+      .provider;
+  } catch {
+    // Disconnect is idempotent; the session may already be closed.
+    return undefined;
   }
+}
+
+async function tearDownSessionAndLease(
+  client: ConnectionClient,
+  state: RemoteConnectionState,
+  flags: CliFlags,
+): Promise<DisconnectTeardown> {
+  let providerData = await closeConnectedSession(client, state, flags);
   await stopMetroCleanup(state.metro);
-  let released = false;
-  let releaseError: string | undefined;
-  if (state.leaseId) {
-    try {
-      const release = await releaseRemoteConnectionLease(client, state, flags.daemonAuthToken);
-      released = release.released;
-      providerData ??= release.provider;
-    } catch (error) {
-      // An inactive lease is already gone. Any other failure leaves a live lease whose only local
-      // record is removed below, so the output must name it.
-      if (!isInactiveLeaseError(error)) releaseError = errorMessage(error);
-    }
+  if (!state.leaseId) return { providerData, released: false, releaseError: undefined };
+  try {
+    const release = await releaseRemoteConnectionLease(client, state, flags.daemonAuthToken);
+    providerData ??= release.provider;
+    return { providerData, released: release.released, releaseError: undefined };
+  } catch (error) {
+    // An inactive lease is already gone. Any other failure leaves a live lease whose only local
+    // record is removed afterwards, so the output must name it.
+    return {
+      providerData,
+      released: false,
+      releaseError: isInactiveLeaseError(error) ? undefined : errorMessage(error),
+    };
   }
-  removeRemoteConnectionState({ stateDir, session: connectedSession });
+}
+
+async function finishDisconnect(
+  flags: CliFlags,
+  stateDir: string,
+  state: RemoteConnectionState,
+  { providerData, released, releaseError }: DisconnectTeardown,
+): Promise<void> {
+  removeRemoteConnectionState({ stateDir, session: state.session });
   // A failed release keeps the profile: retrying that release needs it.
   if (!releaseError) {
     removeGeneratedRemoteConfigIfUnused({ stateDir, remoteConfigPath: state.remoteConfigPath });
@@ -385,13 +414,22 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client, h
     flags,
     {
       connected: false,
-      session: connectedSession,
+      session: state.session,
       released,
       ...(releaseError ? { leaseId: state.leaseId, releaseError } : {}),
       ...(providerData ? { provider: providerData } : {}),
     },
     () => renderDisconnectOutput(state, providerData, releaseError),
   );
+}
+
+export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
+  const stateDir = resolveConnectionStateDir(flags, host);
+  const state = await claimOrReportNothingToRemove(flags, stateDir);
+  if (!state) return true;
+  requireLeasedConnectionSession(state, flags.session);
+  const teardown = await tearDownSessionAndLease(client, state, flags);
+  await finishDisconnect(flags, stateDir, state, teardown);
   return true;
 };
 
