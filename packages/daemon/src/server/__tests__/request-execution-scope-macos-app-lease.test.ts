@@ -139,7 +139,14 @@ test('a request under a pid-pinned macos-app lease does not run once that proces
     trackClaimRecoveryDisposal: () => {},
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: platformRequestScopeFixture(),
-    req: { token: 't', session: 'default', command: 'snapshot', positionals: [], flags: {} },
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+      meta: { leaseId: lease.leaseId },
+    },
     sessionStore,
     leaseRegistry,
   });

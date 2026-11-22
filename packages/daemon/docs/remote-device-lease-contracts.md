@@ -65,6 +65,21 @@ The client then allocates a new lease under a fresh id.
 The proxy is expected to be long-lived and self-serve.
 Recovery from a stale or expired device lease should not require a proxy restart.
 
+## Lease ownership
+
+The proxy token is one credential for every client.
+Thus, a host that serves several clients through one proxy authenticates each client.
+The host sets the tenant, session isolation, and lease of that client on every request that it forwards.
+The lease id proves which client owns a leased session.
+A request on that session, including `close`, `artifacts`, and other admission-exempt commands, must send the lease id.
+Lease heartbeat and release name the lease id too.
+If a request omits the lease id, the daemon refuses it with `UNAUTHORIZED`, reason `LEASE_SESSION_MISMATCH`, and `field: 'leaseId'`.
+The daemon never fills a missing lease id from the session.
+Tenant, run id, lease backend, client id, device key, and lease provider are labels.
+The daemon refuses a label that differs from the session lease. A missing label is not a refusal and grants nothing.
+A caller-chosen lease id on allocate must have at least 32 hex digits (128 bits). A shorter id fails with reason `LEASE_ID_TOO_SHORT`.
+Commands that ignore the session lease, such as `devices`, `session_list`, and the lease RPCs, keep their own scope.
+
 ## Admitted request work
 
 A lease renews when a request is admitted, and never again while that request runs.
@@ -172,9 +187,6 @@ Thus, one daemon serves several leased apps beside the host's own app sessions.
 
 These rules bind a request that names the lease or runs in its session.
 A daemon policy `leases.require` (ADR 0029) refuses requests that name no lease.
-The proxy token is one credential for every client.
-Thus, a host that serves several clients through one proxy authenticates each client.
-The host sets the tenant, session isolation, and lease of that client on every request that it forwards.
 
 ## Web sessions under tenant isolation
 

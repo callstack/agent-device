@@ -21,12 +21,14 @@ import {
 } from '../request-ended-leases.ts';
 
 const SESSION = 'default';
+const LEASE_ID = 'e1d2c3b4a5968778695a4b3c2d1e0f90';
 
 function leasedDaemon() {
   const root = mkdtempForTestSync('agent-device-ended-leases-');
   const sessionStore = makeSessionStore('agent-device-ended-leases-store-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
+    leaseId: LEASE_ID,
     tenantId: 'tenant-a',
     runId: 'run-1',
     leaseProvider: 'proxy',
@@ -66,7 +68,14 @@ function leasedDaemon() {
 }
 
 function request(command: string, positionals: string[] = [], flags = {}): DaemonRequest {
-  return { token: 'test-token', session: SESSION, command, positionals, flags };
+  return {
+    token: 'test-token',
+    session: SESSION,
+    command,
+    positionals,
+    flags,
+    meta: { leaseId: LEASE_ID },
+  };
 }
 
 test('a close reports the lease it ended once, at response level', async () => {
