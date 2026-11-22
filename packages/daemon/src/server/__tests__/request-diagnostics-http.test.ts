@@ -162,7 +162,10 @@ test('request diagnostics route does not serve a record that an earlier release 
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
     // Its name carries no owner, so nobody is known to own it.
     writeRecord(sessionsDir, 'default', 'abc123');
-    for (const leaseHeader of [{}, { 'x-agent-device-lease-id': 'b'.repeat(32) }]) {
+    for (const leaseHeader of [{}, { 'x-agent-device-lease-id': 'b'.repeat(32) }] as Record<
+      string,
+      string
+    >[]) {
       const legacy = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
         headers: { authorization: 'Bearer daemon-secret', ...leaseHeader },
       });
