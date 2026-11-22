@@ -2,6 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import { sparseFindRefusal } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { CaptureProvenance, RequestCaptureProof } from '../../../core/capture-disclosure.ts';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
@@ -72,10 +73,8 @@ export function createFindTargetCapture(
 }
 
 export function sparseFindSnapshotResponse(verdict: SnapshotQualityVerdict): DaemonResponse {
-  return errorResponse('COMMAND_FAILED', 'find could not read the current accessibility tree', {
-    reason: verdict.reason,
-    hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
-  });
+  const refusal = sparseFindRefusal(verdict);
+  return errorResponse('COMMAND_FAILED', refusal.message, refusal.details);
 }
 
 function shouldScopeFind(locator: FindLocator): boolean {

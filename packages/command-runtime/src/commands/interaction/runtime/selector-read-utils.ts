@@ -4,7 +4,7 @@ import type {
   InteractionSelectorTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
-import { FIND_READ_REASONS } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { sparseFindRefusal } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { FindLocator } from '@agent-device/selectors';
 
 export { findNodeByLabel, resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
@@ -41,10 +41,6 @@ export function findSnapshotScope(
 }
 
 export function sparseSelectorSnapshotError(verdict: SnapshotQualityVerdict): AppError {
-  return new AppError('COMMAND_FAILED', 'find could not read the current accessibility tree', {
-    reason: FIND_READ_REASONS.snapshotUnreadable.reason,
-    verdictReason: verdict.reason,
-    verdictReasonCode: verdict.reasonCode,
-    hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
-  });
+  const refusal = sparseFindRefusal(verdict);
+  return new AppError('COMMAND_FAILED', refusal.message, refusal.details);
 }

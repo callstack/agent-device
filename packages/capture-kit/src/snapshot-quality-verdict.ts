@@ -98,10 +98,23 @@ function readCustomActionCoverage(
  * Why `find` refuses a capture whose verdict is sparse. The daemon and command-runtime `find`
  * paths both raise it; the runner's own wording moves to `details.verdictReason`.
  */
-export const FIND_READ_REASONS = {
+const FIND_READ_REASONS = {
   // The capture came back sparse, so no selector could be resolved against it.
   snapshotUnreadable: { reason: 'find_snapshot_unreadable' },
 } as const satisfies ReasonTable<'find'>;
+
+/** The message and details both `find` routes publish when they refuse a sparse capture. */
+export function sparseFindRefusal(verdict: SnapshotQualityVerdict) {
+  return {
+    message: 'find could not read the current accessibility tree',
+    details: {
+      reason: FIND_READ_REASONS.snapshotUnreadable.reason,
+      verdictReason: verdict.reason,
+      verdictReasonCode: verdict.reasonCode,
+      hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
+    },
+  } as const;
+}
 
 export function isSparseSnapshotQualityVerdict(
   verdict: SnapshotQualityVerdict | undefined,

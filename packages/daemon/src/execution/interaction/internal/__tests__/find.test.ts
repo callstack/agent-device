@@ -242,7 +242,9 @@ test('handleFindCommands click tries query-scoped full retry before failing spar
     code: 'COMMAND_FAILED',
     message: 'find could not read the current accessibility tree',
     details: {
-      reason: 'sparse tree',
+      reason: 'find_snapshot_unreadable',
+      verdictReason: 'sparse tree',
+      verdictReasonCode: 'sparse-tree',
       hint: expect.stringContaining('snapshot quality verdict is sparse'),
     },
   });
