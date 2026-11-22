@@ -643,7 +643,7 @@ These reasons can come from more than one command.
 | `cleanup-unconfirmed` | A capture's cleanup failed or could not be confirmed, so its record is kept for a later retry, and a new capture on that device is refused until the earlier one is confirmed gone. |
 | `manual-recovery-required` | The capture's descriptor or recorded state cannot be read well enough to clean it up automatically; its record is kept for manual recovery. |
 | `descriptor-invalid` | The capture's stored descriptor is malformed, or names a device, backend or session paths other than its owner's, so the capture cannot be reattached. |
-| `descriptor-version-unsupported` | The capture's stored descriptor was written by a newer version, so this build cannot reattach it; its record is kept. |
+| `descriptor-version-unsupported` | The capture's stored descriptor was written in a different descriptor version than this build reads, so it cannot be reattached; its record is kept. |
 | `transport-not-reattachable` | The capture's process or transport cannot be reattached after the daemon restarted, so only its cleanup can run. |
 
 ### Foldable panels

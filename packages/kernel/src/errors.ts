@@ -460,8 +460,8 @@ export const DURABLE_RESOURCE_REASONS = {
   // The capture's stored descriptor is malformed, or names a device, backend or session paths
   // other than its owner's, so the capture cannot be reattached.
   descriptorInvalid: { reason: 'descriptor-invalid' },
-  // The capture's stored descriptor was written by a newer version, so this build cannot reattach
-  // it; its record is kept.
+  // The capture's stored descriptor was written in a different descriptor version than this build
+  // reads, so it cannot be reattached; its record is kept.
   descriptorVersionUnsupported: { reason: 'descriptor-version-unsupported' },
   // The capture's process or transport cannot be reattached after the daemon restarted, so only
   // its cleanup can run.
