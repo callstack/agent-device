@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/input-validation';
-import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
+import { BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -151,7 +151,11 @@ const SAFE_CAUSE_DETAIL_KEYS = [
   'snapshotQuality',
   'supportedOn',
   'systemSurface',
+  'verdictReasonCode',
 ] as const;
+
+// Free text a cause may echo from the device, such as a sparse capture verdict, so it is scrubbed.
+const SCRUBBED_CAUSE_DETAIL_KEYS = ['verdictReason'] as const;
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
@@ -162,21 +166,30 @@ function pickSafeCauseDetails(
   for (const key of SAFE_CAUSE_DETAIL_KEYS) {
     if (details[key] !== undefined) safe[key] = details[key];
   }
-  if (
-    details.reason === 'session_cleanup_incomplete' &&
-    Array.isArray(details.failedSteps) &&
-    details.failedSteps.every((step) => typeof step === 'string')
-  ) {
-    safe.failedSteps = details.failedSteps.map((step: string) =>
-      scrubReplayVarValues(step, scrubVars),
-    );
+  for (const key of SCRUBBED_CAUSE_DETAIL_KEYS) {
+    const value = readStringDetail(details, key);
+    if (value !== undefined) safe[key] = scrubReplayVarValues(value, scrubVars);
   }
-  if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
-    if (details.dispatched === 'no') safe.dispatched = 'no';
-    const shape = readStringDetail(details, 'shape');
-    if (shape !== undefined) safe.shape = shape;
-    const commandName = readStringDetail(details, 'standaloneCommandName');
-    if (commandName !== undefined) safe.standaloneCommandName = commandName;
-  }
+  return { ...safe, ...pickCleanupFailedSteps(details, scrubVars), ...pickBoundedRefusal(details) };
+}
+
+function pickCleanupFailedSteps(
+  details: Record<string, unknown>,
+  scrubVars: readonly ReplayVarScrubEntry[],
+): Record<string, unknown> {
+  const steps = details.failedSteps;
+  if (details.reason !== 'session_cleanup_incomplete' || !Array.isArray(steps)) return {};
+  if (!steps.every((step) => typeof step === 'string')) return {};
+  return { failedSteps: steps.map((step: string) => scrubReplayVarValues(step, scrubVars)) };
+}
+
+function pickBoundedRefusal(details: Record<string, unknown>): Record<string, unknown> {
+  if (details.reason !== BOUNDED_COMPOSITE_REASONS.resourceUnsupported.reason) return {};
+  const safe: Record<string, unknown> = {};
+  if (details.dispatched === 'no') safe.dispatched = 'no';
+  const shape = readStringDetail(details, 'shape');
+  if (shape !== undefined) safe.shape = shape;
+  const commandName = readStringDetail(details, 'standaloneCommandName');
+  if (commandName !== undefined) safe.standaloneCommandName = commandName;
   return safe;
 }

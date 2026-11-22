@@ -18,6 +18,7 @@ import {
   normalizeAllocateLeaseRequest,
   createDeviceLease,
   deviceLeaseBusyError,
+  DEVICE_LEASE_REASONS,
   hasAllocatedScope,
   normalizeLeaseId,
   normalizeRequiredLeaseId,
@@ -135,7 +136,7 @@ export class LeaseRegistry {
     if (normalized.backend === 'macos-app') this.macOsAppTenantIds.add(normalized.tenantId);
     if (this.runBindings.has(leaseRunBindingKey(normalized))) {
       throw new AppError('DEVICE_IN_USE', 'This tenant run already holds a lease for the device.', {
-        reason: 'DEVICE_LEASE_BUSY',
+        reason: DEVICE_LEASE_REASONS.busy.reason,
       });
     }
     this.enforceCapacity(normalized.backend);

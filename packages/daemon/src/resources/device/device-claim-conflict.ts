@@ -13,7 +13,10 @@ import {
   type InspectedDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
+import {
+  DEVICE_CLAIM_CONFLICT_REASONS,
+  type DeviceClaimConflictReason,
+} from '@agent-device/contracts/device';
 
 export function buildDeviceClaimInspectionCommand(
   device: DeviceInfo,
@@ -102,14 +105,14 @@ function claimRefusalResponse(error: AppError): DaemonResponse {
 function conflictReason(classification: DeviceClaimClassification): DeviceClaimConflictReason {
   switch (classification) {
     case 'live':
-      return 'DEVICE_CLAIM_LIVE_OWNER';
+      return DEVICE_CLAIM_CONFLICT_REASONS.liveOwner.reason;
     case 'owner-process-dead':
     case 'owner-daemon-superseded':
-      return 'DEVICE_CLAIM_RECOVERY_PENDING';
+      return DEVICE_CLAIM_CONFLICT_REASONS.recoveryPending.reason;
     case 'owner-process-reused':
     case 'owner-state-dir-gone':
     case 'unknown':
     case 'inconsistent':
-      return 'DEVICE_CLAIM_OWNER_UNCERTAIN';
+      return DEVICE_CLAIM_CONFLICT_REASONS.ownerUncertain.reason;
   }
 }

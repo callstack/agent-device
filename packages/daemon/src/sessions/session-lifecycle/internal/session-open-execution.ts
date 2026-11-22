@@ -37,6 +37,7 @@ import {
   AppError,
   createRequestCanceledError,
   readDispatchDisclosure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
 import {
@@ -73,6 +74,11 @@ import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
+
+const OPEN_CLAIM_REASONS = {
+  // The device lost the claim this open was made with; close the session and open the device again.
+  claimLost: { reason: 'claim-lost-during-open' },
+} as const satisfies ReasonTable<'open'>;
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>
@@ -218,7 +224,7 @@ export async function renewOpenSessionClaim(
     'DEVICE_IN_USE',
     `${device.name} no longer holds the claim this open was made with.`,
     {
-      reason: 'claim-lost-during-open',
+      reason: OPEN_CLAIM_REASONS.claimLost.reason,
       deviceKey: ownership.deviceKey,
       hint: 'Close this session and open the device again to claim it.',
     },

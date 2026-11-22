@@ -46,6 +46,7 @@ import {
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
 } from '../../../core/session-runtime-admission.ts';
+import { RUNTIME_GATEWAY_REASONS } from '../../../core/runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type PerfRuntimeHandlerParams = Readonly<{
@@ -279,7 +280,7 @@ function requirePerfCaptureAdmissionLedger(
 ): PerfCaptureAdmissionLedger {
   if (params.perfCaptureAdmissionLedger) return params.perfCaptureAdmissionLedger;
   throw new AppError('COMMAND_FAILED', 'Perf capture admission ledger is not configured', {
-    reason: 'runtime-gateway-missing',
+    reason: RUNTIME_GATEWAY_REASONS.missing.reason,
   });
 }
 

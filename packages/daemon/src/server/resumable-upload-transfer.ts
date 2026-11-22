@@ -3,10 +3,18 @@ import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { PassThrough, finished, type Transform, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { createByteLimitStream } from '@agent-device/host-kit/archive';
 import { parseUploadContentLength, parseUploadContentRange } from './resumable-upload-range.ts';
 import { resolveIngressFailure, throwIfIngressAborted } from './upload-ingress.ts';
+
+const UPLOAD_TRANSFER_REASONS = {
+  // The staged upload holds more bytes than it declared, so it cannot resume; start a new upload.
+  stateCorrupt: { reason: 'UPLOAD_STATE_CORRUPT' },
+  // A failed chunk could not be rolled back, so the upload ticket was invalidated; start a new
+  // upload.
+  rollbackFailed: { reason: 'UPLOAD_ROLLBACK_FAILED' },
+} as const satisfies ReasonTable<'uploads'>;
 
 export type ResumableTransferEntry = {
   payloadPath: string;
@@ -164,7 +172,7 @@ async function currentOffset(entry: ResumableTransferEntry): Promise<number> {
   const size = stat?.size ?? 0;
   if (size > entry.sizeBytes) {
     throw new AppError('COMMAND_FAILED', 'Upload state is corrupt', {
-      reason: 'UPLOAD_STATE_CORRUPT',
+      reason: UPLOAD_TRANSFER_REASONS.stateCorrupt.reason,
     });
   }
   return size;
@@ -182,7 +190,10 @@ async function rollback(
     const failure = new AppError(
       'COMMAND_FAILED',
       'Upload rollback failed; the upload ticket was invalidated',
-      { reason: 'UPLOAD_ROLLBACK_FAILED', originalError: String(originalError) },
+      {
+        reason: UPLOAD_TRANSFER_REASONS.rollbackFailed.reason,
+        originalError: String(originalError),
+      },
       cleanupError,
     );
     await invalidate(failure);

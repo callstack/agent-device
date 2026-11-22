@@ -5,8 +5,14 @@ import {
   type KeyedLockHolder,
 } from '@agent-device/kernel/keyed-lock';
 import { hostDeviceIdOf } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { RequestExecutionLockKey } from './request-binding.ts';
+
+const REQUEST_EXECUTION_REASONS = {
+  // Another request is using the device while this request holds another device of the same host;
+  // run the step as its own request.
+  deviceLockBusy: { reason: 'DEVICE_EXECUTION_LOCK_BUSY' },
+} as const satisfies ReasonTable<'request execution'>;
 
 export type RequestExecutionLocks = {
   run<T>(task: () => Promise<T>): Promise<T>;
@@ -103,7 +109,7 @@ function deviceExecutionLockBusy(deviceId: string): AppError {
     'DEVICE_IN_USE',
     `Another request is using ${deviceId}, and this request already holds another device of the same host.`,
     {
-      reason: 'DEVICE_EXECUTION_LOCK_BUSY',
+      reason: REQUEST_EXECUTION_REASONS.deviceLockBusy.reason,
       deviceId,
       hint: 'Run this step as a separate request, or retry once the other request finishes.',
     },

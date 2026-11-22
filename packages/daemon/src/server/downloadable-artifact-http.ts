@@ -2,7 +2,7 @@ import http from 'node:http';
 import { once } from 'node:events';
 import { Transform } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import {
   cleanupDownloadableArtifact,
@@ -12,6 +12,12 @@ import {
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
 import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
+
+const ARTIFACT_DOWNLOAD_REASONS = {
+  // The artifact stream ended at a different size than the daemon recorded; `details` gives both
+  // sizes.
+  sizeMismatch: { reason: 'artifact_size_mismatch' },
+} as const satisfies ReasonTable<'artifact downloads'>;
 
 type DownloadableArtifactHttpRoute =
   | { kind: 'inventory' }
@@ -130,7 +136,7 @@ async function handleArtifactDownload(
           if (bytesRead !== artifact.sizeBytes) {
             callback(
               new AppError('COMMAND_FAILED', 'Artifact read did not match its declared size', {
-                reason: 'artifact_size_mismatch',
+                reason: ARTIFACT_DOWNLOAD_REASONS.sizeMismatch.reason,
                 expectedBytes: artifact.sizeBytes,
                 actualBytes: bytesRead,
               }),

@@ -7,8 +7,14 @@ import {
   leaseProviderRequiringRuntime,
 } from '@agent-device/contracts/lease-scope';
 import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
+
+export const DEVICE_LEASE_REASONS = {
+  // Another lease, or this tenant run, already holds the device; retry after that lease is released
+  // or expires.
+  busy: { reason: 'DEVICE_LEASE_BUSY' },
+} as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {
   maxActiveSimulatorLeases?: number;
@@ -389,7 +395,7 @@ export function leaseOwnTtlMs(lease: Pick<DeviceLease, 'expiresAt' | 'heartbeatA
 
 export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {
   return new AppError('DEVICE_IN_USE', 'Device is already leased', {
-    reason: 'DEVICE_LEASE_BUSY',
+    reason: DEVICE_LEASE_REASONS.busy.reason,
     deviceKey: activeLease.deviceKey,
     backend: activeLease.backend,
     leaseProvider: activeLease.leaseProvider,

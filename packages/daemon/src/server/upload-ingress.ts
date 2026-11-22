@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
 import { TRANSFER_BODY_INACTIVITY_TIMEOUT_MS } from '@agent-device/host-kit/transport';
 import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
 import { UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS } from './http/ingress-budget.ts';
@@ -15,7 +15,14 @@ import { sendRestJsonError } from './http-errors.ts';
  * through the existing response-disconnect signal.
  */
 const TRANSFER_PHASE_TIMEOUT_REASON = 'transfer_phase_timeout';
-const TRANSFER_INGRESS_AGGREGATE_REASON = 'transfer_ingress_deadline_exceeded';
+
+const UPLOAD_INGRESS_REASONS = {
+  // The upload request exceeded its aggregate deadline (`details.timeoutMs`), which also covers
+  // processing after the body arrived.
+  deadlineExceeded: { reason: 'transfer_ingress_deadline_exceeded' },
+  // The client disconnected or canceled before the upload finished.
+  canceled: { reason: 'upload_canceled' },
+} as const satisfies ReasonTable<'uploads'>;
 
 export type UploadTransferIngress = {
   /** Aborts on aggregate expiry or client disconnect while the request is unfinished. */
@@ -189,7 +196,7 @@ export function beginUploadTransferIngress(params: {
 
 function aggregateExpiry(): AppError {
   return new AppError('COMMAND_FAILED', 'Upload transfer deadline exceeded', {
-    reason: TRANSFER_INGRESS_AGGREGATE_REASON,
+    reason: UPLOAD_INGRESS_REASONS.deadlineExceeded.reason,
     transferPhase: 'request-body',
     timeoutMs: UPLOAD_TRANSFER_AGGREGATE_TIMEOUT_MS,
   });
@@ -309,5 +316,7 @@ export function resolveIngressFailure(signal: AbortSignal | undefined, failure: 
 export function throwIfIngressAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) return;
   if (signal.reason instanceof Error) throw signal.reason;
-  throw new AppError('COMMAND_FAILED', 'Upload canceled', { reason: 'upload_canceled' });
+  throw new AppError('COMMAND_FAILED', 'Upload canceled', {
+    reason: UPLOAD_INGRESS_REASONS.canceled.reason,
+  });
 }

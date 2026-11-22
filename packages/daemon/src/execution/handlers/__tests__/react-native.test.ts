@@ -754,7 +754,9 @@ test('react-native dismiss-overlay reports sparse verdict instead of no overlay 
     message:
       'React Native overlay state could not be determined because the accessibility tree is unreadable',
     details: {
-      reason: 'sparse tree',
+      reason: 'overlay_snapshot_unreadable',
+      verdictReason: 'sparse tree',
+      verdictReasonCode: 'sparse-tree',
       hint: expect.stringContaining('snapshot quality verdict is sparse'),
     },
   });

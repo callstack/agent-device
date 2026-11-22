@@ -8,6 +8,7 @@ import {
   refFrameEpoch,
   refFrameScope,
   refFrameState,
+  REF_FRAME_REASONS,
 } from '../core/ref-frame.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
@@ -270,7 +271,7 @@ export function unissuedRefReadError(
   const scope = refFrameScope(session);
   const currentGeneration = refFrameEpoch(session);
   return new AppError('COMMAND_FAILED', `Ref @${refBody} was not issued by the current ref frame`, {
-    reason: 'ref_not_issued',
+    reason: REF_FRAME_REASONS.notIssued.reason,
     ref: `@${refBody}`,
     ...(currentGeneration !== undefined ? { currentGeneration } : {}),
     scope: scope === 'all' ? 'all' : Array.from(scope),

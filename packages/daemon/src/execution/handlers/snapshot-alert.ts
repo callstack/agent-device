@@ -6,9 +6,8 @@ import {
   parseAlertAction,
   type AlertAction,
   DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
-  ALERT_WAIT_WINDOW_TOO_LONG_REASON,
 } from '@agent-device/contracts/alert-contract';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   alertAcceptUse,
   alertDismissUse,
@@ -33,6 +32,12 @@ import type {
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../../core/snapshot-runtime-capture-input.ts';
 import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel/contracts';
+
+const ALERT_WAIT_REASONS = {
+  // `alert wait` was given a longer window than it can honour; the command refuses it before
+  // running and never shortens it. `details.maxWaitWindowMs` names the limit.
+  windowTooLong: { reason: 'alert-wait-window-too-long' },
+} as const satisfies ReasonTable<'alert'>;
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;
@@ -182,7 +187,7 @@ function alertTimeoutMs(action: AlertAction, rawTimeout: string | undefined): nu
       `alert wait timeoutMs exceeds the maximum of ${MAX_ARMABLE_ALERT_WAIT_WINDOW_MS} ms`,
       {
         hint: 'Pass a shorter timeout, or run repeated alert waits.',
-        reason: ALERT_WAIT_WINDOW_TOO_LONG_REASON,
+        reason: ALERT_WAIT_REASONS.windowTooLong.reason,
         maxWaitWindowMs: MAX_ARMABLE_ALERT_WAIT_WINDOW_MS,
       },
     );

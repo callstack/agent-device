@@ -47,8 +47,13 @@ import {
   type BoundSelectorQuery,
 } from './selector-operation-binding.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isHandheldAppleDevice } from '@agent-device/kernel/device';
+
+const SNAPSHOT_SESSION_REASONS = {
+  // The iOS command needs an active app session on the target device; run `open` first.
+  iosAppSessionRequired: { reason: 'ios_app_session_required' },
+} as const satisfies ReasonTable<'snapshot capture'>;
 
 export type SnapshotRuntimeRouteParams = {
   /** Builds the command surface this request's snapshot runtime executes through. */
@@ -488,7 +493,7 @@ async function snapshotPlanUnavailableResponse(
     'SESSION_NOT_FOUND',
     `iOS ${params.command} requires an active app session on the target device. Run open first (for example: open --session ${params.session?.name ?? 'sim'} --platform ios --device "<name>" <app>).`,
     {
-      reason: 'ios_app_session_required',
+      reason: SNAPSHOT_SESSION_REASONS.iosAppSessionRequired.reason,
       ...(openCommandHint ? { hint: openCommandHint } : {}),
     },
   );

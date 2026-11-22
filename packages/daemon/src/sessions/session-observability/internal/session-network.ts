@@ -12,7 +12,10 @@ import {
   type DaemonResponse,
 } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
+import {
+  RUNTIME_GATEWAY_REASONS,
+  unsupportedOperationResponse,
+} from '../../../core/runtime-admission.ts';
 import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -75,7 +78,7 @@ export async function handleNetworkCommand(params: NetworkHandlerParams): Promis
 function requireNetworkBindDevice(bindDevice: BindDeviceRuntime | undefined): BindDeviceRuntime {
   if (bindDevice) return bindDevice;
   throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {
-    reason: 'runtime-gateway-missing',
+    reason: RUNTIME_GATEWAY_REASONS.missing.reason,
   });
 }
 

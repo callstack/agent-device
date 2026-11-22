@@ -8,11 +8,16 @@ import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { runCmd } from '@agent-device/host-kit/command';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { isMacOs, isMacOsBundleId } from '@agent-device/kernel/device';
-import { AppError, type DaemonError } from '@agent-device/kernel/errors';
+import { AppError, type DaemonError, type ReasonTable } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from '../core/daemon-command-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionState } from '../core/session-state.ts';
+
+const MACOS_APP_LEASE_REASONS = {
+  // A `macos-app` lease does not cover this request; `details.rule` names the limit.
+  denied: { reason: 'MACOS_APP_LEASE_DENIED' },
+} as const satisfies ReasonTable<'leases'>;
 
 /**
  * A `macos-app` lease rents one app on the host Mac, never the desktop. Its device key is the app's
@@ -97,7 +102,7 @@ function macOsAppLeaseDenied(
 ): AppError {
   return new AppError('UNAUTHORIZED', message, {
     ...details,
-    reason: 'MACOS_APP_LEASE_DENIED',
+    reason: MACOS_APP_LEASE_REASONS.denied.reason,
     rule,
     retriable: false,
     hint: 'This lease is limited to one macOS app; retrying will not help. Use an allowed command on the leased app.',

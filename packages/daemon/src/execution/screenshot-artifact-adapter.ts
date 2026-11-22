@@ -1,10 +1,19 @@
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ArtifactAdapter, ReservedOutputFile } from '@agent-device/contracts/artifact-adapter';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+const SCREENSHOT_DESTINATION_REASONS = {
+  // Writing the screenshot to its output path failed; `details.filesystemCode` names the error.
+  publicationFailed: { reason: 'screenshot_publication_failed' },
+  // The output path is a symbolic link to a file that does not exist.
+  danglingSymlink: { reason: 'screenshot_destination_dangling_symlink' },
+  // The output path exists and is not a regular file.
+  notFile: { reason: 'screenshot_destination_not_file' },
+} as const satisfies ReasonTable<'screenshot'>;
 
 export function createDaemonScreenshotArtifactAdapter(
   atomic: boolean,
@@ -66,7 +75,7 @@ export function createDaemonScreenshotArtifactAdapter(
 
 function screenshotPublicationError(error: unknown, outputPath: string): AppError {
   return new AppError('COMMAND_FAILED', 'Failed to publish screenshot', {
-    reason: 'screenshot_publication_failed',
+    reason: SCREENSHOT_DESTINATION_REASONS.publicationFailed.reason,
     path: outputPath,
     ...(error instanceof Error && 'code' in error ? { filesystemCode: error.code } : {}),
     cause: errorMessage(error),
@@ -123,7 +132,7 @@ async function resolveScreenshotDestination(outputPath: string): Promise<string>
               'INVALID_ARGS',
               'Screenshot destination is a dangling symbolic link',
               {
-                reason: 'screenshot_destination_dangling_symlink',
+                reason: SCREENSHOT_DESTINATION_REASONS.danglingSymlink.reason,
                 path: outputPath,
               },
             );
@@ -137,7 +146,7 @@ async function resolveScreenshotDestination(outputPath: string): Promise<string>
     });
     if (target && !target.isFile()) {
       throw new AppError('INVALID_ARGS', 'Screenshot destination must be a regular file', {
-        reason: 'screenshot_destination_not_file',
+        reason: SCREENSHOT_DESTINATION_REASONS.notFile.reason,
         path: outputPath,
       });
     }

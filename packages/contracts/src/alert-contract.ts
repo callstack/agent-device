@@ -32,15 +32,6 @@ export const ALERT_ACTION_RETRY_MS = 2_000;
 export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
 
 /**
- * `alert wait` was given a window longer than the command can honour. The request envelope is a
- * timer too, and it is armed above the window with the daemon-result margin, so past that ceiling
- * the wait would be cut off mid-window or misfire at 1 ms. The command refuses the window before
- * anything runs, with `details.maxWaitWindowMs` naming what it will accept; it never shortens the
- * window the caller asked for.
- */
-export const ALERT_WAIT_WINDOW_TOO_LONG_REASON = 'alert-wait-window-too-long';
-
-/**
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
