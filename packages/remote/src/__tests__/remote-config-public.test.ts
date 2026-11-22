@@ -46,3 +46,14 @@ test('public remote-config helpers resolve file paths and merged profiles', () =
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a whitespace-only lease provider is absent from a remote profile', () => {
+  const root = mkdtempForTestSync('agent-device-remote-config-blank-provider-');
+  const configPath = path.join(root, 'remote.json');
+  const daemonBaseUrl = 'https://daemon.example.test';
+  fs.writeFileSync(configPath, JSON.stringify({ daemonBaseUrl, leaseProvider: '  ' }));
+
+  const { profile } = resolveRemoteConfigProfile({ configPath, cwd: root, env: {} });
+
+  assert.deepEqual(profile, { daemonBaseUrl });
+});

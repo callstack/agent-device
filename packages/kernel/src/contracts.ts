@@ -48,7 +48,7 @@ export function readLeaseBackend(raw: string | undefined): LeaseBackend | undefi
 }
 
 export function canonicalLeaseProvider(raw: string | undefined): string | undefined {
-  return raw?.trim();
+  return raw?.trim() || undefined;
 }
 
 export function readLeaseProvider(raw: unknown): string | undefined {

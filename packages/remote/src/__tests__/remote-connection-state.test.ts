@@ -12,6 +12,8 @@ import {
   hashRemoteConfigFile,
   resolveConnectionDeviceScope,
   resolveRemoteConnectionDefaults,
+  readRemoteConnectionState,
+  requireLeasedConnectionSession,
   writeRemoteConnectionState,
   type RemoteConnectionState,
 } from '../remote-connection-state.ts';
@@ -277,4 +279,32 @@ test('connectionPlatformMatchesSelection refuses the other leaf of a bound apple
     true,
     'with no backend, nothing has decided the family and the alias stands',
   );
+});
+
+test('a legacy whitespace-only provider does not make a stored connection leased', async () => {
+  const stateDir = await mkdtempForTest('agent-device-connection-blank-provider-');
+  const now = new Date().toISOString();
+  const recordPath = path.join(stateDir, 'remote-connections', 'default.json');
+  const state: RemoteConnectionState = {
+    version: 1,
+    session: 'default',
+    remoteConfigPath: path.join(stateDir, 'remote.json'),
+    remoteConfigHash: 'legacy',
+    tenant: 'tenant-a',
+    runId: 'run-a',
+    connectedAt: now,
+    updatedAt: now,
+    leaseProvider: '  ',
+  };
+  fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+  fs.writeFileSync(recordPath, JSON.stringify(state));
+
+  const legacy = readRemoteConnectionState({ stateDir, session: state.session });
+  assert.ok(legacy);
+  assert.equal(legacy.leaseProvider, undefined);
+  requireLeasedConnectionSession(legacy, undefined);
+
+  writeRemoteConnectionState({ stateDir, state });
+  const written = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  assert.equal(Object.hasOwn(written, 'leaseProvider'), false);
 });
