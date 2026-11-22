@@ -66,7 +66,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open the other app or surface in a new `--session`. |
+| `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
 | `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
@@ -156,7 +156,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
-| `keyboard_dismiss_unavailable` | The keyboard stayed up: the Apple runner found no dismiss key and pressed nothing, or the Android IME stayed visible after Escape key events, which may have reached the app. `details.dispatched` says which. |
+| `keyboard_dismiss_unavailable` | The keyboard stayed up: the Apple runner leaves a visible keyboard alone and presses nothing, or the Android IME stayed visible after Escape key events, which may have reached the app. `details.dispatched` says which. |
 
 ### `logs`
 
@@ -170,7 +170,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `launch-console-owner-unadmitted` | --launch-console was asked for on an app-launch owner that cannot stream a console. |
-| `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open the other app or surface in a new `--session`. |
+| `app-device-scope` | This session drives one macOS app as its own device, so it cannot open or close another app or open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface such as `--surface desktop` opens only after the sessions holding app devices on that Mac end. |
 | `claim-lost-during-open` | The device lost the claim this open was made with; close the session and open the device again. |
 | `runtime-hints-operation-missing` | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them. |
 | `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
@@ -820,7 +820,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client re-reads health and retries once; this reaches the caller when the retry was refused too. |
+| `remote_instance_mismatch` | The daemon or proxy behind the remote URL was replaced since the client last read its health, so it refused a request addressed to the earlier instance. The client refreshes health and resends at most once; this reaches the caller when that resend is refused too. |
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
 | `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
@@ -855,7 +855,7 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `duplicate_request_id` | A request arrived with an id another request is still in flight under. |
-| `request_canceled` | The caller canceled the request or disconnected before the work finished, so the command stopped, including a snapshot, native build, provider request, device start or install it was waiting on. No retry is needed unless the cancellation was unintended. |
+| `request_canceled` | The caller canceled the request or disconnected before the work finished, so the command stopped waiting, including on a snapshot, native build, provider request, device start or install. A provider device start already submitted may keep running. No retry is needed unless the cancellation was unintended. |
 
 ### Request execution
 

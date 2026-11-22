@@ -408,8 +408,9 @@ export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
  */
 export const REQUEST_CANCELED_REASONS = {
   // The caller canceled the request or disconnected before the work finished, so the command
-  // stopped, including a snapshot, native build, provider request, device start or install it was
-  // waiting on. No retry is needed unless the cancellation was unintended.
+  // stopped waiting, including on a snapshot, native build, provider request, device start or
+  // install. A provider device start already submitted may keep running. No retry is needed unless
+  // the cancellation was unintended.
   canceled: { reason: 'request_canceled' },
 } as const satisfies ReasonTable<'request cancellation'>;
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
@@ -454,9 +455,9 @@ export const INTERACTOR_BINDING_REFUSAL_REASONS = {
  * because `contracts/keyboard` would grow the Android input-state reader's eager closure.
  */
 export const KEYBOARD_DISMISS_REASONS = {
-  // The keyboard stayed up: the Apple runner found no dismiss key and pressed nothing, or the Android
-  // IME stayed visible after Escape key events, which may have reached the app. `details.dispatched`
-  // says which.
+  // The keyboard stayed up: the Apple runner leaves a visible keyboard alone and presses nothing, or
+  // the Android IME stayed visible after Escape key events, which may have reached the app.
+  // `details.dispatched` says which.
   unavailable: { reason: 'keyboard_dismiss_unavailable' },
 } as const satisfies ReasonTable<'keyboard'>;
 
