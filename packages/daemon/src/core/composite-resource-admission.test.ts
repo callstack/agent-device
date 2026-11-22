@@ -208,7 +208,7 @@ test.each([
           leaseId: lease.leaseId,
           tenantId: lease.tenantId,
           runId: lease.runId,
-          leaseBackend: lease.backend,
+          backend: lease.backend,
         },
       });
       const script = path.join(world.daemon.stateDir, 'provider-close.ad');
@@ -822,7 +822,7 @@ test.each(['batch', 'replay'] as const)(
             leaseId: lease.leaseId,
             tenantId: lease.tenantId,
             runId: lease.runId,
-            leaseBackend: lease.backend,
+            backend: lease.backend,
           },
         });
         return lease;

@@ -95,8 +95,8 @@ export function buildDaemonHttpAuthHeaders(token: string | undefined): Record<st
 }
 
 /** The tenant id every daemon route accepts, trimmed, or `undefined` when it breaks the rule. */
-export function normalizeTenantId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
+export function normalizeTenantId(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
   const value = raw.trim();
   if (!value) return undefined;
   if (!/^[a-zA-Z0-9._-]{1,128}$/.test(value)) return undefined;

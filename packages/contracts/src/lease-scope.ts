@@ -40,6 +40,11 @@ export type LeaseScope = {
 
 export type LeaseDiagnosticsContext = Omit<LeaseScope, 'leaseTtlMs' | 'leaseRetainOnClose'>;
 
+/** The values a request sent for lease fields, by field. A value of any type is a claim. */
+export type LeaseClaims = Readonly<
+  Partial<Record<keyof LeaseDiagnosticsContext, readonly unknown[]>>
+>;
+
 export type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_release';
 
 export type LeaseAllocateRequestScope = {
@@ -521,6 +526,12 @@ export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
 export const MIN_LEASE_WINDOW_MS = 5_000;
 /** The idle window of every remote device lease: proxy, cloud device and cloud WebDriver. */
 export const REMOTE_LEASE_IDLE_TTL_MS = 5 * 60 * 1000;
+
+/** A lease id is 16 to 128 hex digits. Case and surrounding space do not change it. */
+export function normalizeLeaseId(raw: unknown): string | undefined {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return /^[a-f0-9]{16,128}$/i.test(value) ? value.toLowerCase() : undefined;
+}
 
 /** The lease reasons that more than one package raises or reads. */
 export const LEASE_REASONS = {

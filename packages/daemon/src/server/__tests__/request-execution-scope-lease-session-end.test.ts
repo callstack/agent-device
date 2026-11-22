@@ -36,7 +36,7 @@ async function publishLeasedSession(
 ): Promise<string> {
   const { stateDir } = claimStores();
   const session = makeIosSession(name, {
-    lease: { leaseId, tenantId: 'tenant-a', runId: 'run-1' },
+    lease: { backend: 'ios-simulator', leaseId, tenantId: 'tenant-a', runId: 'run-1' },
   });
   const acquired = await acquireDeviceClaim({
     env: process.env,
@@ -94,7 +94,7 @@ function retainExecutionHost(sessionStore: SessionStore, name = 'leased', leaseI
   const ref = sessionStore.publish(
     name,
     makeIosSession(name, {
-      lease: { leaseId, tenantId: 'tenant-a', runId: 'run-1' },
+      lease: { backend: 'ios-simulator', leaseId, tenantId: 'tenant-a', runId: 'run-1' },
     }),
   );
   sessionStore.retire(ref, { retainExecutionHost: true });
@@ -123,7 +123,7 @@ test('expiry waiting behind close cleans the host that close retains before reti
   const ref = sessionStore.publish(
     'leased',
     makeIosSession('leased', {
-      lease: { leaseId: 'lease-1', tenantId: 'tenant-a', runId: 'run-1' },
+      lease: { backend: 'ios-simulator', leaseId: 'lease-1', tenantId: 'tenant-a', runId: 'run-1' },
     }),
   );
   const cleanup = vi.fn(async () => {});
@@ -166,7 +166,12 @@ test.each([false, true])(
     const replacement = sessionStore.publish(
       'replacement',
       makeIosSession('replacement', {
-        lease: { leaseId: 'lease-2', tenantId: 'tenant-b', runId: 'run-2' },
+        lease: {
+          backend: 'ios-simulator',
+          leaseId: 'lease-2',
+          tenantId: 'tenant-b',
+          runId: 'run-2',
+        },
       }),
     );
     if (retained) sessionStore.retire(replacement, { retainExecutionHost: true });
@@ -357,7 +362,7 @@ test('end tears down the session opened under the lease and clears its device cl
   sessionStore.publish(
     'other',
     makeIosSession('other', {
-      lease: { leaseId: 'lease-2', tenantId: 'tenant-b', runId: 'run-2' },
+      lease: { backend: 'ios-simulator', leaseId: 'lease-2', tenantId: 'tenant-b', runId: 'run-2' },
     }),
   );
   expect(fs.existsSync(claimPath)).toBe(true);

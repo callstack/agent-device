@@ -1,24 +1,40 @@
+import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
+  IOS_SIMULATOR,
   closeLoopbackServer,
   createTestHostEnvironment,
+  deviceClaimFilePath,
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createDaemonHttpServer } from './http-server.ts';
+import { createSocketServer, listenNetServer } from './transport.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosAppSession,
+  makeMacOsSession,
+} from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { retainOrphanedDeviceClaims } from '../../__tests__/support/device-claim-store.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { resolveSessionScope } from '../../sessions/session-routing.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
+import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
+import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 
 // One proxy token for every client, as an integrator that runs many sandboxes behind one proxy has.
 const PROXY_TOKEN = 'shared-proxy-token';
@@ -29,12 +45,13 @@ const OWNER_SCOPE = {
   runId: 'run-a',
   leaseProvider: 'proxy',
   clientId: 'client-a',
-  deviceKey: 'ios:mobile:SIM-001',
+  deviceKey: `ios:mobile:${IOS_SIMULATOR.id}`,
 } as const;
 
+type RpcError = { code?: string; details?: { reason?: string; field?: string } };
 type RpcBody = {
-  result?: { ok?: boolean };
-  error?: { data?: { code?: string; details?: { reason?: string; field?: string } } };
+  result?: { ok?: boolean; data?: { sessions?: { address?: string }[] } };
+  error?: { data?: RpcError };
 };
 
 let world: Awaited<ReturnType<typeof startProxiedDaemon>> | undefined;
@@ -49,26 +66,34 @@ afterEach(async () => {
   world = undefined;
 });
 
-async function startProxiedDaemon() {
+async function startProxiedDaemon(
+  options: {
+    env?: NodeJS.ProcessEnv;
+    openSession?: boolean;
+    daemonPolicy?: ReturnType<typeof parseDaemonPolicy>;
+  } = {},
+) {
   const sessionStore = makeSessionStore('agent-device-proxy-session-lease-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({ ...OWNER_SCOPE, leaseBackend: 'ios-instance' });
   const sessionName = tenantScopedSessionName(TENANT, SESSION);
-  sessionStore.publish(
-    sessionName,
-    makeIosAppSession(sessionName, {
-      sessionScope: { kind: 'tenant', id: TENANT },
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: TENANT,
-        runId: OWNER_SCOPE.runId,
-        leaseBackend: lease.backend,
-        leaseProvider: OWNER_SCOPE.leaseProvider,
-        clientId: OWNER_SCOPE.clientId,
-        deviceKey: OWNER_SCOPE.deviceKey,
-      },
-    }),
-  );
+  if (options.openSession !== false) {
+    sessionStore.publish(
+      sessionName,
+      makeIosAppSession(sessionName, {
+        sessionScope: { kind: 'tenant', id: TENANT },
+        lease: {
+          leaseId: lease.leaseId,
+          tenantId: TENANT,
+          runId: OWNER_SCOPE.runId,
+          backend: lease.backend,
+          leaseProvider: OWNER_SCOPE.leaseProvider,
+          clientId: OWNER_SCOPE.clientId,
+          deviceKey: OWNER_SCOPE.deviceKey,
+        },
+      }),
+    );
+  }
   const handleRequest = createRequestHandler({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
@@ -76,14 +101,17 @@ async function startProxiedDaemon() {
     token: 'daemon-token',
     sessionStore,
     leaseRegistry,
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    daemonPolicy: options.daemonPolicy,
+    deviceInventoryGateways: createTestDeviceInventoryGateways({
+      local: async () => [IOS_SIMULATOR],
+    }),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
   const daemon = await createDaemonHttpServer({
     token: 'daemon-token',
     handleRequest,
-    env: {},
+    env: options.env ?? {},
     cwd: process.cwd(),
   });
   const daemonPort = await listenOnLoopback(daemon);
@@ -101,21 +129,48 @@ async function startProxiedDaemon() {
     });
     return (await response.json()) as RpcBody;
   };
+  // The local socket runs no HTTP intake, so nothing has recorded a displaced tenant before routing.
+  const socketServer = createSocketServer(handleRequest);
+  const socketPort = await listenNetServer(socketServer);
+  const socket = async (request: Record<string, unknown>) =>
+    await new Promise<RpcBody>((resolve, reject) => {
+      const connection = net.createConnection({ host: '127.0.0.1', port: socketPort });
+      let buffer = '';
+      connection.setEncoding('utf8');
+      connection.once('error', reject);
+      connection.on('data', (chunk: string) => {
+        buffer += chunk;
+        if (!buffer.includes('\n')) return;
+        connection.destroy();
+        const response = JSON.parse(buffer) as { ok: boolean; error?: RpcError };
+        resolve(response.ok ? { result: { ok: true } } : { error: { data: response.error } });
+      });
+      connection.write(
+        `${JSON.stringify({ token: 'daemon-token', positionals: [], ...request })}\n`,
+      );
+    });
   return {
     leaseId: lease.leaseId,
     sessionName,
     sessionStore,
     leaseRegistry,
     rpc,
-    send: async (command: string, positionals: string[], meta: Record<string, unknown>) =>
+    socket,
+    send: async (
+      command: string,
+      positionals: string[],
+      meta: Record<string, unknown>,
+      flags: Record<string, unknown> = {},
+    ) =>
       await rpc('agent_device.command', {
         session: SESSION,
         command,
         positionals,
-        flags: {},
+        flags,
         meta: { tenantId: TENANT, sessionIsolation: 'tenant', sessionExplicit: true, ...meta },
       }),
     close: async () => {
+      await closeLoopbackServer(socketServer);
       await closeLoopbackServer(proxy);
       await closeLoopbackServer(daemon);
     },
@@ -222,3 +277,491 @@ test('an open of an existing leased session checks the lease id before the proxy
   expect(reopened.error?.data?.code, JSON.stringify(reopened)).not.toBe('INVALID_ARGS');
   expect(reopened.error?.data?.code, JSON.stringify(reopened)).not.toBe('UNAUTHORIZED');
 });
+
+// #4935: a label that an adapter overwrites or collapses is still a claim on the lease.
+
+test.each([
+  ['a tenant flag beside the owner tenant in meta', { tenant: 'tenant-other' }, 'tenantId'],
+  [
+    'a provider flag beside the owner provider flag',
+    { leaseProvider: 'proxy', provider: 'other' },
+    'leaseProvider',
+  ],
+])('the owner lease id does not admit %s', async (_label, flags, field) => {
+  if (!world) return;
+  const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+
+  expectLeaseFieldRefusal(await world.send('snapshot', [], owner, flags), field);
+
+  const snapshot = await world.send('snapshot', [], owner, { tenant: TENANT, provider: 'proxy' });
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+});
+
+test.each([
+  ['tenant', { tenant: 'tenant-other' }, 'tenantId'],
+  ['null tenant', { tenant: null }, 'tenantId'],
+  ['numeric tenant id beside a tenant', { tenantId: 5, tenant: TENANT }, 'tenantId'],
+  ['provider', { provider: 'other' }, 'leaseProvider'],
+  ['backend', { leaseBackend: 'ios-instance', backend: 'android-instance' }, 'leaseBackend'],
+])(
+  'install_from_source refuses a %s alias that contradicts its sibling param',
+  async (_alias, contradiction, field) => {
+    if (!world) return;
+    const install = {
+      session: world.sessionName,
+      platform: 'ios',
+      source: { kind: 'url', url: 'http://127.0.0.1:9/app.zip' },
+      ...OWNER_SCOPE,
+      leaseId: world.leaseId,
+    };
+
+    expectLeaseFieldRefusal(
+      await world.rpc('agent_device.install_from_source', { ...install, ...contradiction }),
+      field,
+    );
+
+    const owner = await world.rpc('agent_device.install_from_source', {
+      ...install,
+      tenant: TENANT,
+      provider: OWNER_SCOPE.leaseProvider,
+      leaseBackend: 'ios-instance',
+      backend: 'ios-instance',
+    });
+    // Admitted: it reaches the device runtime, which this fake device does not implement.
+    expect(owner.error?.data?.code, JSON.stringify(owner)).toBe('UNSUPPORTED_OPERATION');
+  },
+);
+
+function writeAttestingAuthHook(): NodeJS.ProcessEnv {
+  const hookPath = path.join(mkdtempForTestSync('agent-device-attesting-hook-'), 'hook.mjs');
+  fs.writeFileSync(hookPath, `export default () => ({ tenantId: '${TENANT}' });\n`);
+  return { AGENT_DEVICE_HTTP_AUTH_HOOK: hookPath };
+}
+
+test('a tenant the caller declares is compared with the lease after the auth hook attests another', async () => {
+  if (!world) return;
+  await world.close();
+  world = await startProxiedDaemon({ env: writeAttestingAuthHook() });
+  const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+
+  expectLeaseFieldRefusal(
+    await world.send('snapshot', [], { ...owner, tenantId: 'tenant-other' }),
+    'tenantId',
+  );
+  expectLeaseFieldRefusal(
+    await world.send('snapshot', [], owner, { tenant: 'tenant-other' }),
+    'tenantId',
+  );
+
+  const snapshot = await world.send('snapshot', [], owner);
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+});
+
+test('a batch that opens a leased session carries the declared tenant to its later steps', async () => {
+  if (!world) return;
+  await world.close();
+  world = await startProxiedDaemon({ env: writeAttestingAuthHook(), openSession: false });
+  const owner = { ...OWNER_SCOPE, leaseBackend: 'ios-instance', leaseId: world.leaseId };
+  const batchSteps = [
+    { command: 'open', positionals: ['com.example.app'] },
+    { command: 'snapshot', positionals: [] },
+  ];
+
+  const declared = await world.send(
+    'batch',
+    [],
+    { ...owner, tenantId: 'tenant-other' },
+    { platform: 'ios', batchSteps },
+  );
+  expectLeaseFieldRefusal(declared, 'tenantId');
+  expect(declared.error?.data?.details).toMatchObject({ step: 2, executed: 1 });
+
+  const snapshot = await world.send('batch', [], owner, { batchSteps: batchSteps.slice(1) });
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+});
+
+test('a batch step that names the lease scope itself still carries a run id the batch declared', async () => {
+  if (!world) return;
+  await world.close();
+  world = await startProxiedDaemon({ openSession: false });
+  const { rpc, leaseId } = world;
+  const { tenantId, ...labels } = OWNER_SCOPE;
+  const flags = { ...labels, tenant: tenantId, leaseBackend: 'ios-instance', leaseId };
+  const batch = async (batchFlags: Record<string, unknown>) =>
+    await rpc('agent_device.command', {
+      session: 'fresh',
+      command: 'batch',
+      positionals: [],
+      meta: { sessionExplicit: true },
+      flags: {
+        platform: 'ios',
+        ...batchFlags,
+        batchSteps: [
+          { command: 'open', positionals: ['com.example.app'], flags },
+          { command: 'snapshot', positionals: [], flags },
+        ],
+      },
+    });
+
+  const declared = await batch({ runId: 'run-other' });
+  expectLeaseFieldRefusal(declared, 'runId');
+  expect(declared.error?.data?.details).toMatchObject({ step: 2, executed: 1 });
+});
+
+test.each([5, null])(
+  'a run id of %s is refused in meta, in flags and as a param',
+  async (runId) => {
+    if (!world) return;
+    const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+
+    expectLeaseFieldRefusal(await world.send('snapshot', [], { ...owner, runId }), 'runId');
+    expectLeaseFieldRefusal(await world.send('snapshot', [], owner, { runId }), 'runId');
+    expectLeaseFieldRefusal(
+      await world.rpc('agent_device.install_from_source', {
+        session: world.sessionName,
+        platform: 'ios',
+        source: { kind: 'url', url: 'http://127.0.0.1:9/app.zip' },
+        ...owner,
+        runId,
+      }),
+      'runId',
+    );
+  },
+);
+
+test('the owner is admitted and listed under another spelling of its lease id and labels', async () => {
+  if (!world) return;
+  const owner = {
+    ...OWNER_SCOPE,
+    leaseId: ` ${world.leaseId.toUpperCase()} `,
+    runId: ` ${OWNER_SCOPE.runId} `,
+    clientId: ` ${OWNER_SCOPE.clientId} `,
+  };
+
+  const listed = await world.send('session_list', [], owner);
+  expect(listed.result?.data?.sessions, JSON.stringify(listed)).toEqual([
+    expect.objectContaining({ address: world.sessionName }),
+  ]);
+
+  const snapshot = await world.send('snapshot', [], owner);
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+});
+
+// A tenant that routing replaces, or that routing cannot read, is still a claim on the lease.
+
+test.each([5, 0, false])(
+  'unattested HTTP routes by the tenant flag and compares the meta tenant %s',
+  async (tenantId) => {
+    if (!world) return;
+    const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+    const flags = { tenant: TENANT };
+
+    expectLeaseFieldRefusal(
+      await world.send('snapshot', [], { ...owner, tenantId }, flags),
+      'tenantId',
+    );
+    const snapshot = await world.send('snapshot', [], { ...owner, tenantId: undefined }, flags);
+    expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+  },
+);
+
+test.each([5, 0, false])(
+  'session inventory rejects the original tenant %s after routing by the flag',
+  async (tenantId) => {
+    if (!world) return;
+    const flags = { tenant: TENANT };
+
+    const refused = await world.send('session_list', [], { tenantId }, flags);
+    expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+
+    const listed = await world.send('session_list', [], { tenantId: undefined }, flags);
+    expect(listed.result?.ok, JSON.stringify(listed)).toBe(true);
+  },
+);
+
+test('a malformed tenant takes precedence over ambiguous workspace routing', async () => {
+  if (!world) return;
+  const cwd = mkdtempForTestSync('agent-device-ambiguous-tenant-');
+  const request = {
+    token: 'daemon-token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+    meta: { cwd },
+  };
+  const sessionScope = resolveSessionScope(request);
+  world.sessionStore.publish('ios', makeIosAppSession('ios', { sessionScope }));
+  world.sessionStore.publish('android', makeAndroidSession('android', { sessionScope }));
+
+  const ambiguous = await world.socket(request);
+  expect(ambiguous.error?.data?.code, JSON.stringify(ambiguous)).toBe('AMBIGUOUS_MATCH');
+
+  const malformed = await world.socket({ ...request, meta: { cwd, tenantId: 'not a tenant' } });
+  expect(malformed.error?.data?.code, JSON.stringify(malformed)).toBe('INVALID_ARGS');
+});
+
+test('a malformed tenant flag takes precedence over conflicting isolation carriers', async () => {
+  if (!world) return;
+  world.sessionStore.publish('local', makeIosAppSession('local'));
+  const refused = await world.socket({
+    session: 'local',
+    command: 'snapshot',
+    meta: { sessionExplicit: true, sessionIsolation: 'none' },
+    flags: { sessionIsolation: 'tenant', tenant: 'not a tenant' },
+  });
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+});
+
+test('a malformed meta tenant takes precedence over an invalid implicit workspace', async () => {
+  if (!world) return;
+  const refused = await world.socket({
+    session: 'default',
+    command: 'snapshot',
+    meta: { tenantId: 'not a tenant', cwd: 1 },
+  });
+  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+});
+
+test('a malformed tenant takes precedence over device pin and daemon policy refusals', async () => {
+  if (!world) return;
+  await world.close();
+  world = await startProxiedDaemon({
+    daemonPolicy: parseDaemonPolicy(
+      { version: 1, commands: { deny: ['snapshot'] } },
+      '/policy.json',
+    ),
+  });
+  const devicePin = {
+    selector: { platform: 'android' },
+    source: { kind: 'explicit', path: '/pin.json' },
+  };
+  const request = {
+    session: 'local',
+    command: 'snapshot',
+    flags: { platform: 'ios' },
+    positionals: [],
+  };
+  const rpc = (meta: Record<string, unknown>) =>
+    world!.rpc('agent_device.command', { ...request, meta });
+
+  expect((await rpc({ devicePin })).error?.data?.details?.reason).toBe('device_pin_conflict');
+  expect((await rpc({})).error?.data?.details?.reason).toBe('DAEMON_POLICY_DENIED');
+  for (const meta of [{}, { devicePin }]) {
+    const malformed = await rpc({ ...meta, tenantId: 'not a tenant' });
+    expect(malformed.error?.data?.code, JSON.stringify(malformed)).toBe('INVALID_ARGS');
+    expect(malformed.error?.data?.details?.reason).toBeUndefined();
+  }
+});
+
+test('a refused PID-pinned app lease does not stamp session activity', async () => {
+  if (!world) return;
+  const deviceKey = 'com.example.app@2147483646';
+  const lease = world.leaseRegistry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: TENANT,
+    runId: OWNER_SCOPE.runId,
+    leaseBackend: 'macos-app',
+    deviceKey,
+  });
+  const session = makeMacOsSession('pinned', {
+    appBundleId: 'com.example.app',
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      backend: lease.backend,
+      deviceKey,
+    },
+  });
+  world.sessionStore.publish(session.name, session);
+
+  const refused = await world.rpc('agent_device.command', {
+    session: session.name,
+    command: 'snapshot',
+    positionals: [],
+    meta: { leaseId: lease.leaseId },
+  });
+  expect(refused.error?.data, JSON.stringify(refused)).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'MACOS_APP_LEASE_DENIED', rule: 'process' },
+  });
+  expect(session.lastActivityAtMs).toBeUndefined();
+});
+
+test('a refused standalone lease label does not count as session activity', async () => {
+  if (!world) return;
+  const session = world.sessionStore.get(world.sessionName);
+  expect(session).toBeDefined();
+  const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+
+  expectLeaseFieldRefusal(await world.send('snapshot', [], owner, { runId: null }), 'runId');
+  expect(session?.lastActivityAtMs).toBeUndefined();
+
+  const snapshot = await world.send('snapshot', [], owner);
+  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+  expect(session?.lastActivityAtMs).toBeGreaterThan(0);
+});
+
+test.each([
+  ['a malformed tenant string', { tenantId: 'not a tenant' }, {}],
+  [
+    'a falsy meta tenant with a valid routing flag',
+    { tenantId: false, sessionIsolation: 'tenant' },
+    { tenant: TENANT },
+  ],
+])(
+  '%s is refused before a fresh open checks device contention',
+  async (_label, meta, tenantFlags) => {
+    if (!world) return;
+    const { sessionStore } = world;
+    expect(sessionStore.findByDevice(IOS_SIMULATOR.id)?.address).toBe(world.sessionName);
+    const findHolder = vi.spyOn(sessionStore, 'findByDevice');
+    try {
+      const response = await world.rpc('agent_device.command', {
+        session: 'fresh',
+        command: 'open',
+        positionals: ['com.example.app'],
+        meta: { ...meta, sessionExplicit: true },
+        flags: { ...tenantFlags, platform: 'ios', udid: IOS_SIMULATOR.id, waitMs: 100 },
+      });
+      expect(response.error?.data?.code, JSON.stringify(response)).toBe('INVALID_ARGS');
+      expect(findHolder).not.toHaveBeenCalled();
+    } finally {
+      findHolder.mockRestore();
+    }
+  },
+);
+
+test('malformed tenant polling leaves an unleased session and its claim eligible for idle expiry', async () => {
+  if (!world) return;
+  const { sessionStore, leaseRegistry } = world;
+  const stateDir = sessionStore.resolveDaemonStateDir();
+  vi.stubEnv('AGENT_DEVICE_CLAIMS_DIR', path.join(stateDir, 'claims'));
+  const env = { ...process.env, AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS: '1000' };
+  const idleExpiryMs = resolveSessionIdleExpiryMs(env);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const openedAt = Date.now();
+  const controller = createSessionIdleExpiry({
+    env,
+    sessionStore,
+    idleExpiryMs,
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    settleSession: async () => {},
+  });
+  try {
+    const claim = await acquireDeviceClaim({
+      env,
+      device: IOS_SIMULATOR,
+      session: SESSION,
+      workspace: stateDir,
+      stateDir,
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    if (claim.status !== 'acquired') throw new Error(`Expected a test claim, got ${claim.status}`);
+    const claimPath = deviceClaimFilePath(claim.ownership.deviceKey);
+    const session = makeIosAppSession(SESSION, {
+      createdAt: openedAt,
+      deviceClaim: claim.ownership,
+    });
+    sessionStore.publish(SESSION, session);
+    expect(fs.existsSync(claimPath)).toBe(true);
+    controller.noteSessionsChanged();
+    for (const fraction of [0.25, 0.5, 0.75]) {
+      vi.setSystemTime(openedAt + idleExpiryMs * fraction);
+      const refused = await world.send('snapshot', [], {
+        tenantId: 'not a tenant',
+        sessionIsolation: undefined,
+      });
+      expect(refused.error?.data?.code).toBe('INVALID_ARGS');
+      controller.noteSessionsChanged();
+    }
+    expect(session.lastActivityAtMs).toBeUndefined();
+    vi.setSystemTime(openedAt + idleExpiryMs);
+    controller.noteSessionsChanged();
+    await vi.waitFor(() => expect(sessionStore.get(SESSION)).toBeUndefined());
+    expect(fs.existsSync(claimPath)).toBe(false);
+  } finally {
+    controller.cancel();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  }
+});
+
+test.each(['session_list', 'devices'])(
+  '%s refuses a malformed tenant over HTTP',
+  async (command) => {
+    if (!world) return;
+    const response = await world.send(command, [], {
+      tenantId: 'not a tenant',
+      sessionIsolation: undefined,
+    });
+    expect(response.error?.data?.code).toBe('INVALID_ARGS');
+  },
+);
+
+test('a null meta tenant that tenant routing replaces is refused on the socket, direct and in a batch', async () => {
+  if (!world) return;
+  const owner = { ...OWNER_SCOPE, leaseBackend: 'ios-instance', leaseId: world.leaseId };
+  const snapshot = (meta: Record<string, unknown>) => ({
+    session: SESSION,
+    command: 'snapshot',
+    meta: { ...owner, sessionIsolation: 'tenant', sessionExplicit: true, ...meta },
+    flags: { tenant: TENANT },
+  });
+
+  expectLeaseFieldRefusal(await world.socket(snapshot({ tenantId: null })), 'tenantId');
+  const direct = await world.socket(snapshot({}));
+  expect(direct.result?.ok, JSON.stringify(direct)).toBe(true);
+
+  await world.close();
+  world = await startProxiedDaemon({ openSession: false });
+  const batch = await world.socket({
+    ...snapshot({ tenantId: null, leaseId: world.leaseId }),
+    command: 'batch',
+    flags: {
+      tenant: TENANT,
+      platform: 'ios',
+      batchSteps: [
+        { command: 'open', positionals: ['com.example.app'] },
+        { command: 'snapshot', positionals: [] },
+      ],
+    },
+  });
+  expectLeaseFieldRefusal(batch, 'tenantId');
+  expect(batch.error?.data?.details).toMatchObject({ step: 2, executed: 1 });
+});
+
+test.each([
+  ['a numeric meta tenant', { tenantId: 5 }, {}],
+  ['a numeric tenant flag', {}, { tenant: 5 }],
+  ['a malformed meta tenant', { tenantId: 'not a tenant' }, {}],
+])(
+  '%s on a session named without tenant isolation is a lease mismatch',
+  async (_label, meta, flags) => {
+    if (!world) return;
+    const { tenantId: _tenant, ...labels } = OWNER_SCOPE;
+    const request = (session: string, tenant: Record<string, unknown>, tenantFlags: object) => ({
+      session,
+      command: 'snapshot',
+      positionals: [],
+      flags: tenantFlags,
+      meta: { ...labels, leaseId: world!.leaseId, sessionExplicit: true, ...tenant },
+    });
+
+    expectLeaseFieldRefusal(
+      await world.rpc('agent_device.command', request(world.sessionName, meta, flags)),
+      'tenantId',
+    );
+
+    // Off a leased session the malformed tenant keeps its own refusal.
+    const unleased = await world.rpc('agent_device.command', {
+      session: 'unleased',
+      command: 'snapshot',
+      positionals: [],
+      flags,
+      meta: { sessionExplicit: true, ...meta },
+    });
+    expect(unleased.error?.data?.code, JSON.stringify(unleased)).toBe('INVALID_ARGS');
+    const owner = await world.rpc('agent_device.command', request(world.sessionName, {}, {}));
+    expect(owner.result?.ok, JSON.stringify(owner)).toBe(true);
+  },
+);

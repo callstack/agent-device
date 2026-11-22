@@ -131,6 +131,39 @@ test('artifacts by an active lease id checks its labels before provider dispatch
   assert.deepEqual(world.providerCalls, []);
 });
 
+test.each([
+  ['a run id flag', { runId: 'run-other' }, 'runId'],
+  [
+    'a provider flag alias',
+    { leaseProvider: CLOUD_PROVIDER, provider: 'other-cloud' },
+    'leaseProvider',
+  ],
+] as const)(
+  'artifacts by an active lease id compares %s that the owner meta hides',
+  async (_label, flags, field) => {
+    const world = createWorld();
+    const lease = await allocateLease(world, 'tenant-a', 'run-a');
+    const owner = { tenantId: 'tenant-a', runId: 'run-a', leaseId: lease.leaseId };
+
+    await assert.rejects(
+      () => listArtifacts(world, { ...owner, flags }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'UNAUTHORIZED' &&
+        error.details?.reason === 'LEASE_SESSION_MISMATCH' &&
+        error.details?.field === field,
+    );
+    assert.deepEqual(world.providerCalls, []);
+
+    const listed = await listArtifacts(world, {
+      ...owner,
+      flags: { runId: 'run-a', provider: CLOUD_PROVIDER },
+    });
+    assert.equal(listed.ok, true);
+    assert.equal(world.providerCalls.length, 1);
+  },
+);
+
 test('artifacts with an active lease id checks the tenant before the tenant-filtered lookup and accepts canonical spellings', async () => {
   const world = createWorld();
   const lease = await allocateLease(world, 'tenant-a', 'run-a');
@@ -380,6 +413,7 @@ async function listArtifacts(
     leaseProvider?: string;
     leaseId?: string;
     leaseBackend?: string;
+    flags?: Record<string, string>;
   },
 ): Promise<DaemonResponse> {
   return (await handleLeaseCommands({
@@ -393,7 +427,10 @@ async function listArtifacts(
         ...(scope.leaseId ? { leaseId: scope.leaseId } : {}),
         ...(scope.leaseBackend ? { leaseBackend: scope.leaseBackend as never } : {}),
       },
-      scope.providerSessionId ? { providerSessionId: scope.providerSessionId } : {},
+      {
+        ...scope.flags,
+        ...(scope.providerSessionId ? { providerSessionId: scope.providerSessionId } : {}),
+      },
     ),
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,

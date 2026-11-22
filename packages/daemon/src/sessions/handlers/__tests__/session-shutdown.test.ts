@@ -135,7 +135,12 @@ for (const leaseId of [undefined, 'a'.repeat(32)] as const) {
       device: leasedDevice,
       createdAt: Date.now(),
       actions: [],
-      lease: { tenantId: 'tenant-a', runId: 'run-1', leaseId: 'a'.repeat(32) },
+      lease: {
+        backend: 'ios-simulator',
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseId: 'a'.repeat(32),
+      },
     });
     mockResolveTargetDevice.mockResolvedValue(leasedDevice);
 

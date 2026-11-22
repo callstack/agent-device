@@ -10,8 +10,12 @@ import type {
   LeaseBackend,
 } from '@agent-device/kernel/contracts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
-import { readLeaseAllocateProviderFlags } from '@agent-device/contracts/lease-scope';
+import {
+  readLeaseAllocateProviderFlags,
+  type LeaseScope,
+} from '@agent-device/contracts/lease-scope';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { withDisplacedLeaseClaims } from '../../core/lease-context.ts';
 import { resolveRequestSessionAtIntake } from '../../core/request-session-intake.ts';
 import { resolveToken } from './http-authorization.ts';
 import { resolveMaterializedPathRetentionMs } from '../../sessions/materialized-path-registry.ts';
@@ -161,24 +165,28 @@ function toInstallFromSourceDaemonRequest(
   if (platform !== 'ios' && platform !== 'android') {
     throw new AppError('INVALID_ARGS', 'Invalid params: platform must be "ios" or "android"');
   }
-  return {
-    token: resolveToken(params, headers),
-    ...resolveRequestSessionAtIntake({ session: readStringParam(params, 'session') }),
-    command: 'install_source',
-    positionals: [],
-    flags: { platform },
-    meta: {
-      requestId: readStringParam(params, 'requestId'),
-      // A leased session admits only a request that sends its lease id; its labels are checked too (ADR 0007).
-      ...readLeaseLabelParams(params),
-      installSource: parseInstallSource(params),
-      retainMaterializedPaths: readBooleanParam(params, 'retainPaths'),
-      materializedPathRetentionMs:
-        params.retentionMs === undefined
-          ? undefined
-          : resolveMaterializedPathRetentionMs(params.retentionMs),
+  // A leased session admits only a request that sends its lease id; its labels are checked too (ADR 0007).
+  const leaseLabels = readLeaseLabelParams(params);
+  return withDisplacedLeaseClaims(
+    {
+      token: resolveToken(params, headers),
+      ...resolveRequestSessionAtIntake({ session: readStringParam(params, 'session') }),
+      command: 'install_source',
+      positionals: [],
+      flags: { platform },
+      meta: {
+        requestId: readStringParam(params, 'requestId'),
+        ...leaseLabels.meta,
+        installSource: parseInstallSource(params),
+        retainMaterializedPaths: readBooleanParam(params, 'retainPaths'),
+        materializedPathRetentionMs:
+          params.retentionMs === undefined
+            ? undefined
+            : resolveMaterializedPathRetentionMs(params.retentionMs),
+      },
     },
-  };
+    leaseLabels.displaced,
+  );
 }
 
 function toReleaseMaterializedPathsDaemonRequest(
@@ -207,17 +215,30 @@ function readTenantParam(params: Record<string, unknown>): string | undefined {
   return readStringParam(params, 'tenantId') ?? readStringParam(params, 'tenant');
 }
 
+const LEASE_LABEL_PARAMS = {
+  tenantId: ['tenantId', 'tenant'],
+  runId: ['runId'],
+  leaseId: ['leaseId'],
+  leaseProvider: ['leaseProvider', 'provider'],
+  deviceKey: ['deviceKey'],
+  clientId: ['clientId'],
+  leaseBackend: ['leaseBackend', 'backend'],
+} as const;
+
+/**
+ * The first string a caller sends for a field, in alias order, is the request's label. Every other
+ * value sent for the field, of any type and `null` too, is a displaced claim.
+ */
 function readLeaseLabelParams(params: Record<string, unknown>) {
-  return {
-    tenantId: readTenantParam(params),
-    runId: readStringParam(params, 'runId'),
-    leaseId: readStringParam(params, 'leaseId'),
-    leaseProvider: readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
-    deviceKey: readStringParam(params, 'deviceKey'),
-    clientId: readStringParam(params, 'clientId'),
-    leaseBackend: (readStringParam(params, 'leaseBackend') ??
-      readStringParam(params, 'backend')) as LeaseBackend | undefined,
-  };
+  const meta: Record<string, string> = {};
+  const displaced: Record<string, unknown[]> = {};
+  for (const [field, keys] of Object.entries(LEASE_LABEL_PARAMS)) {
+    const values = keys.map((key) => params[key]).filter((value) => value !== undefined);
+    const label = values.findIndex((value) => typeof value === 'string');
+    if (label >= 0) meta[field] = values[label] as string;
+    displaced[field] = values.filter((_, index) => index !== label);
+  }
+  return { meta: meta as Pick<LeaseScope, keyof typeof LEASE_LABEL_PARAMS>, displaced };
 }
 
 // The runtime schema reports failures with an internal JSON-path prefix

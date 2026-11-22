@@ -58,7 +58,12 @@ test('only a claim-holding, unleased, unrecording session is idle-expirable', ()
   assert.equal(
     isIdleExpirableSession(
       claimHoldingSession({
-        lease: { leaseId: 'lease-1', tenantId: 'tenant-1', runId: 'run-1', expiresAt: 1 },
+        lease: {
+          leaseId: 'lease-1',
+          tenantId: 'tenant-1',
+          runId: 'run-1',
+          backend: 'ios-simulator',
+        },
       }),
     ),
     false,

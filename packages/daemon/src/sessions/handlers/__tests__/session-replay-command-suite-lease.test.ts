@@ -60,7 +60,7 @@ test('suite-owned test-session close releases a non-retained provider lease thro
             leaseId: lease.leaseId,
             tenantId: lease.tenantId,
             runId: lease.runId,
-            leaseBackend: lease.backend,
+            backend: lease.backend,
             leaseProvider: lease.leaseProvider,
           },
         }),

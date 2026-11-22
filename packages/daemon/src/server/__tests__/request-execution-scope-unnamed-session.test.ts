@@ -60,11 +60,10 @@ function publishProviderLeasedDefaultSession(
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: 'proxy',
         clientId: 'client-a',
         deviceKey: 'ios:sim-1',
-        expiresAt: lease.expiresAt,
       },
     }),
   );
