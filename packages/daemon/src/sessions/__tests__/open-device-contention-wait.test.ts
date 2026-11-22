@@ -1,7 +1,11 @@
 import { test, expect, vi, afterEach } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import {
+  clearRequestCanceled,
+  markRequestCanceled,
+  withRequestProgressSink,
+} from '@agent-device/host-kit/request';
 import { IOS_SIMULATOR, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
@@ -11,6 +15,7 @@ import { SessionStore } from '../../core/session-store.ts';
 import {
   beginOpenDeviceWait,
   describeOpenWaitForRefusal,
+  findSessionDeviceConflict,
   readOpenWaitAttempt,
   readOpenWaitBudgetMs,
 } from '../open-device-contention-wait.ts';
@@ -310,9 +315,165 @@ test('a request the client gave up on stops waiting at its next poll', async () 
   await rejection;
 });
 
+// The contention progress names the holder only when that holder is visible to the request
+// (#4923). The visible case is the two cwd sessions above; the anonymous case is another tenant's
+// leased session.
+test('the open-wait progress names a holder the request may see', async () => {
+  vi.useFakeTimers();
+  const messages: string[] = [];
+  const req = openRequest({ waitMs: 1000 });
+  const wait = beginWait({
+    req,
+    sessionName: OPENER_ADDRESS,
+    sessionStore: storeWithHolder(),
+    deviceId: IOS_SIMULATOR.id,
+  })!;
+
+  await waitUntil(
+    () =>
+      withRequestProgressSink(
+        (event) => messages.push(event.type === 'command' ? event.message : ''),
+        () => wait.waitForDeviceOutsideLocks(),
+      ),
+    2_000,
+  );
+
+  expect(messages[0]).toContain(`held by session "${HOLDER_ADDRESS}"`);
+});
+
+test('the open-wait progress names no holder the request may not see', async () => {
+  vi.useFakeTimers();
+  const messages: string[] = [];
+  const store = makeSessionStore('agent-device-open-wait-');
+  store.publish('e2b:agentA', {
+    name: 'agentA',
+    sessionScope: { kind: 'tenant', id: 'e2b' },
+    lease: { leaseId: 'lease-a', tenantId: 'e2b', runId: 'run-a' },
+    device: IOS_SIMULATOR,
+    createdAt: 0,
+    actions: [],
+  });
+  const req: DaemonRequest = {
+    ...openRequest({ waitMs: 1000 }),
+    session: 'agentB',
+    meta: { requestId: 'req-open-wait', tenantId: 'e2b', sessionIsolation: 'tenant' },
+  };
+  const wait = beginWait({
+    req,
+    sessionName: 'e2b:agentB',
+    sessionStore: store,
+    deviceId: IOS_SIMULATOR.id,
+  })!;
+
+  await waitUntil(
+    () =>
+      withRequestProgressSink(
+        (event) => messages.push(event.type === 'command' ? event.message : ''),
+        () => wait.waitForDeviceOutsideLocks(),
+      ),
+    2_000,
+  );
+
+  expect(messages[0]).toContain('held by another session');
+  expect(messages[0]).not.toContain('agentA');
+});
+
 /** Runs `start()` under fake timers and advances the clock until it settles. */
 async function waitUntil(start: () => Promise<void>, budgetMs: number): Promise<void> {
   const running = start();
   await vi.advanceTimersByTimeAsync(budgetMs);
   await running;
 }
+
+// The refusal a contended open gets names the holder unless the holder is another proxy client's
+// leased or tenant-scoped session (#4923). These cases are the whole table: same workspace,
+// another client's leased session on a shared token, and another local workspace's session.
+test('the contention refusal names a holder the request may see', () => {
+  const store = storeWithHolder();
+  const conflict = findSessionDeviceConflict({
+    req: openRequest({}),
+    device: IOS_SIMULATOR,
+    sessionStore: store,
+    sessionName: OPENER_ADDRESS,
+  });
+
+  expect(conflict?.error.message).toBe(`Device is already in use by session "${HOLDER_ADDRESS}".`);
+  expect(conflict?.error.details?.session).toBe(HOLDER_ADDRESS);
+});
+
+test('the contention refusal names no session to a caller that may not see it', () => {
+  const store = makeSessionStore('agent-device-open-wait-');
+  store.publish('e2b:agentA', {
+    name: 'agentA',
+    sessionScope: { kind: 'tenant', id: 'e2b' },
+    lease: { leaseId: 'lease-a', tenantId: 'e2b', runId: 'run-a' },
+    device: IOS_SIMULATOR,
+    createdAt: 0,
+    actions: [],
+  });
+  const conflict = findSessionDeviceConflict({
+    req: {
+      ...openRequest({}),
+      session: 'agentB',
+      meta: { requestId: 'req-open-wait', tenantId: 'e2b', sessionIsolation: 'tenant' },
+    },
+    device: IOS_SIMULATOR,
+    sessionStore: store,
+    sessionName: 'e2b:agentB',
+  });
+
+  expect(conflict?.error.code).toBe('DEVICE_IN_USE');
+  expect(conflict?.error.message).toBe('Device is already in use by another session.');
+  expect(conflict?.error.details?.session).toBeUndefined();
+  expect(String(conflict?.error.details?.hint)).not.toContain('agentA');
+});
+
+test('a request carrying the holder lease id still gets the named refusal', () => {
+  const store = makeSessionStore('agent-device-open-wait-');
+  store.publish('e2b:agentA', {
+    name: 'agentA',
+    sessionScope: { kind: 'tenant', id: 'e2b' },
+    lease: { leaseId: 'lease-a', tenantId: 'e2b', runId: 'run-a' },
+    device: IOS_SIMULATOR,
+    createdAt: 0,
+    actions: [],
+  });
+  const conflict = findSessionDeviceConflict({
+    req: {
+      ...openRequest({}),
+      session: 'agentA',
+      meta: {
+        requestId: 'req-open-wait',
+        tenantId: 'e2b',
+        sessionIsolation: 'tenant',
+        leaseId: 'lease-a',
+      },
+    },
+    device: IOS_SIMULATOR,
+    sessionStore: store,
+    // A reopen attempt under a different name still contends with the holder.
+    sessionName: 'e2b:agentA-reopen',
+  });
+
+  expect(conflict?.error.message).toContain('e2b:agentA');
+});
+
+// A holder in another local workspace keeps its address: the owner closes it from that folder
+// with the named address (#2580).
+test('the foreign-workspace conflict names the holder address', () => {
+  const store = storeWithHolder();
+  const conflict = findSessionDeviceConflict({
+    req: { ...openRequest({}), meta: { requestId: 'req-open-wait', cwd: '/worktrees/other' } },
+    device: IOS_SIMULATOR,
+    sessionStore: store,
+    sessionName: OPENER_ADDRESS,
+  });
+
+  expect(conflict?.error.details).toMatchObject({
+    reason: 'WORKSPACE_SESSION_SCOPE_CONFLICT',
+    session: HOLDER_ADDRESS,
+  });
+  expect(conflict?.error.message).toBe(
+    `Device is already in use by workspace session "${HOLDER_ADDRESS}".`,
+  );
+});

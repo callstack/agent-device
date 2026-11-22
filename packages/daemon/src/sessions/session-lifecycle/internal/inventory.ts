@@ -51,6 +51,7 @@ import {
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
 import { createSessionVisibilityPredicate } from '../../session-routing.ts';
+import { claimOwnerVisible } from '../../reply-session-visibility.ts';
 import type {
   BoundDeviceRuntime,
   RuntimeFacts,
@@ -89,7 +90,7 @@ export async function handleSessionInventoryCommands(
     case 'session_list':
       return sessionListInventoryResponse(req, sessionStore);
     case 'devices':
-      return await devicesInventoryResponse(req, params.host.env);
+      return await devicesInventoryResponse(req, params.host.env, sessionStore);
     case 'capabilities':
       return await capabilitiesInventoryResponse({
         req,
@@ -160,6 +161,7 @@ function publicSessionInfo({ address, session }: SessionRef, sessionStore: Sessi
 async function devicesInventoryResponse(
   req: DaemonRequest,
   env: HostEnvironment['env'],
+  sessionStore: SessionStore,
 ): Promise<DaemonResponse> {
   try {
     const claims = await blockingClaims(env);
@@ -168,7 +170,7 @@ async function devicesInventoryResponse(
       data: {
         devices: (await resolveInventoryDevices(req, env)).map((device) => ({
           ...publicDeviceInfo(device),
-          ...claimedByProjection(device, claims),
+          ...claimedByProjection(device, claims, req, sessionStore),
         })),
       },
     };
@@ -194,6 +196,8 @@ async function blockingClaims(env: HostEnvironment['env']): Promise<DeviceClaim[
 function claimedByProjection(
   device: DeviceInfo,
   claims: DeviceClaim[],
+  req: DaemonRequest,
+  sessionStore: SessionStore,
 ): { claimedBy?: { session: string; workspace: string } } {
   const identity = deviceClaimIdentity(device);
   const deviceKey = canonicalLocalDeviceKey(identity);
@@ -201,7 +205,11 @@ function claimedByProjection(
   const claim =
     claims.find((candidate) => candidate.deviceKey === deviceKey) ??
     claims.find((candidate) => isClaimOfHostScopedDevice(identity, candidate));
-  return claim ? { claimedBy: { session: claim.session, workspace: claim.workspace } } : {};
+  // A claim owned by a session of this daemon that the request may not see is listed without its
+  // owner: the label would be another client's session handle (#4923). `open` still refuses the
+  // device, and `device status` stays the host-level view of who holds a device.
+  if (!claim || !claimOwnerVisible(req, sessionStore, claim)) return {};
+  return { claimedBy: { session: claim.session, workspace: claim.workspace } };
 }
 
 async function resolveInventoryDevices(

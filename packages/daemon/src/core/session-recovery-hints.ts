@@ -5,6 +5,16 @@ import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/
 
 export type SessionRecoveryContext = 'device-in-use' | 'selector-conflict';
 
+/**
+ * How much a reply may say about the session that holds a device. `named` reports that session's
+ * address; `anonymous` answers the same reply without it. The caller passes `anonymous` for the
+ * session of another client on a proxy shared under one token — a leased or tenant-scoped session
+ * its request may not see — where an address is another client's session handle and naming it
+ * would confirm that the session exists and holds this device (#4923). A local session of another
+ * workspace keeps its address: that is the handle `close --session` takes from there (#2580).
+ */
+export type HeldSessionNaming = 'named' | 'anonymous';
+
 export type SessionRecoveryOptions = {
   /** Whether the request disagrees with the bound session on *platform*, the one conflict another
    * platform's implicit session actually answers. */
@@ -51,16 +61,26 @@ export function buildSessionRecoveryHint(
 export function buildDeviceInUseBySessionError(
   inUse: SessionRef,
   device: DeviceInfo,
-  options: SessionRecoveryOptions = {},
+  options: SessionRecoveryOptions,
+  naming: HeldSessionNaming,
 ): DaemonFailureResponse {
-  return errorResponse('DEVICE_IN_USE', `Device is already in use by session "${inUse.address}".`, {
-    session: inUse.address,
-    deviceId: device.id,
-    deviceName: device.name,
-    ...(options.waitedMs === undefined ? {} : { waitedMs: options.waitedMs }),
-    hint: buildSessionRecoveryHint(inUse, 'device-in-use', options),
-    dispatched: 'no',
-  });
+  return errorResponse(
+    'DEVICE_IN_USE',
+    naming === 'named'
+      ? `Device is already in use by session "${inUse.address}".`
+      : GENERIC_IN_USE_MESSAGE,
+    {
+      ...(naming === 'named' ? { session: inUse.address } : {}),
+      deviceId: device.id,
+      deviceName: device.name,
+      ...(options.waitedMs === undefined ? {} : { waitedMs: options.waitedMs }),
+      hint:
+        naming === 'named'
+          ? buildSessionRecoveryHint(inUse, 'device-in-use', options)
+          : buildAnonymousInUseHint(options),
+      dispatched: 'no',
+    },
+  );
 }
 
 /**
@@ -159,6 +179,20 @@ function buildOpenSessionRecoveryHint(
 const HOLDER_MAY_BE_FOREIGN = 'The holding session may belong to another agent or user. ';
 const CHOOSE_ANOTHER_DEVICE =
   'Run agent-device devices and open another device with a device selector. ';
+
+/** What every caller may learn about a holder it may not see: that there is one (#4923). */
+export const GENERIC_IN_USE_MESSAGE = 'Device is already in use by another session.';
+
+/**
+ * The recovery text when the holder stays unnamed: the device and the wait are still the caller's
+ * moves; the session is not.
+ */
+function buildAnonymousInUseHint(options: SessionRecoveryOptions): string {
+  return (
+    `${describeOpenWaitAttempt(options)}${HOLDER_MAY_BE_FOREIGN}${CHOOSE_ANOTHER_DEVICE}${waitForDeviceHint(options)}` +
+    'Run agent-device session list to see the sessions this request can act on.'
+  );
+}
 
 /**
  * The record of a spent `--wait` budget, phrased so a caller that already waited is not told to

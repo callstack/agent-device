@@ -188,6 +188,14 @@ session address that holds it; `close --session <address>` releases it. Each wai
 full wait: if another waiter gets the device first, the rest keep waiting for what is left of their own
 budget, so several agents can queue on one device.
 
+Behind a shared proxy token, every client is the same tenant and one client cannot see another's
+leased session. Refusals about that holder — a session with a lease, or any tenant-scoped session
+the caller does not already see — say only that another session holds the device, in the message,
+the details, and the wait progress; `session list` shows each caller what it may close. A caller
+that carries the holder's lease id is the lease's owner and still gets the name. A session of
+another local workspace keeps its named address everywhere: that address is how its owner closes it
+from that folder.
+
 `--wait` waits only for another session. A device claimed by another workspace's
 daemon is never waited for; `open` fails at once and names the command that releases it.
 Device-mutating commands like `install` and `reinstall` don't wait either: while a

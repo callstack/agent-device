@@ -2,19 +2,35 @@ import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { sessionChecks } from '../session-doctor-options.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 // The doctor's close suggestion must carry each session's ADDRESS — the string `close --session`
 // accepts — and dedupe by address: two cwd-scoped implicit sessions both carry the public name
 // `default`, so a name compare hid them from each other and the printed
 // `close --session default` addressed neither (#2031/#1394).
+const doctorRequest = {
+  command: 'doctor',
+  token: 'test-token',
+  session: 'default',
+  positionals: [],
+  flags: {},
+  meta: { sessionExplicit: true },
+} satisfies DaemonRequest;
+
 test('the same-device warning names the other session by its address, not its name', () => {
   const store = makeSessionStore();
   const here = 'cwd:aaaaaaaaaaaaaaaa:default';
   const other = 'cwd:bbbbbbbbbbbbbbbb:default';
-  store.publish(here, makeIosSession('default'));
-  store.publish(other, makeIosSession('default'));
+  store.publish(
+    here,
+    makeIosSession('default', { sessionScope: { kind: 'cwd', id: 'a'.repeat(16) } }),
+  );
+  store.publish(
+    other,
+    makeIosSession('default', { sessionScope: { kind: 'cwd', id: 'b'.repeat(16) } }),
+  );
 
-  const [check] = sessionChecks(store, here, store.get(here));
+  const [check] = sessionChecks(doctorRequest, store, here, store.get(here));
 
   expect(check?.status).toBe('warn');
   expect(check?.summary).toContain(other);
@@ -30,10 +46,13 @@ test('the same-device close suggestion shell-quotes a session name with metachar
   const store = makeSessionStore();
   const here = 'cwd:aaaaaaaaaaaaaaaa:default';
   const other = 'a;b $(x)';
-  store.publish(here, makeIosSession('default'));
-  store.publish(other, makeIosSession(other));
+  store.publish(
+    here,
+    makeIosSession('default', { sessionScope: { kind: 'cwd', id: 'a'.repeat(16) } }),
+  );
+  store.publish(other, makeIosSession(other, { sessionScope: { kind: 'named-local' } }));
 
-  const [check] = sessionChecks(store, here, store.get(here));
+  const [check] = sessionChecks(doctorRequest, store, here, store.get(here));
 
   expect(check?.hint).toContain("agent-device close --session 'a;b $(x)' --platform");
 });
@@ -43,9 +62,31 @@ test('a session alone on its device passes with its own address in evidence', ()
   const here = 'cwd:aaaaaaaaaaaaaaaa:default';
   store.publish(here, makeIosSession('default'));
 
-  const [check] = sessionChecks(store, here, store.get(here));
+  const [check] = sessionChecks(doctorRequest, store, here, store.get(here));
 
   expect(check?.status).toBe('pass');
   expect(check?.command).toBeUndefined();
   expect(check?.evidence).toMatchObject({ session: here });
+});
+
+// A session held by another client's lease is invisible to a request that does not carry the lease
+// id (#4923). The doctor reports it the way it reports nothing: no name in summary, hint or
+// evidence.
+test('the same-device warning omits a session the request may not see', () => {
+  const store = makeSessionStore();
+  const here = 'cwd:aaaaaaaaaaaaaaaa:default';
+  store.publish(here, makeIosSession('default'));
+  store.publish(
+    'e2b:agentB',
+    makeIosSession('e2b:agentB', {
+      sessionScope: { kind: 'tenant', id: 'e2b' },
+      lease: { leaseId: 'lease-b', tenantId: 'e2b', runId: 'run-b' },
+    }),
+  );
+
+  const [check] = sessionChecks(doctorRequest, store, here, store.get(here));
+
+  expect(check?.status).toBe('pass');
+  expect(check?.summary).not.toContain('agentB');
+  expect(check?.evidence).toMatchObject({ sameDeviceSessions: [] });
 });

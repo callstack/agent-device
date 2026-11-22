@@ -7,8 +7,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../core/session-store.ts';
-import type { SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
+import type { SessionState } from '../core/session-state.ts';
+import type { HeldSessionNaming, SessionRecoveryOptions } from '../core/session-recovery-hints.ts';
 import { isImplicitSessionScopeConflict } from './session-routing.ts';
+import { mayNameSession } from './reply-session-visibility.ts';
 import {
   buildDeviceInUseBySessionError,
   buildForeignWorkspaceSessionConflict,
@@ -139,6 +141,7 @@ export function findSessionHoldingDevice(
 /**
  * Resolves the device conflict refusal when another session already holds the target device.
  * Used by both session open and request-execution scope to enforce owner claims consistently.
+ * The holding session is named only when it is visible to the request (#4923).
  */
 export function findSessionDeviceConflict(params: {
   req: DaemonRequest;
@@ -155,7 +158,17 @@ export function findSessionDeviceConflict(params: {
   if (isImplicitSessionScopeConflict(req, inUse.session)) {
     return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }
-  return buildDeviceInUseBySessionError(inUse, device, attempt);
+  return buildDeviceInUseBySessionError(
+    inUse,
+    device,
+    attempt,
+    heldSessionNaming(req, inUse.session),
+  );
+}
+
+/** Whether a refusal may name this holding session to this request. */
+function heldSessionNaming(req: DaemonRequest, holder: SessionState): HeldSessionNaming {
+  return mayNameSession(req, holder) ? 'named' : 'anonymous';
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };
@@ -172,6 +185,7 @@ function createOpenDeviceWait(params: {
   const holder = () => findSessionHoldingDevice(sessionStore, deviceId, sessionName);
 
   const waitForDeviceOutsideLocks = async (): Promise<void> => {
+    const naming = (holder: SessionState) => mayNameSession(req, holder);
     for (;;) {
       const holding = holder();
       // Either nobody is on the device and this open goes looking for it under the locks, or the
@@ -180,9 +194,11 @@ function createOpenDeviceWait(params: {
       emitRequestProgress({
         type: 'command',
         status: 'progress',
-        message: `Waiting for ${holding.session.device.name}: held by session "${holding.address}" (${Math.round(
-          deadline.elapsedMs(),
-        )}ms of the ${Math.round(budgetMs)}ms wait budget used)`,
+        message: `Waiting for ${holding.session.device.name}: ${
+          naming(holding.session)
+            ? `held by session "${holding.address}"`
+            : 'held by another session'
+        } (${Math.round(deadline.elapsedMs())}ms of the ${Math.round(budgetMs)}ms wait budget used)`,
       });
       await sleep(Math.min(DEVICE_CONTENTION_POLL_MS, deadline.remainingMs()));
       // A client that gave up on the request must not leave the daemon queueing for a device

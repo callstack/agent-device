@@ -75,6 +75,7 @@ import {
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
+import { claimOwnerVisible } from '../../reply-session-visibility.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =
@@ -121,9 +122,17 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
 /**
  * What the caller's `open` output says when a claim was taken over because its device rebooted. A
  * `macos-app` lease tenant is not told whose claim it was: that belongs to the host (packages/daemon/docs/remote-device-lease-contracts.md).
+ * Nor is any caller told the owner of a claim that resolves to a session it may not see (#4923).
  */
-function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim, req: DaemonRequest): string {
-  if (req.internal?.admittedLease?.backend === 'macos-app') {
+function deviceClaimTakeoverWarning(
+  tookOver: TakenOverDeviceClaim,
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): string {
+  if (
+    req.internal?.admittedLease?.backend === 'macos-app' ||
+    !claimOwnerVisible(req, sessionStore, tookOver)
+  ) {
     return 'Took the device over: it rebooted after its previous claim was taken, so the previous app was already gone.';
   }
   return (
@@ -394,7 +403,10 @@ export async function completeOpenCommand(params: {
     launchConfirmation: launchConfirmationReport(outcome),
   });
   if (tookOverDeviceClaim) {
-    appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim, req));
+    appendResponseWarning(
+      openResult,
+      deviceClaimTakeoverWarning(tookOverDeviceClaim, req, sessionStore),
+    );
   }
   if (outcome.launchConfirmation === 'unanswered') {
     appendResponseWarning(

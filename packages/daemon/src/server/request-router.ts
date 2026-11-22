@@ -81,6 +81,7 @@ import {
 } from '@agent-device/selectors/parameterized-recorded-fill';
 import { isConfinedToAppLease, scopeRequestSession } from '../sessions/request-admission.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
+import { dropInvisibleClaimOwner } from '../sessions/reply-session-visibility.ts';
 import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
 import { sessionIdleExpiredError } from './session-idle-expiry.ts';
 import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
@@ -325,7 +326,17 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     } catch (error) {
       response = finalizeThrownRequestError(error);
     }
-    return redactForMacOsAppLease(req, scope, await finalizeRequestBindingCleanup(scope, response));
+    return redactForMacOsAppLease(
+      req,
+      scope,
+      dropInvisibleClaimOwner(
+        // The restricted, tenant-scoped request the scope runs under, the same one the app-lease
+        // redaction judges with: a caller-supplied `meta.cwd` never widens what it may learn.
+        scope?.req ?? req,
+        sessionStore,
+        await finalizeRequestBindingCleanup(scope, response),
+      ),
+    );
   }
 
   // Not covered, by choice: a request refused before its scope exists that names no lease in its
@@ -515,7 +526,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       // This entry point registers a sensitive fill too, so it redacts that fill's error as well.
       return redactSensitiveFillResponse(
         req,
-        await finalizeRequestBindingCleanup(childScope, response),
+        dropInvisibleClaimOwner(
+          req,
+          sessionStore,
+          await finalizeRequestBindingCleanup(childScope, response),
+        ),
       );
     };
   }
