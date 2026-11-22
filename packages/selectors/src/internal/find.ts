@@ -57,6 +57,32 @@ export function isReadOnlyFindAction(action: FindAction['kind']): action is Read
   );
 }
 
+/**
+ * #1625's ambiguity contract for every `find` action that binds one node: mutating actions and the
+ * value reads (`get text`, `get attrs`, #4685). Several matches refuse unless `--first`/`--last`
+ * picks one by position; `exists`, `wait`, and `list` never call this.
+ */
+export function narrowFindMatches(
+  matches: readonly SnapshotNode[],
+  flags: { findFirst?: boolean; findLast?: boolean } | undefined,
+): SnapshotNode | undefined {
+  if (flags?.findFirst) return matches[0];
+  if (flags?.findLast) return matches.at(-1);
+  return undefined;
+}
+
+/**
+ * The one AMBIGUOUS_MATCH message every `find` refusal prints (#1597); each route attaches the
+ * candidate list (`elementMatchCandidateDetails`) and its own dispatch disclosure.
+ */
+export function findAmbiguousMatchMessage(
+  count: number,
+  locator: FindLocator,
+  query: string,
+): string {
+  return `find matched ${count} elements for ${locator} "${query}". Use a more specific locator or selector.`;
+}
+
 export type FindMatchOptions = {
   requireRect?: boolean;
 };

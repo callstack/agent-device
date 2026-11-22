@@ -64,6 +64,13 @@ export async function dispatchFindReadOnlyViaRuntime(
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
 
+  // #4685: an ambiguous `get text|attrs` prints candidate refs from the capture it just stored, so it
+  // follows the strict reads' issuance rule rather than printing refs the frame cannot honor.
+  const candidateIssuance = {
+    ref: resolvedRuntime.ref,
+    sessionStore: params.sessionStore,
+    consumed: params.consumedSnapshot,
+  };
   const response = await toDaemonResponse(async () => {
     const result = await resolvedRuntime.runtime.selectors.find({
       session: params.sessionName,
@@ -72,6 +79,8 @@ export async function dispatchFindReadOnlyViaRuntime(
       query: parsed.query,
       action,
       timeoutMs: parsed.timeoutMs,
+      findFirst: req.flags?.findFirst,
+      findLast: req.flags?.findLast,
     });
     recordIfSession(
       params.sessionStore,
@@ -107,7 +116,7 @@ export async function dispatchFindReadOnlyViaRuntime(
       }
     }
     return data;
-  });
+  }, candidateIssuance);
   // The consumed capture was just stored on the session: when it is an occluding system surface,
   // both found and not-found outcomes must disclose that app content is occluded.
   return withCaptureDisclosures({

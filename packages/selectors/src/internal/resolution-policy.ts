@@ -17,7 +17,7 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  *   guesses when it resolves to the control; the pipeline applies that
  *   structural collapse after this door refuses (#2498).
  * - `first-match` — any match count accepted, first wins (existence reads and
- *   the wait loop, where presence is the question).
+ *   the wait loop, where presence is the question; never a read that returns a value).
  * - `reject-candidates` — multiple matches stay visible to the caller, which
  *   either proves structural equivalence (acting targets) or rejects with a
  *   candidate list (#1625's mutating-find contract). It is not reducible to
@@ -69,7 +69,7 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'fail-closed',
     requireRect: false,
   },
-  /** `exists`/`absent` and find's read-only actions — presence is the question. */
+  /** `exists`/`absent` and `find <q> exists|wait` — presence is the question. */
   readAny: {
     ambiguity: 'first-match',
     requireRect: false,
@@ -83,6 +83,14 @@ export const SELECTOR_RESOLUTION_POLICIES = {
   findAct: {
     ambiguity: 'reject-candidates',
     requireRect: true,
+  },
+  /**
+   * `find <q> get text|attrs` (#4685): the same ambiguity contract as `findAct`, but a read needs
+   * no tap point, so a node without a rect or ref (web static text) is still a candidate.
+   */
+  findRead: {
+    ambiguity: 'reject-candidates',
+    requireRect: false,
   },
   /**
    * `find <q> list` — the inspection surface: every match is the ANSWER, so the
