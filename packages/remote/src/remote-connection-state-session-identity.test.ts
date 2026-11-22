@@ -213,7 +213,12 @@ test('a record an older build shared with a case-variant session moves to its ow
     null,
     'the record an older build wrote for Demo is not the demo session connection',
   );
-  assert.deepEqual(recordsIn(stateDir), [hashedFileName('Demo')]);
+  // On a case-sensitive volume the fixture's hard link leaves `Demo.json` as a second name of the
+  // moved record. Only the Demo session retires that name, so ignore it here.
+  assert.deepEqual(
+    recordsIn(stateDir).filter((name) => name !== 'Demo.json'),
+    [hashedFileName('Demo')],
+  );
 
   writeRemoteConnectionState({ stateDir, state: recordFor('demo') });
   assert.equal(readRemoteConnectionState({ stateDir, session: 'demo' })?.runId, 'run-demo');
