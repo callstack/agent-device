@@ -386,6 +386,52 @@ test.for([
   },
 );
 
+test('install_from_source takes the first string alias as its label and keeps every other value as a claim', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const received: DaemonRequest[] = [];
+  const server = await createDaemonHttpServer({
+    handleRequest: async (req) => {
+      received.push(req);
+      return { ok: true, data: {} };
+    },
+    env: {},
+    cwd: process.cwd(),
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    await fetch(`http://127.0.0.1:${port}/rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-1',
+        method: 'agent_device.install_from_source',
+        params: {
+          session: 'agent-a',
+          platform: 'android',
+          source: { kind: 'url', url: 'https://example.com/app.apk' },
+          tenantId: 5,
+          tenant: 'tenant-a',
+          leaseProvider: null,
+          provider: 'proxy',
+          runId: null,
+        },
+      }),
+    });
+    assert.equal(received[0]?.meta?.tenantId, 'tenant-a');
+    assert.equal(received[0]?.meta?.leaseProvider, 'proxy');
+    assert.deepEqual(received[0]?.internal?.displacedLeaseClaims, {
+      tenantId: [5],
+      leaseProvider: [null],
+      runId: [null],
+    });
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 test('lease.allocate forwards retainOnClose to the handler as lease meta', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const received: DaemonRequest[] = [];

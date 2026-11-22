@@ -532,7 +532,12 @@ test('daemon shutdown releases a session lease whose session teardown rejects', 
   });
   shutdownProbe.store!.publish('bound', {
     ...makeIosSession('bound'),
-    lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
+    lease: {
+      backend: lease.backend,
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+    },
   });
   shutdownProbe.finalize.mockRejectedValueOnce(new Error('teardown failed'));
 

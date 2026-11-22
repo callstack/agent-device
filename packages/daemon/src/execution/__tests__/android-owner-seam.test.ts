@@ -15,6 +15,7 @@ test('provider-owned Android sessions bypass local observation and recovery', as
   const session = makeAndroidSession('provider-owned-android', {
     appBundleId: 'com.example.app',
     lease: {
+      backend: 'android-instance',
       leaseId: 'lease',
       tenantId: 'tenant',
       runId: 'run',

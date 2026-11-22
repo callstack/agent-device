@@ -4,6 +4,7 @@ import { isTenantOwnedSessionName, normalizeTenantId } from '@agent-device/contr
 import { resolveSessionIsolationMode } from '../core/config.ts';
 import { tenantScopedSessionName } from '../core/session-tenant-scope.ts';
 import {
+  getSessionCommandKind,
   isAppLeaseAllowed,
   ignoresSessionLease,
   isLeaseAdmissionExempt,
@@ -17,6 +18,7 @@ import {
   resolveLeaseRefusalScope,
   resolveLeaseScope,
   resolveSessionLeaseScope,
+  withDisplacedLeaseClaims,
 } from '../core/lease-context.ts';
 import {
   leaseScopeToHeartbeatRequest,
@@ -25,53 +27,109 @@ import {
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
+import type { SessionStore } from '../core/session-store.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { resolveEffectiveSessionName } from './session-routing.ts';
 
-/** Names the session a request runs in. */
+/**
+ * Under tenant isolation, the first string carrier routes the request. A meta tenant that it
+ * replaces stays a lease claim.
+ */
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,
   );
-  const rawTenant = req.meta?.tenantId ?? req.flags?.tenant;
-  const tenant = normalizeTenantId(rawTenant);
+  if (isolation !== 'tenant') return req;
+  const declaredTenant: unknown = req.meta?.tenantId;
+  const tenant = requireWellFormedTenant(
+    typeof declaredTenant === 'string' ? declaredTenant : req.flags?.tenant,
+  );
+  if (!tenant) throw missingIsolatedTenantError();
+  const requestedSession = req.session || 'default';
+  return withDisplacedLeaseClaims(
+    {
+      ...req,
+      session: isTenantOwnedSessionName(tenant, requestedSession)
+        ? req.session
+        : tenantScopedSessionName(tenant, requestedSession),
+      meta: { ...req.meta, tenantId: tenant, sessionIsolation: isolation },
+    },
+    { tenantId: [declaredTenant].filter((declared) => declared !== tenant) },
+  );
+}
 
+function requireWellFormedTenant(
+  rawTenant: unknown,
+  beforeRefusal?: () => void,
+): string | undefined {
+  const tenant = normalizeTenantId(rawTenant);
   if (rawTenant && !tenant) {
+    beforeRefusal?.();
     throw new AppError(
       'INVALID_ARGS',
       'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
     );
   }
-  if (isolation !== 'tenant') {
-    return req;
-  }
-  if (!tenant) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'session isolation mode tenant requires --tenant (or meta.tenantId).',
-    );
-  }
-  const requestedSession = req.session || 'default';
-  if (isTenantOwnedSessionName(tenant, requestedSession)) {
-    return {
-      ...req,
-      meta: {
-        ...req.meta,
-        tenantId: tenant,
-        sessionIsolation: isolation,
-      },
-    };
-  }
-  return {
-    ...req,
-    session: tenantScopedSessionName(tenant, requestedSession),
-    meta: {
-      ...req.meta,
-      tenantId: tenant,
-      sessionIsolation: isolation,
-    },
+  return tenant;
+}
+
+function missingIsolatedTenantError(): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'session isolation mode tenant requires --tenant (or meta.tenantId).',
+  );
+}
+
+/** Check the original tenant selection. If it is invalid, give the session lease refusal priority. */
+export function assertRequestTenantAdmission(
+  unscopedReq: DaemonRequest,
+  session?: SessionState,
+): void {
+  const { meta, flags } = unscopedReq;
+  const rawTenant = meta?.tenantId ?? flags?.tenant;
+  const assertLease = () => {
+    assertRequestHoldsSessionLease(unscopedReq, session);
   };
+  if (
+    !rawTenant &&
+    resolveSessionIsolationMode(meta?.sessionIsolation ?? flags?.sessionIsolation) === 'tenant'
+  ) {
+    assertLease();
+    throw missingIsolatedTenantError();
+  }
+  requireWellFormedTenant(rawTenant, assertLease);
+}
+
+/** If routing fails without a session, give an invalid tenant priority over the routing error. */
+export function withTenantAdmissionOnRoutingError<T>(
+  unscopedReq: DaemonRequest,
+  resolve: () => T,
+): T {
+  try {
+    return resolve();
+  } catch (error) {
+    assertRequestTenantAdmission(unscopedReq);
+    throw error;
+  }
+}
+
+/** Resolve the session address and validate the original tenant against that session. */
+export function resolveRequestSessionName(params: {
+  scopedReq: DaemonRequest;
+  unscopedReq: DaemonRequest;
+  sessionStore: SessionStore;
+}): string {
+  const { scopedReq, unscopedReq, sessionStore } = params;
+  const sessionName = withTenantAdmissionOnRoutingError(unscopedReq, () =>
+    resolveEffectiveSessionName(scopedReq, sessionStore, {
+      // Inventory must resolve an address even when the workspace owns several implicit sessions.
+      attachesToSession: getSessionCommandKind(scopedReq.command) !== 'inventory',
+    }),
+  );
+  assertRequestTenantAdmission(unscopedReq, sessionStore.get(sessionName));
+  return sessionName;
 }
 
 export function assertRequestLeaseAdmission(

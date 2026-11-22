@@ -90,7 +90,9 @@ function publishRecordingSession(
     appBundleId: 'com.example.app',
     ...(options.leased === false
       ? {}
-      : { lease: { leaseId: 'lease-1', tenantId: TENANT, runId: 'run-1' } }),
+      : {
+          lease: { leaseId: 'lease-1', tenantId: TENANT, runId: 'run-1', backend: 'ios-simulator' },
+        }),
   });
   const completion: ScreenRecordingCompletion = {
     backend: 'simctl recordVideo',
@@ -312,7 +314,12 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
     const harness = makeRecordRuntimeHarness('leased-remote-session-recording-', {
       sessionName: ADDRESS,
     });
-    harness.session.lease = { leaseId: 'lease-1', tenantId: TENANT, runId: 'run-1' };
+    harness.session.lease = {
+      backend: 'ios-simulator',
+      leaseId: 'lease-1',
+      tenantId: TENANT,
+      runId: 'run-1',
+    };
     const start = harness.runtime.start.getMockImplementation()!;
     harness.runtime.start.mockImplementation(async (input) => {
       fs.writeFileSync(input.outputPath, 'session-owned-video');

@@ -358,6 +358,7 @@ test('an allocated proxy session keeps its emulator when multiple local devices 
         actions: [],
         device: held,
         lease: {
+          backend: 'ios-simulator',
           leaseId: '0123456789abcdef0123456789abcdef',
           leaseProvider: 'proxy',
           tenantId: 'tenant',

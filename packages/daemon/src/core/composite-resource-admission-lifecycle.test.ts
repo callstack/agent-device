@@ -77,7 +77,7 @@ test('bounded close may release a local lease when the daemon has no provider re
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
       },
     });
     assertRpcOk(await world.call('batch', [], { batchSteps: [{ command: 'close' }] }));
@@ -161,7 +161,7 @@ test.each([false, true])(
           leaseId: lease.leaseId,
           tenantId: lease.tenantId,
           runId: lease.runId,
-          leaseBackend: lease.backend,
+          backend: lease.backend,
           leaseProvider: 'fixture',
         },
       });

@@ -64,7 +64,7 @@ function leasedRouter(options: { leased?: boolean } = {}) {
               leaseId: lease.leaseId,
               tenantId: lease.tenantId,
               runId: lease.runId,
-              leaseBackend: lease.backend,
+              backend: lease.backend,
               leaseProvider: 'proxy',
               clientId: 'client-a',
               deviceKey: 'ios:SIM-001',

@@ -16,6 +16,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
+import { withDisplacedLeaseClaims } from '../../core/lease-context.ts';
 import {
   isReadOnlyRequest,
   resolveDaemonRequestResultDeadlineMs,
@@ -686,9 +687,18 @@ function stampAdmittedIdentity(
       sessionIsolation: tenantTrust.attested ? 'tenant' : daemonRequest.meta?.sessionIsolation,
     },
   };
-  if (admitted.flags?.tenant !== undefined) {
+  if (
+    admitted.flags?.tenant !== undefined &&
+    (tenantTrust.attested || typeof daemonRequest.meta?.tenantId === 'string')
+  ) {
     admitted = { ...admitted, flags: { ...admitted.flags, tenant: tenantTrust.tenantId } };
   }
+  // The trusted tenant routes the request. A tenant the caller declared is still a lease claim.
+  admitted = withDisplacedLeaseClaims(admitted, {
+    tenantId: [daemonRequest.meta?.tenantId, daemonRequest.flags?.tenant].filter(
+      (declared) => declared !== tenantTrust.tenantId,
+    ),
+  });
   // Consumers reading the flag rather than the meta (`session-doctor-options.ts`) must not
   // see the isolation the meta just overrode.
   if (tenantTrust.attested && admitted.flags?.sessionIsolation !== undefined) {

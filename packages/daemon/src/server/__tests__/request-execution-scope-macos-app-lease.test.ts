@@ -127,7 +127,7 @@ test('a request under a pid-pinned macos-app lease does not run once that proces
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         deviceKey,
       },
     }),

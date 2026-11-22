@@ -8,6 +8,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type { EndedLeaseLedger } from './request-ended-leases.ts';
 import type { ScriptDeliveryLedger } from './request-script-delivery-ledger.ts';
+import type { LeaseClaims } from '@agent-device/contracts/lease-scope';
 
 /**
  * The daemon's request vocabulary: the wire shape from `@agent-device/contracts/command`
@@ -47,6 +48,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    */
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
+  /**
+   * Lease labels the caller sent that an intake adapter replaced or collapsed: the tenant that HTTP
+   * attestation replaced, and an RPC alias that lost to its sibling. Admission compares them too.
+   */
+  displacedLeaseClaims?: LeaseClaims;
   /**
    * The caller named no session. Set by `resolveRequestSessionAtIntake`, because the defaulted name
    * cannot be told apart from a chosen one afterwards, and copied onto batch steps by

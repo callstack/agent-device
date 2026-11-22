@@ -39,6 +39,7 @@ function leasedDaemon() {
     SESSION,
     makeIosSession(SESSION, {
       lease: {
+        backend: lease.backend,
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
