@@ -791,7 +791,6 @@ function resolveActiveConnectionDefaults(options: {
   ) {
     return null;
   }
-  // Disconnect settles its record and removes invalid ones it passes before the defaults read it.
   if (options.command === 'disconnect') claimRemoteConnectionState(options);
   const defaults = resolveRemoteConnectionDefaults({
     stateDir: options.stateDir,
