@@ -38,7 +38,12 @@ function storeWithLeasedSession(): SessionStore {
     'e2b:agentA',
     makeIosAppSession('e2b:agentA', {
       sessionScope: { kind: 'tenant', id: TENANT },
-      lease: { leaseId: 'lease-a', tenantId: TENANT, runId: 'run-a' },
+      lease: {
+        leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        tenantId: TENANT,
+        runId: 'run-a',
+        backend: 'ios-simulator',
+      },
     }),
   );
   return store;
@@ -85,7 +90,7 @@ test('the lease holder keeps the named claim-conflict refusal', () => {
   const store = storeWithLeasedSession();
 
   const response = dropInvisibleClaimOwner(
-    request({ leaseId: 'lease-a' }),
+    request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }),
     store,
     claimConflictResponse('e2b:agentA', store.resolveDaemonStateDir()),
   );
@@ -102,7 +107,7 @@ test('a claim of this daemon whose session no longer resolves is not named', () 
   const store = storeWithLeasedSession();
 
   const response = dropInvisibleClaimOwner(
-    request({ leaseId: 'lease-a' }),
+    request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }),
     store,
     claimConflictResponse('e2b:expired', store.resolveDaemonStateDir()),
   );
@@ -163,9 +168,14 @@ test('only local device recovery names an unlistable local session', () => {
   const own = { session: 'e2b:agentA', workspace: '/w', stateDir: store.resolveDaemonStateDir() };
 
   expect(claimOwnerVisible(request(), store, own)).toBe(false);
-  expect(claimOwnerVisible(request({ leaseId: 'lease-a' }), store, own)).toBe(true);
   expect(
-    claimOwnerVisible(request({ leaseId: 'lease-a' }), store, { ...own, session: 'gone' }),
+    claimOwnerVisible(request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }), store, own),
+  ).toBe(true);
+  expect(
+    claimOwnerVisible(request({ leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }), store, {
+      ...own,
+      session: 'gone',
+    }),
   ).toBe(false);
   const peerClaim = { ...own, stateDir: path.join(own.stateDir, 'peer') };
   expect(claimOwnerVisible(request(), store, peerClaim)).toBe(false);

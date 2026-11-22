@@ -80,7 +80,12 @@ test('the same-device warning omits a session the request may not see', () => {
     'e2b:agentB',
     makeIosSession('e2b:agentB', {
       sessionScope: { kind: 'tenant', id: 'e2b' },
-      lease: { leaseId: 'lease-b', tenantId: 'e2b', runId: 'run-b' },
+      lease: {
+        leaseId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        tenantId: 'e2b',
+        runId: 'run-b',
+        backend: 'ios-simulator',
+      },
     }),
   );
 

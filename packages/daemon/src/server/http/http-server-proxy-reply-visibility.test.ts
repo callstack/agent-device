@@ -112,7 +112,7 @@ async function startProxiedDaemon() {
         leaseId: holderLease.leaseId,
         tenantId: TENANT,
         runId: HOLDER_SCOPE.runId,
-        leaseBackend: holderLease.backend,
+        backend: holderLease.backend,
         leaseProvider: HOLDER_SCOPE.leaseProvider,
         clientId: HOLDER_SCOPE.clientId,
         deviceKey: HOLDER_SCOPE.deviceKey,
