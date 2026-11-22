@@ -784,6 +784,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/engine',
     '@agent-device/selectors/interaction-action',
     '@agent-device/selectors/interaction-error',
+    '@agent-device/selectors/interaction-offscreen',
     '@agent-device/selectors/interaction-positionals',
     '@agent-device/selectors/interaction-targeting',
     '@agent-device/selectors/interaction-touch-point',

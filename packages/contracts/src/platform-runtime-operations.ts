@@ -511,17 +511,25 @@ export const selectorTextCaptureRuntimePlanUses = Object.freeze([
  * `find`'s action-selected mutating uses (ADR 0019 §9: one bind per handler). A mutating find
  * resolves its target from a capture AND executes at most one direct leg, so each action's use
  * carries the complete requirement set and the handler binds exactly once. Click/fill legs
- * re-invoke their own commands, so their use is the plain capture pair.
+ * re-invoke their own commands, so their use is the plain capture pair. `querySelector` is the same
+ * CONDITIONAL off-screen rescue read the captured acting uses declare (#1542), because the focus leg
+ * applies the same off-screen rule.
  */
-const findFocusCaptureUse = defineUse({ required: ['captureSnapshot', 'focusPoint'] });
+const findFocusCaptureUse = defineUse({
+  required: ['captureSnapshot', 'focusPoint'],
+  conditional: ['querySelector'],
+});
 const findFocusCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint'],
+  conditional: ['querySelector'],
 });
 const findTypeCaptureUse = defineUse({
   required: ['captureSnapshot', 'focusPoint', 'typeText'],
+  conditional: ['querySelector'],
 });
 const findTypeCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp', 'focusPoint', 'typeText'],
+  conditional: ['querySelector'],
 });
 
 /**

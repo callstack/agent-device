@@ -25,9 +25,10 @@ import {
   buildSelectorResolutionDisclosure,
   describeResolvedInteractionNode,
 } from './resolution-disclosure.ts';
+import { offscreenSelectorFailure } from '@agent-device/selectors/interaction-offscreen';
 import {
-  assertVisibleSelectorTarget,
   runInteractionPipelineStages,
+  throwIfOffscreenInteractionTarget,
 } from './target-visibility-stages.ts';
 
 export type { InteractionRequestTarget, ResolvedInteractionTarget };
@@ -156,7 +157,13 @@ async function resolveSelectorInteractionTarget(
     hooks: {
       onResolved: (node, tree) => assertReplayTargetResolution(node, tree, params),
       offscreen: async (node, tree) =>
-        await assertVisibleSelectorTarget(runtime, options, node, tree, selected.selector, params),
+        await throwIfOffscreenInteractionTarget(
+          runtime,
+          options,
+          node,
+          tree,
+          offscreenSelectorFailure(selected.selector, params.action),
+        ),
     },
     resolveTapPoint: (node) =>
       resolveNodeTouchPoint(node, capture.snapshot.nodes, {

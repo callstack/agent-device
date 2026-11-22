@@ -345,6 +345,10 @@ export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
       x: numberSchema('Resolved x coordinate for mutating find actions.'),
       y: numberSchema('Resolved y coordinate for mutating find actions.'),
       message: stringSchema('Diagnostic message for mutating find actions.'),
+      targetHittable: booleanSchema(
+        'false when the element find focus or find type focused reports hittable: false.',
+      ),
+      hint: stringSchema('Recovery hint that accompanies targetHittable: false.'),
       cost: responseCostSchema,
     },
     [],

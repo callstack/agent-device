@@ -44,6 +44,7 @@ import {
   selectWaitObservationOperations,
   type BoundElementRead,
   type BoundNativeTextRead,
+  type BoundSelectorQuery,
 } from './selector-operation-binding.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -101,6 +102,8 @@ export type AdmittedSnapshotCapture =
       typeText?: (
         input: import('@agent-device/contracts/type-text-runtime').TypeTextInput,
       ) => Promise<import('@agent-device/contracts/interactor-types').TypeTextBackendResult | void>;
+      /** The find-focus / find-type plans' conditional live selector read (#1542 rescue). */
+      querySelector?: BoundSelectorQuery;
     }>
   | Readonly<{ ok: false; response: DaemonResponse }>;
 
@@ -151,6 +154,7 @@ export async function admitAndBindSnapshotCapture(
     ...(bound.findText ? { findText: bound.findText } : {}),
     ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
     ...(bound.typeText ? { typeText: bound.typeText } : {}),
+    ...(bound.querySelector ? { querySelector: bound.querySelector } : {}),
   });
 }
 
@@ -278,6 +282,7 @@ async function bindSnapshotCaptureRuntime(
     typeText?: (
       input: import('@agent-device/contracts/type-text-runtime').TypeTextInput,
     ) => Promise<import('@agent-device/contracts/interactor-types').TypeTextBackendResult | void>;
+    querySelector?: BoundSelectorQuery;
   }>
 > {
   const bind = requireRuntimeBinding(bindDevice);

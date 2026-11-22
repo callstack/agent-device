@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonFailureResponse, DaemonResponse } from '@agent-device/kernel/contracts';
 import type { FindLocator } from '@agent-device/selectors';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
@@ -35,7 +35,7 @@ export function buildAmbiguousMatchError(
 export function buildNestedTextFieldsError(
   ref: string,
   fields: SnapshotState['nodes'],
-): DaemonResponse {
+): DaemonFailureResponse {
   return errorResponse(
     'AMBIGUOUS_MATCH',
     `find matched ${ref}, which contains ${fields.length} text fields. Use a more specific locator or selector.`,

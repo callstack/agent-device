@@ -8,10 +8,12 @@ import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
 import type {
   FindTextInput,
   FindTextRuntimeOperations,
+  QuerySelectorRuntimeOperations,
 } from '@agent-device/contracts/selector-observation-runtime';
 
 export type BoundElementRead = ElementTextRuntimeOperations['readTextAtPoint'];
 export type BoundNativeTextRead = FindTextRuntimeOperations['findText'];
+export type BoundSelectorQuery = QuerySelectorRuntimeOperations['querySelector'];
 
 type SelectorOperations = Readonly<{
   readTextAtPoint?: BoundElementRead;
@@ -64,21 +66,27 @@ export function selectWaitObservationOperations(
   );
 }
 
-/** find's directly-executed mutating operations, projected from its one action-selected bind. */
+/**
+ * find's directly-executed mutating operations, projected from its one action-selected bind, plus the
+ * owner's conditional live selector read when it advertised one (the #1542 off-screen rescue).
+ */
 export function selectFindMutatingOperations(
   runtime: Readonly<{
     operations: Readonly<{
       focusPoint?: (input: FocusPointInput) => Promise<void>;
       typeText?: (input: TypeTextInput) => Promise<TypeTextBackendResult | void>;
+      querySelector?: BoundSelectorQuery;
     }>;
   }>,
 ): Readonly<{
   focusPoint?: (input: FocusPointInput) => Promise<void>;
   typeText?: (input: TypeTextInput) => Promise<TypeTextBackendResult | void>;
+  querySelector?: BoundSelectorQuery;
 }> {
-  const { focusPoint, typeText } = runtime.operations;
+  const { focusPoint, typeText, querySelector } = runtime.operations;
   return Object.freeze({
     ...(focusPoint ? { focusPoint } : {}),
     ...(typeText ? { typeText } : {}),
+    ...(querySelector ? { querySelector } : {}),
   });
 }

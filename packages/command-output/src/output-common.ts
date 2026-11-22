@@ -76,12 +76,18 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
  * one renders on a single line.
  */
 function collectResponseWarnings(result: Record<string, unknown>): string[] {
-  return [
+  const raw = [
     ...(typeof result.warning === 'string' && result.warning.trim() !== '' ? [result.warning] : []),
     ...readResponseWarnings(result),
+    ...(result.targetHittable === false &&
+    typeof result.hint === 'string' &&
+    result.hint.trim() !== ''
+      ? [result.hint]
+      : []),
   ]
     .map((warning) => collapseWarningText(warning))
     .filter((warning) => warning.length > 0);
+  return Array.from(new Set(raw));
 }
 
 /**
