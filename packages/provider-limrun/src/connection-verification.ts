@@ -59,12 +59,10 @@ export async function verifyLimrunConnection(
         hint: 'Check LIMRUN_API_KEY and its organization access.',
       });
     }
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Limrun connection verification failed.',
-      { hint: 'Check Limrun service access, LIMRUN_REGION, and network connectivity, then retry.' },
-      error,
-    );
+    throw new AppError('COMMAND_FAILED', 'Limrun connection verification failed.', {
+      hint: 'Check Limrun service access, LIMRUN_REGION, and network connectivity, then retry.',
+      ...(status === undefined ? {} : { status }),
+    });
   }
   const platformName = options.platform === 'android' ? 'Android' : 'iOS';
   const deviceKind = options.platform === 'android' ? 'emulator' : 'simulator';
@@ -120,17 +118,12 @@ async function verifyAttachedInstance(
   const platformName = android ? 'Android' : 'iOS';
   try {
     (await connecting).disconnect();
-  } catch (error) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Limrun ${platformName} instance access failed.`,
-      {
-        hint: android
-          ? 'Check LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, and that the instance is still running.'
-          : 'Check LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, and that the instance is still running.',
-      },
-      error,
-    );
+  } catch {
+    throw new AppError('COMMAND_FAILED', `Limrun ${platformName} instance access failed.`, {
+      hint: android
+        ? 'Check LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, and that the instance is still running.'
+        : 'Check LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, and that the instance is still running.',
+    });
   }
   return {
     provider: 'limrun',
