@@ -16,9 +16,10 @@ export type EnsureReadyInput = Readonly<{
   onAndroidEmulatorLaunch?: (identity: AndroidEmulatorLaunchIdentity | undefined) => void;
   /**
    * Whether a session or a device claim already names `device` as its own, asked of `device` before a
-   * boot that failed stops the emulator it launched. Only a caller that can read session and claim
-   * state — the daemon — supplies this; a caller that answers nothing leaves the boot's own rule to
-   * decide, which is what every non-daemon route (a `boot` command, the local CLI) does.
+   * boot that failed stops the emulator it launched. It is asked only of a device whose emulator serial
+   * is resolved, because ownership is recorded under that serial. Only a caller that can read session
+   * and claim state — the daemon — supplies this; a caller that answers nothing leaves the boot's own
+   * rule to decide, which is what every non-daemon route (a `boot` command, the local CLI) does.
    */
   isAndroidEmulatorHeldByOther?: (device: DeviceInfo) => Promise<boolean>;
   serial?: string;

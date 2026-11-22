@@ -712,7 +712,7 @@ test('a boot that fails while no owner holds the launched emulator still stops i
   expect(terminate).toHaveBeenCalledWith(4242);
 });
 
-test('a boot whose discovery fails before the deadline asks about the AVD this request selected', async () => {
+test('a boot that fails before a serial is resolved stops nothing', async () => {
   let discoveries = 0;
   const discoveryFailure = new AppError('COMMAND_FAILED', 'adb devices failed');
   const { host, terminate } = timedHost({
@@ -725,17 +725,22 @@ test('a boot whose discovery fails before the deadline asks about the AVD this r
   });
   const heldByOther = vi.fn(async () => true);
 
-  await expect(
-    ensureAndroidReady(
-      host,
-      stoppedAvd(),
-      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
-      new AbortController().signal,
-    ),
-  ).rejects.toBe(discoveryFailure);
-  // The boot never got a serial, so the ownership question addresses the device it did have.
-  expect(heldByOther).toHaveBeenCalledWith(expect.objectContaining({ id: 'Pixel_9' }));
-  expect(terminate).not.toHaveBeenCalled();
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    await expect(
+      ensureAndroidReady(
+        host,
+        stoppedAvd(),
+        { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+        new AbortController().signal,
+      ),
+    ).rejects.toBe(discoveryFailure);
+    // Ownership is recorded under the emulator's serial, so the AVD this boot started from is not an
+    // address anything can be held under. Asking about it could only answer "not held", which is a
+    // guess at somebody else's emulator, so the launch is kept instead (#4867).
+    expect(heldByOther).not.toHaveBeenCalled();
+    expect(terminate).not.toHaveBeenCalled();
+    expect(countDiagnosticEventsByPhase(['android_emulator_launch_ownership_unanswered'])).toBe(1);
+  });
 });
 
 test('a boot whose owner question cannot be answered keeps the launched emulator running', async () => {

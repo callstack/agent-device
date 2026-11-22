@@ -230,8 +230,13 @@ test('a cold open hands readiness the answer for who holds the device it is boot
 
   const input = mockEnsureReadyRuntime.mock.calls[0]?.[0];
   await expect(input?.isAndroidEmulatorHeldByOther?.(BOOTED_EMULATOR)).resolves.toBe(true);
-  // The AVD nobody holds is a different answer, so readiness is never told a boot is owned at large.
-  await expect(input?.isAndroidEmulatorHeldByOther?.(STOPPED_AVD)).resolves.toBe(false);
+  // A serial nobody holds is the other answer, so the stop is not blocked at large. A boot that never
+  // resolved a serial is never asked about: sessions and claims are keyed under the serial, so an AVD
+  // name could only ever answer "not held". Readiness keeps that launch itself, and the readiness suite
+  // pins that answer (#4867).
+  await expect(
+    input?.isAndroidEmulatorHeldByOther?.({ ...BOOTED_EMULATOR, id: 'emulator-5556' }),
+  ).resolves.toBe(false);
 });
 
 test('a claim being written for a booting device answers as ownership', async () => {

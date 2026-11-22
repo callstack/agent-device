@@ -69,8 +69,7 @@ async function ensureEmulatorReady(
   // coming up; a step that failed on its own does not, even past the deadline.
   const bootWait: BootWaitProgress = { budgetSpentWithBootRunning: false };
   // The device this boot last named: the AVD until the launched emulator answers, then its serial.
-  // It is what an ownership question addresses, because a boot that never got a serial has no serial
-  // anybody could hold.
+  // Ownership is recorded under that serial, so a boot that never got one has no address to ask about.
   let bootDevice: DeviceInfo = selected;
   try {
     const discovered =
@@ -122,6 +121,9 @@ async function ensureEmulatorReady(
  * to the booting serial is using the emulator this request only started. Absent is the answer for a
  * caller that reads no session or claim state, and a caller that fails to answer keeps the launch:
  * ownership is settled by whoever can see it, never assumed away.
+ *
+ * Ownership is recorded under the emulator's serial, so a boot that never resolved one has nothing to
+ * ask about. Its answer is unknown, which keeps the launch the same way an unreachable one does.
  */
 async function launchHeldByOtherOwner(
   input: EnsureReadyInput,
@@ -129,19 +131,25 @@ async function launchHeldByOtherOwner(
 ): Promise<boolean> {
   const heldByOther = input.isAndroidEmulatorHeldByOther;
   if (!heldByOther) return false;
+  if (!isRunningEmulator(device)) {
+    emitOwnershipUnanswered(device.id, 'boot-never-resolved-a-serial');
+    return true;
+  }
   try {
     return await heldByOther(device);
   } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_emulator_launch_ownership_unanswered',
-      data: {
-        device: device.id,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
+    emitOwnershipUnanswered(device.id, error instanceof Error ? error.message : String(error));
     return true;
   }
+}
+
+/** Reports the ownership answer this stop could not get, so a kept launch is never silent. */
+function emitOwnershipUnanswered(deviceId: string, reason: string): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_emulator_launch_ownership_unanswered',
+    data: { device: deviceId, reason },
+  });
 }
 
 /**
