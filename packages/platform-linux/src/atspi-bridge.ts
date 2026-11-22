@@ -49,7 +49,7 @@ export function createLinuxAccessibilityProvider(
 ): LinuxAccessibilityProvider {
   // Probed once per setup: the helper's location never changes while the process lives, and a repair
   // of a broken install needs a restarted process anyway.
-  const resolveScriptPath = createLinuxAtspiScriptResolver((candidate) =>
+  const resolveScript = createLinuxAtspiScriptResolver((candidate) =>
     commands.isFilePresent(candidate),
   );
   return {
@@ -65,13 +65,15 @@ export function createLinuxAccessibilityProvider(
         );
       }
 
-      const scriptPath = await resolveScriptPath();
-      if (scriptPath === undefined) {
+      const script = await resolveScript();
+      if (!script.present) {
         throw new AppError(
           'TOOL_MISSING',
           `Cannot find ${LINUX_ATSPI_SCRIPT_NAME}. Ensure the @agent-device/linux plugin package is installed correctly.`,
+          { path: script.path },
         );
       }
+      const scriptPath = script.path;
 
       const args = [
         scriptPath,

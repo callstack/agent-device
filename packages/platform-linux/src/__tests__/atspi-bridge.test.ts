@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { createLinuxHostStub, type LinuxHostStub } from '../toolbox.fixtures.ts';
+import { createLinuxAtspiScriptResolver } from '../atspi-script.ts';
 import { createLinuxToolProvider } from '../tool-provider.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -72,9 +73,27 @@ test('the AT-SPI capture names a broken install when the host cannot see the shi
 
   await assert.rejects(captureAtspi(stub), (error: unknown) => {
     const failure = error as AppError;
-    return failure.code === 'TOOL_MISSING' && failure.message.includes('atspi-dump.py');
+    return (
+      failure.code === 'TOOL_MISSING' &&
+      failure.message.includes('atspi-dump.py') &&
+      failure.details?.path === path.resolve(import.meta.dirname, '../..', 'linux', 'atspi-dump.py')
+    );
   });
   assert.equal(stub.commands.length, 0);
+});
+
+test('the AT-SPI helper probe asks again after a rejected probe and keeps an answered one', async () => {
+  let calls = 0;
+  const resolve = createLinuxAtspiScriptResolver(async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('EMFILE');
+    return true;
+  });
+
+  await assert.rejects(resolve(), /EMFILE/);
+  assert.equal((await resolve()).present, true);
+  await resolve();
+  assert.equal(calls, 2);
 });
 
 test('the AT-SPI capture passes the surface and traversal limits', async () => {
