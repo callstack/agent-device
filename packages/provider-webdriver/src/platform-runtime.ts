@@ -40,6 +40,7 @@ import {
   sameRuntimeOwner,
   unavailableFact,
   whenAdmitted,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -86,7 +87,7 @@ type WebDriverPlatformDeploymentRuntime = Pick<
 >;
 
 const available = Object.freeze({ available: true } as const);
-const appLogUnavailable = unavailableFact('unsupported-provider-mode');
+const appLogUnavailable = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason);
 /**
  * A live `network dump` needs a source the session can read. A hosted provider keeps traffic on its
  * own side: whatever the provider captures at all, it publishes only once its session ends, through
@@ -94,44 +95,44 @@ const appLogUnavailable = unavailableFact('unsupported-provider-mode');
  * not answer with an empty dump that looks like "no traffic".
  */
 const networkCaptureUnavailable = unavailableFact(
-  'network-capture-post-session',
+  PLATFORM_RUNTIME_REASONS.networkCapturePostSession.reason,
   'The provider publishes any network capture only after its session ends, on the provider dashboard.',
 );
 const recordingUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose screen recording.',
 );
 const headlessUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Headless boot is unavailable for provider-owned devices.',
 );
 const appsUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'WebDriver provider runtimes do not expose app inventory.',
 );
 const deploymentUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose app deployment.',
 );
 const pushUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Push notifications are unavailable for WebDriver provider-owned devices.',
 );
 const inactiveSession = webDriverInactiveSession;
 const snapshotUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose snapshot capture for this device.',
 );
 const screenshotUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose screenshot capture for this device.',
 );
 const snapshotCustomActionsUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose iOS simulator custom snapshot actions.',
 );
 const viewportUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose viewport resizing.',
 );
 
@@ -142,45 +143,45 @@ const viewportUnavailable = unavailableFact(
  * family read.
  */
 const focusUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose focus for this device.',
 );
 const typeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose text entry for this device.',
 );
 const gestureUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose gestures for this device.',
 );
 const scrollUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose scrolling for this device.',
 );
 const iosMultiTouchUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
 );
 const elementTextUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes read element text from the captured tree only.',
 );
 const backUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose back for this device.',
 );
 const homeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose home for this device.',
 );
 const orientationUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose orientation for this device.',
 );
 /** The WebDriver interactor's own `tvRemote` always throws unsupported (no capability declares
  * it), so this cell is unavailable unconditionally rather than gated by interactor reachability. */
 const tvRemoteUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose tv-remote.',
 );
 /**
@@ -190,7 +191,7 @@ const tvRemoteUnavailable = unavailableFact(
  * the probe's result shape is Android's.
  */
 const keyboardUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose this keyboard action for this device.',
 );
 
@@ -201,7 +202,7 @@ const keyboardUnavailable = unavailableFact(
  * answers is whether this runtime has a reachable interactor to ask at all.
  */
 const clipboardUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose clipboard access for this device.',
 );
 
@@ -211,7 +212,7 @@ const clipboardUnavailable = unavailableFact(
  * seam the same way `back`/`home` do: whether this runtime has a reachable interactor to ask.
  */
 const appSwitcherUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose the app switcher for this device.',
 );
 
@@ -222,7 +223,7 @@ const appSwitcherUnavailable = unavailableFact(
  * hardware-button keys below are the family's declared-capability cells instead.
  */
 const systemButtonUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'No WebDriver backend presses this system button.',
 );
 
@@ -233,23 +234,23 @@ const systemButtonUnavailable = unavailableFact(
  * keys unsupported, the Android map does not — so nothing here restates it as a device-kind rule.
  */
 const hardwareButtonUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose hardware-button for this device.',
 );
 
 /** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
 const foldUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
 );
 
 const shakeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   "shake goes through simctl or the Android emulator console on the daemon host; agent-device does not drive a WebDriver backend's own shake.",
 );
 
 const telephonyUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not drive a WebDriver backend's own call or SMS simulation.",
 );
 
@@ -260,7 +261,7 @@ const telephonyUnavailable = unavailableFact(
  * interactor reachability.
  */
 const alertUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose native alert handling.',
 );
 
@@ -270,41 +271,41 @@ const alertUnavailable = unavailableFact(
  * gated by interactor reachability — the same shape `tvRemote` takes.
  */
 const settingsUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose device settings.',
 );
 
 const appEventUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose app-event delivery for this device.',
 );
 
 const appStateUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose a foreground app-state operation.',
 );
 const audioProbeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'This WebDriver provider runtime does not expose the audio probe.',
 );
 const prepareUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Apple runner preparation is unavailable for WebDriver-owned devices.',
 );
 const openTargetUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver open is supported only for its owned iOS or Android mobile-device sessions.',
 );
 const closeTargetUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver close is supported only for its owned iOS or Android mobile-device sessions.',
 );
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Runtime hints are not applied to provider-owned devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'WebDriver provider runtimes do not expose port reverse.',
 );
 
@@ -489,7 +490,7 @@ function declaredCapabilityCell(
   if (!params.reachable) return params.whenUnreachable;
   if (capabilitySupported(params.capabilities, params.operation)) return available;
   return unavailableFact(
-    'owner-capability-missing',
+    PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
     unsupportedCapabilityMessage(params.capabilities, params.operation),
   );
 }
@@ -683,7 +684,7 @@ function webDriverFacts(
       // reason there would report it for unrelated reads. Only this cell refuses post-session.
       networkDump: networkCaptureUnavailable,
       shutdownTarget: unavailableFact(
-        'unsupported-provider-mode',
+        PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
         'WebDriver owns the target lifecycle for provider-owned devices.',
       ),
     },

@@ -1,3 +1,4 @@
+import { PLATFORM_RUNTIME_REASONS } from '@agent-device/contracts/platform-runtime';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -136,7 +137,7 @@ class RevylInteractor implements Interactor {
   private async launch(app: string, launchArgs?: string[]): Promise<void> {
     if (launchArgs?.length) {
       throw new AppError('UNSUPPORTED_OPERATION', 'Revyl launches an app without arguments.', {
-        reason: 'unsupported-provider-mode',
+        reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
         hint: 'Open a deep link instead: open <url>.',
       });
     }
@@ -179,7 +180,7 @@ class RevylInteractor implements Interactor {
       'UNSUPPORTED_OPERATION',
       `Revyl ends the app this session launched (${sessionApp}), not ${target}.`,
       {
-        reason: 'unsupported-provider-mode',
+        reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
         command: 'close',
         sessionApp,
         requestedApp: target,
@@ -334,7 +335,7 @@ class RevylInteractor implements Interactor {
         'UNSUPPORTED_OPERATION',
         'This Revyl worker scrolls with one drag and cannot be told how fast the finger travels.',
         {
-          reason: 'unsupported-provider-mode',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
           command: 'scroll',
           flag: '--duration-ms',
           runId: this.session.runId,
@@ -418,7 +419,7 @@ class RevylInteractor implements Interactor {
         'UNSUPPORTED_OPERATION',
         `This Revyl worker cannot rotate to ${orientation}; it rotates to portrait and landscape-left only.`,
         {
-          reason: 'unsupported-provider-mode',
+          reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
           command: 'orientation',
           runId: this.session.runId,
           hint: 'Rotate to portrait or landscape-left.',
@@ -617,7 +618,7 @@ function relativeToViewport(
 
 function unsupported(command: string, message: string): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
-    reason: 'unsupported-provider-mode',
+    reason: PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
     command,
   });
 }

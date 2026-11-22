@@ -2,7 +2,11 @@ import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { type RuntimeFacts, unavailableFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeFacts,
+  unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
@@ -23,11 +27,11 @@ import {
 } from './interaction-operations.ts';
 
 const uninstallUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not uninstall an app from a session.',
 );
 const appStateUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not report which app the device has in the foreground.',
 );
 /**
@@ -35,28 +39,28 @@ const appStateUnavailable = unavailableFact(
  * os_log or logcat stream the app-log owner reads and reattaches to.
  */
 const appLogUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose an app log stream.',
 );
 /** `install_status` reports one install the worker performed, not the device's installed apps. */
 const appInventoryUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not report the apps installed on a session.',
 );
 const networkUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose a network capture for a session.',
 );
 const recordingUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl streams the screen for its own viewer and does not expose a recording.',
 );
 const customSnapshotUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Custom snapshot actions are available only on a local iOS runner.',
 );
 const viewportUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl rents a device at the size its model has.',
 );
 /**
@@ -64,32 +68,32 @@ const viewportUnavailable = unavailableFact(
  * Provider ownership never borrows the local family's read, so a text wait polls the captured tree.
  */
 const elementTextUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl-owned devices read element text from the captured tree only.',
 );
 const headlessUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Headless boot is unavailable for provider-owned devices.',
 );
 const prepareUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Apple runner preparation is unavailable for Revyl-owned devices.',
 );
 /** Revyl rents the device to one session, so there is no target to start or stop by hand. */
 const shutdownUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl owns the target lifecycle for provider-owned devices.',
 );
 const runtimeHintsUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Runtime hints are not applied to provider-owned devices.',
 );
 const portReverseUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose port reverse; publish the app server at a public URL instead.',
 );
 const audioProbeUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose the audio probe.',
 );
 /**
@@ -98,16 +102,16 @@ const audioProbeUnavailable = unavailableFact(
  * tree the text reads fall back to says nothing about them either.
  */
 const perfUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl does not expose frame, memory, or profiler counters for a session.',
 );
 /** Only the app the session started with can be named, so an unnamed open target cannot be resolved. */
 const openTargetUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl open requires the app the session was started with.',
 );
 const closeTargetUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Revyl close requires the app the session was started with.',
 );
 
@@ -143,7 +147,7 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
   return Object.freeze({
     device: { ...deviceShape(device), providerMode: 'provider-runtime' },
     operations: {
-      accessibilityAudit: unavailableFact('unsupported-provider-mode'),
+      accessibilityAudit: unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason),
       appLogInspect: appLogUnavailable,
       appLogDoctor: appLogUnavailable,
       appLogStart: appLogUnavailable,

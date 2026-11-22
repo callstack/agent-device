@@ -10,11 +10,12 @@ import type {
 import {
   type RuntimeOperationFact,
   unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 
 /** The refusal every WebDriver cell reports once the provider session is gone. */
 export const webDriverInactiveSession = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'The WebDriver provider session is no longer active for this device.',
 );
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
@@ -121,7 +122,7 @@ function deploymentFact(session: WebDriverProviderSession | undefined): RuntimeO
   if (!session) return webDriverInactiveSession;
   if (!capabilitySupported(session.capabilities, 'install')) {
     return unavailableFact(
-      'owner-capability-missing',
+      PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
       unsupportedCapabilityMessage(session.capabilities, 'install'),
     );
   }
