@@ -19,7 +19,6 @@ import {
   startHttpDaemonFixture,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { publishFileSync } from '@agent-device/host-kit/file';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
@@ -188,8 +187,7 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
     if (spawned.child && now.value - spawned.at < 80_000) {
       now.value += 20_000;
       if (nextPhase < phases.length) {
-        // Published atomically: the child polls this file, and a partial read would lose a phase.
-        publishFileSync({ destination: gate, contents: phases[nextPhase]! });
+        fs.writeFileSync(gate, phases[nextPhase]!);
         nextPhase += 1;
         // Wait for the child's real channel message before advancing the clock again, so each
         // receipt lands on the virtual time this pause just set.
@@ -488,7 +486,7 @@ test('a repeated phase message keeps the first receipt time', async () => {
       now.value += 1_000;
       const elapsed = now.value - started;
       if (elapsed === 1_000 || elapsed === 10_000) {
-        publishFileSync({ destination: gate, contents: 'lock-acquired' });
+        fs.writeFileSync(gate, 'lock-acquired');
         sent += 1;
         for (let attempt = 0; reported.length < sent && attempt < 400; attempt += 1)
           await realPause(5);
