@@ -9,7 +9,7 @@ import {
   withDiagnosticsScope,
   withDiagnosticTimer,
   DIAGNOSTIC_STDERR_PREFIX,
-  diagnosticsRecordOwnersPath,
+  getDiagnosticsMeta,
 } from './diagnostics.ts';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -156,24 +156,12 @@ test('appendDiagnosticLine ensures the log directory once across appended lines'
   }
 });
 
-test('a record names a lease by its fingerprint and publishes its owner before its first byte', async () => {
-  const logPath = path.join(
-    mkdtempForTestSync('agent-device-diag-owners-'),
-    'requests',
-    'r1.ndjson',
-  );
+test('a record names a lease by its fingerprint, and a nested scope keeps the record of its parent', async () => {
+  const logPath = path.join(mkdtempForTestSync('agent-device-diag-lease-'), 'r1.ndjson');
   const leaseId = 'A1B2C3D4E5F60718293A4B5C6D7E8F90';
-  const ownersBeforeRecord = await withDiagnosticsScope(
-    {
-      session: 'leased',
-      requestId: 'r1',
-      debug: true,
-      logPath,
-      logRecord: { session: 'leased', requestId: 'r1' },
-      logOwner: 'owner-a',
-    },
+  const recordIds = await withDiagnosticsScope(
+    { session: 'leased', requestId: 'r1', debug: true, logPath, recordId: 'record-1' },
     async () => {
-      const write = vi.spyOn(fs, 'appendFileSync');
       emitDiagnostic({
         phase: 'leased_session_ended',
         data: {
@@ -183,15 +171,15 @@ test('a record names a lease by its fingerprint and publishes its owner before i
           releaseId: 'r-1',
         },
       });
-      emitDiagnostic({ phase: 'request_failed' });
-      const written = write.mock.calls.map(([file]) => String(file));
-      write.mockRestore();
-      return written;
+      const nested = await withDiagnosticsScope(
+        { requestId: 'r1' },
+        () => getDiagnosticsMeta().recordId,
+      );
+      return [getDiagnosticsMeta().recordId, nested];
     },
   );
 
-  assert.deepEqual(ownersBeforeRecord, [`${logPath}.owners`, logPath, logPath]);
-  assert.equal(fs.readFileSync(diagnosticsRecordOwnersPath(logPath), 'utf8'), 'owner-a\n');
+  assert.deepEqual(recordIds, ['record-1', 'record-1']);
   const record = fs.readFileSync(logPath, 'utf8');
   assert.equal(record.toLowerCase().includes(leaseId.toLowerCase()), false);
   assert.deepEqual(JSON.parse(record.split('\n')[0]!).data, {

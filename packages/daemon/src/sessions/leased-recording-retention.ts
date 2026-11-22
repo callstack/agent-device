@@ -6,6 +6,7 @@ import type { SessionRef } from '../core/session-state.ts';
 import { tenantPublicSessionName } from '../core/session-tenant-scope.ts';
 import {
   cleanupDownloadableArtifact,
+  leaseVerifier,
   trackDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
 import {
@@ -37,7 +38,7 @@ export function retainLeasedSessionRecording(
         trackDownloadableArtifact({
           artifactPath: artifact.path!,
           tenantId: lease.tenantId,
-          leaseId: lease.leaseId,
+          leaseVerifier: leaseVerifier(lease.leaseId),
           artifactType: artifact.artifactType,
           fileName: artifact.fileName,
           sessionName,

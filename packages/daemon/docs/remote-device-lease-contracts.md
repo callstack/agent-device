@@ -109,14 +109,18 @@ The `artifacts` RPC reads the lease id from the request. `GET /artifacts`, `GET 
 This rule applies for as long as the daemon keeps the output, also after the lease ends. The lifetime of the output does not change.
 An inventory omits an artifact of another lease.
 A download or a diagnostics read without the lease id fails with `UNAUTHORIZED`, reason `LEASE_OUTPUT_MISMATCH`, and `field: 'leaseId'`.
-If a later request registers a file that a lease already registered, the file stays with that lease.
-The owner of a request diagnostics record is the lease id that the request itself sent. A request that sent no lease id leaves a record with no owner.
-The daemon sets the owner before it writes the first event of that record.
-Thus each caller reads only its own records, also the record of a request that a leased session refused.
-A recording manifest keeps the lease that started the recording. `record stop` under another lease, or under no lease, fails with the same refusal.
-The daemon keeps an owner as the SHA-256 of the lease id, never as the id, and never serves it.
+An artifact id serves only the output that it registered. If another capture is written to the same path, that capture gets its own id, and the earlier id expires.
+The daemon names each request diagnostics record. The name carries the owner of the record: the lease id that the request sent, or that it sent none.
+The request id of the caller names no record. Thus two requests do not share a record, and a record has one owner or none.
+A caller that sent a lease id reads only its own records, also the record of a request that a leased session refused.
+The diagnostics route does not serve a record that an earlier release named, because the owner of that record is not known.
+A recording manifest keeps the lease that started the recording, or that no lease started it.
+`record stop` returns a completed export to a request that sends that lease id, also after the lease ended. Such a request needs no active lease.
+A recording that still runs needs a request that is admitted under that lease.
+`record stop` does not return a completed remote export whose manifest names neither.
+The daemon keeps an owner as the SHA-256 of the lease id, never as the id.
 A request diagnostics record names a lease by the first 8 hex digits of that SHA-256, never by the lease id.
-The daemon log, which only the host operator reads, names the lease id, because the operator needs it to end a rented device.
+An event that the daemon writes outside a request goes to the daemon log, which only the host operator reads. It names the lease id, because the operator needs it to end a rented device.
 Output of a request that acted under no lease keeps the tenant rule.
 
 ## Admitted request work

@@ -136,7 +136,7 @@ When a command fails, stderr starts and ends with the same summary line, so the 
 
 ```text
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
-Log: /Users/me/.agent-device/sessions/<session>/requests/<request-id>.ndjson
+Log: /Users/me/.agent-device/sessions/<session>/requests/<record-id>.ndjson
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
 ```
 

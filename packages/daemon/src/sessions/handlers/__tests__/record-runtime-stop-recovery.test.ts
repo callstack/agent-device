@@ -16,6 +16,8 @@ import {
 } from '@agent-device/host-kit/request';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import { leaseVerifier } from '../../../resources/artifact-tracking.ts';
+import { captureOutputLeaseVerifier } from '../../../core/capture-output-ownership.ts';
 import {
   expectDecodedCompletedRecording,
   makeRecordRuntimeHarness,
@@ -106,47 +108,66 @@ test('record stop after a daemon restart replays the completed export for the na
   );
 });
 
-test('record stop after a daemon restart serves the export only under the lease that started it', async () => {
-  const registry = new LeaseRegistry();
-  const [owner, other] = ['run-a', 'run-b'].map((runId) => ({
-    admittedLease: registry.allocateLease({
-      tenantId: 'tenant-a',
-      runId,
-      leaseBackend: 'android-instance',
-    }),
-  }));
-  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-lease-');
-  const outPath = path.join(
-    mkdtempForTestSync('record-runtime-restart-stop-lease-output-'),
-    'capture.mp4',
-  );
+async function completeLeasedRecording(prefix: string) {
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    leaseBackend: 'android-instance',
+  });
+  const harness = makeRecordRuntimeHarness(prefix);
+  const outPath = path.join(mkdtempForTestSync(`${prefix}output-`), 'capture.mp4');
   fs.writeFileSync(outPath, 'mp4');
-  await harness.run(['start', outPath], undefined, undefined, owner);
-  await harness.run(['stop'], undefined, undefined, owner);
+  await harness.run(['start', outPath], undefined, undefined, { admittedLease: lease });
+  await harness.run(['stop'], undefined, undefined, { admittedLease: lease });
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected the stopped recording session');
   harness.sessionStore.retire(ref);
+  const replay = async (leaseId?: string) =>
+    await harness.run(['stop'], { sessionExplicit: true, ...(leaseId ? { leaseId } : {}) });
+  return { harness, leaseId: lease.leaseId, outPath, replay };
+}
+
+const LEASE_OUTPUT_REFUSAL = {
+  ok: false,
+  error: { code: 'UNAUTHORIZED', details: { reason: 'LEASE_OUTPUT_MISMATCH', field: 'leaseId' } },
+};
+
+test('a completed leased export replays to the lease id that started it, with no active lease', async () => {
+  const { harness, leaseId, outPath, replay } = await completeLeasedRecording(
+    'record-runtime-replay-lease-',
+  );
   const manifest = fs.readFileSync(
     recordingResourcePath(harness.sessionStore, harness.sessionName),
     'utf8',
   );
-  expect(manifest).not.toContain(owner!.admittedLease.leaseId);
+  expect(manifest).not.toContain(leaseId);
 
-  for (const internal of [other, undefined]) {
-    expect(
-      await harness.run(['stop'], { sessionExplicit: true }, undefined, internal),
-    ).toMatchObject({
-      ok: false,
-      error: {
-        code: 'UNAUTHORIZED',
-        details: { reason: 'LEASE_OUTPUT_MISMATCH', field: 'leaseId' },
-      },
-    });
-  }
-  expect(await harness.run(['stop'], { sessionExplicit: true }, undefined, owner)).toMatchObject({
-    ok: true,
-    data: { recording: 'stopped', outPath },
+  expect(await replay('f'.repeat(32))).toMatchObject(LEASE_OUTPUT_REFUSAL);
+  expect(await replay()).toMatchObject(LEASE_OUTPUT_REFUSAL);
+
+  // The lease ended with its session. The replay names it, and no request is admitted under it.
+  const replayed = await replay(leaseId.toUpperCase());
+  expect(replayed).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
+  // The export stays with the lease of the manifest when the response is registered.
+  expect(replayed.ok && captureOutputLeaseVerifier(replayed.data!)).toBe(leaseVerifier(leaseId));
+});
+
+test('a completed remote export whose manifest names no owner is not replayed', async () => {
+  const { harness, leaseId, replay } = await completeLeasedRecording(
+    'record-runtime-replay-legacy-',
+  );
+  const resourcePath = recordingResourcePath(harness.sessionStore, harness.sessionName);
+  const record = screenRecordingResourceStore.read(resourcePath);
+  if (record.status !== 'decoded') throw new Error('Expected decoded recording manifest');
+  // A manifest as an earlier release wrote it: a remote export, and no lease or its absence.
+  const { remoteCaptureLease: _owner, ...metadata } = record.envelope.metadata ?? {};
+  screenRecordingResourceStore.write(resourcePath, {
+    ...record.envelope,
+    metadata: { ...metadata, remoteCaptureOutput: true },
   });
+
+  expect(await replay(leaseId)).toMatchObject(LEASE_OUTPUT_REFUSAL);
+  expect(await replay()).toMatchObject(LEASE_OUTPUT_REFUSAL);
 });
 
 test('record stop recovery after a daemon restart keeps the request host-scoping selectors', async () => {

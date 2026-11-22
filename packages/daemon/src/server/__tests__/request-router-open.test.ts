@@ -146,8 +146,11 @@ test('open returns and creates the session state directory', async () => {
     expect(response.data?.runnerLogPath).toEqual(
       path.join(String(response.data?.sessionStateDir), 'runner.log'),
     );
-    expect(response.data?.requestLogPath).toEqual(
-      path.join(String(response.data?.sessionStateDir), 'requests', 'req-open-state.ndjson'),
+    expect(path.dirname(String(response.data?.requestLogPath))).toEqual(
+      path.join(String(response.data?.sessionStateDir), 'requests'),
+    );
+    expect(path.basename(String(response.data?.requestLogPath))).toMatch(
+      /^[a-f0-9]{32}-unleased\.ndjson$/,
     );
     expect(response.data?.eventLogPath).toEqual(
       path.join(String(response.data?.sessionStateDir), 'events.ndjson'),

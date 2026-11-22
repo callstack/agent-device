@@ -25,7 +25,10 @@ export type DaemonRefFrameEffect<TRequest = DispatchedCommand> =
 
 export type SessionlessLeaseAdmissionExemption =
   | Readonly<{ kind: 'unconditional' }>
-  | Readonly<{ kind: 'provider-app-catalog'; provider: string }>;
+  | Readonly<{ kind: 'provider-app-catalog'; provider: string }>
+  // The request names a lease that ended, to read output that the lease left. Its handler checks
+  // that lease id against the owner of the output.
+  | Readonly<{ kind: 'ended-lease-output' }>;
 
 /**
  * Daemon route + request-policy traits for one command. Generic over the request

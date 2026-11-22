@@ -41,10 +41,11 @@ type DiagnosticsScopeOptions = {
    */
   logRecord?: DiagnosticsRecordRef;
   /**
-   * The one opaque owner of what this scope writes to its `logRecord`. It is written as a line of
-   * {@link diagnosticsRecordOwnersPath} before the first byte that this scope adds to the record.
+   * The server-chosen name of the record that this scope writes. A scope that opens inside another
+   * scope writes to the record of that scope, so it keeps its `recordId`. `requestId` is the
+   * caller's tracking id and names no record.
    */
-  logOwner?: string;
+  recordId?: string;
   /**
    * Set for a log that only the host operator reads, such as the daemon log. It names a lease by
    * its id, which the operator needs to end a rented device. Every other scope names a lease by
@@ -59,7 +60,6 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   flushedLogPath?: string;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
-  logOwnerPublished?: true;
   // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
   // `flushDiagnosticsToSessionFile`, so consumers (e.g. the agent-cost graft)
   // can count phase occurrences for the whole request even in debug mode where
@@ -90,6 +90,7 @@ export async function withDiagnosticsScope<T>(
   fn: () => Promise<T> | T,
 ): Promise<T> {
   const scope: DiagnosticsScope = {
+    recordId: diagnosticsStorage.getStore()?.recordId,
     ...options,
     diagnosticId: createDiagnosticId(),
     events: [],
@@ -110,6 +111,7 @@ export function updateDiagnosticsScope(options: DiagnosticsScopeOptions): void {
 export function getDiagnosticsMeta(): {
   diagnosticId?: string;
   requestId?: string;
+  recordId?: string;
   session?: string;
   command?: string;
   debug?: boolean;
@@ -117,8 +119,8 @@ export function getDiagnosticsMeta(): {
 } {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return {};
-  const { diagnosticId, requestId, session, command, debug, flushOnSuccess } = scope;
-  return { diagnosticId, requestId, session, command, debug, flushOnSuccess };
+  const { diagnosticId, requestId, recordId, session, command, debug, flushOnSuccess } = scope;
+  return { diagnosticId, requestId, recordId, session, command, debug, flushOnSuccess };
 }
 
 /** Register a caller-declared literal that must not reach this request's diagnostics. */
@@ -392,17 +394,5 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
     fs.mkdirSync(dir, { recursive: true });
     scope.ensuredDirectories.add(dir);
   }
-  if (scope.logRecord && logPath === scope.logPath && scope.logOwner && !scope.logOwnerPublished) {
-    fs.appendFileSync(diagnosticsRecordOwnersPath(logPath), `${scope.logOwner}\n`, 'utf8');
-    scope.logOwnerPublished = true;
-  }
   fs.appendFileSync(logPath, line, 'utf8');
-}
-
-/**
- * Where the owners of the record at `logPath` are kept, one line for each scope that wrote to the
- * record with an owner. No reader is served this file.
- */
-export function diagnosticsRecordOwnersPath(logPath: string): string {
-  return `${logPath}.owners`;
 }

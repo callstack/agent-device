@@ -35,10 +35,10 @@ test('Provider-backed integration local proxy serves the daemon diagnostics reco
     assert.equal(failed.statusCode, 404, JSON.stringify(failed.json));
     const error = failed.json.error?.data as DaemonError | undefined;
     assert.equal(error?.code, 'SESSION_NOT_FOUND', JSON.stringify(failed.json));
-    assert.deepEqual(error?.diagnosticsRecord, {
-      session: PLAIN_SESSION,
-      requestId: REQUEST_ID,
-    });
+    // The daemon names the record. The request sent no lease id, so the record has no owner.
+    const recordId = error?.diagnosticsRecord?.requestId ?? '';
+    assert.equal(error?.diagnosticsRecord?.session, PLAIN_SESSION);
+    assert.match(recordId, /^[a-f0-9]{32}-unleased$/);
 
     const throughProxy = await localizeRemoteDaemonError(error!, {
       endpoint: { baseUrl: proxy.baseUrl, token: PROXY_TOKEN },
@@ -50,7 +50,7 @@ test('Provider-backed integration local proxy serves the daemon diagnostics reco
     assert.match(proxyRecord, /"phase":"request_start"/);
     assert.match(proxyRecord, /"phase":"request_failed"/);
 
-    const expectedPath = `/sessions/${encodeURIComponent(PLAIN_SESSION)}/requests/${REQUEST_ID}/diagnostics`;
+    const expectedPath = `/sessions/${encodeURIComponent(PLAIN_SESSION)}/requests/${recordId}/diagnostics`;
     const forwardedRequests = proxy.forwarded.map((entry) => [
       entry.method,
       entry.route,

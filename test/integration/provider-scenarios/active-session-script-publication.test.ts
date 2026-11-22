@@ -358,10 +358,13 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         assertRpcOk(replay);
         assert.equal(world.textInjectionCalls.at(-1)?.text, secret);
         assert.ok(opened.sessionStateDir);
-        const requestLog = fs.readFileSync(
-          path.join(opened.sessionStateDir, 'requests', 'parameterized-replay-diagnostics.ndjson'),
-          'utf8',
-        );
+        // The daemon names the record. The request id is in each line of it.
+        const requestsDir = path.join(opened.sessionStateDir, 'requests');
+        const requestLog = fs
+          .readdirSync(requestsDir)
+          .map((name) => fs.readFileSync(path.join(requestsDir, name), 'utf8'))
+          .filter((log) => log.includes('"requestId":"parameterized-replay-diagnostics"'))
+          .join('');
         assert.match(requestLog, /provider_text_echo_regression/);
         assert.match(requestLog, /\[REDACTED\]/);
         assert.equal(requestLog.includes(secret), false);

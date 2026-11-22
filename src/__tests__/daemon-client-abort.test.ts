@@ -5,11 +5,9 @@ import { createAgentDeviceClient } from '@agent-device/client';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  resolveSessionDir,
-  resolveSessionRequestLogPath,
-} from '@agent-device/daemon-contracts/session-artifact-paths';
+import { resolveSessionDir } from '@agent-device/daemon-contracts/session-artifact-paths';
 import fs from 'node:fs';
+import path from 'node:path';
 import { skipWhenLoopbackUnavailable, type SkippableTestContext } from '@agent-device/test-kit';
 
 async function waitFor(condition: () => boolean, what: string): Promise<void> {
@@ -63,8 +61,14 @@ async function runAlreadyAborted(
       resolveDaemonPaths(daemon.stateDir).sessionsDir,
       'default',
     );
-    assert.equal(fs.existsSync(resolveSessionRequestLogPath(sessionDir, followUpRequestId)), true);
-    assert.equal(fs.existsSync(resolveSessionRequestLogPath(sessionDir, requestId)), false);
+    // The daemon names each record. The request id is in each line of it.
+    const requestsDir = path.join(sessionDir, 'requests');
+    const records = fs
+      .readdirSync(requestsDir)
+      .map((name) => fs.readFileSync(path.join(requestsDir, name), 'utf8'))
+      .join('');
+    assert.equal(records.includes(`"requestId":"${followUpRequestId}"`), true);
+    assert.equal(records.includes(`"requestId":"${requestId}"`), false);
   } finally {
     await daemon.close();
   }

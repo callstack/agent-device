@@ -19,7 +19,6 @@ import http from 'node:http';
 import { AppError, normalizeError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { isSafeSessionSegment } from '@agent-device/host-kit/session-paths';
-import { diagnosticsRecordOwnersPath } from '@agent-device/host-kit/diagnostics';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { decodeUriSegment } from './http-request-target.ts';
 import {
@@ -27,7 +26,11 @@ import {
   type TenantSessionNamespace,
 } from '../core/session-tenant-scope.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
-import { leasedOutputRefusal, requestHoldsOutputLease } from '../resources/artifact-tracking.ts';
+import {
+  diagnosticsRecordOwner,
+  leasedOutputRefusal,
+  requestHoldsOutputLease,
+} from '../resources/artifact-tracking.ts';
 
 const REQUEST_DIAGNOSTICS_CONTENT_TYPE = 'application/x-ndjson';
 
@@ -137,8 +140,17 @@ async function handleRequestDiagnostics(
       return;
     }
 
+    const owner = diagnosticsRecordOwner(ref.requestId);
+    const presentedLeaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
+    const presented = typeof presentedLeaseId === 'string' ? presentedLeaseId : undefined;
+    if (owner !== null && !requestHoldsOutputLease(owner, presented)) {
+      sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
+      return;
+    }
+
     const recordPath = resolveRecordPath(ref);
-    const stats = await statRecord(recordPath);
+    // A record of unknown ownership, such as one that an earlier release wrote, is not served.
+    const stats = owner === null ? null : await statRecord(recordPath);
     if (!stats) {
       sendRestJsonError(
         res,
@@ -155,16 +167,7 @@ async function handleRequestDiagnostics(
       return;
     }
 
-    // The owners are on disk before the first byte of the record, so they are read after the size.
-    const owners = await readRecordOwners(recordPath);
-    const presentedLeaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
-    const presented = typeof presentedLeaseId === 'string' ? presentedLeaseId : undefined;
-    if (!owners.every((owner) => requestHoldsOutputLease(owner, presented))) {
-      sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
-      return;
-    }
-
-    const stream = fs.createReadStream(recordPath, { end: stats.size - 1 });
+    const stream = fs.createReadStream(recordPath);
     res.statusCode = 200;
     res.setHeader('content-type', REQUEST_DIAGNOSTICS_CONTENT_TYPE);
     res.setHeader('content-length', String(stats.size));
@@ -180,18 +183,8 @@ async function handleRequestDiagnostics(
 async function statRecord(recordPath: string): Promise<fs.Stats | null> {
   try {
     const stats = await fs.promises.stat(recordPath);
-    return stats.isFile() && stats.size > 0 ? stats : null;
+    return stats.isFile() ? stats : null;
   } catch {
     return null;
-  }
-}
-
-async function readRecordOwners(recordPath: string): Promise<string[]> {
-  try {
-    const owners = await fs.promises.readFile(diagnosticsRecordOwnersPath(recordPath), 'utf8');
-    return owners.split('\n').filter((owner) => owner.length > 0);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
   }
 }

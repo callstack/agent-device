@@ -211,6 +211,10 @@ test('the owner downloads a leased screenshot after its session and lease ended'
   expect(await listedIds(await world.get('/artifacts', world.leaseId.toUpperCase()))).toEqual([
     artifactId,
   ]);
+  // The CLI sends the ended lease id on `artifacts` after close.
+  expect(await rpcListedIds(await world.send('artifacts', SESSION, world.owner))).toEqual([
+    artifactId,
+  ]);
   const download = await world.get(`/artifacts/${artifactId}`, world.leaseId);
   expect(download.status).toBe(200);
   const bytes = Buffer.from(await download.arrayBuffer());
@@ -255,7 +259,24 @@ test('a request that a leased session refused reads its own record, which names 
   const served = await own.text();
   expect(served).not.toContain(world.leaseId);
   expect(served).not.toContain(OTHER_LEASE_ID);
-  expect((await world.get(`${route}.owners`, OTHER_LEASE_ID)).status).toBe(404);
+});
+
+test('two requests that reuse one request id get one record each', async () => {
+  if (!world) return;
+  const requestId = 'reused-request-id';
+  const owned = await world.send('press', SESSION, { ...world.owner, requestId });
+  const refused = await world.send('press', SESSION, { requestId });
+  const records = [owned, refused].map((body) => body.error?.data?.diagnosticsRecord);
+  expect(records[0]?.requestId).not.toBe(records[1]?.requestId);
+  const route = (record: DiagnosticsRecordRef | undefined) =>
+    `/sessions/${encodeURIComponent(record!.session)}/requests/${record!.requestId}/diagnostics`;
+
+  // Each caller still reads its own record: neither request changed the owner of the other.
+  expect((await world.get(route(records[0]), world.leaseId)).status).toBe(200);
+  await expectLeasedOutputRefusal(await world.get(route(records[0])));
+  expect((await world.get(route(records[1]))).status).toBe(200);
+  // The request id of the caller names no record.
+  expect((await world.get(route({ ...records[0]!, requestId }), world.leaseId)).status).toBe(404);
 });
 
 test('a request with no lease on a session with no lease keeps the tenant rule', async () => {

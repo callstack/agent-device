@@ -28,7 +28,7 @@ JSON output also includes `runnerLogPath` and `requestLogPath` when available.
 
 Each session artifact directory contains:
 
-- `requests/<request-id>.ndjson` - daemon request diagnostics for this session.
+- `requests/<record-id>.ndjson` - daemon request diagnostics for this session, one file per request. The daemon names the file, a failed command prints its path, and each line carries the request id.
 - `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` before an entry would exceed 5 MiB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors within the retained window stay valid across rotation. Older cursors expire.
 - `runner.log` - Apple runner and `xcodebuild` build/start output for this session.
 - `app.log` - app/device logs when `logs start` or `logs clear --restart` is active.

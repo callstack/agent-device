@@ -12,7 +12,10 @@ import {
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
-import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import {
+  requestDiagnosticsRecordId,
+  type TrackDownloadableArtifact,
+} from '../resources/artifact-tracking.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -291,12 +294,11 @@ export async function createRequestExecutionScope(params: {
   // trait under which an activity stamp can be written while holding that lock.
   const attachesToSession = shouldLockSessionExecution(command);
   const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
-  const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
     sessionDir,
     session: sessionName,
-    requestId: scopedReq.meta?.requestId ?? diagnosticsMeta.requestId,
+    requestId: requestDiagnosticsRecordId(scopedReq),
   });
   const requestLogPath = requestLog.path;
   const runnerLogPath = resolveSessionRunnerLogPath(sessionDir);

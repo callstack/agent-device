@@ -73,9 +73,11 @@ test('open relaunch retains Android foreground probe failure in the serialized r
         'sessions',
         'fence-session',
         'requests',
-        'fence-request.ndjson',
+        `${response.error.diagnosticsRecord?.requestId}.ndjson`,
       ),
     );
+    // The daemon names the record. The caller's request id names no file.
+    expect(response.error.diagnosticsRecord?.requestId).toMatch(/^[a-f0-9]{32}-unleased$/);
     const events = fs
       .readFileSync(response.error.logPath!, 'utf8')
       .trim()

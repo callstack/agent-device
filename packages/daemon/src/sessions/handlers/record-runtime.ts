@@ -53,6 +53,7 @@ import { requestCwd } from '../../core/context.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
 import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
+import { resolveLeaseScope } from '../../core/lease-context.ts';
 import {
   leasedOutputRefusal,
   leaseVerifier,
@@ -309,7 +310,12 @@ async function startRecording(
   );
 }
 
-/** Names in the manifest who gets the export: a remote caller, its tenant, and the lease that started it. */
+const UNLEASED_CAPTURE = 'unleased';
+
+/**
+ * Names in the manifest who gets the export: a remote caller, its tenant, and the lease that started
+ * the recording, or that no lease did. A manifest that names neither is of unknown ownership.
+ */
 function withCaptureOwner(
   envelope: DurableResourceEnvelope<'screen-recording'>,
   req: DaemonRequest,
@@ -317,14 +323,13 @@ function withCaptureOwner(
 ): DurableResourceEnvelope<'screen-recording'> {
   const tenantId = session.lease?.tenantId ?? req.meta?.tenantId;
   const leaseId = req.internal?.admittedLease?.leaseId;
-  if (!req.internal?.publicNetworkOnly && !tenantId && !leaseId) return envelope;
   return {
     ...envelope,
     metadata: {
       ...envelope.metadata,
       ...(req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
       ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
-      ...(leaseId ? { remoteCaptureLeaseVerifier: leaseVerifier(leaseId) } : {}),
+      remoteCaptureLease: leaseId ? leaseVerifier(leaseId) : UNLEASED_CAPTURE,
     },
   };
 }
@@ -432,7 +437,7 @@ async function stopRecording(
   kind: 'stop-live' | 'stop-recovery',
   needsReadiness: boolean,
 ): Promise<DaemonResponse> {
-  assertRequestHoldsRecordingLease(params);
+  const leaseOwner = assertRequestMayStopRecording(params);
   let stopped: ScreenRecordingStop;
   try {
     stopped =
@@ -486,24 +491,36 @@ async function stopRecording(
           response.data,
           daemonOwned ? 'daemon' : 'caller',
           tenantId,
+          leaseOwner,
         ),
       }
     : response;
 }
 
 /**
- * The manifest names the lease that started the recording. Only a request under that lease stops
- * the recording or gets its export, also when the manifest outlived its session or its daemon.
+ * Refuses a stop that the owner of the recording did not send, and returns the verifier of the
+ * lease that owns the export. A completed export needs only the lease id of its owner, also after
+ * that lease ended. A recording that still runs needs the admitted lease.
  */
-function assertRequestHoldsRecordingLease(params: RecordRuntimeHandlerParams): void {
+function assertRequestMayStopRecording(params: RecordRuntimeHandlerParams): string | undefined {
   const record = screenRecordingDurableResource.store.read(
     screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
   );
-  const owner =
-    record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureLeaseVerifier : undefined;
-  if (typeof owner !== 'string') return;
-  if (requestHoldsOutputLease(owner, params.req.internal?.admittedLease?.leaseId)) return;
-  throw leasedOutputRefusal('Recording');
+  if (record.status !== 'decoded') return undefined;
+  const { metadata, lifecycle } = record.envelope;
+  const owner = metadata?.remoteCaptureLease;
+  if (owner === UNLEASED_CAPTURE) return undefined;
+  if (typeof owner !== 'string') {
+    // A manifest of an earlier release names no lease, so nobody is known to own its remote export.
+    if (metadata?.remoteCaptureOutput === true) throw leasedOutputRefusal('Recording');
+    return undefined;
+  }
+  const presented =
+    lifecycle === 'completed'
+      ? resolveLeaseScope(params.req).leaseId
+      : params.req.internal?.admittedLease?.leaseId;
+  if (!requestHoldsOutputLease(owner, presented)) throw leasedOutputRefusal('Recording');
+  return owner;
 }
 
 function deleteTerminalRecordOnlySession(

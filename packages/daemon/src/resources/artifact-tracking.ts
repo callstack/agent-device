@@ -18,9 +18,11 @@ import {
   type TenantOwnedResourceKind,
 } from '../core/tenant-owned-entry.ts';
 import {
+  getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
   updateDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { resolveLeaseScope } from '../core/lease-context.ts';
 import { normalizeLeaseId } from './lease-registry-scope.ts';
@@ -49,7 +51,10 @@ export function requestHoldsOutputLease(
   presentedLeaseId: string | undefined,
 ): boolean {
   if (ownerVerifier === undefined) return true;
-  return presentedLeaseId !== undefined && leaseVerifier(presentedLeaseId) === ownerVerifier;
+  return (
+    presentedLeaseId !== undefined &&
+    timingSafeStringEqual(leaseVerifier(presentedLeaseId), ownerVerifier)
+  );
 }
 
 export function leasedOutputRefusal(label: string): AppError {
@@ -59,21 +64,42 @@ export function leasedOutputRefusal(label: string): AppError {
   });
 }
 
+const UNLEASED_RECORD = 'unleased';
+const DIAGNOSTICS_RECORD_ID = new RegExp(`^[a-f0-9]{32}-(${UNLEASED_RECORD}|[a-f0-9]{64})$`);
+
 /**
- * Makes the lease id that a request sends the owner of that request's diagnostics record. Only a
- * reader that sends the same lease id is served the record. A request that sends no lease id
- * leaves a record with no owner, which keeps the tenant rule.
+ * Names the diagnostics record of a request that no other request opened: a server-chosen id that
+ * carries its owner, the lease id that the request sent, or that it sent none. The caller's request
+ * id names no record, so two requests never share one, and a record has one owner or none.
  */
 export function claimRequestDiagnosticsRecord(req: Pick<DaemonRequest, 'flags' | 'meta'>): void {
   const leaseId = resolveLeaseScope(req).leaseId;
-  if (leaseId === undefined) return;
   // A lease id that reaches a message, and not a lease field, is removed from the record too.
   const canonical = normalizeLeaseId(leaseId);
-  if (canonical) {
+  if (leaseId !== undefined && canonical) {
     registerDiagnosticSensitiveValue(canonical);
     registerDiagnosticSensitiveValue(leaseId.trim());
   }
-  updateDiagnosticsScope({ logOwner: leaseVerifier(leaseId) });
+  if (getDiagnosticsMeta().recordId) return;
+  const owner = leaseId === undefined ? UNLEASED_RECORD : leaseVerifier(leaseId);
+  updateDiagnosticsScope({ recordId: `${crypto.randomBytes(16).toString('hex')}-${owner}` });
+}
+
+/** The name of the diagnostics record that the running request writes. */
+export function requestDiagnosticsRecordId(req: Pick<DaemonRequest, 'meta'>): string | undefined {
+  const scope = getDiagnosticsMeta();
+  return scope.recordId ?? req.meta?.requestId ?? scope.requestId;
+}
+
+/**
+ * The lease that owns the diagnostics record `recordId` names: `undefined` for a record of a
+ * request that sent no lease id. Returns `null` for a name that this daemon did not choose, such as
+ * a record from a release that named records by the caller's request id. Its owner is not known.
+ */
+export function diagnosticsRecordOwner(recordId: string): string | undefined | null {
+  const owner = DIAGNOSTICS_RECORD_ID.exec(recordId)?.[1];
+  if (owner === undefined) return null;
+  return owner === UNLEASED_RECORD ? undefined : owner;
 }
 
 // --- Downloadable artifact tracking ---
@@ -116,6 +142,8 @@ type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
   leaseVerifier?: string;
+  /** The output that was registered. Another output written to `artifactPath` is not this artifact. */
+  output: string | undefined;
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
@@ -157,8 +185,8 @@ const pendingUploads = () => artifactTracking().uploads;
 export type DownloadableArtifactRegistration = {
   artifactPath: string;
   tenantId?: string;
-  /** The lease that produced the artifact. Only a request that sends this id lists or downloads it. */
-  leaseId?: string;
+  /** {@link leaseVerifier} of the lease that produced the artifact. Only a request that sends that lease id lists or downloads it. */
+  leaseVerifier?: string;
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
@@ -187,13 +215,14 @@ export type OpenedDownloadableArtifact = PreparedDownloadableArtifact & {
 };
 
 /**
- * Registers one file for download and returns its id. A file the same tenant can already download
- * returns its existing entry unchanged: two ids for one file would each delete it after their own
- * download. A file that a lease registered keeps that entry for every later registration, so a
- * request without that lease cannot register the file again and read it.
+ * Registers one output for download and returns its id. The same output registered again for the
+ * same tenant and lease returns its existing entry unchanged: two ids for one file would each
+ * delete it after their own download. An id serves only the output that it registered: another
+ * output written to the same path gets its own id, and the earlier id expires.
  */
 export function trackDownloadableArtifact(params: DownloadableArtifactRegistration): string {
-  const existingId = findTrackedArtifactId(params);
+  const output = readOutputIdentity(params.artifactPath);
+  const existingId = findTrackedArtifactId(params, output);
   if (existingId) return existingId;
   const artifactId = crypto.randomUUID();
   const createdAt = Date.now();
@@ -210,7 +239,8 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
   pendingArtifacts().set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
-    ...(params.leaseId !== undefined ? { leaseVerifier: leaseVerifier(params.leaseId) } : {}),
+    ...(params.leaseVerifier !== undefined ? { leaseVerifier: params.leaseVerifier } : {}),
+    output,
     artifactType: params.artifactType,
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
@@ -225,12 +255,18 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
 }
 
 function findTrackedArtifactId(
-  owner: Pick<DownloadableArtifactRegistration, 'artifactPath' | 'tenantId' | 'leaseId'>,
+  owner: Pick<DownloadableArtifactRegistration, 'artifactPath' | 'tenantId' | 'leaseVerifier'>,
+  output: string | undefined,
 ): string | undefined {
   for (const [artifactId, entry] of pendingArtifacts()) {
-    if (entry.cleanupRequested || entry.artifactPath !== owner.artifactPath) continue;
-    if (entry.leaseVerifier !== undefined) return artifactId;
-    if (entry.tenantId === owner.tenantId && owner.leaseId === undefined) return artifactId;
+    if (
+      !entry.cleanupRequested &&
+      entry.artifactPath === owner.artifactPath &&
+      entry.output === output &&
+      entry.tenantId === owner.tenantId &&
+      entry.leaseVerifier === owner.leaseVerifier
+    )
+      return artifactId;
   }
   return undefined;
 }
@@ -240,6 +276,20 @@ function findArtifactSourceCleanup(artifactPath: string): ArtifactSourceCleanup 
     if (entry.artifactPath === artifactPath) return entry.sourceCleanup;
   }
   return undefined;
+}
+
+/** What tells one output at a path from the next one written there. A directory keeps its identity while its entries change. */
+function outputIdentity(stat: fs.Stats): string {
+  const inode = `${stat.dev}:${stat.ino}`;
+  return stat.isDirectory() ? inode : `${inode}:${stat.size}:${stat.mtimeMs}`;
+}
+
+function readOutputIdentity(artifactPath: string): string | undefined {
+  try {
+    return outputIdentity(fs.statSync(artifactPath));
+  } catch {
+    return undefined;
+  }
 }
 
 export async function openDownloadableArtifact(
@@ -315,13 +365,8 @@ export async function listDownloadableArtifacts(
   const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts()) {
     if (!canReadArtifact(entry, reader)) continue;
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(entry.artifactPath);
-    } catch {
-      cleanupDownloadableArtifact(id);
-      continue;
-    }
+    const stat = statRegisteredOutput(id, entry);
+    if (!stat) continue;
     const payload = await prepareArtifactPayloadForInventory(id, entry, stat, hostEnv);
     if (!payload || entry.cleanupRequested) continue;
     artifacts.push({
@@ -337,6 +382,18 @@ export async function listDownloadableArtifacts(
     });
   }
   return artifacts;
+}
+
+/** The output that `entry` registered. Cleans the entry up when the output is gone or replaced. */
+function statRegisteredOutput(artifactId: string, entry: ArtifactEntry): fs.Stats | undefined {
+  try {
+    const stat = fs.statSync(entry.artifactPath);
+    if (outputIdentity(stat) === entry.output) return stat;
+  } catch {
+    // A missing output is cleaned up like a replaced one.
+  }
+  cleanupDownloadableArtifact(artifactId);
+  return undefined;
 }
 
 async function prepareArtifactPayloadForInventory(
@@ -375,6 +432,10 @@ function readDownloadableArtifactEntry(
   } catch {
     cleanupDownloadableArtifact(artifactId);
     throw new AppError('COMMAND_FAILED', `Artifact file is missing: ${entry.artifactPath}`);
+  }
+  if (outputIdentity(stat) !== entry.output) {
+    cleanupDownloadableArtifact(artifactId);
+    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   }
   return { entry, stat };
 }

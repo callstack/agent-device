@@ -29,9 +29,11 @@ import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   cleanupDownloadableArtifact,
+  leaseVerifier,
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
+import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../../server/downloadable-artifact-http.ts';
 import { finalizeDaemonResponse } from '../../server/request-finalization.ts';
 import { buildRecordingStopResponse } from '../handlers/record-runtime-response.ts';
@@ -275,6 +277,9 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
     device: IOS_SIMULATOR,
   });
   if (recovery.kind !== 'completed') throw new Error(`expected a replay, got ${recovery.kind}`);
+  const stopped = buildRecordingStopResponse(recovery.completion);
+  if (!stopped.ok || !stopped.data) throw new Error('expected a stop response');
+  // The stop handler names the lease of the manifest as the owner of a replayed export.
   const replayed = finalizeDaemonResponse(
     {
       token: 't',
@@ -284,7 +289,10 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
       flags: {},
       meta: { tenantId: TENANT },
     },
-    buildRecordingStopResponse(recovery.completion),
+    {
+      ok: true,
+      data: withCaptureOutputOwnership(stopped.data, 'daemon', TENANT, leaseVerifier(LEASE_ID)),
+    },
     trackDownloadableArtifact,
   );
 
@@ -295,7 +303,7 @@ test('a record stop replay after a leased teardown serves the artifacts teardown
     expect.objectContaining({ id: retained[0]!.id, sessionName: 'checkout-flow' }),
     expect.objectContaining({ id: retained[1]!.id, sessionName: 'checkout-flow' }),
   ]);
-  // The replay names no lease, so it registers no second way to the files.
+  // The replay registers under the lease of the manifest, so it opens no second way to the files.
   expect(await listDownloadableArtifacts({ tenantId: TENANT }, process.env)).toEqual([]);
 });
 

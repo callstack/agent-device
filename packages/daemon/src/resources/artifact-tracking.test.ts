@@ -10,6 +10,7 @@ import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
 import {
   cleanupDownloadableArtifact,
+  leaseVerifier,
   listDownloadableArtifacts,
   openDownloadableArtifact,
   trackDownloadableArtifact,
@@ -627,6 +628,46 @@ test('a file tracked twice for one tenant keeps one id, and another tenant gets 
   expect(again).toBe(first);
   expect(otherTenant).not.toBe(first);
 });
+
+test.each([
+  { first: undefined, second: 'a'.repeat(32) },
+  { first: 'a'.repeat(32), second: 'b'.repeat(32) },
+])(
+  'an id does not serve a later capture written to its path (first lease $first)',
+  async ({ first, second }) => {
+    const artifactPath = path.join(mkdtempForTestSync('agent-device-artifact-path-'), 'shot.png');
+    const runtime = createRuntimeStateHandle();
+    const capture = (bytes: string, leaseId: string | undefined) => {
+      fs.writeFileSync(artifactPath, bytes);
+      return runtime.run(() =>
+        trackDownloadableArtifact({
+          artifactPath,
+          tenantId: 'tenant-a',
+          artifactType: 'screenshot',
+          ...(leaseId ? { leaseVerifier: leaseVerifier(leaseId) } : {}),
+        }),
+      );
+    };
+    const reader = (leaseId: string | undefined) => ({ tenantId: 'tenant-a', leaseId });
+    const firstId = capture('first capture', first);
+    const secondId = capture('the second capture', second);
+
+    expect(secondId).not.toBe(firstId);
+    // The first id named the first capture, which is gone. It never opens the second capture.
+    await expect(
+      runtime.run(() => openDownloadableArtifact(firstId, reader(first), process.env)),
+    ).rejects.toMatchObject({ details: { reason: 'RESOURCE_EXPIRED' } });
+    expect(await runtime.run(() => listDownloadableArtifacts(reader(first), process.env))).toEqual(
+      [],
+    );
+    const download = await runtime.run(() =>
+      openDownloadableArtifact(secondId, reader(second), process.env),
+    );
+    expect((await buffer(download.stream)).toString()).toBe('the second capture');
+    download.release();
+    runtime.dispose();
+  },
+);
 
 test.each(
   (['old-first', 'new-first'] as const).flatMap((order) =>
