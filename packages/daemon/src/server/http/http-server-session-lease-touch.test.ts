@@ -643,6 +643,35 @@ test.each([
   },
 );
 
+test.each(['doctor', 'capabilities', 'artifacts'] as const)(
+  '%s leaves no start when open leases the existing session before the handler read',
+  async (command) => {
+    const daemon = world;
+    if (!daemon) return;
+    const { owner, sessionName, sessionStore, hooks } = daemon;
+    const ref = sessionStore.publish(
+      sessionName,
+      makeIosAppSession(sessionName, { sessionScope: { kind: 'tenant', id: TENANT } }),
+    );
+    hooks.beforeDispatch = async () => {
+      hooks.beforeDispatch = undefined;
+      const opened = await daemon.send('open', ['com.example.app'], owner);
+      expect(opened.result?.ok, JSON.stringify(opened)).toBe(true);
+      const current = sessionStore.lookup(sessionName);
+      expect(current?.lifetime).toBe(ref.lifetime);
+      expect(current?.session.lease?.leaseId).toBe(owner.leaseId);
+    };
+
+    expectLeaseIdRefusal(await daemon.send(command, [], {}));
+
+    const events = await daemon.send('events', [], owner);
+    expect(events.result?.ok, JSON.stringify(events)).toBe(true);
+    expect(events.result?.data?.events).not.toContainEqual(
+      expect.objectContaining({ command, kind: 'request.started' }),
+    );
+  },
+);
+
 test('devices with no lease id is still refused at the address of a macos-app leased session', async () => {
   if (!world) return;
   const { session } = world.publishLeasedSession(world.sessionName);

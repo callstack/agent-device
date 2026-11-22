@@ -190,6 +190,7 @@ const requestScopeFinalizers = new WeakMap<
   RequestExecutionScope,
   (response: DaemonResponse) => DaemonResponse
 >();
+const HANDLER_JOURNAL_START_COMMANDS = new Set(['doctor', 'capabilities', 'artifacts']);
 
 export type RequestExecutionScope = AsyncDisposable & {
   /** The environment and working directory of the daemon serving this request. */
@@ -204,7 +205,11 @@ export type RequestExecutionScope = AsyncDisposable & {
   /** For a request without the session lock: runs `task` under it, unless a request holds it. */
   tryRunUnderSessionLock(task: () => Promise<void>): Promise<void>;
   /** Resolves an authorized session and starts the journal for a lock-exempt request. */
-  resolveSessionRef: ResolveRequestSessionRef;
+  resolveSessionRef(
+    req: DaemonRequest,
+    ref: SessionRef | undefined,
+    phase?: 'handler',
+  ): SessionRef | undefined;
   /** Writes the request-finished event, unless the request may not write to its session. */
   recordFinished(req: DaemonRequest, response: DaemonResponse): void;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
@@ -313,8 +318,9 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  // A request can defer its start until it finishes if it resolves no session ref.
-  let resolvedRef = false;
+  // These handlers recheck the current session after the scope's provisional reads.
+  const startsAtHandlerRead = !attachesToSession && HANDLER_JOURNAL_START_COMMANDS.has(command);
+  let recordStartAtFinish = !startsAtHandlerRead;
   let recordsRequestEvents = false;
   const recordStarted = (ts?: string): void => {
     if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
@@ -324,7 +330,7 @@ export async function createRequestExecutionScope(params: {
     sessionStore.recordEvent(sessionName, ts ? { ...started, ts } : started);
   };
   const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
-    if (!resolvedRef) recordStarted(new Date(startedAtMs).toISOString());
+    if (recordStartAtFinish) recordStarted(new Date(startedAtMs).toISOString());
     if (!recordsRequestEvents) return;
     if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
     sessionStore.recordEvent(
@@ -432,12 +438,11 @@ export async function createRequestExecutionScope(params: {
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
-      resolveSessionRef(req, ref) {
+      resolveSessionRef(req, ref, phase) {
         const resolved = resolveRequestSessionRef(req, ref);
-        if (resolved) {
-          resolvedRef = true;
-          if (!attachesToSession) recordStarted();
-        }
+        if (startsAtHandlerRead && phase !== 'handler') return resolved;
+        if (startsAtHandlerRead || resolved) recordStartAtFinish = !resolved;
+        if (resolved && !attachesToSession) recordStarted();
         return resolved;
       },
       recordFinished,
@@ -786,7 +791,7 @@ export async function prepareLockedRequestScope(params: {
       sessionName: scope.sessionName,
       logPath,
       existingSession,
-      resolveSessionRef: scope.resolveSessionRef,
+      resolveSessionRef: (req, ref) => scope.resolveSessionRef(req, ref, 'handler'),
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
       platformServices: scope.platformServices,
