@@ -65,7 +65,10 @@ export type RequestDiagnosticsHttpOptions = {
    * owns the session store, so this module never builds a session artifact path
    * of its own (AGENTS.md, "Session artifact paths come from session-store").
    */
-  resolveRecordPath: (ref: DiagnosticsRecordRef) => string;
+  resolveRecordPath: (
+    ref: DiagnosticsRecordRef,
+    directory: 'request-records' | 'requests-unleased',
+  ) => string;
 };
 
 export function tryHandleRequestDiagnosticsHttpRoute(
@@ -141,19 +144,18 @@ async function handleRequestDiagnostics(
     }
 
     const owner = diagnosticsRecordOwner(ref.requestId);
-    // A record of unknown ownership, such as one that an earlier release wrote, is not served.
-    if (owner === null) {
-      sendRestJsonError(res, normalizeError(missingRecordError(ref)));
-      return;
-    }
     const presentedLeaseId = req.headers[DAEMON_HTTP_LEASE_HEADER];
     const presented = typeof presentedLeaseId === 'string' ? presentedLeaseId : undefined;
-    if (!requestHoldsOutputLease(owner, presented)) {
+    if (owner !== null && !requestHoldsOutputLease(owner, presented)) {
       sendRestJsonError(res, normalizeError(leasedOutputRefusal('Diagnostics record')));
       return;
     }
 
-    const recordPath = resolveRecordPath(ref);
+    // Only the host can attest a legacy record by moving it out of the old request-id namespace.
+    const recordPath = resolveRecordPath(
+      ref,
+      owner === null ? 'requests-unleased' : 'request-records',
+    );
     const stats = await statRecord(recordPath);
     if (!stats) {
       sendRestJsonError(res, normalizeError(missingRecordError(ref)));

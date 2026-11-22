@@ -79,6 +79,8 @@ import {
   buildRecordingStopResponse,
   buildRecordingUnsupportedResponse,
   isDaemonOwnedRecordingOutput,
+  recordingOutputLeaseVerifier,
+  UNLEASED_CAPTURE,
 } from './record-runtime-response.ts';
 import { resolveRequestTargetDevice } from '../../core/request-device-resolution.ts';
 
@@ -289,7 +291,7 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
-    envelope: withCaptureOwner(started.envelope, params.req, session),
+    envelope: withCaptureOwner(started.envelope, params.req),
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
@@ -310,8 +312,6 @@ async function startRecording(
   );
 }
 
-const UNLEASED_CAPTURE = 'unleased';
-
 /**
  * Names in the manifest who gets the export: a remote caller, its tenant, and the lease that started
  * the recording, or that no lease did. A manifest that names neither is of unknown ownership.
@@ -319,10 +319,10 @@ const UNLEASED_CAPTURE = 'unleased';
 function withCaptureOwner(
   envelope: DurableResourceEnvelope<'screen-recording'>,
   req: DaemonRequest,
-  session: SessionState,
 ): DurableResourceEnvelope<'screen-recording'> {
-  const tenantId = session.lease?.tenantId ?? req.meta?.tenantId;
-  const leaseId = req.internal?.admittedLease?.leaseId;
+  const lease = req.internal?.admittedLease;
+  const tenantId = lease?.tenantId ?? req.meta?.tenantId;
+  const leaseId = lease?.leaseId;
   return {
     ...envelope,
     metadata: {
@@ -465,11 +465,10 @@ async function stopRecording(
     completion,
     record.status === 'decoded' && record.envelope.metadata?.remoteCaptureOutput === true,
   );
-  const tenantId =
-    record.status === 'decoded' &&
-    typeof record.envelope.metadata?.remoteCaptureTenantId === 'string'
-      ? record.envelope.metadata.remoteCaptureTenantId
-      : session.lease?.tenantId;
+  if (daemonOwned && leaseOwner === undefined) throw leasedOutputRefusal('Recording');
+  const storedTenant =
+    record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureTenantId : undefined;
+  const tenantId = typeof storedTenant === 'string' ? storedTenant : undefined;
   if (stopped.recordsSessionAction) {
     recordSessionAction(params.sessionStore, ref, params.req, params.req.command, {
       action: 'stop',
@@ -502,19 +501,19 @@ async function stopRecording(
  * lease that owns the export. A completed export needs only the lease id of its owner, also after
  * that lease ended. A recording that still runs needs the admitted lease.
  */
-function assertRequestMayStopRecording(params: RecordRuntimeHandlerParams): string | undefined {
+function assertRequestMayStopRecording(
+  params: RecordRuntimeHandlerParams,
+): string | null | undefined {
   const record = screenRecordingDurableResource.store.read(
     screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
   );
   if (record.status !== 'decoded') return undefined;
   const { metadata, lifecycle } = record.envelope;
-  const owner = metadata?.remoteCaptureLease;
-  if (owner === UNLEASED_CAPTURE) return undefined;
-  if (typeof owner !== 'string') {
-    // A manifest of an earlier release names no lease, so nobody is known to own its remote export.
-    if (metadata?.remoteCaptureOutput === true) throw leasedOutputRefusal('Recording');
-    return undefined;
+  const owner = recordingOutputLeaseVerifier(metadata);
+  if (owner === undefined && metadata?.remoteCaptureOutput === true) {
+    throw leasedOutputRefusal('Recording');
   }
+  if (typeof owner !== 'string') return owner;
   const presented =
     lifecycle === 'completed'
       ? resolveLeaseScope(params.req).leaseId

@@ -136,7 +136,7 @@ When a command fails, stderr starts and ends with the same summary line, so the 
 
 ```text
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
-Log: /Users/me/.agent-device/sessions/<session>/requests/<record-id>.ndjson
+Log: /Users/me/.agent-device/sessions/<session>/request-records/<record-id>.ndjson
 Error (COMMAND_FAILED): tap @e12: runner did not answer within 10s. May have reached the device. Next: Run snapshot to check the screen before you retry. Read the diagnostics log for the failing step.
 ```
 
@@ -146,9 +146,9 @@ Use `--json` to inspect `error.details.stderr` when it is present. Diagnostic st
 
 When a command fails against a remote daemon, the `Log:` path is always on your machine:
 agent-device downloads the failing request's record over the same base URL and token into
-`<state-dir>/remote-diagnostics/<session>/requests/<request-id>.ndjson`, so a CI job can keep it as a build
+`<state-dir>/remote-diagnostics/<session>/requests/<record-id>.ndjson`, so a CI job can keep it as a build
 artifact. If the download fails, the line reads `Log: unavailable` with the remote daemon, the
-request id, and the reason — never a path on the daemon host.
+record id, and the reason.
 
 On iOS simulators, `logs` scope by bundle id and the resolved app executable. For launch-time stdout/stderr, capture the direct app launch console instead of starting raw `simctl` streams:
 

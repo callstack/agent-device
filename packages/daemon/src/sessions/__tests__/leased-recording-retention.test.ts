@@ -91,7 +91,7 @@ function localRecordingExport(): RecordingExport {
 function publishRecordingSession(
   sessionStore: SessionStore,
   recordingExport: RecordingExport,
-  options: { leased?: boolean; finishFails?: boolean } = {},
+  options: { leased?: boolean; finishFails?: boolean; unleasedProducer?: boolean } = {},
 ) {
   const session: SessionState = makeIosSession(ADDRESS, {
     appBundleId: 'com.example.app',
@@ -144,7 +144,12 @@ function publishRecordingSession(
     fence: { token: 'recording-fence', generation: 1 },
     lifecycle: 'open',
     descriptor: { version: 1, body: { recordingId: 'checkout-flow' } },
-    metadata: { phase: 'active' },
+    metadata: {
+      phase: 'active',
+      remoteCaptureTenantId: TENANT,
+      remoteCaptureLease:
+        options.leased === false || options.unleasedProducer ? 'unleased' : leaseVerifier(LEASE_ID),
+    },
   });
   session.screenRecording = { handle, envelope };
   screenRecordingResourceStore.write(
@@ -354,7 +359,18 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
       ['start'],
       clientOutPath ? { clientArtifactPaths: { outPath: clientOutPath } } : undefined,
       undefined,
-      { publicNetworkOnly: true },
+      {
+        publicNetworkOnly: true,
+        admittedLease: {
+          leaseId: LEASE_ID,
+          tenantId: TENANT,
+          runId: 'run-1',
+          backend: 'android-instance',
+          createdAt: 0,
+          heartbeatAt: 0,
+          expiresAt: 0,
+        },
+      },
     );
     expect(started.ok).toBe(true);
     const output = harness.runtime.start.mock.calls[0]![0].outputPath;
@@ -384,3 +400,17 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
     expect(fs.existsSync(output)).toBe(false);
   },
 );
+
+test('teardown keeps the recording unleased when the session later acquired a lease', async () => {
+  const sessionStore = makeSessionStore('agent-device-unleased-recording-');
+  publishRecordingSession(sessionStore, remoteRecordingExport(), { unleasedProducer: true });
+
+  await teardown(sessionStore);
+
+  const artifacts = await listDownloadableArtifacts({ tenantId: TENANT }, process.env);
+  expect(artifacts).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ artifactType: 'screen-recording', filename: 'checkout.mp4' }),
+    ]),
+  );
+});

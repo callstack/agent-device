@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { createDaemonProxyServer } from '@agent-device/proxy';
@@ -87,8 +88,12 @@ async function startProxiedDaemon() {
     token: 'daemon-token',
     handleRequest,
     leaseRegistry,
-    resolveRequestDiagnosticsPath: (ref) =>
-      resolveSessionRequestLogPath(sessionStore.resolveSessionDir(ref.session), ref.requestId),
+    resolveRequestDiagnosticsPath: (ref, directory) =>
+      resolveSessionRequestLogPath(
+        sessionStore.resolveSessionDir(ref.session),
+        ref.requestId,
+        directory,
+      ),
     env: {},
     cwd: process.cwd(),
   });
@@ -108,6 +113,7 @@ async function startProxiedDaemon() {
     command: string,
     session: string,
     meta: Record<string, unknown>,
+    flags: Record<string, unknown> = {},
   ): Promise<RpcBody> => {
     const response = await fetch(`${base}/rpc`, {
       method: 'POST',
@@ -120,7 +126,7 @@ async function startProxiedDaemon() {
           session,
           command,
           positionals: [],
-          flags: {},
+          flags,
           meta: { tenantId: TENANT, sessionIsolation: 'tenant', sessionExplicit: true, ...meta },
         },
       }),
@@ -290,4 +296,44 @@ test('a request with no lease on a session with no lease keeps the tenant rule',
   );
 
   expect(own.status).toBe(200);
+});
+
+test('a routed batch step writes a record under its own lease', async () => {
+  if (!world) return;
+  const session = 'nested';
+  const batch = await world.send(
+    'batch',
+    session,
+    {
+      sessionIsolation: undefined,
+      debug: true,
+    },
+    {
+      batchSteps: [
+        {
+          command: 'open',
+          flags: {
+            leaseId: world.leaseId,
+            runId: OWNER_SCOPE.runId,
+            leaseBackend: 'android-instance',
+          },
+          positionals: ['com.example.app'],
+        },
+      ],
+    },
+  );
+  expect(batch.error?.data?.diagnosticsRecord, JSON.stringify(batch)).toBeDefined();
+  const parentRecord = batch.error!.data!.diagnosticsRecord!;
+  const recordDir = path.join(world.sessionStore.resolveSessionDir(session), 'request-records');
+  const records = fs.readdirSync(recordDir);
+  const child = records.find((file) => file !== `${parentRecord.requestId}.ndjson`);
+  expect(child, JSON.stringify(records)).toBeDefined();
+  const route = (recordId: string) => `/sessions/${session}/requests/${recordId}/diagnostics`;
+  await expectLeasedOutputRefusal(await world.get(route(path.basename(child!, '.ndjson'))));
+  const own = await world.get(route(path.basename(child!, '.ndjson')), world.leaseId);
+  expect(own.status).toBe(200);
+  expect(await own.text()).toContain('"command":"open"');
+  const parent = await world.get(route(parentRecord.requestId));
+  expect(parent.status).toBe(200);
+  expect(await parent.text()).not.toContain('"command":"open"');
 });

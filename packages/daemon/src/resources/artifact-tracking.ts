@@ -81,8 +81,10 @@ export function claimRequestDiagnosticsRecord(req: Pick<DaemonRequest, 'flags' |
     const canonical = normalizeLeaseId(leaseId);
     if (canonical) registerDiagnosticSensitiveValue(canonical);
   }
-  if (getDiagnosticsMeta().recordId) return;
-  const owner = leaseId === undefined ? UNLEASED_RECORD : leaseVerifier(leaseId);
+  const verifier = leaseId === undefined ? undefined : leaseVerifier(leaseId);
+  const inheritedRecordId = getDiagnosticsMeta().recordId;
+  if (inheritedRecordId && diagnosticsRecordOwner(inheritedRecordId) === verifier) return;
+  const owner = verifier ?? UNLEASED_RECORD;
   updateDiagnosticsScope({ recordId: `${crypto.randomBytes(16).toString('hex')}-${owner}` });
 }
 
@@ -231,7 +233,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     cleanupDownloadableArtifact(artifactId);
   }, ARTIFACT_CLEANUP_TIMEOUT_MS);
   timer.unref();
-  const sourceCleanup = findArtifactSourceCleanup(params.artifactPath) ?? {
+  const sourceCleanup = findArtifactSourceCleanup(params.artifactPath, output) ?? {
     remainingEntries: 0,
     deleteAfterDownload: true,
   };
@@ -272,9 +274,12 @@ function findTrackedArtifactId(
   return undefined;
 }
 
-function findArtifactSourceCleanup(artifactPath: string): ArtifactSourceCleanup | undefined {
+function findArtifactSourceCleanup(
+  artifactPath: string,
+  output: string | undefined,
+): ArtifactSourceCleanup | undefined {
   for (const entry of pendingArtifacts().values()) {
-    if (entry.artifactPath === artifactPath) return entry.sourceCleanup;
+    if (entry.artifactPath === artifactPath && entry.output === output) return entry.sourceCleanup;
   }
   return undefined;
 }
@@ -613,7 +618,12 @@ function requestArtifactCleanup(
   artifacts.delete(artifactId);
   cleanupDirectoryArchive(entry);
   entry.sourceCleanup.remainingEntries -= 1;
-  if (entry.sourceCleanup.remainingEntries === 0 && entry.sourceCleanup.deleteAfterDownload) {
+  if (
+    entry.sourceCleanup.remainingEntries === 0 &&
+    entry.sourceCleanup.deleteAfterDownload &&
+    entry.output !== undefined &&
+    readOutputIdentity(entry.artifactPath) === entry.output
+  ) {
     removeBestEffort(entry.artifactPath);
   }
 }

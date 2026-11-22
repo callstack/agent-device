@@ -147,7 +147,7 @@ test('open returns and creates the session state directory', async () => {
       path.join(String(response.data?.sessionStateDir), 'runner.log'),
     );
     expect(path.dirname(String(response.data?.requestLogPath))).toEqual(
-      path.join(String(response.data?.sessionStateDir), 'requests'),
+      path.join(String(response.data?.sessionStateDir), 'request-records'),
     );
     expect(path.basename(String(response.data?.requestLogPath))).toMatch(
       /^[a-f0-9]{32}-unleased\.ndjson$/,

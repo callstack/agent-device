@@ -141,7 +141,7 @@ Diagnostics and traces:
   Use AGENT_DEVICE_EXEC_TRACE=1 when you need host-tool spawn timing without full debug streaming; it flushes the full request diagnostics file on successful requests that spawn host tools.
   Open output includes Session state; JSON also includes runnerLogPath and requestLogPath.
   For open timing under --debug, run open --debug --json and inspect requestLogPath for the open_timing event.
-  Session requests/<record-id>.ndjson holds daemon request diagnostics, one file per request, named by the daemon (a failed command prints its path; each line carries the request id); session runner.log holds Apple runner/xcodebuild output.
+  Session request-records/<record-id>.ndjson holds daemon request diagnostics, one file per request, named by the daemon (a failed command prints its path; each line carries the request id); session runner.log holds Apple runner/xcodebuild output.
   Against a remote daemon the Log path is always local: the failing request's record is fetched to <state-dir>/remote-diagnostics/, and if it cannot be fetched the line reads "Log: unavailable" with the reason instead of a daemon-host path.
   daemon.log is global daemon lifecycle evidence, not the primary per-run log.
   Use trace for low-level session diagnostics around one repro:

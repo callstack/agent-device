@@ -359,7 +359,7 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         assert.equal(world.textInjectionCalls.at(-1)?.text, secret);
         assert.ok(opened.sessionStateDir);
         // The daemon names the record. The request id is in each line of it.
-        const requestsDir = path.join(opened.sessionStateDir, 'requests');
+        const requestsDir = path.join(opened.sessionStateDir, 'request-records');
         const requestLog = fs
           .readdirSync(requestsDir)
           .map((name) => fs.readFileSync(path.join(requestsDir, name), 'utf8'))

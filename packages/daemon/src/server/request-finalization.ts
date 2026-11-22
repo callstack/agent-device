@@ -98,8 +98,11 @@ function registerDownloadableArtifacts(
 ): DaemonResponseData | undefined {
   if (!data) return data;
   const admittedLeaseId = req.internal?.admittedLease?.leaseId;
+  const producer = captureOutputLeaseVerifier(data);
   const owner =
-    captureOutputLeaseVerifier(data) ?? (admittedLeaseId && leaseVerifier(admittedLeaseId));
+    producer === undefined ? admittedLeaseId && leaseVerifier(admittedLeaseId) : producer;
+  const producerTenant = captureOutputTenantId(data);
+  const tenantId = producer === undefined ? (producerTenant ?? req.meta?.tenantId) : producerTenant;
   const register = (artifact: PendingArtifact): DaemonArtifact => {
     const artifactPath = artifact.path as string;
     const delivered = daemonDeliveredArtifact(artifact);
@@ -110,9 +113,7 @@ function registerDownloadableArtifacts(
       ...(artifact.artifactType !== undefined ? { artifactType: artifact.artifactType } : {}),
       artifactId: trackArtifact({
         artifactPath,
-        tenantId: delivered
-          ? delivered.tenantId
-          : (captureOutputTenantId(data) ?? req.meta?.tenantId),
+        tenantId: delivered ? delivered.tenantId : tenantId,
         ...(owner ? { leaseVerifier: owner } : {}),
         artifactType: artifact.artifactType,
         fileName: artifact.fileName,

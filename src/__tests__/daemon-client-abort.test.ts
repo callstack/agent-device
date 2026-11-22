@@ -62,7 +62,7 @@ async function runAlreadyAborted(
       'default',
     );
     // The daemon names each record. The request id is in each line of it.
-    const requestsDir = path.join(sessionDir, 'requests');
+    const requestsDir = path.join(sessionDir, 'request-records');
     const records = fs
       .readdirSync(requestsDir)
       .map((name) => fs.readFileSync(path.join(requestsDir, name), 'utf8'))

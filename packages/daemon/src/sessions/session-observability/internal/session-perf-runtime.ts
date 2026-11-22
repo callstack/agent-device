@@ -1,7 +1,9 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { cp, rename, rm } from 'node:fs/promises';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import {
   adoptStartedPerfCapture,
@@ -227,7 +229,13 @@ async function startPerfCapture(
       : request.kind === 'perfetto'
         ? 'app.perfetto-trace'
         : 'cpu.perf.data';
-  const outPath = resolveNativeOutPath(params, request.outPath, fallback);
+  const outPath =
+    request.kind === 'xctrace' && params.req.internal?.publicNetworkOnly
+      ? path.join(
+          params.sessionStore.ensureSessionDir(params.sessionName),
+          `${randomUUID()}-${fallback}`,
+        )
+      : resolveNativeOutPath(params, request.outPath, fallback);
   const resourcePath = perfCaptureDurableResource.store.resolvePath(
     params.sessionStore.resolveSessionDir(params.sessionName),
   );
@@ -311,15 +319,49 @@ async function stopPerfCapture(
     typeof capture.envelope.metadata?.remoteCaptureTenantId === 'string'
       ? capture.envelope.metadata.remoteCaptureTenantId
       : session.lease?.tenantId;
+  const outPath = readString(completion.outPath);
+  const daemonOwned =
+    outPath !== undefined && capture.envelope.metadata?.remoteCaptureOutputPath === outPath;
+  const artifacts =
+    daemonOwned && completion.kind === 'xctrace'
+      ? [await publishXctraceDownload(outPath, clientOutPath, request.area === 'cpu')]
+      : undefined;
   return {
     ok: true,
     data: withCaptureOutputOwnership(
-      { ...completion, ...(clientOutPath ? { clientOutPath } : {}) },
-      capture.envelope.metadata?.remoteCaptureOutputPath === completion.outPath
-        ? 'daemon'
-        : 'caller',
+      {
+        ...completion,
+        ...(clientOutPath ? { clientOutPath } : {}),
+        ...(artifacts ? { artifacts } : {}),
+      },
+      daemonOwned ? 'daemon' : 'caller',
       tenantId,
     ),
+  };
+}
+
+async function publishXctraceDownload(
+  outPath: string,
+  clientOutPath: string | undefined,
+  keepForReport: boolean,
+): Promise<DaemonArtifact> {
+  const publishedPath = path.join(path.dirname(outPath), `${randomUUID()}.trace`);
+  try {
+    if (keepForReport) {
+      await cp(outPath, publishedPath, { recursive: true, errorOnExist: true, force: false });
+    } else {
+      await rename(outPath, publishedPath);
+    }
+  } catch (error) {
+    await rm(publishedPath, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    field: 'outPath',
+    artifactType: 'performance',
+    path: publishedPath,
+    fileName: path.basename(clientOutPath ?? outPath),
+    localPath: clientOutPath,
   };
 }
 

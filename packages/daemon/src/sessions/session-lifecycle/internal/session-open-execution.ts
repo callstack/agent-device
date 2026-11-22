@@ -376,6 +376,7 @@ export async function completeOpenCommand(params: {
   const requestLogPath = resolveSessionRequestLogPath(
     sessionStateDir,
     requestDiagnosticsRecordId(req),
+    'request-records',
   );
   timing.totalDurationMs = Math.max(0, Date.now() - openCommandStartedAtMs);
   emitDiagnostic({

@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -437,5 +437,24 @@ test('downloadable artifact inventory reports a screenshot display rotation only
   } finally {
     cleanupDownloadableArtifact(rotatedId);
     cleanupDownloadableArtifact(plainId);
+  }
+});
+
+test('retiring stale inventory preserves the file now at its path', async () => {
+  const root = mkdtempForTestSync('stale-artifact-');
+  const artifactPath = path.join(root, 'artifact.png');
+  fs.writeFileSync(artifactPath, 'old');
+  const id = trackDownloadableArtifact({ artifactPath, artifactType: 'screenshot' });
+  const next = path.join(root, 'replacement.png');
+  fs.writeFileSync(next, 'replacement');
+  fs.renameSync(next, artifactPath);
+  try {
+    expect(await listDownloadableArtifacts({}, {})).not.toContainEqual(
+      expect.objectContaining({ id }),
+    );
+    expect(fs.readFileSync(artifactPath, 'utf8')).toBe('replacement');
+  } finally {
+    cleanupDownloadableArtifact(id);
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

@@ -663,10 +663,11 @@ async function startDaemonRuntimeOnHost(
       // locator so a remote caller can fetch what it cannot read by path.
       resolveRequestDiagnosticsPath: daemonPolicy?.requiredLeaseBackend
         ? undefined
-        : (ref) =>
+        : (ref, directory) =>
             resolveSessionRequestLogPath(
               sessionStore.resolveSessionDir(ref.session),
               ref.requestId,
+              directory,
             ),
     },
     rollback,

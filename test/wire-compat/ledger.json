@@ -85,8 +85,8 @@
     "packages/daemon/src/server/http-request-target.ts#decodeUriSegment": "sha256:b37622771ea4e61d1a9820169dbdc5809b5c38889bfad79277d7b22f3c3f1ef1",
     "packages/daemon/src/server/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
-    "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
-    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:3d3223a0f05c50b07ae4988cccbd9638aea421753b2c5f4c550a60b8c0100e8f",
+    "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:58fc1eb61b082b64eb9714ae76ef6f3ff44102a72736db52ce0b9214dca7f509",
+    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:a374824d0af99b2a40f95a4a4f9981f4446a5dd7df427f3fdc9852350f4b73b8",
     "packages/daemon/src/server/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
@@ -315,8 +315,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics",
-      "digest": "sha256:3d3223a0f05c50b07ae4988cccbd9638aea421753b2c5f4c550a60b8c0100e8f",
-      "rationale": "#2198 context: asks isTenantAddressableSessionName instead of applying the prefix rule locally. Same UNAUTHORIZED code, same 'Session is outside this tenant' message and same 401 body for the attested-tenant case the rule still refuses; the only difference a peer can observe is that an unattested tenant now gets the 200 + ndjson record it already knows how to read instead of a 401 it could not act on. Implementation-only HTTP error repair under ADR 0006: setup failures use the shared streamed failure helper. Before headers, it emits the existing REST JSON error shape with an error status; after headers, it destroys the incomplete transfer. Successful diagnostics remain 200 with the same NDJSON bytes. Released clients reject error statuses before reading diagnostic records, so no successful response parser or request requirement changes. #4912 reads the existing x-agent-device-lease-id request header. The daemon now chooses the requestId segment of the locator it returns in diagnosticsRecord, and that id carries the owner: the lease id the request sent, or that it sent none. A released client uses the locator as an opaque value for the URL and for its local file name. A record of a request that sent a lease id needs that lease id, else it fails with the existing 401 REST error shape and reason LEASE_OUTPUT_MISMATCH. Released clients send the header and treat any error status as an unavailable record. A locator that the daemon did not choose, such as one from an earlier release, answers the existing 404."
+      "digest": "sha256:a374824d0af99b2a40f95a4a4f9981f4446a5dd7df427f3fdc9852350f4b73b8",
+      "rationale": "The existing locator and NDJSON response keep their shape. Only the server storage lookup and lease authorization change."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",
@@ -667,6 +667,11 @@
       "declaration": "packages/daemon-contracts/src/daemon-resolution.ts#DAEMON_CAPABILITIES",
       "digest": "sha256:1ba3b95deeedfc4f47504e9566f9d934a5dd69da4ffdc8a9c39ffc485cd4dbd4",
       "rationale": "Adds the session-lease-id capability: the daemon refuses a request on a leased session that does not send that lease's id, with UNAUTHORIZED and reason LEASE_SESSION_MISMATCH (field leaseId). readDaemonCapabilities filters to known values, so a released client ignores the new string. A released client that relied on the daemon filling the lease id from the session gets that normal command error and misreads no payload. The current CLI already sends the saved connection's lease id. No request or response field changes shape."
+    },
+    {
+      "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions",
+      "digest": "sha256:58fc1eb61b082b64eb9714ae76ef6f3ff44102a72736db52ce0b9214dca7f509",
+      "rationale": "The server-internal path resolver takes a storage namespace. No HTTP request or response field changes."
     }
   ]
 }

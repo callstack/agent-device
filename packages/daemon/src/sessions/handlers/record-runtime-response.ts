@@ -1,5 +1,6 @@
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import path from 'node:path';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { RecordingCommandResult } from '@agent-device/contracts/recording';
 import type {
   ScreenRecordingCompletion,
@@ -8,6 +9,18 @@ import type {
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
 import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
 import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
+
+export const UNLEASED_CAPTURE = 'unleased';
+
+/** Null identifies an unleased producer. Undefined means that ownership is unknown. */
+export function recordingOutputLeaseVerifier(
+  metadata: DurableResourceEnvelope['metadata'],
+): string | null | undefined {
+  const owner = metadata?.remoteCaptureLease;
+  if (owner === UNLEASED_CAPTURE) return null;
+  if (typeof owner === 'string' && /^[a-f0-9]{64}$/.test(owner)) return owner;
+  return undefined;
+}
 
 export function isDaemonOwnedRecordingOutput(
   completion: ScreenRecordingCompletion,

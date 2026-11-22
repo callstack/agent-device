@@ -11,26 +11,12 @@ import type {
   PerfNativeCaptureLiveHandle,
   PerfNativeCaptureSnapshot,
 } from '@agent-device/contracts/perf-runtime';
-import type {
-  DaemonArtifact,
-  DaemonResponse,
-  DaemonResponseData,
-} from '@agent-device/kernel/contracts';
+import type { DaemonArtifact } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import {
-  DAEMON_HTTP_LEASE_HEADER,
-  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
-  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
-} from '@agent-device/contracts/daemon-http';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 import { parsePerfRuntimeRequest } from '@agent-device/capture-kit/perf-runtime-plan';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import {
-  closeLoopbackServer,
-  createTestHostEnvironment,
-  listenOnLoopback,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
-import { createDaemonHttpServer } from './http-server.ts';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import {
   makeAndroidSession,
@@ -45,68 +31,10 @@ import {
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
+import { localEnv, successfulData, withHttp } from './http-output.fixtures.ts';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
 import { runBatchCommands } from '../../sessions/handlers/session-batch.ts';
 import { makeRecordRuntimeHarness } from '../../sessions/handlers/__tests__/record-runtime.fixtures.ts';
-
-type RpcBody = {
-  result?: Extract<DaemonResponse, { ok: true }>;
-  error?: { data?: { code?: string; details?: { reason?: string; field?: string } } };
-};
-
-function successfulData(body: RpcBody): DaemonResponseData {
-  expect(body.result?.ok, JSON.stringify(body)).toBe(true);
-  expect(body.result!.data).toBeDefined();
-  return body.result!.data!;
-}
-
-function localEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
-  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
-  return env;
-}
-
-async function withHttp(
-  handleRequest: (request: DaemonRequest) => Promise<DaemonResponse>,
-  run: (
-    post: (params: Record<string, unknown>, remote?: boolean, tenant?: string) => Promise<RpcBody>,
-    base: string,
-  ) => Promise<void>,
-  env = localEnv(),
-): Promise<void> {
-  const server = await createDaemonHttpServer({
-    token: 'test-token',
-    handleRequest,
-    env,
-    cwd: process.cwd(),
-  });
-  try {
-    const base = `http://127.0.0.1:${await listenOnLoopback(server)}`;
-    await run(async (params, remote = true, tenant) => {
-      const response = await fetch(`${base}/rpc`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: 'Bearer test-token',
-          ...(tenant ? { 'x-tenant': tenant } : {}),
-          ...(remote
-            ? { [DAEMON_HTTP_NETWORK_ACCESS_HEADER]: DAEMON_HTTP_PUBLIC_NETWORK_ACCESS }
-            : {}),
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'output',
-          method: 'agent-device.command',
-          params,
-        }),
-      });
-      return (await response.json()) as RpcBody;
-    }, base);
-  } finally {
-    await closeLoopbackServer(server);
-  }
-}
 
 const outputCases = [
   { command: 'screenshot', positionals: ['/host/screenshot.png'] },
@@ -666,6 +594,7 @@ test.each(
       }
       expect(artifact?.artifactId).toBeTypeOf('string');
       const output = stoppedData.outPath as string;
+      const restoreProfile = replaceXctraceProfile(kind, area, output);
       const download = await fetch(`${baseUrl}/artifacts/${artifact?.artifactId}`, {
         headers: { authorization: 'Bearer test-token' },
       });
@@ -676,6 +605,7 @@ test.each(
           ? gunzipSync(payload).includes(Buffer.from('generated-capture'))
           : payload.toString() === 'generated-capture',
       ).toBe(true);
+      restoreProfile();
       if (area === 'cpu') {
         expect(
           fs.readFileSync(kind === 'xctrace' ? path.join(output, 'capture.bin') : output, 'utf8'),
@@ -970,3 +900,10 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
     cwd.mockRestore();
   }
 });
+
+function replaceXctraceProfile(kind: string, area: string, output: string): () => void {
+  if (kind !== 'xctrace' || area !== 'cpu') return () => {};
+  const profile = path.join(output, 'capture.bin');
+  fs.writeFileSync(profile, 'later-profile');
+  return () => fs.writeFileSync(profile, 'generated-capture');
+}

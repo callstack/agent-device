@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { errorMessage } from '@agent-device/kernel/errors';
@@ -6,12 +7,12 @@ import type { SessionRef } from '../core/session-state.ts';
 import { tenantPublicSessionName } from '../core/session-tenant-scope.ts';
 import {
   cleanupDownloadableArtifact,
-  leaseVerifier,
   trackDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
 import {
   isDaemonOwnedRecordingOutput,
   recordingStopArtifacts,
+  recordingOutputLeaseVerifier,
 } from './handlers/record-runtime-response.ts';
 
 /**
@@ -23,10 +24,15 @@ import {
 export function retainLeasedSessionRecording(
   ref: SessionRef,
   completion: ScreenRecordingCompletion,
-  remoteCaptureOutput: boolean,
+  metadata: DurableResourceEnvelope['metadata'],
 ): void {
   const lease = ref.session.lease;
-  if (!lease || !isDaemonOwnedRecordingOutput(completion, remoteCaptureOutput)) return;
+  if (!lease || !isDaemonOwnedRecordingOutput(completion, metadata?.remoteCaptureOutput === true))
+    return;
+  const owner = recordingOutputLeaseVerifier(metadata);
+  if (owner === undefined) return;
+  const storedTenant = metadata?.remoteCaptureTenantId;
+  const tenantId = typeof storedTenant === 'string' ? storedTenant : undefined;
   const sessionName = tenantPublicSessionName(lease.tenantId, ref.address);
   const artifacts = recordingStopArtifacts(completion).filter(
     (artifact) => typeof artifact.path === 'string',
@@ -37,8 +43,8 @@ export function retainLeasedSessionRecording(
       artifactIds.push(
         trackDownloadableArtifact({
           artifactPath: artifact.path!,
-          tenantId: lease.tenantId,
-          leaseVerifier: leaseVerifier(lease.leaseId),
+          tenantId,
+          ...(owner === null ? {} : { leaseVerifier: owner }),
           artifactType: artifact.artifactType,
           fileName: artifact.fileName,
           sessionName,

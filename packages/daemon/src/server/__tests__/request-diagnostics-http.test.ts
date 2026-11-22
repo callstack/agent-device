@@ -20,10 +20,16 @@ const RECORD = '{"phase":"request_start"}\n{"phase":"request_failed"}\n';
 // A record id as the daemon chooses it for a request that sent no lease id.
 const RECORD_ID = `${'a'.repeat(32)}-unleased`;
 
-function writeRecord(sessionsDir: string, session: string, requestId: string): string {
+function writeRecord(
+  sessionsDir: string,
+  session: string,
+  requestId: string,
+  directory: Parameters<typeof resolveSessionRequestLogPath>[2] = 'request-records',
+): string {
   const recordPath = resolveSessionRequestLogPath(
     path.join(sessionsDir, safeSessionName(session)),
     requestId,
+    directory,
   );
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
   fs.writeFileSync(recordPath, RECORD);
@@ -40,10 +46,11 @@ async function withDiagnosticsServer(
     token: 'daemon-secret',
     leaseRegistry,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    resolveRequestDiagnosticsPath: (ref) =>
+    resolveRequestDiagnosticsPath: (ref, directory) =>
       resolveSessionRequestLogPath(
         path.join(sessionsDir, safeSessionName(ref.session)),
         ref.requestId,
+        directory,
       ),
     env: process.env,
     cwd: process.cwd(),
@@ -289,4 +296,20 @@ test('request diagnostics route does not serve a tenant that held a macos-app le
     });
     assert.equal(other.status, 200);
   }, leaseRegistry);
+});
+
+test('legacy diagnostics are served only from the host-verified namespace', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', RECORD_ID, 'requests');
+    writeRecord(sessionsDir, 'default', 'verified-legacy', 'requests-unleased');
+    const headers = { authorization: 'Bearer daemon-secret' };
+    const unknown = await fetch(diagnosticsUrl(baseUrl, 'default', RECORD_ID), { headers });
+    expect(unknown.status).toBe(404);
+    const verified = await fetch(diagnosticsUrl(baseUrl, 'default', 'verified-legacy'), {
+      headers,
+    });
+    expect(verified.status).toBe(200);
+    expect(await verified.text()).toBe(RECORD);
+  });
 });

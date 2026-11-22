@@ -72,7 +72,7 @@ test('open relaunch retains Android foreground probe failure in the serialized r
         sessionStore.resolveDaemonStateDir(),
         'sessions',
         'fence-session',
-        'requests',
+        'request-records',
         `${response.error.diagnosticsRecord?.requestId}.ndjson`,
       ),
     );

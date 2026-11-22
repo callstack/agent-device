@@ -299,6 +299,7 @@ export async function createRequestExecutionScope(params: {
     sessionDir,
     session: sessionName,
     requestId: requestDiagnosticsRecordId(scopedReq),
+    directory: 'request-records',
   });
   const requestLogPath = requestLog.path;
   const runnerLogPath = resolveSessionRunnerLogPath(sessionDir);

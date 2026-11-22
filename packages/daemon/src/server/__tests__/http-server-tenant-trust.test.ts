@@ -91,10 +91,11 @@ async function withDiagnosticsHookServer(
   const server = await createDaemonHttpServer({
     token: DAEMON_TOKEN,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    resolveRequestDiagnosticsPath: (ref) =>
+    resolveRequestDiagnosticsPath: (ref, directory) =>
       resolveSessionRequestLogPath(
         path.join(sessionsDir, safeSessionName(ref.session)),
         ref.requestId,
+        directory,
       ),
     env: process.env,
     cwd: process.cwd(),
@@ -115,6 +116,7 @@ function writeDiagnosticsRecord(sessionsDir: string, session: string, requestId:
   const recordPath = resolveSessionRequestLogPath(
     path.join(sessionsDir, safeSessionName(session)),
     requestId,
+    'request-records',
   );
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
   fs.writeFileSync(recordPath, DIAGNOSTICS_RECORD);
