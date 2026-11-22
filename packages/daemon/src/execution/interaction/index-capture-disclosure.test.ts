@@ -8,7 +8,7 @@ import { getRuntimeBindings } from '../__tests__/interaction-get-runtime-fixture
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { dispatchWaitViaRuntime } from '../wait-runtime.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
+import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
@@ -68,7 +68,7 @@ import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-targe
 import { TARGET_ACTIVATION_FACT } from '../../core/__tests__/capture-disclosure-target-activation-fact.ts';
 
 // The occluding-shade capture every scenario below consumes: no application window content, one
-// active quick-settings surface. The Android capture route stamps systemSurfaceOnly on both the
+// active quick-settings surface. The Android capture route stamps the system surface on both the
 // annotations and the SnapshotState (see snapshot-capture.ts), so selector routes must disclose it.
 const SHADE_SNAPSHOT_DATA = {
   backend: 'android',
@@ -214,7 +214,7 @@ test('sessionless read-only find still discloses the occluding system surface', 
 test('disclosure appends after an existing success warning instead of replacing it', () => {
   const response = withSystemSurfaceDisclosure(
     { ok: true, data: { found: true, warning: 'prior warning text' } },
-    { systemSurfaceOnly: true },
+    { systemSurface: { kind: 'android-system-overlay' } },
   );
   expect(response.ok).toBe(true);
   if (!response.ok) return;
@@ -232,7 +232,7 @@ test('disclosure appends after an existing failure hint instead of replacing it'
       ok: false,
       error: { code: 'NOT_FOUND', message: 'no match', details: { hint: 'prior hint text' } },
     },
-    { systemSurfaceOnly: true },
+    { systemSurface: { kind: 'android-system-overlay' } },
   );
   expect(response.ok).toBe(false);
   if (response.ok) return;
@@ -300,8 +300,8 @@ test('sessionless wait timeout still discloses the occluding system surface', as
 
 // --- #2438: an in-place iOS system surface (web sign-in sheet) discloses on the same shared seam ---
 
-// The runner stamps `systemSurface` on a capture it served from the sheet; buildSnapshotState turns
-// that into `iosSystemSurfaceBundleId`, which selector routes must carry and disclose.
+// The runner stamps `systemSurface` on a capture it served from the sheet; buildSnapshotState carries
+// it onto the SnapshotState, which selector routes must carry and disclose.
 const WEB_SIGN_IN_SHEET_BUNDLE_ID = 'com.apple.SafariViewService';
 const WEB_SIGN_IN_DISCLOSURE = iosSystemSurfaceDisclosure(WEB_SIGN_IN_SHEET_BUNDLE_ID);
 const SHEET_SNAPSHOT_DATA = {
@@ -392,7 +392,7 @@ test('mutating find that misses on an in-place system surface still discloses it
 test('the shared disclosure helper reports an iOS system surface on both outcomes', () => {
   const ok = withSystemSurfaceDisclosure(
     { ok: true, data: { found: true } },
-    { iosSystemSurfaceBundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID },
+    { systemSurface: { bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID, kind: 'web-auth' } },
   );
   expect(ok.ok).toBe(true);
   if (!ok.ok) return;
@@ -400,7 +400,7 @@ test('the shared disclosure helper reports an iOS system surface on both outcome
 
   const failed = withSystemSurfaceDisclosure(
     { ok: false, error: { code: 'NOT_FOUND', message: 'no match' } },
-    { iosSystemSurfaceBundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID },
+    { systemSurface: { bundleId: WEB_SIGN_IN_SHEET_BUNDLE_ID, kind: 'web-auth' } },
   );
   expect(failed.ok).toBe(false);
   if (failed.ok) return;

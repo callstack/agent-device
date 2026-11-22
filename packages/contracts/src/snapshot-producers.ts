@@ -10,9 +10,10 @@ import type { SnapshotRefMinting } from '@agent-device/kernel/snapshot';
  * Every acquisition that can produce a snapshot tree, named for the source and never for the
  * platform: one platform channel can be fed by several producers with different guarantees, and
  * one producer can feed more than one channel (`appium-source` answers for WebDriver iOS and
- * Android). Sharing a parser does not make two sources one producer.
+ * Android). Sharing a parser does not make two sources one producer. Third-party providers use
+ * their own stable names; only the known facts table below is closed.
  */
-export type SnapshotProducer =
+export type KnownSnapshotProducer =
   | 'apple-runner'
   | 'simulator-ax-bridge'
   | 'appium-source'
@@ -24,6 +25,12 @@ export type SnapshotProducer =
   | 'macos-helper'
   | 'linux-atspi'
   | 'agent-browser';
+
+export type SnapshotProducer = KnownSnapshotProducer;
+
+export type ThirdPartySnapshotProducer = string & { readonly __thirdPartySnapshotProducer: true };
+
+export type SnapshotProducerIdentity = SnapshotProducer | ThirdPartySnapshotProducer;
 
 /**
  * The closed backend vocabulary. A registry row may name only these channels, so a typo in a row
@@ -178,34 +185,39 @@ export const SNAPSHOT_PRODUCERS = {
     refs: 'backend-issued',
     sparseRootWarning: 'none',
   },
-} as const satisfies Record<SnapshotProducer, SnapshotProducerFacts>;
+} as const satisfies Record<KnownSnapshotProducer, SnapshotProducerFacts>;
 
 /**
  * The registry row of a producer read from a capture. A store plugin built against another release
  * can name a producer this host does not list; that capture gets no producer facts.
  */
 export function snapshotProducerFacts(
-  producer: SnapshotProducer,
+  producer: SnapshotProducerIdentity,
 ): SnapshotProducerFacts | undefined {
-  return Object.hasOwn(SNAPSHOT_PRODUCERS, producer) ? SNAPSHOT_PRODUCERS[producer] : undefined;
+  if (!Object.hasOwn(SNAPSHOT_PRODUCERS, producer)) return undefined;
+  return SNAPSHOT_PRODUCERS[producer as KnownSnapshotProducer];
 }
 
 export type SnapshotProducerRegistry = typeof SNAPSHOT_PRODUCERS;
 
-type ProducerChannel<Producer extends SnapshotProducer> =
+type ProducerChannel<Producer extends KnownSnapshotProducer> =
   SnapshotProducerRegistry[Producer]['channels'][number];
 
 /** Every backend in the vocabulary has a producer that arrives on it. */
 const everyBackendHasProducer: [
-  Exclude<SnapshotBackend, ProducerChannel<SnapshotProducer>>,
+  Exclude<SnapshotBackend, ProducerChannel<KnownSnapshotProducer>>,
 ] extends [never]
   ? true
   : never = true;
 void everyBackendHasProducer;
 
-type ProducerOnChannel<Backend extends SnapshotBackend> = {
-  [Producer in SnapshotProducer]: Backend extends ProducerChannel<Producer> ? Producer : never;
-}[SnapshotProducer];
+export type KnownSnapshotProducerOnChannel<Backend extends SnapshotBackend> = {
+  [Producer in KnownSnapshotProducer]: Backend extends ProducerChannel<Producer> ? Producer : never;
+}[KnownSnapshotProducer];
+
+type ProducerOnChannel<Backend extends SnapshotBackend> =
+  | KnownSnapshotProducerOnChannel<Backend>
+  | ThirdPartySnapshotProducer;
 
 /**
  * The channel↔producer pairs that can actually occur, derived from {@link SNAPSHOT_PRODUCERS}.
@@ -223,9 +235,9 @@ export type SnapshotProvenance = {
 /**
  * Stamps the served identity of a capture onto its result: the producer that read the tree and the
  * channel it arrived on. Every one-source owner stamps through here (ADR 0038); an owner with more
- * than one source routes through the snapshot router instead. The identity must be a registry pair:
- * a producer without a {@link SNAPSHOT_PRODUCERS} row, or a channel its row does not list, does not
- * compile.
+ * than one source routes through the snapshot router instead. A known identity must be a registry
+ * pair: a known producer on a channel its row does not list does not compile. A third-party identity
+ * is accepted on every channel and has no row in {@link SNAPSHOT_PRODUCERS}.
  */
 export function stampSnapshotIdentity<
   Result extends object,

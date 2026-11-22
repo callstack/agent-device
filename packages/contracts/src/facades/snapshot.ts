@@ -27,6 +27,7 @@ export {
   type SnapshotProducerRegistry,
   type SnapshotStateProvenance,
   type SnapshotCaptureProvenance,
+  type SnapshotSystemSurface,
   type SnapshotState,
   type PostGestureAction,
   type PostGestureOutcome,

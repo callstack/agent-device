@@ -9,7 +9,10 @@ import {
   createRunnerCommandRouteResolver,
   type RunnerCommandRoute,
 } from './runner-command-route.ts';
-import { isUsbmuxDeviceUnattachedError } from './runner-error-classification.ts';
+import {
+  isUsbmuxDeviceUnattachedError,
+  RUNNER_EXCHANGE_REASONS,
+} from './runner-error-classification.ts';
 import {
   type RunnerCommand,
   requireTokenEnforcingRunner,
@@ -115,7 +118,7 @@ export async function postRunnerCommandOverRoute(
   if (endpoint.http && [502, 503, 504].includes(response.status)) {
     await response.body?.cancel();
     throw new AppError('COMMAND_FAILED', 'Runner HTTP forwarding is unavailable', {
-      reason: 'runner_forwarding_unavailable',
+      reason: RUNNER_EXCHANGE_REASONS.forwardingUnavailable.reason,
       status: response.status,
     });
   }

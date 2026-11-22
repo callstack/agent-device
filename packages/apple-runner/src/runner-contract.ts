@@ -5,18 +5,14 @@ import {
   toAppErrorCode,
   type AppErrorCode,
   type DispatchDisclosure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
-import type { DeviceRotation } from '@agent-device/contracts/device';
-import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
-import type { ClickButton } from '@agent-device/contracts/click-button';
 import type {
-  CoordinateTapTextInputEvidence,
-  ElementSelectorKey,
-} from '@agent-device/contracts/interactor-types';
-import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
+  RunnerCommand,
+  RunnerSequenceOrientation,
+  RunnerSequenceStep,
+} from './runner-command-types.ts';
 import { getRequestSignal, isRequestCanceled } from './host.ts';
 
 /**
@@ -37,161 +33,12 @@ export const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
  */
 export const RUNNER_WEDGED_RUNNER_CODE: RunnerTableErrorCode = 'RUNNER_WEDGED';
 
-export type RunnerCommand = {
-  coordinateTapTextInputEvidence?: CoordinateTapTextInputEvidence;
-  command:
-    | 'tap'
-    | 'mouseClick'
-    | 'longPress'
-    | 'drag'
-    | 'remotePress'
-    | 'type'
-    | 'swipe'
-    // Fused frame-resolve + drag scroll (non-tvOS). Intentionally mutating in runner command
-    // traits so it routes through single-send, command-id tracking, and lost-response status
-    // recovery like other gestures.
-    | 'scroll'
-    // macOS-only frame-resolve + desktop wheel scroll. Kept distinct from `scroll` so mobile
-    // touch drag semantics remain stable.
-    | 'desktopScroll'
-    | 'findText'
-    | 'querySelector'
-    | 'readText'
-    | 'snapshot'
-    | 'accessibilityAudit'
-    | 'screenshot'
-    | 'backInApp'
-    | 'home'
-    | 'rotate'
-    | 'gesture'
-    | 'gestureViewport'
-    | 'appSwitcher'
-    | 'actionButton'
-    | 'volumeUp'
-    | 'volumeDown'
-    | 'keyboardDismiss'
-    | 'keyboardReturn'
-    // Reads the software keyboard and the focused field's return key. A read: it reports what is on
-    // screen, and presses nothing.
-    | 'keyboardStatus'
-    | 'alert'
-    | 'sequence'
-    | 'recordStart'
-    | 'recordStop'
-    | 'status'
-    | 'uptime'
-    // The session app's XCUIApplication.state by name. A lifecycle read: it skips the activation
-    // preflight, so it reports the state the app is in rather than the one a repair leaves.
-    | 'appState'
-    // Reads the Simulator AX bridge tree in the runner process, off its journal and command queue.
-    | 'snapshotBridge'
-    // Sets the device's general pasteboard from the runner's own process: a simulator's
-    // `simctl pbcopy` only promises its data from a process that exits before anything reads it.
-    | 'pasteboardWrite'
-    | 'activate'
-    | 'terminate'
-    | 'targetReset'
-    | 'shutdown';
-  commandId?: string;
-  statusCommandId?: string;
-  appBundleId?: string;
-  text?: string;
-  selectorKey?: ElementSelectorKey;
-  selectorValue?: string;
-  /** `querySelector` only: answer the lean per-element hittability read instead of a node. */
-  hittabilityProbe?: boolean;
-  allowNonHittableCoordinateFallback?: boolean;
-  delayMs?: number;
-  textEntryMode?: 'append' | 'replace';
-  action?: 'get' | 'accept' | 'dismiss';
-  includesKeyboard?: boolean;
-  x?: number;
-  y?: number;
-  button?: ClickButton;
-  remoteButton?: 'select' | 'menu' | 'home' | 'up' | 'down' | 'left' | 'right';
-  x2?: number;
-  y2?: number;
-  durationMs?: number;
-  /** Remaining request budget for runner work that performs bounded XCTest queries. */
-  timeoutMs?: number;
-  direction?: ScrollDirection;
-  amount?: number;
-  pixels?: number;
-  scrollReleaseBehavior?: ScrollReleaseBehavior;
-  orientation?: DeviceRotation;
-  /** Canonical pointer samples planned by the portable gesture runtime. */
-  gesturePlan?: GesturePlan;
-  outPath?: string;
-  fps?: number;
-  interactiveOnly?: boolean;
-  /** Pin the snapshot capture backend (same-backend evidence probes). */
-  preferredBackend?: SnapshotPreferredBackend;
-  /**
-   * Read accessibility custom actions for merged leaves. Opt-in: each element
-   * costs its own AX round trip, and the runner pins the private-AX backend
-   * because no other backend can carry them.
-   */
-  customActions?: boolean;
-  observeOnly?: boolean;
-  depth?: number;
-  scope?: string;
-  raw?: boolean;
-  fullscreen?: boolean;
-  inlineScreenshot?: boolean;
-  synthesized?: boolean;
-  /**
-   * The lit panel's display and native box in points, sent only for a multi-panel device on a
-   * command that resolves a screen (ADR 0025).
-   */
-  litPanel?: { displayId: number; widthPt: number; heightPt: number };
-  sequenceOrientation?: RunnerSequenceOrientation;
-  steps?: RunnerSequenceStep[];
-  snapshotBridge?: RunnerSnapshotBridgeRequest;
-};
-
-/**
- * One request to the Simulator AX bridge reader that the runner serves. `target` names the foreground
- * process of `appBundleId`. `describe` reads that process's tree under the guest bridge's own bounds,
- * and refuses a process other than `expectedPid` and `expectedProcessStartTime` as a stale target, so
- * it cannot be sent without them.
- */
-export type RunnerSnapshotBridgeRequest =
-  | { verb: 'target'; requestId: string; maxDurationMs?: number }
-  | {
-      verb: 'describe';
-      requestId: string;
-      generation: string;
-      expectedPid: number;
-      expectedProcessStartTime: string;
-      maxDepth?: number;
-      maxNodes?: number;
-      maxDurationMs?: number;
-      maxResponseBytes?: number;
-      nativeLevelsHint?: number;
-      /**
-       * System surface host executables whose running process on this Simulator refuses the read with
-       * `system-surface-host-present`. The runner names its own Simulator.
-       */
-      surfaceHostExecutables?: readonly string[];
-    };
-
-/**
- * One allowlisted coordinate gesture step inside a fused `sequence` runner command.
- * The kind set is intentionally narrow (tap/doubleTap/longPress) and validated on both the
- * daemon and runner sides — see `parseRunnerSequenceResult` below (the single interpretation point).
- */
-export type RunnerSequenceStep = {
-  kind: 'tap' | 'doubleTap' | 'longPress';
-  x: number;
-  y: number;
-  durationMs?: number;
-  pauseMs?: number;
-  /**
-   * For `tap` steps on iOS non-tv: use the synthesized HID tap (synthesizedTapAt) fast path
-   * instead of the drag-based XCUICoordinate tapAt, matching the individual `tap` command.
-   */
-  synthesized?: boolean;
-};
+export type {
+  RunnerCommand,
+  RunnerSequenceOrientation,
+  RunnerSequenceStep,
+  RunnerSnapshotBridgeRequest,
+} from './runner-command-types.ts';
 
 export function resolveRunnerRequestSignal(options: {
   requestId?: string;
@@ -310,6 +157,46 @@ export type RunnerErrorCodeRow = Readonly<{
   }>;
 }>;
 
+/**
+ * The `details.reason` values the host publishes for Apple runner failures: the reasons the rows of
+ * {@link RUNNER_ERROR_CODES} map runner codes to (the runner itself writes no reason), and the
+ * refusals this module raises before or around a runner exchange.
+ */
+export const RUNNER_ERROR_REASONS = {
+  // The runner was still busy with an earlier command and refused this one; retry it.
+  runnerBusy: { reason: 'runner_busy' },
+  // The command's work on the app's main thread did not finish in time, so it may have run.
+  mainThreadTimeout: { reason: 'runner_main_thread_timeout' },
+  // A coordinate `fill` point identified no text input, so nothing was tapped or typed.
+  noTextInputAtPoint: { reason: 'no_text_input_at_point', commands: ['fill'] },
+  // The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped.
+  textInputProbeUnavailable: { reason: 'text_input_probe_unavailable', commands: ['fill'] },
+  // The runner refused the gesture before its events reached XCTest, so nothing was sent.
+  synthesizedGestureNotDispatched: { reason: 'synthesized_gesture_not_dispatched' },
+  // The gesture failed after its events reached XCTest, so it may have run.
+  synthesizedGestureOutcomeUnknown: { reason: 'synthesized_gesture_outcome_unknown' },
+  // The back swipe ran and left the app's screen unchanged.
+  backSwipeNoChange: { reason: 'back_swipe_no_change', commands: ['back'] },
+  // The back swipe ran, but the screen was already changing or could not be sampled afterwards.
+  backSwipeUnverified: { reason: 'back_swipe_unverified', commands: ['back'] },
+  // The back swipe was refused before it reached the device.
+  backSwipeNotDispatched: { reason: 'back_swipe_not_dispatched', commands: ['back'] },
+  // A Return on the focused input could not be confirmed; a tap on the field may have landed.
+  keyboardReturnUnavailable: { reason: 'keyboard_return_unavailable' },
+  // The target has no such hardware control, such as an Action Button, so nothing was pressed.
+  hardwareControlUnavailable: { reason: 'hardware_control_unavailable' },
+  // On macOS, the app's accessibility tree exposes no in-app back control.
+  inAppBackControlUnavailable: { reason: 'in_app_back_control_unavailable', commands: ['back'] },
+  // Apple's audit failed while a system alert covered the app; answer the alert, then retry.
+  nativeAuditBlockedByAlert: { reason: 'native_audit_blocked_by_alert', commands: ['audit'] },
+  // The runner build does not require a listener token; rebuild it with this agent-device version.
+  tokenUnsupported: { reason: 'runner_token_unsupported' },
+  // The daemon refused a runner action sequence before sending it, so nothing reached the device.
+  sequenceInvalid: { reason: 'runner_sequence_invalid' },
+  // Another request took over the Apple runner session before this command was sent.
+  sessionOwnershipChanged: { reason: 'runner_session_ownership_changed' },
+} as const satisfies ReasonTable<'apple runner'>;
+
 export const RUNNER_ERROR_CODES = {
   INVALID_ARGS: { dispatched: 'no' },
   ELEMENT_NOT_FOUND: { dispatched: 'no' },
@@ -318,7 +205,11 @@ export const RUNNER_ERROR_CODES = {
   OBSERVATION_UNAVAILABLE: { dispatched: 'no' },
   // Transient by construction (#1105) — past the wedge threshold the runner escalates to
   // RUNNER_WEDGED — so every host path publishes this refusal as retriable.
-  RUNNER_BUSY: { dispatched: 'no', reason: 'runner_busy', diagnosticOnly: { retriable: true } },
+  RUNNER_BUSY: {
+    dispatched: 'no',
+    reason: RUNNER_ERROR_REASONS.runnerBusy.reason,
+    diagnosticOnly: { retriable: true },
+  },
   RUNNER_WEDGED: { dispatched: 'no' },
   // A repeat of a `commandId` the runner already finished, when that command keeps no response body
   // to replay. Nothing ran for the repeat, but only the runner knows whether an earlier send of that
@@ -334,7 +225,7 @@ export const RUNNER_ERROR_CODES = {
     // of a later command, this is the only typed signal available before any refusal happens. It is not
     // retriable: the wait already elapsed and an immediate retry would only meet RUNNER_BUSY.
     dispatched: 'unknown',
-    reason: 'runner_main_thread_timeout',
+    reason: RUNNER_ERROR_REASONS.mainThreadTimeout.reason,
     diagnosticOnly: {},
   },
   SCROLL_KEYBOARD_OCCLUDES_SURFACE: { dispatched: 'no', diagnosticOnly: {} },
@@ -349,38 +240,44 @@ export const RUNNER_ERROR_CODES = {
   // A coordinate `fill` whose point identified no text input (#1721). The synthesized first-responder
   // replacement this route would otherwise take has no element, so its clear and its typed text reach
   // whichever field already holds focus. The refusal answers before the focus tap.
-  NO_TEXT_INPUT_AT_POINT: { dispatched: 'no', reason: 'no_text_input_at_point' },
+  NO_TEXT_INPUT_AT_POINT: {
+    dispatched: 'no',
+    reason: RUNNER_ERROR_REASONS.noTextInputAtPoint.reason,
+  },
   // A coordinate `fill` whose pre-tap input lookup could not answer on the degraded channel. Like
   // NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a claim that the point has
   // no input — only that the runner could not tell.
-  TEXT_INPUT_PROBE_UNAVAILABLE: { dispatched: 'no', reason: 'text_input_probe_unavailable' },
+  TEXT_INPUT_PROBE_UNAVAILABLE: {
+    dispatched: 'no',
+    reason: RUNNER_ERROR_REASONS.textInputProbeUnavailable.reason,
+  },
   // Refused before the gesture's events reached XCTest, so the command sent nothing.
   SYNTHESIZED_GESTURE_NOT_DISPATCHED: {
     dispatched: 'no',
-    reason: 'synthesized_gesture_not_dispatched',
+    reason: RUNNER_ERROR_REASONS.synthesizedGestureNotDispatched.reason,
     diagnosticOnly: {},
   },
   // Failed after the gesture's events reached XCTest, so it may have run.
   SYNTHESIZED_GESTURE_OUTCOME_UNKNOWN: {
     dispatched: 'unknown',
-    reason: 'synthesized_gesture_outcome_unknown',
+    reason: RUNNER_ERROR_REASONS.synthesizedGestureOutcomeUnknown.reason,
     diagnosticOnly: {},
   },
   // The swipe ran and left the app's screen unchanged.
   BACK_SWIPE_NO_CHANGE: {
     dispatched: 'unknown',
-    reason: 'back_swipe_no_change',
+    reason: RUNNER_ERROR_REASONS.backSwipeNoChange.reason,
     diagnosticOnly: {},
   },
   // The swipe ran, but the screen kept changing on its own beforehand or could not be sampled after.
   BACK_SWIPE_UNVERIFIED: {
     dispatched: 'unknown',
-    reason: 'back_swipe_unverified',
+    reason: RUNNER_ERROR_REASONS.backSwipeUnverified.reason,
     diagnosticOnly: {},
   },
   BACK_SWIPE_NOT_DISPATCHED: {
     dispatched: 'no',
-    reason: 'back_swipe_not_dispatched',
+    reason: RUNNER_ERROR_REASONS.backSwipeNotDispatched.reason,
     diagnosticOnly: {},
   },
   // The Apple runner left the visible keyboard alone: it exposes no dismiss key, and a background tap
@@ -395,7 +292,7 @@ export const RUNNER_ERROR_CODES = {
   // landed.
   KEYBOARD_RETURN_UNAVAILABLE: {
     dispatched: 'unknown',
-    reason: 'keyboard_return_unavailable',
+    reason: RUNNER_ERROR_REASONS.keyboardReturnUnavailable.reason,
     diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
   },
   // A press of a hardware or Siri Remote control this target cannot perform. Today that is the Action
@@ -408,7 +305,7 @@ export const RUNNER_ERROR_CODES = {
   // the control.
   HARDWARE_CONTROL_UNAVAILABLE: {
     dispatched: 'no',
-    reason: 'hardware_control_unavailable',
+    reason: RUNNER_ERROR_REASONS.hardwareControlUnavailable.reason,
     diagnosticOnly: { wireCode: 'UNSUPPORTED_OPERATION' },
   },
   // macOS `back` where the app's tree exposes no in-app back control. That refusal answered with no
@@ -417,7 +314,7 @@ export const RUNNER_ERROR_CODES = {
   // the wrong home for it and this row must not move the command to a code its callers never saw.
   IN_APP_BACK_CONTROL_UNAVAILABLE: {
     dispatched: 'no',
-    reason: 'in_app_back_control_unavailable',
+    reason: RUNNER_ERROR_REASONS.inAppBackControlUnavailable.reason,
     diagnosticOnly: {},
   },
   // `audit` asked a runner that cannot run Apple's audit for it: an OS older than iOS 17, or a
@@ -432,7 +329,7 @@ export const RUNNER_ERROR_CODES = {
   // app, so the reply proves no effect reached it.
   NATIVE_AUDIT_BLOCKED_BY_ALERT: {
     dispatched: 'no',
-    reason: 'native_audit_blocked_by_alert',
+    reason: RUNNER_ERROR_REASONS.nativeAuditBlockedByAlert.reason,
     diagnosticOnly: {},
   },
   // The four runner codes meaning "this capture did not happen" (#2728), covering the display, the
@@ -697,7 +594,6 @@ export function assertRunnerRequestActive(requestId: string | undefined): void {
 const RUNNER_TOKEN_HEADER = 'X-Agent-Device-Runner-Token';
 const RUNNER_TOKEN_ENFORCED_HEADER = 'X-Agent-Device-Runner-Auth';
 const RUNNER_TOKEN_BYTES = 24;
-export const RUNNER_TOKEN_UNSUPPORTED_REASON = 'runner_token_unsupported';
 
 /** How to reach one runner generation: its listener port and the token it requires. */
 export type RunnerEndpoint = Readonly<{
@@ -734,7 +630,7 @@ export function runnerRequestHeaders(endpoint: RunnerEndpoint): Record<string, s
 export function requireTokenEnforcingRunner(response: Response): Response {
   if (response.headers.get(RUNNER_TOKEN_ENFORCED_HEADER) === 'required') return response;
   throw new AppError('COMMAND_FAILED', 'XCTest runner does not require a listener token', {
-    reason: RUNNER_TOKEN_UNSUPPORTED_REASON,
+    reason: RUNNER_ERROR_REASONS.tokenUnsupported.reason,
     hint: 'Rebuild the runner with this agent-device version. A configured iosXctestrunFile must come from the same version.',
   });
 }
@@ -779,8 +675,6 @@ export type ParsedRunnerSequenceResult = {
   sequenceOrientation?: RunnerSequenceOrientation;
 };
 
-export type RunnerSequenceOrientation = 1 | 2 | 3 | 4;
-
 function isSequenceableKind(kind: unknown): kind is SequenceableRunnerStepKind {
   return (
     typeof kind === 'string' && (SEQUENCEABLE_RUNNER_STEP_KINDS as readonly string[]).includes(kind)
@@ -790,7 +684,10 @@ function isSequenceableKind(kind: unknown): kind is SequenceableRunnerStepKind {
 /** A sequence the daemon refuses before sending it: nothing reached the runner. */
 function invalidSequence(message: string, details: Record<string, unknown>): AppError {
   return discloseDispatch(
-    new AppError('INVALID_ARGS', message, { ...details, reason: 'runner_sequence_invalid' }),
+    new AppError('INVALID_ARGS', message, {
+      ...details,
+      reason: RUNNER_ERROR_REASONS.sequenceInvalid.reason,
+    }),
     'no',
   );
 }

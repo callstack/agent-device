@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { hostEnvironment, isEnvTruthy, findProjectRoot, readVersion } from './host.ts';
 import {
   resolveRunnerBuildDestinationFamily,
@@ -18,6 +18,11 @@ import {
 } from './runner-toolchain-identity.ts';
 import type { RunnerPhaseBudget } from './runner-phase-budget.ts';
 import { computeRunnerSourceFingerprint } from './runner-source.ts';
+
+const RUNNER_BUILD_SETTINGS_REASONS = {
+  // The runner build used settings other than those its cache identity records.
+  buildSettingsMismatch: { reason: 'runner_build_settings_mismatch' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
@@ -504,7 +509,7 @@ export function requireRunnerBuildSettingsMatchBuildLog(
     'COMMAND_FAILED',
     'The Apple runner build did not use the settings its cache identity records',
     {
-      reason: 'runner_build_settings_mismatch',
+      reason: RUNNER_BUILD_SETTINGS_REASONS.buildSettingsMismatch.reason,
       buildLogPath: logPath,
       differences,
       hint: 'Align the build invocation with the runner cache identity resolvers, or rebuild without the cache.',

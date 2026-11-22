@@ -1,7 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { commandDeveloperDir } from './host.ts';
+
+const RUNNER_TOOLCHAIN_REASONS = {
+  // The Xcode toolchain version files the runner cache is keyed on could not be read.
+  toolchainUnreadable: { reason: 'apple_toolchain_unreadable' },
+} as const satisfies ReasonTable<'apple runner'>;
 
 /**
  * Apple toolchain identity, read from the files that `xcodebuild -version`, `xcrun
@@ -94,7 +103,7 @@ export function requireRunnerToolchainFingerprint(
       'COMMAND_FAILED',
       `Could not read the Xcode toolchain versions the Apple runner cache is keyed on (${error.message})`,
       {
-        reason: 'apple_toolchain_unreadable',
+        reason: RUNNER_TOOLCHAIN_REASONS.toolchainUnreadable.reason,
         ...(chosenDir === undefined ? {} : { developerDir: chosenDir }),
         file: error.file,
         detail: error.detail,

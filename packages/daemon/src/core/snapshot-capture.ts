@@ -153,7 +153,7 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
   // SnapshotState (selector-backed find/wait, session-stored snapshots) must still learn that the
   // capture is an occluding system surface, so the disclosure is not lost with the annotations.
   if (annotations.androidSnapshot?.systemSurfaceOnly === true) {
-    snapshot.systemSurfaceOnly = true;
+    snapshot.systemSurface = { kind: 'android-system-overlay' };
   }
   if (provesFreshAndroidTraversal(annotations.androidSnapshot)) snapshot.freshTraversal = true;
   return { data, snapshot, annotations };

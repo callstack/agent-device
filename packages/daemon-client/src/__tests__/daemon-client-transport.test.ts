@@ -27,7 +27,7 @@ import {
   isDaemonTransportUnavailableError,
   sendRequest,
 } from '../daemon-client-transport.ts';
-import { REMOTE_DAEMON_UNAVAILABLE_REASON } from '../daemon-lifecycle-errors.ts';
+import { DAEMON_UNAVAILABLE_REASONS } from '../daemon-lifecycle-errors.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { invalidateRemoteDaemonHealth } from '../daemon-client-remote-health-cache.ts';
@@ -368,7 +368,7 @@ async function assertRestartProbeFailureReportsUnavailable(
     await assert.rejects(sendWithStaleInstance(port, 150), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.message, 'Remote daemon is unavailable');
-      assert.equal(error.details?.reason, REMOTE_DAEMON_UNAVAILABLE_REASON);
+      assert.equal(error.details?.reason, DAEMON_UNAVAILABLE_REASONS.remoteUnavailable.reason);
       assert.equal(error.details?.dispatched, 'no');
       assert.equal(error.details?.daemonBaseUrl, `http://127.0.0.1:${port}`);
       assert.notEqual(error.details?.reason, 'daemon_transport_timeout');

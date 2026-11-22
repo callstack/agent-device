@@ -246,6 +246,8 @@ test('prepareIosRunner invalidates rebuilt sessions when bad-cache recovery heal
       assert.ok(error instanceof AppError);
       assert.equal(error.message, 'artifact restored but runner did not connect');
       assert.equal(error.details?.restoredFailureReason, 'Runner endpoint probe failed');
+      assert.equal(error.details?.reason, 'prepare_rebuilt_runner_unhealthy');
+      assert.equal(error.details?.rebuiltFailureMessage, 'Runner health timed out');
       assert.equal(error.details?.xctestrunPath, '/tmp/rebuilt.xctestrun');
       assert.equal(error.details?.artifact, 'rebuilt');
       assert.equal(error.details?.cache, 'miss');

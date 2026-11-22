@@ -1,14 +1,13 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
-import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
-import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
+import { systemSurfaceDisclosure } from '@agent-device/contracts/system-surface-disclosure';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 /** The capture provenance a response must be disclosed against (#2438, #2682, gesture outcomes). */
 export type CaptureProvenance = Pick<
   SnapshotState,
-  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId' | 'targetActivation' | 'postGestureOutcome'
+  'systemSurface' | 'targetActivation' | 'postGestureOutcome'
 >;
 
 /**
@@ -53,9 +52,7 @@ export function withSystemSurfaceDisclosure(
   response: DaemonResponse,
   snapshot: CaptureProvenance | undefined,
 ): DaemonResponse {
-  const disclosure = snapshot?.iosSystemSurfaceBundleId
-    ? iosSystemSurfaceDisclosure(snapshot.iosSystemSurfaceBundleId)
-    : systemSurfaceDisclosure(snapshot);
+  const disclosure = systemSurfaceDisclosure(snapshot?.systemSurface);
   return disclosure ? appendDisclosure(response, disclosure, 'warning') : response;
 }
 

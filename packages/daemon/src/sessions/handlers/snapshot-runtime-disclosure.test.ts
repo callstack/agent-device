@@ -160,7 +160,7 @@ function scenario(params: { storedRepair?: boolean; android?: boolean }) {
       createdAt: Date.now(),
       nodes: [{ ref: 'e1', index: 0, type: 'Button', label: 'Earlier' }],
       targetActivation: REPAIR,
-      iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+      systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
     };
   }
   sessionStore.publish(sessionName, session);

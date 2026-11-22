@@ -6,6 +6,7 @@ import {
   discloseUnclassifiedDispatch,
   isRequestCanceledError,
   type DispatchDisclosure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ReadinessPhase } from '@agent-device/contracts/wait';
@@ -59,6 +60,14 @@ import {
   runnerRecycleLedgerKey,
   tryBeginRunnerRecycle,
 } from './runner-recycle-ledger.ts';
+
+const RUNNER_PREPARE_REASONS = {
+  // `prepare ios-runner` ran out of its deadline before the named `details.phase` began.
+  deadlineExpired: { reason: 'prepare_deadline_expired' },
+  // The cached runner failed its health check, and the rebuilt runner failed it too;
+  // `details.rebuiltFailureMessage` says how.
+  rebuiltRunnerUnhealthy: { reason: 'prepare_rebuilt_runner_unhealthy' },
+} as const satisfies ReasonTable<'prepare'>;
 
 export type PrepareIosRunnerOptions = AppleRunnerPrepareOptions;
 export type PrepareIosRunnerResult = AppleRunnerPrepareResult;
@@ -628,7 +637,7 @@ function readPreparePhaseTimeoutMs(
   if (remainingMs <= 0) {
     throw new AppError('COMMAND_FAILED', 'prepare ios-runner timed out', {
       phase,
-      reason: 'prepare_deadline_expired',
+      reason: RUNNER_PREPARE_REASONS.deadlineExpired.reason,
     });
   }
   return remainingMs;
@@ -668,7 +677,11 @@ function wrapPrepareHealthFailure(
       xctestrunPath: session.xctestrunArtifact?.xctestrunPath,
       artifact: session.xctestrunArtifact?.artifact,
       cache: session.xctestrunArtifact?.cache,
-      reason: appErr.message,
+      reason: RUNNER_PREPARE_REASONS.rebuiltRunnerUnhealthy.reason,
+      rebuiltFailureMessage: appErr.message,
+      ...(typeof appErr.details?.reason === 'string'
+        ? { rebuiltFailureReason: appErr.details.reason }
+        : {}),
     },
     appErr,
   );

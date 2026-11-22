@@ -13,7 +13,7 @@ import {
   type DaemonStopIdentity,
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { ownerRefusal, type DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -57,6 +57,12 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   return true;
 };
 
+// Why `daemon stop --clean` refuses to walk a process tree it cannot prove belongs to a daemon.
+const DAEMON_STOP_CLEAN_REASONS = {
+  // The record does not prove the process is a daemon of its own, so its process tree may be someone else's work.
+  ownerUnproven: { reason: 'daemon-clean-not-detached' },
+} as const satisfies ReasonTable<'daemon lifecycle'>;
+
 /** Refuses process-tree cleanup unless the record proves detached ownership. */
 function daemonCleanRefusedForUnprovenOwner(
   paths: DaemonPaths,
@@ -66,7 +72,7 @@ function daemonCleanRefusedForUnprovenOwner(
     'COMMAND_FAILED',
     'This daemon record does not prove the process is a daemon of its own, so its retained-runner cleanup cannot be run from here.',
     {
-      reason: 'daemon-clean-not-detached',
+      reason: DAEMON_STOP_CLEAN_REASONS.ownerUnproven.reason,
       stateDir: paths.baseDir,
       ownership: record.ownership,
       hint: daemonCleanRefusalHint(paths, record),

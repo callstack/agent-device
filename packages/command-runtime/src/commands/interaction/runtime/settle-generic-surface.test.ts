@@ -24,7 +24,7 @@ function signInSheetSnapshot(): SnapshotState {
         hittable: true,
       })),
     ),
-    iosSystemSurfaceBundleId: SHEET_BUNDLE_ID,
+    systemSurface: { bundleId: SHEET_BUNDLE_ID, kind: 'web-auth' },
   };
 }
 
@@ -62,10 +62,7 @@ for (const route of ['scroll', 'back'] as const) {
       assert.match(settle.hint ?? '', /different surfaces/);
       assert.match(settle.hint ?? '', /take a snapshot/i);
       const stored = (await device.sessions.get('default')) as { snapshot?: SnapshotState };
-      assert.equal(
-        stored.snapshot?.iosSystemSurfaceBundleId,
-        transition.after.iosSystemSurfaceBundleId,
-      );
+      assert.deepEqual(stored.snapshot?.systemSurface, transition.after.systemSurface);
     });
   }
 }

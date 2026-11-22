@@ -9,7 +9,7 @@ import type { RunnerSession } from '../runner-session.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
-import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
+import { RUNNER_EXCHANGE_REASONS } from '../runner-error-classification.ts';
 import { createRunnerPhaseBudget, requireRunnerPhaseRemainingMs } from '../runner-phase-budget.ts';
 import {
   captureDiagnostics,
@@ -185,7 +185,7 @@ test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
     await assert.rejects(runAppleRunnerCommand(IOS_SIMULATOR, { ...request }), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, 'unknown');
-      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       return true;
     });
     assert.equal(
@@ -245,7 +245,7 @@ test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
     await assert.rejects(runAppleRunnerCommand(IOS_SIMULATOR, { ...request }), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, 'unknown');
-      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.reason, RUNNER_EXCHANGE_REASONS.replyLost.reason);
       return true;
     });
     assert.equal(invalidateRunnerSessionMock.mock.calls.length, 1, 'the dead runner is dropped');

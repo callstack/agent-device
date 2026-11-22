@@ -6,27 +6,33 @@ import type {
   SnapshotQualityNote,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
-import type { SnapshotProducerRegistry } from './snapshot-producers.ts';
+import type {
+  KnownSnapshotProducerOnChannel,
+  SnapshotProducerRegistry,
+  ThirdPartySnapshotProducer,
+} from './snapshot-producers.ts';
 
-/** The producers whose trees arrive on the iOS (`xctest`) channel, from the producer registry. */
-export type IosSnapshotProducer = {
-  [
-    Producer in keyof SnapshotProducerRegistry
-  ]: 'xctest' extends SnapshotProducerRegistry[Producer]['channels'][number] ? Producer : never;
-}[keyof SnapshotProducerRegistry];
+export type KnownIosSnapshotProducer = KnownSnapshotProducerOnChannel<'xctest'>;
+
+/** Any producer whose trees arrive on the iOS (`xctest`) channel, including a third-party tree. */
+export type IosSnapshotProducer = KnownIosSnapshotProducer | ThirdPartySnapshotProducer;
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
 
 /**
- * The iOS producers that hand over a bare tree, so capture-kit derives their residue. `apple-runner`
- * and `simulator-ax-bridge` build their own residue at the source and are absent by construction:
+ * A provider hands over a bare tree, so capture-kit derives its residue. `apple-runner` and
+ * `simulator-ax-bridge` build their own residue at the source and are absent by construction:
  * a declaration for them would have no reader (#2199).
  */
-export type IosProviderAcquisitionProducer = {
+type KnownIosProviderAcquisitionProducer = {
   [
-    Producer in IosAcquisitionProducer
+    Producer in KnownIosSnapshotProducer
   ]: SnapshotProducerRegistry[Producer]['residue'] extends 'provider-derived' ? Producer : never;
-}[IosAcquisitionProducer];
+}[KnownIosSnapshotProducer];
+
+export type IosProviderAcquisitionProducer =
+  | KnownIosProviderAcquisitionProducer
+  | ThirdPartySnapshotProducer;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
 export type IosSnapshotGeneration = string;

@@ -24,6 +24,7 @@ import {
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
+import { DAEMON_TRANSPORT_REASONS } from './daemon-client-transport-reasons.ts';
 import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
@@ -143,13 +144,12 @@ export function createRequestGuard(params: {
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
-const DAEMON_ENDPOINT_UNAVAILABLE_REASON = 'daemon_endpoint_unavailable';
 
 export function isDaemonTransportUnavailableError(error: unknown): boolean {
   return (
     error instanceof AppError &&
     error.code === 'COMMAND_FAILED' &&
-    error.details?.reason === DAEMON_ENDPOINT_UNAVAILABLE_REASON
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.endpointUnavailable.reason
   );
 }
 
@@ -159,7 +159,7 @@ function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): App
     transport === 'http'
       ? 'Daemon HTTP endpoint is unavailable'
       : 'Daemon socket endpoint is unavailable',
-    { reason: DAEMON_ENDPOINT_UNAVAILABLE_REASON, transport },
+    { reason: DAEMON_TRANSPORT_REASONS.endpointUnavailable.reason, transport },
   );
 }
 
@@ -412,7 +412,10 @@ async function recoverFromTimeout(
   statePaths: DaemonPaths,
   options: SendRequestOptions,
 ): Promise<unknown> {
-  if (!(error instanceof AppError) || error.details?.reason !== 'daemon_transport_timeout') {
+  if (
+    !(error instanceof AppError) ||
+    error.details?.reason !== DAEMON_TRANSPORT_REASONS.timeout.reason
+  ) {
     return error;
   }
   const expiredBudget = error.details.timeoutMs;
@@ -436,11 +439,11 @@ function classifyTransportFailure(
 ): { failure: AppError; sent: boolean } | undefined {
   if (!(error instanceof AppError)) return undefined;
   switch (error.details?.reason) {
-    case 'daemon_transport_failure':
-    case 'daemon_transport_timeout':
+    case DAEMON_TRANSPORT_REASONS.failure.reason:
+    case DAEMON_TRANSPORT_REASONS.timeout.reason:
       return { failure: error, sent: error.details.daemonRequestSent !== false };
-    case 'daemon_response_read_failure':
-    case 'daemon_response_invalid':
+    case DAEMON_TRANSPORT_REASONS.replyUnreadable.reason:
+    case DAEMON_TRANSPORT_REASONS.replyInvalid.reason:
       return { failure: error, sent: true };
     default:
       return undefined;
@@ -542,9 +545,9 @@ function isRemoteInstanceMismatch(error: unknown): boolean {
 function isRemoteTransportFailure(error: unknown): boolean {
   return (
     error instanceof AppError &&
-    (error.details?.reason === 'daemon_transport_failure' ||
-      error.details?.reason === 'daemon_transport_timeout' ||
-      error.details?.reason === 'daemon_response_read_failure')
+    (error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason ||
+      error.details?.reason === DAEMON_TRANSPORT_REASONS.timeout.reason ||
+      error.details?.reason === DAEMON_TRANSPORT_REASONS.replyUnreadable.reason)
   );
 }
 
@@ -607,7 +610,7 @@ function isSafeAutoTransportFallbackError(
   return (
     attempted === 'socket' &&
     error instanceof AppError &&
-    error.details?.reason === 'daemon_transport_failure' &&
+    error.details?.reason === DAEMON_TRANSPORT_REASONS.failure.reason &&
     error.details.daemonRequestSent === false
   );
 }
@@ -643,7 +646,7 @@ function handleTransportError(
     'Failed to communicate with daemon',
     {
       daemonRequestSent,
-      reason: 'daemon_transport_failure',
+      reason: DAEMON_TRANSPORT_REASONS.failure.reason,
       requestId,
       hint: remote
         ? 'Retry command. If this persists, verify the remote daemon URL, auth token, and remote host reachability.'
@@ -746,7 +749,7 @@ function requestTimeoutError(
   daemonRequestSent: boolean,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
-    reason: 'daemon_transport_timeout',
+    reason: DAEMON_TRANSPORT_REASONS.timeout.reason,
     timeoutMs,
     requestId,
     daemonRequestSent,
@@ -884,7 +887,7 @@ async function sendHttpRequest(
             'Failed to read daemon response',
             {
               requestId: req.meta?.requestId,
-              reason: 'daemon_response_read_failure',
+              reason: DAEMON_TRANSPORT_REASONS.replyUnreadable.reason,
             },
             error instanceof Error ? error : undefined,
           );

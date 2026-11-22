@@ -16,6 +16,7 @@ import {
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import type { ThirdPartySnapshotProducer } from '@agent-device/contracts/snapshot-producers';
 
 type CaptureHintFixture = Readonly<{
   name: string;
@@ -67,8 +68,12 @@ test('normalization makes raw, scope, and absent values explicit', () => {
   });
 });
 
-test('acquisition derives unavailable provider facts from the registry', () => {
-  for (const producer of ['appium-source', 'revyl-ios-tree'] as const) {
+test('acquisition derives unavailable provider facts for known and third-party producers', () => {
+  for (const producer of [
+    'appium-source',
+    'revyl-ios-tree',
+    'vphone-ios-tree' as ThirdPartySnapshotProducer,
+  ] as const) {
     assert.deepEqual(
       createIosSnapshotAcquisition({
         producer,
