@@ -13,6 +13,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createDaemonHttpServer } from './http-server.ts';
 import { createSocketServer, listenNetServer } from './transport.ts';
@@ -20,12 +21,17 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosAppSession,
+  makeMacOsSession,
+} from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { retainOrphanedDeviceClaims } from '../../__tests__/support/device-claim-store.ts';
 import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { resolveSessionScope } from '../../sessions/session-routing.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
@@ -61,7 +67,11 @@ afterEach(async () => {
 });
 
 async function startProxiedDaemon(
-  options: { env?: NodeJS.ProcessEnv; openSession?: boolean } = {},
+  options: {
+    env?: NodeJS.ProcessEnv;
+    openSession?: boolean;
+    daemonPolicy?: ReturnType<typeof parseDaemonPolicy>;
+  } = {},
 ) {
   const sessionStore = makeSessionStore('agent-device-proxy-session-lease-');
   const leaseRegistry = new LeaseRegistry();
@@ -91,6 +101,7 @@ async function startProxiedDaemon(
     token: 'daemon-token',
     sessionStore,
     leaseRegistry,
+    daemonPolicy: options.daemonPolicy,
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => [IOS_SIMULATOR],
     }),
@@ -438,28 +449,120 @@ test('the owner is admitted and listed under another spelling of its lease id an
 
 // A tenant that routing replaces, or that routing cannot read, is still a claim on the lease.
 
-test('unattested HTTP routes by the tenant flag and compares the numeric meta tenant', async () => {
-  if (!world) return;
-  const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
-  const flags = { tenant: TENANT };
+test.each([5, 0, false])(
+  'unattested HTTP routes by the tenant flag and compares the meta tenant %s',
+  async (tenantId) => {
+    if (!world) return;
+    const owner = { ...OWNER_SCOPE, leaseId: world.leaseId };
+    const flags = { tenant: TENANT };
 
-  expectLeaseFieldRefusal(
-    await world.send('snapshot', [], { ...owner, tenantId: 5 }, flags),
-    'tenantId',
-  );
-  const snapshot = await world.send('snapshot', [], { ...owner, tenantId: undefined }, flags);
-  expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+    expectLeaseFieldRefusal(
+      await world.send('snapshot', [], { ...owner, tenantId }, flags),
+      'tenantId',
+    );
+    const snapshot = await world.send('snapshot', [], { ...owner, tenantId: undefined }, flags);
+    expect(snapshot.result?.ok, JSON.stringify(snapshot)).toBe(true);
+  },
+);
+
+test.each([5, 0, false])(
+  'session inventory rejects the original tenant %s after routing by the flag',
+  async (tenantId) => {
+    if (!world) return;
+    const flags = { tenant: TENANT };
+
+    const refused = await world.send('session_list', [], { tenantId }, flags);
+    expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+
+    const listed = await world.send('session_list', [], { tenantId: undefined }, flags);
+    expect(listed.result?.ok, JSON.stringify(listed)).toBe(true);
+  },
+);
+
+test('a malformed tenant takes precedence over ambiguous workspace routing', async () => {
+  if (!world) return;
+  const cwd = mkdtempForTestSync('agent-device-ambiguous-tenant-');
+  const request = {
+    token: 'daemon-token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+    meta: { cwd },
+  };
+  const sessionScope = resolveSessionScope(request);
+  world.sessionStore.publish('ios', makeIosAppSession('ios', { sessionScope }));
+  world.sessionStore.publish('android', makeAndroidSession('android', { sessionScope }));
+
+  const ambiguous = await world.socket(request);
+  expect(ambiguous.error?.data?.code, JSON.stringify(ambiguous)).toBe('AMBIGUOUS_MATCH');
+
+  const malformed = await world.socket({ ...request, meta: { cwd, tenantId: 'not a tenant' } });
+  expect(malformed.error?.data?.code, JSON.stringify(malformed)).toBe('INVALID_ARGS');
 });
 
-test('session inventory rejects the original malformed tenant after routing by the flag', async () => {
+test('a malformed tenant takes precedence over device pin and daemon policy refusals', async () => {
   if (!world) return;
-  const flags = { tenant: TENANT };
+  await world.close();
+  world = await startProxiedDaemon({
+    daemonPolicy: parseDaemonPolicy(
+      { version: 1, commands: { deny: ['snapshot'] } },
+      '/policy.json',
+    ),
+  });
+  const devicePin = {
+    selector: { platform: 'android' },
+    source: { kind: 'explicit', path: '/pin.json' },
+  };
+  const request = {
+    session: 'local',
+    command: 'snapshot',
+    flags: { platform: 'ios' },
+    positionals: [],
+  };
+  const rpc = (meta: Record<string, unknown>) =>
+    world!.rpc('agent_device.command', { ...request, meta });
 
-  const refused = await world.send('session_list', [], { tenantId: 5 }, flags);
-  expect(refused.error?.data?.code, JSON.stringify(refused)).toBe('INVALID_ARGS');
+  expect((await rpc({ devicePin })).error?.data?.details?.reason).toBe('device_pin_conflict');
+  expect((await rpc({})).error?.data?.details?.reason).toBe('DAEMON_POLICY_DENIED');
+  for (const meta of [{}, { devicePin }]) {
+    const malformed = await rpc({ ...meta, tenantId: 'not a tenant' });
+    expect(malformed.error?.data?.code, JSON.stringify(malformed)).toBe('INVALID_ARGS');
+    expect(malformed.error?.data?.details?.reason).toBeUndefined();
+  }
+});
 
-  const listed = await world.send('session_list', [], { tenantId: undefined }, flags);
-  expect(listed.result?.ok, JSON.stringify(listed)).toBe(true);
+test('a refused PID-pinned app lease does not stamp session activity', async () => {
+  if (!world) return;
+  const deviceKey = 'com.example.app@2147483646';
+  const lease = world.leaseRegistry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: TENANT,
+    runId: OWNER_SCOPE.runId,
+    leaseBackend: 'macos-app',
+    deviceKey,
+  });
+  const session = makeMacOsSession('pinned', {
+    appBundleId: 'com.example.app',
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      backend: lease.backend,
+      deviceKey,
+    },
+  });
+  world.sessionStore.publish(session.name, session);
+
+  const refused = await world.rpc('agent_device.command', {
+    session: session.name,
+    command: 'snapshot',
+    positionals: [],
+    meta: { leaseId: lease.leaseId },
+  });
+  expect(refused.error?.data, JSON.stringify(refused)).toMatchObject({
+    code: 'UNAUTHORIZED',
+    details: { reason: 'MACOS_APP_LEASE_DENIED', rule: 'process' },
+  });
+  expect(session.lastActivityAtMs).toBeUndefined();
 });
 
 test('a refused standalone lease label does not count as session activity', async () => {

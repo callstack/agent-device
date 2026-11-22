@@ -25,16 +25,13 @@ import {
   requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import {
-  resolveCallerScopeRoot,
-  resolveEffectiveSessionName,
-  resolveSessionScope,
-} from '../sessions/session-routing.ts';
+import { resolveCallerScopeRoot, resolveSessionScope } from '../sessions/session-routing.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
   assertRequestTenantAdmission,
+  resolveRequestSessionName,
   scopeRequestSession,
 } from '../sessions/request-admission.ts';
 import { isBoundedCompositeRequest } from '../core/lease-context.ts';
@@ -68,7 +65,6 @@ import { refreshRecordingHealth } from '../sessions/request-recording-health.ts'
 import { runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
-  getSessionCommandKind,
   resolveCommandAndroidAvdSelection,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
@@ -261,13 +257,7 @@ export async function createRequestExecutionScope(params: {
   // it is what puts the session's execution lock in this request's plan, and therefore the only
   // trait under which an activity stamp can be written while holding that lock.
   const attachesToSession = shouldLockSessionExecution(command);
-  const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore, {
-    // Inventory commands (`session list`, `devices`, `doctor`, …) route only to locate their own
-    // artifacts and never act through a session, so they must keep resolving an address even when
-    // the workspace owns several implicit sessions. Refusing them would refuse `session list`, the
-    // command an agent runs to resolve that ambiguity.
-    attachesToSession: getSessionCommandKind(command) !== 'inventory',
-  });
+  const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
@@ -312,7 +302,6 @@ export async function createRequestExecutionScope(params: {
     if (devicePin && pinPolicy) pinPolicy.assertRequestHonorsDevicePin(devicePin, scopedReq);
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     const preflightSession = sessionStore.get(sessionName);
-    assertRequestTenantAdmission(unscopedReq, preflightSession);
     assertProviderLeaseRequestNamesSession(scopedReq, preflightSession);
     assertRequestLeaseAdmissionPreflight(scopedReq, preflightSession);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
@@ -495,10 +484,16 @@ export async function createRequestExecutionScope(params: {
             daemonPolicy: params.daemonPolicy,
           });
           scope.req = scopedReq;
-          admissionCompleted = true;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
-          return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+          return await runAdmittedLeaseWork({
+            leaseRegistry,
+            req: scopedReq,
+            task: async () => {
+              admissionCompleted = true;
+              return await task();
+            },
+          });
         } finally {
           // The #2833 inactivity deadline is measured from the end of the last admitted command
           // that attached to this session, stamped here under the session's execution lock. The lock
