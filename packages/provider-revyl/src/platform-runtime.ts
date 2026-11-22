@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { REVYL_PROVIDER, isSupportedRevylRuntimeDevice } from './device.ts';
 import {
   providerRuntimeOwner,
+  PROVIDER_RUNTIME_REASONS,
   sameRuntimeOwner,
   type DeviceBinding,
   type RuntimeFacts,
@@ -69,7 +70,7 @@ export function createRevylPlatformRuntimeOwner(
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Revyl provider session is no longer live for the selected device',
-          { reason: 'provider-session-unavailable' },
+          { reason: PROVIDER_RUNTIME_REASONS.sessionUnavailable.reason },
         );
       }
       return bindRevylRuntime(options, owner, request.device, request.scope.signal, live);
@@ -152,7 +153,7 @@ function bindRevylDeployment(
     const live = options.getDeploymentSession(device);
     if (live) return live;
     throw new AppError('UNSUPPORTED_OPERATION', 'Revyl provider session is no longer live.', {
-      reason: 'provider-session-unavailable',
+      reason: PROVIDER_RUNTIME_REASONS.sessionUnavailable.reason,
     });
   };
   return {

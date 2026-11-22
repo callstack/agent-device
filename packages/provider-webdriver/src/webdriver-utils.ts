@@ -11,8 +11,18 @@ import {
   PROVIDER_DEVICE_ORIENTATIONS,
   type ProviderDeviceOrientation,
 } from '@agent-device/contracts/remote';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
+
+/** Why an app upload to the provider failed. */
+const WEBDRIVER_APP_UPLOAD_REASONS = {
+  // The app upload to the provider's storage did not answer within its own deadline.
+  hubAppUploadTimeout: { reason: 'hub_app_upload_timeout' },
+  // The app upload to the provider's storage never completed its transport.
+  hubAppUploadTransportFailed: { reason: 'hub_app_upload_transport_failed' },
+  // `--provider-app` is a relative path and the request names no working directory to resolve it in.
+  providerAppCwdMissing: { reason: 'provider_app_cwd_missing' },
+} as const satisfies ReasonTable<'webdriver provider'>;
 
 /** Best-effort release after a failure; a failed release rides along as `cleanupError`, never masks the primary. */
 export async function releaseOnFailure(
@@ -137,7 +147,9 @@ export async function postHubAppUpload(
       'COMMAND_FAILED',
       `${options.service} app upload failed.`,
       {
-        reason: timedOut ? 'hub_app_upload_timeout' : 'hub_app_upload_transport_failed',
+        reason: timedOut
+          ? WEBDRIVER_APP_UPLOAD_REASONS.hubAppUploadTimeout.reason
+          : WEBDRIVER_APP_UPLOAD_REASONS.hubAppUploadTransportFailed.reason,
         ...(timedOut ? { timeoutMs: HUB_APP_UPLOAD_TIMEOUT_MS } : {}),
         hint: `Check network access to the ${options.service} upload API, then retry.`,
       },
@@ -217,7 +229,10 @@ function requireAppCwd(options: { service: string; app: string; cwd?: string }):
   throw new AppError(
     'INVALID_ARGS',
     `${options.service} --provider-app ${options.app} is a relative path and the request names no working directory; pass an absolute path.`,
-    { providerApp: options.app, reason: 'provider_app_cwd_missing' },
+    {
+      providerApp: options.app,
+      reason: WEBDRIVER_APP_UPLOAD_REASONS.providerAppCwdMissing.reason,
+    },
   );
 }
 

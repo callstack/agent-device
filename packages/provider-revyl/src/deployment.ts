@@ -5,10 +5,16 @@ import type {
 } from '@agent-device/contracts/app-deployment-runtime';
 import { packGzipTar } from '@agent-device/host-kit/gzip-tar';
 import { Deadline, type DeadlineClock, pollUntilSettled } from '@agent-device/host-kit/retry';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import type { RevylClient } from './revyl-client.ts';
+import { REVYL_OUTCOME_REASONS, type RevylClient } from './revyl-client.ts';
 import type { RevylWorkerActionResponse } from './revyl-types.ts';
+
+/** Why a Revyl app deployment is refused. */
+const REVYL_DEPLOYMENT_REASONS = {
+  // Revyl installs an iOS simulator build or an Android .apk, and the build is neither.
+  unsupportedAppArtifact: { reason: 'unsupported_app_artifact' },
+} as const satisfies ReasonTable<'revyl provider'>;
 
 /**
  * The whole install's budget: packing, upload, and Revyl's install. It stays inside the daemon's
@@ -50,7 +56,7 @@ export async function deployRevylApp(
   const scoped = AbortSignal.any([signal, budget]);
   const timedOut = (cause?: unknown) =>
     installStopped(
-      'provider-unconfirmed',
+      REVYL_OUTCOME_REASONS.unconfirmed.reason,
       `Revyl did not finish the install within ${budgetMs / 1000} s.`,
       cause,
     );
@@ -96,7 +102,14 @@ async function uploadAndInstall(
   }
 }
 
-function installStopped(reason: string, message: string, cause: unknown): AppError {
+/**
+ * Why an install stopped short of a confirmed result: the provider's own verdicts, or the caller's
+ * cancellation. `request_canceled` is the kernel's cancellation vocabulary, which no provider table
+ * re-declares, so it is named here as the one spelling this wrapper also takes.
+ */
+type RevylInstallStopReason = typeof REVYL_OUTCOME_REASONS.unconfirmed.reason | 'request_canceled';
+
+function installStopped(reason: RevylInstallStopReason, message: string, cause: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
     message,
@@ -148,13 +161,13 @@ function unsupportedBuild(platform: 'ios' | 'android', appPath: string): AppErro
         'INVALID_ARGS',
         'Revyl installs an iOS simulator build: a .app directory, or a .zip, .tar.gz, or .tgz of one.',
         {
-          reason: 'unsupported_app_artifact',
+          reason: REVYL_DEPLOYMENT_REASONS.unsupportedAppArtifact.reason,
           appPath,
           hint: 'Build for the iOS simulator; a device .ipa does not run on a simulator.',
         },
       )
     : new AppError('INVALID_ARGS', 'Revyl installs an Android build from an .apk file.', {
-        reason: 'unsupported_app_artifact',
+        reason: REVYL_DEPLOYMENT_REASONS.unsupportedAppArtifact.reason,
         appPath,
         hint: 'Pass the .apk the build produced.',
       });
@@ -179,7 +192,7 @@ async function installAndWait(
   const installId = accepted.install_id?.trim();
   if (accepted.status !== 'accepted' || !installId) {
     throw new AppError('COMMAND_FAILED', 'Revyl did not accept the app install.', {
-      reason: 'provider-refused',
+      reason: REVYL_OUTCOME_REASONS.refused.reason,
       ...(accepted.status === undefined ? {} : { providerDetail: accepted.status }),
     });
   }
@@ -195,7 +208,7 @@ async function installAndWait(
     return requireInstalled(value.status, value.result ?? undefined);
   }
   throw new AppError('COMMAND_FAILED', `Revyl reported install status "${value.status}".`, {
-    reason: 'provider-refused',
+    reason: REVYL_OUTCOME_REASONS.refused.reason,
     installId,
   });
 }
@@ -212,7 +225,7 @@ function requireInstalled(
     'COMMAND_FAILED',
     `Revyl could not install the app${error === undefined ? '' : `: ${error}`}`,
     {
-      reason: 'provider-refused',
+      reason: REVYL_OUTCOME_REASONS.refused.reason,
       installStatus: status,
       ...(error === undefined ? {} : { providerDetail: error }),
     },

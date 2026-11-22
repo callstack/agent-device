@@ -5,12 +5,20 @@ import {
   requireResolvedProfilePlatform,
 } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { REVYL_PROVIDER, REVYL_SERVICE, type RevylPlatform } from './device.ts';
 import { requireRevylCredentials, type RevylCredentials } from './credentials.ts';
 import { createRevylClient } from './revyl-client.ts';
 import { REVYL_PROFILE_FIELDS } from './profile-fields.ts';
 import { revylTextFlag } from './session-allocation.ts';
+
+/** Why a Revyl connection request is refused. */
+const REVYL_CONNECTION_REASONS = {
+  // Revyl installs the app from a URL, so `--provider-app` cannot name a local file.
+  invalidApp: { reason: 'invalid_provider_app' },
+  // Revyl rents an iOS simulator or an Android emulator, and the request names neither.
+  unsupportedPlatform: { reason: 'unsupported_platform' },
+} as const satisfies ReasonTable<'revyl provider'>;
 
 /** The connect half of the plugin, bound to one host's environment. */
 export type RevylConnection = ReturnType<typeof createRevylConnection>;
@@ -87,7 +95,7 @@ export async function verifyRevylProfile(
       'INVALID_ARGS',
       `${REVYL_SERVICE} installs the app from a URL, so --provider-app must be an https URL.`,
       {
-        reason: 'invalid_provider_app',
+        reason: REVYL_CONNECTION_REASONS.invalidApp.reason,
         hint: `Pass the URL ${REVYL_SERVICE} can read the build from; a local path cannot.`,
       },
     );
@@ -140,7 +148,7 @@ function isRevylAppUrl(value: string | undefined): boolean {
 function requireConnectPlatform(flags: CliFlags): RevylPlatform {
   if (flags.platform === 'ios' || flags.platform === 'android') return flags.platform;
   throw new AppError('INVALID_ARGS', `connect ${REVYL_PROVIDER} requires --platform ios|android.`, {
-    reason: 'unsupported_platform',
+    reason: REVYL_CONNECTION_REASONS.unsupportedPlatform.reason,
   });
 }
 
