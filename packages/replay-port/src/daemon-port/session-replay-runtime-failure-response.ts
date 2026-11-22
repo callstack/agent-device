@@ -1,5 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/input-validation';
 import { BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
@@ -34,7 +34,8 @@ export function hoistReplayFailureCauseDiagnosticMeta(
  * recovery is the `test`/`replay` flag itself. Keyed on the typed reason only.
  */
 function rewriteAndroidTestImeFlowHint(error: ReplayFailureCause): ReplayFailureCause {
-  if (error.details?.reason !== ANDROID_SHELL_TEXT_UNSUPPORTED_REASON) return error;
+  if (error.details?.reason !== ANDROID_TEXT_CHANNEL_REASONS.shellTextUnsupported.reason)
+    return error;
   return { ...error, hint: ANDROID_TEST_IME_FLOW_HINT };
 }
 

@@ -10,7 +10,6 @@ import {
   readAndroidClipboardWithAdb,
   writeAndroidClipboardWithAdb,
 } from '../device-input-state.ts';
-import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON } from '../clipboard-shell-response.ts';
 import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
@@ -399,7 +398,7 @@ test('readAndroidClipboardWithAdb refuses the exit-0 no-implementation answer in
   assert.equal(error.code, 'UNSUPPORTED_OPERATION');
   assert.equal(
     (error.details as { reason?: unknown }).reason,
-    ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
+    'android_clipboard_shell_command_unavailable',
   );
 });
 
@@ -418,7 +417,7 @@ test('writeAndroidClipboardWithAdb refuses the exit-0 no-implementation answer i
   assert.equal(error.code, 'UNSUPPORTED_OPERATION');
   assert.equal(
     (error.details as { reason?: unknown }).reason,
-    ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
+    'android_clipboard_shell_command_unavailable',
   );
 });
 

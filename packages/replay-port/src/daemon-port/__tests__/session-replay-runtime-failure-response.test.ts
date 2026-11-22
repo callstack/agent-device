@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/input-validation';
 import { BOUNDED_COMPOSITE_REASONS } from '@agent-device/kernel/errors';
 import {
   ANDROID_TEST_IME_FLOW_HINT,
@@ -134,7 +134,10 @@ test('an Android shell-text cause gets the flow-owned --test-ime recovery', () =
     message:
       'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only.',
     hint: openRouteHint,
-    details: { reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON, hint: openRouteHint },
+    details: {
+      reason: ANDROID_TEXT_CHANNEL_REASONS.shellTextUnsupported.reason,
+      hint: openRouteHint,
+    },
   });
 
   expect(cause.hint).toBe(ANDROID_TEST_IME_FLOW_HINT);

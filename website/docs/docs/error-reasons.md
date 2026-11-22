@@ -29,10 +29,18 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
 
+### `clipboard`
+
+| Reason | Meaning |
+| --- | --- |
+| `android_clipboard_shell_command_unavailable` | This Android build ships no shell command for the clipboard service. |
+
 ### `close`
 
 | Reason | Meaning |
 | --- | --- |
+| `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
 
 ### `events`
@@ -46,8 +54,12 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
+| `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
+| `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
 | `fill_record_as_requires_armed_recording` | `fill --record-as` needs an armed script recording; open a session with `--save-script` first. |
 | `fill_text_stdin_unparameterized_recording` | `fill --text-stdin` needs `--record-as` or `--no-record` while a recording is armed, so the stdin text stays out of the script. |
+| `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
 
 ### `find`
 
@@ -92,6 +104,11 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `claim-lost-during-open` | The device lost the claim this open was made with; close the session and open the device again. |
 | `runtime-hints-operation-missing` | Runtime hints were requested, but the device runtime admitted no operation to apply or clear them. |
+| `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
+| `invalid-android-activity-component` | The `--activity` value is not an Android component name. |
+| `android-launch-not-foreground` | The app the helper launched never reached the foreground before the launch budget ran out. |
+| `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `ios-simulator-openurl-timeout` | CoreSimulator did not answer `simctl openurl` in time, so the URL open failed. |
 | `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
@@ -158,6 +175,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `android_screenrecord_startup_failed` | Android `screenrecord` exited before it began writing; its startup output says why. |
+| `native_recovery_evidence_unavailable` | The marker exists but the device could not be read, so it cannot be classified. |
+| `native_recovery_evidence_unreadable` | The marker exists but does not decode, so nothing about it can be verified. |
+| `native_recovery_evidence_transport_mismatch` | The marker was written by the other adb transport, so this one must not retire it. |
+| `native_recovery_evidence_open` | An open recording still owns the marker; only its own session's stop or close retires it. |
+| `native_recording_artifact_claimed` | A recorder is still writing the pending artifact, so removing it would cut a clip short. |
+| `native_recording_artifact_removal_failed` | The device refused to remove the pending artifact, so the marker has to stay. |
+| `native_recovery_evidence_retirement_unconfirmed` | The marker read back after removal, so its retirement is not proven. |
+| `native_recording_recorder_unproven` | The probe could not prove no recorder is writing the pending artifact. |
 | `recording_destination_not_requested` | A remote recording was saved to the current directory because the request named no destination; a warning. |
 
 ### `replay`
@@ -166,6 +191,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
 | `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
+| `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
+| `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
 
 ### `screenshot`
 
@@ -214,7 +242,21 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `android_bluetooth_adapter_missing` | The device declares no Bluetooth adapter, so there is nothing to turn on or off. |
+| `android_bluetooth_command_unavailable` | The build predates `svc bluetooth`, so the adapter cannot be switched from the shell. |
+| `bluetooth-not-applied` | The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request. |
+| `bluetooth-unreadable` | The device answered the Bluetooth read-back with a value that is not a known state. |
+| `mobile-data-not-applied` | The device kept mobile data in its prior state after `svc data` accepted the request. |
+| `mobile-data-unreadable` | The device answered the mobile-data read-back with a value that is neither 0 nor 1. |
+| `setting_app_not_package` | The named app resolves to an intent such as `settings`, not to an installed package. |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+
+### `shake`
+
+| Reason | Meaning |
+| --- | --- |
+| `shake-rest-acceleration-unreadable` | The console gave no accelerometer reading to restore afterwards, so nothing was sent. |
+| `shake-console-refused` | The emulator console refused an accelerometer command; `details.consoleReason` is its reply. |
 
 ### `shutdown`
 
@@ -229,11 +271,29 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `observation-unavailable` | The runner answered an observe-only snapshot request without an observe-only snapshot. |
 | `empty-snapshot` | XCTest returned a snapshot with no nodes on an iOS simulator. |
 
+### `telephony`
+
+| Reason | Meaning |
+| --- | --- |
+| `telephony-console-refused` | The console answered the event with an error; `details.consoleReason` is its reply. |
+
 ### `test`
 
 | Reason | Meaning |
 | --- | --- |
 | `bounded_composite_resource_unsupported` | The step drives a long-lived resource (a recording, trace, log, audio, or perf capture, or a session resource awaiting recovery), so it must run as its own command; `details.shape` names the refused operation and `details.standaloneCommandName` the command. The refused step did not dispatch; earlier steps may have. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
+| `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
+| `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
+
+### `type`
+
+| Reason | Meaning |
+| --- | --- |
+| `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
+| `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
+| `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
+| `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
 
 ### `wait`
 
@@ -257,6 +317,53 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `swift_cache_untrusted` | The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a trusted path that only this user or root can change. |
+
+### Android adb port reverse
+
+| Reason | Meaning |
+| --- | --- |
+| `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
+
+### Android adb transport
+
+| Reason | Meaning |
+| --- | --- |
+| `managed-device-transport-mismatch` | The call aimed a managed adb transport at another device, target, or server. |
+
+### Android helper install
+
+| Reason | Meaning |
+| --- | --- |
+| `missing` | The device has no package installed under the helper's name. |
+| `outdated` | The installed helper's versionCode is below the bundled artifact's. |
+| `mismatched` | The installed helper matches the artifact's versionCode but not its APK checksum. |
+| `unverifiable` | The installed helper's APK checksum could not be read, so its currency stays unproven. |
+
+### Android input
+
+| Reason | Meaning |
+| --- | --- |
+| `android-input-budget-exhausted` | The request had no room left for one helper input attempt, so nothing was sent. |
+
+### Android snapshot helper
+
+| Reason | Meaning |
+| --- | --- |
+| `android-snapshot-helper-not-current` | A current-only check found no current helper: nothing ran, so there is nothing to recover. |
+| `android_snapshot_helper_runtime_occupied` | Another helper process still holds UiAutomation, so nothing can take the runtime. |
+| `android_snapshot_helper_session_request_timeout` | The helper accepted the session request but sent no answer before the command deadline. |
+| `android_snapshot_helper_session_peer_unverified` | The listener could not prove the session secret, so it is not the helper this session launched. |
+| `android_snapshot_helper_session_ready_timeout` | The helper process never reported readiness before the readiness budget ran out. |
+| `android_snapshot_helper_session_ready_malformed` | The readiness record the helper sent does not prove this session's protocol, socket, or secret. |
+| `android_snapshot_helper_session_exited_before_ready` | The helper process ended before it reported readiness. |
+
+### Android text channel
+
+| Reason | Meaning |
+| --- | --- |
+| `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
+| `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
+| `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
 
 ### Apple app resolution
 
@@ -446,7 +553,7 @@ These reasons can come from more than one command.
 | --- | --- |
 | `ref_frame_expired` | A device action since the snapshot expired the ref frame, so none of its refs resolve. |
 | `ref_generation_mismatch` | The pinned ref was minted from a snapshot generation that a newer one superseded. |
-| `plain_ref_requires_complete_frame` | A plain ref needs a complete frame; retry with the pinned ref in `details.suggestedRef`. |
+| `plain_ref_requires_complete_frame` | A plain ref needs a complete frame. Retry with the pinned ref in `details.suggestedRef` when present; otherwise capture a fresh interactive snapshot or use a stable selector. |
 | `ref_not_issued` | The current ref frame did not issue this ref, so it no longer names a node. |
 
 ### Remote connection

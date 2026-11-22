@@ -14,9 +14,7 @@ export type { CommandFlags, MaestroRuntimeFlags } from '../command-flags.ts';
 export type { DaemonWireRequest, DaemonWireRequestMeta } from '../daemon-wire-request.ts';
 export type { DispatchedCommand } from '../dispatched-command.ts';
 export {
-  ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
-  ANDROID_IME_HELPER_NO_ACK_REASON,
-  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+  ANDROID_TEXT_CHANNEL_REASONS,
   normalizeBatchCommandName,
   readOptionalInteger,
   readOptionalNumber,

@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { provesAndroidScreenRecordPathUnclaimed } from '@agent-device/contracts/screen-recording-runtime-host';
 import { candidateRemotePaths, cleanupChunks } from './chunks.ts';
@@ -116,12 +116,35 @@ async function removePendingArtifact(
   if (!(await transport.remove(pendingPath))) throw artifactRemovalFailed(pendingPath);
 }
 
+/**
+ * Why `record start` refuses over the native recovery evidence one Android screenrecord leaves on
+ * the device.
+ */
+const NATIVE_RECOVERY_EVIDENCE_REASONS = {
+  // The marker exists but the device could not be read, so it cannot be classified.
+  unavailable: { reason: 'native_recovery_evidence_unavailable' },
+  // The marker exists but does not decode, so nothing about it can be verified.
+  unreadable: { reason: 'native_recovery_evidence_unreadable' },
+  // The marker was written by the other adb transport, so this one must not retire it.
+  transportMismatch: { reason: 'native_recovery_evidence_transport_mismatch' },
+  // An open recording still owns the marker; only its own session's stop or close retires it.
+  evidenceOpen: { reason: 'native_recovery_evidence_open' },
+  // A recorder is still writing the pending artifact, so removing it would cut a clip short.
+  artifactClaimed: { reason: 'native_recording_artifact_claimed' },
+  // The device refused to remove the pending artifact, so the marker has to stay.
+  artifactRemovalFailed: { reason: 'native_recording_artifact_removal_failed' },
+  // The marker read back after removal, so its retirement is not proven.
+  retirementUnconfirmed: { reason: 'native_recovery_evidence_retirement_unconfirmed' },
+  // The probe could not prove no recorder is writing the pending artifact.
+  recorderUnproven: { reason: 'native_recording_recorder_unproven' },
+} as const satisfies ReasonTable<'record'>;
+
 function unavailableEvidence(manifestPath: string, probeMessage: string): AppError {
   return new AppError(
     'COMMAND_FAILED',
     `Android screenrecord native recovery evidence is unavailable: ${manifestPath}`,
     {
-      reason: 'native_recovery_evidence_unavailable',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.unavailable.reason,
       manifestPath,
       hint: 'Confirm the device is online and its storage readable, then run record start again.',
     },
@@ -134,7 +157,7 @@ function corruptEvidence(manifestPath: string): AppError {
     'COMMAND_FAILED',
     `Android screenrecord native recovery evidence is unreadable: ${manifestPath}`,
     {
-      reason: 'native_recovery_evidence_unreadable',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.unreadable.reason,
       manifestPath,
       hint: markerRemovalHint(manifestPath),
     },
@@ -150,7 +173,7 @@ function foreignTransportEvidence(
     'COMMAND_FAILED',
     `Android screenrecord native recovery evidence was written by the ${evidence.transportMode} transport, not this ${transportMode} one: ${manifestPath}`,
     {
-      reason: 'native_recovery_evidence_transport_mismatch',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.transportMismatch.reason,
       manifestPath,
       evidenceTransportMode: evidence.transportMode,
       hint: markerRemovalHint(manifestPath),
@@ -167,7 +190,7 @@ function openEvidenceOnDevice(
     'DEVICE_IN_USE',
     `Android screenrecord native recovery evidence already exists: ${manifestPath} (open recording of session "${evidence.sessionId}" on ${device.id})`,
     {
-      reason: 'native_recovery_evidence_open',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.evidenceOpen.reason,
       manifestPath,
       sessionId: evidence.sessionId,
       // Retrying this start cannot free the marker; only the owning session's stop or close can.
@@ -188,7 +211,7 @@ function artifactClaimed(
       named ? 'its recorder' : 'another recorder'
     } is writing ${remotePath}`,
     {
-      reason: 'native_recording_artifact_claimed',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.artifactClaimed.reason,
       remotePath,
       writer,
       // A recorder this marker names is a live recording: only its owner's stop frees it. An
@@ -206,7 +229,7 @@ function artifactRemovalFailed(remotePath: string): AppError {
     'COMMAND_FAILED',
     `Android screenrecord recovery evidence could not remove ${remotePath}`,
     {
-      reason: 'native_recording_artifact_removal_failed',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.artifactRemovalFailed.reason,
       remotePath,
       hint: 'Confirm the device is online and run record start again.',
     },
@@ -218,7 +241,7 @@ function retirementUnconfirmed(manifestPath: string): AppError {
     'COMMAND_FAILED',
     `Android screenrecord recovery evidence removal could not be confirmed: ${manifestPath}`,
     {
-      reason: 'native_recovery_evidence_retirement_unconfirmed',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.retirementUnconfirmed.reason,
       manifestPath,
       hint: 'Run record start again; the marker is retired from the beginning.',
     },
@@ -230,7 +253,7 @@ function unprovenRecorder(remotePath: string): AppError {
     'COMMAND_FAILED',
     `Android screenrecord recovery evidence cannot be safely retired: ${remotePath}`,
     {
-      reason: 'native_recording_recorder_unproven',
+      reason: NATIVE_RECOVERY_EVIDENCE_REASONS.recorderUnproven.reason,
       remotePath,
       hint: 'Confirm the device is online and run record start again.',
     },

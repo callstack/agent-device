@@ -1,6 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
 import { ANDROID_TEST_IME_OPEN_HINT, fillAndroid, typeAndroid } from '../text-input.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import {
@@ -320,7 +319,7 @@ test('typeAndroid reports clear error when unicode input is unsupported', async 
       await assertRejectsAppError(() => typeAndroid(device, '很'), {
         code: 'COMMAND_FAILED',
         message: /provider-native text injection/i,
-        reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+        reason: 'android_shell_text_unsupported',
         hint: ANDROID_TEST_IME_OPEN_HINT,
       });
     },
