@@ -1,6 +1,7 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   type DevicePin,
+  isFlagSupportedForCommand,
   mergeDefinedFlags,
   resolveConfigDefaults,
 } from '@agent-device/command-surface';
@@ -54,5 +55,5 @@ export function resolveCliOptions(
 }
 
 function shouldApplyRemoteConfigDefaults(command: string | null): boolean {
-  return command !== null;
+  return command !== null && isFlagSupportedForCommand('remoteConfig', command);
 }

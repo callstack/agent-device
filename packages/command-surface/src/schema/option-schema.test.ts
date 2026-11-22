@@ -101,6 +101,7 @@ test('isFlagSupportedForCommand consults option schema support map', () => {
   assert.equal(isFlagSupportedForCommand('snapshotDepth', 'open'), false);
   assert.equal(isFlagSupportedForCommand('platform', 'open'), true);
   assert.equal(isFlagSupportedForCommand('platform', 'auth'), false);
+  assert.equal(isFlagSupportedForCommand('remoteConfig', 'auth'), false);
   assert.equal(isFlagSupportedForCommand('iosXctestrunFile', 'open'), true);
   assert.equal(isFlagSupportedForCommand('iosXctestrunFile', 'auth'), false);
   assert.equal(isFlagSupportedForCommand('delayMs', 'type'), true);
