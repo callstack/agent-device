@@ -1336,7 +1336,7 @@ An Apple runner that returns `COMMAND_ALREADY_FINISHED` cannot replay that comma
 [Error reasons](/docs/error-reasons) lists the typed reasons by command and subsystem. These refusals carry `dispatched: no`, so nothing ran:
 
 - `session_or_device_selector_required`: open a session or pass `--platform`.
-- `named_session_not_found`: the daemon was replaced or restarted, or the name is wrong. Run `agent-device session list` to see the sessions it holds. Some commands report the same cause as `SESSION_NOT_FOUND` without a reason.
+- `named_session_not_found`: the daemon was replaced or restarted, or the name is wrong. Run `agent-device session list` to see the sessions visible to your request. A leased session appears only when the request sends its lease id. Some commands report the same cause as `SESSION_NOT_FOUND` without a reason.
 - `session_app_required`: run `open <app>`, or name the app, as in `settings clear-app-state com.example.app`.
 - `app_not_installed`: run `apps --all` for the exact bundle id or package, or install the app.
 - `malformed_request`: fix the client that built the request; resending it unchanged fails the same way.
@@ -2712,7 +2712,7 @@ agent-device session list
 agent-device session list --json
 ```
 
-- `session list` shows active daemon sessions for your workspace. Add `--json` for session metadata.
+- `session list` shows the active daemon sessions visible to your request scope: your workspace, or the named session scope when `--session` or `AGENT_DEVICE_SESSION` is set. A session that holds a device lease appears only when the request sends that session's lease id. Run the command from the saved connection that owns the session — the CLI sends the saved lease id with every command — or pass `--lease-id <id>`. Add `--json` for raw session metadata.
 - `session list --json` reports `kind`, `model`, and `osVersion` flat on each entry when the host reported them: read `sessions[0].osVersion`, not `sessions[0].device.osVersion`, which is the device name.
 
 ## Cloud provider artifacts
