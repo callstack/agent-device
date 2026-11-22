@@ -38,7 +38,6 @@ function writeStoredSession(stateDir: string, overrides: Record<string, unknown>
       version: 2,
       id: 'session-pairing',
       cloudBaseUrl: 'https://cloud.example',
-      issuerOrigin: 'https://cloud.example',
       refreshCredential: 'adc_refresh_old',
       createdAt: '2026-01-01T00:00:00.000Z',
       ...overrides,

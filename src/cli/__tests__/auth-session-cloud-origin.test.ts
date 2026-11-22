@@ -21,6 +21,10 @@ const baseFlags = {
   runId: 'run-123',
 };
 
+const START = 'https://cloud.example/api/control-plane/device-auth/start';
+const POLL = 'https://cloud.example/api/control-plane/device-auth/poll';
+const REFRESH = 'https://cloud.example/api/control-plane/cli-session/refresh';
+
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -41,6 +45,40 @@ function refreshWith(stateDir: string, env: Record<string, string>, requests: st
         requests.push(String(url));
         return jsonResponse({ accessToken: 'adc_agent_fresh' });
       },
+    },
+  });
+}
+
+/** Answers device-auth start and poll with an approved login, and any other URL with a 404. */
+const deviceAuthCloud = async (url: URL | RequestInfo): Promise<Response> => {
+  if (String(url) === START) {
+    return jsonResponse({
+      deviceCode: 'device-secret',
+      userCode: 'ABCD-EFGH',
+      verificationUri: 'https://cloud.example/authorize',
+    });
+  }
+  if (String(url) === POLL) {
+    return jsonResponse({
+      status: 'approved',
+      accessToken: 'adc_agent_login',
+      cliSession: { id: 'session-new', refreshCredential: 'adc_refresh_new' },
+    });
+  }
+  return new Response('{}', { status: 404 });
+};
+
+function loginAt(stateDir: string, fetch: typeof globalThis.fetch) {
+  return loginWithDeviceAuth({
+    stateDir,
+    flags: baseFlags,
+    env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example/' },
+    io: {
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+      stderr: { write: () => true },
+      openBrowser: async () => {},
+      fetch,
     },
   });
 }
@@ -69,7 +107,6 @@ test('a stored CLI session is sent only to the cloud that issued it', async () =
         version: 2,
         id: 'session-origin',
         cloudBaseUrl: 'https://cloud.example',
-        issuerOrigin: 'https://cloud.example',
         refreshCredential: 'adc_refresh_secret',
         createdAt: '2026-01-01T00:00:00.000Z',
       },
@@ -93,7 +130,7 @@ test('a stored CLI session is sent only to the cloud that issued it', async () =
       requests,
     );
     assert.equal(same.flags.daemonAuthToken, 'adc_agent_fresh');
-    assert.deepEqual(requests, ['https://cloud.example/api/control-plane/cli-session/refresh']);
+    assert.deepEqual(requests, [REFRESH]);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -106,16 +143,11 @@ test('a rotation is not stored over a session that a login moved to another clou
       version: 2 as const,
       id: 'session-moved',
       cloudBaseUrl: 'https://cloud.example',
-      issuerOrigin: 'https://cloud.example',
       refreshCredential: 'adc_refresh_old',
       createdAt: '2026-01-01T00:00:00.000Z',
     };
     writeCliSession({ stateDir: tempRoot, session });
-    const moved = {
-      ...session,
-      cloudBaseUrl: 'https://other-cloud.example',
-      issuerOrigin: 'https://other-cloud.example',
-    };
+    const moved = { ...session, cloudBaseUrl: 'https://other-cloud.example' };
 
     await resolveRemoteAuth({
       command: 'snapshot',
@@ -154,56 +186,55 @@ test('a version 1 session is refused with a re-login reason, and a fresh login i
     assert.deepEqual(requests, []);
     assert.equal(readCliSession({ stateDir: tempRoot }), null);
 
-    const login = await loginWithDeviceAuth({
-      stateDir: tempRoot,
-      flags: baseFlags,
-      env: { AGENT_DEVICE_CLOUD_BASE_URL: 'https://cloud.example/' },
-      io: {
-        stdinIsTTY: true,
-        stdoutIsTTY: true,
-        stderr: { write: () => true },
-        openBrowser: async () => {},
-        fetch: async (url) =>
-          String(url).endsWith('/device-auth/start')
-            ? jsonResponse({
-                deviceCode: 'device-secret',
-                userCode: 'ABCD-EFGH',
-                verificationUri: 'https://cloud.example/authorize',
-              })
-            : jsonResponse({
-                status: 'approved',
-                accessToken: 'adc_agent_login',
-                cliSession: { id: 'session-new', refreshCredential: 'adc_refresh_new' },
-              }),
-      },
-    });
+    const login = await loginAt(tempRoot, deviceAuthCloud);
     assert.equal(login.session.version, 2);
-    assert.equal(login.session.issuerOrigin, 'https://cloud.example');
 
     const refreshed = await refreshWith(tempRoot, {}, requests);
     assert.equal(refreshed.flags.daemonAuthToken, 'adc_agent_fresh');
-    assert.deepEqual(requests, ['https://cloud.example/api/control-plane/cli-session/refresh']);
+    assert.deepEqual(requests, [REFRESH]);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });
 
-test('a session whose recorded issuer is not the origin of its URL is refused', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-auth-origin-issuer-');
-  try {
-    writeRawSession(tempRoot, {
-      version: 2,
-      id: 'session-edited',
-      cloudBaseUrl: 'https://cloud.example',
-      issuerOrigin: 'https://other-cloud.example',
-      refreshCredential: 'adc_refresh_other',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
-    const requests: string[] = [];
+// Every auth route goes through the redirect-checked transport, whose cases are proven in
+// cloud-auth-request.test.ts. A route that called fetch directly would follow this redirect.
+test.each([START, POLL, REFRESH])(
+  'a cross-origin redirect from %s is refused before it is followed, and nothing is stored',
+  async (redirected) => {
+    const tempRoot = mkdtempForTestSync('agent-device-auth-origin-redirect-');
+    try {
+      const sent: string[] = [];
+      const fetch = async (url: URL | RequestInfo) => {
+        sent.push(String(url));
+        return String(url) === redirected
+          ? new Response(null, {
+              status: 307,
+              headers: { location: 'https://elsewhere.example/auth' },
+            })
+          : await deviceAuthCloud(url);
+      };
+      if (redirected === REFRESH) await loginAt(tempRoot, deviceAuthCloud);
+      const stored = readCliSession({ stateDir: tempRoot });
 
-    await assert.rejects(() => refreshWith(tempRoot, {}, requests), isIssuerUnverified);
-    assert.deepEqual(requests, []);
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
-});
+      await assert.rejects(
+        () =>
+          redirected === REFRESH
+            ? resolveRemoteAuth({
+                command: 'snapshot',
+                flags: baseFlags,
+                stateDir: tempRoot,
+                allowInteractiveLogin: false,
+                env: {},
+                io: { fetch },
+              })
+            : loginAt(tempRoot, fetch),
+        (error) => normalizeError(error).details?.reason === 'cloud_auth_redirect_refused',
+      );
+      assert.equal(sent.at(-1), redirected);
+      assert.deepEqual(readCliSession({ stateDir: tempRoot }), stored);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  },
+);

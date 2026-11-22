@@ -300,8 +300,6 @@ export async function loginWithDeviceAuth(options: {
     version: CLI_SESSION_FORMAT_VERSION,
     id: approved.cliSession?.id ?? `cli-${Date.now().toString(36)}`,
     cloudBaseUrl,
-    // Every login request stays on this origin, so the credential came from it.
-    issuerOrigin: new URL(cloudBaseUrl).origin,
     workspaceId: approved.cliSession?.workspaceId,
     accountId: approved.cliSession?.accountId,
     name: approved.cliSession?.name,
@@ -571,8 +569,8 @@ async function resolveCliSessionAccess(options: {
  * origin would send it to that origin, so the command stops before any request.
  */
 function assertStoredSessionOrigin(session: CliSessionRecord, env: EnvMap): void {
-  const storedUrl = resolveCloudBaseUrl({}, session.cloudBaseUrl);
-  if (new URL(resolveCloudBaseUrl(env, storedUrl)).origin === new URL(storedUrl).origin) return;
+  const storedOrigin = new URL(resolveCloudBaseUrl({}, session.cloudBaseUrl)).origin;
+  if (new URL(resolveCloudBaseUrl(env, session.cloudBaseUrl)).origin === storedOrigin) return;
   throw new AppError(
     'UNAUTHORIZED',
     'The stored CLI session belongs to another cloud API origin.',
