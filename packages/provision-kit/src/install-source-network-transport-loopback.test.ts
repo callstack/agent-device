@@ -258,12 +258,12 @@ test(`a proxy that never answers CONNECT is closed on caller cancellation`, asyn
   assert.equal(observed.liveProxySockets, 0);
 });
 
-test('The downloader derives TLS trust, SNI, and the certificate identity check from the URL host', async (t) => {
+test('The downloader derives TLS trust, SNI, ALPN, and the certificate identity check from the URL host', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   // TLS trust is fixed when a process starts, so the test runs the TLS scenarios in a child
   // process spawned with the loopback fixture certificate as an extra CA. The child owns no
-  // listeners: the parent's TLS origin echoes the SNI name it saw, and that is how the dial is
-  // verified.
+  // listeners: the parent's TLS origin echoes the SNI name and the negotiated protocol it saw, and
+  // that is how the dial is verified.
   const scenarios: TlsScenario[] = [
     'direct',
     'proxied',
@@ -283,18 +283,27 @@ test('The downloader derives TLS trust, SNI, and the certificate identity check 
 
   // SNI names the URL host, so the server answers with that name. A literal IP cannot be an SNI
   // name, and the client omits it there; the fixture certificate covers `127.0.0.1` as an IP
-  // subject alternative name, so those connections still complete.
-  const expectedSni: [TlsScenario, string][] = [
+  // subject alternative name, so those connections still complete. The origin advertises
+  // `http/1.1`, so the echoed protocol proves the origin leg offered the protocol the transport
+  // speaks; an origin reports `false` for a client that offers none.
+  const expectedOriginHandshake: [TlsScenario, string][] = [
     ['direct', 'localhost'],
     ['proxied', 'localhost'],
     ['proxied-literal-ip', 'false'],
     ['direct-literal-ip', 'false'],
   ];
-  for (const [scenario, sniHeader] of expectedSni) {
+  for (const [scenario, sniHeader] of expectedOriginHandshake) {
     assert.deepEqual(
       { scenario, ...byScenario.get(scenario) },
-      { scenario, outcome: 'response', statusCode: 200, body: 'body', sniHeader },
-      'a trusted loopback certificate must complete the request with the URL host as SNI',
+      {
+        scenario,
+        outcome: 'response',
+        statusCode: 200,
+        body: 'body',
+        sniHeader,
+        alpnHeader: 'http/1.1',
+      },
+      'a trusted loopback certificate must complete the request with the URL host as SNI and must negotiate HTTP/1.1 at the origin',
     );
   }
   assert.equal(

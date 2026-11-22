@@ -114,10 +114,11 @@ test('an authenticated http-scheme proxy tunnels TLS to the approved origin unde
         statusCode: 200,
         body: 'body',
         sniHeader: 'localhost',
+        alpnHeader: 'http/1.1',
         openSockets: 0,
       },
     ],
-    `the CONNECT must carry the fixture credential, the tunnel must keep the URL host as SNI, and close must leave no socket of its own`,
+    `the CONNECT must carry the fixture credential, the tunnel must keep the URL host as SNI and negotiate HTTP/1.1 at the origin, and close must leave no socket of its own`,
   );
   assert.deepEqual(lab.connectAuthoritiesSince(mark), ['127.0.0.1:<port>']);
   assert.deepEqual(lab.proxyAuthorizationsSince(mark), [EXPECTED_PROXY_AUTHORIZATION]);
@@ -162,6 +163,11 @@ test(
     assert.deepEqual(lab.proxyAuthorizationsSince(mark), [EXPECTED_PROXY_AUTHORIZATION]);
     await lab.settleSince(mark);
     assert.deepEqual(lab.proxySniSince(mark), [undefined]);
+    assert.deepEqual(
+      lab.proxyAlpnSince(mark),
+      ['http/1.1'],
+      `the proxy handshake must negotiate HTTP/1.1 offered by the transport`,
+    );
     assert.equal(lab.liveProxySocketsSince(mark), 0);
   },
 );
@@ -198,15 +204,21 @@ test(
           statusCode: 200,
           body: 'body',
           sniHeader: 'localhost',
+          alpnHeader: 'http/1.1',
           openSockets: 0,
         },
       ],
-      `a named https-scheme proxy must complete the authenticated TLS origin fetch with the URL host as origin SNI and release the sockets it dialed`,
+      `a named https-scheme proxy must complete the authenticated TLS origin fetch with the URL host as origin SNI, must negotiate HTTP/1.1 at the origin, and must release the sockets it dialed`,
     );
     assert.deepEqual(
       lab.proxySniSince(mark),
       ['localhost'],
       `the proxy handshake must present the proxy host name as SNI`,
+    );
+    assert.deepEqual(
+      lab.proxyAlpnSince(mark),
+      ['http/1.1'],
+      `the proxy handshake must negotiate HTTP/1.1 offered by the transport`,
     );
     assert.deepEqual(lab.connectAuthoritiesSince(mark), ['127.0.0.1:<port>']);
     assert.deepEqual(lab.proxyAuthorizationsSince(mark), [EXPECTED_PROXY_AUTHORIZATION]);

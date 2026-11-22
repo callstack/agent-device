@@ -50,6 +50,11 @@ type TlsScenarioResult = {
   body?: string;
   /** The name the TLS origin saw at the handshake, echoed back by it. `'false'` means no SNI. */
   sniHeader?: string;
+  /**
+   * The protocol the TLS origin negotiated, echoed back by it. `'false'` means the handshake
+   * negotiated none, which is what an origin reports for a client that offers none.
+   */
+  alpnHeader?: string;
   error?: { name?: string; code?: string | number; message?: string };
 };
 
@@ -98,12 +103,14 @@ for (const scenario of scenarios) {
     let body = '';
     for await (const chunk of response.body) body += Buffer.from(chunk).toString('utf8');
     const sni = response.headers['x-sni'];
+    const alpn = response.headers['x-alpn'];
     console.log(JSON.stringify({
       scenario,
       outcome: 'response',
       statusCode: response.statusCode,
       body,
       sniHeader: Array.isArray(sni) ? sni[0] : sni,
+      alpnHeader: Array.isArray(alpn) ? alpn[0] : alpn,
     }));
     await response.close();
   } catch (error) {

@@ -10,6 +10,7 @@ import {
   authoritiesWithoutPorts,
   createTlsArtifactOrigin,
   errorShape,
+  FIXTURE_ALPN_PROTOCOLS,
   forwardConnect,
   listen,
   readTlsFixturePair,
@@ -57,7 +58,7 @@ export function authHttpProxyEnvironment(proxyPort: number): NodeJS.ProcessEnv {
 type ProxyAuthLabMark = {
   requests: number;
   connect: number;
-  proxySni: number;
+  proxyHandshakes: number;
   plainProxySockets: number;
   tlsProxySockets: number;
 };
@@ -75,6 +76,8 @@ export type ProxyAuthLab = {
   proxyAuthorizationsSince(mark: ProxyAuthLabMark): (string | undefined)[];
   /** The SNI names the TLS proxy accepted at its handshakes, after `mark`. */
   proxySniSince(mark: ProxyAuthLabMark): (string | undefined)[];
+  /** The ALPN protocols the TLS proxy negotiated at its handshakes, after `mark`. */
+  proxyAlpnSince(mark: ProxyAuthLabMark): (string | undefined)[];
   liveProxySocketsSince(mark: ProxyAuthLabMark): number;
   settleSince(mark: ProxyAuthLabMark): Promise<void>;
   dropProxySockets(): void;
@@ -83,6 +86,13 @@ export type ProxyAuthLab = {
 
 const SETTLE_DEADLINE_MS = 700;
 const SETTLE_POLL_MS = 20;
+
+/** What the TLS proxy observed at one client handshake. */
+type TlsProxyHandshake = {
+  sni: string | undefined;
+  /** The negotiated protocol; `undefined` when the handshake negotiated none. */
+  alpn: string | undefined;
+};
 
 /** One CONNECT exchange: demand the fixture credential, then tunnel to the approved address. */
 function handleConnect(
@@ -106,7 +116,7 @@ function handleConnect(
 export async function startProxyAuthLab(root: string): Promise<ProxyAuthLab> {
   const { key, cert } = readTlsFixturePair(root);
   const requests: ObservedRequest[] = [];
-  const proxySni: (string | undefined)[] = [];
+  const proxyHandshakes: TlsProxyHandshake[] = [];
   const record = { authorities: [] as string[], authorizations: [] as (string | undefined)[] };
 
   const origin = http.createServer((request, response) => {
@@ -132,18 +142,26 @@ export async function startProxyAuthLab(root: string): Promise<ProxyAuthLab> {
   const proxySockets = trackSockets(proxy);
   const proxyPort = await listen(proxy);
 
-  // The same CONNECT proxy behind TLS: an `https://` proxy URL must reach this listener.
-  const tlsProxyServer = https.createServer({ key, cert }, (_request, response) => {
-    response.writeHead(501).end();
-  });
+  // The same CONNECT proxy behind TLS: an `https://` proxy URL must reach this listener. It
+  // advertises the fixture ALPN protocols, so the handshake can evidence what the client offered.
+  const tlsProxyServer = https.createServer(
+    { key, cert, ALPNProtocols: FIXTURE_ALPN_PROTOCOLS },
+    (_request, response) => {
+      response.writeHead(501).end();
+    },
+  );
   tlsProxyServer.on('connect', (request, clientSocket, head) =>
     handleConnect(record, request, clientSocket, head),
   );
   tlsProxyServer.on('tlsClientError', () => {});
-  // Records the name each client asked for at the handshake, so a case can prove the proxy dial
-  // presented the proxy host as SNI. A handshake without SNI records `undefined`.
+  // Records what each client presented at the handshake, so a case can prove the proxy dial offered
+  // the proxy host as SNI and offered the transport's application protocol. A handshake without SNI
+  // or without a negotiated protocol records `undefined`.
   tlsProxyServer.on('secureConnection', (socket) =>
-    proxySni.push(typeof socket.servername === 'string' ? socket.servername : undefined),
+    proxyHandshakes.push({
+      sni: typeof socket.servername === 'string' ? socket.servername : undefined,
+      alpn: typeof socket.alpnProtocol === 'string' ? socket.alpnProtocol : undefined,
+    }),
   );
   const tlsProxySockets = trackSockets(tlsProxyServer);
   const tlsProxyPort = await listen(tlsProxyServer);
@@ -156,7 +174,7 @@ export async function startProxyAuthLab(root: string): Promise<ProxyAuthLab> {
     mark: () => ({
       requests: requests.length,
       connect: record.authorities.length,
-      proxySni: proxySni.length,
+      proxyHandshakes: proxyHandshakes.length,
       plainProxySockets: proxySockets.highestId(),
       tlsProxySockets: tlsProxySockets.highestId(),
     }),
@@ -164,7 +182,10 @@ export async function startProxyAuthLab(root: string): Promise<ProxyAuthLab> {
     connectAuthoritiesSince: (mark) =>
       authoritiesWithoutPorts(record.authorities.slice(mark.connect)),
     proxyAuthorizationsSince: (mark) => record.authorizations.slice(mark.connect),
-    proxySniSince: (mark) => proxySni.slice(mark.proxySni),
+    proxySniSince: (mark) =>
+      proxyHandshakes.slice(mark.proxyHandshakes).map((handshake) => handshake.sni),
+    proxyAlpnSince: (mark) =>
+      proxyHandshakes.slice(mark.proxyHandshakes).map((handshake) => handshake.alpn),
     liveProxySocketsSince: (mark) =>
       proxySockets.liveSince(mark.plainProxySockets) +
       tlsProxySockets.liveSince(mark.tlsProxySockets),
@@ -278,6 +299,11 @@ type ProxyAuthScenarioResult = {
   statusCode?: number;
   body?: string;
   sniHeader?: string;
+  /**
+   * The protocol the TLS origin negotiated, echoed back by it. `'false'` means the handshake
+   * negotiated none, which is what an origin reports for a client that offers none.
+   */
+  alpnHeader?: string;
   error?: ErrorShape;
   /**
    * Child TCP resources remaining above the initial process count. Use one scenario per child
@@ -389,6 +415,7 @@ for (const scenario of scenarios) {
     let body = '';
     for await (const chunk of response.body) body += Buffer.from(chunk).toString('utf8');
     const sni = response.headers['x-sni'];
+    const alpn = response.headers['x-alpn'];
     await response.close();
     console.log(JSON.stringify({
       scenario,
@@ -396,6 +423,7 @@ for (const scenario of scenarios) {
       statusCode: response.statusCode,
       body,
       sniHeader: Array.isArray(sni) ? sni[0] : sni,
+      alpnHeader: Array.isArray(alpn) ? alpn[0] : alpn,
       openSockets: openSockets() - baselineSockets,
     }));
   } catch (error) {

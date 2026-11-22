@@ -4,6 +4,9 @@ import https from 'node:https';
 import net, { type Socket } from 'node:net';
 import tls from 'node:tls';
 
+/** The only application protocol this transport speaks, so it is the only one it offers at TLS. */
+const HTTP_1_1_ALPN = 'http/1.1';
+
 export type InstallSourceNetworkResponse = {
   statusCode: number;
   headers: Record<string, string | string[] | undefined>;
@@ -35,6 +38,8 @@ export async function requestApprovedUrl(params: {
     ? tls.connect({
         ...(tunnel ? { socket: tunnel } : { host: approvedAddress, port }),
         ...(net.isIP(hostname) === 0 ? { servername: hostname } : {}),
+        // The transport speaks HTTP/1.1 on the socket, so every TLS leg must offer it.
+        ALPNProtocols: [HTTP_1_1_ALPN],
         checkServerIdentity: (_host, certificate) => tls.checkServerIdentity(hostname, certificate),
       })
     : (tunnel ?? net.connect({ host: approvedAddress, port }));
@@ -144,7 +149,9 @@ function createProxyConnectRequest(proxy: URL, authority: string): http.ClientRe
     path: authority,
     headers,
     agent: false,
-    ...(secure ? { servername: net.isIP(hostname) ? '' : hostname } : {}),
+    ...(secure
+      ? { servername: net.isIP(hostname) ? '' : hostname, ALPNProtocols: [HTTP_1_1_ALPN] }
+      : {}),
   });
 }
 

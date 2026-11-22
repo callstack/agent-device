@@ -126,12 +126,23 @@ export function readTlsFixturePair(root: string): { key: Buffer; cert: Buffer } 
   };
 }
 
+/**
+ * The ALPN protocols the loopback TLS listeners offer. A server that advertises nothing reports
+ * `false` for every handshake whatever the client offered, so the origin can only evidence the
+ * client's offer while it advertises the protocol the transport speaks.
+ */
+export const FIXTURE_ALPN_PROTOCOLS = ['http/1.1'];
+
 export function createTlsArtifactOrigin(credentials: { key: Buffer; cert: Buffer }): tls.Server {
-  return tls.createServer(credentials, (socket) => {
+  return tls.createServer({ ...credentials, ALPNProtocols: FIXTURE_ALPN_PROTOCOLS }, (socket) => {
     socket.on('error', () => {});
     socket.once('data', () => {
+      // Echoes the handshake facts the client must present: the URL host as SNI, and the
+      // negotiated protocol, where an offer of none is reported as `false`.
       socket.end(
-        `HTTP/1.1 200 OK\r\nx-sni: ${String(socket.servername)}\r\ncontent-length: 4\r\n\r\nbody`,
+        `HTTP/1.1 200 OK\r\nx-sni: ${String(socket.servername)}\r\nx-alpn: ${String(
+          socket.alpnProtocol,
+        )}\r\ncontent-length: 4\r\n\r\nbody`,
       );
     });
   });
@@ -341,6 +352,7 @@ function selectedResponseHeaders(
     'set-cookie',
     'x-origin-host',
     'x-sni',
+    'x-alpn',
     'location',
   ]) {
     const value = headers[name];
