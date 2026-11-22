@@ -54,6 +54,8 @@ export type SessionLease = Readonly<
 
 type LeaseClaimField = keyof LeaseClaims;
 
+type LeaseClaimRefusal = { kind: 'missing-id' } | { kind: 'mismatch'; field: LeaseClaimField };
+
 type LeaseClaimRequest = Pick<DaemonRequest, 'flags' | 'meta' | 'internal'>;
 
 /** The flags that carry each lease field. `meta` carries each field under the field's own name. */
@@ -91,7 +93,7 @@ export const LEASE_FIELD_NORMALIZERS = {
 } as const satisfies Record<LeaseClaimField, (raw: unknown) => string | undefined>;
 
 /** The `error.details.reason` values a session-lease refusal publishes. */
-const LEASE_ADMISSION_REASONS = {
+export const LEASE_ADMISSION_REASONS = {
   // The lease scope of the request differs from the lease of its session; `details.field` names the
   // field.
   sessionMismatch: { reason: 'LEASE_SESSION_MISMATCH' },
@@ -233,21 +235,36 @@ export function assertRequestHoldsSessionLease(
  * sends, and so does an empty label or a value that is not a string.
  */
 export function assertRequestPresentsLease(req: LeaseClaimRequest, lease: SessionLease): void {
-  const claims = readLeaseClaims(req);
-  if (claims.leaseId.every((claim) => typeof claim === 'string' && !claim.trim())) {
+  const refusal = compareRequestLeaseClaims(req, lease);
+  if (!refusal) return;
+  if (refusal.kind === 'missing-id') {
     throw new AppError('UNAUTHORIZED', 'This session holds a device lease. Send its lease id.', {
       reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
       field: 'leaseId',
       hint: 'Send the leaseId that the allocation returned (meta.leaseId or the leaseId param). From the CLI, open the session through connect proxy or connect --remote-config and keep the same --session; raw --tenant and --session flags do not send it.',
     });
   }
-  for (const field of LEASE_CLAIM_FIELDS) {
-    if (claims[field].every((claim) => leaseClaimNamesLease(field, claim, lease))) continue;
-    throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
-      reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
-      field,
-    });
+  throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${refusal.field})`, {
+    reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
+    field: refusal.field,
+  });
+}
+
+/** Reports the first refusal without constructing an error. */
+export function compareRequestLeaseClaims(
+  req: LeaseClaimRequest,
+  lease: SessionLease,
+): LeaseClaimRefusal | undefined {
+  const claims = readLeaseClaims(req);
+  if (claims.leaseId.every((claim) => typeof claim === 'string' && !claim.trim())) {
+    return { kind: 'missing-id' };
   }
+  for (const field of LEASE_CLAIM_FIELDS) {
+    if (!claims[field].every((claim) => leaseClaimNamesLease(field, claim, lease))) {
+      return { kind: 'mismatch', field };
+    }
+  }
+  return undefined;
 }
 
 function readLeaseClaims(req: LeaseClaimRequest): Record<LeaseClaimField, unknown[]> {

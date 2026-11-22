@@ -78,6 +78,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   audioProbeAdmissionLedger,
   perfCaptureAdmissionLedger,
   throwIfCanceled,
+  resolveSessionRef,
 }) =>
   await handleSessionObservabilityCommands({
     host,
@@ -91,6 +92,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
     throwIfCanceled,
+    resolveSessionRef,
   } satisfies SessionObservabilityCommandInput);
 
 /**
@@ -115,6 +117,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     sessionStore,
     androidAdbExecutor,
     hostDiagnostics,
+    resolveSessionRef,
     inspectFacts,
     bindDevice,
   }) =>
@@ -125,6 +128,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       androidAdbExecutor,
       hostDiagnostics,
+      resolveSessionRef,
       inspectFacts,
       bindDevice,
     }),
@@ -232,6 +236,7 @@ export async function handleSessionCommands(
     perfCaptureAdmissionLedger,
     screenRecordingAdmissionLedger,
     hostDiagnostics,
+    resolveSessionRef,
     requestScope,
     retainDeviceExecutionLock,
     throwIfCanceled,
@@ -265,6 +270,7 @@ export async function handleSessionCommands(
     perfCaptureAdmissionLedger,
     screenRecordingAdmissionLedger,
     hostDiagnostics,
+    resolveSessionRef,
     requestScope,
     retainDeviceExecutionLock,
     throwIfCanceled,

@@ -41,7 +41,7 @@ import {
   getLeaseRegistryExecutionLocks,
 } from '../request-execution-scope.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
-import { teardownSessionResources } from '../../sessions/session-teardown.ts';
+import { settleExpiredSession } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
@@ -342,6 +342,9 @@ async function startDaemonRuntimeOnHost(
     leaseRegistry,
     endSessionsForLease: async (leaseId, reason) =>
       await endSessionsForLease(leaseId, reason ?? 'LEASE_RELEASED'),
+    // A request that ends an expired session retires it, so the application is always finalized.
+    settleExpiredSession: async (ref: SessionRef) =>
+      await settleIdleExpiredSession(ref, 'finalize'),
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
@@ -417,26 +420,31 @@ async function startDaemonRuntimeOnHost(
   // survive so the next pass can retry rather than leave a claim owned by a process that no longer
   // knows what it holds. So: resources, then the platform finalization that stops the execution host
   // and releases its lease, then the claim, cleared last, by the reaper.
-  const settleIdleExpiredSession = async (ref: SessionRef): Promise<void> => {
+  const settleIdleExpiredSession = async (
+    ref: SessionRef,
+    afterResourceFailure: 'stop' | 'finalize' = 'stop',
+  ): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     const sessionName = ref.address;
     const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(sessionName));
-    await teardownSessionResources({
+    await settleExpiredSession({
       appLog: 'run',
       ref,
       sessionStore,
       platformCleanup: deps.platformResourceCleanup,
-    });
-    await finalizeDaemonSessionApplicationLifecycle({
-      gateway: deviceRuntimeGateway,
-      scope: createRecoveryPlatformScope(),
-      session,
-      stateDir: baseDir,
-      runtimeHints,
-      // The one caller that must say so: this daemon is staying alive, so there is no shutdown
-      // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
-      // runner and releases its lease instead of parking it until process exit.
-      daemonLeaving: false,
+      afterResourceFailure,
+      finalizeApplication: async () =>
+        await finalizeDaemonSessionApplicationLifecycle({
+          gateway: deviceRuntimeGateway,
+          scope: createRecoveryPlatformScope(),
+          session,
+          stateDir: baseDir,
+          runtimeHints,
+          // The one caller that must say so: this daemon is staying alive, so there is no shutdown
+          // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
+          // runner and releases its lease instead of parking it until process exit.
+          daemonLeaving: false,
+        }),
     });
     // ADR 0012 R7 binds this teardown too — the healed `.ad` is committed by
     // `SessionStore.finalizeRepairTeardown` — but NOT from in here. That call publishes the script
