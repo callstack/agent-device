@@ -35,10 +35,10 @@ function buildLaunchAppCommand(action: SessionAction, appId: string): MaestroExp
 }
 
 function buildLaunchAppOptions(action: SessionAction): Record<string, unknown> {
-  const launchArgs = action.flags?.launchArgs;
+  const launchArgs = action.flags.launchArgs;
   const options: Record<string, unknown> = {};
-  if (action.flags?.relaunch === true) options.stopApp = true;
-  if (action.flags?.clearAppState === true) options.clearState = true;
+  if (action.flags.relaunch === true) options.stopApp = true;
+  if (action.flags.clearAppState === true) options.clearState = true;
   if (Array.isArray(launchArgs) && launchArgs.length > 0) {
     options.launchArguments = launchArgs;
   }

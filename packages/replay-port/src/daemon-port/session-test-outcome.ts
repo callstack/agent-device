@@ -28,7 +28,7 @@ export function toReplayTestAttemptOutcome(response: DaemonResponse): ReplayTest
       ...snapshotDiagnostics(response.error.details?.snapshotDiagnostics),
     };
   }
-  const data = response.data as Record<string, unknown> | undefined;
+  const data = response.data;
   return {
     status: 'passed',
     replayed: typeof data?.replayed === 'number' ? data.replayed : 0,

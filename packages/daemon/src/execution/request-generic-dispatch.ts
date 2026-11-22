@@ -350,13 +350,13 @@ function recordVisualizationAndAction(params: {
     session,
     command,
     resolvedPositionals,
-    data as Record<string, unknown> | void,
+    data,
   );
   recordTouchVisualizationEvent(
     session,
     command,
     resolvedPositionals,
-    visualizationData as Record<string, unknown> | void,
+    visualizationData,
     flags,
     actionStartedAt,
     actionFinishedAt,

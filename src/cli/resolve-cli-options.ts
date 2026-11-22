@@ -1,4 +1,3 @@
-import type { CliFlags } from '@agent-device/contracts/command';
 import {
   type DevicePin,
   isFlagSupportedForCommand,
@@ -36,7 +35,7 @@ export function resolveCliOptions(
   const configDefaults = resolveConfigDefaults({
     command: rawParsed.command,
     cwd,
-    cliFlags: rawParsed.flags as CliFlags,
+    cliFlags: rawParsed.flags,
     env,
   });
   const devicePin = configDefaults.devicePin;

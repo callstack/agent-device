@@ -400,15 +400,14 @@ function buildOptimizedActions(
 function assertNoUnresolvedRefFallback(action: SessionAction): void {
   const drag =
     action.command === 'gesture'
-      ? dragGesturePayloadFromPositionals(action.positionals ?? [])
+      ? dragGesturePayloadFromPositionals(action.positionals)
       : undefined;
   if (drag) {
     assertNoUnresolvedDragEndpoint(drag);
     return;
   }
   if (!isSelectorTargetingCommand(action.command)) return;
-  const refPositional =
-    action.command === 'get' ? action.positionals?.[1] : action.positionals?.[0];
+  const refPositional = action.command === 'get' ? action.positionals[1] : action.positionals[0];
   if (!refPositional?.startsWith('@')) return;
   throw new AppError(
     'COMMAND_FAILED',
@@ -440,7 +439,7 @@ function readSelectorChainExpression(action: SessionAction): string | undefined 
   const selectorChain =
     Array.isArray(action.result?.selectorChain) &&
     action.result.selectorChain.every((entry) => typeof entry === 'string')
-      ? (action.result.selectorChain as string[])
+      ? action.result.selectorChain
       : [];
   return recordedSelectorExpression(selectorChain);
 }
@@ -454,8 +453,7 @@ function optimizeFillAction(
   selectorExpr: string,
 ): SessionAction | undefined {
   // `''` is the explicit clear request, so only a fill that recorded no text argument is skipped.
-  const recordedText =
-    typeof action.result?.text === 'string' || (action.positionals?.length ?? 0) > 1;
+  const recordedText = typeof action.result?.text === 'string' || action.positionals.length > 1;
   return recordedText
     ? { ...action, positionals: [selectorExpr, inferFillText(action)] }
     : undefined;
@@ -465,7 +463,7 @@ function optimizeLongPressAction(action: SessionAction, selectorExpr: string): S
   const durationMs =
     typeof action.result?.durationMs === 'number'
       ? String(action.result.durationMs)
-      : readLongPressDurationFromPositionals(action.positionals ?? []);
+      : readLongPressDurationFromPositionals(action.positionals);
   return {
     ...action,
     positionals: durationMs ? [selectorExpr, durationMs] : [selectorExpr],
@@ -473,7 +471,7 @@ function optimizeLongPressAction(action: SessionAction, selectorExpr: string): S
 }
 
 function optimizeGetAction(action: SessionAction, selectorExpr: string): SessionAction | undefined {
-  const sub = action.positionals?.[0];
+  const sub = action.positionals[0];
   return sub === 'text' || sub === 'attrs'
     ? { ...action, positionals: [sub, selectorExpr] }
     : undefined;
@@ -513,14 +511,14 @@ function formatScript(
   appendCompleteSentinel: boolean,
 ): string {
   const lines: string[] = [];
-  const kind = session.device.kind ? ` kind=${session.device.kind}` : '';
+  const kind = ` kind=${session.device.kind}`;
   const theme = 'unknown';
   lines.push(
     // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
     `context platform=${publicPlatformString(session.device)} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=${theme}`,
   );
   for (const action of actions) {
-    if (action.flags?.noRecord) continue;
+    if (action.flags.noRecord) continue;
     lines.push(...formatTargetAnnotationLines(action));
     // Replay interpolates the written positionals, flags, and runtime hints; only the
     // placeholders the recorder inserted stay live.
@@ -554,7 +552,7 @@ function formatSpecialActionLine(parts: string[], action: SessionAction): string
 }
 
 function formatClickLikeActionLine(parts: string[], action: SessionAction): string | undefined {
-  const first = action.positionals?.[0];
+  const first = action.positionals[0];
   if (!first) return undefined;
   if (first.startsWith('@')) {
     // Recorded refs may carry a `~s<generation>` pin (#1076); scripts store the
@@ -573,7 +571,7 @@ function formatClickLikeActionLine(parts: string[], action: SessionAction): stri
 }
 
 function formatFillActionLine(parts: string[], action: SessionAction): string | undefined {
-  const ref = action.positionals?.[0];
+  const ref = action.positionals[0];
   if (!ref?.startsWith('@')) return undefined;
   parts.push(formatScriptArg(stripRecordedRefGeneration(ref)));
   appendRefLabel(parts, action);
@@ -587,8 +585,8 @@ function formatFillActionLine(parts: string[], action: SessionAction): string | 
 }
 
 function formatGetActionLine(parts: string[], action: SessionAction): string | undefined {
-  const sub = action.positionals?.[0];
-  const ref = action.positionals?.[1];
+  const sub = action.positionals[0];
+  const ref = action.positionals[1];
   if (!sub || !ref) return undefined;
   parts.push(formatScriptArg(sub));
   parts.push(formatScriptArg(stripRecordedRefGeneration(ref)));

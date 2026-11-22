@@ -39,8 +39,8 @@ export function collectReplaySelectorCandidates(action: ReplayReportAction): str
   const result: string[] = [];
   const explicitChain =
     Array.isArray(action.result?.selectorChain) &&
-    action.result?.selectorChain.every((entry) => typeof entry === 'string')
-      ? (action.result.selectorChain as string[])
+    action.result.selectorChain.every((entry) => typeof entry === 'string')
+      ? action.result.selectorChain
       : [];
   result.push(...explicitChain);
 
@@ -52,13 +52,13 @@ export function collectReplaySelectorCandidates(action: ReplayReportAction): str
     }
   }
   if (action.command === 'fill') {
-    const first = action.positionals?.[0] ?? '';
+    const first = action.positionals[0] ?? '';
     if (first && !first.startsWith('@') && Number.isNaN(Number(first))) {
       result.push(first);
     }
   }
   if (action.command === 'get') {
-    const selector = action.positionals?.[1] ?? '';
+    const selector = action.positionals[1] ?? '';
     if (selector && !selector.startsWith('@')) {
       result.push(action.positionals.slice(1).join(' '));
     }

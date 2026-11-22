@@ -41,7 +41,7 @@ export async function readSimulatorAppMetadata(
     exitCode: result.exitCode,
     stderr: String(result.stderr ?? ''),
   } as const;
-  const trimmed = (result.stdout as string).trim();
+  const trimmed = result.stdout.trim();
   if (!trimmed.startsWith('{')) return unreadable;
 
   const parsed =

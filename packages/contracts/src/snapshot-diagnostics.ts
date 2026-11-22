@@ -99,7 +99,7 @@ export function summarizeSnapshotTimingSamples(
     slowWarmCount >= MIN_SLOW_WARM_SAMPLES;
   return {
     stats: buildSnapshotTimingStats(samples),
-    ...(warns && judged ? { warning: formatSlowSnapshotWarning(judged) } : {}),
+    ...(warns ? { warning: formatSlowSnapshotWarning(judged) } : {}),
   };
 }
 
@@ -236,7 +236,7 @@ function readRequiredSnapshotTimingStats(
   if (!Number.isSafeInteger(entries.count) || (entries.count as number) < 0) return undefined;
   const durations = [entries.p50Ms, entries.p95Ms, entries.maxMs, entries.slowThresholdMs];
   if (!durations.every(isNonNegativeFiniteNumber)) return undefined;
-  const [p50Ms, p95Ms, maxMs] = durations as number[];
+  const [p50Ms, p95Ms, maxMs] = durations;
   if (p50Ms! > p95Ms! || p95Ms! > maxMs!) return undefined;
   return entries as Pick<
     SnapshotTimingStats,
