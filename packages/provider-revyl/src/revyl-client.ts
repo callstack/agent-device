@@ -1,4 +1,4 @@
-import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
+import { AppError, type AppErrorCode, type ReasonTable } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -44,6 +44,44 @@ export type RevylClientOptions = Readonly<{
   clientVersion: string;
   fetch?: typeof fetch;
 }>;
+
+/**
+ * Request outcomes the Revyl client, deployment and snapshot code all publish. With
+ * `REVYL_HTTP_REASONS` below, these rows are the provider-owned reasons this client publishes;
+ * `request_canceled` is shared cancellation vocabulary.
+ * `missing_provider_credentials` sits with the credential reader instead, which the plugin's eager
+ * entry loads before this module exists.
+ */
+export const REVYL_OUTCOME_REASONS = {
+  // Revyl refused the request or the action it carries.
+  refused: { reason: 'provider-refused' },
+  // Revyl answered in a way agent-device cannot read, such as a body that is not JSON.
+  responseInvalid: { reason: 'provider-response-invalid' },
+  // agent-device could not confirm the outcome of the request; check the session before retrying.
+  unconfirmed: { reason: 'provider-unconfirmed' },
+} as const satisfies ReasonTable<'revyl provider'>;
+
+const REVYL_HTTP_REASONS = {
+  // Revyl never answered the request, or the connection to its backend failed.
+  unreachable: { reason: 'provider-unreachable' },
+  // Revyl rejected the credentials on the request.
+  authRejected: { reason: 'provider-auth-rejected' },
+  // The session the request addresses no longer exists at Revyl.
+  sessionGone: { reason: 'provider-session-gone' },
+  // Revyl rejected the request because its state conflicts with what it asks for.
+  conflict: { reason: 'provider-conflict' },
+  // Revyl refused a request it never routed, with a status that settles the failure.
+  requestFailed: { reason: 'provider-request-failed' },
+  // Revyl gave no response before the request's own deadline passed.
+  requestTimeout: { reason: 'request_timeout' },
+  // `REVYL_API_URL` is not an origin Revyl's API can be addressed at.
+  invalidProviderUrl: { reason: 'invalid_provider_url' },
+} as const satisfies ReasonTable<'revyl provider'>;
+
+/** The `details.reason` spellings the Revyl client publishes: its HTTP rows and the shared outcomes. */
+type RevylProviderReason =
+  | (typeof REVYL_HTTP_REASONS)[keyof typeof REVYL_HTTP_REASONS]['reason']
+  | (typeof REVYL_OUTCOME_REASONS)[keyof typeof REVYL_OUTCOME_REASONS]['reason'];
 
 /**
  * Which half of the API one request belongs to, which is what a 404 or 410 means. A route that
@@ -274,7 +312,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
         throw new AppError(
           'COMMAND_FAILED',
           'Revyl storage did not accept the app upload.',
-          { reason: 'provider-unreachable' },
+          { reason: REVYL_HTTP_REASONS.unreachable.reason },
           error,
         );
       }
@@ -282,7 +320,10 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
         throw new AppError(
           'COMMAND_FAILED',
           `Revyl storage refused the app upload with HTTP ${response.status}.`,
-          { reason: 'provider-refused', status: response.status },
+          {
+            reason: REVYL_OUTCOME_REASONS.refused.reason,
+            status: response.status,
+          },
         );
       }
     },
@@ -341,7 +382,7 @@ async function sendOnce(
     return new AppError(
       'COMMAND_FAILED',
       `Revyl did not answer ${request.method} ${request.path}.`,
-      { reason: 'provider-unreachable', path: request.path },
+      { reason: REVYL_HTTP_REASONS.unreachable.reason, path: request.path },
       error,
     );
   }
@@ -354,7 +395,10 @@ async function sendOnce(
  */
 function isRetryable(request: RevylRequest, outcome: RevylResponse | Error): boolean {
   if (outcome instanceof Error) {
-    return outcome instanceof AppError && outcome.details?.reason === 'provider-unreachable';
+    return (
+      outcome instanceof AppError &&
+      outcome.details?.reason === REVYL_HTTP_REASONS.unreachable.reason
+    );
   }
   if (request.retryServerError === true && outcome.status === 500) return true;
   return revylFailure(request.route ?? 'general', outcome.status).retryable;
@@ -376,7 +420,7 @@ function requestTimedOut(request: RevylRequest, cause: unknown): AppError {
       request.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
     } ms.`,
     {
-      reason: 'request_timeout',
+      reason: REVYL_HTTP_REASONS.requestTimeout.reason,
       path: request.path,
       hint: 'Revyl may have carried out the request. Check the session before retrying it.',
     },
@@ -422,7 +466,7 @@ function assertLifecycleAccepted(
     'COMMAND_FAILED',
     `Revyl did not stop the session${message === undefined ? '' : `: ${message}`}`,
     {
-      reason: 'provider-refused',
+      reason: REVYL_OUTCOME_REASONS.refused.reason,
       operation,
       ...(message === undefined ? {} : { providerDetail: message }),
       hint: 'The Revyl session may still be rented. End it from Revyl if it stays listed.',
@@ -453,7 +497,10 @@ function assertWorkerActionSuccess(
       error === undefined ? '' : `: ${error}`
     }`,
     {
-      reason: response.execution_uncertain === true ? 'provider-unconfirmed' : 'provider-refused',
+      reason:
+        response.execution_uncertain === true
+          ? REVYL_OUTCOME_REASONS.unconfirmed.reason
+          : REVYL_OUTCOME_REASONS.refused.reason,
       path: request.path,
       ...(error === undefined ? {} : { providerDetail: error }),
     },
@@ -493,7 +540,7 @@ function parseJson<T>(request: RevylRequest, response: RevylResponse): T {
     throw new AppError(
       'COMMAND_FAILED',
       `Revyl returned a response to ${request.method} ${request.path} that is not JSON (HTTP ${response.status}).`,
-      { reason: 'provider-response-invalid', path: request.path },
+      { reason: REVYL_OUTCOME_REASONS.responseInvalid.reason, path: request.path },
       error,
     );
   }
@@ -506,7 +553,7 @@ function parseJson<T>(request: RevylRequest, response: RevylResponse): T {
  */
 type RevylStatusVerdict = Readonly<{
   code: AppErrorCode;
-  reason: string;
+  reason: RevylProviderReason;
   /** Revyl left it unknown whether the request landed, which is what a hint has to say. */
   uncertain: boolean;
   /** Replaying the request is safe and may succeed, which is what the retry budget is for. */
@@ -515,7 +562,7 @@ type RevylStatusVerdict = Readonly<{
 
 const REVYL_REQUEST_FAILED: RevylStatusVerdict = {
   code: 'COMMAND_FAILED',
-  reason: 'provider-request-failed',
+  reason: REVYL_HTTP_REASONS.requestFailed.reason,
   uncertain: false,
   retryable: false,
 };
@@ -523,7 +570,7 @@ const REVYL_REQUEST_FAILED: RevylStatusVerdict = {
 /** A server error Revyl has no rule for: the request went in, the verdict did not come back. */
 const REVYL_SERVER_ERROR: RevylStatusVerdict = {
   code: 'COMMAND_FAILED',
-  reason: 'provider-unconfirmed',
+  reason: REVYL_OUTCOME_REASONS.unconfirmed.reason,
   uncertain: true,
   retryable: false,
 };
@@ -533,48 +580,68 @@ const REVYL_STATUS_VERDICTS: Readonly<Record<number, RevylStatusVerdict>> = {
   400: REVYL_REQUEST_FAILED,
   401: {
     code: 'UNAUTHORIZED',
-    reason: 'provider-auth-rejected',
+    reason: REVYL_HTTP_REASONS.authRejected.reason,
     uncertain: false,
     retryable: false,
   },
   403: {
     code: 'UNAUTHORIZED',
-    reason: 'provider-auth-rejected',
+    reason: REVYL_HTTP_REASONS.authRejected.reason,
     uncertain: false,
     retryable: false,
   },
   404: {
     code: 'SESSION_NOT_FOUND',
-    reason: 'provider-session-gone',
+    reason: REVYL_HTTP_REASONS.sessionGone.reason,
     uncertain: false,
     retryable: false,
   },
   408: {
     code: 'COMMAND_FAILED',
-    reason: 'provider-unconfirmed',
+    reason: REVYL_OUTCOME_REASONS.unconfirmed.reason,
     uncertain: true,
     retryable: false,
   },
-  409: { code: 'COMMAND_FAILED', reason: 'provider-conflict', uncertain: false, retryable: false },
+  409: {
+    code: 'COMMAND_FAILED',
+    reason: REVYL_HTTP_REASONS.conflict.reason,
+    uncertain: false,
+    retryable: false,
+  },
   410: {
     code: 'SESSION_NOT_FOUND',
-    reason: 'provider-session-gone',
+    reason: REVYL_HTTP_REASONS.sessionGone.reason,
     uncertain: false,
     retryable: false,
   },
   500: {
     code: 'COMMAND_FAILED',
-    reason: 'provider-unconfirmed',
+    reason: REVYL_OUTCOME_REASONS.unconfirmed.reason,
     uncertain: true,
     retryable: false,
   },
-  502: { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed', uncertain: true, retryable: true },
-  503: { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed', uncertain: true, retryable: true },
-  504: { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed', uncertain: true, retryable: true },
+  502: {
+    code: 'COMMAND_FAILED',
+    reason: REVYL_OUTCOME_REASONS.unconfirmed.reason,
+    uncertain: true,
+    retryable: true,
+  },
+  503: {
+    code: 'COMMAND_FAILED',
+    reason: REVYL_OUTCOME_REASONS.unconfirmed.reason,
+    uncertain: true,
+    retryable: true,
+  },
+  504: {
+    code: 'COMMAND_FAILED',
+    reason: REVYL_OUTCOME_REASONS.unconfirmed.reason,
+    uncertain: true,
+    retryable: true,
+  },
 };
 
 /**
- * The verdict one status carries, read together with the route that answered. `session-gone` is only
+ * The verdict one status carries, read together with the route that answered. `sessionGone` is only
  * ever a session route's answer: a 404 from `start_device` or the credential check is a request the
  * backend did not route, not a session that ended, and reading it as one sends the user to run `open`
  * on a session they already have.
@@ -582,7 +649,7 @@ const REVYL_STATUS_VERDICTS: Readonly<Record<number, RevylStatusVerdict>> = {
 function revylFailure(route: RevylRoute, status: number): RevylStatusVerdict {
   const verdict =
     REVYL_STATUS_VERDICTS[status] ?? (status >= 500 ? REVYL_SERVER_ERROR : REVYL_REQUEST_FAILED);
-  if (verdict.reason === 'provider-session-gone' && route !== 'session')
+  if (verdict.reason === REVYL_HTTP_REASONS.sessionGone.reason && route !== 'session')
     return REVYL_REQUEST_FAILED;
   return verdict;
 }
@@ -605,7 +672,9 @@ export function revylFailureRefusedTheRequest(error: unknown): boolean {
  * the same way.
  */
 export function isRevylSessionGone(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'provider-session-gone';
+  return (
+    error instanceof AppError && error.details?.reason === REVYL_HTTP_REASONS.sessionGone.reason
+  );
 }
 
 /** The loopback ranges, the same set the daemon client trusts for a local daemon. */
@@ -629,7 +698,7 @@ export function resolveRevylBackendUrl(raw: string): string {
     url = new URL(raw);
   } catch {
     throw new AppError('INVALID_ARGS', 'REVYL_API_URL is not a valid URL.', {
-      reason: 'invalid_provider_url',
+      reason: REVYL_HTTP_REASONS.invalidProviderUrl.reason,
     });
   }
   const loopback = isLoopbackHostname(url.hostname);
@@ -637,14 +706,17 @@ export function resolveRevylBackendUrl(raw: string): string {
     throw new AppError(
       'INVALID_ARGS',
       'REVYL_API_URL must use HTTPS; plain HTTP is allowed only on loopback.',
-      { reason: 'invalid_provider_url', hint: 'Example: https://backend.revyl.ai' },
+      {
+        reason: REVYL_HTTP_REASONS.invalidProviderUrl.reason,
+        hint: 'Example: https://backend.revyl.ai',
+      },
     );
   }
   if (url.username || url.password || url.search || url.hash) {
     throw new AppError(
       'INVALID_ARGS',
       'REVYL_API_URL must be an origin without credentials, query, or fragment.',
-      { reason: 'invalid_provider_url' },
+      { reason: REVYL_HTTP_REASONS.invalidProviderUrl.reason },
     );
   }
   return url.origin;

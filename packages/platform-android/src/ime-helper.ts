@@ -1,7 +1,4 @@
-import {
-  ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
-  ANDROID_IME_HELPER_NO_ACK_REASON,
-} from '@agent-device/contracts/command';
+import { ANDROID_TEXT_CHANNEL_REASONS } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
@@ -341,8 +338,8 @@ function assertCommittedOutcome(
       backend: 'test-ime',
       reason:
         outcome.kind === 'no-ack'
-          ? ANDROID_IME_HELPER_NO_ACK_REASON
-          : ANDROID_IME_HELPER_DISPATCH_REJECTED_REASON,
+          ? ANDROID_TEXT_CHANNEL_REASONS.imeHelperNoAck.reason
+          : ANDROID_TEXT_CHANNEL_REASONS.imeHelperDispatchRejected.reason,
       dispatchKind: outcome.kind,
       ...(outcome.kind === 'no-ack'
         ? {

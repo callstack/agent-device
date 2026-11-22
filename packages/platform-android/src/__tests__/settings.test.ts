@@ -1,6 +1,5 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { SETTINGS_APP_NOT_PACKAGE_REASON } from '@agent-device/contracts/settings';
 import { TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings-catalog';
 import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { readAndroidSetting, setAndroidSetting } from '../settings.ts';
@@ -227,7 +226,7 @@ test('setAndroidSetting permission refuses an app alias that resolves to an inte
         setAndroidSetting(device, 'permission', 'grant', 'settings', {
           permissionTarget: 'camera',
         }),
-      { code: 'INVALID_ARGS', reason: SETTINGS_APP_NOT_PACKAGE_REASON, dispatched: 'no' },
+      { code: 'INVALID_ARGS', reason: 'setting_app_not_package', dispatched: 'no' },
     );
     assert.deepEqual(calls, [CURRENT_USER]);
   });

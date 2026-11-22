@@ -2,7 +2,7 @@ import {
   relayDeviceShellArgvWithOptions,
   relayDeviceShellArgvWithoutOptions,
 } from '@agent-device/kernel/device-shell';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { Readable, Stream, Writable } from 'node:stream';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type {
@@ -596,6 +596,12 @@ export function requireManagedAndroidAdbCommand(command: readonly string[]): voi
   if (isAndroidAdbManagedForbiddenCommand(head)) throw transportMismatch('target');
 }
 
+/** Why a managed adb transport refuses a call at all. */
+const MANAGED_TRANSPORT_REASONS = {
+  // The call aimed a managed adb transport at another device, target, or server.
+  transportMismatch: { reason: 'managed-device-transport-mismatch' },
+} as const satisfies ReasonTable<'android adb transport'>;
+
 /** What a managed transport refuses to be pointed at: another device, target, or adb server. */
 const TRANSPORT_MISMATCH_MESSAGES = {
   device: 'Managed ADB transport cannot address another device.',
@@ -605,7 +611,7 @@ const TRANSPORT_MISMATCH_MESSAGES = {
 
 function transportMismatch(scope: keyof typeof TRANSPORT_MISMATCH_MESSAGES): never {
   throw new AppError('COMMAND_FAILED', TRANSPORT_MISMATCH_MESSAGES[scope], {
-    reason: 'managed-device-transport-mismatch',
+    reason: MANAGED_TRANSPORT_REASONS.transportMismatch.reason,
   });
 }
 

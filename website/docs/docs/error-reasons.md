@@ -27,10 +27,18 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `back_swipe_not_dispatched` | The back swipe was refused before it reached the device. |
 | `in_app_back_control_unavailable` | On macOS, the app's accessibility tree exposes no in-app back control. |
 
+### `clipboard`
+
+| Reason | Meaning |
+| --- | --- |
+| `android_clipboard_shell_command_unavailable` | This Android build ships no shell command for the clipboard service. |
+
 ### `close`
 
 | Reason | Meaning |
 | --- | --- |
+| `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
 
 ### `events`
@@ -46,6 +54,10 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `no_text_input_at_point` | A coordinate `fill` point identified no text input, so nothing was tapped or typed. |
 | `text_input_probe_unavailable` | The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped. |
+| `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
+| `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
+| `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
+| `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
 
 ### `fold`
 
@@ -82,6 +94,11 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
+| `invalid-android-activity-component` | The `--activity` value is not an Android component name. |
+| `android-launch-not-foreground` | The app the helper launched never reached the foreground before the launch budget ran out. |
+| `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `ios-simulator-openurl-timeout` | CoreSimulator did not answer `simctl openurl` in time, so the URL open failed. |
 | `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
@@ -142,6 +159,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `android_screenrecord_startup_failed` | Android `screenrecord` exited before it began writing; its startup output says why. |
+| `native_recovery_evidence_unavailable` | The marker exists but the device could not be read, so it cannot be classified. |
+| `native_recovery_evidence_unreadable` | The marker exists but does not decode, so nothing about it can be verified. |
+| `native_recovery_evidence_transport_mismatch` | The marker was written by the other adb transport, so this one must not retire it. |
+| `native_recovery_evidence_open` | An open recording still owns the marker; only its own session's stop or close retires it. |
+| `native_recording_artifact_claimed` | A recorder is still writing the pending artifact, so removing it would cut a clip short. |
+| `native_recording_artifact_removal_failed` | The device refused to remove the pending artifact, so the marker has to stay. |
+| `native_recovery_evidence_retirement_unconfirmed` | The marker read back after removal, so its retirement is not proven. |
+| `native_recording_recorder_unproven` | The probe could not prove no recorder is writing the pending artifact. |
 | `recording_destination_not_requested` | A remote recording was saved to the current directory because the request named no destination; a warning. |
 
 ### `replay`
@@ -149,6 +174,9 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `wait_landmark_identity_mismatch` | A replay destination guard refused the match because its identity differs from the recorded landmark. |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
+| `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
+| `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
 
 ### `screenshot`
 
@@ -188,7 +216,21 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `android_bluetooth_adapter_missing` | The device declares no Bluetooth adapter, so there is nothing to turn on or off. |
+| `android_bluetooth_command_unavailable` | The build predates `svc bluetooth`, so the adapter cannot be switched from the shell. |
+| `bluetooth-not-applied` | The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request. |
+| `bluetooth-unreadable` | The device answered the Bluetooth read-back with a value that is not a known state. |
+| `mobile-data-not-applied` | The device kept mobile data in its prior state after `svc data` accepted the request. |
+| `mobile-data-unreadable` | The device answered the mobile-data read-back with a value that is neither 0 nor 1. |
+| `setting_app_not_package` | The named app resolves to an intent such as `settings`, not to an installed package. |
 | `app-no-data-container` | `clear-app-state` was refused because the installed app owns no data container. |
+
+### `shake`
+
+| Reason | Meaning |
+| --- | --- |
+| `shake-rest-acceleration-unreadable` | The console gave no accelerometer reading to restore afterwards, so nothing was sent. |
+| `shake-console-refused` | The emulator console refused an accelerometer command; `details.consoleReason` is its reply. |
 
 ### `snapshot`
 
@@ -196,6 +238,29 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | --- | --- |
 | `observation-unavailable` | The runner answered an observe-only snapshot request without an observe-only snapshot. |
 | `empty-snapshot` | XCTest returned a snapshot with no nodes on an iOS simulator. |
+
+### `telephony`
+
+| Reason | Meaning |
+| --- | --- |
+| `telephony-console-refused` | The console answered the event with an error; `details.consoleReason` is its reply. |
+
+### `test`
+
+| Reason | Meaning |
+| --- | --- |
+| `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
+| `android-kill-process-survived` | `am kill` returned and the process is still running; force-stop it instead. |
+| `android-kill-requires-background-app` | `am kill` only reaps background processes, so it refuses the foreground app. |
+
+### `type`
+
+| Reason | Meaning |
+| --- | --- |
+| `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
+| `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
+| `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
+| `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
 
 ### `wait`
 
@@ -219,6 +284,53 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `swift_cache_untrusted` | The Swift helper cache, a helper compiled into it, or the selected `DEVELOPER_DIR` is not a trusted path that only this user or root can change. |
+
+### Android adb port reverse
+
+| Reason | Meaning |
+| --- | --- |
+| `android_port_reverse_rebind_refused` | The endpoint already has a device mapping, which a `--no-rebind` reverse never replaces. |
+
+### Android adb transport
+
+| Reason | Meaning |
+| --- | --- |
+| `managed-device-transport-mismatch` | The call aimed a managed adb transport at another device, target, or server. |
+
+### Android helper install
+
+| Reason | Meaning |
+| --- | --- |
+| `missing` | The device has no package installed under the helper's name. |
+| `outdated` | The installed helper's versionCode is below the bundled artifact's. |
+| `mismatched` | The installed helper matches the artifact's versionCode but not its APK checksum. |
+| `unverifiable` | The installed helper's APK checksum could not be read, so its currency stays unproven. |
+
+### Android input
+
+| Reason | Meaning |
+| --- | --- |
+| `android-input-budget-exhausted` | The request had no room left for one helper input attempt, so nothing was sent. |
+
+### Android snapshot helper
+
+| Reason | Meaning |
+| --- | --- |
+| `android-snapshot-helper-not-current` | A current-only check found no current helper: nothing ran, so there is nothing to recover. |
+| `android_snapshot_helper_runtime_occupied` | Another helper process still holds UiAutomation, so nothing can take the runtime. |
+| `android_snapshot_helper_session_request_timeout` | The helper accepted the session request but sent no answer before the command deadline. |
+| `android_snapshot_helper_session_peer_unverified` | The listener could not prove the session secret, so it is not the helper this session launched. |
+| `android_snapshot_helper_session_ready_timeout` | The helper process never reported readiness before the readiness budget ran out. |
+| `android_snapshot_helper_session_ready_malformed` | The readiness record the helper sent does not prove this session's protocol, socket, or secret. |
+| `android_snapshot_helper_session_exited_before_ready` | The helper process ended before it reported readiness. |
+
+### Android text channel
+
+| Reason | Meaning |
+| --- | --- |
+| `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
+| `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
+| `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
 
 ### Apple app resolution
 
@@ -354,10 +466,24 @@ These reasons can come from more than one command.
 | `LEASE_NOT_FOUND` | The lease that the request names is not active. |
 | `LEASE_SCOPE_MISMATCH` | The lease does not match the tenant, run, backend, provider, device, or client of the request. |
 | `LEASE_SCOPE_REQUIRED` | The lease was allocated with an owner scope that the request does not repeat. |
+| `provider-instance-ended` | The device instance behind the lease ended outside the daemon, which ends the lease with it. |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
+
+### Limrun provider
+
+| Reason | Meaning |
+| --- | --- |
+| `limrun_adb_tunnel_cleaned_up` | The ADB tunnel of this lease was already cleaned up, so nothing can be typed over it. |
+| `limrun_instance_unreachable` | The instance stopped answering, so its app state cannot be read. |
+| `limrun_instance_delete_unconfirmed` | A release could not confirm Limrun deleted the instance, so it may still be billed. |
+| `limrun_lease_released_mid_allocation` | The lease was released while its instance was still being prepared for the allocation. |
+| `limrun_lease_not_live` | The lease holds no live session, so the command that addresses it has nothing to act on. |
+| `limrun_runtime_shut_down` | This runtime is shut down, so it refuses to allocate a lease into it. |
+| `limrun_app_sync_retired` | The app-sync session of this lease has ended, so no further sync runs on it. |
+| `limrun_app_sync_failed` | App sync or local cache maintenance failed; check the device for the app before retrying. |
 
 ### Macos helper
 
@@ -391,6 +517,12 @@ These reasons can come from more than one command.
 | `exit-timeout` | SIGKILL was sent and nothing proved the process exited within the budget it was given. |
 | `identity-unverified` | Nothing confirmed the pid names the recorded process, so signalling it was refused. |
 
+### Provider runtime
+
+| Reason | Meaning |
+| --- | --- |
+| `provider-session-unavailable` | The provider's session for the device ended, so the runtime has nothing left to serve. |
+
 ### Remote connection
 
 | Reason | Meaning |
@@ -422,6 +554,36 @@ These reasons can come from more than one command.
 | --- | --- |
 | `duplicate_request_id` | A request arrived with an id another request is still in flight under. |
 
+### Revyl provider
+
+| Reason | Meaning |
+| --- | --- |
+| `invalid_provider_app` | Revyl installs the app from a URL, so `--provider-app` cannot name a local file. |
+| `unsupported_platform` | Revyl rents an iOS simulator or an Android emulator, and the request names neither. |
+| `missing_provider_credentials` | No Revyl API key is set, so the provider cannot authenticate the request. |
+| `unsupported_app_artifact` | Revyl installs an iOS simulator build or an Android .apk, and the build is neither. |
+| `provider-app-not-launched` | The session runs no app, so a close or setting that names one has nothing to act on. |
+| `provider-viewport-unavailable` | The session reports no viewport, so a scroll distance or screenshot density has nothing to scale by. |
+| `provider-invalid-response` | Revyl answered a worker action with a value outside the field's own range. |
+| `provider-refused` | Revyl refused the request or the action it carries. |
+| `provider-response-invalid` | Revyl answered in a way agent-device cannot read, such as a body that is not JSON. |
+| `provider-unconfirmed` | agent-device could not confirm the outcome of the request; check the session before retrying. |
+| `provider-unreachable` | Revyl never answered the request, or the connection to its backend failed. |
+| `provider-auth-rejected` | Revyl rejected the credentials on the request. |
+| `provider-session-gone` | The session the request addresses no longer exists at Revyl. |
+| `provider-conflict` | Revyl rejected the request because its state conflicts with what it asks for. |
+| `provider-request-failed` | Revyl refused a request it never routed, with a status that settles the failure. |
+| `request_timeout` | Revyl gave no response before the request's own deadline passed. |
+| `invalid_provider_url` | `REVYL_API_URL` is not an origin Revyl's API can be addressed at. |
+| `provider-session-identity-mismatch` | Revyl started a session under an identity agent-device did not issue for the lease. |
+| `provider-start-refused` | Revyl refused to start the device and named why in its start answer. |
+| `provider-start-failed` | Revyl's worker connection ended in a state that never serves the device. |
+| `provider-not-ready` | Revyl never reported a ready device within the wait the caller could spend. |
+| `provider-cleanup-pending` | Revyl did not confirm it released the session, which stays rented and billed until it does. |
+| `provider-lease-releasing` | The lease is being released, so it cannot serve another allocation. |
+| `runtime-shutting-down` | The provider runtime is ending the sessions it holds, so it takes no new work. |
+| `provider-lease-request-mismatch` | An allocation joins a lease whose device was started for another app or device. |
+
 ### Script publication
 
 | Reason | Meaning |
@@ -452,3 +614,21 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `web_session_name_invalid` | The session name is longer than the backend key allows or holds a character it rejects. |
+
+### Webdriver provider
+
+| Reason | Meaning |
+| --- | --- |
+| `provider_session_create_timeout` | The provider did not create the WebDriver session within the session-creation budget. |
+| `provider_session_released_during_allocation` | Releasing the lease interrupted the allocation; `details.cleanup` reports how cleanup ended. |
+| `provider_session_shutdown_during_allocation` | The WebDriver runtime could not finish the allocation: shutdown was in progress or done. |
+| `provider_session_release_in_progress` | The lease is still releasing its previous session, so a new allocation gets no session. |
+| `provider_session_cleanup_incomplete` | Shutdown could not confirm that all WebDriver sessions and provider resources were cleaned up. |
+| `text_entry_clear_target_unavailable` | `fill` has no focused element reference to clear before it types the replacement text. |
+| `webdriver_request_timeout` | The transport stopped waiting on a WebDriver request the driver may still be carrying out. |
+| `webdriver_connect_refused` | The request never reached the driver: the connection was refused or the host is unreachable. |
+| `webdriver_request_interrupted` | The connection to the driver failed after the request may have reached it. |
+| `webdriver_route_unsupported` | The driver answered that it does not implement the route. |
+| `hub_app_upload_timeout` | The app upload to the provider's storage did not answer within its own deadline. |
+| `hub_app_upload_transport_failed` | The app upload to the provider's storage never completed its transport. |
+| `provider_app_cwd_missing` | `--provider-app` is a relative path and the request names no working directory to resolve it in. |

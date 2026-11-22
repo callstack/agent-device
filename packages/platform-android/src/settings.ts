@@ -3,6 +3,7 @@ import {
   sessionAppRequiredDetails,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
@@ -12,7 +13,6 @@ import {
   parseSettingState,
   parseTextSizeCategory,
   resolveSettingsApp,
-  SETTINGS_APP_NOT_PACKAGE_REASON,
   textSizeSettingPayload,
   type ReadSettingResult,
   type SettingOptions,
@@ -25,7 +25,11 @@ import {
 } from '@agent-device/contracts/settings-catalog';
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
-import { setAndroidGlobalToggle, type AndroidGlobalToggle } from './settings-global-toggle.ts';
+import {
+  ANDROID_GLOBAL_TOGGLE_REASONS,
+  setAndroidGlobalToggle,
+  type AndroidGlobalToggle,
+} from './settings-global-toggle.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
 import {
@@ -33,6 +37,15 @@ import {
   requireAndroidPermissionUser,
   setAndroidPermission,
 } from './settings-permission.ts';
+
+/**
+ * The `error.details.reason` an app-scoped `settings` change states when the name it was handed
+ * resolves to nothing it can grant or revoke.
+ */
+const ANDROID_SETTINGS_APP_REASONS = {
+  // The named app resolves to an intent such as `settings`, not to an installed package.
+  appNotPackage: { reason: 'setting_app_not_package' },
+} as const satisfies ReasonTable<'settings'>;
 
 /** The settings {@link setAndroidSetting} applies over adb, wherever an owner runs it. */
 export const ANDROID_SETTINGS = [
@@ -227,7 +240,7 @@ async function resolveAndroidSettingsPackage(
       'INVALID_ARGS',
       `settings ${setting} requires a package name, not an intent.`,
       {
-        reason: SETTINGS_APP_NOT_PACKAGE_REASON,
+        reason: ANDROID_SETTINGS_APP_REASONS.appNotPackage.reason,
         dispatched: 'no',
         app,
         hint: 'Run apps --all for the exact package name, then retry with it in --app.',
@@ -316,8 +329,8 @@ const MOBILE_DATA_TOGGLE: AndroidGlobalToggle<'mobileData'> = {
     if (storedValue === '0') return 'disabled';
     return undefined;
   },
-  notAppliedReason: 'mobile-data-not-applied',
-  unreadableReason: 'mobile-data-unreadable',
+  notAppliedReason: ANDROID_GLOBAL_TOGGLE_REASONS.mobileDataNotApplied.reason,
+  unreadableReason: ANDROID_GLOBAL_TOGGLE_REASONS.mobileDataUnreadable.reason,
   sampleIntervalMs: 100,
   hint: 'Run `adb shell settings get global mobile_data` to see what the device holds. A target without an active SIM, or with more than one, can accept svc data without changing that row.',
 };
