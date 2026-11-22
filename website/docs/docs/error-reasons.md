@@ -26,6 +26,10 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
 | `cloud_login_origin_mismatch` | The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued the stored CLI session, so the stored credential is not sent. Log in with the named origin, or unset the override. |
+| `cli_session_issuer_unverified` | The stored CLI session does not record the cloud that issued its credential, as a session saved by an older CLI does not, so the credential is not sent. Run agent-device auth login. |
+| `cloud_auth_redirect_cross_origin` | A cloud auth request was redirected to another origin. The request was not sent there, so no credential or device code left the requested origin. |
+| `cloud_auth_redirect_limit` | A cloud auth request was redirected more than three times within its origin. |
+| `cloud_auth_redirect_unsupported` | A cloud auth request got a redirect that cannot keep its POST: a 301, 302 or 303, or one with no readable Location. |
 
 ### `back`
 
@@ -58,6 +62,11 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `cli_session_revoked` | The cloud answered a refresh by reporting the stored session revoked. |
 | `cli_session_refresh_unanswered` | The refresh answered without an access token, so the CLI has nothing to send. |
 | `cli_session_store_unwritable` | The directory holding the session file cannot be written, so its lock cannot be taken. |
+| `cloud_login_origin_mismatch` | The cloud API origin named by AGENT_DEVICE_CLOUD_BASE_URL differs from the origin that issued the stored CLI session, so the stored credential is not sent. Log in with the named origin, or unset the override. |
+| `cli_session_issuer_unverified` | The stored CLI session does not record the cloud that issued its credential, as a session saved by an older CLI does not, so the credential is not sent. Run agent-device auth login. |
+| `cloud_auth_redirect_cross_origin` | A cloud auth request was redirected to another origin. The request was not sent there, so no credential or device code left the requested origin. |
+| `cloud_auth_redirect_limit` | A cloud auth request was redirected more than three times within its origin. |
+| `cloud_auth_redirect_unsupported` | A cloud auth request got a redirect that cannot keep its POST: a 301, 302 or 303, or one with no readable Location. |
 | `plugin-unavailable` | The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
 | `plugin-not-installed` | No plugin declares this provider; `details.installCommand` is the command that adds it. |
 

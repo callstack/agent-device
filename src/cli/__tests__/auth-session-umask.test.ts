@@ -9,9 +9,10 @@ test.skipIf(process.platform === 'win32')(
   () => {
     const tempRoot = mkdtempForTestSync('agent-device-auth-session-umask-');
     const session = {
-      version: 1 as const,
+      version: 2 as const,
       id: 'session-first',
       cloudBaseUrl: 'https://cloud.example',
+      issuerOrigin: 'https://cloud.example',
       refreshCredential: 'adc_refresh_umask',
       createdAt: '2026-01-01T00:00:00.000Z',
     };
