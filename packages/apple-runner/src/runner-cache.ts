@@ -244,19 +244,25 @@ export function requireCertifiedRunnerCacheArtifacts(
 }
 
 /**
+ * Unlinks a managed cache key that is a symlink, leaving its target alone, so the key is rebuilt as
+ * a real directory and no launch path runs through the link. Returns whether it unlinked one. A
+ * `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` override is the caller's own path and is never unlinked.
+ */
+export function unlinkSymlinkedManagedRunnerKey(derived: string): boolean {
+  if (resolveRunnerDerivedOverride(hostEnvironment().env)) return false;
+  if (!fs.lstatSync(derived, { throwIfNoEntry: false })?.isSymbolicLink()) return false;
+  fs.rmSync(derived, { force: true });
+  return true;
+}
+
+/**
  * Removes the cache metadata, the build scratch, and every runner tree no session can be reading.
  * A tree another session may launch from survives (see `listLiveRunnerTrees`); with the metadata
- * gone, nothing resolves it again. A directory named `derived` loses only its Xcode entries. A cache
- * key that is a symlink is unlinked, never walked, so the rebuild makes a real key directory.
+ * gone, nothing resolves it again. A directory named `derived` loses only its Xcode entries.
  */
 export async function cleanRunnerDerivedArtifacts(derived: string): Promise<void> {
   try {
-    const entry = fs.lstatSync(derived, { throwIfNoEntry: false });
-    if (!entry) return;
-    if (entry.isSymbolicLink() && path.basename(derived) !== 'derived') {
-      fs.rmSync(derived, { force: true });
-      return;
-    }
+    if (unlinkSymlinkedManagedRunnerKey(derived) || !fs.existsSync(derived)) return;
     const { listLiveRunnerTrees, removeRunnerCacheEntriesExcept } =
       await import('./runner-cache-trim.ts');
     const kept = new Set(listLiveRunnerTrees(derived));

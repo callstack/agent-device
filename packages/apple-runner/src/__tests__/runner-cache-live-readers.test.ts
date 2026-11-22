@@ -203,3 +203,18 @@ test('a rebuild unlinks a symlinked cache key without touching what it points at
   assert.deepEqual(fs.readdirSync(outside), ['keep.txt']);
   assert.equal(fs.lstatSync(rebuilt.derived).isDirectory(), true);
 });
+
+test('a start never returns a path through a symlinked cache key, even to a certified tree', async () => {
+  withoutRunnerDerivedPathEnv();
+  const cached = removeCacheEntryAfterTest(await ensureXctestrunArtifact(IOS_SIMULATOR, {}));
+  const outside = path.join(mkdtempForTestSync('agent-device-outside-cache-'), 'key');
+  fs.renameSync(cached.derived, outside);
+  fs.symlinkSync(outside, cached.derived);
+  const outsideTree = readTree(outside);
+
+  const next = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
+
+  assert.equal(fs.lstatSync(next.derived).isDirectory(), true);
+  assert.equal(fs.realpathSync(path.dirname(next.xctestrunPath)).startsWith(outside), false);
+  assert.deepEqual(readTree(outside), outsideTree);
+});

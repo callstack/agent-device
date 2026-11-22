@@ -33,6 +33,7 @@ import {
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
   stampRunnerTreeResolved,
+  unlinkSymlinkedManagedRunnerKey,
   emitRunnerXctestrunDecision,
   emitRunnerXctestrunRebuildDecision,
   evaluateExistingXctestrun,
@@ -595,6 +596,7 @@ async function ensureXctestrunUnderCacheLock(params: {
   forceRebuild: boolean;
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
+  unlinkSymlinkedManagedRunnerKey(derived);
   await cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
   const existing = await evaluateExistingXctestrun({
     derived,
