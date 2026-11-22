@@ -103,8 +103,7 @@ export class LeaseRegistry {
       });
     }
     this.assertHumanControlAdmission(normalized);
-    const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
-    if (existingLease) return existingLease;
+    this.assertNoRunBindingLease(normalized);
     this.assertDeviceAvailable(normalized);
     this.enforceCapacity(normalized.backend);
     const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), chosenLeaseId);
@@ -202,29 +201,24 @@ export class LeaseRegistry {
     );
   }
 
-  private refreshExistingRunBinding(
-    request: NormalizedAllocateLeaseRequest,
-    leaseTtlMs: number,
-  ): DeviceLease | undefined {
+  /**
+   * An allocation that repeats the labels of a live run binding without that binding's lease id
+   * claims a lease it cannot prove it owns, so it is refused like any other contention. The lease id
+   * is the credential, and labels a caller can guess are not one (#4909). For a device-less live
+   * lease, a label that disagrees stays the scope mismatch the daemon already refused. A repeat of a
+   * device-keyed binding is busy whatever its client id says.
+   */
+  private assertNoRunBindingLease(request: NormalizedAllocateLeaseRequest): void {
     const bindingKey = leaseRunBindingKey(request);
     const existingId = this.runBindings.get(bindingKey);
-    if (!existingId) return undefined;
+    if (!existingId) return;
     const existingLease = this.leases.get(existingId);
     if (!existingLease) {
       this.runBindings.delete(bindingKey);
-      return undefined;
+      return;
     }
-    if (existingLease.clientId === request.clientId) {
-      return this.refreshLease(
-        request.retainOnClose ? { ...existingLease, retainOnClose: true } : existingLease,
-        leaseTtlMs,
-      );
-    }
-    if (existingLease.deviceKey) {
-      throw deviceLeaseBusyError(existingLease);
-    }
-    assertLeaseScopeMatch(existingLease, request);
-    return this.refreshLease(existingLease, leaseTtlMs);
+    if (!existingLease.deviceKey) assertLeaseScopeMatch(existingLease, request);
+    throw deviceLeaseBusyError(existingLease);
   }
 
   /**
