@@ -98,5 +98,5 @@ function hasProviderFacets(runtime: ProviderDeviceRuntime): boolean {
 }
 
 export function invalidPlugin(message: string): AppError {
-  return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
+  return new AppError('INVALID_ARGS', message, { reason: PLUGIN_REASONS.invalidPlugin.reason });
 }

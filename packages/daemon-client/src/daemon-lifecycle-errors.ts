@@ -4,7 +4,7 @@ import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_LIFECYCLE_REASONS,
   embeddedCloseHint,
-  DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+  DAEMON_RETIREMENT_REASONS,
   type DaemonLifecycleCensus,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -137,7 +137,7 @@ export function daemonRetirementUnconfirmedError(
   paths: DaemonPaths,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
-    reason: 'daemon_retirement_unconfirmed',
+    reason: DAEMON_RETIREMENT_REASONS.retirementUnconfirmed.reason,
     retirement,
     hint: retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
   });
@@ -230,7 +230,7 @@ function daemonRecordOwnerUnrecognizedError(params: {
     'COMMAND_FAILED',
     'This daemon record states an owner this version cannot read, so this client did not replace it.',
     {
-      reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+      reason: DAEMON_RETIREMENT_REASONS.ownerUnrecognized.reason,
       stateDir,
       daemon: daemonIdentityOf(info),
       hint: `Update agent-device if the record comes from a newer build. Otherwise check what owns pid ${info.pid}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`,

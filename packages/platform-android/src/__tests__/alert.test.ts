@@ -1,6 +1,5 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { ALERT_WAIT_TIMEOUT_REASON } from '@agent-device/contracts/alert-contract';
 import { underFakeTimers } from './test-utils/fake-timers.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
@@ -476,6 +475,6 @@ test('wait on a quiet screen times out with the typed wait-timeout reason', asyn
     handleAndroidAlert(device, 'wait', { timeoutMs: 0, captureNodes: async () => [] }),
     (error: unknown) =>
       (error as { code?: string }).code === 'COMMAND_FAILED' &&
-      (error as { details?: { reason?: unknown } }).details?.reason === ALERT_WAIT_TIMEOUT_REASON,
+      (error as { details?: { reason?: unknown } }).details?.reason === 'alert-wait-timeout',
   );
 });

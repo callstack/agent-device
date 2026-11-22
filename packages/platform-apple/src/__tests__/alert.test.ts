@@ -6,11 +6,9 @@ vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 
 import {
   ALERT_MIN_READ_BUDGET_MS,
-  ALERT_NOT_FOUND_REASON,
   ALERT_RUNNER_MAX_BUDGET_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
   ALERT_NOT_FOUND_RUNNER_CODE,
-  ALERT_WAIT_TIMEOUT_REASON,
   ALERT_POLL_INTERVAL_MS,
   ALERT_UNRESOLVED_RUNNER_CODE,
 } from '@agent-device/contracts/alert-contract';
@@ -44,7 +42,7 @@ function runnerUnresolved(): AppError {
 }
 
 function helperAbsence(): AppError {
-  return new AppError('COMMAND_FAILED', 'alert not found', { reason: ALERT_NOT_FOUND_REASON });
+  return new AppError('COMMAND_FAILED', 'alert not found', { reason: 'alert-not-found' });
 }
 
 afterEach(() => {
@@ -128,7 +126,7 @@ test('a wait that never sees an alert reports the timeout rather than the last a
   );
   await vi.advanceTimersByTimeAsync(2_000);
 
-  assert.equal(((await outcome) as AppError).details?.reason, ALERT_WAIT_TIMEOUT_REASON);
+  assert.equal(((await outcome) as AppError).details?.reason, 'alert-wait-timeout');
 });
 
 test('an accept retries only while the backend says the alert is not there yet', async () => {
@@ -545,7 +543,7 @@ test.each([
       assert.equal(error, observed);
       assert.equal(error.details?.dispatched, 'no');
     } else {
-      assert.equal(error.details?.reason, ALERT_WAIT_TIMEOUT_REASON);
+      assert.equal(error.details?.reason, 'alert-wait-timeout');
       assert.equal(error.details?.runnerErrorCode, ALERT_NOT_FOUND_RUNNER_CODE);
     }
   },

@@ -18,6 +18,7 @@ import {
   normalizeTenantId,
   normalizeDaemonPublicOrigin,
   DAEMON_REQUEST_MAX_BYTES,
+  DAEMON_INSTANCE_REASONS,
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
@@ -795,7 +796,7 @@ function sendInstanceMismatch(rpcId: unknown): Response {
       'Proxy instance changed',
       normalizeError(
         new AppError('COMMAND_FAILED', 'Proxy instance changed', {
-          reason: 'remote_instance_mismatch',
+          reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
         }),
       ),
     ),

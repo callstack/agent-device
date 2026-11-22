@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/app-deployment-runtime';
 import { packGzipTar } from '@agent-device/host-kit/gzip-tar';
 import { Deadline, type DeadlineClock, pollUntilSettled } from '@agent-device/host-kit/retry';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, REQUEST_CANCELED_REASONS, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { REVYL_OUTCOME_REASONS, type RevylClient } from './revyl-client.ts';
 import type { RevylWorkerActionResponse } from './revyl-types.ts';
@@ -66,7 +66,11 @@ export async function deployRevylApp(
     return installed;
   } catch (error) {
     if (signal.aborted)
-      throw installStopped('request_canceled', 'The install was canceled.', error);
+      throw installStopped(
+        REQUEST_CANCELED_REASONS.canceled.reason,
+        'The install was canceled.',
+        error,
+      );
     if (budget.aborted) throw timedOut(error);
     throw error;
   }
@@ -102,12 +106,10 @@ async function uploadAndInstall(
   }
 }
 
-/**
- * Why an install stopped short of a confirmed result: the provider's own verdicts, or the caller's
- * cancellation. `request_canceled` is the kernel's cancellation vocabulary, which no provider table
- * re-declares, so it is named here as the one spelling this wrapper also takes.
- */
-type RevylInstallStopReason = typeof REVYL_OUTCOME_REASONS.unconfirmed.reason | 'request_canceled';
+/** Why an install stopped short of a confirmed result: the provider's verdict, or the caller's cancellation. */
+type RevylInstallStopReason =
+  | typeof REVYL_OUTCOME_REASONS.unconfirmed.reason
+  | typeof REQUEST_CANCELED_REASONS.canceled.reason;
 
 function installStopped(reason: RevylInstallStopReason, message: string, cause: unknown): AppError {
   return new AppError(

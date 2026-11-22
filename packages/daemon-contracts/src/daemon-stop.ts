@@ -14,7 +14,7 @@ const DAEMON_STOP_REASONS = {
 import {
   DAEMON_LIFECYCLE_REASONS,
   embeddedCloseHint,
-  DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+  DAEMON_RETIREMENT_REASONS,
   type DaemonPaths,
   type ObservedDaemonIdentity,
 } from './daemon-resolution.ts';
@@ -125,7 +125,7 @@ export function ownerRefusal(
         hint: embeddedCloseHint(pid),
       }
     : {
-        reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+        reason: DAEMON_RETIREMENT_REASONS.ownerUnrecognized.reason,
         hint: 'Nothing was signaled. Check what owns that process, then repair the record: stop it by its own means and remove its daemon.json so a daemon can register again.',
       };
 }
@@ -153,7 +153,9 @@ function daemonRetirementError(
       processStartTime: info.startTime,
       reason:
         refusal?.reason ??
-        (failure ? DAEMON_STOP_REASONS.exitUnconfirmed.reason : 'daemon_retirement_unconfirmed'),
+        (failure
+          ? DAEMON_STOP_REASONS.exitUnconfirmed.reason
+          : DAEMON_RETIREMENT_REASONS.retirementUnconfirmed.reason),
       terminationReason: failure?.reason,
       signal: failure?.signal,
       retirement,

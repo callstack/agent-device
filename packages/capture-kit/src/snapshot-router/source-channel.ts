@@ -1,7 +1,7 @@
 import type { IosSnapshotAcquisition } from '@agent-device/contracts/ios-snapshot';
 import type { IosSystemSurfaceHost } from '@agent-device/contracts/ios-system-surface';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, REQUEST_CANCELED_REASONS } from '@agent-device/kernel/errors';
 
 /**
  * The vocabulary a snapshot source channel speaks to the router: what an acquisition returns, the
@@ -64,7 +64,7 @@ export class SnapshotSourceError extends AppError {
         ...details,
         bridgeFailure: kind,
         bridgeFailureCode: code,
-        ...(kind === 'cancelled' ? { reason: 'request_canceled' } : {}),
+        ...(kind === 'cancelled' ? { reason: REQUEST_CANCELED_REASONS.canceled.reason } : {}),
       },
       cause,
     );

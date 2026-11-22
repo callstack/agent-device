@@ -1,6 +1,7 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
+  BATCH_STEP_REASONS,
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
 } from '@agent-device/command-registry/batch-policy';
@@ -93,7 +94,7 @@ function assertNoStdinFillStep(
   throw new AppError(
     'INVALID_ARGS',
     `Batch step ${stepNumber}: fill textStdin is not supported because batch steps have no stdin of their own. Run that fill on its own with --text-stdin.`,
-    { reason: 'fill_text_stdin_in_batch' },
+    { reason: BATCH_STEP_REASONS.fillTextStdin.reason },
   );
 }
 

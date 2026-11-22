@@ -1,3 +1,13 @@
+import type { ReasonTable } from '@agent-device/kernel/errors';
+
+/** Why `open` or `close` refuses a target an app device does not hold (ADR 0035). */
+export const APP_DEVICE_REASONS = {
+  // This session drives one macOS app as its own device, so it cannot open or close another app or
+  // open a surface other than `app`. Open another app in a separate `--session`. A whole-Mac surface
+  // such as `--surface desktop` opens only after the sessions holding app devices on that Mac end.
+  scope: { reason: 'app-device-scope', commands: ['close'] },
+} as const satisfies ReasonTable<'open'>;
+
 export function isDeepLinkTarget(input: string): boolean {
   const value = input.trim();
   if (!value) return false;

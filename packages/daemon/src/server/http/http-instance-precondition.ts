@@ -3,6 +3,7 @@ import {
   buildDaemonInstanceMismatchRpcResponse,
   DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+  DAEMON_INSTANCE_REASONS,
 } from '@agent-device/contracts/daemon-http';
 import type { JsonRpcId } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -31,7 +32,7 @@ export function refuseStaleDaemonInstance(
         'Daemon instance changed',
         normalizeError(
           new AppError('COMMAND_FAILED', 'Daemon instance changed', {
-            reason: 'remote_instance_mismatch',
+            reason: DAEMON_INSTANCE_REASONS.instanceMismatch.reason,
           }),
         ),
       ),

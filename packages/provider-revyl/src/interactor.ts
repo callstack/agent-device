@@ -29,6 +29,7 @@ import {
   AppError,
   discloseDispatch,
   discloseDispatchAfterSteps,
+  REQUEST_CANCELED_REASONS,
   type ReasonTable,
 } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -547,7 +548,7 @@ class RevylInteractor implements Interactor {
     return new AppError(
       'COMMAND_FAILED',
       'The Revyl action was canceled before it finished.',
-      { reason: 'request_canceled', runId: this.session.runId },
+      { reason: REQUEST_CANCELED_REASONS.canceled.reason, runId: this.session.runId },
       cause ?? this.signal?.reason,
     );
   }

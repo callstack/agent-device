@@ -5,9 +5,7 @@ import {
   type AlertCapture,
   type AlertInfo,
   type AlertPlatform,
-  ALERT_NOT_FOUND_REASON,
   ALERT_POLL_INTERVAL_MS,
-  ALERT_WAIT_TIMEOUT_REASON,
   type AlertStatusKind,
   DEFAULT_ALERT_TIMEOUT_MS,
   MAX_ALERT_WINDOW_MS,
@@ -145,7 +143,7 @@ export async function runTreeAlertAction<
       // actionable alert ever resolved within the window; the timeout phrasing is the honest
       // answer for either.
       throw new AppError('COMMAND_FAILED', 'alert wait timed out', {
-        reason: ALERT_WAIT_TIMEOUT_REASON,
+        reason: ALERT_REFUSAL_REASONS.waitTimeout.reason,
       });
     }
     return {
@@ -374,7 +372,7 @@ function lookupRefusal(
     );
   }
   return new AppError('COMMAND_FAILED', 'alert not found', {
-    reason: ALERT_NOT_FOUND_REASON,
+    reason: ALERT_REFUSAL_REASONS.notFound.reason,
     dispatched: 'no',
     hint: ALERT_NOT_FOUND_HINT,
   });
