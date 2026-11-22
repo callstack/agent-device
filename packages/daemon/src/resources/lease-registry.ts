@@ -1,5 +1,5 @@
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS, normalizeLeaseId } from '@agent-device/contracts/lease-scope';
 import type { HumanControlHold, HumanControlHoldScope } from '@agent-device/contracts/client';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
@@ -20,7 +20,6 @@ import {
   createDeviceLease,
   deviceLeaseBusyError,
   hasAllocatedScope,
-  normalizeLeaseId,
   normalizeRequiredLeaseId,
   normalizeLeaseAdmissionRequest,
   assertLeaseOwnerScope,

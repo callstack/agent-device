@@ -36,7 +36,7 @@ test.each([false, true])(
     const lease = leaseRegistry.allocateLease({ tenantId, runId: 'capture-run' });
     harness.sessionStore.update(harness.sessionStore.lookup(sessionName)!, {
       sessionScope: { kind: 'tenant', id: tenantId },
-      lease: { tenantId, runId: lease.runId, leaseId: lease.leaseId },
+      lease: { backend: lease.backend, tenantId, runId: lease.runId, leaseId: lease.leaseId },
     });
     const start = harness.runtime.start.getMockImplementation()!;
     harness.runtime.start.mockImplementation(async (input) => {

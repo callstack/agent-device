@@ -11,6 +11,7 @@ import {
 } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import { sessionLeaseOf } from '../../../core/lease-context.ts';
 import { createLeaseSessionEnd } from '../../../server/request-execution-scope.ts';
 import { handleLeaseCommands } from '../../handlers/lease.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -228,10 +229,9 @@ test.each([false, true])(
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         deviceKey: lease.deviceKey,
         clientId: lease.clientId,
-        expiresAt: lease.expiresAt,
       },
     });
 
@@ -276,7 +276,7 @@ test('releasing a retained client lease stops the host after close retired its s
     deviceKey: lease.deviceKey,
     clientId: lease.clientId,
   };
-  publishSession(sessionStore, sessionName, IOS_SIMULATOR, { lease: leaseScope });
+  publishSession(sessionStore, sessionName, IOS_SIMULATOR, { lease: sessionLeaseOf(lease) });
   const closed = await closeSession({
     sessionStore,
     sessionName,
@@ -336,10 +336,9 @@ test('a lease scope mismatch still closes the app and runner before returning a 
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       deviceKey: lease.deviceKey,
       clientId: 'client-b',
-      expiresAt: lease.expiresAt,
     },
   });
   sessionStore.setRuntimeHints(sessionName, { platform: 'ios', metroHost: '127.0.0.1' });

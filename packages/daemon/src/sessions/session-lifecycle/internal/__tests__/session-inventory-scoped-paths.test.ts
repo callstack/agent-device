@@ -166,7 +166,15 @@ function tenantSession(tenantId: string, leaseId?: string): SessionState {
     createdAt: Date.now(),
     actions: [],
     ...(leaseId
-      ? { lease: { tenantId, runId: 'run-leased', leaseId, leaseProvider: 'proxy' } }
+      ? {
+          lease: {
+            tenantId,
+            runId: 'run-leased',
+            leaseId,
+            backend: 'ios-simulator',
+            leaseProvider: 'proxy',
+          },
+        }
       : {}),
   };
 }

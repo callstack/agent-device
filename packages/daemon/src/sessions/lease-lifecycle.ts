@@ -1,14 +1,14 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { LEASE_REASONS, leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
+import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
   ProviderAppCatalog,
 } from '@agent-device/contracts/device';
-import { buildSessionLeaseFromRequest, type SessionLease } from '../core/lease-context.ts';
 import { assertRequestLeaseAdmission } from './request-admission.ts';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
@@ -135,55 +135,18 @@ export function admitRequestLeaseForLockedScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
-  const ref = sessionStore.lookup(sessionName);
-  const existingSession = ref?.session;
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
-    env: params.env,
-    providerAppCatalog: params.providerAppCatalog,
-    daemonPolicy: params.daemonPolicy,
-  });
-  if (!activeLease) return params.req;
-
-  const nextReq = {
-    ...params.req,
-    internal: {
-      ...params.req.internal,
-      admittedLease: activeLease,
+  const activeLease = assertRequestLeaseAdmission(
+    params.req,
+    leaseRegistry,
+    sessionStore.lookup(sessionName)?.session,
+    {
+      env: params.env,
+      providerAppCatalog: params.providerAppCatalog,
+      daemonPolicy: params.daemonPolicy,
     },
-  };
-  if (ref && existingSession?.lease) {
-    sessionStore.update(ref, (current) => ({
-      lease: {
-        ...current.lease!,
-        leaseBackend: activeLease.backend,
-        expiresAt: activeLease.expiresAt,
-      },
-    }));
-  }
-  return nextReq;
-}
-
-export function resolveSessionLeaseForRequest(params: {
-  req: Pick<DaemonRequest, 'flags' | 'meta' | 'internal'>;
-  existingLease?: SessionLease;
-}): SessionLease | undefined {
-  return (
-    buildSessionLeaseFromRequest(params.req, params.req.internal?.admittedLease) ??
-    params.existingLease
   );
-}
-
-function closeReleaseRequest(session: SessionState) {
-  const lease = session.lease!;
-  return leaseScopeToReleaseRequest({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    leaseBackend: lease.leaseBackend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
+  if (!activeLease) return params.req;
+  return { ...params.req, internal: { ...params.req.internal, admittedLease: activeLease } };
 }
 
 function closeLeaseDecision(
@@ -199,10 +162,11 @@ export function inspectSessionLeaseRetainedOnClose(params: {
   session: SessionState;
   leaseRegistry: LeaseRegistry;
 }): boolean {
-  if (!params.session.lease) return false;
+  const { lease } = params.session;
+  if (!lease) return false;
   return (
     closeLeaseDecision(
-      params.leaseRegistry.inspectLeaseForClose(closeReleaseRequest(params.session)),
+      params.leaseRegistry.inspectLeaseForClose(leaseReleaseRequestFor(lease)),
       undefined,
     ) === 'retained'
   );
@@ -214,10 +178,11 @@ export function inspectSessionProviderReleaseOnClose(params: {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   shutdownRequested?: boolean;
 }): boolean {
-  if (!params.session.lease) return false;
+  const { lease } = params.session;
+  if (!lease) return false;
   return (
     closeLeaseDecision(
-      params.leaseRegistry.inspectLeaseForClose(closeReleaseRequest(params.session)),
+      params.leaseRegistry.inspectLeaseForClose(leaseReleaseRequestFor(lease)),
       params.leaseLifecycleProvider,
       params.shutdownRequested,
     ) === 'provider-release'
@@ -235,7 +200,7 @@ export async function releaseSessionLease(params: {
 }): Promise<{ endedLeaseId?: string; providerData?: Record<string, unknown> }> {
   const lease = params.session.lease;
   if (!lease) return {};
-  const releaseRequest = closeReleaseRequest(params.session);
+  const releaseRequest = leaseReleaseRequestFor(lease);
   const activeLease = params.leaseRegistry.getLease(releaseRequest);
   const decision = closeLeaseDecision(activeLease, params.leaseLifecycleProvider);
   if (decision === 'retained') {

@@ -115,10 +115,9 @@ test('session lease metadata round-trips through the store', () => {
     tenantId: 'tenant-a',
     runId: 'run-1',
     clientId: 'client-a',
-    leaseBackend: 'ios-simulator',
+    backend: 'ios-simulator',
     leaseProvider: 'proxy',
     deviceKey: 'ios:SIM-001',
-    expiresAt: 123_456,
   };
 
   store.publish(session.name, session);

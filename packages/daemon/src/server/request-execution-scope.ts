@@ -25,16 +25,15 @@ import {
   requestCwd,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import {
-  resolveCallerScopeRoot,
-  resolveEffectiveSessionName,
-  resolveSessionScope,
-} from '../sessions/session-routing.ts';
+import { resolveCallerScopeRoot, resolveSessionScope } from '../sessions/session-routing.ts';
 import { deriveWebSessionIdentity } from '../core/session-tenant-scope.ts';
 import {
   assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
+  assertRequestTenantAdmission,
+  resolveRequestSessionName,
   scopeRequestSession,
+  withTenantAdmissionOnRoutingError,
 } from '../sessions/request-admission.ts';
 import { isBoundedCompositeRequest } from '../core/lease-context.ts';
 import {
@@ -67,7 +66,6 @@ import { refreshRecordingHealth } from '../sessions/request-recording-health.ts'
 import { runAdmittedLeaseWork } from './request-lease-work.ts';
 import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import {
-  getSessionCommandKind,
   resolveCommandAndroidAvdSelection,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
@@ -238,7 +236,8 @@ export async function createRequestExecutionScope(params: {
   daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  const tenantScopedReq = scopeRequestSession(restrictRemoteHostInputs(params.req));
+  const unscopedReq = restrictRemoteHostInputs(params.req);
+  const tenantScopedReq = scopeRequestSession(unscopedReq);
   // A nested batch or replay step arrives with the identity of the request that spawned it, and its
   // own name is already the store key.
   const webSession =
@@ -246,7 +245,7 @@ export async function createRequestExecutionScope(params: {
     deriveWebSessionIdentity(
       params.req.session,
       tenantScopedReq,
-      resolveSessionScope(tenantScopedReq),
+      withTenantAdmissionOnRoutingError(unscopedReq, () => resolveSessionScope(tenantScopedReq)),
     );
   let scopedReq = applyRequestCommandDefaults({
     ...tenantScopedReq,
@@ -259,13 +258,7 @@ export async function createRequestExecutionScope(params: {
   // it is what puts the session's execution lock in this request's plan, and therefore the only
   // trait under which an activity stamp can be written while holding that lock.
   const attachesToSession = shouldLockSessionExecution(command);
-  const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore, {
-    // Inventory commands (`session list`, `devices`, `doctor`, …) route only to locate their own
-    // artifacts and never act through a session, so they must keep resolving an address even when
-    // the workspace owns several implicit sessions. Refusing them would refuse `session list`, the
-    // command an agent runs to resolve that ambiguity.
-    attachesToSession: getSessionCommandKind(command) !== 'inventory',
-  });
+  const sessionName = resolveRequestSessionName({ scopedReq, unscopedReq, sessionStore });
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({
@@ -396,12 +389,13 @@ export async function createRequestExecutionScope(params: {
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
+        const existingRef = sessionStore.lookup(sessionName);
+        const session = existingRef?.session;
+        assertRequestTenantAdmission(unscopedReq, session);
         const boundedStep =
           command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
         let admissionCompleted = false;
         try {
-          const existingRef = sessionStore.lookup(sessionName);
-          const session = existingRef?.session;
           assertProviderLeaseRequestNamesSession(scopedReq, session);
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
@@ -491,13 +485,19 @@ export async function createRequestExecutionScope(params: {
             daemonPolicy: params.daemonPolicy,
           });
           scope.req = scopedReq;
-          admissionCompleted = true;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
-          return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+          return await runAdmittedLeaseWork({
+            leaseRegistry,
+            req: scopedReq,
+            task: async () => {
+              admissionCompleted = true;
+              return await task();
+            },
+          });
         } finally {
-          // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED
-          // to this session, stamped here under the session's own execution lock. The lock is what
+          // The #2833 inactivity deadline is measured from the end of the last admitted command
+          // that attached to this session, stamped here under the session's execution lock. The lock
           // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a
           // session mid-command, and one command slower than the window keeps the session it is
           // working on — the same guarantee admitted work gives a remote lease (ADR 0007).
@@ -509,7 +509,7 @@ export async function createRequestExecutionScope(params: {
           // hung up preserves nothing, exactly as a canceled request renews no lease: an agent that
           // timed out is the behavior this feature exists to catch.
           if (
-            (!boundedStep || admissionCompleted) &&
+            admissionCompleted &&
             attachesToSession &&
             !isRequestCanceled(scopedReq.meta?.requestId)
           ) {

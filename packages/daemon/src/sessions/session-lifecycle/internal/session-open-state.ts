@@ -6,7 +6,7 @@ import type { CloseBootOwnership, SessionRef, SessionState } from '../../../core
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
 import { clearSessionSnapshot } from '../../../execution/session-snapshot.ts';
-import { resolveSessionLeaseForRequest } from '../../lease-lifecycle.ts';
+import { sessionLeaseOf } from '../../../core/lease-context.ts';
 import { resolvePublicSessionName, resolveSessionScope } from '../../session-routing.ts';
 
 export function requireOpenSessionAdmission(
@@ -48,6 +48,7 @@ export function publishOpenSession(params: {
     deviceClaim,
     bootOwnership,
   } = params;
+  const admittedLease = req.internal?.admittedLease;
   requireOpenSessionAdmission(store, sessionName, existingRef);
   if (existingRef) {
     store.updateOpenDevice(existingRef, device, bootOwnership, params.androidLaunchIdentity);
@@ -56,7 +57,7 @@ export function publishOpenSession(params: {
       appBundleId,
       appName,
     });
-    session.lease = resolveSessionLeaseForRequest({ req, existingLease: session.lease });
+    session.lease ??= admittedLease && sessionLeaseOf(admittedLease);
     if (deviceClaim) session.deviceClaim = deviceClaim;
     clearSessionSnapshot(session);
     return store.refresh(existingRef);
@@ -70,7 +71,7 @@ export function publishOpenSession(params: {
     appName,
     createdAt: Date.now(),
     actions: [],
-    lease: resolveSessionLeaseForRequest({ req }),
+    lease: admittedLease && sessionLeaseOf(admittedLease),
     deviceClaim,
   };
   const ref = store.publish(sessionName, draft);

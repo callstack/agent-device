@@ -49,10 +49,9 @@ test('expired leases remove owned sessions before the next command and free capa
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
         leaseProvider: 'proxy',
         deviceKey: 'ios:SIM-001',
-        expiresAt: lease.expiresAt,
       },
     }),
   );
@@ -92,7 +91,7 @@ test.each(['rebuild', 'retire'] as const)(
           leaseId: lease.leaseId,
           tenantId: lease.tenantId,
           runId: lease.runId,
-          leaseBackend: lease.backend,
+          backend: lease.backend,
         },
       }),
     );
