@@ -3,16 +3,33 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { safeInstanceErrorText } from './error-text.ts';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { LimrunFileDownload } from './runtime-dependencies.ts';
 
-const RESPONSE_BODY_PREVIEW_BYTES = 500;
+/** Every `details.reason` a Limrun file download publishes. */
+const LIMRUN_DOWNLOAD_REASONS = {
+  // The instance answered the download with no body at all, so nothing could reach disk.
+  emptyBody: { reason: 'limrun_download_empty_body' },
+  // The instance refused the download; its HTTP status answers for the refusal.
+  httpError: { reason: 'limrun_download_http_error' },
+  // The transfer's own deadline passed before the file reached disk.
+  timeout: { reason: 'limrun_download_timeout' },
+  // The transfer failed before it could ask the instance for the file.
+  failed: { reason: 'limrun_download_failed' },
+} as const satisfies ReasonTable<'limrun'>;
 
 /**
  * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
  * failed or timed-out attempt leaves no file at the destination, so the caller can retry from the
  * same URL and never mistakes an earlier attempt's file for this one's.
+ *
+ * A destination is a file this process chose, so a caller reads back what it asked for. The URL is not
+ * published: an attached instance answers with a download URL that carries its bearer token as the
+ * whole value, so the URL is a credential, not a location.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
@@ -24,10 +41,11 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
       headers: options.headers,
       signal,
     });
-    if (!response.ok) throw await httpFailure(response, options);
+    if (!response.ok) throw httpFailure(response);
     if (!response.body) {
       throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
-        url: options.url,
+        reason: LIMRUN_DOWNLOAD_REASONS.emptyBody.reason,
+        destination: path.basename(options.destinationPath),
       });
     }
     await pipeline(
@@ -41,35 +59,26 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
   }
 }
 
-async function httpFailure(response: Response, options: LimrunFileDownload): Promise<AppError> {
+/**
+ * Refuses a download by its HTTP status. The peer's body is deliberately unread: it is the peer's own
+ * text and this request is authenticated with a token the peer can echo, so a published preview could
+ * carry that token out with or without its label. `statusCode` is what a caller acts on — a missing
+ * recording and a missing file are both a 404 answer, not a failure of the transfer.
+ */
+function httpFailure(response: Response): AppError {
+  void response.body?.cancel().catch(() => {});
   return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${response.status}`, {
-    url: options.url,
     statusCode: response.status,
-    reason: 'limrun_download_http_error',
-    body: safeInstanceErrorText(await readBodyPreview(response), Object.values(options.headers)),
+    reason: LIMRUN_DOWNLOAD_REASONS.httpError.reason,
   });
 }
 
-/** Reads at most the preview's bytes of an error body; a body that stalls fails like the transfer. */
-async function readBodyPreview(response: Response): Promise<string> {
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  try {
-    while (bytes < RESPONSE_BODY_PREVIEW_BYTES) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const room = RESPONSE_BODY_PREVIEW_BYTES - bytes;
-      chunks.push(value.subarray(0, room));
-      bytes += value.byteLength;
-    }
-  } finally {
-    void reader.cancel().catch(() => {});
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
-
+/**
+ * Names why a download did not reach disk. A fetch failure's own text is not published: it can quote
+ * the request URL, and this request's URL can be the caller's instance token. The failure is answered
+ * by its typed reason and by the transport class: a rejected URL, a refused connection, or an
+ * interrupted transfer.
+ */
 function downloadFailure(
   error: unknown,
   options: LimrunFileDownload,
@@ -83,27 +92,31 @@ function downloadFailure(
     if (!(reason instanceof Error && reason.name === 'TimeoutError')) {
       return createRequestCanceledError(undefined, reason);
     }
-    return new AppError(
-      'COMMAND_FAILED',
-      'Limrun download deadline expired',
-      {
-        url: options.url,
-        reason: 'limrun_download_timeout',
-        timeoutMs: options.timeoutMs,
-      },
-      reason,
-    );
+    return new AppError('COMMAND_FAILED', 'Limrun download deadline expired', {
+      reason: LIMRUN_DOWNLOAD_REASONS.timeout.reason,
+      timeoutMs: options.timeoutMs,
+      transport: transportSummary(error),
+    });
   }
   if (timeout.aborted) {
     return new AppError('COMMAND_FAILED', 'Limrun download timed out', {
-      url: options.url,
+      reason: LIMRUN_DOWNLOAD_REASONS.timeout.reason,
       timeoutMs: options.timeoutMs,
-      reason: 'limrun_download_timeout',
     });
   }
   return new AppError('COMMAND_FAILED', 'Limrun download failed', {
-    url: options.url,
-    reason: 'limrun_download_failed',
-    cause: error instanceof Error ? error.message : String(error),
+    reason: LIMRUN_DOWNLOAD_REASONS.failed.reason,
+    transport: transportSummary(error),
   });
+}
+
+/**
+ * The transport's own code for a failure, without its message. `fetch` names a malformed request URL
+ * with a `TypeError` and reports a socket failure with a Node code like `ECONNREFUSED`; both answer for
+ * what went wrong without quoting the request it happened on.
+ */
+function transportSummary(error: unknown): string {
+  if (error instanceof TypeError) return 'invalid-request';
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code.length > 0 ? code : 'unknown';
 }

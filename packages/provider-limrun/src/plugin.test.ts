@@ -154,6 +154,7 @@ test('verify runs its own SDK check over scoped credentials, version and platfor
       userAgent: 'agent-device-cli/1.2.3',
       timeout: 15_000,
       maxRetries: 0,
+      logLevel: 'off',
     },
   ]);
   // Only the platform this call selected is asked, and the region narrows its query. `keepAlive`

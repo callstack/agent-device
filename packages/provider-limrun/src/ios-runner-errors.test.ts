@@ -56,6 +56,28 @@ test('shared startup failures retain their reason with a remote toolchain recove
   });
 });
 
+test('a runner failure that echoes the forwarded credential publishes it scrubbed', async () => {
+  const token = 'abc123';
+  const error = new AppError('COMMAND_FAILED', `the command route refused ${token}`, {
+    reason: 'IOS_RUNNER_CONNECT_TIMEOUT',
+    response: `401 Unauthorized: ${token}`,
+  });
+
+  let failure: unknown;
+  await withLimrunRunnerErrors(async () => {
+    throw error;
+  }, [`Bearer ${token}`]).catch((error: unknown) => {
+    failure = error;
+  });
+
+  const published = failure as AppError;
+  expect(published.code).toBe('COMMAND_FAILED');
+  expect(published.details?.reason).toBe('IOS_RUNNER_CONNECT_TIMEOUT');
+  expect(JSON.stringify({ message: published.message, details: published.details })).not.toContain(
+    token,
+  );
+});
+
 test('retains product-specific recovery instructions over the default hint', () => {
   expect(
     limrunRunnerError('limrun_runner_products_invalid', 'Invalid runner', {

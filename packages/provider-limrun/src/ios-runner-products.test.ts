@@ -208,3 +208,41 @@ for (const recover of [true, false]) {
     }
   });
 }
+
+// A `/sync` reply is the instance's own JSON, and this request is authenticated with the instance
+// token. Only a path this upload named is an answer about the sync; any other entry is peer text and
+// stays out of the published details.
+test('a sync answer naming an entry this upload did not send keeps it out of the failure', async () => {
+  const { createServer } = await import('node:http');
+  const token = 'liminst_deadbeefcafe';
+  const directory = await mkdtempForTest('runner-products-');
+  await fs.writeFile(path.join(directory, 'Runner.xctestrun'), '<plist/>');
+  await fs.mkdir(path.join(directory, 'Runner.app'));
+  await fs.writeFile(path.join(directory, 'Runner.app/Runner'), 'runner executable');
+  const server = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ ok: false, needFull: ['Runner.app/Runner', token] }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing server address');
+  try {
+    let failure: unknown;
+    await uploadLimrunRunnerProducts(
+      directory,
+      `http://127.0.0.1:${address.port}`,
+      token,
+      new AbortController().signal,
+      ['Runner.xctestrun'],
+    ).catch((error: unknown) => {
+      failure = error;
+    });
+
+    const details = (failure as { details?: { needFull?: string[] } }).details;
+    expect(details?.needFull).toEqual(['Runner.app/Runner']);
+    expect(JSON.stringify(details)).not.toContain(token);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

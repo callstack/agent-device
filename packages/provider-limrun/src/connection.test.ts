@@ -231,6 +231,7 @@ test('verify asks the selected platform of the account the scoped credentials re
       userAgent: 'agent-device-cli/1.2.3',
       timeout: 15_000,
       maxRetries: 0,
+      logLevel: 'off',
     },
   ]);
   assert.deepEqual(limrunSdk.iosList.mock.calls, [[{ limit: 1 }]]);

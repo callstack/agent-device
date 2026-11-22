@@ -741,10 +741,10 @@ test('Limrun drives existing instances without an API key and never deletes them
 
     assert.match(String(ios?.limrunInstanceId), /^attached-[a-f0-9]{12}$/);
     assert.deepEqual(vi.mocked(createIosInstanceClient).mock.calls, [
-      [{ ...ATTACHED_IOS, logLevel: 'warn' }],
+      [{ ...ATTACHED_IOS, logLevel: 'none' }],
     ]);
     assert.deepEqual(vi.mocked(createAndroidInstanceClient).mock.calls, [
-      [{ ...ATTACHED_ANDROID, logLevel: 'warn' }],
+      [{ ...ATTACHED_ANDROID, logLevel: 'none' }],
     ]);
 
     await releaseLease(iosLease('lease-attached-ios'));

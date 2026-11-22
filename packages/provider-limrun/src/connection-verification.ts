@@ -2,7 +2,11 @@ import Limrun from '@limrun/api';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import type { LimrunInstanceAccess } from './instance-access.ts';
-import { limrunUserAgent } from './client-options.ts';
+import {
+  LIMRUN_INSTANCE_PROBE_OPTIONS,
+  LIMRUN_ORG_CLIENT_LOGGING,
+  limrunUserAgent,
+} from './client-options.ts';
 
 export type LimrunConnectionVerification = ProviderConnectionVerification & {
   provider: 'limrun';
@@ -43,6 +47,7 @@ export async function verifyLimrunConnection(
     userAgent: limrunUserAgent(options.clientVersion),
     timeout: 15_000,
     maxRetries: 0,
+    ...LIMRUN_ORG_CLIENT_LOGGING,
   });
   const query = { limit: 1, ...(options.region ? { region: options.region } : {}) };
   try {
@@ -91,7 +96,7 @@ function readStatus(error: unknown): number | undefined {
 function connectAttachedInstance(
   options: LimrunConnectionVerificationOptions,
 ): Promise<{ disconnect(): void }> | undefined {
-  const clientOptions = { logLevel: 'none', maxReconnectAttempts: 0 } as const;
+  const clientOptions = LIMRUN_INSTANCE_PROBE_OPTIONS;
   const { ios, android } = options.instances ?? {};
   if (options.platform === 'android') {
     return (

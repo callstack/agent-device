@@ -1,4 +1,5 @@
 import type { LimrunSyncCache } from './sync-cache.ts';
+import { LIMRUN_INSTANCE_CLIENT_LOGGING } from './client-options.ts';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import type {
   DeviceLease,
@@ -62,11 +63,17 @@ export async function createLimrunIosSession(
   },
   dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>,
 ): Promise<LimrunIosSession> {
-  const client = await createIosInstanceClient({
-    apiUrl: options.apiUrl,
-    token: options.token,
-    logLevel: 'warn',
-  });
+  // The wrapper is loaded here, not imported: the runtime façade keeps its merge-base eager closure
+  // (ADR-0027).
+  const { withInstanceCredentialScrubbing } = await import('./instance-error-scrubbing.ts');
+  const client = withInstanceCredentialScrubbing(
+    await createIosInstanceClient({
+      apiUrl: options.apiUrl,
+      token: options.token,
+      ...LIMRUN_INSTANCE_CLIENT_LOGGING,
+    }),
+    [`Bearer ${options.token}`],
+  );
   try {
     const runner = await dependencies.ios.createRunner({ ...options, client });
     return { ...options, platform: 'ios', client, runner, dependencies };

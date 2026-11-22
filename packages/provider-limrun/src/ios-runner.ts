@@ -1,5 +1,5 @@
 import { limrunRunnerError, withLimrunRunnerErrors } from './ios-runner-errors.ts';
-import { safeInstanceErrorText } from './error-text.ts';
+import { createInstanceStreamScrubber, safeInstanceErrorText } from './error-text.ts';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import { createLimrunAppleToolProvider } from './ios-tools.ts';
@@ -32,7 +32,9 @@ export async function createLimrunIosRunner(
   const withTools = <T>(task: () => Promise<T>, signal?: AbortSignal) =>
     apple.tools.withProvider(
       createLimrunAppleToolProvider(session, host, lifetime.signal, signal),
-      () => withLimrunRunnerErrors(task),
+      // The runner's command route is given this session's credential, so whatever a runner operation
+      // answers with has it taken out before a caller sees it.
+      () => withLimrunRunnerErrors(task, Object.values(headers)),
     );
   const hostTools = withMethodScope({ ...apple.applicationTools }, (task) =>
     apple.tools.hasScopedProvider() ? task() : withTools(task),
@@ -224,15 +226,22 @@ export async function createLimrunIosRunner(
     const exited = new Promise<void>((resolve) => {
       settle = resolve;
     });
+    // The XCTest stream is the instance's own text, and this request carries the instance token to the
+    // forwarding service in front of it. What is published here is written to runner.log and to a startup
+    // failure, so every chunk goes through the scrubber, whose held tail carries a credential that a chunk
+    // boundary cut in half.
     async function* output() {
       const decoder = new TextDecoder();
+      const scrubber = createInstanceStreamScrubber(Object.values(headers));
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          yield decoder.decode(value, { stream: true });
+          const text = scrubber.push(decoder.decode(value, { stream: true }));
+          if (text.length > 0) yield text;
         }
-        yield decoder.decode();
+        const tail = scrubber.push(decoder.decode()) + scrubber.flush();
+        if (tail.length > 0) yield tail;
       } catch (error) {
         canceledRunMayHoldSlot = true;
         if (!signal.aborted) throw error;

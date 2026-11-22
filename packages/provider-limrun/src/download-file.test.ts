@@ -60,7 +60,7 @@ test('a non-2xx answer is a typed failure carrying the status and no file is lef
     downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    details: { statusCode: 404, body: 'no active recording' },
+    details: { statusCode: 404, reason: 'limrun_download_http_error' },
   });
   expect(fs.existsSync(destinationPath)).toBe(false);
 });
@@ -84,27 +84,27 @@ test('a stalled transfer ends at the deadline as a typed timeout and removes the
   expect(fs.existsSync(destinationPath)).toBe(false);
 });
 
-test('a non-2xx answer whose body stalls ends at the deadline as the typed timeout', async () => {
+test('a non-2xx answer whose body stalls is answered by its status without waiting for the body', async () => {
   const url = await serve((_request, response) => {
     response.writeHead(503);
     response.write('upstr');
-    // Never end: the error body stalls like a transfer can.
+    // Never end: nothing here reads the body, so the status answers at once.
   });
   const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
 
   await expect(
-    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 150 }),
+    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    message: 'Limrun download timed out',
-    details: { timeoutMs: 150 },
+    details: { statusCode: 503, reason: 'limrun_download_http_error' },
   });
 });
 
-// The instance authenticates with a bearer token and its own error body can echo it unlabeled, so
-// core's pattern redaction cannot see it. The typed status and reason still answer for the failure.
-test('an error body that echoes the instance token publishes it redacted', async () => {
-  const token = 'liminst_5f4dcc3b5aa765d61d8327deb882cf99';
+// The download route is authenticated with the instance token, and an error body is the peer's own text,
+// which can echo that token as a bare value. So no body text is published at all: the typed status and
+// reason answer for the failure, and the token cannot survive a clipping or a short length.
+test('an HTTP failure publishes its status and reason, and no peer body text at all', async () => {
+  const token = 'abc123';
   const url = await serve((_request, response) => {
     response.writeHead(500);
     response.end(`upstream rejected ${token} for this transfer`);
@@ -122,11 +122,34 @@ test('an error body that echoes the instance token publishes it redacted', async
   });
 
   expect(failure).toBeInstanceOf(AppError);
-  expect((failure as AppError).details).toMatchObject({
+  expect((failure as AppError).details).toEqual({
     statusCode: 500,
     reason: 'limrun_download_http_error',
   });
   expect(JSON.stringify((failure as AppError).details)).not.toMatch(token);
+});
+
+// A malformed URL is the failure an attached instance can cause: it answers with its bare bearer token
+// as the download URL. Neither the URL nor fetch's message about it may be published.
+test('a malformed download URL publishes neither the URL nor the transport message', async () => {
+  const token = 'liminst_9b74c9897bac770ffc029102a200c5de';
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  let failure: unknown;
+  await downloadLimrunFile({
+    url: token,
+    headers: { Authorization: `Bearer ${token}` },
+    destinationPath,
+    timeoutMs: 5_000,
+  }).catch((error: AppError) => {
+    failure = error;
+  });
+
+  expect(failure).toBeInstanceOf(AppError);
+  const details = (failure as AppError).details ?? {};
+  expect(details).toEqual({ reason: 'limrun_download_failed', transport: 'invalid-request' });
+  expect(JSON.stringify(details)).not.toMatch(token);
+  expect(JSON.stringify((failure as AppError).cause ?? '')).not.toMatch(token);
 });
 
 test('a failed retry removes the file an earlier attempt left at the destination', async () => {
@@ -160,25 +183,9 @@ test('a destination directory that cannot be created ends typed without fetching
   await expect(failure).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Limrun download failed',
-    details: { url },
+    details: { reason: 'limrun_download_failed', transport: 'EEXIST' },
   });
   expect(requests).toEqual([]);
-});
-
-test('an error body is read only up to the preview, without waiting for the rest', async () => {
-  const url = await serve((_request, response) => {
-    response.writeHead(502);
-    response.write('x'.repeat(2_048));
-    // Never end: the preview must not wait for the whole body.
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-
-  await expect(
-    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
-  ).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { statusCode: 502, body: 'x'.repeat(500) },
-  });
 });
 
 test.each(['default', 'typed', 'deadline'] as const)(

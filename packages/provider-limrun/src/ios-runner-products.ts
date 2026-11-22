@@ -205,16 +205,21 @@ export async function uploadLimrunRunnerProducts(
   };
   await visit('');
   const selected = payloadPaths ? files.filter((file) => payloadPaths.includes(file.path)) : files;
+  // Only a path this upload named is a sync answer: an entry the instance returns is its own text and
+  // can echo the token this request is authenticated with. So a failure names back only what it was
+  // asked to sync, and drops anything else it put in that field.
+  const knownProductPaths = new Set(files.map((file) => file.path));
   for (let attempt = 0; attempt < 2; attempt++) {
     signal.throwIfAborted();
     const result = await upload(attempt === 0 ? selected : files);
-    if (result.ok === true && !result.needFull?.length) return;
-    if (!result.needFull?.length || attempt === 1) {
+    const needFull = (result.needFull ?? []).filter((name) => knownProductPaths.has(name));
+    if (result.ok === true && needFull.length === 0) return;
+    if (needFull.length === 0 || attempt === 1) {
       throw limrunRunnerError(
         'limrun_runner_upload_failed',
         'Limrun runner products could not be synchronized',
         {
-          needFull: result.needFull,
+          needFull,
         },
       );
     }

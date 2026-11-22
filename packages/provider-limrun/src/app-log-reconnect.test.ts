@@ -280,7 +280,7 @@ test('reattaches app logs to the attached instance the descriptor names', async 
   });
   expect(vi.mocked(createIosInstanceClient)).toHaveBeenLastCalledWith({
     ...ATTACHED_ACCESS,
-    logLevel: 'warn',
+    logLevel: 'none',
   });
   expect(outcome.status).toBe('opened');
 

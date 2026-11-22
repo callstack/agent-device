@@ -44,6 +44,8 @@ import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import {
   deleteLimrunInstance,
   LIMRUN_CLIENT_ID,
+  LIMRUN_ORG_CLIENT_LOGGING,
+  fromLimrunOrgApi,
   limrunUserAgent,
   requireLimrunOrgClient,
 } from './client-options.ts';
@@ -188,6 +190,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       ? new Limrun({
           apiKey: options.apiKey,
           userAgent: limrunUserAgent(dependencies.clientVersion),
+          ...LIMRUN_ORG_CLIENT_LOGGING,
         })
       : undefined;
   }
@@ -552,10 +555,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       // The session is recorded in the step that answers for it, so every later step of this allocation
       // fails with its handles still owned: the instance client and the host ADB endpoint are released by
       // whoever ends this lease, whether or not the allocation ever answered.
+      // The create's failure is the one answer this lease has for its caller and is recorded by the daemon,
+      // so it is normalized here: the SDK's own text for an account-API refusal is the response body.
       const session =
         platform === 'ios'
-          ? await allocateLimrunIosSession(params, rent)
-          : await allocateLimrunAndroidSession(params, rent);
+          ? await fromLimrunOrgApi(allocateLimrunIosSession(params, rent))
+          : await fromLimrunOrgApi(allocateLimrunAndroidSession(params, rent));
       owner.session = session;
       const appAlias: LimrunAppAlias | undefined = requestedAsset && {
         assetName: requestedAsset.name,
@@ -778,6 +783,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
     if (terminationReason === undefined) return undefined;
     const { PROVIDER_INSTANCE_ENDED } = await import('@agent-device/contracts/lease-scope');
+    // `terminationReason` is bounded and scrubbed by its reader; `readLimrunTerminationReason` is the only
+    // route that can name it here, so the published line is one line.
     throw new AppError('COMMAND_FAILED', `The Limrun instance ended (${terminationReason}).`, {
       reason: PROVIDER_INSTANCE_ENDED,
       terminationReason,
@@ -969,7 +976,14 @@ async function readLimrunTerminationReason(
       return undefined;
     }
     if (answer.value.status.state !== 'terminated') return undefined;
-    return answer.value.status.terminationReason ?? 'Unknown';
+    // The termination reason is the account API's own text, and this request carries the account key in
+    // its header, so it goes through the same reader as an instance's error body before it is published.
+    // It is read here rather than imported at the top: the runtime façade keeps its merge-base closure
+    // (ADR-0027), and this is the only route that publishes the account API's text.
+    const { safeTerminationReason } = await import('./error-text.ts');
+    return safeTerminationReason(answer.value.status.terminationReason, [
+      limrun.apiKey ?? undefined,
+    ]);
   } catch {
     return undefined;
   }
