@@ -154,3 +154,73 @@ The window text stays "within 5s" here because the CLI request's deadline
 left the full budget — the deadline wording fires only when the deadline
 actually clamped the poll (pinned by the partly-clamped and spent-deadline
 tests).
+
+## The secure keyguard, live at head fbbe9fa81 (2026-11-23)
+
+A 4-digit PIN is set on the unit (Settings, the secure keypad — its keys are
+neither in the accessibility tree nor in a screenshot, so the digits are
+tapped by grid position; the same taps that set the PIN unlock it). The unit
+is a personal acceptance device with no user data on it; the serial and the
+bundle below keep the same placeholders as the launch-args evidence.
+
+The live run answers the protocol above, and the answer diverges from the
+predicted shape in one important way: on a secure keyguard, `aa start`
+refuses the launch outright, before any poll:
+
+```sh
+$ agent-device open <bundle> --platform harmonyos
+Error (COMMAND_FAILED): HarmonyOS refused to launch <bundle>: the device
+screen is locked. May have reached the device. Next: Run snapshot to check
+the screen before you retry. Unlock the device screen, then run the open
+again.
+[exit=1]
+$ agent-device open <bundle> --platform harmonyos --foreground --json
+{
+  "code": "COMMAND_FAILED",
+  "message": "HarmonyOS refused to launch <bundle>: the device screen is locked",
+  "hint": "Unlock the device screen, then run the open again.",
+  "details": {"reason": "open-not-foreground", "dispatched": "unknown"}
+}
+[exit=1]
+$ hdc -t <serial> shell "aa dump -l"
+User ID #100
+  current mission lists:{
+    Mission ID #70  mission name #[#<other-app>:entry:EntryAbility] ...
+        state #BACKGROUND  start time [13052787]
+    ...          # 11 missions, zero state #FOREGROUND lines
+```
+
+The device-side answer, captured before the classification landed, is what
+the unit actually prints at dispatch:
+
+```
+error: failed to start ability.
+Error Code:10106102  Error Message:The device screen is locked during the
+application launch, unlock screen failed.
+Error cause: The current mode is developer mode, and the screen cannot be
+unlocked automatically
+```
+
+Three consequences, stated plainly:
+
+- The predicted "plain open prints a warning and succeeds" cannot exist on
+  this route: `aa` refuses the launch, so there is nothing to warn about.
+  Both the plain and the `--foreground` open now fail with the typed
+  `open-not-foreground` reason and the unlock hint. A locked screen still
+  never reports a confirmed open.
+- The refusal is instant, so the "within 5s" wording of the poll path never
+  applies here; no probe runs.
+- `parseHarmonyForegroundRead` needed no change: the dump keeps the
+  no-foreground shape (headers plus mission blocks, zero FOREGROUND), but
+  the poll never reads it on this route because the dispatch fails first.
+  The classification now lives where the refusal surfaces: `openHarmonyApp`
+  maps `aa`'s `Error Code:10106102` answer to the typed
+  `open-not-foreground` failure (pinned by
+  `openHarmonyApp classifies the locked-screen launch refusal as
+  open-not-foreground`).
+
+One restoration note kept honest: after this run the unit stays locked, and
+no shell-reachable gesture variant (`uinput -T` flings from four starting
+points, taps, a double click) moved the widget page to the password page.
+The keypad that set the PIN sits on the same class of secure surface. The
+unit unlocks manually with the recorded PIN.
