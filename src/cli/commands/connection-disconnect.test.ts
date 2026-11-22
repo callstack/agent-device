@@ -174,3 +174,86 @@ test('disconnect treats an already-inactive lease as released without a failure 
   assert.equal(text.trim(), 'Disconnected remote session "adc-release-inactive".');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+test('disconnect removes a record that names its session but fails validation', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-disconnect-invalid-record-',
+  );
+  fs.writeFileSync(remoteConfigPath, '{}');
+  const recordsDir = path.join(stateDir, 'remote-connections');
+  const recordPath = path.join(recordsDir, 'demo.json');
+  const activePath = path.join(recordsDir, '.active-session.json');
+  fs.mkdirSync(recordsDir, { recursive: true });
+  fs.writeFileSync(
+    recordPath,
+    JSON.stringify({
+      version: 1,
+      session: 'demo',
+      remoteConfigPath,
+      remoteConfigHash: 'hash',
+      tenant: 'acme',
+      runId: 'run-demo',
+      connectedAt: new Date().toISOString(),
+      updatedAt: null,
+    }),
+  );
+  fs.writeFileSync(activePath, JSON.stringify({ session: 'demo' }));
+
+  const text = await withCapturedStdoutAsync(async () => {
+    await disconnectCommand({
+      positionals: [],
+      flags: { json: false, help: false, version: false, stateDir, session: 'demo' },
+      client: createTestClient(),
+    });
+  });
+
+  assert.equal(text.trim(), 'No remote connection for "demo".');
+  assert.equal(fs.existsSync(recordPath), false);
+  assert.equal(fs.existsSync(activePath), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('disconnect refuses a record it cannot remove before it closes the session or releases the lease', async () => {
+  const { tempRoot, stateDir } = seedReleasableConnection(
+    'agent-device-disconnect-occupied-session-path-',
+    'Demo',
+  );
+  const recordsDir = path.join(stateDir, 'remote-connections');
+  const [hashedName] = fs.readdirSync(recordsDir).filter((name) => name.startsWith('~'));
+  assert.ok(hashedName, 'the new build saves Demo at its hashed path');
+  const hashedPath = path.join(recordsDir, hashedName);
+  // An older build connected Demo under a run of its own and saved it at the name it wrote.
+  const legacyPath = path.join(recordsDir, 'Demo.json');
+  const legacy = JSON.parse(fs.readFileSync(hashedPath, 'utf8'));
+  fs.writeFileSync(
+    legacyPath,
+    JSON.stringify({ ...legacy, runId: 'run-legacy', leaseId: 'lease-legacy' }),
+  );
+  let closed = 0;
+  let released = 0;
+
+  await assert.rejects(
+    disconnectCommand({
+      positionals: [],
+      flags: { json: true, help: false, version: false, stateDir, session: 'Demo' },
+      client: createTestClient({
+        closeSession: async () => {
+          closed += 1;
+          return { session: 'Demo', identifiers: { session: 'Demo' } };
+        },
+        release: async () => {
+          released += 1;
+          return { released: true };
+        },
+      }),
+    }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'connection_session_mismatch',
+  );
+
+  assert.equal(closed, 0);
+  assert.equal(released, 0);
+  assert.equal(JSON.parse(fs.readFileSync(hashedPath, 'utf8')).leaseId, 'lease-1');
+  assert.equal(JSON.parse(fs.readFileSync(legacyPath, 'utf8')).leaseId, 'lease-legacy');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
