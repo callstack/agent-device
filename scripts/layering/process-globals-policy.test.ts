@@ -159,7 +159,7 @@ test('non-configuration process members and unrelated property names remain perm
     [],
   );
   for (const file of [
-    'packages/platform-apple/src/os/macos/helper.ts',
+    'packages/platform-macos/src/helper.ts',
     'packages/apple-runner/src/runner-process-launch.ts',
   ]) {
     assert.equal(check('captureHostEnvironment(process);', file).length, 1, file);

@@ -96,7 +96,7 @@ const ANDROID_EMITTED_TYPES = [
   'androidx.core.widget.NestedScrollView',
 ] as const;
 
-// apple/macos-helper/.../SnapshotTraversal.swift `normalizedSnapshotType`. Three
+// packages/platform-macos/macos-helper/.../SnapshotTraversal.swift `normalizedSnapshotType`. Three
 // output classes, all represented below:
 //  1. every one of the 13 roles the switch maps to a fixed short name;
 //  2. `AXWindow`, whose output is the SUBROLE unless that subrole is
@@ -150,7 +150,7 @@ function macosFixedOutputsFromEmitter(): string[] {
   const swift = fs.readFileSync(
     path.join(
       REPO_ROOT,
-      'apple/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift',
+      'packages/platform-macos/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift',
     ),
     'utf8',
   );

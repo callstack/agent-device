@@ -107,7 +107,7 @@ Audio:
     agent-device audio probe start 10 1000 --platform android
   audio probe start uses duration seconds first, then bucket milliseconds. Results are compact rmsDbfs and peakDbfs arrays so agents can correlate audible moments with screenshots, actions, network entries, or frame samples.
   On web, audio probe samples HTML media elements and URL-backed media may be routed through the probe AudioContext while observed.
-  On macOS hosts, audio probe samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators. It requires Screen Recording permission and is system-audio evidence, not app-instrumented audio. Physical iOS and Android devices are not supported.
+  On macOS hosts, audio probe samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators. The sampler is the macOS plugin's, so every one of those sessions needs it installed: agent-device plugins add @agent-device/macos. It requires Screen Recording permission and is system-audio evidence, not app-instrumented audio. Physical iOS and Android devices are not supported.
 
 Crash symbolication:
   Crash routing:

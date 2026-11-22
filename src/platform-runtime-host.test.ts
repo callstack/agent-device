@@ -4,10 +4,9 @@ import path from 'node:path';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createPlatformDeviceInventoryGateways } from './platform-runtime.ts';
-import {
-  vegaPlatformCompositionFixture,
-  vegaSelectionFixture,
-} from './platform-runtime-vega-provider.fixtures.ts';
+import { vegaSelectionFixture } from './platform-runtime-vega-provider.fixtures.ts';
+import { macOsLeafSelectionFixture } from './platform-runtime-macos-leaf.fixtures.ts';
+import { bindPlatformLeaves, composePlatformPlugins } from './platform-runtime/platform-plugins.ts';
 
 const toolchains = vi.hoisted(() => ({
   appleEvaluations: 0,
@@ -120,15 +119,23 @@ test('a host env with no home still inventories every family through the gateway
   // the gateways load the one host for all of them. Reverting the refusal makes both assertions
   // below red: the Apple host-Mac route fails with COMMAND_FAILED, and Vega fails with
   // COMMAND_FAILED instead of the honest TOOL_MISSING its PATH-only answer yields.
+  const platforms = composePlatformPlugins(
+    [vegaSelectionFixture({ env: {}, cwd: process.cwd() }).get()],
+    [],
+    undefined,
+    [macOsLeafSelectionFixture({ env: {}, cwd: process.cwd() }).get()],
+  );
+  bindPlatformLeaves(platforms);
   const gateways = await createPlatformDeviceInventoryGateways(
     {
       env: {},
       cwd: process.cwd(),
     },
     undefined,
-    // Vega is a platform plugin, so the scenario supplies it: the assertion covers what its
-    // inventory answers when the host env names no home, not the builtin family set.
-    vegaPlatformCompositionFixture({ env: {}, cwd: process.cwd() }),
+    // Vega is a platform plugin and macOS a leaf of the Apple family, so the scenario supplies
+    // both: the assertions cover what their inventories answer when the host env names no home,
+    // not the builtin family set.
+    platforms,
   );
   const scope: PlatformRequestScope = Object.freeze({
     signal: new AbortController().signal,

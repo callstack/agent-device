@@ -9,7 +9,7 @@ import {
 import type { IosAppInfo } from './app-info.ts';
 import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 import { buildAppNotInstalledError } from './app-resolution-error.ts';
-import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';
+import { macOsDesktop } from './macos-desktop.ts';
 import { resolveAppleToolProvider } from './tool-provider.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
@@ -48,7 +48,7 @@ export async function resolveIosApp(
   options: IosAppResolutionOptions = {},
 ): Promise<string> {
   if (isMacOs(device)) {
-    return await resolveMacOsApp(app);
+    return await macOsDesktop().resolveApp(app);
   }
   const trimmed = app.trim();
   const alias = resolveIosAppAlias(trimmed);
@@ -283,7 +283,7 @@ function parseUrlScheme(url: string): string | undefined {
 
 export async function listIosApps(device: DeviceInfo, filter: AppsFilter): Promise<IosAppInfo[]> {
   if (isMacOs(device)) {
-    return await listMacApps(filter);
+    return await macOsDesktop().listApps(filter);
   }
   if (device.kind === 'simulator') {
     const apps = await listSimulatorApps(device);
@@ -332,4 +332,15 @@ async function listSimulatorAppMetadata(
 ): Promise<SimulatorAppMetadata[]> {
   const read = await resolveAppleToolProvider().simulatorApps.list(device, options);
   return read.type === 'listed' ? read.apps : [];
+}
+
+/**
+ * The open target of a macOS app device (ADR 0035): its own app, which a link alone also opens.
+ * The installed macOS leaf resolves it; naming another app is refused before anything launches.
+ */
+export async function resolveMacOsAppDeviceOpenTarget(
+  device: DeviceInfo,
+  target: string | undefined,
+): Promise<{ appBundleId: string; appName?: string }> {
+  return await macOsDesktop().resolveAppDeviceOpenTarget(device, target);
 }

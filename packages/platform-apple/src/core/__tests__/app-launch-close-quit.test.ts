@@ -1,8 +1,6 @@
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
@@ -22,7 +20,7 @@ import { closeIosApp } from '../app-launch.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
 import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import { runCmd } from '@agent-device/host-kit/command';
-import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
+import { bindMacOsLeafFixture } from '../../__tests__/macos-leaf.fixtures.ts';
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
 
 bindTestCommandHost();
@@ -36,32 +34,15 @@ beforeEach(() => {
   mockEnsureBootedSimulator.mockImplementation(simulatorActual.ensureBootedSimulator);
 });
 
-test('closeIosApp on macOS uses helper quit for bundle identifiers', async () => {
-  await withMockedMacOsHelper(
-    [
-      '#!/bin/sh',
-      String.raw`printf "%s\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"`,
-      "cat <<'JSON'",
-      '{"ok":true,"data":{"bundleId":"com.example.foobar","running":false,"terminated":false,"forceTerminated":false}}',
-      'JSON',
-      '',
-    ].join('\n'),
-    async ({ tmpDir }) => {
-      const argsLogPath = path.join(tmpDir, 'args.log');
-      const previousArgsFile = process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-      process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
+test('closeIosApp on macOS delegates the close to the installed leaf', async () => {
+  const leaf = bindMacOsLeafFixture({ closeApp: async () => {} });
 
-      try {
-        await closeIosApp(MACOS_TEST_DEVICE, 'com.example.foobar', undefined, process.env);
-        const logged = await fs.readFile(argsLogPath, 'utf8');
-        assert.equal(logged, 'app\nquit\n--bundle-id\ncom.example.foobar\n');
-      } finally {
-        if (previousArgsFile === undefined) delete process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-        else process.env.AGENT_DEVICE_TEST_ARGS_FILE = previousArgsFile;
-      }
-    },
-    { tempPrefix: 'agent-device-macos-close-helper-test-' },
-  );
+  await closeIosApp(MACOS_TEST_DEVICE, 'com.example.foobar', undefined, process.env);
+
+  assert.deepEqual(leaf.calls, [
+    { operation: 'closeApp', args: [MACOS_TEST_DEVICE, 'com.example.foobar', process.env] },
+  ]);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
 test('closeIosApp on iOS simulator bounds simctl terminate', async () => {

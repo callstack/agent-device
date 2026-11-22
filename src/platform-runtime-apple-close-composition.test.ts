@@ -22,12 +22,13 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     },
   };
 });
-vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple/macos')>()),
-  runMacOsAlertAction: async () => {
-    events.push('alerts');
-    return {};
-  },
+vi.mock('@agent-device/platform-apple/macos-desktop', () => ({
+  macOsDesktop: async () => ({
+    runAlertAction: async () => {
+      events.push('alerts');
+      return {};
+    },
+  }),
 }));
 
 bindTestCommandHost();

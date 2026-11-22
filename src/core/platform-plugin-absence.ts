@@ -1,6 +1,9 @@
 import type { Platform } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
-import { missingOptionalPlatformError } from '@agent-device/contracts/plugin-installation';
+import {
+  missingMacOsPlatformError,
+  missingOptionalPlatformError,
+} from '@agent-device/contracts/plugin-installation';
 import { readVersion } from '@agent-device/host-kit/version';
 
 /**
@@ -15,4 +18,9 @@ import { readVersion } from '@agent-device/host-kit/version';
  */
 export function missingPlatformPlugin(family: Platform): AppError {
   return missingOptionalPlatformError(family, readVersion());
+}
+
+/** How this runtime reports a macOS request when no package holds the macOS leaf (#4675). */
+export function missingMacOsPlatformPlugin(): AppError {
+  return missingMacOsPlatformError(readVersion());
 }

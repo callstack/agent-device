@@ -1,8 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AppsFilter } from '@agent-device/contracts/device';
 import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
 import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
-import type { IosAppInfo } from './app-info.ts';
+import type { MacOsHostProvider } from '@agent-device/contracts/macos-platform-leaf';
 
 /** Cleanup ignores scoped request cancellation but keeps explicit signals and its own deadline. */
 export type AppleToolExecOptions = ExecOptions &
@@ -37,18 +36,11 @@ export type ApplePlistProvider = {
   readJson(path: string, signal?: AbortSignal): Promise<Record<string, unknown> | null>;
 };
 
-export type MacOsOpenOptions = { background?: boolean };
-
-export type AppleMacOsHostProvider = {
-  /** `background` launches or reopens without bringing the app to the front. */
-  openBundle(bundleId: string, url?: string, options?: MacOsOpenOptions): Promise<void>;
-  openTarget(target: string, options?: MacOsOpenOptions): Promise<void>;
-  readClipboard(): Promise<string>;
-  writeClipboard(text: string): Promise<void>;
-  readDarkMode(): Promise<boolean>;
-  setDarkMode(enabled: boolean): Promise<void>;
-  listApps(filter: AppsFilter): Promise<IosAppInfo[]>;
-};
+/**
+ * The macOS host routes a request may substitute. A provider that names none leaves them to the
+ * installed macOS leaf, which answers them with the local tools of this host.
+ */
+export type AppleMacOsHostProvider = MacOsHostProvider;
 
 export type AppleSimulatorFileCopy = {
   device: DeviceInfo;

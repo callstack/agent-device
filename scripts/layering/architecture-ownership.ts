@@ -305,6 +305,7 @@ export const ARCHITECTURE_OWNERSHIP = {
         'packages/platform-apple/',
         'packages/platform-harmonyos/',
         'packages/platform-linux/',
+        'packages/platform-macos/',
         'packages/platform-vega/',
         'packages/platform-web/',
         'packages/provider-aws-device-farm/',

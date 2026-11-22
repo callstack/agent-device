@@ -1,0 +1,440 @@
+import assert from 'node:assert/strict';
+import { test, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { macOsHelperSurface } from '@agent-device/contracts/session';
+import { AppError } from '@agent-device/kernel/errors';
+import { macOsToolboxFixture } from './toolbox.fixtures.ts';
+import type { MacOsToolbox } from './toolbox.ts';
+
+const withToolbox = async <T>(box: MacOsToolbox, run: (box: MacOsToolbox) => Promise<T>) =>
+  await run(box);
+import { readFileSync } from 'node:fs';
+import {
+  MACOS_DELIVERY_MECHANISMS,
+  MACOS_HELPER_REASONS,
+  MACOS_HELPER_REFUSAL_REASONS,
+  macOsClickScheduleMs,
+  runMacOsPressAction,
+  runMacOsReadTextAction,
+  runMacOsScreenshotAction,
+  quitMacOsApp,
+  runMacOsPermissionAction,
+  runMacOsSnapshotAction,
+} from './helper.ts';
+
+let captureEnv: Record<string, string | undefined>;
+beforeEach(() => {
+  captureEnv = {
+    ...process.env,
+    AGENT_DEVICE_CLAIMS_DIR: mkdtempForTestSync('macos-capture-claims'),
+  };
+});
+
+const desktop = macOsHelperSurface('desktop', 'xctest')!;
+const menubar = macOsHelperSurface('menubar', 'xctest')!;
+const frontmostApp = macOsHelperSurface('frontmost-app', 'xctest')!;
+const nativeApp = macOsHelperSurface('app', 'native')!;
+
+test('macOS helper snapshot passes cancellation to the helper process', async () => {
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | undefined;
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (_args, options) => {
+        receivedSignal = options?.signal;
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            ok: true,
+            data: {
+              surface: 'desktop',
+              nodes: [],
+              truncated: false,
+              backend: 'macos-helper',
+            },
+          }),
+          stderr: '',
+        };
+      },
+    },
+  });
+
+  await withToolbox(
+    provider,
+    async (box) =>
+      await runMacOsSnapshotAction(box, desktop, { env: captureEnv, signal: controller.signal }),
+  );
+
+  assert.equal(receivedSignal, controller.signal);
+});
+
+function helperReturn(data: Record<string, unknown>) {
+  return {
+    exitCode: 0,
+    stdout: JSON.stringify({ ok: true, data }),
+    stderr: '',
+  };
+}
+
+test('macOS helper press carries the hold, repeat count, and interval to the click schedule', async () => {
+  let receivedArgs: string[] = [];
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ x: 12, y: 34, holdMs: 800, clicks: 2 });
+      },
+    },
+  });
+
+  const result = await withToolbox(
+    provider,
+    async (box) =>
+      await runMacOsPressAction(box, 12, 34, {
+        env: captureEnv,
+        surface: menubar,
+        bundleId: 'com.example.Menu',
+        holdMs: 800,
+        clicks: 2,
+        intervalMs: 140,
+      }),
+  );
+
+  assert.deepEqual(
+    [
+      receivedArgs.slice(receivedArgs.indexOf('--hold-ms'), receivedArgs.indexOf('--hold-ms') + 2),
+      receivedArgs.slice(receivedArgs.indexOf('--clicks'), receivedArgs.indexOf('--clicks') + 2),
+      receivedArgs.slice(
+        receivedArgs.indexOf('--interval-ms'),
+        receivedArgs.indexOf('--interval-ms') + 2,
+      ),
+    ],
+    [
+      ['--hold-ms', '800'],
+      ['--clicks', '2'],
+      ['--interval-ms', '140'],
+    ],
+  );
+  // The helper reports the hold it delivered, which the caller republishes as the
+  // press's hold so a clamped request cannot read back as the requested one.
+  assert.equal(result.holdMs, 800);
+});
+
+test('macOS helper press carries an explicit zero interval instead of dropping it', async () => {
+  let receivedArgs: string[] = [];
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ x: 7, y: 8, holdMs: 60, clicks: 2 });
+      },
+    },
+  });
+
+  await withToolbox(
+    provider,
+    async (box) =>
+      await runMacOsPressAction(box, 7, 8, {
+        env: captureEnv,
+        surface: desktop,
+        clicks: 2,
+        intervalMs: 0,
+      }),
+  );
+
+  assert.ok(receivedArgs.includes('--clicks'), receivedArgs.join(' '));
+  assert.deepEqual(
+    receivedArgs.slice(
+      receivedArgs.indexOf('--interval-ms'),
+      receivedArgs.indexOf('--interval-ms') + 2,
+    ),
+    ['--interval-ms', '0'],
+  );
+});
+
+test('macOS helper press keeps repeats independent and names a double-click explicitly', async () => {
+  let receivedArgs: string[] = [];
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ x: 7, y: 8, holdMs: 60, clicks: 3, doubleClick: true });
+      },
+    },
+  });
+
+  await withToolbox(
+    provider,
+    async (box) =>
+      await runMacOsPressAction(box, 7, 8, {
+        env: captureEnv,
+        surface: frontmostApp,
+        clicks: 3,
+        doubleClick: true,
+      }),
+  );
+
+  // `--count 3 --double-tap` is three double-clicks: the count stays the press count and the
+  // rising click state is a separate flag, never derived from the count.
+  assert.deepEqual(
+    receivedArgs.slice(receivedArgs.indexOf('--clicks'), receivedArgs.indexOf('--clicks') + 2),
+    ['--clicks', '3'],
+  );
+  assert.ok(receivedArgs.includes('--double-click'), receivedArgs.join(' '));
+});
+
+test('macOS helper press outlives its own click schedule and forwards cancellation', async () => {
+  let receivedTimeoutMs: number | undefined;
+  let receivedSignal: AbortSignal | undefined;
+  let receivedKill: { signal: string; graceMs: number } | undefined;
+  const controller = new AbortController();
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (_args, options) => {
+        receivedTimeoutMs = options?.timeoutMs;
+        receivedSignal = options?.signal;
+        receivedKill = options?.kill;
+        return helperReturn({ x: 1, y: 2, holdMs: 10_000, clicks: 4 });
+      },
+    },
+  });
+
+  await withToolbox(
+    provider,
+    async (box) =>
+      await runMacOsPressAction(box, 1, 2, {
+        env: captureEnv,
+        surface: desktop,
+        holdMs: 10_000,
+        clicks: 4,
+        intervalMs: 120,
+        signal: controller.signal,
+      }),
+  );
+
+  // Four ten-second holds are 40.36s of schedule; a fixed 30s timeout would kill the helper
+  // inside the third hold with the button down.
+  const scheduleMs = macOsClickScheduleMs({ holdMs: 10_000, clicks: 4, intervalMs: 120 });
+  assert.equal(scheduleMs, 40_360);
+  assert.equal(receivedTimeoutMs, scheduleMs + 30_000);
+  assert.equal(receivedSignal, controller.signal);
+  // The host stops the helper with SIGKILL on both routes, and a helper killed between a
+  // mouse-down and its mouse-up leaves the button stuck. The helper's release handler only
+  // runs if the stop reaches it as a catchable signal first.
+  assert.deepEqual(receivedKill, { signal: 'SIGTERM', graceMs: 1_000 });
+});
+
+test('macOS click schedule mirrors the helper floors for the timeout it derives', () => {
+  assert.equal(macOsClickScheduleMs({}), 60);
+  assert.equal(macOsClickScheduleMs({ holdMs: 5 }), 40);
+  assert.equal(
+    macOsClickScheduleMs({ clicks: 2, doubleClick: true, intervalMs: 100 }),
+    4 * 60 + 2 * 80 + 100,
+  );
+});
+
+test('macOS helper press stays a single held click when nothing is repeated', async () => {
+  let receivedArgs: string[] = [];
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ x: 5, y: 6, holdMs: 60, clicks: 1 });
+      },
+    },
+  });
+
+  await withToolbox(
+    provider,
+    async (box) => await runMacOsPressAction(box, 5, 6, { env: captureEnv, surface: frontmostApp }),
+  );
+
+  assert.equal(receivedArgs.includes('--clicks'), false);
+  assert.equal(receivedArgs.includes('--hold-ms'), false);
+  assert.equal(receivedArgs.includes('--interval-ms'), false);
+});
+
+test('macOS helper screenshot argv carries only --out and --surface', async () => {
+  let receivedArgs: string[] = [];
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ path: '/tmp/out.png', surface: 'desktop' });
+      },
+    },
+  });
+
+  await withToolbox(
+    provider,
+    async (box) =>
+      await runMacOsScreenshotAction(box, '/tmp/out.png', { env: captureEnv, surface: desktop }),
+  );
+
+  assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
+});
+
+for (const hint of [
+  'The front window is unavailable to screen capture. If it is opening or closing, retry after it settles.',
+  undefined,
+]) {
+  test(`a helper refusal carries its details and hint through untouched (${hint === undefined ? 'no hint' : 'with hint'})`, async () => {
+    const provider = macOsToolboxFixture({
+      macosHelper: {
+        run: async () => ({
+          exitCode: 1,
+          stdout: JSON.stringify({
+            ok: false,
+            error: {
+              message:
+                "screenshot could not capture the app's front window: ScreenCaptureKit does not offer it",
+              details: {
+                reason: 'front-window-not-shareable',
+                bundleId: 'com.apple.TextEdit',
+                frontWindowId: '4242',
+                ...(hint ? { hint } : {}),
+              },
+            },
+          }),
+          stderr: '',
+        }),
+      },
+    });
+
+    const error = await withToolbox(provider, async (box) =>
+      runMacOsScreenshotAction(box, '/tmp/out.png', {
+        surface: nativeApp,
+        bundleId: 'com.apple.TextEdit',
+        env: captureEnv,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      ),
+    );
+
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'front-window-not-shareable');
+    assert.equal(error.details?.frontWindowId, '4242');
+    assert.equal(error.details?.hint, hint);
+  });
+}
+
+test('macOS helper screenshots never run two captures at once', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        active -= 1;
+        return helperReturn({ path: '/tmp/out.png', surface: 'app' });
+      },
+    },
+  });
+  const app = macOsHelperSurface('app', 'native')!;
+
+  await withToolbox(provider, async (box) => {
+    await Promise.all([
+      runMacOsScreenshotAction(box, '/tmp/one.png', {
+        env: captureEnv,
+        surface: app,
+        bundleId: 'com.example.one',
+      }),
+      runMacOsScreenshotAction(box, '/tmp/two.png', {
+        env: captureEnv,
+        surface: app,
+        bundleId: 'com.example.two',
+      }),
+    ]);
+  });
+
+  assert.equal(maxActive, 1);
+});
+
+test('helper entry points accept only an owner-routed surface', () => {
+  // Never invoked: each directive fails typecheck once its entry point widens back to an
+  // unbranded or optional surface.
+  const widenedCalls = async (out: string) => {
+    // @ts-expect-error a bare literal skips the routing owner
+    await runMacOsSnapshotAction(box, 'desktop');
+    // @ts-expect-error a bare literal skips the routing owner
+    await runMacOsScreenshotAction(box, out, { env: captureEnv, surface: 'menubar' });
+    // @ts-expect-error the surface is required
+    await runMacOsReadTextAction(box, 1, 2, { bundleId: 'com.example' });
+    // @ts-expect-error the surface is required
+    await runMacOsPressAction(box, 1, 2, {});
+    // @ts-expect-error the surface is required
+    await runMacOsScreenshotAction(box, out);
+  };
+  assert.equal(typeof widenedCalls, 'function');
+});
+
+test('the helper vocabulary matches the table the Swift helper is held to', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL('../../../contracts/fixtures/macos-native-helper-outcomes.json', import.meta.url),
+      'utf8',
+    ),
+  ) as {
+    refusalReasons: string[];
+    failureReasons: string[];
+    deliveryMechanisms: string[];
+  };
+  assert.deepEqual(
+    Object.values(MACOS_HELPER_REASONS).map((row) => row.reason),
+    [...fixture.refusalReasons, ...fixture.failureReasons],
+  );
+  assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
+  assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
+});
+
+test('the helper accepts a bundle id with an uppercase first segment and refuses a bare name', async () => {
+  const receivedArgs: string[][] = [];
+  const provider = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs.push(args);
+        return helperReturn({
+          bundleId: 'Foo.Bar',
+          running: false,
+          terminated: false,
+          forceTerminated: false,
+        });
+      },
+    },
+  });
+
+  await withToolbox(provider, async (box) => {
+    await quitMacOsApp(box, 'Foo.Bar', captureEnv);
+    await assert.rejects(quitMacOsApp(box, 'TextEdit', captureEnv), { code: 'INVALID_ARGS' });
+  });
+
+  assert.deepEqual(receivedArgs, [['app', 'quit', '--bundle-id', 'Foo.Bar']]);
+});
+
+test('a permission grant names its action and target to the helper and returns its answer', async () => {
+  const granted = {
+    target: 'accessibility',
+    action: 'grant',
+    granted: true,
+    requested: true,
+    openedSettings: false,
+  };
+  let receivedArgs: string[] = [];
+  const box = macOsToolboxFixture({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn(granted);
+      },
+    },
+  });
+
+  const result = await runMacOsPermissionAction(box, 'grant', 'accessibility', captureEnv);
+
+  assert.deepEqual(receivedArgs, ['permission', 'grant', 'accessibility']);
+  assert.deepEqual(result, granted);
+});

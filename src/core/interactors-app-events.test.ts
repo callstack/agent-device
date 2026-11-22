@@ -14,8 +14,13 @@ import {
   mkdtempForTest,
 } from '@agent-device/test-kit';
 import { getInteractor } from './interactors.ts';
+import { macOsPlatformCompositionFixture } from '../platform-runtime-macos-leaf.fixtures.ts';
 
 bindTestCommandHost();
+
+// macOS desktop automation is the managed macOS package's: composing it binds the leaf to the
+// bundled Apple owner, as the daemon's composition does.
+macOsPlatformCompositionFixture();
 
 async function triggerEvent(device: DeviceInfo, eventUrl: string, appBundleId?: string) {
   const operations = bindAdmittedLocalInteractorOperations({

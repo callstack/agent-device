@@ -140,6 +140,8 @@ const RUNTIME_SURFACE: ReadonlyArray<{ root: string; owns: (file: string) => boo
   { root: 'android/', owns: () => true },
   // The Linux plugin's AT-SPI helper: a runtime asset the Linux lanes execute through the plugin.
   { root: 'packages/platform-linux/linux/', owns: () => true },
+  // The macOS plugin's Swift helper: source the plugin builds on the host the macOS lane drives.
+  { root: 'packages/platform-macos/macos-helper/', owns: () => true },
   // macOS host Swift helpers that recording post-processing compiles on the daemon host.
   { root: 'packages/host-swift/swift/', owns: () => true },
   // TS/Swift golden tables (own:golden-table in model.ts): the parity XCTest runs on the lane.

@@ -7,7 +7,7 @@ import { readIosSetting, setIosSetting } from './core/app-settings.ts';
 import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts';
 import { iosRunnerOverrides } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
-import { runMacOsScreenshotAction } from './os/macos/helper.ts';
+import { macOsDesktop } from './core/macos-desktop.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlertStatus } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
@@ -23,6 +23,7 @@ import { KEYBOARD_RETURN_KEYS, type KeyboardReturnKey } from '@agent-device/cont
 import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
 import {
   macOsHelperSurface,
+  readMacOsAppBackend,
   type MacOsHelperSurface,
   type SessionSurface,
 } from '@agent-device/contracts/session';
@@ -42,10 +43,7 @@ import type {
   ScreenshotOptions,
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
-import { captureMacOsSurfaceSnapshot } from './os/macos/surface-snapshot.ts';
-import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { macOsNativeAppInteractor } from './os/macos/native-app-interactor.ts';
 import {
   presentAppleRunnerSnapshot,
   type AppleRunnerSnapshotPresentation,
@@ -69,7 +67,8 @@ export function createAppleInteractor(
 ): Interactor {
   const env = host.env;
   const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext, env);
-  const appBackend = isMacOs(device) ? hostMacOsAppBackend(env) : 'xctest';
+  // The app-session backend the host selected through `AGENT_DEVICE_MACOS_APP_BACKEND`.
+  const appBackend = isMacOs(device) ? readMacOsAppBackend((name) => env[name]) : 'xctest';
   const helperSurface = (surface: SessionSurface | undefined) =>
     isMacOs(device) ? macOsHelperSurface(surface, appBackend) : undefined;
   const interactor: Interactor = {
@@ -316,7 +315,11 @@ async function captureAppleSnapshot(
   env: Readonly<EnvMap>,
 ) {
   if (helper) {
-    return await captureMacOsSurfaceSnapshot({ ...options, surface: helper }, options?.signal, env);
+    return await macOsDesktop().captureSurfaceSnapshot(
+      { ...options, surface: helper },
+      options?.signal,
+      env,
+    );
   }
   return await captureAppleRunnerSnapshot(device, options, runnerOpts);
 }
@@ -621,7 +624,7 @@ async function runAppleScreenshot(
         },
       );
     }
-    await runMacOsScreenshotAction(outPath, {
+    await macOsDesktop().screenshot(outPath, {
       surface: helper,
       ...(helper === 'app' ? { bundleId: options.appBundleId } : {}),
       signal: runnerOpts.signal,
@@ -662,8 +665,7 @@ async function readMacOsSurfaceTextAtPoint(
   signal: AbortSignal | undefined,
   env: Readonly<EnvMap>,
 ): Promise<string | undefined> {
-  const { runMacOsReadTextAction } = await import('./os/macos/helper.ts');
-  const result = await runMacOsReadTextAction(point.x, point.y, {
+  const result = await macOsDesktop().readTextAtPoint(point.x, point.y, {
     bundleId: appBundleId,
     surface,
     signal,
@@ -686,4 +688,42 @@ async function readRunnerTextAtPoint(
   if (typeof result.text === 'string') return result.text;
   // The runner answers `message` when it reached the element but rendered no readable text.
   return typeof result.message === 'string' ? result.message : undefined;
+}
+
+/**
+ * The macOS interactor of the native backend. It is assembled member by member so that nothing
+ * reaches the XCTest runner: the installed macOS leaf serves the actions on the session app through
+ * its helper, and only members whose macOS implementation uses local tooling or the helper are taken
+ * from `base`. Each action asks the leaf when it runs, so it uses the tools of the request it runs in.
+ */
+function macOsNativeAppInteractor(
+  base: Interactor,
+  context: RunnerContext,
+  env: Readonly<EnvMap>,
+): Interactor {
+  const native = async () => await macOsDesktop().nativeAppActions(base, context, env);
+  return {
+    open: base.open,
+    openDevice: base.openDevice,
+    close: base.close,
+    screenshot: base.screenshot,
+    snapshot: base.snapshot,
+    readTextAtPoint: base.readTextAtPoint,
+    readClipboard: base.readClipboard,
+    writeClipboard: base.writeClipboard,
+    setSetting: base.setSetting,
+    readAlert: base.readAlert,
+    awaitAlert: base.awaitAlert,
+    acceptAlert: base.acceptAlert,
+    dismissAlert: base.dismissAlert,
+    tap: async (...args) => await (await native()).tap(...args),
+    pressPoint: async (...args) => await (await native()).pressPoint(...args),
+    longPress: async (...args) => await (await native()).longPress(...args),
+    focus: async (...args) => await (await native()).focus(...args),
+    type: async (...args) => await (await native()).type(...args),
+    fill: async (...args) => await (await native()).fill(...args),
+    scroll: async (...args) => await (await native()).scroll(...args),
+    back: async (...args) => await (await native()).back(...args),
+    setOrientation: async (...args) => await (await native()).setOrientation(...args),
+  };
 }

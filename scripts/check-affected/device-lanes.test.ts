@@ -25,7 +25,7 @@ test('a TypeScript-only Apple change selects the iOS and macOS lanes without a S
   for (const file of [
     'packages/platform-apple/src/core/app-resolution.ts',
     'packages/platform-apple/src/runtime.ts',
-    'packages/platform-apple/src/os/macos/desktop-scroll.ts',
+    'packages/platform-apple/src/os/tvos/remote.ts',
   ]) {
     assert.deepEqual(lanes(file), ['replay-ios', 'replay-ios-device', 'replay-macos'], file);
     assert.ok(
@@ -36,6 +36,16 @@ test('a TypeScript-only Apple change selects the iOS and macOS lanes without a S
   }
   assert.deepEqual(lanes('packages/capture-kit/src/ios-snapshot-engine/action-shelf.ts'), [...IOS]);
   assert.deepEqual(lanes('test/integration/replays/macos/01-desktop.ad'), ['replay-macos']);
+});
+
+test('the macOS plugin owns only the macOS lanes, and its Swift helper adds the helper build', () => {
+  // macOS desktop automation is the managed macOS package's, so a change there carries no iOS lane.
+  assert.deepEqual(lanes('packages/platform-macos/src/helper.ts'), ['replay-macos']);
+  const helperLanes = lanes(
+    'packages/platform-macos/macos-helper/Sources/AgentDeviceMacOSHelper/main.swift',
+  );
+  assert.ok(helperLanes.includes('macos-helper') && helperLanes.includes('replay-macos'));
+  assert.equal(helperLanes.includes('replay-ios'), false);
 });
 
 test('a Swift runner change selects every platform build and every Apple lane', () => {
@@ -165,6 +175,7 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
 
 test('a mixed tree is shared, and two Apple leaves are still Apple', () => {
   assert.equal(deviceLaneLeaf('packages/platform-apple/src/os/macos/x.ts'), 'apple');
+  assert.equal(deviceLaneLeaf('packages/platform-macos/src/x.ts'), 'macos');
   assert.equal(deviceLaneLeaf('test/integration/android-emulator-e2e/ios/x.ts'), 'shared');
   assert.deepEqual(deviceLanesFor('packages/platform-apple/src/os/macos/x.ts').lanes, [
     'replay-ios',

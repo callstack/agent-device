@@ -859,6 +859,33 @@ importers:
         specifier: workspace:*
         version: link:../..
 
+  packages/platform-macos:
+    devDependencies:
+      '@agent-device/build-config':
+        specifier: workspace:*
+        version: link:../build-config
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+
   packages/platform-vega:
     devDependencies:
       '@agent-device/build-config':
