@@ -100,6 +100,19 @@ test('the extractors read every member and reject unsupported ones instead of dr
     /RUNNER_ERROR_CODES row RUNNER_BUSY must write its reason as a literal or read it from a reason table row/,
   );
   expectRead(codes("'runner_busy'"), 'RUNNER_ERROR_CODES', 'runnerCodes', ['runner_busy']);
+  for (const row of [
+    'RUNNER_BUSY: BUSY_ROW',
+    'RUNNER_BUSY: { ...BUSY_ROW }',
+    '...COMMON',
+    "[CODE]: { reason: 'x' }",
+  ]) {
+    expectReject(
+      `export const RUNNER_ERROR_CODES = { ${row} } as const;`,
+      'RUNNER_ERROR_CODES',
+      'runnerCodes',
+      /must be an object literal of named members/,
+    );
+  }
   expectRead(
     `export const WAIT_REASONS = {
       // Stalled.
@@ -151,8 +164,8 @@ function readRunnerCodeReasons(
   name: string,
 ): string[] {
   return exportedConstObject(parsed, name).properties.flatMap((property: any) => {
-    const row = unwrapAssertion(property.value);
-    const reason = row?.properties?.find((member: any) => member.key?.name === 'reason');
+    const row = readRunnerCodeRow(name, property);
+    const reason = row.properties.find((member: any) => member.key.name === 'reason');
     if (reason === undefined) return [];
     if (reason.value.type === 'Literal' && typeof reason.value.value === 'string') {
       return [reason.value.value];
@@ -167,6 +180,23 @@ function readRunnerCodeReasons(
     );
     return [found.reason];
   });
+}
+
+/** A RUNNER_ERROR_CODES row written as a plain object of named members, or a failed assertion. */
+function readRunnerCodeRow(name: string, property: any): any {
+  const row = property.type === 'Property' ? unwrapAssertion(property.value) : undefined;
+  const label = property.key?.name ?? property.type;
+  assert.ok(
+    property.key?.type === 'Identifier' &&
+      !property.computed &&
+      row?.type === 'ObjectExpression' &&
+      row.properties.every(
+        (member: any) =>
+          member.type === 'Property' && member.key.type === 'Identifier' && !member.computed,
+      ),
+    `${name} row ${label} must be an object literal of named members, so its reason can be read.`,
+  );
+  return row;
 }
 
 /** The string members of an exported `type Name = 'a' | 'b'` union. */
