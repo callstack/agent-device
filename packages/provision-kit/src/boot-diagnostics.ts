@@ -1,5 +1,4 @@
 import { asAppError, type ReasonTable } from '@agent-device/kernel/errors';
-export type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 
 /**
  * Why a simulator, emulator or XCTest runner failed to start, as {@link classifyBootFailure} and the
@@ -9,18 +8,20 @@ export type { InfrastructureBootFailureReason } from '@agent-device/contracts/bo
 export const BOOT_FAILURE_REASONS = {
   // The iOS simulator did not finish booting within its budget.
   iosBootTimeout: { reason: 'IOS_BOOT_TIMEOUT' },
-  // The XCTest runner did not accept a connection: it timed out, refused or dropped the connection.
+  // The XCTest runner did not accept a connection: xcodebuild exited before it was ready, or the
+  // connection timed out, was refused or dropped.
   iosRunnerConnectTimeout: { reason: 'IOS_RUNNER_CONNECT_TIMEOUT' },
   // The XCTest runner for this device is owned by another agent-device daemon, or is still busy
   // after this session's device lease was admitted.
   iosRunnerOwnedByOtherDaemon: { reason: 'IOS_RUNNER_OWNED_BY_OTHER_DAEMON' },
   // Xcode command-line tools are missing or not on PATH.
   iosToolMissing: { reason: 'IOS_TOOL_MISSING' },
-  // The Android emulator did not finish booting, or its boot poll timed out.
+  // The Android emulator did not finish booting, or an adb command timed out while it booted.
   androidBootTimeout: { reason: 'ANDROID_BOOT_TIMEOUT' },
   // adb is missing, its host refused the request, or the device is unauthorized.
   adbTransportUnavailable: { reason: 'ADB_TRANSPORT_UNAVAILABLE' },
-  // The boot output shows the host ran out of memory or processes, as on an overloaded CI machine.
+  // The boot output shows the host ran out of memory or processes, or a boot process was killed, as
+  // on an overloaded CI machine.
   ciResourceStarvationSuspected: { reason: 'CI_RESOURCE_STARVATION_SUSPECTED' },
   // The XCTest runner cannot be installed because its provisioning profile does not cover the
   // device. Register the device with the signing team; retrying alone keeps failing.
