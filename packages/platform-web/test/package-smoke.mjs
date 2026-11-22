@@ -78,22 +78,18 @@ function debugRecordsOf(stderr) {
 const DEBUG_RECORD_PREFIX = '[agent-device][diag] ';
 
 /**
- * The records one `--debug` request wrote, read back from the request records the daemon keeps under
- * its session dirs. Matched by the CLI command they belong to, so an empty answer means the request
- * traced nothing rather than that a file was missed.
+ * Read the open record by its CLI-reported path. Use its directory to find follow-up records,
+ * which the daemon names independently and the CLI does not report on success.
  */
-function requestRecordsOf(storeRoot, phase, command) {
-  const sessionsDir = path.join(storeRoot, 'sessions');
-  if (!fs.existsSync(sessionsDir)) return [];
-  const requestFiles = fs
-    .readdirSync(sessionsDir)
-    .flatMap((session) => {
-      const requestsDir = path.join(sessionsDir, session, 'requests');
-      return fs.existsSync(requestsDir)
-        ? fs.readdirSync(requestsDir).map((request) => path.join(requestsDir, request))
-        : [];
-    })
-    .filter((file) => file.endsWith('.ndjson'));
+function requestRecordsOf(openLogPath, phase, command) {
+  const recordDir = path.dirname(openLogPath);
+  const requestFiles =
+    command === 'open'
+      ? [openLogPath]
+      : fs
+          .readdirSync(recordDir)
+          .filter((file) => file.endsWith('.ndjson'))
+          .map((file) => path.join(recordDir, file));
   return requestFiles
     .flatMap((file) => fs.readFileSync(file, 'utf8').split('\n'))
     .filter((line) => line.includes(`"phase":"${phase}"`))
@@ -256,7 +252,11 @@ test('packed core discovers web only after the managed platform is installed', (
     // One named session for the whole interaction: the backend is told which session each call
     // belongs to, so the recorded argv names it too.
     const session = 'web-pack';
-    debugCli('open', 'https://example.test', '--platform', 'web', '--session', session);
+    const opened = JSON.parse(
+      debugCli('open', 'https://example.test', '--platform', 'web', '--session', session),
+    );
+    const openLogPath = opened.data.requestLogPath;
+    assert.equal(typeof openLogPath, 'string', 'open must report its diagnostics record path');
     debugCli('press', '100', '200', '--platform', 'web', '--session', session);
     const shot = path.join(scratch, 'screen.png');
     debugCli('screenshot', shot, '--platform', 'web', '--session', session);
@@ -306,7 +306,7 @@ test('packed core discovers web only after the managed platform is installed', (
     // reads, and the executable path of each candidate — on macOS one `osascript`, on Windows one CIM
     // query. Read through a bundled host-kit copy instead, each read still succeeds — and the request
     // that owed it traces nothing, which is what the two assertions below refuse to accept.
-    const openRecords = requestRecordsOf(storeRoot, 'exec_command', 'open');
+    const openRecords = requestRecordsOf(openLogPath, 'exec_command', 'open');
     assert.ok(
       openRecords.some((record) => record.data?.event === 'spawn' && record.data.command === 'ps'),
       `the open request traced no process-table read out of ${openRecords.length} exec records: ${JSON.stringify(
@@ -328,7 +328,7 @@ test('packed core discovers web only after the managed platform is installed', (
       ['screenshot', 'a screenshot call'],
       ['close', 'close'],
     ]) {
-      const records = requestRecordsOf(storeRoot, 'exec_command', command);
+      const records = requestRecordsOf(openLogPath, 'exec_command', command);
       const spawns = records.filter((record) => record.data?.event === 'spawn');
       const exits = records.filter((record) => record.data?.event === 'exit');
       assert.ok(
@@ -347,7 +347,7 @@ test('packed core discovers web only after the managed platform is installed', (
     // The interactor's snapshot timer reports through the host too, so one capture timing is
     // attributed to the request that asked for the capture.
     assert.ok(
-      requestRecordsOf(storeRoot, 'snapshot_capture', 'snapshot').some(
+      requestRecordsOf(openLogPath, 'snapshot_capture', 'snapshot').some(
         (record) => record.data?.backend === 'web' && record.durationMs > 0,
       ),
       'the snapshot request carried no web capture timing',
