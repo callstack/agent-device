@@ -139,7 +139,7 @@ for (const leaseId of [undefined, 'a'.repeat(32)] as const) {
     });
     mockResolveTargetDevice.mockResolvedValue(leasedDevice);
 
-    const response = await handleSessionCommands({
+    const pending = handleSessionCommands({
       host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
@@ -161,12 +161,22 @@ for (const leaseId of [undefined, 'a'.repeat(32)] as const) {
       invoke: noopInvoke,
     });
 
+    if (!leaseId) {
+      // #4911 refuses a request without the lease id before the device check can name the session.
+      await expect(pending).rejects.toMatchObject({
+        code: 'UNAUTHORIZED',
+        details: { reason: 'LEASE_SESSION_MISMATCH' },
+      });
+      await expect(pending).rejects.not.toMatchObject({ details: { session: sessionAddress } });
+      return;
+    }
+    const response = await pending;
     expect(response?.ok).toBe(false);
     if (response && !response.ok) {
       expect(response.error.code).toBe('DEVICE_IN_USE');
-      expect(response.error.details?.session).toBe(leaseId ? sessionAddress : undefined);
+      expect(response.error.details?.session).toBe(sessionAddress);
       expect(response.error.details?.hint).toBe(
-        leaseId ? `Run agent-device close --shutdown --session ${sessionAddress}` : undefined,
+        `Run agent-device close --shutdown --session ${sessionAddress}`,
       );
     }
   });
