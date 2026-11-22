@@ -518,3 +518,37 @@ test('download keeps the INVALID_ARGS refusal and hint when the source host does
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('download keeps the typed cancellation when the caller aborts during URL approval', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-approval-abort-');
+  const controller = new AbortController();
+  let releaseLookup: () => void = () => {};
+  const lookup = vi.spyOn(dns, 'lookup').mockImplementation(
+    async () =>
+      await new Promise<Awaited<ReturnType<typeof dns.lookup>>>((resolve) => {
+        releaseLookup = () =>
+          resolve([{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+            ReturnType<typeof dns.lookup>
+          >);
+        queueMicrotask(() => controller.abort());
+      }),
+  );
+  const requester = vi.spyOn(networkTransport, 'requestApprovedUrl');
+  try {
+    const error = await downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/app.apk',
+      signal: controller.signal,
+      environment: {},
+    }).catch((error: unknown) => error);
+
+    assert.ok(error instanceof AppError);
+    assert.ok(isRequestCanceledError(error));
+    assert.equal(requester.mock.calls.length, 0);
+  } finally {
+    releaseLookup();
+    requester.mockRestore();
+    lookup.mockRestore();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

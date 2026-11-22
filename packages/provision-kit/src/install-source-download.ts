@@ -152,9 +152,11 @@ function phaseTimeout(error: unknown, phases: TransferPhaseTools): AppError | un
   );
 }
 
+/** A raw failure from the watchdog signal. A typed error that wraps the signal reason keeps its type. */
 function isSignalFailure(error: unknown, signal: AbortSignal): boolean {
   return (
     signal.aborted &&
+    !(error instanceof AppError) &&
     (error === signal.reason || (error instanceof Error && error.cause === signal.reason))
   );
 }
