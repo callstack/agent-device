@@ -292,3 +292,31 @@ test('a proxy client is refused a device held by a local session without learnin
   expect(refusal.error?.data?.code, JSON.stringify(refusal)).toBe('DEVICE_IN_USE');
   expect(JSON.stringify(refusal)).not.toContain(localHolder);
 });
+
+test('a shared-token proxy client without tenant isolation does not learn a local holder name', async () => {
+  if (!world) return;
+  const localHolder = 'local-holder-unisolated';
+  world.sessionStore.retire(world.sessionStore.lookup(world.holderSessionName)!);
+  world.sessionStore.publish(
+    localHolder,
+    makeIosAppSession(localHolder, {
+      sessionScope: { kind: 'named-local' },
+      device: DEVICE,
+    }),
+  );
+
+  // The client keeps its lease metadata but sends no tenant isolation, so only the proxy's
+  // public-network admission marks it as remote.
+  const refusal = await world.send(
+    PEER,
+    'open',
+    {
+      meta: { ...PEER_SCOPE, leaseId: world.peerLeaseId, sessionIsolation: undefined },
+      flags: { waitMs: 400 },
+    },
+    ['com.example.app'],
+  );
+
+  expect(refusal.error?.data?.code, JSON.stringify(refusal)).toBe('DEVICE_IN_USE');
+  expect(JSON.stringify(refusal)).not.toContain(localHolder);
+});
