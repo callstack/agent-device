@@ -399,7 +399,14 @@ class TortureWorld {
       device,
       createdAt: Date.now(),
       actions: [],
-      lease: { ...leaseScope, expiresAt: lease.expiresAt },
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        backend: 'ios-simulator',
+        deviceKey,
+        clientId: `c${client}`,
+      },
       deviceClaim: {
         deviceKey,
         ownerToken: claimResult.ownership.ownerToken,

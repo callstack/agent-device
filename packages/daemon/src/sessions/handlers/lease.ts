@@ -506,6 +506,7 @@ async function listArtifactsForRequest(
   }
 
   return await listCloudArtifactsForRequest(
+    req,
     leaseScope,
     providerSessionId,
     leaseRegistry,
@@ -534,6 +535,7 @@ async function listDaemonArtifacts(
 }
 
 async function listCloudArtifactsForRequest(
+  req: DaemonRequest,
   leaseScope: ReturnType<typeof resolveLeaseScope>,
   providerSessionId: string | undefined,
   leaseRegistry: LeaseRegistry,
@@ -553,9 +555,9 @@ async function listCloudArtifactsForRequest(
   }
   // A presented active lease id is checked with its labels first, before any tenant-filtered lookup.
   const activeLeaseId = leaseScope.leaseId
-    ? assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, leaseScope.leaseId)
+    ? assertRequestHoldsActiveProviderLease(leaseRegistry, req, leaseScope.leaseId)
     : undefined;
-  const providerSession = resolveProviderSession(leaseRegistry, leaseScope, providerSessionId);
+  const providerSession = resolveProviderSession(req, leaseRegistry, leaseScope, providerSessionId);
   const result = await cloudArtifactProvider?.listCloudArtifacts?.({
     provider: leaseScope.leaseProvider,
     leaseId: providerSession?.leaseId ?? activeLeaseId ?? leaseScope.leaseId,
@@ -571,6 +573,7 @@ async function listCloudArtifactsForRequest(
 }
 
 function resolveProviderSession(
+  req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   leaseScope: ReturnType<typeof resolveLeaseScope>,
   providerSessionId: string | undefined,
@@ -582,7 +585,7 @@ function resolveProviderSession(
     tenantId: leaseScope.tenantId,
   });
   if (providerSession) {
-    assertRequestHoldsActiveProviderLease(leaseRegistry, leaseScope, providerSession.leaseId);
+    assertRequestHoldsActiveProviderLease(leaseRegistry, req, providerSession.leaseId);
     return providerSession;
   }
   throw new AppError('UNAUTHORIZED', 'Provider session is not owned by the request tenant', {
@@ -598,12 +601,12 @@ function resolveProviderSession(
  */
 function assertRequestHoldsActiveProviderLease(
   leaseRegistry: LeaseRegistry,
-  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  req: DaemonRequest,
   leaseId: string,
 ): string | undefined {
   const lease = leaseRegistry.inspectActiveLease(leaseId);
   if (!lease) return undefined;
-  assertRequestPresentsLease(leaseScope, { ...lease, leaseBackend: lease.backend });
+  assertRequestPresentsLease(req, lease);
   return lease.leaseId;
 }
 

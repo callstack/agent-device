@@ -17,6 +17,7 @@ import {
   resolveLeaseRefusalScope,
   resolveLeaseScope,
   resolveSessionLeaseScope,
+  withDisplacedLeaseClaims,
 } from '../core/lease-context.ts';
 import {
   leaseScopeToHeartbeatRequest,
@@ -29,23 +30,22 @@ import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.t
 import { assertDaemonPolicyAdmitsLease } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
-/** Names the session a request runs in. */
+/**
+ * Names the session a request runs in. Without tenant isolation the name resolves without a tenant,
+ * so admission refuses a malformed tenant after the session lease check. Under tenant isolation the
+ * first string carrier routes the request, and a meta tenant that it replaces stays a lease claim.
+ */
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
     req.meta?.sessionIsolation ?? req.flags?.sessionIsolation,
   );
-  const rawTenant = req.meta?.tenantId ?? req.flags?.tenant;
-  const tenant = normalizeTenantId(rawTenant);
-
-  if (rawTenant && !tenant) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-    );
-  }
   if (isolation !== 'tenant') {
     return req;
   }
+  const declaredTenant: unknown = req.meta?.tenantId;
+  const tenant = requireWellFormedTenant(
+    typeof declaredTenant === 'string' ? declaredTenant : req.flags?.tenant,
+  );
   if (!tenant) {
     throw new AppError(
       'INVALID_ARGS',
@@ -53,25 +53,27 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
     );
   }
   const requestedSession = req.session || 'default';
-  if (isTenantOwnedSessionName(tenant, requestedSession)) {
-    return {
+  return withDisplacedLeaseClaims(
+    {
       ...req,
-      meta: {
-        ...req.meta,
-        tenantId: tenant,
-        sessionIsolation: isolation,
-      },
-    };
-  }
-  return {
-    ...req,
-    session: tenantScopedSessionName(tenant, requestedSession),
-    meta: {
-      ...req.meta,
-      tenantId: tenant,
-      sessionIsolation: isolation,
+      session: isTenantOwnedSessionName(tenant, requestedSession)
+        ? req.session
+        : tenantScopedSessionName(tenant, requestedSession),
+      meta: { ...req.meta, tenantId: tenant, sessionIsolation: isolation },
     },
-  };
+    { tenantId: [declaredTenant].filter((declared) => declared !== tenant) },
+  );
+}
+
+function requireWellFormedTenant(rawTenant: unknown): string | undefined {
+  const tenant = normalizeTenantId(rawTenant);
+  if (rawTenant && !tenant) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
+    );
+  }
+  return tenant;
 }
 
 export function assertRequestLeaseAdmission(
@@ -86,6 +88,7 @@ export function assertRequestLeaseAdmission(
 ): DeviceLease | undefined {
   // An admission-exempt command still acts on its session, so it must hold the session lease too.
   assertRequestHoldsSessionLease(req, session);
+  requireWellFormedTenant(req.meta?.tenantId ?? req.flags?.tenant);
   if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }

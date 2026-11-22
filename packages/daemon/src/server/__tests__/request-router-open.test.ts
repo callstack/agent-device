@@ -436,11 +436,10 @@ test('open stores admitted lease metadata on the session', async () => {
     leaseId: lease.leaseId,
     tenantId: 'tenant-a',
     runId: 'run-1',
-    leaseBackend: 'ios-simulator',
+    backend: 'ios-simulator',
     leaseProvider: 'proxy',
     clientId: 'client-a',
     deviceKey: 'ios:SIM-LEASED',
-    expiresAt: 61_000,
   });
 });
 
@@ -486,7 +485,7 @@ test.each([
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       clientId: 'client-a',
     },
   });
@@ -526,7 +525,7 @@ test.each([
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       clientId: 'client-a',
     },
   });
@@ -570,7 +569,7 @@ test('close rejects a different client before cleanup', async () => {
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
       clientId: 'client-a',
     },
   });

@@ -81,7 +81,7 @@ test('address reuse with the same record still starts a different lifetime', () 
 test('retained execution-host ownership follows the current session lifetime', () => {
   const store = makeSessionStore();
   const session = makeSession('default', {
-    lease: { leaseId: 'lease-1', tenantId: 'tenant-a', runId: 'run-1' },
+    lease: { backend: 'ios-simulator', leaseId: 'lease-1', tenantId: 'tenant-a', runId: 'run-1' },
   });
   const old = store.publish(ADDRESS, session);
   store.retire(old, { retainExecutionHost: true });

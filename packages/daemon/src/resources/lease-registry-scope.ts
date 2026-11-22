@@ -5,10 +5,12 @@ import {
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
   leaseProviderRequiringRuntime,
+  normalizeLeaseId,
 } from '@agent-device/contracts/lease-scope';
 import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
+import { LEASE_FIELD_NORMALIZERS, type SessionLease } from '../core/lease-context.ts';
 
 export type LeaseRegistryOptions = {
   maxActiveSimulatorLeases?: number;
@@ -123,21 +125,7 @@ export function createLeaseTtlResolver(options: LeaseRegistryOptions) {
   };
 }
 
-function normalizeRunId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const value = raw.trim();
-  if (!value) return undefined;
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(value)) return undefined;
-  return value;
-}
-
-export function normalizeLeaseId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const value = raw.trim();
-  if (!value) return undefined;
-  if (!/^[a-f0-9]{16,128}$/i.test(value)) return undefined;
-  return value.toLowerCase();
-}
+const normalizeRunId = LEASE_FIELD_NORMALIZERS.runId;
 
 export function normalizeRequiredLeaseId(raw: string | undefined): string {
   const leaseId = normalizeLeaseId(raw);
@@ -179,35 +167,32 @@ export function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
 
 export function normalizeDeviceKey(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
-  const value = raw.trim();
-  if (!value || value.length > 256 || !/^[\u0020-\u007E]+$/.test(value)) {
-    throw new AppError('INVALID_ARGS', 'Invalid device key. Use 1-256 printable characters.');
-  }
-  return value;
+  const value = LEASE_FIELD_NORMALIZERS.deviceKey(raw);
+  if (value) return value;
+  throw new AppError('INVALID_ARGS', 'Invalid device key. Use 1-256 printable characters.');
 }
 
 function normalizeClientId(raw: string | undefined): string | undefined {
-  return normalizeAgentIdentifier(raw, 'client id', 128);
+  return normalizeAgentIdentifier(raw, 'clientId', 'client id', 128);
 }
 
 export function normalizeLeaseProvider(raw: string | undefined): string | undefined {
-  return normalizeAgentIdentifier(raw, 'lease provider', 64);
+  return normalizeAgentIdentifier(raw, 'leaseProvider', 'lease provider', 64);
 }
 
 function normalizeAgentIdentifier(
   raw: string | undefined,
+  field: 'clientId' | 'leaseProvider',
   label: string,
   maxLength: number,
 ): string | undefined {
   if (raw === undefined) return undefined;
-  const value = raw.trim();
-  if (!value || value.length > maxLength || !/^[a-zA-Z0-9._-]+$/.test(value)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid ${label}. Use 1-${String(maxLength)} chars: letters, numbers, dot, underscore, hyphen.`,
-    );
-  }
-  return value;
+  const value = LEASE_FIELD_NORMALIZERS[field](raw);
+  if (value) return value;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid ${label}. Use 1-${String(maxLength)} chars: letters, numbers, dot, underscore, hyphen.`,
+  );
 }
 
 function normalizeRequiredTenantId(raw: string): string {
@@ -422,7 +407,7 @@ export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {
   });
 }
 
-export function leaseReleaseRequestFor(lease: DeviceLease): ReleaseLeaseRequest {
+export function leaseReleaseRequestFor(lease: SessionLease): ReleaseLeaseRequest {
   return leaseScopeToReleaseRequest({
     leaseId: lease.leaseId,
     tenantId: lease.tenantId,

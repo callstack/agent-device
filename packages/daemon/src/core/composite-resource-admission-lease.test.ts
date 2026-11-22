@@ -12,7 +12,7 @@ test('provider-releasing close refuses while reopen keeps the provider lease', a
         leaseId: lease.leaseId,
         tenantId: lease.tenantId,
         runId: lease.runId,
-        leaseBackend: lease.backend,
+        backend: lease.backend,
       },
     });
     const close = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
@@ -46,7 +46,7 @@ test.each(['batch', 'replay'] as const)(
           leaseId: lease.leaseId,
           tenantId: lease.tenantId,
           runId: lease.runId,
-          leaseBackend: lease.backend,
+          backend: lease.backend,
         },
       });
       world.expireLease();

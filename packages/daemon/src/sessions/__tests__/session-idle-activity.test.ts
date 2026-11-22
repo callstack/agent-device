@@ -90,7 +90,7 @@ test('ordinary failed lease admission retains the session activity stamp', async
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
-      leaseBackend: lease.backend,
+      backend: lease.backend,
     },
   });
   const scope = await withDiagnosticsScope({ command: 'home', logPath: LOG_PATH }, () =>

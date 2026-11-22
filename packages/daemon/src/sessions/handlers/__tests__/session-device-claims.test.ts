@@ -700,7 +700,7 @@ test('an open under a macos-app lease claims its app device, beside other apps o
       leaseId: 'b'.repeat(32),
       tenantId: 't2',
       runId: 'r2',
-      leaseBackend: 'macos-app',
+      backend: 'macos-app',
       deviceKey: 'com.example.other',
     },
     createdAt: Date.now(),

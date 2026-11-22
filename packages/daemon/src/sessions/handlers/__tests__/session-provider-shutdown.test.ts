@@ -106,7 +106,7 @@ function scenario(platform: 'ios' | 'android', activeSession = false, sessionAdd
         runId: lease.runId,
         leaseId: lease.leaseId,
         leaseProvider: 'limrun',
-        leaseBackend: lease.backend,
+        backend: lease.backend,
       },
     });
   }
