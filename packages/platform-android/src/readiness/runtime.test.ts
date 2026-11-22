@@ -712,35 +712,58 @@ test('a boot that fails while no owner holds the launched emulator still stops i
   expect(terminate).toHaveBeenCalledWith(4242);
 });
 
-test('a boot that fails before a serial is resolved stops nothing', async () => {
+// #4867: ownership is recorded under the emulator's serial, so a boot that failed before discovery
+// named one has nothing to ask about. It stops its launch the way base did: no emulator is left
+// running with no session to own it. Issue #4993 tracks giving that window an ownership answer.
+test('a failure before a serial is resolved stops the launch without asking', async () => {
   let discoveries = 0;
   const discoveryFailure = new AppError('COMMAND_FAILED', 'adb devices failed');
   const { host, terminate } = timedHost({
     bootCompleted: '1',
     discover: () => {
       discoveries += 1;
-      if (discoveries === 2) throw discoveryFailure;
-      return [stoppedAvd()];
+      if (discoveries === 1) return [stoppedAvd()];
+      throw discoveryFailure;
     },
   });
   const heldByOther = vi.fn(async () => true);
 
-  await withDiagnosticsScope({ command: 'open' }, async () => {
-    await expect(
-      ensureAndroidReady(
-        host,
-        stoppedAvd(),
-        { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
-        new AbortController().signal,
-      ),
-    ).rejects.toBe(discoveryFailure);
-    // Ownership is recorded under the emulator's serial, so the AVD this boot started from is not an
-    // address anything can be held under. Asking about it could only answer "not held", which is a
-    // guess at somebody else's emulator, so the launch is kept instead (#4867).
-    expect(heldByOther).not.toHaveBeenCalled();
-    expect(terminate).not.toHaveBeenCalled();
-    expect(countDiagnosticEventsByPhase(['android_emulator_launch_ownership_unanswered'])).toBe(1);
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(discoveryFailure);
+  expect(heldByOther).not.toHaveBeenCalled();
+  expect(terminate).toHaveBeenCalledWith(4242);
+});
+
+test('a cancel that arrives before discovery names a serial stops the launch', async () => {
+  const controller = new AbortController();
+  let discoveries = 0;
+  const { host, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => {
+      discoveries += 1;
+      if (discoveries === 1) return [stoppedAvd()];
+      controller.abort(new Error('cancel during discovery'));
+      throw new Error('cancel during discovery');
+    },
   });
+  const heldByOther = vi.fn(async () => true);
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 30_000, isAndroidEmulatorHeldByOther: heldByOther },
+      controller.signal,
+    ),
+  ).rejects.toThrow('cancel during discovery');
+  expect(heldByOther).not.toHaveBeenCalled();
+  expect(terminate).toHaveBeenCalledWith(4242);
 });
 
 test('a boot whose owner question cannot be answered keeps the launched emulator running', async () => {
