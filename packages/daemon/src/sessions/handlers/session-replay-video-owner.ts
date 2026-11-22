@@ -14,6 +14,8 @@ type ReplayRecordVideoRequest = Parameters<ReplayTestVideoOwner['record']>[0];
 
 export type ReplayTestVideoOwnerParams = Readonly<{
   sessionStore: SessionStore;
+  /** Refuses an attempt session that holds a lease the suite did not send. */
+  assertSuiteMayActOn: (sessionName: string) => unknown;
   bindDevice?: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
   bindExactDevice?: BindExactDeviceRuntime;
@@ -28,6 +30,7 @@ export function createReplayTestVideoOwner(
 ): ReplayTestVideoOwner | undefined {
   const {
     sessionStore,
+    assertSuiteMayActOn,
     bindDevice,
     platformServices,
     bindExactDevice,
@@ -46,8 +49,9 @@ export function createReplayTestVideoOwner(
   ) {
     return undefined;
   }
-  const record: ReplayTestVideoOwner['record'] = async (request) =>
-    await handleRecordCommand({
+  const record: ReplayTestVideoOwner['record'] = async (request) => {
+    assertSuiteMayActOn(request.sessionName);
+    return await handleRecordCommand({
       req: recordRequest(request),
       sessionName: request.sessionName,
       sessionStore,
@@ -59,6 +63,7 @@ export function createReplayTestVideoOwner(
       retainDeviceExecutionLock,
       throwIfCanceled,
     });
+  };
   return {
     throwIfCanceled,
     record,

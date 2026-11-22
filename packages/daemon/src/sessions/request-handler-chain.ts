@@ -1,4 +1,5 @@
 import type { LeaseEndReason } from './lease-lifecycle.ts';
+import type { ResolveRequestSessionRef } from './request-admission.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
@@ -70,6 +71,7 @@ type RequestHandlerChainParams = {
   perfCaptureAdmissionLedger: PerfCaptureAdmissionLedger;
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
+  resolveSessionRef?: ResolveRequestSessionRef;
   requestScope: PlatformRequestScope;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
@@ -167,6 +169,7 @@ async function runLeaseHandler(
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
       endSessionsForLease: params.endSessionsForLease,
+      resolveSessionRef: params.resolveSessionRef,
     }),
   );
 }
@@ -201,6 +204,7 @@ async function runSessionHandler(
       perfCaptureAdmissionLedger: params.perfCaptureAdmissionLedger,
       screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
       hostDiagnostics: params.hostDiagnostics,
+      resolveSessionRef: params.resolveSessionRef,
       requestScope: params.requestScope,
       retainDeviceExecutionLock: params.retainDeviceExecutionLock,
       throwIfCanceled: params.throwIfCanceled,

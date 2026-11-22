@@ -29,10 +29,6 @@ type SessionFinalization = Readonly<{
   daemonShutdown?: boolean;
 }>;
 
-/**
- * Both finalization entry points admit the same facts and run the same effects; they differ only
- * in how the selected owner is bound and disposed, which each entry point supplies as `bind`.
- */
 async function finalizeSessionApplicationLifecycle(params: SessionFinalization): Promise<void> {
   const { inspectFacts, bind, session, stateDir, runtimeHints } = params;
   const input = {
@@ -50,16 +46,6 @@ async function finalizeSessionApplicationLifecycle(params: SessionFinalization):
   const runtime = await bind(session.device, use);
   await runtime.operations.finalizeApplicationClose(input);
   await runtime.operations.clearRuntimeHints(runtimeHints);
-}
-
-export async function finalizeBoundSessionApplicationLifecycle(params: {
-  inspectFacts: InspectDeviceRuntimeFacts;
-  bindDevice: BindDeviceRuntime;
-  session: SessionState;
-  stateDir: string;
-  runtimeHints: RuntimeHintsApplicationInput;
-}): Promise<void> {
-  await finalizeSessionApplicationLifecycle({ ...params, bind: params.bindDevice });
 }
 
 /**

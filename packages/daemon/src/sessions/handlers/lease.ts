@@ -5,6 +5,7 @@ import {
 } from '../../resources/lease-release.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { LeaseEndReason } from '../lease-lifecycle.ts';
+import { resolveRequestSessionRef, type ResolveRequestSessionRef } from '../request-admission.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -79,6 +80,7 @@ type LeaseHandlerArgs = {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
+  resolveSessionRef?: ResolveRequestSessionRef;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
   failedPlugins?: readonly PluginInventoryEntry[];
@@ -104,7 +106,9 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
     case PUBLIC_COMMANDS.artifacts: {
-      const artifactScope = resolveSessionLeaseScope(req, sessionStore.get(sessionName));
+      const resolveSessionRef = args.resolveSessionRef ?? resolveRequestSessionRef;
+      const ref = resolveSessionRef(req, sessionStore.lookup(sessionName));
+      const artifactScope = resolveSessionLeaseScope(req, ref?.session);
       return {
         ok: true,
         data: (await listArtifactsForRequest(

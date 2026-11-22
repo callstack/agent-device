@@ -4,6 +4,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { assertRequestHoldsSessionLease } from '../../core/lease-context.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import { bindInternalObservationAuthority } from '../../execution/internal-observation.ts';
@@ -109,8 +110,17 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
       'Platform resource cleanup was not supplied by root runtime composition',
     );
   }
+  // The suite reaches an attempt session through the handlers below, not through admission. An
+  // attempt address can already hold a leased session, so every read here checks the lease id that
+  // the suite sent.
+  const lookupAttemptSession = (attemptSessionName: string): SessionRef | undefined => {
+    const ref = sessionStore.lookup(attemptSessionName);
+    assertRequestHoldsSessionLease(req, ref?.session);
+    return ref;
+  };
   const video = createReplayTestVideoOwner({
     sessionStore,
+    assertSuiteMayActOn: lookupAttemptSession,
     bindDevice,
     platformServices,
     bindExactDevice,
@@ -141,7 +151,9 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     host,
     session: createReplaySession(sessionName, logPath, sessionStore, capture),
     createSession: (testSessionName, testLogPath) =>
-      createReplaySession(testSessionName, testLogPath, sessionStore, capture),
+      createReplaySession(testSessionName, testLogPath, sessionStore, capture, () =>
+        lookupAttemptSession(testSessionName),
+      ),
     invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
     cleanupSession: async (testSessionName) =>
@@ -149,6 +161,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         host,
         req,
         sessionName: testSessionName,
+        lookupSession: lookupAttemptSession,
         logPath,
         sessionStore,
         leaseRegistry,
@@ -173,19 +186,24 @@ export function createReplaySession(
   logPath: string,
   store: SessionStore,
   capture?: ReplayCaptureAdmission,
+  lookup: () => SessionRef | undefined = () => store.lookup(name),
 ): ReplaySession {
   const updateSession = (mutate: (session: SessionState) => void): boolean => {
-    const session = store.get(name);
+    const session = lookup()?.session;
     if (!session) return false;
     mutate(session);
     return true;
   };
   // One read set for both views: the narrowed one the port binds over, and the full-record one the
   // repair coordinator writes through.
+  const getRuntimeHints = (): ReturnType<SessionStore['getRuntimeHints']> => {
+    lookup();
+    return store.getRuntimeHints(name);
+  };
   const reads = {
-    get: () => store.get(name),
-    lookup: () => store.lookup(name),
-    getRuntimeHints: () => store.getRuntimeHints(name)?.hints,
+    get: () => lookup()?.session,
+    lookup,
+    getRuntimeHints: () => getRuntimeHints()?.hints,
     ensureSessionDir: () => store.ensureSessionDir(name),
   };
   let captureCell:
@@ -250,7 +268,7 @@ export function createReplaySession(
         hostCwd: store.host.cwd,
       }),
     assertSelectorMatches: (flags) => {
-      const ref = store.lookup(name);
+      const ref = lookup();
       if (ref) assertSessionSelectorMatches(ref, flags);
     },
     resolveOpenRuntimeHints: ({ request, device, platform }) =>
@@ -258,14 +276,14 @@ export function createReplaySession(
         req: request,
         sessionStore: {
           getRuntimeHints: (requestedSessionName) =>
-            requestedSessionName === name ? store.getRuntimeHints(name) : undefined,
+            requestedSessionName === name ? getRuntimeHints() : undefined,
         },
         sessionName: name,
         device,
         platform,
       }),
     bindAuthority: (signal) => {
-      const ref = store.lookup(name);
+      const ref = lookup();
       return {
         ...bindInternalObservationAuthority({ sessionStore: store, ref, signal }),
         capture: async ({ flags, logPath: captureLogPath }) => {
@@ -306,6 +324,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
   host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
+  lookupSession: (sessionName: string) => SessionRef | undefined;
   logPath: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -321,7 +340,7 @@ async function closeReplayTestSession(
   params: ReplayTestSessionCleanupParams,
 ): Promise<readonly string[]> {
   const { req, sessionName, logPath, sessionStore } = params;
-  if (!sessionStore.get(sessionName)) return [];
+  if (!params.lookupSession(sessionName)) return [];
   const closeResponse = await handleSessionCloseCommands({
     host: params.host,
     req: onDelegatingLedger(
