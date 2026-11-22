@@ -7,6 +7,26 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError } from './adb-failure.ts';
+import type { ReasonTable } from '@agent-device/kernel/errors';
+
+/**
+ * The `error.details.reason` pair a global-toggle read-back answers with, shared by every toggle
+ * `setAndroidGlobalToggle` runs. Each toggle names which two rows it hands over.
+ */
+export const ANDROID_GLOBAL_TOGGLE_REASONS = {
+  // The device kept Bluetooth in its prior state after `svc bluetooth` accepted the request.
+  bluetoothNotApplied: { reason: 'bluetooth-not-applied' },
+  // The device answered the Bluetooth read-back with a value that is not a known state.
+  bluetoothUnreadable: { reason: 'bluetooth-unreadable' },
+  // The device kept mobile data in its prior state after `svc data` accepted the request.
+  mobileDataNotApplied: { reason: 'mobile-data-not-applied' },
+  // The device answered the mobile-data read-back with a value that is neither 0 nor 1.
+  mobileDataUnreadable: { reason: 'mobile-data-unreadable' },
+} as const satisfies ReasonTable<'settings'>;
+
+/** The reason spellings a global-toggle read-back publishes, as `error.details.reason`. */
+export type AndroidGlobalToggleReason =
+  (typeof ANDROID_GLOBAL_TOGGLE_REASONS)[keyof typeof ANDROID_GLOBAL_TOGGLE_REASONS]['reason'];
 
 export type AndroidToggleState = 'enabled' | 'disabled';
 
@@ -25,8 +45,10 @@ export type AndroidGlobalToggle<Key extends string = string> = Readonly<{
   /** The key the toggle's state is reported under, on success and in failure details. */
   stateKey: Key;
   parseRow: (storedValue: string) => AndroidToggleState | undefined;
-  notAppliedReason: string;
-  unreadableReason: string;
+  /** Why to report when the row settled on the other state: a row of `ANDROID_GLOBAL_TOGGLE_REASONS`. */
+  notAppliedReason: AndroidGlobalToggleReason;
+  /** Why to report when the final read is no known state: a row of `ANDROID_GLOBAL_TOGGLE_REASONS`. */
+  unreadableReason: AndroidGlobalToggleReason;
   sampleIntervalMs: number;
   hint: string;
 }>;

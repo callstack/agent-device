@@ -1,5 +1,5 @@
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutorResult } from './adb-executor.ts';
 import { isAndroidShellCommandUnsupported, reportsAndroidNoShellCommand } from './adb.ts';
 
@@ -9,8 +9,11 @@ export type AndroidClipboardShellVerdict = 'executed' | 'no-shell-command' | 'ca
 /** Which clipboard subcommand was called, shared by the refusal wording and the reason. */
 export type AndroidClipboardOperation = 'read' | 'write';
 
-export const ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON =
-  'android_clipboard_shell_command_unavailable' as const;
+/** Why an Android shell clipboard call refuses at all. */
+const ANDROID_CLIPBOARD_REASONS = {
+  // This Android build ships no shell command for the clipboard service.
+  shellCommandUnavailable: { reason: 'android_clipboard_shell_command_unavailable' },
+} as const satisfies ReasonTable<'clipboard'>;
 
 /**
  * What to do instead, carried by both the fact that refuses admission and the error that refuses
@@ -80,7 +83,7 @@ export function androidClipboardShellCommandUnavailableError(
     'UNSUPPORTED_OPERATION',
     `Android shell clipboard ${operation} is not supported on this device.`,
     {
-      reason: ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
+      reason: ANDROID_CLIPBOARD_REASONS.shellCommandUnavailable.reason,
       hint: ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
     },
   );

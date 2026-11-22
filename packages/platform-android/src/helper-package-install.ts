@@ -13,9 +13,10 @@ import {
 import type { AndroidAdbPackageInstallOptions } from './adb-transfer.ts';
 import { attachAndroidHelperInstallTimeoutHint } from './adb-failure.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
-import type {
-  AndroidHelperInstallDecision,
-  InstalledAndroidHelperState,
+import {
+  ANDROID_HELPER_INSTALL_STATE_REASONS,
+  type AndroidHelperInstallDecision,
+  type InstalledAndroidHelperState,
 } from './helper-artifacts.ts';
 
 // Shared install/version-check/checksum lifecycle for the three Android helper APKs.
@@ -134,8 +135,13 @@ export async function inspectInstalledAndroidHelper(options: {
     packageName,
     signal,
   );
-  if (installedVersionCode === undefined) return { reason: 'missing' };
-  if (installedVersionCode < versionCode) return { installedVersionCode, reason: 'outdated' };
+  if (installedVersionCode === undefined)
+    return { reason: ANDROID_HELPER_INSTALL_STATE_REASONS.missing.reason };
+  if (installedVersionCode < versionCode)
+    return {
+      installedVersionCode,
+      reason: ANDROID_HELPER_INSTALL_STATE_REASONS.outdated.reason,
+    };
   if (installedVersionCode > versionCode) return { installedVersionCode, reason: 'current' };
 
   try {
@@ -148,11 +154,17 @@ export async function inspectInstalledAndroidHelper(options: {
     return {
       installedVersionCode,
       installedSha256,
-      reason: installedSha256 === sha256 ? 'current' : 'mismatched',
+      reason:
+        installedSha256 === sha256
+          ? 'current'
+          : ANDROID_HELPER_INSTALL_STATE_REASONS.mismatched.reason,
     };
   } catch {
     signal?.throwIfAborted();
-    return { installedVersionCode, reason: 'unverifiable' };
+    return {
+      installedVersionCode,
+      reason: ANDROID_HELPER_INSTALL_STATE_REASONS.unverifiable.reason,
+    };
   }
 }
 

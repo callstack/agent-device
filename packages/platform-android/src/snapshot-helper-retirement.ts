@@ -1,5 +1,5 @@
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellFragment } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -18,7 +18,14 @@ const RUNTIME_OCCUPANCY_RECHECK_MS = 250;
 // time out before Android could confirm UiAutomation release.
 export const ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS = 250;
 export const ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS = 2_000;
-const RUNTIME_OCCUPIED_REASON = 'android_snapshot_helper_runtime_occupied';
+/**
+ * Why a command cannot take the device automation runtime at all. The retirement runs for the
+ * snapshot capture and the helper-backed touch commands alike.
+ */
+const SNAPSHOT_HELPER_RUNTIME_REASONS = {
+  // Another helper process still holds UiAutomation, so nothing can take the runtime.
+  runtimeOccupied: { reason: 'android_snapshot_helper_runtime_occupied' },
+} as const satisfies ReasonTable<'android snapshot helper'>;
 /**
  * Printed by the device's own shell, and only by it, when the helper process is not running.
  * Exported so a fake device can answer with the real thing.
@@ -152,7 +159,10 @@ export async function recordAndroidSnapshotHelperRelease(params: {
 }
 
 export function isAndroidSnapshotHelperRuntimeOccupiedError(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === RUNTIME_OCCUPIED_REASON;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === SNAPSHOT_HELPER_RUNTIME_REASONS.runtimeOccupied.reason
+  );
 }
 
 function createAndroidSnapshotHelperRuntimeOccupiedError(params: {
@@ -165,7 +175,7 @@ function createAndroidSnapshotHelperRuntimeOccupiedError(params: {
     'COMMAND_FAILED',
     'Android automation helper is still holding device automation ownership',
     {
-      reason: RUNTIME_OCCUPIED_REASON,
+      reason: SNAPSHOT_HELPER_RUNTIME_REASONS.runtimeOccupied.reason,
       deviceKey: params.deviceKey,
       packageName: params.packageName,
       cause: causeMessage,

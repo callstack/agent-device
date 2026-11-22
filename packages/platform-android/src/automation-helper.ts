@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   getLiveAndroidSnapshotHelperSession,
@@ -145,6 +145,11 @@ function decodeHelperIndex(value: string | undefined): number | undefined {
   return value !== undefined && /^\d+$/.test(value) ? Number(value) : undefined;
 }
 
+const ANDROID_HELPER_INPUT_REASONS = {
+  // The request had no room left for one helper input attempt, so nothing was sent.
+  budgetExhausted: { reason: 'android-input-budget-exhausted' },
+} as const satisfies ReasonTable<'android input'>;
+
 /**
  * The host waits for input up to its cap, or until the request's own deadline when that is sooner.
  * A request with no room for one attempt is refused before anything is sent. The refusal is thrown
@@ -163,7 +168,7 @@ function admitInputTimeoutMs(): number {
       'COMMAND_FAILED',
       'Android input was not sent: the request has too little time left for one attempt',
       {
-        reason: 'android-input-budget-exhausted',
+        reason: ANDROID_HELPER_INPUT_REASONS.budgetExhausted.reason,
         remainingMs: timeoutMs,
         minimumMs: MIN_INPUT_ATTEMPT_MS,
         dispatched: 'no',

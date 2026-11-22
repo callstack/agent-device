@@ -5,13 +5,23 @@ import { androidAdbResultError } from './adb-failure.ts';
 import { readAndroidSdkInt } from './device-sdk-int.ts';
 import { androidFeatureListDeclares } from './inventory-parsers.ts';
 import {
+  ANDROID_GLOBAL_TOGGLE_REASONS,
   setAndroidGlobalToggle,
   type AndroidGlobalToggle,
   type AndroidToggleState,
 } from './settings-global-toggle.ts';
+import type { ReasonTable } from '@agent-device/kernel/errors';
 
-const NO_BLUETOOTH_ADAPTER_REASON = 'android_bluetooth_adapter_missing';
-const BLUETOOTH_COMMAND_UNAVAILABLE_REASON = 'android_bluetooth_command_unavailable';
+/**
+ * The `error.details.reason` the Bluetooth adapter and API-level checks state before the write, both
+ * of which refuse with nothing changed.
+ */
+const BLUETOOTH_PREWRITE_REASONS = {
+  // The device declares no Bluetooth adapter, so there is nothing to turn on or off.
+  adapterMissing: { reason: 'android_bluetooth_adapter_missing' },
+  // The build predates `svc bluetooth`, so the adapter cannot be switched from the shell.
+  commandUnavailable: { reason: 'android_bluetooth_command_unavailable' },
+} as const satisfies ReasonTable<'settings'>;
 
 /** Without this feature no Bluetooth service starts, and `svc bluetooth` exits 0 having done nothing. */
 const BLUETOOTH_FEATURE = 'android.hardware.bluetooth';
@@ -36,8 +46,8 @@ const BLUETOOTH_TOGGLE: AndroidGlobalToggle<'bluetooth'> = {
     if (storedValue === '0' || storedValue === '2') return 'disabled';
     return undefined;
   },
-  notAppliedReason: 'bluetooth-not-applied',
-  unreadableReason: 'bluetooth-unreadable',
+  notAppliedReason: ANDROID_GLOBAL_TOGGLE_REASONS.bluetoothNotApplied.reason,
+  unreadableReason: ANDROID_GLOBAL_TOGGLE_REASONS.bluetoothUnreadable.reason,
   sampleIntervalMs: 200,
   hint: 'A device policy or user restriction can block Bluetooth changes. Run `adb shell settings get global bluetooth_on` to see what the device holds.',
 };
@@ -74,7 +84,7 @@ async function requireAndroidSvcBluetooth(
       'UNSUPPORTED_OPERATION',
       'This Android device has no Bluetooth adapter, so nothing was changed.',
       {
-        reason: NO_BLUETOOTH_ADAPTER_REASON,
+        reason: BLUETOOTH_PREWRITE_REASONS.adapterMissing.reason,
         deviceId: device.id,
         hint: `Some emulator images ship without Bluetooth. Use a device or emulator image whose pm list features includes ${BLUETOOTH_FEATURE}.`,
       },
@@ -93,7 +103,7 @@ async function requireAndroidSvcBluetooth(
       'UNSUPPORTED_OPERATION',
       'This Android build has no shell command for Bluetooth, so nothing was changed.',
       {
-        reason: BLUETOOTH_COMMAND_UNAVAILABLE_REASON,
+        reason: BLUETOOTH_PREWRITE_REASONS.commandUnavailable.reason,
         deviceId: device.id,
         sdkInt,
         hint: 'settings bluetooth needs svc bluetooth, which requires Android 8.1 (API 27) or newer. Use a newer device or emulator image.',
