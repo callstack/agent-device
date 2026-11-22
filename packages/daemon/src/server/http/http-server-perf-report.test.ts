@@ -1,6 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, onTestFinished, test, vi } from 'vitest';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type {
+  PerfRuntimeOperations,
+  PerfNativeCaptureLiveHandle,
+} from '@agent-device/contracts/perf-runtime';
+import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { DAEMON_HTTP_TENANT_HEADER } from '@agent-device/contracts/daemon-http';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -14,6 +22,7 @@ import {
   leaseVerifier,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
+import { sessionLeaseOf } from '../../core/lease-context.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { successfulData, withHttp } from './http-output.fixtures.ts';
 
@@ -29,7 +38,11 @@ function reportFixture() {
     const facts = await gateway.inspectFacts(...args);
     return {
       ...facts,
-      operations: { ...facts.operations, perfProfileReport: { available: true } },
+      operations: {
+        ...facts.operations,
+        perfProfileReport: { available: true },
+        perfNativeCaptureStart: { available: true },
+      },
     };
   });
   const perfProfileReport = vi.fn(async ({ outPath }: { outPath: string }) => {
@@ -52,7 +65,11 @@ function reportFixture() {
         return {
           ...binding,
           facts: await inspectFacts(request.device),
-          operations: { ...binding.operations, perfProfileReport },
+          operations: {
+            ...binding.operations,
+            perfProfileReport,
+            perfNativeCaptureStart: fixtureCapture(request.device),
+          },
         };
       },
     },
@@ -89,6 +106,116 @@ function reportFixture() {
     inspectFacts,
   };
 }
+
+function fixtureCapture(device: DeviceInfo): PerfRuntimeOperations['perfNativeCaptureStart'] {
+  return async (input) => {
+    let outPath = input.outPath;
+    const snapshot = () => ({
+      kind: 'xctrace' as const,
+      mode: 'cpu-profile' as const,
+      appBundleId: input.appId,
+      template: 'Time Profiler',
+      outPath,
+    });
+    const handle: PerfNativeCaptureLiveHandle = {
+      inspect: snapshot,
+      setOutputPath: (value) => {
+        outPath = value;
+      },
+      finish: async () => {
+        fs.mkdirSync(outPath, { recursive: true });
+        fs.writeFileSync(path.join(outPath, 'sample'), 'fixture');
+        return { status: 'completed', result: snapshot() };
+      },
+      forceCleanup: async () => ({ status: 'cleaned' }),
+      [Symbol.asyncDispose]: async () => {},
+    };
+    return {
+      pendingHandle: new PendingTransferGuard(handle),
+      envelope: createDurableResourceEnvelope({
+        resourceKind: 'perf-capture',
+        sessionId: input.sessionId,
+        device: deviceIdentity(device),
+        owner: localRuntimeOwner(device.platform),
+        fence: input.fence,
+        lifecycle: 'open',
+        descriptor: { version: 1, body: { kind: 'fixture' } },
+      }),
+      response: snapshot(),
+    };
+  };
+}
+
+function captureRequest(action: 'start' | 'stop', meta = {}) {
+  return {
+    command: 'perf',
+    session: 'capture',
+    positionals: ['cpu', 'profile', action, 'xctrace'],
+    meta,
+  };
+}
+
+test('explicit perf reports check the source and identity of an older daemon-owned xctrace capture', async () => {
+  const fixture = reportFixture();
+  fixture.sessionStore.publish('capture', makeIosAppSession('capture'));
+  fixture.sessionStore.publish('reporter', makeIosAppSession('reporter'));
+  const scope = { tenantId, runId: 'producer', leaseBackend: 'android-instance' } as const;
+  const meta = { ...scope, leaseId: fixture.leaseRegistry.allocateLease(scope).leaseId };
+  await withHttp(fixture.handler, async (post) => {
+    const complete = async () => {
+      successfulData(await post(captureRequest('start', meta)));
+      const result = successfulData(await post(captureRequest('stop', meta)));
+      return result.outPath as string;
+    };
+    const older = await complete();
+    expect(await complete()).not.toBe(older);
+    const moved = older + '-moved';
+    fs.renameSync(older, moved);
+    fs.mkdirSync(older);
+    const report = (source: string, owner = {}) =>
+      post(
+        {
+          command: 'perf',
+          session: 'reporter',
+          positionals: [...positionals, '', '', source],
+          meta: owner,
+        },
+        false,
+      );
+    const refusals = [await report(older), await report(moved)];
+    expect(refusals.map((body) => body.error?.data?.details?.reason)).toEqual([
+      'LEASE_OUTPUT_MISMATCH',
+      'LEASE_OUTPUT_MISMATCH',
+    ]);
+    expect(fixture.perfProfileReport).not.toHaveBeenCalled();
+    successfulData(await report(moved, meta));
+  });
+});
+
+test('perf stop retains the session lease tenant for an unleased producer', async () => {
+  const fixture = reportFixture();
+  const session = fixture.sessionStore.publish('capture', makeIosAppSession('capture'));
+  const lease = fixture.leaseRegistry.allocateLease({
+    tenantId,
+    runId: 'session-owner',
+    leaseBackend: 'android-instance',
+  });
+  await withHttp(fixture.handler, async (post, base) => {
+    successfulData(await post(captureRequest('start')));
+    fixture.sessionStore.update(session, { lease: sessionLeaseOf(lease) });
+    const result = successfulData(await post(captureRequest('stop', { leaseId: lease.leaseId })));
+    const id = result.artifacts?.[0]?.artifactId;
+    expect(id).toBeTypeOf('string');
+    const fetchCapture = (tenant: string) =>
+      fetch(`${base}/artifacts/${id}`, {
+        headers: { authorization: 'Bearer test-token', [DAEMON_HTTP_TENANT_HEADER]: tenant },
+      });
+    expect((await fetchCapture('other-tenant')).status).toBe(401);
+    const download = await fetchCapture(tenantId);
+    expect(download.status).toBe(200);
+    await download.arrayBuffer();
+  });
+});
 
 test.each(['public without a lease', 'tenant-scoped under another lease'])(
   'perf report refuses an explicit host trace path from a %s request before runtime admission',

@@ -160,6 +160,36 @@ test('runner trace output is scoped to the trace and the request that started th
   assert.equal(fs.readFileSync(traceLogPath, 'utf8'), 'runner output\n');
 });
 
+test('runner output stays bound to an active caller-owned trace after the request ends', async () => {
+  const { withDiagnosticsScope } = await loadRealHostKitCapabilities();
+  const logPath = runnerLogPath();
+  const traceLogPath = path.join(path.dirname(logPath), 'caller.trace');
+  let finish = () => {};
+  const wait = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+    finish = () => resolve({ stdout: '', stderr: '', exitCode: 0 });
+  });
+  onTestFinished(finish);
+  mockRunCmdBackground.mockReturnValue({ ...makeBackgroundRunner(4242), wait });
+  let traceActive = true;
+  const launched = await withDiagnosticsScope(
+    { traceLogPath, runnerTraceLogWritable: () => traceActive },
+    () =>
+      launchRunnerProcess({
+        device: IOS_SIMULATOR,
+        xctestrunPath: '/tmp/runner.xctestrun',
+        derivedPath: '/tmp/runner-derived',
+        logPath,
+      }),
+  );
+  fs.appendFileSync(logPath, 'after the request\n');
+  await waitFor(() => assert.equal(fs.readFileSync(traceLogPath, 'utf8'), 'after the request\n'));
+  traceActive = false;
+  fs.appendFileSync(logPath, 'after trace stop\n');
+  finish();
+  await launched.output;
+  assert.equal(fs.readFileSync(traceLogPath, 'utf8'), 'after the request\n');
+});
+
 test('output an older runner generation left in the same log file does not wake startup', async () => {
   const logPath = runnerLogPath();
   fs.writeFileSync(logPath, 'AGENT_DEVICE_RUNNER_LISTENER_READY\n');

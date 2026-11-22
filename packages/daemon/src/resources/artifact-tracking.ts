@@ -54,12 +54,23 @@ export function requestTraceDiagnostics(
   store: Pick<SessionStore, 'resolveCurrent'>,
 ) {
   const trace = ref?.session.trace;
-  if (!ref || !trace || (trace.leaseVerifier ?? null) !== admittedOutputLeaseVerifier(req)) {
-    return { traceLogPath: undefined, traceLogWritable: undefined };
+  const owner = trace?.leaseVerifier ?? null;
+  if (!ref || !trace || owner !== admittedOutputLeaseVerifier(req)) {
+    return {
+      traceLogPath: undefined,
+      traceLogWritable: undefined,
+      runnerTraceLogWritable: undefined,
+    };
   }
+  const unleasedCallerTrace = trace.outPath !== undefined && owner === null && !ref.session.lease;
+  const traceLogWritable = () => {
+    const current = store.resolveCurrent(ref);
+    return current?.trace === trace && (!unleasedCallerTrace || current.lease === undefined);
+  };
   return {
     traceLogPath: trace.remoteCaptureOutputPath ?? trace.outPath,
-    traceLogWritable: () => store.resolveCurrent(ref)?.trace === trace,
+    traceLogWritable,
+    runnerTraceLogWritable: unleasedCallerTrace ? traceLogWritable : undefined,
   };
 }
 
@@ -185,13 +196,21 @@ type ArtifactEntry = {
 type ArtifactTrackingState = {
   artifacts: Map<string, ArtifactEntry>;
   uploads: Map<string, UploadEntry>;
+  retainedPerformanceSources: Map<
+    string,
+    { output: string; leaseVerifier: string | null; birthtimeMs: number }
+  >;
 };
 
 const ARTIFACT_TRACKING_SLOT = Symbol('artifactTracking');
 const artifactTracking = (): ArtifactTrackingState =>
   runtimeSlot(
     ARTIFACT_TRACKING_SLOT,
-    (): ArtifactTrackingState => ({ artifacts: new Map(), uploads: new Map() }),
+    (): ArtifactTrackingState => ({
+      artifacts: new Map(),
+      uploads: new Map(),
+      retainedPerformanceSources: new Map(),
+    }),
     (state) => {
       for (const [id, entry] of state.artifacts) {
         requestArtifactCleanup(state.artifacts, id, entry);
@@ -320,10 +339,36 @@ function readOutputIdentity(artifactPath: string): string | undefined {
   }
 }
 
-/** Checks source identity because a local report can reach the same file through another path. */
-export function assertPerformanceArtifactLease(source: fs.Stats, caller: string | null): void {
+/** Keeps the report source owner independently of the downloadable copy and latest handoff. */
+export function retainXctraceReportSource(source: string, leaseVerifier: string | null): void {
+  const canonical = fs.realpathSync(source);
+  const stat = fs.statSync(canonical);
+  artifactTracking().retainedPerformanceSources.set(canonical, {
+    output: outputIdentity(stat),
+    birthtimeMs: stat.birthtimeMs,
+    leaseVerifier,
+  });
+}
+
+/** Checks both resolved paths and source identities, including renamed or aliased sources. */
+export function assertTrackedPerformanceSourceLease(
+  canonical: string,
+  source: fs.Stats,
+  caller: string | null,
+): void {
   const identity = outputIdentity(source);
-  for (const entry of pendingArtifacts().values()) {
+  const state = artifactTracking();
+  for (const [retainedPath, entry] of state.retainedPerformanceSources) {
+    if (
+      entry.leaseVerifier &&
+      entry.leaseVerifier !== caller &&
+      (canonical === retainedPath ||
+        (identity === entry.output && source.birthtimeMs === entry.birthtimeMs))
+    ) {
+      throw leasedOutputRefusal('Performance capture');
+    }
+  }
+  for (const entry of state.artifacts.values()) {
     if (
       entry.artifactType === 'performance' &&
       entry.leaseVerifier &&

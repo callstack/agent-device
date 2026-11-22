@@ -54,6 +54,7 @@ type DiagnosticsScopeOptions = {
   operatorLog?: boolean;
   traceLogPath?: string;
   traceLogWritable?: () => boolean;
+  runnerTraceLogWritable?: () => boolean;
 };
 
 type DiagnosticsScope = DiagnosticsScopeOptions & {
@@ -107,6 +108,7 @@ export async function withDiagnosticsScope<T>(
     scope.traceLogClosed = true;
     scope.traceLogPath = undefined;
     scope.traceLogWritable = undefined;
+    scope.runnerTraceLogWritable = undefined;
   }
 }
 
@@ -117,15 +119,20 @@ export function updateDiagnosticsScope(options: DiagnosticsScopeOptions): void {
 }
 
 /**
- * Binds a raw trace writer to the current request and trace. An inactive binding still suppresses
- * fallback to an unverified session path.
+ * Binds a raw trace writer to the current request and trace. A runner can continue through an
+ * active caller-owned trace when it has a separate lifetime guard. An inactive binding still
+ * suppresses fallback to an unverified session path.
  */
-export function captureDiagnosticTraceWriter(): ((line: string) => void) | undefined {
+export function captureDiagnosticTraceWriter(
+  source: 'request' | 'runner' = 'request',
+): ((line: string) => void) | undefined {
   const scope = diagnosticsStorage.getStore();
   if (!scope || !('traceLogPath' in scope)) return undefined;
   const { traceLogPath } = scope;
+  const runnerTraceLogWritable = source === 'runner' ? scope.runnerTraceLogWritable : undefined;
   return (line) => {
-    if (traceLogPath && activeTracePath(scope) === traceLogPath) {
+    const writable = runnerTraceLogWritable?.() ?? activeTracePath(scope) === traceLogPath;
+    if (traceLogPath && writable) {
       appendDiagnosticLine(
         scope,
         traceLogPath,

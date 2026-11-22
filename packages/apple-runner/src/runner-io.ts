@@ -24,7 +24,7 @@ export async function getFreePort(): Promise<number> {
 export function bindRunnerTraceOutput(
   path: string | undefined,
 ): ((chunk: string) => void) | undefined {
-  const write = captureDiagnosticTraceWriter();
+  const write = captureDiagnosticTraceWriter('runner');
   if (!write) return path ? (chunk) => appendLogChunk(path, chunk) : undefined;
   return (chunk) => {
     try {

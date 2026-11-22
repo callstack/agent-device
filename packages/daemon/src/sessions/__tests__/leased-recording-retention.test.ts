@@ -94,7 +94,12 @@ function localRecordingExport(): RecordingExport {
 function publishRecordingSession(
   sessionStore: SessionStore,
   recordingExport: RecordingExport,
-  options: { leased?: boolean; finishFails?: boolean; unleasedProducer?: boolean } = {},
+  options: {
+    leased?: boolean;
+    finishFails?: boolean;
+    unleasedProducer?: boolean;
+    producerTenant?: string;
+  } = {},
 ) {
   const session: SessionState = makeIosSession(ADDRESS, {
     appBundleId: 'com.example.app',
@@ -150,7 +155,9 @@ function publishRecordingSession(
     metadata: {
       phase: 'active',
       ...(recordingExport.daemonOwned ? { remoteCaptureOutput: true } : {}),
-      ...(options.unleasedProducer ? {} : { remoteCaptureTenantId: TENANT }),
+      ...(options.unleasedProducer && !options.producerTenant
+        ? {}
+        : { remoteCaptureTenantId: options.producerTenant ?? TENANT }),
       remoteCaptureLease:
         options.leased === false || options.unleasedProducer ? 'unleased' : leaseVerifier(LEASE_ID),
     },
@@ -405,17 +412,25 @@ test.each([undefined, '/client/downloads/checkout.mp4'])(
   },
 );
 
-test('teardown keeps the recording unleased when the session later acquired a lease', async () => {
-  const sessionStore = makeSessionStore('agent-device-unleased-recording-');
-  publishRecordingSession(sessionStore, remoteRecordingExport(), { unleasedProducer: true });
+test.each([undefined, 'former-tenant'])(
+  'teardown assigns an unleased recording with producer tenant %s to the session lease tenant',
+  async (producerTenant) => {
+    const sessionStore = makeSessionStore('agent-device-unleased-recording-');
+    publishRecordingSession(sessionStore, remoteRecordingExport(), {
+      unleasedProducer: true,
+      producerTenant,
+    });
 
-  await teardown(sessionStore);
+    await teardown(sessionStore);
 
-  expect(await listDownloadableArtifacts({ tenantId: 'tenant-b' }, process.env)).toEqual([]);
-  const artifacts = await listDownloadableArtifacts({ tenantId: TENANT }, process.env);
-  expect(artifacts).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ artifactType: 'screen-recording', filename: 'checkout.mp4' }),
-    ]),
-  );
-});
+    expect(
+      await listDownloadableArtifacts({ tenantId: producerTenant ?? 'tenant-b' }, process.env),
+    ).toEqual([]);
+    const artifacts = await listDownloadableArtifacts({ tenantId: TENANT }, process.env);
+    expect(artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ artifactType: 'screen-recording', filename: 'checkout.mp4' }),
+      ]),
+    );
+  },
+);

@@ -546,7 +546,8 @@ test.each([
                 };
               },
               perfProfileReport: async ({ tracePath, outPath, profile, template }) => {
-                const explicit = tracePath === explicitTrace;
+                const explicit =
+                  fs.existsSync(explicitTrace) && tracePath === fs.realpathSync(explicitTrace);
                 if (explicit) {
                   expect(profile).toBeUndefined();
                   expect(template).toBeUndefined();

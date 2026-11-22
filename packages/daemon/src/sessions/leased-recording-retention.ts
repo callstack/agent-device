@@ -31,7 +31,8 @@ export function retainLeasedSessionRecording(
   const owner = recordingOutputLeaseVerifier(metadata);
   if (owner === undefined) return;
   const storedTenant = metadata?.remoteCaptureTenantId;
-  const tenantId = typeof storedTenant === 'string' ? storedTenant : lease.tenantId;
+  const tenantId =
+    owner !== null && typeof storedTenant === 'string' ? storedTenant : lease.tenantId;
   const sessionName = tenantPublicSessionName(lease.tenantId, ref.address);
   const artifacts = recordingStopArtifacts(completion).filter(
     (artifact) => typeof artifact.path === 'string',

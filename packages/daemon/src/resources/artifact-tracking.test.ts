@@ -9,14 +9,59 @@ import { AppError, isRequestCanceledError, normalizeError } from '@agent-device/
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
 import {
+  captureDiagnosticTraceWriter,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import {
   cleanupDownloadableArtifact,
   leaseVerifier,
   listDownloadableArtifacts,
   openDownloadableArtifact,
+  requestTraceDiagnostics,
   trackDownloadableArtifact,
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
+
+test.each(['trace stopped', 'session gained a lease'])(
+  'an unleased caller-owned trace accepts runner output after the request until %s',
+  async (ended) => {
+    const store = makeSessionStore('agent-device-runner-trace-scope-');
+    const tracePath = path.join(store.ensureSessionDir('default'), 'active-runner.trace');
+    const ref = store.publish(
+      'default',
+      makeIosSession('default', {
+        trace: { outPath: tracePath, startedAt: Date.now() },
+      }),
+    );
+    const req = { token: 'test-token', session: 'default', command: 'snapshot', positionals: [] };
+    const write = await withDiagnosticsScope(requestTraceDiagnostics(req, ref, store), () => {
+      const writer = captureDiagnosticTraceWriter('runner');
+      writer?.('from the producing request\n');
+      return writer;
+    });
+    write?.('while the trace is still active\n');
+    if (ended === 'trace stopped') {
+      store.update(ref, { trace: undefined });
+    } else {
+      store.update(ref, {
+        lease: {
+          leaseId: 'a'.repeat(32),
+          tenantId: 'tenant-a',
+          runId: 'run-a',
+          backend: 'ios-simulator',
+        },
+      });
+    }
+    write?.('after the trace or owner changed\n');
+
+    expect(fs.readFileSync(tracePath, 'utf8')).toBe(
+      'from the producing request\nwhile the trace is still active\n',
+    );
+  },
+);
 
 test.each(['cleanup', 'expiry'] as const)(
   '%s aborts an inventory-only archive and removes its source after tar settles',
