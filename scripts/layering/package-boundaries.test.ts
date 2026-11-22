@@ -647,6 +647,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-apple/macos-leaf',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',
+    '@agent-device/platform-apple/plist',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/runner/operations',
     '@agent-device/platform-apple/session-observation',

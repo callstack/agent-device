@@ -208,6 +208,7 @@ const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
   'packages/platform-apple/src/install-artifact-facade.ts',
   'packages/platform-apple/src/perf-facade.ts',
   'packages/platform-apple/src/physical-device-facade.ts',
+  'packages/platform-apple/src/plist-facade.ts',
   'packages/platform-apple/src/runner-operations-facade.ts',
   'packages/platform-apple/src/runner-owner-facade.ts',
   'packages/platform-apple/src/simctl-facade.ts',

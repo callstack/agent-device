@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>String</key>
+	<string>plain</string>
+	<key>EmptyString</key>
+	<string></string>
+	<key>UnicodeString</key>
+	<string>Zürich — 東京</string>
+	<key>Integer</key>
+	<integer>-12</integer>
+	<key>BigInteger</key>
+	<integer>9007199254740991</integer>
+	<key>Real</key>
+	<real>2.5</real>
+	<key>True</key>
+	<true/>
+	<key>False</key>
+	<false/>
+	<key>Null</key>
+	<null/>
+	<key>Date</key>
+	<date>2026-11-22T09:15:30Z</date>
+	<key>Data</key>
+	<data>
+    iVBORw0KGgo=
+    </data>
+	<key>Array</key>
+	<array>
+		<string>one</string>
+		<integer>2</integer>
+	</array>
+	<key>EmptyArray</key>
+	<array/>
+	<key>Nested</key>
+	<dict>
+		<key>Inner</key>
+		<dict>
+			<key>Flag</key>
+			<true/>
+		</dict>
+		<key>Number</key>
+		<integer>7</integer>
+	</dict>
+	<key>EmptyDict</key>
+	<dict/>
+</dict>
+</plist>

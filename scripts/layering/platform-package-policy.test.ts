@@ -286,6 +286,7 @@ test('the Apple domain facades preserve synchronous helpers without widening the
     '@agent-device/platform-apple/install-artifact',
     '@agent-device/platform-apple/perf',
     '@agent-device/platform-apple/physical-device',
+    '@agent-device/platform-apple/plist',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/simctl',
     '@agent-device/platform-apple/snapshot-source',
@@ -294,7 +295,6 @@ test('the Apple domain facades preserve synchronous helpers without widening the
   ]) {
     sources.set('src/platform-runtime-domain-facade.ts', `import '${specifier}';`);
     assert.deepEqual(checkPlatformPackagePolicy(sources, declarations(), policyOptions()), []);
-    sources.delete('src/platform-runtime-domain-facade.ts');
   }
 
   const widened = declarations();
