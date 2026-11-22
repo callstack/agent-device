@@ -693,7 +693,6 @@ export function assertRunnerRequestActive(requestId: string | undefined): void {
   throw createRequestCanceledError();
 }
 
-// ── Listener endpoint and token ─────────────────────────────────────────────────────────────────
 const RUNNER_TOKEN_HEADER = 'X-Agent-Device-Runner-Token';
 const RUNNER_TOKEN_ENFORCED_HEADER = 'X-Agent-Device-Runner-Auth';
 const RUNNER_TOKEN_BYTES = 24;
@@ -704,7 +703,11 @@ export type RunnerEndpoint = Readonly<{
   port: number;
   token: string;
   /** A provider's authenticated forwarding route; omitted for local and USB runners. */
-  http?: Readonly<{ url: string; headers?: Readonly<Record<string, string>> }>;
+  http?: Readonly<{
+    url: string;
+    headers?: Readonly<Record<string, string>>;
+    transformResponse?(response: Response): Response;
+  }>;
 }>;
 
 export function mintRunnerToken(): string {
@@ -738,8 +741,6 @@ export function requireTokenEnforcingRunner(response: Response): Response {
     hint: 'Rebuild the runner with this agent-device version. A configured iosXctestrunFile must come from the same version.',
   });
 }
-
-// --- Sequence commands ---
 
 export const SEQUENCEABLE_RUNNER_STEP_KINDS = ['tap', 'doubleTap', 'longPress'] as const;
 export type SequenceableRunnerStepKind = (typeof SEQUENCEABLE_RUNNER_STEP_KINDS)[number];

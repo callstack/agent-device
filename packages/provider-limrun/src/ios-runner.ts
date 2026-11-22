@@ -1,5 +1,6 @@
 import { limrunRunnerError, withLimrunRunnerErrors } from './ios-runner-errors.ts';
 import { createInstanceStreamScrubber, safeInstanceErrorText } from './error-text.ts';
+import { scrubInstanceDiagnostic } from './instance-error-scrubbing.ts';
 import { awaitWithSignal } from '@agent-device/kernel/await-with-signal';
 import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import { createLimrunAppleToolProvider } from './ios-tools.ts';
@@ -49,7 +50,17 @@ export async function createLimrunIosRunner(
   let preparationWaiters = 0;
   let prepared = false;
   let canceledRunMayHoldSlot = false;
-  const endpoint = { port, token: apple.runner.mintToken(), http: { url: commandUrl, headers } };
+  const token = apple.runner.mintToken();
+  const endpoint = {
+    port,
+    token,
+    http: {
+      url: commandUrl,
+      headers,
+      transformResponse: (response: Response) =>
+        scrubRunnerResponse(response, [headers.Authorization, token]),
+    },
+  };
   const provider = await apple.runner.createLaunchedProvider(session.device, { endpoint, launch });
   const { stop, release, prepare, isStarted, releaseSpeculative } = provider;
   const isReady = provider.hasLiveSession;
@@ -341,4 +352,37 @@ export async function createLimrunIosRunner(
       }
     },
   };
+}
+
+function scrubRunnerResponse(response: Response, credentials: readonly string[]): Response {
+  if (!response.body) return response;
+  const chunks: string[] = [];
+  const body = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(
+    new TransformStream<string, Uint8Array>({
+      transform: (chunk) => {
+        chunks.push(chunk);
+      },
+      flush: (controller) => {
+        controller.enqueue(
+          new TextEncoder().encode(scrubRunnerResponseText(chunks.join(''), credentials)),
+        );
+      },
+    }),
+  );
+  return new Response(body, {
+    status: response.status,
+    statusText: safeInstanceErrorText(response.statusText, credentials),
+    headers: response.headers,
+  });
+}
+
+function scrubRunnerResponseText(text: string, credentials: readonly string[]): string {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return safeInstanceErrorText(text, credentials);
+  }
+  const scrubbed = scrubInstanceDiagnostic(payload, credentials);
+  return scrubbed === payload ? text : JSON.stringify(scrubbed);
 }

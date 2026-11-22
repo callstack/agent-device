@@ -246,3 +246,40 @@ test('a sync answer naming an entry this upload did not send keeps it out of the
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test('a stale needFull name still triggers the full sync retry', async () => {
+  const directory = await mkdtempForTest('runner-products-');
+  await fs.writeFile(path.join(directory, 'Runner.xctestrun'), '<plist/>');
+  const fetch = vi
+    .fn()
+    .mockImplementationOnce(async () => Response.json({ ok: true, needFull: ['stale'] }))
+    .mockImplementationOnce(async () => Response.json({ ok: true }));
+  vi.stubGlobal('fetch', fetch);
+  await uploadLimrunRunnerProducts(
+    directory,
+    'https://instance.invalid',
+    'token',
+    new AbortController().signal,
+  );
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('invalid sync JSON returns a static failure and status', async () => {
+  const directory = await mkdtempForTest('runner-products-');
+  await fs.writeFile(path.join(directory, 'Runner.xctestrun'), '<plist/>');
+  const token = 'syntheticInstanceCredential';
+  vi.stubGlobal('fetch', async () => new Response(token));
+  await expect(
+    uploadLimrunRunnerProducts(
+      directory,
+      'https://instance.invalid',
+      token,
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Limrun runner upload returned invalid JSON',
+    details: { status: 200, reason: 'limrun_runner_upload_failed' },
+    cause: undefined,
+  });
+});

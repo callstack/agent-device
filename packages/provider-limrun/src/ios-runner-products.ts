@@ -212,14 +212,14 @@ export async function uploadLimrunRunnerProducts(
   for (let attempt = 0; attempt < 2; attempt++) {
     signal.throwIfAborted();
     const result = await upload(attempt === 0 ? selected : files);
-    const needFull = (result.needFull ?? []).filter((name) => knownProductPaths.has(name));
+    const needFull = result.needFull ?? [];
     if (result.ok === true && needFull.length === 0) return;
     if (needFull.length === 0 || attempt === 1) {
       throw limrunRunnerError(
         'limrun_runner_upload_failed',
         'Limrun runner products could not be synchronized',
         {
-          needFull,
+          needFull: needFull.filter((name) => knownProductPaths.has(name)),
         },
       );
     }
@@ -273,7 +273,16 @@ export async function uploadLimrunRunnerProducts(
           },
         );
       }
-      return (await response.json()) as { ok?: boolean; needFull?: string[] };
+      try {
+        return (await response.json()) as { ok?: boolean; needFull?: string[] };
+      } catch {
+        signal.throwIfAborted();
+        throw limrunRunnerError(
+          'limrun_runner_upload_failed',
+          'Limrun runner upload returned invalid JSON',
+          { status: response.status },
+        );
+      }
     } finally {
       stream.destroy();
       await compression;

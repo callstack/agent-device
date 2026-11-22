@@ -34,9 +34,8 @@ function instanceSecrets(sentValues: Iterable<string | undefined>): string[] {
     const trimmed = value?.trim();
     if (!trimmed) continue;
     secrets.add(trimmed);
-    const [scheme = '', ...rest] = trimmed.split(/\s+/);
-    const credential = rest.join(' ').trim();
-    if (credential.length > 0 && CREDENTIAL_SCHEMES.has(scheme.toLowerCase())) {
+    const [, scheme, credential] = /^(\S+)\s+([\s\S]+)$/.exec(trimmed) ?? [];
+    if (scheme && credential && CREDENTIAL_SCHEMES.has(scheme.toLowerCase())) {
       secrets.add(credential);
     }
   }
@@ -119,7 +118,7 @@ export function safeTerminationReason(
 ): string {
   const trimmed = reason?.trim();
   if (!trimmed) return 'Unknown';
-  const oneLine = safeInstanceErrorText(trimmed.replaceAll(/\s+/g, ' '), sentValues);
+  const oneLine = safeInstanceErrorText(trimmed, sentValues).replaceAll(/\s+/g, ' ');
   if (oneLine.length <= MAX_PUBLISHED_REASON_LENGTH) return oneLine;
   return `${withoutTrailingPartialMarker(oneLine.slice(0, MAX_PUBLISHED_REASON_LENGTH))}…`;
 }

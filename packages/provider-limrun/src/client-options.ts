@@ -1,5 +1,11 @@
-import type Limrun from '@limrun/api';
-import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
+import Limrun from '@limrun/api';
+import {
+  AppError,
+  errorMessage,
+  isRequestCanceledError,
+  type AppErrorCode,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { LimrunDeleteResult } from './lease-ownership.ts';
 
 export const LIMRUN_CLIENT_ID = 'agent-device-cli';
@@ -132,29 +138,33 @@ const LIMRUN_ORG_API_REASONS = {
   rejected: { reason: 'limrun_api_failed' },
 } as const satisfies ReasonTable<'limrun'>;
 
-/**
- * Re-raises one organization-API failure as this runtime's own error. See {@link fromLimrunOrgApi}.
- * A 404 keeps its own reason: a caller that acts on a gone instance reads it.
- */
+const LIMRUN_ORG_HTTP_ERRORS = new Map<number, { code: AppErrorCode; reason: string }>([
+  [401, { code: 'UNAUTHORIZED', reason: LIMRUN_ORG_API_REASONS.unauthorized.reason }],
+  [403, { code: 'UNAUTHORIZED', reason: LIMRUN_ORG_API_REASONS.unauthorized.reason }],
+  [404, { code: 'DEVICE_NOT_FOUND', reason: LIMRUN_ORG_API_REASONS.notFound.reason }],
+  [429, { code: 'COMMAND_FAILED', reason: LIMRUN_ORG_API_REASONS.rateLimited.reason }],
+]);
+
 function limrunOrgApiError(error: unknown): unknown {
   const status = readHttpStatus(error);
-  if (status === undefined) return error;
-  const code =
-    status === 401 || status === 403
-      ? 'UNAUTHORIZED'
-      : status === 404
-        ? 'DEVICE_NOT_FOUND'
-        : 'COMMAND_FAILED';
-  const reason =
-    status === 401 || status === 403
-      ? LIMRUN_ORG_API_REASONS.unauthorized.reason
-      : status === 404
-        ? LIMRUN_ORG_API_REASONS.notFound.reason
-        : status === 429
-          ? LIMRUN_ORG_API_REASONS.rateLimited.reason
-          : LIMRUN_ORG_API_REASONS.rejected.reason;
-  return new AppError(code, `Limrun rejected the request (${status}).`, {
-    status,
-    reason,
-  });
+  if (status === undefined) {
+    if (
+      (Limrun.APIUserAbortError && error instanceof Limrun.APIUserAbortError) ||
+      (error instanceof Error && error.name === 'AbortError') ||
+      isRequestCanceledError(error)
+    )
+      return error;
+    return new AppError('COMMAND_FAILED', 'Limrun organization request failed.', {
+      reason: LIMRUN_ORG_API_REASONS.rejected.reason,
+    });
+  }
+  const classified = LIMRUN_ORG_HTTP_ERRORS.get(status);
+  return new AppError(
+    classified?.code ?? 'COMMAND_FAILED',
+    `Limrun rejected the request (${status}).`,
+    {
+      status,
+      reason: classified?.reason ?? LIMRUN_ORG_API_REASONS.rejected.reason,
+    },
+  );
 }

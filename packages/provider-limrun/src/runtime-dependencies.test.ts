@@ -69,6 +69,8 @@ vi.mock('@limrun/api', () => ({
       list: state.assetList,
     };
 
+    readonly apiKey = 'lim_test_key';
+
     constructor(options: { defaultHeaders?: Record<string, string> }) {
       state.constructorOptions.push(options);
     }
@@ -109,12 +111,20 @@ test('heartbeat reports a terminated instance with its typed cause', async () =>
     assert.equal(await timedOut, undefined);
     assert.equal(probeSignal?.aborted, true);
     vi.useRealTimers();
+    state.instanceGet.mockResolvedValueOnce({
+      status: {
+        state: 'terminated',
+        terminationReason: 'InactivityTimeout instance-token lim_test_key',
+      },
+    });
     await assert.rejects(
       runtime.leaseLifecycle.heartbeat!(lease),
       (error: unknown) =>
         error instanceof AppError &&
         error.details?.reason === 'provider-instance-ended' &&
-        error.details.terminationReason === 'InactivityTimeout',
+        error.details.terminationReason === 'InactivityTimeout [REDACTED] [REDACTED]' &&
+        !error.message.includes('instance-token') &&
+        !error.message.includes('lim_test_key'),
     );
   } finally {
     vi.useRealTimers();

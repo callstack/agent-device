@@ -156,3 +156,10 @@ const MARKER = '[REDACTED]';
 const MARKER_PARTIALS = Array.from({ length: MARKER.length - 1 }, (_, length) =>
   MARKER.slice(0, length + 1),
 );
+
+test('matches the exact bare token before normalizing whitespace', () => {
+  const token = 'synthetic  instance-token';
+  const sent = ['Bearer ' + token];
+  expect(safeInstanceErrorText('refused ' + token, sent)).toBe('refused [REDACTED]');
+  expect(safeTerminationReason('ended\nusing ' + token, sent)).toBe('ended using [REDACTED]');
+});

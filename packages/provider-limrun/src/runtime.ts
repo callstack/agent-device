@@ -45,7 +45,6 @@ import {
   deleteLimrunInstance,
   LIMRUN_CLIENT_ID,
   LIMRUN_ORG_CLIENT_LOGGING,
-  fromLimrunOrgApi,
   limrunUserAgent,
   requireLimrunOrgClient,
 } from './client-options.ts';
@@ -555,12 +554,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       // The session is recorded in the step that answers for it, so every later step of this allocation
       // fails with its handles still owned: the instance client and the host ADB endpoint are released by
       // whoever ends this lease, whether or not the allocation ever answered.
-      // The create's failure is the one answer this lease has for its caller and is recorded by the daemon,
-      // so it is normalized here: the SDK's own text for an account-API refusal is the response body.
       const session =
         platform === 'ios'
-          ? await fromLimrunOrgApi(allocateLimrunIosSession(params, rent))
-          : await fromLimrunOrgApi(allocateLimrunAndroidSession(params, rent));
+          ? await allocateLimrunIosSession(params, rent)
+          : await allocateLimrunAndroidSession(params, rent);
       owner.session = session;
       const appAlias: LimrunAppAlias | undefined = requestedAsset && {
         assetName: requestedAsset.name,
@@ -959,7 +956,7 @@ function allocationRefusedAfterShutdown(lease: DeviceLease): never {
  */
 async function readLimrunTerminationReason(
   limrun: Limrun,
-  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId'>,
+  session: Pick<LimrunRuntimeSession, 'platform' | 'instanceId' | 'token'>,
   requestSignal: AbortSignal | undefined,
 ): Promise<string | undefined> {
   const expiry = new AbortController();
@@ -983,6 +980,7 @@ async function readLimrunTerminationReason(
     const { safeTerminationReason } = await import('./error-text.ts');
     return safeTerminationReason(answer.value.status.terminationReason, [
       limrun.apiKey ?? undefined,
+      session.token,
     ]);
   } catch {
     return undefined;

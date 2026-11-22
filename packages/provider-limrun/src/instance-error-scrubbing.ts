@@ -1,5 +1,22 @@
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { safeInstanceErrorText } from './error-text.ts';
+import { LIMRUN_INSTANCE_CLIENT_LOGGING } from './client-options.ts';
+
+export async function connectLimrunInstanceClient<
+  Options extends { token: string },
+  Client extends object,
+>(
+  connect: (options: Options & typeof LIMRUN_INSTANCE_CLIENT_LOGGING) => Promise<Client>,
+  access: Options,
+): Promise<Client> {
+  const secrets = [`Bearer ${access.token}`];
+  try {
+    const client = await connect({ ...access, ...LIMRUN_INSTANCE_CLIENT_LOGGING });
+    return withInstanceCredentialScrubbing(client, secrets);
+  } catch (error) {
+    throw instanceCommandFailure(error, secrets);
+  }
+}
 
 /** Every `details.reason` a command sent to an attached or created instance publishes. */
 const LIMRUN_INSTANCE_REASONS = {
@@ -16,7 +33,7 @@ const LIMRUN_INSTANCE_REASONS = {
  * itself, or the body of the reply. This plugin authenticated that channel with the instance token, and
  * an instance that echoes it does so as a bare value core's pattern redaction cannot recognise. So every
  * method of the client is answered through this wrapper: a failure that names a value this session sent
- * is re-raised with that value removed, and keeps the original as its cause.
+ * is re-raised with that value removed, before reaching its caller.
  *
  * A failure that names nothing this session sent is passed through untouched, so the command that caught
  * it still answers with its own reason. A method's own answer, and a method that throws synchronously
@@ -107,28 +124,27 @@ function scrubPublishedDetails(
   if (details === undefined) return undefined;
   const secrets = [...sentValues].filter((value): value is string => typeof value === 'string');
   if (secrets.length === 0) return details;
-  const scrubbed = scrubValue(details, secrets);
+  const scrubbed = scrubInstanceDiagnostic(details, secrets);
   return scrubbed === details ? details : (scrubbed as Record<string, unknown>);
 }
 
 /** Rebuilds only the strings of a diagnostic value that name a sent credential; a type is preserved. */
-function scrubValue(value: unknown, secrets: readonly string[]): unknown {
+export function scrubInstanceDiagnostic(value: unknown, secrets: readonly string[]): unknown {
   if (typeof value === 'string') {
     const scrubbed = safeInstanceErrorText(value, secrets);
     return scrubbed === value ? value : scrubbed;
   }
   if (Array.isArray(value)) {
-    const entries = value.map((entry) => scrubValue(entry, secrets));
+    const entries = value.map((entry) => scrubInstanceDiagnostic(entry, secrets));
     return entries.every((entry, index) => entry === value[index]) ? value : entries;
   }
   if (value === null || typeof value !== 'object') return value;
-  const entries = Object.entries(value as Record<string, unknown>).map(
-    ([key, entry]) => [key, scrubValue(entry, secrets)] as const,
-  );
-  return entries.every(
-    ([key, entry], index) =>
-      key === Object.keys(value)[index] && entry === (value as Record<string, unknown>)[key],
-  )
+  const original = Object.entries(value);
+  const entries = original
+    .filter(([key]) => safeInstanceErrorText(key, secrets) === key)
+    .map(([key, entry]) => [key, scrubInstanceDiagnostic(entry, secrets)] as const);
+  return entries.length === original.length &&
+    entries.every(([, entry], index) => entry === original[index]?.[1])
     ? value
     : Object.fromEntries(entries);
 }

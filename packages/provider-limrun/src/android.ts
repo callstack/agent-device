@@ -1,5 +1,4 @@
 import type { LimrunSyncCache } from './sync-cache.ts';
-import { LIMRUN_INSTANCE_CLIENT_LOGGING } from './client-options.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   createInstanceClient as createAndroidInstanceClient,
@@ -78,16 +77,12 @@ export async function createLimrunAndroidSession(
 ): Promise<LimrunAndroidSession> {
   // The wrapper is loaded here, not imported: the runtime façade keeps its merge-base eager closure
   // (ADR-0027), and this is one of the two routes that builds an instance client.
-  const { withInstanceCredentialScrubbing } = await import('./instance-error-scrubbing.ts');
-  const client = withInstanceCredentialScrubbing(
-    await createAndroidInstanceClient({
-      apiUrl: options.apiUrl,
-      adbUrl: options.adbUrl,
-      token: options.token,
-      ...LIMRUN_INSTANCE_CLIENT_LOGGING,
-    }),
-    [`Bearer ${options.token}`],
-  );
+  const { connectLimrunInstanceClient } = await import('./instance-error-scrubbing.ts');
+  const client = await connectLimrunInstanceClient(createAndroidInstanceClient, {
+    apiUrl: options.apiUrl,
+    adbUrl: options.adbUrl,
+    token: options.token,
+  });
   const session: LimrunAndroidAdbSession = {
     platform: 'android',
     lease: options.lease,

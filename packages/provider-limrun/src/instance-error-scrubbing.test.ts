@@ -167,3 +167,13 @@ describe('scrubPublishedError', () => {
     expect((scrubPublishedError(failure, SENT) as AppError).cause).toBe(cause);
   });
 });
+
+test('drops nested diagnostic properties whose names contain the instance token', () => {
+  const failure = new AppError('COMMAND_FAILED', 'runner refused', {
+    runner: { status: 401, ['echo-' + TOKEN]: 'unexpected' },
+  });
+  expect(scrubPublishedError(failure, SENT)).toMatchObject({
+    details: { runner: { status: 401 } },
+  });
+  expect(JSON.stringify(scrubPublishedError(failure, SENT))).not.toContain(TOKEN);
+});

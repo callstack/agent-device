@@ -216,6 +216,7 @@ These reasons can come from more than one command.
 | `limrun_download_timeout` | The transfer's own deadline passed before the file reached disk. |
 | `limrun_download_failed` | The transfer failed before it could ask the instance for the file. |
 | `limrun_instance_command_failed` | The instance refused or could not answer the command; its text, with this session's credential removed, is the message. |
+| `limrun_file_response_invalid` | The instance returned an unreadable JSON reply for a simulator file operation. |
 | `limrun_runner_snapshot_unavailable` | The runner's own capture failure is answered over: the recovery is to reopen this session, not to inspect the simulator. |
 
 ### Macos helper

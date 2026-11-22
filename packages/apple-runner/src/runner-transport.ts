@@ -119,7 +119,7 @@ export async function postRunnerCommandOverRoute(
       status: response.status,
     });
   }
-  return response;
+  return endpoint.http?.transformResponse?.(response) ?? response;
 }
 
 /** A cancellation that lands before the POST is issued proves the runner received nothing. */

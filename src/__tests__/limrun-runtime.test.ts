@@ -707,7 +707,10 @@ test('Limrun keeps session tracked when release fails so release can be retried'
           error instanceof AppError &&
           details?.reason === 'limrun_instance_delete_unconfirmed' &&
           details.limrunInstanceId === 'android-instance-1' &&
-          details.cause === 'temporary delete failure'
+          details.cause === 'Limrun organization request failed.' &&
+          error.cause instanceof AppError &&
+          error.cause.details?.reason === 'limrun_api_failed' &&
+          error.cause.cause === undefined
         );
       },
     );

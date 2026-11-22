@@ -4,13 +4,8 @@ import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader, LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
-import {
-  fromLimrunOrgApi,
-  isLimrunApiNotFound,
-  LIMRUN_INSTANCE_CLIENT_LOGGING,
-  requireLimrunOrgClient,
-} from './client-options.ts';
-import { withInstanceCredentialScrubbing } from './instance-error-scrubbing.ts';
+import { fromLimrunOrgApi, isLimrunApiNotFound, requireLimrunOrgClient } from './client-options.ts';
+import { connectLimrunInstanceClient } from './instance-error-scrubbing.ts';
 import { attachedLimrunInstanceId } from './device.ts';
 import type {
   LimrunAndroidInstanceAccess,
@@ -35,18 +30,9 @@ export async function reconnectLimrunAppLogReader(options: {
     );
   }
   const limrun = requireLimrunOrgClient(options.limrun, 'Reconnecting app logs');
-  try {
-    // The lookup is asked with the account key and its failure text is the response body, so it is
-    // answered with a typed status before anything here records or returns it.
-    return await fromLimrunOrgApi(
-      options.descriptor.platform === 'ios'
-        ? reconnectIos({ ...options, limrun })
-        : reconnectAndroid({ ...options, limrun }),
-    );
-  } catch (error) {
-    if (isLimrunApiNotFound(error)) return { status: 'missing' };
-    throw error;
-  }
+  return options.descriptor.platform === 'ios'
+    ? await reconnectIos({ ...options, limrun })
+    : await reconnectAndroid({ ...options, limrun });
 }
 
 async function reconnectAttached(
@@ -99,14 +85,7 @@ async function openIosReader(
   descriptor: LimrunAppLogDescriptor,
   dependencies: LimrunRuntimeDependencies,
 ): Promise<LimrunAppLogReconnectOutcome> {
-  const client = withInstanceCredentialScrubbing(
-    await createIosInstanceClient({
-      apiUrl: access.apiUrl,
-      token: access.token,
-      ...LIMRUN_INSTANCE_CLIENT_LOGGING,
-    }),
-    [`Bearer ${access.token}`],
-  );
+  const client = await connectLimrunInstanceClient(createIosInstanceClient, access);
   const logs = dependencies.ios.createAppLogReader({ ...access, client });
   const reader: LimrunAppLogReader = {
     platform: 'ios',
@@ -159,15 +138,7 @@ async function openAndroidReader(
   descriptor: LimrunAppLogDescriptor,
   dependencies: LimrunRuntimeDependencies,
 ): Promise<LimrunAppLogReconnectOutcome> {
-  const client = withInstanceCredentialScrubbing(
-    await createAndroidInstanceClient({
-      apiUrl: access.apiUrl,
-      adbUrl: access.adbUrl,
-      token: access.token,
-      ...LIMRUN_INSTANCE_CLIENT_LOGGING,
-    }),
-    [`Bearer ${access.token}`],
-  );
+  const client = await connectLimrunInstanceClient(createAndroidInstanceClient, access);
   const rollback = new AsyncCleanupStack();
   let adopted = false;
   rollback.defer(async () => {
@@ -233,7 +204,13 @@ async function selectOwnedActiveInstance<Instance extends ReconnectableLimrunIns
   | Readonly<{ status: 'active'; instance: Instance; apiUrl: string; token: string }>
   | Extract<LimrunAppLogReconnectOutcome, { status: 'missing' | 'ownership-lost' }>
 > {
-  const instance = await load();
+  let instance: Instance;
+  try {
+    instance = await fromLimrunOrgApi(load());
+  } catch (error) {
+    if (isLimrunApiNotFound(error)) return { status: 'missing' };
+    throw error;
+  }
   if (!hasDescriptorOwnership(instance.metadata.labels, descriptor)) {
     return { status: 'ownership-lost' };
   }

@@ -3,6 +3,7 @@ import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import type { ProviderAppLogReader } from '@agent-device/capture-kit/provider-app-log';
 import type { LogStream } from '@limrun/api/ios-client';
 import type { LimrunIosHost } from './ios-host.ts';
+import { safeInstanceErrorText } from './error-text.ts';
 
 const MAX_LOG_BYTES = 1024 * 1024;
 
@@ -18,9 +19,11 @@ export function createLimrunIosAppLogReader(
   let failure: Error | undefined;
   const lines: string[] = [];
   let bytes = 0;
+  const credentials = [`Bearer ${input.token}`];
   const append = (line: string) => {
-    lines.push(line);
-    bytes += Buffer.byteLength(line) + 1;
+    const scrubbed = safeInstanceErrorText(line, credentials);
+    lines.push(scrubbed);
+    bytes += Buffer.byteLength(scrubbed) + 1;
     while (bytes > MAX_LOG_BYTES && lines.length) bytes -= Buffer.byteLength(lines.shift()!) + 1;
   };
   const stop = () => {

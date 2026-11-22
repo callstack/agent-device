@@ -7,7 +7,11 @@ import type {
   AppleToolExecOptions,
 } from '@agent-device/platform-apple/tool-provider';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import { downloadLimrunFile } from './download-file.ts';
 import type { LimrunIosHost } from './ios-host.ts';
 
@@ -15,6 +19,23 @@ type Session = Parameters<LimrunRuntimeDependencies['ios']['createRunner']>[0];
 type Files = AppleToolProvider['simulatorFiles'];
 type ParsePlist = LimrunIosHost['apple']['tools']['parsePlist'];
 type Container = Parameters<Files['openContainer']>[0];
+
+const LIMRUN_FILE_REASONS = {
+  // The instance returned an unreadable JSON reply for a simulator file operation.
+  invalidResponse: { reason: 'limrun_file_response_invalid' },
+} as const satisfies ReasonTable<'limrun'>;
+
+async function readFileReply<T>(response: Response, signal: AbortSignal): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    signal.throwIfAborted();
+    throw new AppError('COMMAND_FAILED', 'Limrun file operation returned invalid JSON', {
+      reason: LIMRUN_FILE_REASONS.invalidResponse.reason,
+      status: response.status,
+    });
+  }
+}
 
 export function createLimrunSimulatorFiles(
   session: Session,
@@ -98,7 +119,10 @@ export function createLimrunSimulatorFiles(
       const list = () =>
         operation(container, async (signal) => {
           const response = await request('GET', urlFor('files/list', '', container), signal);
-          const result = (await response.json()) as { entries: Array<{ name: string }> };
+          const result = await readFileReply<{ entries: Array<{ name: string }> }>(
+            response,
+            signal,
+          );
           return result.entries.map((entry) => entry.name);
         });
       try {
@@ -144,7 +168,7 @@ export function createLimrunSimulatorFiles(
           signal,
           await fs.readFile(localPath, { signal }),
         );
-        return (await response.json()) as { path: string };
+        return await readFileReply<{ path: string }>(response, signal);
       }).catch(async (error: unknown) => {
         await remove().catch(() => {});
         throw error;

@@ -87,3 +87,32 @@ test('the organization client this plugin builds logs nothing, whatever LIMRUN_L
     else process.env.LIMRUN_LOG = previous;
   }
 });
+
+test('a malformed organization JSON reply never publishes the decoder error', async () => {
+  const key = 'syntheticAccountCredential';
+  const limrun = new Limrun({
+    apiKey: key,
+    baseURL: 'https://limrun.example',
+    ...LIMRUN_ORG_CLIENT_LOGGING,
+    fetch: async () => new Response(key, { headers: { 'content-type': 'application/json' } }),
+  });
+  await expect(fromLimrunOrgApi(limrun.iosInstances.list({}))).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Limrun organization request failed.',
+    details: { reason: 'limrun_api_failed' },
+    cause: undefined,
+  });
+});
+
+test('an aborted organization request preserves cancellation', async () => {
+  const controller = new AbortController();
+  const limrun = new Limrun({
+    apiKey: 'syntheticAccountCredential',
+    baseURL: 'https://limrun.example',
+    ...LIMRUN_ORG_CLIENT_LOGGING,
+  });
+  controller.abort();
+  await expect(
+    fromLimrunOrgApi(limrun.iosInstances.list({}, { signal: controller.signal })),
+  ).rejects.toBeInstanceOf(Limrun.APIUserAbortError);
+});

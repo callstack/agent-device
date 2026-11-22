@@ -321,3 +321,36 @@ test('does not connect once the reconnect request is aborted', async () => {
   ).rejects.toThrow();
   expect(vi.mocked(createIosInstanceClient)).not.toHaveBeenCalled();
 });
+
+test('scrubs an iOS device-info failure while reconnecting the app log', async () => {
+  const token = 'syntheticInstanceCredential';
+  vi.mocked(createIosInstanceClient).mockRejectedValueOnce(
+    new Error('deviceInfo refused ' + token),
+  );
+  await expect(
+    reconnectLimrunAppLogReader({
+      limrun: {
+        iosInstances: {
+          get: async () => ({
+            metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
+            status: { state: 'ready', apiUrl: 'https://instance', token },
+          }),
+        },
+      } as never,
+      descriptor: {
+        transport: 'limrun-log-poller',
+        platform: 'ios',
+        leaseId: 'lease-a',
+        instanceId: 'instance-a',
+        ownership: 'created',
+        appBundleId: 'com.example.app',
+        outputPath: '/sessions/one/app.log',
+      },
+      dependencies: iosDependencies,
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'deviceInfo refused [REDACTED]',
+    details: { reason: 'limrun_instance_command_failed' },
+  });
+});
