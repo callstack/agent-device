@@ -1,5 +1,5 @@
 import type { DoctorCheck } from '@agent-device/contracts/observability';
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolProvider } from './tool-provider-types.ts';
 import { linuxToolSlotCommands } from './tool-provider.ts';
 
 /**

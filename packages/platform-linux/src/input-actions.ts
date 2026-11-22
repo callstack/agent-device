@@ -1,8 +1,5 @@
 import { discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
-import type {
-  LinuxInputProvider,
-  LinuxToolProvider,
-} from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxInputProvider, LinuxToolProvider } from './tool-provider-types.ts';
 import {
   DEFAULT_SCROLL_AMOUNT,
   type ScrollDirection,

@@ -106,7 +106,6 @@ test('setup registers the Linux modules and operations', () => {
   assert.equal(typeof registration.inventoryModule.loadInventory, 'function');
   assert.equal(typeof registration.runtimeModule.loadRuntime, 'function');
   assert.equal(typeof registration.createInteractor, 'function');
-  assert.equal(typeof registration.withRequestProvider, 'function');
   assert.equal(typeof registration.operations.toolchainCheck, 'function');
 });
 
@@ -269,75 +268,6 @@ test('the Linux interactor drives the host the plugin was set up with', async ()
   // The environment is the setup host's, not the process's: the daemon's own environment never
   // enters the bundle, and the request's display decision would be lost if it did.
   assert.equal(commands[0]?.env?.XDG_SESSION_TYPE, 'x11');
-});
-
-test('a request-scoped provider answers the interactor instead of the setup host', async () => {
-  const hostCommands: HostCommand[] = [];
-  const registration = setupLinuxPlatform(
-    createPluginHost({
-      env: { PATH: '/usr/bin', XDG_SESSION_TYPE: 'x11' },
-      tools: ['xdotool'],
-      commands: hostCommands,
-    }),
-  );
-  const scopedCommands: Array<[string, readonly string[]]> = [];
-  const scoped = {
-    display: { detectDisplayServer: () => 'x11' as const },
-    runCommand: async (cmd: string, args: readonly string[]) => {
-      scopedCommands.push([cmd, args]);
-      return { stdout: '', stderr: '', exitCode: 0 };
-    },
-    whichCommand: async (cmd: string) => cmd === 'xdotool',
-    launchDetached: () => ({ exited: Promise.resolve({ pid: 1, exitCode: 0 }) }),
-    sleep: async () => {},
-    desktop: {
-      openTarget: async () => {},
-      closeApp: async () => {},
-    },
-    // The parts this request never reaches: reading one would mean the tap went somewhere the test
-    // did not script, so the assertion is the throw.
-    clipboard: {
-      readText: async () => {
-        throw new Error('this request reads no clipboard');
-      },
-      writeText: async () => {
-        throw new Error('this request writes no clipboard');
-      },
-    },
-    screenshot: {
-      capture: async () => {
-        throw new Error('this request captures no screenshot');
-      },
-    },
-    accessibility: {
-      captureTree: async () => {
-        throw new Error('this request captures no tree');
-      },
-    },
-  };
-  const interactor = await registration.createInteractor(
-    {
-      platform: 'linux',
-      id: 'local',
-      name: 'builder',
-      kind: 'device',
-      target: 'desktop',
-      booted: true,
-    },
-    {},
-    { env: {}, cwd: '/host-cwd' },
-  );
-
-  await registration.withRequestProvider(scoped, async () => {
-    await interactor.tap(1, 2);
-  });
-
-  assert.deepEqual(scopedCommands, [
-    ['xdotool', ['getmouselocation', '--shell']],
-    ['xdotool', ['mousemove', '--sync', '1', '2']],
-    ['xdotool', ['click', '1']],
-  ]);
-  assert.equal(hostCommands.length, 0);
 });
 
 test('two setups keep separate host environments', async () => {

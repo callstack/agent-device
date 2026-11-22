@@ -1,4 +1,4 @@
-import type { LinuxToolProvider } from '@agent-device/contracts/linux-tool-provider';
+import type { LinuxToolProvider } from './tool-provider-types.ts';
 import { sendKey } from './input-actions.ts';
 
 /**

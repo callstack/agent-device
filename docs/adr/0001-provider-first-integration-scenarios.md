@@ -8,6 +8,8 @@ Completed process history is in git history.
 
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Provider-first scenario coverage and semantic provider operations remain accepted.
 > Request-bound runtime facets and explicit provider ownership supersede the monolithic `Interactor` and the request callback-stack topology one command at a time.
+>
+> **Amended 2026-11-22 (Linux).** The Linux family has no request-scoped provider seam. Its desktop vocabulary is internal to `packages/platform-linux`, and the family answers every desktop intent through the `PlatformHost` its plugin was set up with. A Provider-backed integration scenario for Linux scripts that host instead of injecting a provider. The semantic Linux operations below still hold; the plugin owns them.
 
 ## Rules at a glance
 
@@ -48,7 +50,6 @@ For commands that still use the legacy adapter, use these request-scoped provide
 - Android ADB provider.
 - Apple tool provider with semantic `simctl`, `devicectl`, macOS helper, and macOS host subproviders.
 - Apple runner provider.
-- Linux tool provider with semantic subproviders for desktop lifecycle, accessibility, clipboard, and screenshots.
 - App-log provider for semantic start and stop of app log streams.
 - Recording provider for semantic local and remote screen-recording start operations that would otherwise be raw host processes.
 
@@ -66,7 +67,7 @@ The macOS host provider owns these operations:
 
 The reason is that remote desktop providers should not need to infer these intents from `open`, `find`, `plutil`, `pbcopy`, `pbpaste`, or `osascript`.
 
-Linux desktop lifecycle exposes semantic `openTarget` and `closeApp` operations for two reasons:
+Linux desktop lifecycle uses semantic `openTarget` and `closeApp` operations internally for two reasons:
 
 - Provider-backed integration covers these user workflows.
 - Remote desktop providers should not need to infer intent from `xdg-open`, binary launch, `wmctrl`, or `pkill`.
@@ -79,6 +80,8 @@ Linux accessibility snapshots, clipboard, screenshots, and input synthesis are a
 - "perform this user input"
 
 The local implementation details `python3`/AT-SPI, `xclip`, `scrot`, `grim`, `xdotool`, and `ydotool` are not the contracts.
+
+The Linux family keeps that vocabulary to itself: the plugin builds one provider from the host it was set up with, and no request-scoped provider is resolved for it. A Linux scenario therefore scripts the host — which desktop tools exist, and what each command answers — and asserts the desktop argv the family produced. That keeps the plugin's own tool selection under test, which an injected provider would have stepped around.
 
 App-log stream start/stop is semantic observability behavior, not generic host process execution.
 Thus, provider-backed integration injects an app-log provider, and it does not spawn `log stream` or `logcat`.
