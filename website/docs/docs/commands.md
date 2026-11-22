@@ -2600,6 +2600,8 @@ Exact behavior: `agent-device help disconnect`.
 
 <!-- /generated -->
 
+If agent-device cannot read or parse a session's own saved connection file or the active-session pointer, it cannot establish which session owns that file. It keeps the file and refuses with `connection_record_owner_unknown`. A session's own saved connection file that cannot be read refuses every command that uses that session's saved connection. An unreadable active-session pointer refuses `connect` and any command that rewrites the saved connection. The error names the file. Make it readable, or remove it if no session needs it. A file from an older build whose owner cannot be proven is left in place and is not used. A command that only reads the saved connection, such as `connection status`, changes no file. It uses an older build's file for the session where that file is, and it treats a file that fails validation as no connection. Only a command that saves or removes the saved connection moves an older file to its session's own file, or removes a file that fails validation. If an older file cannot move because its session's own file already exists, that command refuses with `connection_session_mismatch`. The refused file is kept, and so is the occupied session file. This is also true when both files name the same session, and when the occupied file cannot be read.
+
 <!-- generated:command auth -->
 
 Manage cloud login state.
