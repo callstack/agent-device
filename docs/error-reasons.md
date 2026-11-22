@@ -632,6 +632,19 @@ These reasons can come from more than one command.
 | `resource-already-completed` | The record is already committed, so a finish, cleanup, or late progress write is refused. |
 | `resource-missing` | The record the caller holds a descriptor for no longer exists on disk. |
 
+### Durable captures
+
+| Reason | Meaning |
+| --- | --- |
+| `ownership-fence-lost` | The capture's durable record now belongs to another owner, or its descriptor or evidence no longer matches the owning session or device, so nothing was signaled or removed. It is not retried. |
+| `owner-unavailable` | The runtime owner the request needs is not available: the platform runtime gateway has no runtime for the selected owner, or the transport that owns a capture could not be reached to clean it up. |
+| `transport-failed` | The device transport failed while a capture was being stopped, collected or cleaned up. |
+| `cleanup-unconfirmed` | A capture's cleanup failed or could not be confirmed, so its record is kept for a later retry, and a new capture on that device is refused until the earlier one is confirmed gone. |
+| `manual-recovery-required` | The capture's descriptor or recorded state cannot be read well enough to clean it up automatically; its record is kept for manual recovery. |
+| `descriptor-invalid` | The capture's stored descriptor is malformed, or names a device, backend or session paths other than its owner's, so the capture cannot be reattached. |
+| `descriptor-version-unsupported` | The capture's stored descriptor was written in a different descriptor version than this build reads, so it cannot be reattached; its record is kept. |
+| `transport-not-reattachable` | The capture's process or transport cannot be reattached after the daemon restarted, so only its cleanup can run. |
+
 ### Foldable panels
 
 | Reason | Meaning |
