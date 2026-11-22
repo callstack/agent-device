@@ -309,8 +309,9 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  // A request writes to the session journal only after its lease check: under the session lock,
-  // or with its last write when it ends before or without that lock. A refusal leaves no event.
+  // A request starts its journal under the session lock or after it resolves an authorized leased
+  // ref. A request that resolves no leased ref can defer its start until it finishes.
+  let hasAuthorizedLeasedRef = false;
   let recordsRequestEvents = false;
   const recordStarted = (ts?: string): void => {
     if (recordsRequestEvents || !shouldRecordEventForRequest(scopedReq)) return;
@@ -320,7 +321,7 @@ export async function createRequestExecutionScope(params: {
     sessionStore.recordEvent(sessionName, ts ? { ...started, ts } : started);
   };
   const recordFinished = (req: DaemonRequest, response: DaemonResponse): void => {
-    recordStarted(new Date(startedAtMs).toISOString());
+    if (!hasAuthorizedLeasedRef) recordStarted(new Date(startedAtMs).toISOString());
     if (!recordsRequestEvents) return;
     if (!requestMayRecordSessionEvents(req, sessionStore.lookup(sessionName))) return;
     sessionStore.recordEvent(
@@ -452,7 +453,8 @@ export async function createRequestExecutionScope(params: {
           holdDeviceLock: scope.retainDeviceExecutionLock,
           admission: params,
         });
-        if (attachesToSession) recordStarted();
+        hasAuthorizedLeasedRef = existingRef?.session.lease !== undefined;
+        if (attachesToSession || hasAuthorizedLeasedRef) recordStarted();
         let admissionCompleted = false;
         try {
           const session = existingRef?.session;

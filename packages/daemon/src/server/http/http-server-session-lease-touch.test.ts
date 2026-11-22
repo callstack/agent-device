@@ -473,6 +473,51 @@ test('devices with no lease id stays detached from a leased session and its reco
   );
 });
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+test('events shows the authorized doctor start while its toolchain check is pending', async () => {
+  if (!world) return;
+  world.publishLeasedSession(world.sessionName);
+  const enteredToolchain = deferred();
+  const releaseToolchain = deferred();
+  vi.mocked(world.hostDiagnostics.toolchainCheck).mockImplementation(async () => {
+    enteredToolchain.resolve();
+    await releaseToolchain.promise;
+    return undefined;
+  });
+
+  const doctor = world.send('doctor', [], world.owner);
+  try {
+    await Promise.race([
+      enteredToolchain.promise,
+      doctor.then((response) => {
+        throw new Error(`Doctor finished before its toolchain check: ${JSON.stringify(response)}`);
+      }),
+    ]);
+
+    const events = await world.send('events', [], world.owner);
+
+    expect(events.result?.ok).toBe(true);
+    expect(events.result?.data?.events).toMatchObject([
+      { command: 'doctor', kind: 'request.started' },
+    ]);
+  } finally {
+    releaseToolchain.resolve();
+    await doctor;
+  }
+  expect((await doctor).result?.ok).toBe(true);
+  expect(await world.requestEvents(world.sessionName)).toEqual([
+    'request.started',
+    'request.finished',
+  ]);
+});
+
 // `apps` needs a lease of its own to reach dispatch, so it sends the lease of another client.
 test.each([
   ['doctor', false],
