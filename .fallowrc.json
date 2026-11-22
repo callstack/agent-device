@@ -281,14 +281,6 @@
       "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
     },
     {
-      // The hash a session's saved-connection file name is built from. Production derives it inside
-      // remote-connection-state.ts when it resolves that file path and reaches no in-repo consumer of
-      // the export; it is published so a caller can name a session's record path. The package test
-      // recomputes it on purpose, so an accidental change to the identity breaks the test.
-      "file": "packages/remote/src/remote-connection-state.ts",
-      "exports": ["connectionSessionIdentity"]
-    },
-    {
       // Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
       "file": "packages/platform-linux/src/index.ts",
       "exports": ["createLocalLinuxToolProvider"]
