@@ -18,7 +18,7 @@ import {
   encodeDurableDescriptor,
 } from '@agent-device/capture-kit';
 import { deviceIdentity, isPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import type {
   AndroidNativePerfSession,
@@ -206,17 +206,23 @@ export async function cleanupApplePerfCaptureDescriptor(
 ): Promise<CleanupOutcome> {
   const decoded = decodeDurableDescriptor(envelope, perfCaptureDescriptorCodec);
   if (decoded.status !== 'decoded' || decoded.descriptor.family !== 'apple') {
-    return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
+    };
   }
   const ownership = await inspectManagedProcess(decoded.descriptor.marker);
   if (ownership === 'ownership-lost') {
-    return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
+    };
   }
   if (ownership === 'missing') return { status: 'already-missing' };
   const stopped = await terminateManagedProcessSet([decoded.descriptor.marker]);
   if (stopped === 'terminated') return { status: 'cleaned' };
   if (stopped === 'already-missing') return { status: 'already-missing' };
-  return { status: 'cleanup-pending', reason: 'ownership-fence-lost' };
+  return { status: 'cleanup-pending', reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason };
 }
 
 export async function inspectApplePerfCaptureDescriptor(
@@ -225,14 +231,17 @@ export async function inspectApplePerfCaptureDescriptor(
   const decoded = decodeDurableDescriptor(envelope, perfCaptureDescriptorCodec);
   if (decoded.status !== 'decoded') return decoded;
   if (decoded.descriptor.family !== 'apple') {
-    return { status: 'unreattachable', reason: 'descriptor-invalid' };
+    return { status: 'unreattachable', reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason };
   }
   const ownership = await inspectManagedProcess(decoded.descriptor.marker);
   if (ownership === 'owned-alive') {
-    return { status: 'unreattachable', reason: 'transport-not-reattachable' };
+    return {
+      status: 'unreattachable',
+      reason: DURABLE_RESOURCE_REASONS.transportNotReattachable.reason,
+    };
   }
   if (ownership === 'ownership-lost') {
-    return { status: 'unreattachable', reason: 'ownership-fence-lost' };
+    return { status: 'unreattachable', reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason };
   }
   return { status: 'missing' };
 }
@@ -243,8 +252,8 @@ export async function inspectAndroidPerfCaptureDescriptor(
   const decoded = decodeDurableDescriptor(envelope, perfCaptureDescriptorCodec);
   if (decoded.status !== 'decoded') return decoded;
   return decoded.descriptor.family === 'android'
-    ? { status: 'unreattachable', reason: 'transport-not-reattachable' }
-    : { status: 'unreattachable', reason: 'descriptor-invalid' };
+    ? { status: 'unreattachable', reason: DURABLE_RESOURCE_REASONS.transportNotReattachable.reason }
+    : { status: 'unreattachable', reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason };
 }
 
 export async function cleanupAndroidPerfCaptureDescriptor(
@@ -253,7 +262,10 @@ export async function cleanupAndroidPerfCaptureDescriptor(
 ): Promise<CleanupOutcome> {
   const decoded = decodeDurableDescriptor(envelope, perfCaptureDescriptorCodec);
   if (decoded.status !== 'decoded' || decoded.descriptor.family !== 'android') {
-    return { status: 'cleanup-pending', reason: 'manual-recovery-required' };
+    return {
+      status: 'cleanup-pending',
+      reason: DURABLE_RESOURCE_REASONS.manualRecoveryRequired.reason,
+    };
   }
   try {
     const android = await loadAndroidPerf();
@@ -320,7 +332,7 @@ function compactAndroidCapture(
 function cleanupPending(error: unknown): CleanupOutcome {
   return {
     status: 'cleanup-pending',
-    reason: 'cleanup-unconfirmed',
+    reason: DURABLE_RESOURCE_REASONS.cleanupUnconfirmed.reason,
     message: error instanceof Error ? error.message : String(error),
   };
 }

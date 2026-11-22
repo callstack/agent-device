@@ -283,7 +283,7 @@ export function resolveReplayAction(
 ): SessionAction {
   return {
     ...action,
-    positionals: (action.positionals ?? []).map((token) => resolveReplayString(token, scope, loc)),
+    positionals: action.positionals.map((token) => resolveReplayString(token, scope, loc)),
     flags: resolveStringProps(action.flags, scope, loc) ?? {},
     runtime: resolveStringProps(action.runtime, scope, loc),
   };
@@ -309,9 +309,7 @@ export function escapeReplayAction(
   const escape = (value: unknown): unknown => escapeStringValue(value, livePlaceholders);
   return {
     ...action,
-    positionals: (action.positionals ?? []).map((token) =>
-      escapeReplayLiteral(token, livePlaceholders),
-    ),
+    positionals: action.positionals.map((token) => escapeReplayLiteral(token, livePlaceholders)),
     flags: (escape(action.flags) as SessionAction['flags'] | undefined) ?? {},
     runtime: escape(action.runtime) as SessionAction['runtime'],
   };

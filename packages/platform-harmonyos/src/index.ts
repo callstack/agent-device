@@ -38,6 +38,9 @@ export const openHarmonyApp = deferred<(typeof import('./app-lifecycle.ts'))['op
 export const closeHarmonyApp = deferred<(typeof import('./app-lifecycle.ts'))['closeHarmonyApp']>(
   async () => (await import('./app-lifecycle.ts')).closeHarmonyApp,
 );
+export const verifyHarmonyOpenForeground = deferred<
+  (typeof import('./app-lifecycle.ts'))['verifyHarmonyOpenForeground']
+>(async () => (await import('./app-lifecycle.ts')).verifyHarmonyOpenForeground);
 
 export const runHarmonyHdc = deferred<(typeof import('./hdc.ts'))['runHarmonyHdc']>(
   async () => (await import('./hdc.ts')).runHarmonyHdc,

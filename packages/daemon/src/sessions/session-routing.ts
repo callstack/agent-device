@@ -258,7 +258,7 @@ function listImplicitWorkspaceSessions(sessionStore: SessionStore, scopeId: stri
  */
 function resolveImplicitPlatformSelector(req: DaemonRequest): PlatformSelector | undefined {
   return (
-    normalizeImplicitPlatformSelector((req.flags as CommandFlags | undefined)?.platform) ??
+    normalizeImplicitPlatformSelector(req.flags?.platform) ??
     // `--session-lock` backfills its platform into `flags` only after routing has chosen the session
     // key, and the CLI keeps a configured default platform out of `flags` whenever a lock policy is
     // set, so the lock's platform is the only platform this request carries at routing time.

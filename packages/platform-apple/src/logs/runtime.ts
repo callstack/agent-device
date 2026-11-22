@@ -1,5 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, DURABLE_RESOURCE_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppLogRuntimeHost,
   AppLogRuntimeOperations,
@@ -62,7 +62,7 @@ function bindAppleAppLogs(
       ) {
         return {
           status: 'unreattachable',
-          reason: 'descriptor-invalid',
+          reason: DURABLE_RESOURCE_REASONS.descriptorInvalid.reason,
           message: 'Apple app-log descriptor does not match the bound device or owning session',
         };
       }
@@ -74,7 +74,7 @@ function bindAppleAppLogs(
         ? await cleanupManagedAppLogProcess(host, descriptor.pidPath)
         : {
             status: 'cleanup-pending',
-            reason: 'ownership-fence-lost',
+            reason: DURABLE_RESOURCE_REASONS.ownershipFenceLost.reason,
             message: 'Apple app-log descriptor does not match the bound device or owning session',
           },
   });

@@ -30,7 +30,7 @@ export function requireInteractorMethod<Method>(
   method: Method | undefined,
   operation: string,
 ): NonNullable<Method> {
-  if (method) return method as NonNullable<Method>;
+  if (method) return method;
   throw createRuntimeContractInvalidError(
     `${operation} was admitted but its bound interactor has no implementation.`,
   );

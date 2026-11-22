@@ -1138,7 +1138,7 @@ test('disconnect cleans connection state when remote config file is gone', async
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('disconnect removes malformed connection state', async () => {
+test('disconnect refuses and keeps a connection state file that does not parse', async () => {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const connectionsDir = path.join(stateDir, 'remote-connections');
@@ -1153,10 +1153,12 @@ test('disconnect removes malformed connection state', async () => {
     env: { HOME: home },
   });
 
-  assert.equal(disconnected.code, null);
+  // No session can be shown to own an unparseable file, so it is never removed.
+  assert.equal(disconnected.code, 1);
   assert.equal(disconnected.calls.length, 0);
-  assert.equal(fs.existsSync(statePath), false);
-  assert.equal(fs.existsSync(activePath), false);
+  assert.match(disconnected.stdout, /connection_record_owner_unknown/);
+  assert.equal(fs.readFileSync(statePath, 'utf8'), '{not json');
+  assert.equal(fs.existsSync(activePath), true);
 
   fs.rmSync(root, { recursive: true, force: true });
 });

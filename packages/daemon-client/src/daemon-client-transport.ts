@@ -638,7 +638,7 @@ function handleTransportError(
     phase: 'daemon_request_socket_error',
     data: {
       requestId,
-      message: err instanceof Error ? (err as Error).message : String(err),
+      message: err instanceof Error ? err.message : String(err),
     },
   });
   return new AppError(

@@ -423,7 +423,7 @@ async function buildReplayActionFailure(
  * engine loop as the narrow `describeStepValue` capability.
  */
 function describeReplayStepValue(action: SessionAction): string | undefined {
-  const positionals = action.positionals ?? [];
+  const positionals = action.positionals;
   const selectorValue = readReplaySelectorDisplayValue(positionals[0]);
   if (selectorValue) return selectorValue;
   if (positionals.length === 0) return undefined;

@@ -35,6 +35,7 @@ export async function tryRunClientBackedCommand(params: {
   replayTestReporterRuntime?: ClientCommandParams['replayTestReporterRuntime'];
   commandProgress?: ClientCommandParams['commandProgress'];
   leaseDevice?: ClientCommandParams['leaseDevice'];
+  claimedConnection?: ClientCommandParams['claimedConnection'];
 }): Promise<boolean> {
   const flags = { ...params.flags };
   const loadDedicatedHandler =

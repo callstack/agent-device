@@ -272,7 +272,7 @@ export const managementCliOutputFormatters = {
 } as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function formatDeviceLine(device: AgentDeviceDevice): string {
-  const kind = device.kind ? ` ${device.kind}` : '';
+  const kind = ` ${device.kind}`;
   const target = device.target ? ` target=${device.target}` : '';
   const model = device.model ? ` model=${JSON.stringify(device.model)}` : '';
   const osVersion = device.osVersion ? ` os=${device.osVersion}` : '';

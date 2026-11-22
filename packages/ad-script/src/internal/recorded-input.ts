@@ -56,7 +56,7 @@ export function readRecordedInputVariableName(value: string): string | undefined
 export function inferFillText(action: SessionAction): string {
   const resultText = action.result?.text;
   if (typeof resultText === 'string') return resultText;
-  const positionals = action.positionals ?? [];
+  const positionals = action.positionals;
   if (positionals.length === 0) return '';
   const first = positionals[0];
   if (first?.startsWith('@')) {

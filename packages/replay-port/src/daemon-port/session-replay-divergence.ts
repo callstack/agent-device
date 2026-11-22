@@ -564,7 +564,7 @@ export function resolveSuggestionMatchingConfig(
     allowDisambiguation:
       isTouch ||
       action.command === 'fill' ||
-      (action.command === 'get' && action.positionals?.[0] === 'text'),
+      (action.command === 'get' && action.positionals[0] === 'text'),
   };
 }
 

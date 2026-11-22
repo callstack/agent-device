@@ -197,7 +197,7 @@ Aliases: `launch`, `relaunch`.
 | `--no-post-gesture-stabilization` | Scroll, swipe, gesture swipe, open: skip the movement check and the stabilization wait that follow a gesture, and on a local iOS simulator the first-screen wait after an app launch; use it only when your own polling verifies the screen |
 | `--save-script [path]` | Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path. On Windows, absolute paths need a drive letter or ordinary UNC share. |
 | `--relaunch` | open: terminate app process before launching it |
-| `--foreground` | open: keep normal app/device selection and return an initial snapshot of the first screen (a local iOS simulator waits up to 10s for it); without an app, resolve the sole running app on the sole booted iOS simulator |
+| `--foreground` | open: keep normal app/device selection and return an initial snapshot of the first screen (a local iOS simulator waits up to 10s for it); without an app, resolve the sole running app on the sole booted iOS simulator; on HarmonyOS with an app target, fail when the launched app does not hold the foreground within 5s |
 | `--no-record` | Do not record this action |
 | `--wait <ms>` | Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE |
 
@@ -238,6 +238,7 @@ Exact behavior: `agent-device help close`.
 - Android React Native: `open --relaunch` needs an installed package name, not an APK path. For Metro-served JS changes, run `metro reload` instead.
 - ADB-backed Android: `open settings --relaunch` restarts the app that the intent opened. It fails when the intent matches more than one activity.
 - ADB-backed Android: `close` fails with `android-app-close-timeout` when the app does not leave the foreground or its processes do not exit in time. It fails with `android-process-probe-unavailable` when it cannot list the app's processes; if that happens before the stop, the app keeps running.
+- On HarmonyOS, `open` reads the foreground app after the launch dispatch, for up to 5 seconds. When the opened app never holds the foreground, the open succeeds and `warnings` name it `open-not-foreground` with the app that holds the foreground, or the fact that no mission is foreground. A lock screen is a typical cause: unlock the device, then run the open again. When no read of the mission list succeeds in that budget, the warning names `open-foreground-probe-unreadable` instead and claims nothing about the app: check the device connection. With `--foreground`, an unconfirmed open fails with `details.reason: open-not-foreground` or `open-foreground-probe-unreadable`, matching the same two cases.
 - If `close` cannot confirm its cleanup, it keeps the session and its device claim. Run `close` again with the same options to release the device, without `--save-script` if the first attempt saved the script. The same applies when `open --relaunch` cannot confirm its effects.
 
 iOS Simulator launch prompt:
@@ -2599,6 +2600,8 @@ agent-device disconnect [--shutdown]
 Exact behavior: `agent-device help disconnect`.
 
 <!-- /generated -->
+
+If agent-device cannot read or parse a session's own saved connection file or the active-session pointer, it cannot establish which session owns that file. It keeps the file and refuses with `connection_record_owner_unknown`. A session's own saved connection file that cannot be read refuses every command that uses that session's saved connection. An unreadable active-session pointer refuses `connect` and any command that rewrites the saved connection. The error names the file. Make it readable, or remove it if no session needs it. A file from an older build whose owner cannot be proven is left in place and is not used. A command that only reads the saved connection, such as `connection status`, changes no file. It uses an older build's file for the session where that file is, and it treats a file that fails validation as no connection. Only a command that saves or removes the saved connection moves an older file to its session's own file, or removes a file that fails validation. If an older file cannot move because its session's own file already exists, that command refuses with `connection_session_mismatch`. The refused file is kept, and so is the occupied session file. This is also true when both files name the same session, and when the occupied file cannot be read.
 
 <!-- generated:command auth -->
 

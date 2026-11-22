@@ -3,6 +3,7 @@ import type { CloudProviderSessionResult } from '@agent-device/contracts/observa
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
+  claimRemoteConnectionState,
   readActiveConnectionState,
   requireLeasedConnectionSession,
   sessionLeaseScope,
@@ -335,12 +336,33 @@ function scopeConnectProfile(
   };
 }
 
-export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
-  const { session, stateDir, state } = readRequestedConnectionState(flags, host);
+/**
+ * The record moves to its session's own path before any teardown, so a record this command cannot
+ * remove is refused before its session closes or its lease ends. The CLI claims it before it builds
+ * the client, and that claim is the one torn down.
+ */
+function claimDisconnectTarget(
+  claimedConnection: RemoteConnectionState | null | undefined,
+  stateDir: string,
+  session: string | undefined,
+): RemoteConnectionState | null {
+  if (claimedConnection !== undefined) return claimedConnection;
+  return claimRemoteConnectionState({ stateDir, session });
+}
+
+export const disconnectCommand: ClientCommandHandler = async ({
+  flags,
+  client,
+  host,
+  claimedConnection,
+}) => {
+  const stateDir = resolveConnectionStateDir(flags, host);
+  const state = claimDisconnectTarget(claimedConnection, stateDir, flags.session);
   if (!state) {
-    await writeNoRemoteConnectionOutput(flags, session);
+    await writeNoRemoteConnectionOutput(flags, flags.session ?? 'default');
     return true;
   }
+  requireLeasedConnectionSession(state, flags.session);
   const connectedSession = state.session;
 
   let providerData: CloudProviderSessionResult | undefined;
@@ -475,19 +497,21 @@ function readRequestedConnectionState(
   host: HostEnvironment,
 ): {
   session: string;
-  stateDir: string;
   state: RemoteConnectionState | null;
 } {
   const session = flags.session ?? 'default';
-  const stateDir = resolveDaemonPaths(flags.stateDir, {
-    cwd: host.cwd,
-    env: host.env,
-  }).baseDir;
+  const stateDir = resolveConnectionStateDir(flags, host);
+  // Only a caller that named no session follows the active-session pointer. `--session=` names the
+  // empty session.
   const state =
     readRemoteConnectionState({ stateDir, session }) ??
-    (flags.session ? null : readActiveConnectionState({ stateDir }));
+    (flags.session === undefined ? readActiveConnectionState({ stateDir }) : null);
   if (state) requireLeasedConnectionSession(state, flags.session);
-  return { session, stateDir, state };
+  return { session, state };
+}
+
+function resolveConnectionStateDir(flags: CliFlags, host: HostEnvironment): string {
+  return resolveDaemonPaths(flags.stateDir, { cwd: host.cwd, env: host.env }).baseDir;
 }
 
 async function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): Promise<void> {

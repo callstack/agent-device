@@ -129,7 +129,7 @@ function readCachedWalk(cachePath: string): DaemonCodeGraphWalk | undefined {
     files.push(stamp);
   }
   if (!document.absent.every((label) => typeof label === 'string')) return undefined;
-  return { files, absentPaths: document.absent as string[] };
+  return { files, absentPaths: document.absent };
 }
 
 /** The document's raw arrays, or `undefined` for anything this format cannot own. */

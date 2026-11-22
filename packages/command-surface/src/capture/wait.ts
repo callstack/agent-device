@@ -216,7 +216,7 @@ function waitPositionals(options: WaitCommandOptions): string[] {
     }
     return ['stable', ...quiet, ...timeout];
   }
-  const selector = options.selector!;
+  const selector = options.selector;
   if (!isValidSelectorExpression(selector)) {
     throw new AppError('INVALID_ARGS', `Invalid wait selector: ${selector}`);
   }

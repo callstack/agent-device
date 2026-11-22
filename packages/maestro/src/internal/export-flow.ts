@@ -140,7 +140,7 @@ function convertClickAction(
   const tapOptions = readRepeatedTapOptions(action);
   if (!tapOptions.ok) return { kind: 'unsupported', message: tapOptions.message };
 
-  if (action.flags?.doubleTap === true) {
+  if (action.flags.doubleTap === true) {
     return {
       kind: 'commands',
       commands: [{ doubleTapOn: tapTarget }],
@@ -150,7 +150,7 @@ function convertClickAction(
       ],
     };
   }
-  if (typeof action.flags?.holdMs === 'number') {
+  if (typeof action.flags.holdMs === 'number') {
     return {
       kind: 'commands',
       commands: [{ longPressOn: tapTarget }],
@@ -203,12 +203,12 @@ function readIgnoredRepeatedTapOptionWarnings(
   maestroCommand: 'doubleTapOn' | 'longPressOn',
 ): string[] {
   const warnings: string[] = [];
-  if (typeof action.flags?.count === 'number' && action.flags.count > 1) {
+  if (typeof action.flags.count === 'number' && action.flags.count > 1) {
     warnings.push(
       `tap --count ${action.flags.count} is not represented by Maestro ${maestroCommand}`,
     );
   }
-  if (typeof action.flags?.intervalMs === 'number' && action.flags.intervalMs > 0) {
+  if (typeof action.flags.intervalMs === 'number' && action.flags.intervalMs > 0) {
     warnings.push(
       `tap --interval-ms ${action.flags.intervalMs} is not represented by Maestro ${maestroCommand}`,
     );
@@ -382,7 +382,7 @@ function convertScrollAction(action: SessionAction): ConvertedAction {
   // #3197: `--until` is now part of a scroll action, so the export says when it
   // cannot carry the stop condition rather than exporting a bare page scroll and
   // letting the flow lose the step that made it land on the target.
-  const until = typeof action.flags?.until === 'string' ? action.flags.until : undefined;
+  const until = typeof action.flags.until === 'string' ? action.flags.until : undefined;
   return {
     kind: 'commands',
     commands: ['scroll'],
@@ -421,13 +421,13 @@ function readSwipeGeometry(action: SessionAction): SwipeGeometry | undefined {
 }
 
 function readSwipeCount(action: SessionAction): number | null {
-  const count = action.flags?.count ?? 1;
+  const count = action.flags.count ?? 1;
   return Number.isInteger(count) && count >= 1 ? count : null;
 }
 
 function readUnsupportedSwipeFlag(action: SessionAction): string | undefined {
-  if (action.flags?.pauseMs !== undefined) return 'swipe --pause-ms has no Maestro equivalent';
-  if (action.flags?.pattern && action.flags.pattern !== 'one-way') {
+  if (action.flags.pauseMs !== undefined) return 'swipe --pause-ms has no Maestro equivalent';
+  if (action.flags.pattern && action.flags.pattern !== 'one-way') {
     return 'swipe ping-pong pattern has no Maestro equivalent';
   }
   return undefined;
@@ -453,20 +453,20 @@ function readRepeatedTapOptions(
 
 function buildRepeatedTapOptions(action: SessionAction): Record<string, unknown> {
   const options: Record<string, unknown> = {};
-  if (typeof action.flags?.count === 'number' && action.flags.count > 1) {
+  if (typeof action.flags.count === 'number' && action.flags.count > 1) {
     options.repeat = action.flags.count;
   }
-  if (typeof action.flags?.intervalMs === 'number' && action.flags.intervalMs > 0) {
+  if (typeof action.flags.intervalMs === 'number' && action.flags.intervalMs > 0) {
     options.delay = action.flags.intervalMs;
   }
   return options;
 }
 
 function readUnsupportedRepeatedTapOption(action: SessionAction): string | undefined {
-  if (action.flags?.jitterPx !== undefined) {
+  if (action.flags.jitterPx !== undefined) {
     return 'tap --jitter-px has no Maestro equivalent';
   }
-  if (action.flags?.clickButton && action.flags.clickButton !== 'primary') {
+  if (action.flags.clickButton && action.flags.clickButton !== 'primary') {
     return `tap --button ${action.flags.clickButton} has no Maestro equivalent`;
   }
   return undefined;
@@ -515,7 +515,7 @@ function formatUnsupportedList(entries: MaestroExportWarning[]): string {
 }
 
 function formatActionForMessage(action: SessionAction): string {
-  return [action.command, ...(action.positionals ?? [])].join(' ').trim();
+  return [action.command, ...action.positionals].join(' ').trim();
 }
 
 function isNumber(value: string | undefined): value is string {

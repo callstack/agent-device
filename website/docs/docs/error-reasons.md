@@ -172,6 +172,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
 | `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
 | `invalid-harmony-ability-name` | --activity is not an ability name the module.json5 format can carry. |
+| `open-not-foreground` | The launch was refused (a locked screen) or the poll answered without the app. |
+| `open-foreground-probe-unreadable` | The poll's every read failed, so the foreground question stayed unanswered. |
 | `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
 | `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 
@@ -648,6 +650,19 @@ These reasons can come from more than one command.
 | `resource-already-completed` | The record is already committed, so a finish, cleanup, or late progress write is refused. |
 | `resource-missing` | The record the caller holds a descriptor for no longer exists on disk. |
 
+### Durable captures
+
+| Reason | Meaning |
+| --- | --- |
+| `ownership-fence-lost` | The capture's durable record now belongs to another owner, or its descriptor or evidence no longer matches the owning session or device, so nothing was signaled or removed. It is not retried. |
+| `owner-unavailable` | The runtime owner the request needs is not available: the platform runtime gateway has no runtime for the selected owner, or the transport that owns a capture could not be reached to clean it up. |
+| `transport-failed` | The device transport failed while a capture was being stopped, collected or cleaned up. |
+| `cleanup-unconfirmed` | A capture's cleanup failed or could not be confirmed, so its record is kept for a later retry, and a new capture on that device is refused until the earlier one is confirmed gone. |
+| `manual-recovery-required` | The capture's descriptor or recorded state cannot be read well enough to clean it up automatically; its record is kept for manual recovery. |
+| `descriptor-invalid` | The capture's stored descriptor is malformed, or names a device, backend or session paths other than its owner's, so the capture cannot be reattached. |
+| `descriptor-version-unsupported` | The capture's stored descriptor was written in a different descriptor version than this build reads, so it cannot be reattached; its record is kept. |
+| `transport-not-reattachable` | The capture's process or transport cannot be reattached after the daemon restarted, so only its cleanup can run. |
+
 ### Foldable panels
 
 | Reason | Meaning |
@@ -823,6 +838,13 @@ These reasons can come from more than one command.
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
 | `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
 | `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
+
+### Remote connections
+
+| Reason | Meaning |
+| --- | --- |
+| `connection_session_mismatch` | A saved connection file cannot be used for the session a command named: it names another session, a record from an older build cannot move to its session file because that file already exists, or the active-session pointer path holds a record whose owner is unproven. The refused file is kept, and so is the occupied session file. |
+| `connection_record_owner_unknown` | The session's own saved connection file, or the active-session pointer, could not be read or parsed, so no session is known to own it. It was neither replaced nor removed. |
 
 ### Remote daemon
 
