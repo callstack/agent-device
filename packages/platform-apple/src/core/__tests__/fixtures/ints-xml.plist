@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Neg</key>
+	<integer>-12</integer>
+	<key>Neg32</key>
+	<integer>-2147483648</integer>
+	<key>SafeMax</key>
+	<integer>9007199254740991</integer>
+	<key>U16Max</key>
+	<integer>65535</integer>
+	<key>U32Max</key>
+	<integer>4294967295</integer>
+	<key>U8High</key>
+	<integer>128</integer>
+	<key>U8Max</key>
+	<integer>255</integer>
+	<key>Zero</key>
+	<integer>0</integer>
+</dict>
+</plist>
