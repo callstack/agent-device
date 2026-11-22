@@ -1,4 +1,4 @@
-import { normalizeLeaseProvider } from '@agent-device/contracts/lease-scope';
+import { normalizeLeaseProvider } from '@agent-device/kernel/contracts';
 import type {
   HumanControlHold,
   HumanControlHoldOptions,

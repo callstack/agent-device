@@ -9,8 +9,7 @@ import {
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { stripUndefined } from '@agent-device/kernel/record';
-import { normalizeLeaseProvider } from '@agent-device/contracts/lease-scope';
+import { normalizeLeaseProvider } from '@agent-device/kernel/contracts';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { parseSourceValue, type EnvMap } from '@agent-device/kernel/source-value';
 
@@ -77,13 +76,14 @@ export function readRemoteConfigFile(
         : parsedValue;
   }
 
-  return {
-    resolvedPath,
-    profile: stripUndefined({
-      ...profile,
-      leaseProvider: normalizeLeaseProvider(profile.leaseProvider),
-    }),
-  };
+  normalizeProfileLeaseProvider(profile);
+  return { resolvedPath, profile };
+}
+
+function normalizeProfileLeaseProvider(profile: RemoteConfigProfile): void {
+  if (profile.leaseProvider !== undefined) {
+    profile.leaseProvider = normalizeLeaseProvider(profile.leaseProvider);
+  }
 }
 
 function readRemoteConfigEnvDefaults(env: EnvMap): RemoteConfigProfile {

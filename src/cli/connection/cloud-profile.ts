@@ -1,7 +1,8 @@
+import { normalizeLeaseProvider } from '@agent-device/kernel/contracts';
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { CLOUD_LEASE_PROVIDER, normalizeLeaseProvider } from '@agent-device/contracts/lease-scope';
+import { CLOUD_LEASE_PROVIDER } from '@agent-device/contracts/lease-scope';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { resolveCloudAccessForConnect } from '../auth-session.ts';
 import { readCloudJsonResponse } from '../cloud-response.ts';

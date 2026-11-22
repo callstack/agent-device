@@ -1,8 +1,14 @@
+import { PROVIDER_INVENTORY_REASONS } from '@agent-device/contracts/device';
 import { pluginInstallationHint } from '@agent-device/contracts/plugin-installation';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { getProviderPluginDeclaration } from '@agent-device/contracts/provider-plugin-catalog';
 import { readVersion } from '@agent-device/host-kit/version';
-import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  type DaemonError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 
 const PROVIDER_RUNTIME_REASONS = {
   // The daemon has no runtime for the requested provider. Inspect failedPlugins or install the named managed plugin.
@@ -65,4 +71,21 @@ export function providerRuntimeAdmissionError(
           : `Restart the daemon with ${provider} configured, then retry lease allocation.`,
     },
   );
+}
+
+export function enrichProviderCatalogError(
+  error: DaemonError,
+  registeredProviders: readonly string[] | undefined,
+  failedPlugins: readonly PluginInventoryEntry[] | undefined,
+): DaemonError {
+  if (error.details?.reason !== PROVIDER_INVENTORY_REASONS.instanceUnallocated.reason) return error;
+  const provider = error.details.leaseProvider;
+  if (typeof provider !== 'string') return error;
+  const missing = providerRuntimeAdmissionError(
+    provider,
+    'catalog',
+    registeredProviders,
+    failedPlugins,
+  );
+  return missing ? normalizeError(missing) : error;
 }

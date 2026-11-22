@@ -1,4 +1,4 @@
-import type { DaemonError } from './errors.ts';
+import { AppError, type DaemonError } from './errors.ts';
 
 export type { AppErrorCode } from './errors.ts';
 export { defaultHintForCode, normalizeError } from './errors.ts';
@@ -45,6 +45,21 @@ export type LeaseBackend = (typeof LEASE_BACKENDS)[number];
 export function readLeaseBackend(raw: string | undefined): LeaseBackend | undefined {
   const value = (raw ?? '').trim().toLowerCase();
   return LEASE_BACKENDS.find((entry) => entry === value);
+}
+
+export function readLeaseProvider(raw: unknown): string | undefined {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return /^[a-zA-Z0-9._-]{1,64}$/.test(value) ? value : undefined;
+}
+
+export function normalizeLeaseProvider(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const provider = readLeaseProvider(raw);
+  if (provider) return provider;
+  throw new AppError(
+    'INVALID_ARGS',
+    'Invalid lease provider. Use 1-64 chars: letters, numbers, dot, underscore, hyphen.',
+  );
 }
 
 // Which lease backend rents a device on each platform the remote lease layer can hold. `ios-simulator`

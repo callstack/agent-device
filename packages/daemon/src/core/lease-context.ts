@@ -8,7 +8,7 @@ import {
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import { ignoresSessionLease } from './daemon-command-registry.ts';
-import { readLeaseBackend } from '@agent-device/kernel/contracts';
+import { readLeaseProvider, readLeaseBackend } from '@agent-device/kernel/contracts';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
@@ -19,7 +19,6 @@ import {
   leaseScopeFromRequest,
   leaseScopeToRequestMeta,
   normalizeLeaseId,
-  readLeaseProvider,
   type LeaseClaims,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';

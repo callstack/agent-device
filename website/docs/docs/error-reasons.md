@@ -236,6 +236,12 @@ These reasons can come from more than one command.
 | `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
 | `missing_button` | No button on the alert fits the requested accept or dismiss. |
 
+### Provider inventory
+
+| Reason | Meaning |
+| --- | --- |
+| `provider_instance_unallocated` | The provider connection has no live instance. Allocate one with open, boot, or leases.allocate. |
+
 ### Provider runtime admission
 
 | Reason | Meaning |

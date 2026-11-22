@@ -19,6 +19,8 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import {
+  readLeaseProvider,
+  normalizeLeaseProvider,
   leaseBackendForPlatform,
   platformForLeaseBackend,
   type LeaseBackend,
@@ -30,8 +32,6 @@ import {
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
   parseLeaseDeviceKey,
-  readLeaseProvider,
-  normalizeLeaseProvider,
   remoteSessionRequiredError,
 } from '@agent-device/contracts/lease-scope';
 

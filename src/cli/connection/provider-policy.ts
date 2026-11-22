@@ -1,5 +1,5 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import { readLeaseProvider } from '@agent-device/contracts/lease-scope';
+import { readLeaseProvider } from '@agent-device/kernel/contracts';
 import {
   pluginConnectionInventory,
   pluginConnectionCapabilities,

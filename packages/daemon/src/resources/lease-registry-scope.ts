@@ -6,9 +6,12 @@ import {
   leaseScopeToReleaseRequest,
   leaseProviderRequiringRuntime,
   normalizeLeaseId,
-  normalizeLeaseProvider,
 } from '@agent-device/contracts/lease-scope';
-import { readLeaseBackend, type LeaseBackend } from '@agent-device/kernel/contracts';
+import {
+  normalizeLeaseProvider,
+  readLeaseBackend,
+  type LeaseBackend,
+} from '@agent-device/kernel/contracts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { LEASE_FIELD_NORMALIZERS, type SessionLease } from '../core/lease-context.ts';

@@ -4,6 +4,7 @@ export type { AppsFilter } from '../app-inventory.ts';
 export type { AppStateCommandResult } from '../app-state.ts';
 export {
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
+  PROVIDER_INVENTORY_REASONS,
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,
   filterDeviceInventoryProjection,

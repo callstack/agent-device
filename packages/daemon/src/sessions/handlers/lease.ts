@@ -41,14 +41,13 @@ import {
   isProviderInstanceEndedError,
   leaseDeviceKey,
   leaseProviderRequiringRuntime,
-  normalizeLeaseProvider,
   leaseScopeToAllocateRequest,
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { platformForLeaseBackend } from '@agent-device/kernel/contracts';
+import { normalizeLeaseProvider, platformForLeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
