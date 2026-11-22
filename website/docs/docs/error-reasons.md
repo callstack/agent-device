@@ -480,7 +480,7 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
-| `human_control_active` | A human holds the device, so agent interactions wait until the hold is released. |
+| `human_control_active` | A human holds the device, so state-changing commands are refused while the hold is active; retry after it is released. |
 
 ### Interaction
 

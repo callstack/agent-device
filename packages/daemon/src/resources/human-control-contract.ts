@@ -11,7 +11,8 @@ import {
 } from './lease-registry-scope.ts';
 
 const HUMAN_CONTROL_REASONS = {
-  // A human holds the device, so agent interactions wait until the hold is released.
+  // A human holds the device, so state-changing commands are refused while the hold is active;
+  // retry after it is released.
   active: { reason: 'human_control_active' },
 } as const satisfies ReasonTable<'human control'>;
 
