@@ -12,7 +12,17 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `native_audit_blocked_by_alert` | Apple's audit failed while a system alert covered the app; answer the alert, then retry. |
 | `native-audit-invalid-result` | The runner answered the native audit with a missing or malformed result. |
+
+### `back`
+
+| Reason | Meaning |
+| --- | --- |
+| `back_swipe_no_change` | The back swipe ran and left the app's screen unchanged. |
+| `back_swipe_unverified` | The back swipe ran, but the screen was already changing or could not be sampled afterwards. |
+| `back_swipe_not_dispatched` | The back swipe was refused before it reached the device. |
+| `in_app_back_control_unavailable` | On macOS, the app's accessibility tree exposes no in-app back control. |
 
 ### `clipboard`
 
@@ -27,6 +37,14 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `android-app-close-timeout` | A stop fence ended before the app left the foreground or its killed processes exited. |
 | `android-process-probe-unavailable` | `adb pidof` or the resumed-activity read did not answer, so process state is unknown. |
 | `MACOS_APP_TERMINATION_TIMEOUT` | The macOS app was still running after every termination attempt. |
+| `android_test_ime_restore_incomplete` | The IME could not be restored, so the device may still send test-helper text. |
+
+### `connect`
+
+| Reason | Meaning |
+| --- | --- |
+| `plugin-unavailable` | The provider's plugin is present but cannot serve the provider; `details.failedPlugins` names what broke. |
+| `plugin-not-installed` | No plugin declares this provider; `details.installCommand` is the command that adds it. |
 
 ### `events`
 
@@ -39,10 +57,16 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 
 | Reason | Meaning |
 | --- | --- |
+| `no_text_input_at_point` | A coordinate `fill` point identified no text input, so nothing was tapped or typed. |
+| `text_input_probe_unavailable` | The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped. |
 | `android_shell_text_unsupported` | The adb-shell fallback carries ASCII text only; a helper or provider channel is needed. |
 | `android_ime_helper_no_ack` | The test IME helper gave no evidence it attempted the dispatch, so nothing is proven typed. |
 | `android_ime_helper_dispatch_rejected` | The test IME helper answered that it rejected the dispatch, so nothing was typed. |
 | `android_test_ime_rebind_unconfirmed` | The test IME rebind could not be confirmed, so the focused field may have no input session. |
+| `fill_text_stdin_tty` | stdin is a terminal, so the command would wait for input no one is piping. |
+| `fill_text_stdin_too_large` | The piped input passed the byte limit of 64 KiB. |
+| `fill_text_stdin_empty` | The piped input decoded to an empty string. |
+| `fill_text_stdin_invalid_utf8` | The piped input is not valid UTF-8, a lone surrogate included. |
 
 ### `fold`
 
@@ -74,6 +98,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `simulator-log-stream-launch-timeout` | The simulator log stream did not start in time. |
+| `app_log_redact_pattern_invalid` | A redaction pattern in `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` does not compile; `details.patternIndex` names the field and the pattern text is not echoed. |
 
 ### `open`
 
@@ -88,6 +113,8 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `system-surface-host-not-openable` | The bundle hosts an iOS system surface, which `open` refuses to launch as an app. |
 | `launch_confirmation_foreign_app` | iOS asks to open another app's URL scheme instead of the session app's. |
 | `launch_confirmation_unanswered` | The Simulator has not completed the launch URL; an "Open in" prompt may still be waiting. |
+| `android_test_ime_recovery_fence_failed` | The recovery records that keep the IME switch safe could not be persisted, so the switch stays unsafe. |
+| `foreground_app_ambiguous` | `open --foreground` found no single running app to bring forward on the selected simulator. |
 
 ### `orientation`
 
@@ -108,6 +135,13 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `plugin_load_failed` | The plugin's manifest or code could not be read, resolved, or loaded. |
 | `plugin_setup_failed` | The plugin's `setup(host)` threw, or registering what it returned failed. |
 | `reserved_provider` | A plugin claims a provider id reserved for daemon routing, `cloud` or `proxy`. |
+
+### `prepare`
+
+| Reason | Meaning |
+| --- | --- |
+| `prepare_deadline_expired` | `prepare ios-runner` ran out of its deadline before the named `details.phase` began. |
+| `prepare_rebuilt_runner_unhealthy` | The cached runner failed its health check, and the rebuilt runner failed it too; `details.rebuiltFailureMessage` says how. |
 
 ### `proxy`
 
@@ -137,6 +171,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | Reason | Meaning |
 | --- | --- |
 | `android_screenrecord_startup_failed` | Android `screenrecord` exited before it began writing; its startup output says why. |
+| `recording-output-unplayable` | The recording's file is not a playable video, which only a recorder still finalizing it can undo. |
 | `native_recovery_evidence_unavailable` | The marker exists but the device could not be read, so it cannot be classified. |
 | `native_recovery_evidence_unreadable` | The marker exists but does not decode, so nothing about it can be verified. |
 | `native_recovery_evidence_transport_mismatch` | The marker was written by the other adb transport, so this one must not retire it. |
@@ -146,6 +181,7 @@ Treat a reason that this page does not list as unknown, not as an error in the r
 | `native_recovery_evidence_retirement_unconfirmed` | The marker read back after removal, so its retirement is not proven. |
 | `native_recording_recorder_unproven` | The probe could not prove no recorder is writing the pending artifact. |
 | `recording_destination_not_requested` | A remote recording was saved to the current directory because the request named no destination; a warning. |
+| `apple_simulator_recording_busy` | Another recorder holds the CoreSimulator host lock; `details.exitCode` is the `simctl` verdict. |
 
 ### `replay`
 
@@ -320,6 +356,45 @@ These reasons can come from more than one command.
 
 | Reason | Meaning |
 | --- | --- |
+| `runner_build_settings_mismatch` | The runner build used settings other than those its cache identity records. |
+| `runner_cache_uncertifiable` | The runner build products cannot be certified for cache reuse; `details.refusalReason` says why. |
+| `runner_busy` | The runner was still busy with an earlier command and refused this one; retry it. |
+| `runner_main_thread_timeout` | The command's work on the app's main thread did not finish in time, so it may have run. |
+| `no_text_input_at_point` | A coordinate `fill` point identified no text input, so nothing was tapped or typed. |
+| `text_input_probe_unavailable` | The runner could not tell whether a coordinate `fill` point holds a text input; nothing was tapped. |
+| `synthesized_gesture_not_dispatched` | The runner refused the gesture before its events reached XCTest, so nothing was sent. |
+| `synthesized_gesture_outcome_unknown` | The gesture failed after its events reached XCTest, so it may have run. |
+| `back_swipe_no_change` | The back swipe ran and left the app's screen unchanged. |
+| `back_swipe_unverified` | The back swipe ran, but the screen was already changing or could not be sampled afterwards. |
+| `back_swipe_not_dispatched` | The back swipe was refused before it reached the device. |
+| `keyboard_return_unavailable` | A Return on the focused input could not be confirmed; a tap on the field may have landed. |
+| `hardware_control_unavailable` | The target has no such hardware control, such as an Action Button, so nothing was pressed. |
+| `in_app_back_control_unavailable` | On macOS, the app's accessibility tree exposes no in-app back control. |
+| `native_audit_blocked_by_alert` | Apple's audit failed while a system alert covered the app; answer the alert, then retry. |
+| `runner_token_unsupported` | The runner build does not require a listener token; rebuild it with this agent-device version. |
+| `runner_sequence_invalid` | The daemon refused a runner action sequence before sending it, so nothing reached the device. |
+| `runner_session_ownership_changed` | Another request took over the Apple runner session before this command was sent. |
+| `runner_reply_lost` | A mutation's reply was lost and status recovery found no result, so it may have run; observe the screen before acting again. |
+| `runner_forwarding_unavailable` | The HTTP forwarder in front of the runner answered 502, 503 or 504. |
+| `bundle_identifier_already_registered` | The runner's bundle identifier is taken; set AGENT_DEVICE_IOS_BUNDLE_ID to a unique value. |
+| `signing_no_development_team` | The runner build needs a development team for signing. |
+| `signing_provisioning_profile_missing` | No installed provisioning profile covers the runner, or the one found is unusable. |
+| `signing_unspecified` | The runner build failed on code signing for a cause the output does not name. |
+| `devtools_security_developer_mode_disabled` | DevToolsSecurity is disabled on the host, so the UI test runner cannot be attached. |
+| `simulator_service_hub_unavailable` | macOS refused to load this Xcode's simulator service; select an Xcode that supports this macOS. |
+| `simulator_set_destination_not_found` | xcodebuild found no simulator with this id in the requested simulator set. |
+| `device_developer_mode_disabled` | Developer Mode is off on the physical device, so it refuses the runner. |
+| `device_developer_disk_image_unavailable` | The physical device reports no developer disk image, and the runner build named no other cause. |
+| `build_failed_unclassified` | The runner did not start and no rule proves a cause; the hint gives the cache-recovery steps. |
+| `runner_process_exited` | The runner launcher exited before the runner accepted a connection. |
+| `runner_termination_failed` | The runner launcher could not stop its runner process. |
+| `runner_output_failed` | Reading the runner's output failed while it was starting, so the runner was stopped. |
+| `RUNNER_PRODUCT_MISSING` | The macOS runner's xctestrun file names no product to launch. |
+| `RUNNER_PRODUCT_REPAIR_FAILED` | The signature of a macOS runner product could not be repaired. |
+| `runner_phase_budget_exhausted` | The Apple runner's budget ran out before the step in `details.phase` began; retry. |
+| `runner_sequence_orientation_unavailable` | The runner did not report the orientation of a press series; inspect the screen before continuing. |
+| `runner_start_budget_exhausted` | Starting the Apple runner took longer than its start budget; the next request starts over. |
+| `apple_toolchain_unreadable` | The Xcode toolchain version files the runner cache is keyed on could not be read. |
 | `apple_runner_host_unbound` | The Apple runner was asked for its host before the daemon bound one. |
 
 ### Artifact extraction
@@ -341,10 +416,33 @@ These reasons can come from more than one command.
 | `daemon-not-running` | An attaching client found no daemon to connect to. |
 | `daemon-incompatible` | The running daemon does not match the client; `details.daemon` and `details.client` hold both identities. |
 | `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be retired. |
+| `daemon-contended` | Another process started a daemon while this one was starting, and this caller may not retire a daemon it never started. |
+| `daemon-lifecycle-contended` | The daemon kept being started or replaced while `ensureDaemon` was judging the state directory. |
+| `daemon_registration_unproven` | A daemon this client started did not prove through its registration that it owns the process. |
+| `daemon-record-unreadable` | The `daemon.json` of the state directory cannot identify a usable daemon, so nothing was started, replaced, or signaled. |
+| `remote_daemon_unavailable` | The health probe that gates a remote send found no daemon to hand the request to, so `details.dispatched` is `no` and a resend is safe. |
+| `daemon-binding-mismatch` | A client pinned to one daemon instance reached a state directory registering another one, or none it can read as an address; `details.bound` and `details.registered` hold both. |
+| `DAEMON_POLICY_MISMATCH` | The running daemon enforces a different daemon policy than `AGENT_DEVICE_DAEMON_POLICY` names. |
+| `startup-exited` | The daemon process ended before it registered a reachable endpoint. |
+| `startup-stalled` | The daemon stayed registered and reachable but never reported the startup phase that follows. |
+| `startup-ceiling` | Startup passed the ceiling its own startup budget allows, so this client stopped waiting. |
+| `daemon_binding_with_remote_base_url` | The client named both a pinned daemon instance and a daemon base URL, which answer "which daemon" two different ways. |
 | `daemon_state_root_unsafe` | The state directory, or a directory above it, is not private to your account; `details.fix` says how to fix it. |
 | `daemon-busy` | The daemon still holds work, so it refused to leave; `details` counts that work. |
 | `daemon-instance-mismatch` | The request names a different daemon instance than the one answering it. |
 | `daemon-owner-embedded` | A live host process owns this daemon and ends it through its own `close()`. |
+| `daemon-clean-not-detached` | The record does not prove the process is a daemon of its own, so its process tree may be someone else's work. |
+
+### Daemon transport
+
+| Reason | Meaning |
+| --- | --- |
+| `daemon_endpoint_unavailable` | The daemon's socket or HTTP endpoint is unreachable; `details.transport` names the one tried. |
+| `daemon_transport_failure` | The connection to the daemon broke; `details.daemonRequestSent` says whether the request was written. |
+| `daemon_transport_timeout` | The daemon did not answer within the request's budget; `details.timeoutMs` is that budget. |
+| `daemon_response_invalid` | A message the daemon sent is not a daemon response envelope; `details.line`, when present, carries what arrived. |
+| `daemon_response_read_failure` | The response body could not be read before the connection ended. |
+| `daemon_request_too_large` | The serialized request passes `DAEMON_REQUEST_MAX_BYTES`, so it was refused before being sent. |
 
 ### Device selection
 
@@ -384,6 +482,12 @@ These reasons can come from more than one command.
 | --- | --- |
 | `relative_claims_dir` | `AGENT_DEVICE_CLAIMS_DIR` is relative, so the shared device-claim store has no fixed home. |
 
+### Host runtime
+
+| Reason | Meaning |
+| --- | --- |
+| `host_instance_unreadable` | The host could not prove its own process start time, so it cannot issue a daemon pin. |
+
 ### Interaction
 
 | Reason | Meaning |
@@ -410,6 +514,20 @@ These reasons can come from more than one command.
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |
 | `LEASE_SESSION_MISMATCH` | The lease scope of the request differs from the lease of its session; `details.field` names the field. |
 | `LEASE_LEDGER_OVERWRITE` | The CLI already tracks an allocated lease and must release or transfer it before it allocates another. |
+
+### Limrun
+
+| Reason | Meaning |
+| --- | --- |
+| `limrun_xctest_slot_occupied` | Another XCTest run holds the simulator's one run slot. |
+| `limrun_runner_launch_failed` | The remote XCTest run could not be started, or its run stream never arrived. |
+| `limrun_runner_products_invalid` | The runner app or its manifest does not match the instance this client rented. |
+| `limrun_runner_upload_failed` | The runner app could not be staged on the instance. |
+| `limrun_runner_bind_address_missing` | The simulator never reported the address its HTTP forward listens on. |
+| `limrun_runner_snapshot_unavailable` | The runner's snapshot capture came back too sparse to act on after a failed or unbudgeted capture. |
+| `limrun_download_http_error` | The service answered the download with an error status; `details.statusCode` and `details.body` carry its reply. |
+| `limrun_download_timeout` | The download passed its deadline; `details.timeoutMs` is that deadline. |
+| `limrun_download_failed` | The transfer broke for a reason the service never answered with, kept in `details.cause`. |
 
 ### Limrun provider
 
@@ -441,6 +559,13 @@ These reasons can come from more than one command.
 | `event_creation_failed` | macOS could not create the keyboard or mouse event to post. |
 | `missing_button` | No button on the alert fits the requested accept or dismiss. |
 
+### Platform runtime
+
+| Reason | Meaning |
+| --- | --- |
+| `runtime-gateway-shut-down` | The gateway is closed, so the command reached no runtime owner. |
+| `platform-owner-shutdown-failed` | One or more runtime owners failed to shut down; `details.failures` keeps each owner's error and cleanup stays unconfirmed. |
+
 ### Process lock
 
 | Reason | Meaning |
@@ -467,6 +592,8 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `REMOTE_SESSION_REQUIRED` | A command on a leased remote connection, or one that would lease one, named no session. |
+| `CONNECTION_DEVICE_CONFLICT` | The connection is bound to another device, or its lease was allocated by another device spec; `details.keys` names the disagreeing keys, and is present only for a device-spec mismatch. |
+| `CONNECTION_PLATFORM_CONFLICT` | The connection is bound to another platform, or the request names one its lease backend does not rent. |
 
 ### Remote transfer
 
