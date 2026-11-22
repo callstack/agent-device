@@ -14,6 +14,7 @@ import type { DaemonRequest } from './daemon-request.ts';
 import {
   LEASE_ADMISSION_REASONS,
   assertRequestHoldsSessionLease,
+  assertRequestPresentsLease,
   sessionLeaseOf,
 } from './lease-context.ts';
 import {
@@ -616,6 +617,7 @@ export type AuthorizedOpenSlot = Readonly<{
 export type WithSessionExecutionLock = <T>(
   address: string,
   task: (holdDevice: (deviceId: string) => Promise<void>) => Promise<T>,
+  signal?: AbortSignal,
 ) => Promise<T>;
 
 export class SessionCoordinator {
@@ -679,7 +681,8 @@ export class SessionCoordinator {
 }
 
 export function assertSameOpenOwner(req: DaemonRequest, session: SessionState): void {
-  if (session.lease?.leaseId === req.internal?.admittedLease?.leaseId) return;
+  if (session.lease) return assertRequestPresentsLease(req, session.lease);
+  if (!req.internal?.admittedLease) return;
   throw new AppError('UNAUTHORIZED', 'Close the session before opening it under another lease.', {
     reason: LEASE_ADMISSION_REASONS.sessionMismatch.reason,
     field: 'leaseId',

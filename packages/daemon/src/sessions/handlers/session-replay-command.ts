@@ -1,4 +1,9 @@
-import { isRequestCanceled } from '@agent-device/host-kit/request';
+import {
+  getRequestDeadlineMs,
+  getRequestSignal,
+  isRequestCanceled,
+} from '@agent-device/host-kit/request';
+import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { resolveSessionTestArtifactsRoot } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -186,26 +191,56 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     dependencies: replayDaemonDependencies,
     cleanupSession: async (name) => {
       // A timed-out attempt can still hold the lock. Its late cleanup runs after it settles.
-      if (!completed(name)) return [];
-      return await withSessionExecutionLock(name, async (holdDevice) => {
-        const ref = completed(name);
-        if (!ref) return [];
-        await holdDevice(ref.session.device.id);
-        return await closeReplayTestSession({
-          host,
-          req,
-          ref,
-          logPath,
-          sessionStore,
-          leaseRegistry,
-          leaseLifecycleProvider,
-          inspectFacts,
-          bindDevice,
-          platformServices,
-          platformResourceCleanup,
-          deviceShutdownDenied,
-        });
-      });
+      const lifetime = completed(name)?.lifetime;
+      if (!lifetime) return [];
+      let acquiring = true;
+      const closePinned = (signal?: AbortSignal) =>
+        withSessionExecutionLock(
+          name,
+          async (holdDevice) => {
+            const ref = completed(name);
+            if (ref?.lifetime !== lifetime) return [];
+            await holdDevice(ref.session.device.id);
+            acquiring = false;
+            return await closeReplayTestSession({
+              host,
+              req,
+              ref,
+              logPath,
+              sessionStore,
+              leaseRegistry,
+              leaseLifecycleProvider,
+              inspectFacts,
+              bindDevice,
+              platformServices,
+              platformResourceCleanup,
+              deviceShutdownDenied,
+            });
+          },
+          signal,
+        );
+      const lockBusy = (error: unknown) =>
+        acquiring &&
+        error instanceof AppError &&
+        error.code === 'DEVICE_IN_USE' &&
+        error.details?.reason === 'DEVICE_EXECUTION_LOCK_BUSY';
+      try {
+        return await closePinned();
+      } catch (error) {
+        if (!lockBusy(error)) throw error;
+        const signal = getRequestSignal(req.meta?.requestId);
+        const expiresAt = getRequestDeadlineMs(req.meta?.requestId);
+        const remaining = expiresAt === undefined ? undefined : expiresAt - Date.now();
+        if (signal?.aborted || (remaining !== undefined && remaining <= 0)) throw error;
+        return await retryWithPolicy(
+          () => closePinned(signal),
+          { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 200, jitter: 0, shouldRetry: lockBusy },
+          {
+            signal,
+            deadline: remaining === undefined ? undefined : Deadline.fromTimeoutMs(remaining),
+          },
+        );
+      }
     },
     ...(video ? { video } : {}),
   });

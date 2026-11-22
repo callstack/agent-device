@@ -1,6 +1,8 @@
+import { LeaseRegistry } from '../../../../resources/lease-registry.ts';
+import { sessionLeaseOf } from '../../../../core/lease-context.ts';
 import { SessionCoordinator } from '../../../../core/session-store.ts';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { completeOpenCommand } from '../session-open-execution.ts';
 import { openApplicationRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { resolveExistingSessionDeviceSelection } from '@agent-device/device-selection/device-selection-resolver';
@@ -55,6 +57,56 @@ test.each([
     if (fails) await expect(pending).rejects.toThrow('Launch rejected');
     else expect((await pending).type).toBe('opened');
     expect(store.requireCurrent(ref).bootedByOpen).toBe(priorBoot);
+  },
+);
+
+test.each(['runId', 'tenantId', 'clientId', 'deviceKey'] as const)(
+  'a reopen with the same lease ID and a different %s refuses before launch',
+  async (field) => {
+    const store = makeSessionStore();
+    const device = makeAndroidEmulator();
+    const lease = new LeaseRegistry().allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      clientId: 'client-a',
+      deviceKey: device.id,
+      leaseBackend: 'android-instance',
+    });
+    const session = { ...makeSession('reopen', device), lease: sessionLeaseOf(lease) };
+    const existingRef = store.publish('reopen', session);
+    const openApplication = vi.fn(async () => ({ timing: {} }));
+    const { loader } = lifecycleOperationsSpy({ openApplication });
+    await expect(
+      completeOpenCommand({
+        req: {
+          token: 't',
+          command: 'open',
+          session: 'reopen',
+          positionals: [],
+          meta: { leaseId: lease.leaseId, [field]: 'different' },
+          internal: { admittedLease: lease },
+        },
+        sessionName: 'reopen',
+        sessionStore: store,
+        logPath: path.join(store.host.cwd, 'daemon.log'),
+        device,
+        openPositionals: [],
+        surface: 'app',
+        runtimeHints: undefined,
+        existingRef,
+        lifecycle: await mockBindDeviceRuntime(
+          device,
+          openApplicationRuntimeUse,
+          undefined,
+          loader,
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: { reason: 'LEASE_SESSION_MISMATCH', field },
+    });
+    expect(openApplication).not.toHaveBeenCalled();
+    expect(store.requireCurrent(existingRef)).toBe(session);
   },
 );
 

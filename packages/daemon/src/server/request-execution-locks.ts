@@ -137,10 +137,11 @@ export async function withRequestExecutionLockKeys<T>(
 export function createSessionExecutionLock(
   locks: Map<string, Promise<unknown>>,
 ): WithSessionExecutionLock {
-  return async (address, task) => {
+  return async (address, task, signal) => {
     const attemptLocks = createRequestExecutionLocks({
       locks,
       initialKeys: [sessionExecutionLockKey(address)],
+      scope: signal ? { signal } : undefined,
     });
     return await attemptLocks.run(() => task(attemptLocks.retainDevice));
   };
