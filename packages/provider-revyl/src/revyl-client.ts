@@ -47,7 +47,8 @@ export type RevylClientOptions = Readonly<{
 
 /**
  * Request outcomes the Revyl client, deployment and snapshot code all publish. With
- * `REVYL_HTTP_REASONS` below, these rows are every `details.reason` this client publishes.
+ * `REVYL_HTTP_REASONS` below, these rows are the provider-owned reasons this client publishes;
+ * `request_canceled` is shared cancellation vocabulary.
  * `missing_provider_credentials` sits with the credential reader instead, which the plugin's eager
  * entry loads before this module exists.
  */
@@ -78,7 +79,7 @@ const REVYL_HTTP_REASONS = {
 } as const satisfies ReasonTable<'revyl provider'>;
 
 /** The `details.reason` spellings the Revyl client publishes: its HTTP rows and the shared outcomes. */
-export type RevylProviderReason =
+type RevylProviderReason =
   | (typeof REVYL_HTTP_REASONS)[keyof typeof REVYL_HTTP_REASONS]['reason']
   | (typeof REVYL_OUTCOME_REASONS)[keyof typeof REVYL_OUTCOME_REASONS]['reason'];
 

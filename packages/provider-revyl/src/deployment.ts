@@ -7,11 +7,7 @@ import { packGzipTar } from '@agent-device/host-kit/gzip-tar';
 import { Deadline, type DeadlineClock, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import {
-  REVYL_OUTCOME_REASONS,
-  type RevylClient,
-  type RevylProviderReason,
-} from './revyl-client.ts';
+import { REVYL_OUTCOME_REASONS, type RevylClient } from './revyl-client.ts';
 import type { RevylWorkerActionResponse } from './revyl-types.ts';
 
 /** Why a Revyl app deployment is refused. */
@@ -111,7 +107,7 @@ async function uploadAndInstall(
  * cancellation. `request_canceled` is the kernel's cancellation vocabulary, which no provider table
  * re-declares, so it is named here as the one spelling this wrapper also takes.
  */
-type RevylInstallStopReason = RevylProviderReason | 'request_canceled';
+type RevylInstallStopReason = typeof REVYL_OUTCOME_REASONS.unconfirmed.reason | 'request_canceled';
 
 function installStopped(reason: RevylInstallStopReason, message: string, cause: unknown): AppError {
   return new AppError(
