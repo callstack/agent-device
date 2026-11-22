@@ -21,15 +21,10 @@ import {
   withDisplacedLeaseClaims,
 } from '../core/lease-context.ts';
 import {
-  LEASE_REASONS,
   leaseScopeToHeartbeatRequest,
   remoteSessionRequiredError,
 } from '@agent-device/contracts/lease-scope';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
-import {
-  assertLeaseScopeMatch,
-  normalizeLeaseAdmissionRequest,
-} from '../resources/lease-registry-scope.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from '../resources/macos-app-lease.ts';
@@ -228,7 +223,7 @@ function admitLease(
 ): DeviceLease {
   const admission = leaseScopeToHeartbeatRequest(resolveSessionLeaseScope(req, session));
   const lease = options.inspectOnly
-    ? inspectAdmittedLease(leaseRegistry, admission)
+    ? leaseRegistry.inspectLeaseAdmission(admission)
     : renewAdmittedLease(leaseRegistry, admission);
   assertMacOsAppLeaseAdmitsRequest(lease, req, session, options.env);
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
@@ -244,22 +239,6 @@ function renewAdmittedLease(
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
   // that rented a device for longer than the default lost it on the next admitted command (#2946).
   return leaseRegistry.heartbeatLease(admission);
-}
-
-/** The registry checks of {@link renewAdmittedLease} on the lease as it is: no sweep, no renewal. */
-function inspectAdmittedLease(
-  leaseRegistry: LeaseRegistry,
-  admission: ReturnType<typeof leaseScopeToHeartbeatRequest>,
-): DeviceLease {
-  const scope = normalizeLeaseAdmissionRequest(admission);
-  const lease = leaseRegistry.inspectActiveLease(scope.leaseId);
-  if (!lease) {
-    throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-      reason: LEASE_REASONS.notFound.reason,
-    });
-  }
-  assertLeaseScopeMatch(lease, scope);
-  return lease;
 }
 
 /**

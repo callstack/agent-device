@@ -52,6 +52,13 @@ const LEASE_REGISTRY_REASONS = {
 
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 
+function requireActiveLease(lease: DeviceLease | undefined): DeviceLease {
+  if (lease) return lease;
+  throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+    reason: LEASE_REASONS.notFound.reason,
+  });
+}
+
 export class LeaseRegistry {
   private readonly holdsByDevice = new Map<string, Map<string, OwnedHumanControlHold>>();
   private readonly mutations = new DeviceMutationDrain();
@@ -230,11 +237,15 @@ export class LeaseRegistry {
     const leaseId = normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.getActiveLease(leaseId);
+    return this.refreshLease(lease, this.resolveHeartbeatTtlMs(lease, request));
+  }
+
+  private resolveHeartbeatTtlMs(lease: DeviceLease, request: HeartbeatLeaseRequest): number {
     assertLeaseOwnerScope(lease, request);
     assertLeaseScopeMatch(lease, request);
-    const requestedTtlMs =
-      request.ttlMs === undefined ? leaseOwnTtlMs(lease) : this.resolveLeaseTtlMs(request.ttlMs);
-    return this.refreshLease(lease, requestedTtlMs);
+    return request.ttlMs === undefined
+      ? leaseOwnTtlMs(lease)
+      : this.resolveLeaseTtlMs(request.ttlMs);
   }
 
   /**
@@ -309,6 +320,15 @@ export class LeaseRegistry {
     const scope = normalizeLeaseAdmissionRequest(request);
     this.cleanupExpiredLeases();
     assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
+  }
+
+  /** Checks request admission and renewal without sweeping or refreshing any lease. */
+  inspectLeaseAdmission(request: HeartbeatLeaseRequest): DeviceLease {
+    const scope = normalizeLeaseAdmissionRequest(request);
+    const lease = requireActiveLease(this.inspectActiveLease(scope.leaseId));
+    assertLeaseScopeMatch(lease, scope);
+    this.resolveHeartbeatTtlMs(lease, request);
+    return lease;
   }
 
   /** Whether this daemon ever allocated `tenantId` a `macos-app` lease, released or not. */
@@ -666,11 +686,7 @@ export class LeaseRegistry {
   }
 
   private getActiveLease(leaseId: string): DeviceLease {
-    const lease = this.leases.get(leaseId);
-    if (lease) return lease;
-    throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-      reason: LEASE_REASONS.notFound.reason,
-    });
+    return requireActiveLease(this.leases.get(leaseId));
   }
 
   /** Every renewal route ends here, so a host-pinned lease never outlives the host's window. */

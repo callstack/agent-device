@@ -1,9 +1,11 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { LEASE_REASONS } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { leaseReleaseRequestFor } from '../resources/lease-registry-scope.ts';
+import { assertMacOsAppLeaseProcess } from '../resources/macos-app-lease.ts';
 import type {
   DeviceLease,
   LeaseLifecycleProvider,
@@ -173,23 +175,29 @@ async function endExpiredSessionForSuccessor(
   ref: SessionRef,
 ): Promise<boolean> {
   const { leaseRegistry } = params;
-  const sessionLease = ref.session.lease;
-  const successorScope = resolveLeaseScope(params.req);
-  const successorLease = (): DeviceLease | undefined =>
-    successorScope.leaseId ? leaseRegistry.inspectActiveLease(successorScope.leaseId) : undefined;
-  if (!sessionLease || !successorLease()) return false;
-  if (leaseRegistry.inspectActiveLease(sessionLease.leaseId)) return false;
+  const expiredLeaseId = ref.session.lease?.leaseId;
+  const successorLeaseId = resolveLeaseScope(params.req).leaseId;
+  if (!expiredLeaseId || !successorLeaseId || successorLeaseId === expiredLeaseId) return false;
+  const canEndSession = () =>
+    params.sessionStore.resolveCurrent(ref)?.lease?.leaseId === expiredLeaseId &&
+    !leaseRegistry.inspectActiveLease(expiredLeaseId) &&
+    leaseRegistry.inspectActiveLease(successorLeaseId) !== undefined;
+  if (!canEndSession()) return false;
   await params.holdDeviceLock(ref.session.device.id);
-  // The wait for the device lock can outlast the successor lease or the session. Both are checked
-  // again here, with no await before the teardown starts.
-  if (!successorLease() || !params.sessionStore.resolveCurrent(ref)) return false;
-  // The admission rules of a fresh session, with no lease change: a successor that admission
-  // would refuse ends nothing.
-  assertRequestLeaseAdmission(params.req, leaseRegistry, undefined, {
-    ...params.admission,
-    env: params.env,
-    inspectOnly: true,
-  });
+  const admitSuccessor = () =>
+    assertRequestLeaseAdmission(params.req, leaseRegistry, undefined, {
+      ...params.admission,
+      env: params.env,
+      inspectOnly: true,
+    });
+  if (!canEndSession()) return false;
+  const successor = admitSuccessor();
+  if (!successor) return false;
+  if (successor.backend === 'macos-app') {
+    await assertMacOsAppLeaseProcess(successor);
+    throwIfRequestCanceled(params.req.meta?.requestId);
+    if (!canEndSession() || !admitSuccessor()) return false;
+  }
   await endLeasedSession(
     ref,
     params.sessionStore,
@@ -199,7 +207,7 @@ async function endExpiredSessionForSuccessor(
   );
   // An inactive lease never becomes active again. The registry notes the expiry only now, so the
   // lease-end owner that it starts finds no session to end a second time.
-  leaseRegistry.consumeExpiredLease(sessionLease.leaseId);
+  leaseRegistry.consumeExpiredLease(expiredLeaseId);
   return true;
 }
 

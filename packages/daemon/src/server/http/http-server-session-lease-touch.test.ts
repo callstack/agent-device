@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import * as hostCommand from '@agent-device/host-kit/command';
+import * as hostProcess from '@agent-device/host-kit/process';
 import {
   IOS_SIMULATOR,
   closeLoopbackServer,
@@ -61,6 +63,7 @@ beforeEach(async (context) => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await world?.close();
   world = undefined;
 });
@@ -112,7 +115,9 @@ async function startDaemon() {
   const runtime = createLifecycleDeviceRuntimeGatewaySpies();
   const hooks: { beforeDispatch?: () => void; duringDeviceSelection?: () => void } = {};
   const handleRequest = createRequestHandler({
-    host: createTestHostEnvironment(),
+    host: createTestHostEnvironment({
+      env: { ...process.env, AGENT_DEVICE_MACOS_APP_BACKEND: 'native' },
+    }),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('agent-device-session-lease-touch-log-'), 'daemon.log'),
     token: 'daemon-token',
@@ -298,6 +303,108 @@ test('a new owner that lease admission would refuse does not end the expired ses
   expect(world.sessionStore.lookup(world.sessionName)?.lifetime).toBe(ref.lifetime);
   expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
 });
+
+test('an unscoped open cannot replace an expired leased session', async () => {
+  if (!world) return;
+  const ref = world.publishLeasedSession(SESSION);
+  const { leaseId } = world.allocateOtherClient('ios:mobile:SIM-002');
+  world.passLeaseDeadline();
+
+  const opened = await world.send('open', ['com.example.app'], {
+    leaseId,
+    tenantId: undefined,
+    sessionIsolation: 'none',
+  });
+
+  expect(world.sessionStore.lookup(SESSION)?.lifetime).toBe(ref.lifetime);
+  expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
+  expectLeaseIdRefusal(opened);
+});
+
+test.each([
+  {
+    command: 'snapshot',
+    positionals: [],
+    meta: { clientId: undefined },
+    error: { code: 'UNAUTHORIZED', details: { reason: 'LEASE_SCOPE_REQUIRED' } },
+  },
+  {
+    command: 'open',
+    positionals: ['com.example.app'],
+    meta: { leaseTtlMs: 1 },
+    error: { code: 'INVALID_ARGS' },
+  },
+])(
+  'a successor that cannot heartbeat on $command leaves the expired session intact',
+  async ({ command, positionals, meta, error }) => {
+    if (!world) return;
+    const ref = world.publishLeasedSession(world.sessionName);
+    const successor = world.allocateOtherClient('ios:mobile:SIM-002');
+    world.passLeaseDeadline();
+
+    const response = await world.send(command, positionals, { ...successor, ...meta });
+
+    expect(world.sessionStore.lookup(world.sessionName)?.lifetime).toBe(ref.lifetime);
+    expect(world.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
+    expect(response.error?.data, JSON.stringify(response)).toMatchObject(error);
+  },
+);
+
+test.each([
+  {
+    failure: 'process has stopped',
+    processAlive: false,
+    details: { reason: 'MACOS_APP_LEASE_DENIED', rule: 'process' },
+  },
+  {
+    failure: 'lease expires during PID lookup',
+    processAlive: true,
+    details: { reason: 'LEASE_SESSION_MISMATCH', field: 'leaseId' },
+  },
+])(
+  'a macOS app successor leaves the expired session intact when the $failure',
+  async ({ processAlive, details }) => {
+    const daemon = world;
+    if (!daemon) return;
+    const ref = daemon.publishLeasedSession(daemon.sessionName);
+    const bundleId = 'com.example.app';
+    const pid = 12345;
+    const leaseId = 'b'.repeat(32);
+    const successor = {
+      leaseId,
+      tenantId: TENANT,
+      runId: 'run-b',
+      leaseBackend: 'macos-app',
+      deviceKey: `${bundleId}@${pid}`,
+    } as const;
+    daemon.leaseRegistry.putHostLease(leaseId, { ...successor, ttlMs: 2 * LEASE_TTL_MS });
+    const { isProcessAlive } = hostProcess;
+    vi.spyOn(hostProcess, 'isProcessAlive').mockImplementation((observedPid) =>
+      observedPid === pid ? processAlive : isProcessAlive(observedPid),
+    );
+    if (processAlive) {
+      const { runCmd } = hostCommand;
+      vi.spyOn(hostCommand, 'runCmd').mockImplementation(async (command, args, options) => {
+        if (command !== '/usr/bin/lsappinfo') return await runCmd(command, args, options);
+        await Promise.resolve();
+        daemon.passLeaseDeadline();
+        return { exitCode: 0, stderr: '', stdout: `bundleID="${bundleId}"` };
+      });
+    }
+    daemon.passLeaseDeadline();
+
+    const opened = await daemon.send('open', [bundleId], successor, {
+      flags: { platform: 'macos' },
+    });
+
+    expect(daemon.sessionStore.lookup(daemon.sessionName)?.lifetime).toBe(ref.lifetime);
+    expect(daemon.requestTeardown.stopSnapshotHelper).not.toHaveBeenCalled();
+    expect(opened.error?.data, JSON.stringify(opened)).toMatchObject({
+      code: 'UNAUTHORIZED',
+      details,
+    });
+  },
+);
 
 test('doctor with the lease id after the deadline leaves the session to the lease-end owner', async () => {
   if (!world) return;
