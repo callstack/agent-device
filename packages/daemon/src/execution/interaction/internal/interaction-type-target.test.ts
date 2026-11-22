@@ -169,6 +169,72 @@ test.for([
   },
 );
 
+test('a targetless type records its original positionals', async () => {
+  // `type " " @e2` types a literal two-space `@e2`. The record must keep the two positionals:
+  // folding them into one `["  @e2"]` trims into a ref that replay refuses (#4870).
+  const recordName = 'type-record-targetless';
+  const recordStore = publishTextboxSession(recordName);
+  const record = await runType(recordName, recordStore, [' ', '@e2']);
+  expect(record?.ok).toBe(true);
+  const actions = recordStore.get(recordName)?.actions ?? [];
+  expect(actions.map((action) => action.command)).toEqual(['type']);
+  expect(actions[0]?.positionals).toEqual([' ', '@e2']);
+});
+
+test('a recorded targetless type replays the whole text with no focus tap and no INVALID_ARGS', async () => {
+  // The prove-the-fix round trip: record `type " " @e2`, then replay the recorded step in a fresh
+  // session. The mistargeted-ref replay check reads only the first positional, so the leading
+  // blank passes, the joined text reaches the device whole, and a targetless type taps nothing.
+  const recordName = 'type-record-targetless-replay';
+  const recordStore = publishTextboxSession(recordName);
+  const record = await runType(recordName, recordStore, [' ', '@e2']);
+  expect(record?.ok).toBe(true);
+  const actions = recordStore.get(recordName)?.actions ?? [];
+
+  const replayName = `${recordName}-replay`;
+  const replayStore = publishTextboxSession(replayName);
+  mockTapPoint.mockClear();
+  mockTypeText.mockClear();
+  for (const action of actions) {
+    const response = await runType(
+      replayName,
+      replayStore,
+      action.positionals ?? [],
+      action.command,
+    );
+    expect(response?.ok, action.command).toBe(true);
+  }
+  expect(mockTapPoint).not.toHaveBeenCalled();
+  expect(mockTypeText).toHaveBeenCalledOnce();
+  expect(mockTypeText.mock.calls[0]?.[0]).toMatchObject({ text: '  @e2' });
+});
+
+test('a targeted type whose text reads as a ref records folded and replays refused', async () => {
+  // Characterization of a known boundary (#4870 open question): folding keeps ordinary text from
+  // re-splitting on replay, but a payload that itself reads as a minted ref lands as a bare
+  // structural token, and replay decodes it as a target with no text to append.
+  const recordName = 'type-record-ref-shaped-text';
+  const recordStore = publishTextboxSession(recordName);
+  const record = await runType(recordName, recordStore, ['@e1', '@e2']);
+  expect(record?.ok).toBe(true);
+  const actions = recordStore.get(recordName)?.actions ?? [];
+  expect(actions.map((action) => action.command)).toEqual(['press', 'type']);
+  expect(actions[1]?.positionals).toEqual(['@e2']);
+
+  const replayName = `${recordName}-replay`;
+  const replayStore = publishTextboxSession(replayName);
+  mockTapPoint.mockClear();
+  mockTypeText.mockClear();
+  expect((await runType(replayName, replayStore, ['@e1'], 'press'))?.ok).toBe(true);
+  expect(await runType(replayName, replayStore, ['@e2'])).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', message: 'type @e2 requires text to append' },
+  });
+  // The refusal happens before dispatch: only the press tap reached the device.
+  expect(mockTapPoint).toHaveBeenCalledOnce();
+  expect(mockTypeText).not.toHaveBeenCalled();
+});
+
 async function runType(
   sessionName: string,
   sessionStore: ReturnType<typeof makeSessionStore>,

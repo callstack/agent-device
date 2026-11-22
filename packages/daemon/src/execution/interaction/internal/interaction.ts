@@ -137,9 +137,7 @@ async function dispatchTypeViaRuntime(params: RoutedInteractionInput): Promise<D
   // A targeted `type` is one command with two device effects: the press admission stack
   // (resolution, AMBIGUOUS_MATCH, motion and keyboard guards) focuses the target first, then the
   // bound text-entry operation appends. The leg dispatches and records as `press` — the command
-  // it performs — so the recorded script replays one tap and then the append, and the recorded
-  // type step carries the text as one positional that replay cannot re-split into a target
-  // (#4870 review).
+  // it performs — so the recorded script replays one tap and then the append (#4870 review).
   let focusedTarget: Record<string, unknown> | undefined;
   if (decoded.target) {
     const focusResponse = await dispatchTargetedTouchViaRuntime(
@@ -153,11 +151,17 @@ async function dispatchTypeViaRuntime(params: RoutedInteractionInput): Promise<D
     focusedTarget = focusResponse.data;
   }
 
+  // A targetless `type` records its original positionals so the saved script replays the same
+  // argument boundaries; the mistargeted-ref replay check reads only the first positional, and a
+  // folded `["  @e2"]` trims into a ref it refuses (#4870). Only a targeted `type` folds its text
+  // into one positional, so a replayed step cannot re-split the payload into a target.
+  const recordedPositionals =
+    decoded.target === undefined ? undefined : [decoded.textPositionals.join(' ')];
   return await runTypeTextViaRuntime(params, session, {
     typeText: () => bound.typeText(request, context),
     recordingRecoveryWarning: recordingRecovery.warning,
     focusedTarget,
-    recordedPositionals: [decoded.textPositionals.join(' ')],
+    recordedPositionals,
   });
 }
 
@@ -224,7 +228,10 @@ async function runTypeTextViaRuntime(
     recordingRecoveryWarning?: string;
     /** Target identity from the focus tap of a targeted `type`, reported with the text. */
     focusedTarget?: Record<string, unknown>;
-    /** The text as one positional, so a replayed step cannot re-split it into a target. */
+    /**
+     * The folded text of a targeted `type`, as one positional replay cannot re-split into a
+     * target. Undefined records a targetless `type`'s original positionals (#4870).
+     */
     recordedPositionals?: string[];
   },
 ): Promise<DaemonResponse> {
