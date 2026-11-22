@@ -3,7 +3,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  type ReasonTable,
+} from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
@@ -13,7 +17,72 @@ import {
   requireTenantOwnedEntry,
   type TenantOwnedResourceKind,
 } from '../core/tenant-owned-entry.ts';
-import { leasedOutputRefusal, requestHoldsOutputLease } from './lease-registry-scope.ts';
+import {
+  registerDiagnosticSensitiveValue,
+  updateDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import type { DaemonRequest } from '../core/daemon-request.ts';
+import { resolveLeaseScope } from '../core/lease-context.ts';
+import { normalizeLeaseId } from './lease-registry-scope.ts';
+
+// --- Leased output ownership ---
+
+/** The `error.details.reason` values a leased-output refusal publishes. */
+const LEASED_OUTPUT_REASONS = {
+  // The request does not send the id of the lease that produced the artifact or diagnostics record.
+  leaseMismatch: { reason: 'LEASE_OUTPUT_MISMATCH' },
+} as const satisfies ReasonTable<'leases'>;
+
+/** What a record keeps to check a reader against its lease: the SHA-256 of the lease id, never the id. */
+export function leaseVerifier(leaseId: string): string {
+  const canonical = normalizeLeaseId(leaseId) ?? leaseId.trim();
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+/**
+ * Whether a request may read output that a lease produced. Output of a leased request belongs to
+ * that lease for as long as the output is kept, also after the lease ends: only a request that
+ * sends the lease id reads it (ADR 0007). Output with no lease has no lease rule.
+ */
+export function requestHoldsOutputLease(
+  ownerVerifier: string | undefined,
+  presentedLeaseId: string | undefined,
+): boolean {
+  if (ownerVerifier === undefined) return true;
+  return presentedLeaseId !== undefined && leaseVerifier(presentedLeaseId) === ownerVerifier;
+}
+
+export function leasedOutputRefusal(label: string): AppError {
+  return new AppError('UNAUTHORIZED', `${label} belongs to a device lease. Send its lease id.`, {
+    reason: LEASED_OUTPUT_REASONS.leaseMismatch.reason,
+    field: 'leaseId',
+  });
+}
+
+/**
+ * Fixes who may read a request's diagnostics record before the record gets its first event: the
+ * lease id that the request sends, and the lease of the session at the request's address. A reader
+ * must send a lease id that matches each of them, so a request that a leased session refuses
+ * cannot read what the daemon logged while it refused. A record with no owner keeps the tenant
+ * rule.
+ */
+export function claimRequestDiagnosticsRecord(
+  req: Pick<DaemonRequest, 'flags' | 'meta'>,
+  session: Readonly<{ lease?: Readonly<{ leaseId: string }> | null }> | undefined,
+): void {
+  const leaseIds = [resolveLeaseScope(req).leaseId, session?.lease?.leaseId].filter(
+    (leaseId): leaseId is string => leaseId !== undefined,
+  );
+  if (leaseIds.length === 0) return;
+  // A lease id that reaches a message, and not a lease field, is removed from the record too.
+  for (const leaseId of leaseIds) {
+    const canonical = normalizeLeaseId(leaseId);
+    if (!canonical) continue;
+    registerDiagnosticSensitiveValue(canonical);
+    registerDiagnosticSensitiveValue(leaseId.trim());
+  }
+  updateDiagnosticsScope({ logOwners: [...new Set(leaseIds.map(leaseVerifier))] });
+}
 
 // --- Downloadable artifact tracking ---
 
@@ -54,7 +123,7 @@ type ArtifactDownload = {
 type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
-  leaseId?: string;
+  leaseVerifier?: string;
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
@@ -149,7 +218,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
   pendingArtifacts().set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
-    ...(params.leaseId !== undefined ? { leaseId: params.leaseId } : {}),
+    ...(params.leaseId !== undefined ? { leaseVerifier: leaseVerifier(params.leaseId) } : {}),
     artifactType: params.artifactType,
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
@@ -168,7 +237,7 @@ function findTrackedArtifactId(
 ): string | undefined {
   for (const [artifactId, entry] of pendingArtifacts()) {
     if (entry.cleanupRequested || entry.artifactPath !== owner.artifactPath) continue;
-    if (entry.leaseId !== undefined) return artifactId;
+    if (entry.leaseVerifier !== undefined) return artifactId;
     if (entry.tenantId === owner.tenantId && owner.leaseId === undefined) return artifactId;
   }
   return undefined;
@@ -302,7 +371,7 @@ function readDownloadableArtifactEntry(
     reader.tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
   );
-  if (!requestHoldsOutputLease(entry.leaseId, reader.leaseId)) {
+  if (!requestHoldsOutputLease(entry.leaseVerifier, reader.leaseId)) {
     throw leasedOutputRefusal(DOWNLOADABLE_ARTIFACT_RESOURCE.label);
   }
   if (entry.cleanupRequested) {
@@ -447,7 +516,7 @@ function canReadArtifact(entry: ArtifactEntry, reader: DownloadableArtifactReade
   return (
     !entry.cleanupRequested &&
     (!entry.tenantId || entry.tenantId === reader.tenantId) &&
-    requestHoldsOutputLease(entry.leaseId, reader.leaseId)
+    requestHoldsOutputLease(entry.leaseVerifier, reader.leaseId)
   );
 }
 

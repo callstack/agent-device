@@ -53,6 +53,11 @@ import { requestCwd } from '../../core/context.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
 import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
+import {
+  leasedOutputRefusal,
+  leaseVerifier,
+  requestHoldsOutputLease,
+} from '../../resources/artifact-tracking.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import {
   missingAppSessionResponse,
@@ -276,7 +281,6 @@ async function startRecording(
   const started = await runtime.operations.screenRecordingStart(
     screenRecordingStartInput(params, session, prepared, fence, outputPaths),
   );
-  const tenantId = session.lease?.tenantId ?? params.req.meta?.tenantId;
   await adoptStartedScreenRecording({
     admissionLedger: params.admissionLedger,
     binding,
@@ -284,17 +288,7 @@ async function startRecording(
     owner: runtime.owner,
     fence,
     ...started,
-    envelope:
-      params.req.internal?.publicNetworkOnly || tenantId
-        ? {
-            ...started.envelope,
-            metadata: {
-              ...started.envelope.metadata,
-              ...(params.req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
-              ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
-            },
-          }
-        : started.envelope,
+    envelope: withCaptureOwner(started.envelope, params.req, session),
     throwIfCanceled: params.throwIfCanceled,
   });
   const adoptedRef = ref ?? draft!.requireRef();
@@ -313,6 +307,26 @@ async function startRecording(
     params.sessionStore.ensureSessionDir(params.sessionName),
     outputPaths.requestedPath,
   );
+}
+
+/** Names in the manifest who gets the export: a remote caller, its tenant, and the lease that started it. */
+function withCaptureOwner(
+  envelope: DurableResourceEnvelope<'screen-recording'>,
+  req: DaemonRequest,
+  session: SessionState,
+): DurableResourceEnvelope<'screen-recording'> {
+  const tenantId = session.lease?.tenantId ?? req.meta?.tenantId;
+  const leaseId = req.internal?.admittedLease?.leaseId;
+  if (!req.internal?.publicNetworkOnly && !tenantId && !leaseId) return envelope;
+  return {
+    ...envelope,
+    metadata: {
+      ...envelope.metadata,
+      ...(req.internal?.publicNetworkOnly ? { remoteCaptureOutput: true } : {}),
+      ...(tenantId ? { remoteCaptureTenantId: tenantId } : {}),
+      ...(leaseId ? { remoteCaptureLeaseVerifier: leaseVerifier(leaseId) } : {}),
+    },
+  };
 }
 
 function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: SessionState) {
@@ -418,6 +432,7 @@ async function stopRecording(
   kind: 'stop-live' | 'stop-recovery',
   needsReadiness: boolean,
 ): Promise<DaemonResponse> {
+  assertRequestHoldsRecordingLease(params);
   let stopped: ScreenRecordingStop;
   try {
     stopped =
@@ -474,6 +489,21 @@ async function stopRecording(
         ),
       }
     : response;
+}
+
+/**
+ * The manifest names the lease that started the recording. Only a request under that lease stops
+ * the recording or gets its export, also when the manifest outlived its session or its daemon.
+ */
+function assertRequestHoldsRecordingLease(params: RecordRuntimeHandlerParams): void {
+  const record = screenRecordingDurableResource.store.read(
+    screenRecordingDurableResource.resourcePath(params.sessionStore, params.sessionName),
+  );
+  const owner =
+    record.status === 'decoded' ? record.envelope.metadata?.remoteCaptureLeaseVerifier : undefined;
+  if (typeof owner !== 'string') return;
+  if (requestHoldsOutputLease(owner, params.req.internal?.admittedLease?.leaseId)) return;
+  throw leasedOutputRefusal('Recording');
 }
 
 function deleteTerminalRecordOnlySession(

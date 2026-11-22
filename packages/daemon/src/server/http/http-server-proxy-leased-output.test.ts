@@ -228,7 +228,10 @@ test('only the owner reads the diagnostics record of a request on its leased ses
   await expectLeasedOutputRefusal(await world.get(route, OTHER_LEASE_ID));
   const owned = await world.get(route, world.leaseId);
   expect(owned.status).toBe(200);
-  expect(await owned.text()).toContain('"phase":"request_failed"');
+  const served = await owned.text();
+  expect(served).toContain('"phase":"request_failed"');
+  // The record that a client downloads holds no credential to replay.
+  expect(served).not.toContain(world.leaseId);
 
   endLeasedSession(world);
 
@@ -236,17 +239,30 @@ test('only the owner reads the diagnostics record of a request on its leased ses
   expect((await world.get(route, world.leaseId)).status).toBe(200);
 });
 
-test('a refused request on a leased session leaves a record with no lease', async () => {
+test('the record of a request that a leased session refused belongs to the session lease', async () => {
   if (!world) return;
   const refused = await world.send('press', SESSION, {});
   expect(refused.error?.data?.details).toMatchObject({ reason: 'LEASE_SESSION_MISMATCH' });
   const record = refused.error?.data?.diagnosticsRecord;
   expect(record, JSON.stringify(refused)).toBeDefined();
+  const route = `/sessions/${encodeURIComponent(record!.session)}/requests/${record!.requestId}/diagnostics`;
+
+  // The refused client is not served what the daemon logged about the session it does not own.
+  await expectLeasedOutputRefusal(await world.get(route));
+  await expectLeasedOutputRefusal(await world.get(route, OTHER_LEASE_ID));
+  expect((await world.get(route, world.leaseId)).status).toBe(200);
+  expect((await world.get(`${route}.owners`)).status).toBe(404);
+});
+
+test('a request with no lease on a session with no lease keeps the tenant rule', async () => {
+  if (!world) return;
+  const failed = await world.send('press', 'agentB', {});
+  const record = failed.error?.data?.diagnosticsRecord;
+  expect(record, JSON.stringify(failed)).toBeDefined();
 
   const own = await world.get(
     `/sessions/${encodeURIComponent(record!.session)}/requests/${record!.requestId}/diagnostics`,
   );
 
   expect(own.status).toBe(200);
-  expect(await own.text()).not.toContain('"phase":"request_lease"');
 });

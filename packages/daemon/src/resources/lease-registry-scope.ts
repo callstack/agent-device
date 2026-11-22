@@ -418,30 +418,3 @@ export function leaseReleaseRequestFor(lease: SessionLease): ReleaseLeaseRequest
     clientId: lease.clientId,
   });
 }
-
-/** The `error.details.reason` values a leased-output refusal publishes. */
-const LEASED_OUTPUT_REASONS = {
-  // The request does not send the id of the lease that produced the artifact or diagnostics record.
-  leaseMismatch: { reason: 'LEASE_OUTPUT_MISMATCH' },
-} as const satisfies ReasonTable<'leases'>;
-
-/**
- * Whether a request may read output that `ownerLeaseId` produced. Output of a leased request
- * belongs to that lease for as long as the output is kept, also after the lease ends: only a
- * request that sends the lease id reads it (ADR 0007). Output with no lease has no lease rule.
- */
-export function requestHoldsOutputLease(
-  ownerLeaseId: string | undefined,
-  presentedLeaseId: string | undefined,
-): boolean {
-  if (ownerLeaseId === undefined) return true;
-  const owner = normalizeLeaseId(ownerLeaseId);
-  return owner !== undefined && owner === normalizeLeaseId(presentedLeaseId);
-}
-
-export function leasedOutputRefusal(label: string): AppError {
-  return new AppError('UNAUTHORIZED', `${label} belongs to a device lease. Send its lease id.`, {
-    reason: LEASED_OUTPUT_REASONS.leaseMismatch.reason,
-    field: 'leaseId',
-  });
-}

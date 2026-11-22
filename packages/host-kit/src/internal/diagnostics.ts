@@ -40,6 +40,18 @@ type DiagnosticsScopeOptions = {
    * the locator cannot name different records (#1801).
    */
   logRecord?: DiagnosticsRecordRef;
+  /**
+   * Set together with `logPath` when only some readers may be served that record. Each entry is
+   * one opaque owner. They are written to {@link diagnosticsRecordOwnersPath}, one per line,
+   * before the first byte of the record.
+   */
+  logOwners?: readonly string[];
+  /**
+   * Set for a log that only the host operator reads, such as the daemon log. It names a lease by
+   * its id, which the operator needs to end a rented device. Every other scope names a lease by
+   * a fingerprint.
+   */
+  operatorLog?: boolean;
   traceLogPath?: string;
 };
 
@@ -48,6 +60,7 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   flushedLogPath?: string;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
+  logOwnersPublished?: true;
   // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
   // `flushDiagnosticsToSessionFile`, so consumers (e.g. the agent-cost graft)
   // can count phase occurrences for the whole request even in debug mode where
@@ -313,7 +326,11 @@ function redactScopeData(
 ): Record<string, unknown> {
   const values = sortedScopeSensitiveValues(scope);
   try {
-    return replaceSensitiveValues(redactDiagnosticData(input), values) as Record<string, unknown>;
+    const redacted = redactDiagnosticData(input);
+    return replaceSensitiveValues(
+      scope.operatorLog ? redacted : fingerprintLeaseIds(redacted),
+      values,
+    ) as Record<string, unknown>;
   } catch {
     return replaceSensitiveValues({ reason: 'diagnostic-data-unserializable' }, values) as Record<
       string,
@@ -342,6 +359,30 @@ function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string
   );
 }
 
+// `leaseId`, `releasedLeaseIds`, `lease_id`; never `releaseId`.
+const LEASE_ID_KEY_RE = /(?:^l|L|[_-]l)ease[_-]?[iI]ds?$/;
+
+/**
+ * A lease id is the credential for its session and its output, and a request record can reach
+ * another reader. Thus diagnostics name a lease by a fingerprint: the first 8 hex digits of the
+ * SHA-256 of the id.
+ */
+function fingerprintLeaseIds(value: unknown, namesLease = false): unknown {
+  if (typeof value === 'string') {
+    if (!namesLease) return value;
+    const digest = crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+    return digest.slice(0, 8);
+  }
+  if (Array.isArray(value)) return value.map((entry) => fingerprintLeaseIds(entry, namesLease));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      fingerprintLeaseIds(entry, LEASE_ID_KEY_RE.test(key)),
+    ]),
+  );
+}
+
 function sanitizePathPart(value: string): string {
   return value.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
 }
@@ -352,5 +393,15 @@ function appendDiagnosticLine(scope: DiagnosticsScope, logPath: string, line: st
     fs.mkdirSync(dir, { recursive: true });
     scope.ensuredDirectories.add(dir);
   }
+  if (logPath === scope.logPath && scope.logOwners?.length && !scope.logOwnersPublished) {
+    const owners = scope.logOwners.map((owner) => `${owner}\n`).join('');
+    fs.appendFileSync(diagnosticsRecordOwnersPath(logPath), owners, 'utf8');
+    scope.logOwnersPublished = true;
+  }
   fs.appendFileSync(logPath, line, 'utf8');
+}
+
+/** Where the owners of the record at `logPath` are kept. No reader is served this file. */
+export function diagnosticsRecordOwnersPath(logPath: string): string {
+  return `${logPath}.owners`;
 }

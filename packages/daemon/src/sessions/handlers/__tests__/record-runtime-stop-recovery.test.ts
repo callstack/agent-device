@@ -15,6 +15,7 @@ import {
   withRequestDeadline,
 } from '@agent-device/host-kit/request';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
+import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import {
   expectDecodedCompletedRecording,
   makeRecordRuntimeHarness,
@@ -103,6 +104,49 @@ test('record stop after a daemon restart replays the completed export for the na
     expect.objectContaining({ serial: 'emulator-5554' }),
     expect.objectContaining({ env: process.env }),
   );
+});
+
+test('record stop after a daemon restart serves the export only under the lease that started it', async () => {
+  const registry = new LeaseRegistry();
+  const [owner, other] = ['run-a', 'run-b'].map((runId) => ({
+    admittedLease: registry.allocateLease({
+      tenantId: 'tenant-a',
+      runId,
+      leaseBackend: 'android-instance',
+    }),
+  }));
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-lease-');
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-lease-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath], undefined, undefined, owner);
+  await harness.run(['stop'], undefined, undefined, owner);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+  const manifest = fs.readFileSync(
+    recordingResourcePath(harness.sessionStore, harness.sessionName),
+    'utf8',
+  );
+  expect(manifest).not.toContain(owner!.admittedLease.leaseId);
+
+  for (const internal of [other, undefined]) {
+    expect(
+      await harness.run(['stop'], { sessionExplicit: true }, undefined, internal),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        details: { reason: 'LEASE_OUTPUT_MISMATCH', field: 'leaseId' },
+      },
+    });
+  }
+  expect(await harness.run(['stop'], { sessionExplicit: true }, undefined, owner)).toMatchObject({
+    ok: true,
+    data: { recording: 'stopped', outPath },
+  });
 });
 
 test('record stop recovery after a daemon restart keeps the request host-scoping selectors', async () => {

@@ -9,6 +9,7 @@ import {
   withDiagnosticsScope,
   withDiagnosticTimer,
   DIAGNOSTIC_STDERR_PREFIX,
+  diagnosticsRecordOwnersPath,
 } from './diagnostics.ts';
 import { escapeTerminalText } from '@agent-device/kernel/redaction';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
@@ -153,6 +154,45 @@ test('appendDiagnosticLine ensures the log directory once across appended lines'
   } finally {
     mkdirSpy.mockRestore();
   }
+});
+
+test('a record names a lease by its fingerprint and publishes its owners before its first byte', async () => {
+  const logPath = path.join(
+    mkdtempForTestSync('agent-device-diag-owners-'),
+    'requests',
+    'r1.ndjson',
+  );
+  const leaseId = 'A1B2C3D4E5F60718293A4B5C6D7E8F90';
+  const ownersBeforeRecord = await withDiagnosticsScope(
+    { session: 'leased', requestId: 'r1', debug: true, logPath, logOwners: ['owner-a', 'owner-b'] },
+    async () => {
+      const write = vi.spyOn(fs, 'appendFileSync');
+      emitDiagnostic({
+        phase: 'leased_session_ended',
+        data: {
+          leaseId,
+          endedLeases: [{ leaseId }],
+          releasedLeaseIds: [leaseId],
+          releaseId: 'r-1',
+        },
+      });
+      emitDiagnostic({ phase: 'request_failed' });
+      const written = write.mock.calls.map(([file]) => String(file));
+      write.mockRestore();
+      return written;
+    },
+  );
+
+  assert.deepEqual(ownersBeforeRecord, [`${logPath}.owners`, logPath, logPath]);
+  assert.equal(fs.readFileSync(diagnosticsRecordOwnersPath(logPath), 'utf8'), 'owner-a\nowner-b\n');
+  const record = fs.readFileSync(logPath, 'utf8');
+  assert.equal(record.toLowerCase().includes(leaseId.toLowerCase()), false);
+  assert.deepEqual(JSON.parse(record.split('\n')[0]!).data, {
+    leaseId: 'ff25d238',
+    endedLeases: [{ leaseId: 'ff25d238' }],
+    releasedLeaseIds: ['ff25d238'],
+    releaseId: 'r-1',
+  });
 });
 
 test('a later diagnostics scope recreates a removed log directory', async () => {
