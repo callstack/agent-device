@@ -1,4 +1,7 @@
-import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
+import {
+  captureDiagnostics,
+  makeRunnerSession as makeLocalRunnerSession,
+} from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import { RunnerCommandAccounting } from '../runner-session-types.ts';
 import { afterEach, test, vi } from 'vitest';
@@ -6,7 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
-import type { RunnerCommand } from '../runner-contract.ts';
+import type { RunnerCommand, RunnerEndpoint } from '../runner-contract.ts';
 import { RUNNER_EXCHANGE_REASONS } from '../runner-error-classification.ts';
 import type { RunnerSession } from '../runner-session.ts';
 import {
@@ -27,12 +30,12 @@ afterEach(async () => {
   server = undefined;
 });
 
-function makeRunnerSession(port: number): RunnerSession {
+function makeRunnerSession(port: number, http?: RunnerEndpoint['http']): RunnerSession {
   return makeLocalRunnerSession({
     sessionId: `fake:${port}`,
     device: IOS_SIMULATOR,
     deviceId: IOS_SIMULATOR.id,
-    endpoint: { port, token: 'runner-token-fixture' },
+    endpoint: { port, token: 'runner-token-fixture', http },
     xctestrunPath: '/tmp/fake.xctestrun',
     jsonPath: '/tmp/fake.json',
     testPromise: new Promise<ExecResult>(() => {}),
@@ -50,6 +53,7 @@ async function runRecovery(params: {
   script: FakeRunnerResponse[];
   command?: RunnerCommand;
   transportError?: AppError;
+  scrubText?: (text: string) => string;
 }): Promise<{
   result: Promise<Record<string, unknown>>;
   session: RunnerSession;
@@ -57,7 +61,15 @@ async function runRecovery(params: {
   transportError: AppError;
 }> {
   server = await startFakeRunnerServer(params.script);
-  const session = makeRunnerSession(server.port);
+  const session = makeRunnerSession(
+    server.port,
+    params.scrubText
+      ? {
+          url: `http://127.0.0.1:${server.port}/command`,
+          diagnostics: { scrubText: params.scrubText, scrubPayload: (payload) => payload },
+        }
+      : undefined,
+  );
   const invalidate = vi.fn(async () => {});
   const transportError = params.transportError ?? new AppError('COMMAND_FAILED', 'socket hang up');
   const result = handleRunnerTransportErrorAfterCommandSend({
@@ -112,6 +124,30 @@ test('a command still in flight surfaces without invalidating the session', asyn
   assert.equal(invalidate.mock.calls.length, 0);
 });
 
+test('a provider token equal to an in-flight state cannot reach the lost reply or diagnostics', async () => {
+  const token = 'started';
+  const logs = await captureDiagnostics(async () => {
+    const { result, invalidate } = await runRecovery({
+      script: [{ kind: 'ok', data: { lifecycleState: token } }],
+      scrubText: (text) => text.replaceAll(token, '[REDACTED]'),
+    });
+    await assert.rejects(result, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.recovery, 'command_still_in_flight');
+      assert.equal(error.details?.lifecycleState, '[REDACTED]');
+      assert.ok(!error.message.includes(token));
+      assert.ok(!String(error.details?.hint).includes(token));
+      return true;
+    });
+    assert.equal(invalidate.mock.calls.length, 0);
+  });
+  const decision = logs
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((event) => event.phase === 'ios_runner_command_invalidation_decision');
+  assert.equal(decision?.data.lifecycleState, '[REDACTED]');
+});
+
 test('an unknown lifecycle state invalidates the session and says so', async () => {
   const { result, invalidate } = await runRecovery({
     script: [{ kind: 'ok', data: { lifecycleState: 'zombie' } }],
@@ -122,6 +158,23 @@ test('an unknown lifecycle state invalidates the session and says so', async () 
   });
   assert.equal(invalidate.mock.calls.length, 1);
   assert.equal(invalidate.mock.calls[0]?.[1], 'transport_error_after_command_send');
+});
+
+test('an unknown provider lifecycle state is scrubbed when published', async () => {
+  const token = 'synthetic-instance-token';
+  const { result, invalidate } = await runRecovery({
+    script: [{ kind: 'ok', data: { lifecycleState: token } }],
+    scrubText: (text) => text.replaceAll(token, '[REDACTED]'),
+  });
+  await assert.rejects(
+    result,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message.includes('invalidated the runner session') &&
+      !error.message.includes(token) &&
+      error.details?.lifecycleState === '[REDACTED]',
+  );
+  assert.equal(invalidate.mock.calls.length, 1);
 });
 
 test('notAccepted from a restarted runner fails the lost command as unknown, naming the lost reply', async () => {

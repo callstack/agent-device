@@ -4,7 +4,7 @@ import { REMOTE_LEASE_IDLE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
-import { LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
+import { fromLimrunOrgApi, LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
 import { buildLimrunDevice, LIMRUN_PROFILE_FIELDS, type LimrunIosModel } from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
 import {
@@ -75,31 +75,33 @@ export async function allocateLimrunIosSession(
   params: SessionAllocationParams,
   onRent: (instanceId: string) => void,
 ): Promise<LimrunIosSession> {
-  const instance = (await params.limrun.iosInstances.create(
-    {
-      wait: true,
-      metadata: params.metadata,
-      spec: {
-        inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
-        ...(params.iosModel ? { model: params.iosModel } : {}),
-        ...(params.region ? { region: params.region } : {}),
-        ...(params.app
-          ? {
-              initialAssets: [
-                {
-                  kind: 'App' as const,
-                  source: 'AssetID' as const,
-                  assetId: params.app.id,
-                  launchMode: 'RelaunchIfRunning' as const,
-                },
-              ],
-            }
-          : {}),
+  const instance = (await fromLimrunOrgApi(
+    params.limrun.iosInstances.create(
+      {
+        wait: true,
+        metadata: params.metadata,
+        spec: {
+          inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
+          ...(params.iosModel ? { model: params.iosModel } : {}),
+          ...(params.region ? { region: params.region } : {}),
+          ...(params.app
+            ? {
+                initialAssets: [
+                  {
+                    kind: 'App' as const,
+                    source: 'AssetID' as const,
+                    assetId: params.app.id,
+                    launchMode: 'RelaunchIfRunning' as const,
+                  },
+                ],
+              }
+            : {}),
+        },
       },
-    },
-    // Limrun may have created this instance even though its answer was lost, so the SDK must not POST
-    // this call again: a second create would rent a second instance nobody is standing beside.
-    LIMRUN_SINGLE_ATTEMPT,
+      // Limrun may have created this instance even though its answer was lost, so the SDK must not POST
+      // this call again: a second create would rent a second instance nobody is standing beside.
+      LIMRUN_SINGLE_ATTEMPT,
+    ),
   )) as LimrunInstance;
   const instanceId = instance.metadata.id;
   // Rented from this step: the caller's owner records the instance here, before any session is built on it,
@@ -125,29 +127,31 @@ export async function allocateLimrunAndroidSession(
   params: SessionAllocationParams,
   onRent: (instanceId: string) => void,
 ): Promise<LimrunAndroidSession> {
-  const instance = (await params.limrun.androidInstances.create(
-    {
-      wait: true,
-      metadata: params.metadata,
-      spec: {
-        inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
-        ...(params.region ? { region: params.region } : {}),
-        ...(params.app
-          ? {
-              initialAssets: [
-                {
-                  kind: 'App' as const,
-                  source: 'AssetIDs' as const,
-                  assetIds: [params.app.id],
-                },
-              ],
-            }
-          : {}),
+  const instance = (await fromLimrunOrgApi(
+    params.limrun.androidInstances.create(
+      {
+        wait: true,
+        metadata: params.metadata,
+        spec: {
+          inactivityTimeout: LIMRUN_INACTIVITY_TIMEOUT,
+          ...(params.region ? { region: params.region } : {}),
+          ...(params.app
+            ? {
+                initialAssets: [
+                  {
+                    kind: 'App' as const,
+                    source: 'AssetIDs' as const,
+                    assetIds: [params.app.id],
+                  },
+                ],
+              }
+            : {}),
+        },
       },
-    },
-    // Limrun may have created this instance even though its answer was lost, so the SDK must not POST
-    // this call again: a second create would rent a second instance nobody is standing beside.
-    LIMRUN_SINGLE_ATTEMPT,
+      // Limrun may have created this instance even though its answer was lost, so the SDK must not POST
+      // this call again: a second create would rent a second instance nobody is standing beside.
+      LIMRUN_SINGLE_ATTEMPT,
+    ),
   )) as LimrunInstance;
   const instanceId = instance.metadata.id;
   // Rented from this step: the caller's owner records the instance here, before any session is built on it,

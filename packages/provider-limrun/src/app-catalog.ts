@@ -1,6 +1,7 @@
 import type Limrun from '@limrun/api';
 import type { Asset } from '@limrun/api/resources/assets';
 import { AppError } from '@agent-device/kernel/errors';
+import { fromLimrunOrgApi } from './client-options.ts';
 
 const APP_CATALOG_LIMIT = 1_000;
 
@@ -25,7 +26,9 @@ export async function listLimrunAppAssets(
   signal?: AbortSignal,
 ): Promise<readonly LimrunAppAsset[]> {
   signal?.throwIfAborted();
-  const assets = await limrun.assets.list({ limit: APP_CATALOG_LIMIT }, { signal });
+  const assets = await fromLimrunOrgApi(
+    limrun.assets.list({ limit: APP_CATALOG_LIMIT }, { signal }),
+  );
   signal?.throwIfAborted();
   const apps: LimrunAppAsset[] = [];
   for (const asset of assets) {
@@ -42,9 +45,8 @@ export async function resolveLimrunAppAsset(
   signal?: AbortSignal,
 ): Promise<LimrunAppAsset | undefined> {
   signal?.throwIfAborted();
-  const assets = await limrun.assets.list(
-    { limit: APP_CATALOG_LIMIT, nameFilter: name },
-    { signal },
+  const assets = await fromLimrunOrgApi(
+    limrun.assets.list({ limit: APP_CATALOG_LIMIT, nameFilter: name }, { signal }),
   );
   signal?.throwIfAborted();
   const matches = assets
@@ -55,7 +57,7 @@ export async function resolveLimrunAppAsset(
   throw new AppError('COMMAND_FAILED', `Limrun returned multiple uploaded apps named ${name}.`, {
     app: name,
     platform,
-    assetIds: matches.map((asset) => asset.id),
+    matchCount: matches.length,
   });
 }
 

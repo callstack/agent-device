@@ -81,6 +81,8 @@ export function claimProviderIds(providers: readonly string[]): PluginCandidate[
 export type PluginRegistryPolicy = Readonly<{
   platformHost?: PlatformHost;
   assertSelectionCurrent?(packageName: string): void;
+  /** What the root adds to every provider setup host. */
+  hostCapabilities?(host: HostEnvironment): object | Promise<object>;
 }>;
 
 export type ProviderRegistration = Readonly<{
@@ -409,7 +411,7 @@ async function setUpClaim(
 ): Promise<void> {
   const contribution = claim.contribution;
   if (contribution.kind === 'provider') {
-    if (scope === 'all') await setUpProviderClaim(claim, contribution, host);
+    if (scope === 'all') await setUpProviderClaim(claim, contribution, host, policy);
     return;
   }
   if (contribution.kind === 'platform') {
@@ -595,12 +597,8 @@ async function cleanUpClaim(claim: Claim): Promise<PluginCleanupOutcome> {
   };
 }
 
-/**
- * A plugin's connection with the host it declares added to each context. Exported for the composing
- * root: a built-in provider wires its plugin's callbacks to a CLI call through the same helper the
- * registry uses, so both answer `connect` identically.
- */
-export function withConnectionHost(
+/** A plugin's connection with the host it declares added to each context. */
+function withConnectionHost(
   connection: PluginConnection,
   hostOptions: Record<string, unknown> | undefined,
 ): RegisteredConnection {
@@ -623,8 +621,10 @@ async function setUpProviderClaim(
   claim: Claim,
   contribution: ProviderContribution,
   host: HostEnvironment,
+  policy: PluginRegistryPolicy,
 ): Promise<void> {
-  const pluginHost = await createPluginHost(host, claim.slot.candidate.hostOptions);
+  const capabilities = await policy.hostCapabilities?.(host);
+  const pluginHost = await createPluginHost(host, claim.slot.candidate.hostOptions, capabilities);
   const result = await contribution.setup(pluginHost);
   try {
     if (!isRecord(result))

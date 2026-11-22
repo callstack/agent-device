@@ -20,6 +20,7 @@ export {
   androidAdbResultError,
   attachAdbFailureHint,
   classifyAdbFailure,
+  type AndroidAdbFailureClassification,
   createAndroidPortReverseManager,
   createDeviceAdbExecutor,
   createLocalAndroidAdbProvider,

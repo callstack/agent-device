@@ -2,6 +2,7 @@ import {
   relayDeviceShellArgvWithOptions,
   relayDeviceShellArgvWithoutOptions,
 } from '@agent-device/kernel/device-shell';
+import type { AndroidAdbFailureClassification } from './adb-failure.ts';
 import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { Readable, Stream, Writable } from 'node:stream';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -34,6 +35,8 @@ export type AndroidAdbExecutorResult = {
   stdoutBuffer?: Buffer;
   /** The signal that ended the process, when one did. */
   signal?: string;
+  /** The transport's classification before it redacts stdout and stderr. Null records no match. */
+  failure?: AndroidAdbFailureClassification | null;
 };
 
 /** Structural mirror of node's StdioOptions; R13 bars the child_process import that names it. */

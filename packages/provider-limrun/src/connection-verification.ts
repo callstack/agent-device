@@ -3,7 +3,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import type { LimrunIosModel } from './device.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
-import { limrunUserAgent } from './client-options.ts';
+import {
+  LIMRUN_INSTANCE_PROBE_OPTIONS,
+  LIMRUN_ORG_CLIENT_LOGGING,
+  limrunUserAgent,
+} from './client-options.ts';
 
 const IOS_MODEL_NAMES: Record<LimrunIosModel, string> = {
   iphone: 'Provider-selected iOS simulator',
@@ -51,6 +55,7 @@ export async function verifyLimrunConnection(
     userAgent: limrunUserAgent(options.clientVersion),
     timeout: 15_000,
     maxRetries: 0,
+    ...LIMRUN_ORG_CLIENT_LOGGING,
   });
   const query = { limit: 1, ...(options.region ? { region: options.region } : {}) };
   try {
@@ -67,12 +72,10 @@ export async function verifyLimrunConnection(
         hint: 'Check LIMRUN_API_KEY and its organization access.',
       });
     }
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Limrun connection verification failed.',
-      { hint: 'Check Limrun service access, LIMRUN_REGION, and network connectivity, then retry.' },
-      error,
-    );
+    throw new AppError('COMMAND_FAILED', 'Limrun connection verification failed.', {
+      hint: 'Check Limrun service access, LIMRUN_REGION, and network connectivity, then retry.',
+      ...(status === undefined ? {} : { status }),
+    });
   }
   const platformName = options.platform === 'android' ? 'Android' : 'iOS';
   const deviceName =
@@ -104,7 +107,7 @@ function readStatus(error: unknown): number | undefined {
 function connectAttachedInstance(
   options: LimrunConnectionVerificationOptions,
 ): Promise<{ disconnect(): void; deviceInfo?: { model?: string } }> | undefined {
-  const clientOptions = { logLevel: 'none', maxReconnectAttempts: 0 } as const;
+  const clientOptions = LIMRUN_INSTANCE_PROBE_OPTIONS;
   const { ios, android } = options.instances ?? {};
   if (options.platform === 'android') {
     return (
@@ -134,17 +137,12 @@ async function verifyAttachedInstance(
     const client = await connecting;
     model = client.deviceInfo?.model;
     client.disconnect();
-  } catch (error) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Limrun ${platformName} instance access failed.`,
-      {
-        hint: android
-          ? 'Check LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, and that the instance is still running.'
-          : 'Check LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, and that the instance is still running.',
-      },
-      error,
-    );
+  } catch {
+    throw new AppError('COMMAND_FAILED', `Limrun ${platformName} instance access failed.`, {
+      hint: android
+        ? 'Check LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, and that the instance is still running.'
+        : 'Check LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, and that the instance is still running.',
+    });
   }
   return {
     provider: 'limrun',

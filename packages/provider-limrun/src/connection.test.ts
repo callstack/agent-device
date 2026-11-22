@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import type { PluginConnectionContext } from '@agent-device/plugins/contract';
-import type { ProviderPluginHost } from '@agent-device/plugins/host';
+import type { PluginConnectionContext, ProviderPluginHost } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLimrunConnection } from './connection.ts';
 import { LIMRUN_CONNECTION_CAPABILITIES } from './device.ts';
@@ -232,6 +231,7 @@ test('verify asks the selected platform of the account the scoped credentials re
       userAgent: 'agent-device-cli/1.2.3',
       timeout: 15_000,
       maxRetries: 0,
+      logLevel: 'off',
     },
   ]);
   assert.deepEqual(limrunSdk.iosList.mock.calls, [[{ limit: 1 }]]);

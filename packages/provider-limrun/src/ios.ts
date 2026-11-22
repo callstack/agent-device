@@ -62,10 +62,12 @@ export async function createLimrunIosSession(
   },
   dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>,
 ): Promise<LimrunIosSession> {
-  const client = await createIosInstanceClient({
+  // The wrapper is loaded here, not imported: the runtime façade keeps its merge-base eager closure
+  // (ADR-0027).
+  const { connectLimrunInstanceClient } = await import('./instance-error-scrubbing.ts');
+  const client = await connectLimrunInstanceClient(createIosInstanceClient, {
     apiUrl: options.apiUrl,
     token: options.token,
-    logLevel: 'warn',
   });
   try {
     const { model, osVersion } = client.deviceInfo;
@@ -194,12 +196,15 @@ async function verifyLimrunIosInstall(
     });
     if (verifiedBundleId) return { appId: verifiedBundleId };
   }
+  const { safeInstanceErrorText } = await import('./error-text.ts');
+  const scrubId = (value?: string) =>
+    value === undefined ? undefined : safeInstanceErrorText(value, [session.token]);
   throw new AppError('COMMAND_FAILED', 'Limrun iOS app installation could not be verified.', {
-    resultBundleId,
-    requestedBundleId,
+    resultBundleId: scrubId(resultBundleId),
+    requestedBundleId: scrubId(requestedBundleId),
     installedUserApps: afterInstallApps
       .filter(isUserInstalledIosApp)
-      .map((app) => app.bundleId)
+      .map((app) => safeInstanceErrorText(app.bundleId, [session.token]))
       .sort(),
   });
 }

@@ -1,3 +1,4 @@
+import { classifyAdbFailure } from '@agent-device/platform-android/mechanics';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import {
@@ -19,7 +20,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import type { LimrunRuntimeDependencies } from '@agent-device/limrun/runtime';
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
@@ -273,6 +274,7 @@ export const limrunTestDependencies: LimrunRuntimeDependencies = {
       target: { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } },
       command,
     }),
+    classifyAdbFailure,
     adbError: async () => {
       throw new Error('unused');
     },
@@ -297,8 +299,7 @@ export async function createTestLimrunIosRunner(
 ): Promise<Awaited<ReturnType<LimrunRuntimeDependencies['ios']['createRunner']>>> {
   const { createAppleRunnerRuntime } =
     await import('@agent-device/platform-apple/runner/operations');
-  const { createLimrunAppleApplicationTools } =
-    await import('./core/interactors/limrun-ios-application-tools.ts');
+  const { createLimrunAppleApplicationTools } = await import('@agent-device/limrun/host');
   const runner = await createAppleRunnerRuntime({
     device,
     host: { env: {}, cwd: process.cwd() },
@@ -331,6 +332,7 @@ export async function createTestLimrunIosRunner(
       applyRuntimeHints: async () => {},
       clearRuntimeHints: async () => {},
     },
+    () => {},
   );
   return {
     ...runner,

@@ -1,3 +1,7 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppleRunnerProvider, RunnerCommand } from '@agent-device/apple-runner';
@@ -47,6 +51,7 @@ function bridgeRunner(state: {
   process: RunnerProcess;
   refuseDescribe?: string;
   refuseTarget?: string;
+  refusalDetails?: Record<string, unknown>;
   refuseSurfaceHostCheck?: boolean;
   holdNextDescribe?: Promise<void>;
 }) {
@@ -71,6 +76,7 @@ function bridgeRunner(state: {
           ok: false,
           error_kind: 'application_unavailable',
           error_code: state.refuseTarget,
+          ...state.refusalDetails,
         });
       }
       if (request.verb === 'target') return envelope(request, { ok: true, ...state.process });
@@ -81,6 +87,7 @@ function bridgeRunner(state: {
           generation: request.generation,
           error_kind: kind,
           error_code: code,
+          ...state.refusalDetails,
         });
       if (
         request.expectedPid !== state.process.pid ||
@@ -640,3 +647,44 @@ test('a wedge before the runner id is known does not disable a newly identified 
   expect((await snapshot()).producer).toBe('simulator-ax-bridge');
   expect(verbs(sent)).toEqual(['target', 'target', 'describe']);
 });
+
+test.each([
+  ['target', 'synthetic-forwarded-token'],
+  ['describe', 'synthetic-forwarded-token'],
+  ['describe', 'bridge-read-in-flight'],
+] as const)(
+  'a forwarded bridge %s refusal never publishes the echoed credential %s',
+  async (verb, token) => {
+    const log = path.join(await mkdtempForTest('bridge-diagnostics-'), 'trace.jsonl');
+    const { provider, sent } = bridgeRunner({
+      process: { pid: 41, processStartTime: token },
+      ...(verb === 'target' ? { refuseTarget: token } : { refuseDescribe: token }),
+      refusalDetails: { error: 'peer ' + token, surfaceHostExecutable: token },
+    });
+    const scrubText = (text: string) => text.replaceAll(token, '[REDACTED]');
+    const diagnostics = {
+      scrubText,
+      scrubPayload: (payload: unknown) => JSON.parse(scrubText(JSON.stringify(payload))),
+    };
+    const { snapshot, fallbacks } = bridgeRoute(
+      Object.assign(provider, { diagnostics }),
+      'runner-session-1',
+    );
+    const result = await withDiagnosticsScope({ traceLogPath: log }, snapshot);
+    const published = (await readFile(log, 'utf8')) + JSON.stringify(result);
+    expect(fallbacks).toHaveLength(1);
+    expect(published).not.toContain(token);
+    expect(published).toContain('[REDACTED]');
+    if (token === 'bridge-read-in-flight') {
+      expect(result.warnings?.[0]).toContain('while an earlier bridge read was still running');
+    }
+    if (verb === 'describe') {
+      expect(
+        sent.find((command) => command.snapshotBridge?.verb === 'describe')?.snapshotBridge,
+      ).toMatchObject({
+        generation: '41:' + token,
+        expectedProcessStartTime: token,
+      });
+    }
+  },
+);

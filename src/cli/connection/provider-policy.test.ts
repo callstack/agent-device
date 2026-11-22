@@ -10,11 +10,29 @@ import {
   connectProviderNamesForError,
   isConnectProviderName,
   primeProviderConnection,
+  providerRouteForConnection,
 } from './provider-policy.ts';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
+import limrun from '@agent-device/limrun';
+import awsDeviceFarm from '@agent-device/aws-device-farm';
+import browserstack from '@agent-device/browserstack';
+import { providerPluginConnectionCapabilities } from '../../commands/provider-plugin-catalog.ts';
+import { declaredConnectionCapabilities } from '../../__tests__/test-utils/plugin-declaration.fixtures.ts';
 
-test('provider policy projects provider identity into semantic capabilities', () => {
-  assert.deepEqual(connectionProviderCapabilities('limrun', {}), {
+test('provider policy projects provider identity into semantic capabilities', async () => {
+  const limrunStore = pluginHome();
+  selectPlugin(
+    limrunStore.home,
+    '@agent-device/limrun',
+    pluginSource('limrun', {
+      extra: `connection: { capabilities: ${JSON.stringify(declaredConnectionCapabilities(limrun()))}, resolve() {}, verify() {} },`,
+    }),
+  );
+  // Limrun's lease policy is its own on every route: the catalog answers it before any plugin store is
+  // loaded, so a host without the plugin still defers app selection and bounds the lease.
+  assert.equal(connectionProviderCapabilities('limrun', {}).leaseKind, 'direct-device-provider');
+  await primeProviderConnection('limrun', limrunStore.env);
+  assert.deepEqual(connectionProviderCapabilities('limrun', limrunStore.env), {
     leaseKind: 'direct-device-provider',
     requiresAppAttachment: false,
     requiresRemoteDaemon: false,
@@ -25,7 +43,8 @@ test('provider policy projects provider identity into semantic capabilities', ()
     holdsCloudDevice: true,
     forgetsEndedConnectionLease: true,
   });
-  // BrowserStack is a plugin: without an installed one nothing declares its capabilities.
+  // BrowserStack and AWS Device Farm declare no catalog capabilities: without an installed plugin
+  // nothing declares theirs, and they keep the daemon's own routing.
   assert.equal(
     connectionProviderCapabilities('browserstack', pluginHome().env).leaseKind,
     'remote-provider',
@@ -120,4 +139,61 @@ test('a plugin that fails to load supplies no connection name even after priming
   expect(pluginLoadFailures(env).map(({ package: name, error }) => [name, error.reason])).toEqual([
     ['dup', 'duplicate_provider'],
   ]);
+});
+
+test('the plugin catalog copies the connection capabilities each plugin declares', () => {
+  // The catalog answers a connection's lease policy on a route that loads no plugin, so every copy it
+  // carries must equal what the plugin itself declares.
+  for (const [provider, plugin] of [
+    ['limrun', limrun()],
+    ['aws-device-farm', awsDeviceFarm()],
+    ['browserstack', browserstack()],
+  ] as const) {
+    const declared = providerPluginConnectionCapabilities(provider);
+    if (declared === undefined) continue;
+    assert.deepEqual(declared, declaredConnectionCapabilities(plugin), provider);
+  }
+  // Limrun is the row a remote connection is answered from without the plugin, so its copy is required.
+  assert.deepEqual(
+    providerPluginConnectionCapabilities('limrun'),
+    declaredConnectionCapabilities(limrun()),
+  );
+});
+
+test('a route is answered by the daemon only when a base URL is actually set', () => {
+  // The daemon client reads the same two settings with `??` and treats an empty one as no daemon, so an
+  // empty flag or an empty environment setting drives the connection from this host — the one route
+  // that refuses a provider it has no plugin for.
+  assert.equal(
+    providerRouteForConnection({ daemonBaseUrl: undefined, env: {} }),
+    'drives-connection',
+  );
+  assert.equal(
+    providerRouteForConnection({
+      daemonBaseUrl: undefined,
+      env: { AGENT_DEVICE_DAEMON_BASE_URL: '' },
+    }),
+    'drives-connection',
+  );
+  assert.equal(
+    providerRouteForConnection({
+      daemonBaseUrl: '',
+      env: { AGENT_DEVICE_DAEMON_BASE_URL: 'http://127.0.0.1:50000' },
+    }),
+    'drives-connection',
+  );
+  assert.equal(
+    providerRouteForConnection({
+      daemonBaseUrl: undefined,
+      env: { AGENT_DEVICE_DAEMON_BASE_URL: 'http://127.0.0.1:50000' },
+    }),
+    'dispatches-to-remote-daemon',
+  );
+  assert.equal(
+    providerRouteForConnection({
+      daemonBaseUrl: 'http://127.0.0.1:50000',
+      env: {},
+    }),
+    'dispatches-to-remote-daemon',
+  );
 });

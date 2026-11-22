@@ -78,3 +78,21 @@ describe('Limrun uploaded app catalog', () => {
     ).toBeUndefined();
   });
 });
+
+test('reports only the match count for ambiguous uploaded assets', async () => {
+  const name = 'Example.apk';
+  const apiKey = 'synthetic-account-key';
+  const limrun = {
+    apiKey,
+    assets: {
+      list: async () => [
+        { id: 'echo-' + apiKey, name, md5: 'a' },
+        { id: 'other', name, md5: 'b' },
+      ],
+    },
+  } as never;
+  await expect(resolveLimrunAppAsset(limrun, 'android', name)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { app: name, platform: 'android', matchCount: 2 },
+  });
+});

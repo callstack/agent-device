@@ -4,6 +4,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   androidAdbHostTarget,
+  classifyAdbFailure,
   androidAdbInvocation,
   androidAdbSerialTarget,
 } from '@agent-device/platform-android/mechanics';
@@ -54,6 +55,7 @@ export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
       deviceAdbInvocation: (serial, command) =>
         androidAdbInvocation(androidAdbSerialTarget(serial), command),
       hostAdbInvocation: (command) => androidAdbInvocation(androidAdbHostTarget(), command),
+      classifyAdbFailure,
       adbError: async (message) => new AppError('COMMAND_FAILED', message),
     },
     host: {

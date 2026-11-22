@@ -21,6 +21,7 @@ import {
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
+  admitProviderForRoute,
   connectProviderNamesForError,
   connectionProviderCapabilities,
   isConnectProviderName,
@@ -431,7 +432,10 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
-  await primeProviderConnection(state.leaseProvider, host.env);
+  // Reading a stored record dispatches nothing, so a plugin this host lacks is not this command's
+  // answer; the provider's declared capabilities come from the plugin when it is loaded, and from the
+  // plugin catalog's copy of the declaration when it is not.
+  await admitProviderForRoute(state.leaseProvider, 'reads-connection-record', host.env);
   const leasePreparation = buildLeasePreparationNotice(state, undefined, host.env);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state, host);
   await writeCommandOutput(

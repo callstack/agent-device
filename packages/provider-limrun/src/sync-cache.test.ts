@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
+import { withInstanceCredentialScrubbing } from './instance-error-scrubbing.ts';
 import { LimrunSyncCache } from './sync-cache.ts';
 
 test('materializations reuse one basis, prune removed resources, and release it with the lease', async () => {
@@ -115,5 +116,23 @@ test('a canceled queued install never reaches the SDK after the previous install
   await first;
   await rejected;
   expect(secondRan).toBe(false);
+  await cache.dispose();
+});
+
+test.each([
+  ['ios', 'syntheticLongInstanceTokenForSync'],
+  ['android', 'short'],
+] as const)('discards the %s SDK sync JSON decoder cause', async (platform, token) => {
+  const client = withInstanceCredentialScrubbing({ syncApp: async () => JSON.parse(token) }, [
+    token,
+  ]);
+  const cache = new LimrunSyncCache();
+  await expect(cache.run('/synthetic-app', platform, () => client.syncApp())).rejects.toMatchObject(
+    {
+      code: 'COMMAND_FAILED',
+      details: { reason: 'limrun_app_sync_failed', platform, installablePath: '/synthetic-app' },
+      cause: undefined,
+    },
+  );
   await cache.dispose();
 });

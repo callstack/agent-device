@@ -81,7 +81,8 @@ try {
     '.': fixture.primaryExport ?? { import: './dist/agent-device.mjs' },
     './agent-device': fixture.primaryExport ?? { import: './dist/agent-device.mjs' },
   });
-  assert.equal(installed.dependencies, undefined);
+  // A plugin bundles its workspace code; it declares only what the fixture names as its own.
+  assert.deepEqual(installed.dependencies, fixture.dependencies);
   assert.equal(installed.peerDependencies, undefined);
   await assert.rejects(fs.stat(path.join(project, 'node_modules', 'agent-device')), {
     code: 'ENOENT',

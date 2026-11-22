@@ -7,7 +7,6 @@ import {
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { AppError } from '@agent-device/kernel/errors';
 import { addPluginArtifact, changePlugin, listPlugins } from '@agent-device/plugins/store';
-import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -30,7 +29,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ host, positionals, 
   if (action !== 'list' && !artifact && name) {
     await changePlugin(action as 'add' | 'update' | 'remove', name, host.env);
   }
-  const plugins = artifact ? [] : await listPlugins(host.env, BUILTIN_PROVIDER_IDS);
+  const plugins = artifact ? [] : await listPlugins(host.env, []);
   const daemon = readDaemonStatus(resolveDaemonPaths(flags.stateDir, host));
   const daemonPlugins = readPluginInventory(daemon.plugins);
   const failedInDaemon = daemonPlugins.filter(({ state }) => state === 'failed');

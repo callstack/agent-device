@@ -13,10 +13,8 @@ import {
   primeProviderConnection,
   type ConnectProvider,
 } from './provider-policy.ts';
-import { builtinLimrunConnection } from '../../builtin-provider-plugins.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
-import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
@@ -50,8 +48,8 @@ type ConnectProviderAdapter = {
 
 /**
  * The profiles the CLI composes itself: the routing identities answer with a saved connection's
- * settings, not a provider's callbacks. Every real provider, built-in or installed, answers `resolve`
- * and `verify` through connection callbacks.
+ * settings, not a provider's callbacks. Every provider is an installed plugin and answers `resolve`
+ * and `verify` through its connection callbacks.
  */
 const CONNECT_PROVIDER_ADAPTERS: Readonly<Record<'cloud' | 'proxy', ConnectProviderAdapter>> = {
   cloud: {
@@ -79,22 +77,12 @@ function builtinConnectAdapter(provider: string): ConnectProviderAdapter | undef
     : undefined;
 }
 
-/**
- * The connection callbacks one `connect` call runs: the built-in provider's own, composed by the
- * root over the provider package's callbacks, or an installed plugin's through the registry. The
- * built-in ids stay claimed against the store, so an installed plugin never answers for them.
- */
+/** The connection callbacks one `connect` call runs: an installed plugin's, through the registry. */
 async function providerConnection(
   provider: string,
   host: HostEnvironment,
 ): Promise<PluginConnectionCallbacks> {
-  if (provider === 'limrun') return await builtinLimrunConnection();
-  return await withPluginConnection(
-    provider,
-    BUILTIN_PROVIDER_IDS,
-    host.env,
-    async (connection) => connection,
-  );
+  return await withPluginConnection(provider, [], host.env, async (connection) => connection);
 }
 
 export async function resolveConnectProviderProfile(options: {

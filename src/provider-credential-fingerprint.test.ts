@@ -3,16 +3,15 @@ import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/p
 import { readDaemonProviderCredentials as daemonCredentialsFor } from './provider-credential-fingerprint.ts';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
+import { limrunPluginInventory } from './__tests__/test-utils/limrun-plugin-inventory.ts';
 import { browserstackPluginInventory } from './__tests__/test-utils/browserstack-plugin-inventory.ts';
 import { awsDeviceFarmPluginInventory } from './__tests__/test-utils/aws-device-farm-plugin-inventory.ts';
 import { pluginHome, selectPlugin, pluginSource } from '@agent-device/test-kit';
-import { BUILTIN_PROVIDER_IDS } from './builtin-provider-ids.ts';
 
 // BrowserStack and AWS Device Farm are installed plugins, so their credential variables come
 // from their own inventory entries.
 const inventory = [
-  ...(await builtinPluginInventory()),
+  ...(await limrunPluginInventory()),
   ...(await browserstackPluginInventory()),
   ...(await awsDeviceFarmPluginInventory()),
 ];
@@ -139,15 +138,11 @@ test('a Limrun lease fingerprint covers only the leased platform and the account
   ).toBe(ios(rotatedAndroid));
 });
 
-/** The inventory the daemon publishes: the built-ins claim their ids, then the store loads. */
+/** The inventory the daemon publishes for the plugin store. */
 async function storeInventory(env: Record<string, string>) {
-  const { claimProviderIds, resolveProviderPlugins } =
-    await import('@agent-device/plugins/registry');
+  const { resolveProviderPlugins } = await import('@agent-device/plugins/registry');
   const { storePluginCandidates } = await import('@agent-device/plugins/store');
-  const resolved = await resolveProviderPlugins([
-    ...claimProviderIds(BUILTIN_PROVIDER_IDS),
-    ...(await storePluginCandidates(env)),
-  ]);
+  const resolved = await resolveProviderPlugins(await storePluginCandidates(env));
   return resolved.inventory();
 }
 
@@ -200,15 +195,6 @@ test('a plugin provider without declared credential variables has no fingerprint
   const env = { ...home, EXAMPLE_USER: 'user' };
   expect(providerCredentialFingerprint('example', env, undefined, inventory)).toBe(undefined);
   expect(providerCredentialFingerprint('other', env, undefined, inventory)).toBe(undefined);
-});
-
-test('a plugin declaration never adds a fingerprint to a bundled provider', async () => {
-  const { env: home } = pluginWithCredentialVariables(['AWS_ACCESS_KEY_ID'], 'limrun');
-  const inventory = await storeInventory(home);
-  const env = { ...home, AWS_ACCESS_KEY_ID: 'id' };
-  expect(providerCredentialFingerprint('limrun', env, undefined, inventory)).toBe(undefined);
-  // The built-in's own answer is unchanged by the store package that claims its id.
-  expect(providerCredentialFingerprint('limrun', env)).toBe(undefined);
 });
 
 test('an installed AWS Device Farm plugin declares no credential variables', async () => {
