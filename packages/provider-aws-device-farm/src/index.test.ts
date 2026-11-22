@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ProviderPluginHost, AgentDevicePlugin } from 'agent-device/plugins';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import awsDeviceFarm from './index.ts';
+import { createAwsDeviceFarmWebDriver } from './aws-device-farm-webdriver.ts';
 
 function providerOf<P extends AgentDevicePlugin>(plugin: P) {
   const [contribution] = plugin.contributes;
@@ -18,6 +19,7 @@ function host(env: Record<string, string | undefined> = {}): ProviderPluginHost 
     env,
     options: {},
     clientVersion: '1.2.3',
+    diagnostics: { emit: () => {} },
     createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async () => {
       throw new Error('this scenario runs no host commands');
@@ -42,17 +44,18 @@ test('the plugin declares its provider, capabilities, and no credential variable
   });
 });
 
-test('setup builds a WebDriver descriptor for the shared engine', async () => {
-  const setup = await providerOf(awsDeviceFarm()).setup(host());
-  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
-  assert.equal(setup.webDriver.provider, 'aws-device-farm');
-  assert.equal(setup.webDriver.profileFields.provider, 'aws-device-farm');
+test('setup builds a runtime and platform owner for AWS Device Farm', async () => {
+  const { runtime, platformModule } = await providerOf(awsDeviceFarm()).setup(host());
+  try {
+    assert.equal(runtime.provider, 'aws-device-farm');
+    assert.equal(platformModule.owner.provider, 'aws-device-farm');
+  } finally {
+    await runtime.shutdown();
+  }
 });
 
 test('lease preparation reads the connect selectors before any host command runs', async () => {
-  const setup = await providerOf(awsDeviceFarm()).setup(host());
-  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
-  const { webDriver } = setup;
+  const { runtime } = await providerOf(awsDeviceFarm()).setup(host());
   const lease: DeviceLease = {
     leaseId: 'lease-aws',
     tenantId: 'team-a',
@@ -63,37 +66,32 @@ test('lease preparation reads the connect selectors before any host command runs
     expiresAt: 2,
     heartbeatAt: 1,
   };
-  await assert.rejects(
-    webDriver.prepareSession!({
-      lease,
-      req: { flags: { platform: 'android', awsDeviceArn: DEVICE_ARN } },
-      base: {
-        provider: 'aws-device-farm',
-        endpoint: 'http://127.0.0.1/',
-        platform: 'android',
-        deviceName: 'AWS Device Farm device',
-        webdriverCapabilities: {},
+  try {
+    await assert.rejects(
+      (runtime as ProviderDeviceRuntime).leaseLifecycle.allocate!(lease, {
+        flags: { platform: 'android', awsDeviceArn: DEVICE_ARN },
+      }),
+      {
+        code: 'INVALID_ARGS',
+        message: 'AWS Device Farm requires --aws-project-arn <arn> or AWS_DEVICE_FARM_PROJECT_ARN.',
       },
-    }),
-    {
-      code: 'INVALID_ARGS',
-      message: 'AWS Device Farm requires --aws-project-arn <arn> or AWS_DEVICE_FARM_PROJECT_ARN.',
-    },
-  );
+    );
+  } finally {
+    await runtime.shutdown();
+  }
 });
 
 test('artifact lookup runs in the region of the session ARN, not the environment region', async () => {
   const commands: string[][] = [];
-  const setup = await providerOf(awsDeviceFarm()).setup({
+  const options = createAwsDeviceFarmWebDriver({
     ...host({ AWS_REGION: 'eu-west-1' }),
     runHostCommand: async (command, args) => {
       commands.push([command, ...args]);
       return { stdout: '{"artifacts":[]}' };
     },
   });
-  if (!('webDriver' in setup)) throw new Error('AWS Device Farm sets up a WebDriver descriptor');
 
-  await setup.webDriver.listArtifacts!({
+  await options.listArtifacts!({
     provider: 'aws-device-farm',
     providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session:project-a/session-a/00000',
   });

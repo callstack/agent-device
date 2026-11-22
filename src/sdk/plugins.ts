@@ -1,12 +1,3 @@
-import type {
-  AgentDevicePlugin as ContractPlugin,
-  AgentDevicePluginFactory as ContractPluginFactory,
-  PluginSetupResult as ContractSetupResult,
-  PluginWebDriverSetup as ContractWebDriverSetup,
-  ProviderOnlyPlugin as ContractProviderOnlyPlugin,
-} from '@agent-device/plugins/contract';
-import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdriver/plugin';
-
 export type {
   HostCommandResult,
   ProviderPluginHost,
@@ -14,6 +5,8 @@ export type {
   RunHostCommand,
 } from '@agent-device/plugins/host';
 export type {
+  AgentDevicePlugin,
+  AgentDevicePluginFactory,
   Contribution,
   MacOsPlatformLeafContribution,
   PlatformBackgroundCommand,
@@ -31,22 +24,8 @@ export type {
   PluginRuntimeSetup,
   ProviderContribution,
   ProviderOnlyPlugin,
+  ProviderOnlyPlugin as ProviderAgentDevicePlugin,
 } from '@agent-device/plugins/contract';
-
-/** A hosted WebDriver service; the host builds the runtime from the descriptor. */
-export type PluginWebDriverSetup = ContractWebDriverSetup<CloudWebDriverProviderOptions>;
-export type PluginSetupResult = ContractSetupResult<CloudWebDriverProviderOptions>;
-export type AgentDevicePlugin = ContractPlugin<CloudWebDriverProviderOptions>;
-/**
- * A plugin whose only contribution is a `provider` claim. Provider packages declare this as the
- * factory return type so their published declarations stay within the provider branch and never
- * inline the replay branches' host types.
- */
-export type ProviderAgentDevicePlugin = ContractProviderOnlyPlugin<CloudWebDriverProviderOptions>;
-export type AgentDevicePluginFactory<Options = Record<string, unknown>> = ContractPluginFactory<
-  Options,
-  CloudWebDriverProviderOptions
->;
 
 export type {
   ReplayBackendContribution,

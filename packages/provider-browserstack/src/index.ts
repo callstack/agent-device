@@ -56,11 +56,8 @@ function browserstack(options: BrowserStackOptions = {}): ProviderAgentDevicePlu
           verify: async (context) =>
             await (await loadBrowserStackConnection(context.host)).verify(context),
         },
-        setup: async (host) => ({
-          webDriver: (await import('./browserstack-webdriver.ts')).createBrowserStackWebDriver(
-            withCredentials(host),
-          ),
-        }),
+        setup: async (host) =>
+          (await import('./browserstack-webdriver.ts')).setupBrowserStack(withCredentials(host)),
       },
     ],
   };

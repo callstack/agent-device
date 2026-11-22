@@ -69,10 +69,6 @@
     "./plugins": {
       "types": "./dist/src/plugins.d.ts",
       "import": "./dist/src/plugins.js"
-    },
-    "./plugins/webdriver": {
-      "types": "./dist/src/plugins/webdriver.d.ts",
-      "import": "./dist/src/plugins/webdriver.js"
     }
   },
   "engines": {
@@ -325,7 +321,6 @@
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/plugins": "workspace:*",
     "@agent-device/provider-limrun": "workspace:*",
-    "@agent-device/provider-webdriver": "workspace:*",
     "@agent-device/provision-kit": "workspace:*",
     "@agent-device/proxy": "workspace:*",
     "@agent-device/react-native": "workspace:*",

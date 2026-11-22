@@ -5,7 +5,6 @@ import { afterEach, test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import revyl from '@agent-device/revyl';
-import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 const servers: http.Server[] = [];
 
@@ -55,11 +54,7 @@ test('a Revyl device the shutdown could not stop is named in the message and hin
       load: () => revyl({ apiKey: 'test-key', apiUrl }),
     },
   ]);
-  const registry = await startProviderRegistry(
-    resolved,
-    { env: {}, cwd: '/' },
-    PROVIDER_PLUGIN_POLICY,
-  );
+  const registry = await startProviderRegistry(resolved, { env: {}, cwd: '/' });
   const runtime = registry.registrations[0]!.runtime;
   const lease: DeviceLease = {
     leaseId: 'lease-1',

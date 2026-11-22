@@ -4,6 +4,7 @@ import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import { afterEach, test, vi } from 'vitest';
 import {
+  emitDiagnostic,
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
@@ -396,6 +397,7 @@ for (const { status, body, unsupported } of ROUTE_ANSWERS) {
     const transport = new WebDriverTransport({
       clientVersion: '0.0.0-test',
       endpoint: 'http://cloud-webdriver.test/wd/hub/',
+      diagnostics: { emit: emitDiagnostic },
     });
     globalThis.fetch = async () => Response.json(body, { status });
 

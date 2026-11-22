@@ -8,7 +8,6 @@ export const buildEntries = {
   'install-source': 'src/sdk/install-source.ts',
   'android-adb': 'src/sdk/android-adb.ts',
   plugins: 'src/sdk/plugins.ts',
-  'plugins/webdriver': 'src/sdk/plugin-webdriver.ts',
   contracts: 'src/sdk/contracts.ts',
   selectors: 'src/sdk/selectors.ts',
   finders: 'src/sdk/finders.ts',

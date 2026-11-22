@@ -68,6 +68,7 @@ function pluginHost(env: Record<string, string | undefined> = {}): ProviderPlugi
     env,
     options: {},
     clientVersion: '1.2.3',
+    diagnostics: { emit: () => {} },
     createError: (code, message, details) => new AppError(code, message, details),
     runHostCommand: async () => {
       throw new Error('this scenario runs no host commands');

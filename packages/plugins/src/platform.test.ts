@@ -88,9 +88,6 @@ async function startStore(env: HostEnvironment['env'], builtins: readonly Plugin
         throw new Error('setup must not launch a detached process');
       },
     },
-    adaptWebDriver: async () => {
-      throw new Error('unexpected WebDriver');
-    },
   });
 }
 

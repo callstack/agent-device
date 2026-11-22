@@ -216,11 +216,6 @@ export async function resourceAdmissionWorld(
             : []),
         ]),
         input.host,
-        {
-          adaptWebDriver: async () => {
-            throw new Error('Resource fixture cannot create providers');
-          },
-        },
       );
       await bindReplayBackendResolver(
         registry.resolveReplayBackend,
