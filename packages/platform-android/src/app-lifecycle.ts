@@ -38,25 +38,28 @@ const ANDROID_APP_OPEN_REASONS = {
 /**
  * The `close` refusals this module states in `error.details.reason`. `open --relaunch` stops the app
  * through the same fences, so the timeout and the probe refusal name `open` too. A Maestro flow's
- * `killApp` step kills through `killAndroidPackage`, so `replay` and `test` raise the kill refusals
- * and the probe refusal that guards them.
+ * `killApp` step guards its kill with the probe refusal too, so `replay` and `test` name it.
  */
 const ANDROID_APP_CLOSE_REASONS = {
   // A stop fence ended before the app left the foreground or its killed processes exited.
   appCloseTimeout: { reason: 'android-app-close-timeout', commands: ['open'] },
-  // `am kill` returned and the process is still running; force-stop it instead.
-  killProcessSurvived: { reason: 'android-kill-process-survived', commands: ['replay', 'test'] },
-  // `am kill` only reaps background processes, so it refuses the foreground app.
-  killRequiresBackgroundApp: {
-    reason: 'android-kill-requires-background-app',
-    commands: ['replay', 'test'],
-  },
   // `adb pidof` or the resumed-activity read did not answer, so process state is unknown.
   processProbeUnavailable: {
     reason: 'android-process-probe-unavailable',
     commands: ['open', 'replay', 'test'],
   },
 } as const satisfies ReasonTable<'close'>;
+
+/** The refusals only a Maestro flow's `killApp` step raises, through `killAndroidPackage`. */
+const ANDROID_APP_KILL_REASONS = {
+  // `am kill` returned and the process is still running; force-stop it instead.
+  killProcessSurvived: { reason: 'android-kill-process-survived', commands: ['test'] },
+  // `am kill` only reaps background processes, so it refuses the foreground app.
+  killRequiresBackgroundApp: {
+    reason: 'android-kill-requires-background-app',
+    commands: ['test'],
+  },
+} as const satisfies ReasonTable<'replay'>;
 
 const ANDROID_DEFAULT_CATEGORY = 'android.intent.category.DEFAULT';
 const ANDROID_LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
@@ -690,7 +693,7 @@ async function killAndroidPackage(device: DeviceInfo, packageName: string): Prom
   const resumed = await getAndroidResumedActivity(device);
   if (resumed.status === 'resumed' && resumed.package === packageName) {
     throw new AppError('COMMAND_FAILED', `Cannot kill foreground app ${packageName}`, {
-      reason: ANDROID_APP_CLOSE_REASONS.killRequiresBackgroundApp.reason,
+      reason: ANDROID_APP_KILL_REASONS.killRequiresBackgroundApp.reason,
       hint: 'Background the app before killApp (for example pressKey: Home): am kill only reaps background processes.',
     });
   }
@@ -712,7 +715,7 @@ async function killAndroidPackage(device: DeviceInfo, packageName: string): Prom
   const process = await readAndroidPackageProcessState(device, packageName);
   if (process === 'running') {
     throw new AppError('COMMAND_FAILED', `am kill did not stop ${packageName}`, {
-      reason: ANDROID_APP_CLOSE_REASONS.killProcessSurvived.reason,
+      reason: ANDROID_APP_KILL_REASONS.killProcessSurvived.reason,
       hint: 'The process survived am kill (for example a foreground service keeps it alive): use stopApp (am force-stop) to terminate it.',
     });
   }

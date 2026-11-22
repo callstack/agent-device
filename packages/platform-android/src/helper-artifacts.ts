@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 
 // Provider-boundary artifact vocabulary for the Android helper APKs. An adb provider may ship
 // its own helper artifacts (exactly as the SDK seam allows), so these shapes cross the
@@ -49,17 +49,47 @@ export type AndroidHelperInstallDecision = {
   installedVersionCode?: number;
   installedSha256?: string;
   installed: boolean;
-  reason: 'missing' | 'outdated' | 'mismatched' | 'unverifiable' | 'current';
+  reason: AndroidHelperInstallStateReason | 'current';
 };
 
+/**
+ * Why the helper APK already on the device is not the bundled one. The install that follows the
+ * refusal publishes the state as `error.details.reason` when the push fails. `current` is a
+ * decision state that is never published, so it has no row.
+ */
+export const ANDROID_HELPER_INSTALL_STATE_REASONS = {
+  // The device has no package installed under the helper's name.
+  missing: { reason: 'missing' },
+  // The installed helper's versionCode is below the bundled artifact's.
+  outdated: { reason: 'outdated' },
+  // The installed helper matches the artifact's versionCode but not its APK checksum.
+  mismatched: { reason: 'mismatched' },
+  // The installed helper's APK checksum could not be read, so its currency stays unproven.
+  unverifiable: { reason: 'unverifiable' },
+} as const satisfies ReasonTable<'android helper install'>;
+
+type AndroidHelperInstallStateRows = typeof ANDROID_HELPER_INSTALL_STATE_REASONS;
+type AndroidHelperInstallStateReason =
+  AndroidHelperInstallStateRows[keyof AndroidHelperInstallStateRows]['reason'];
+
 export type InstalledAndroidHelperState =
-  | { reason: 'missing'; installedVersionCode?: never; installedSha256?: never }
   | {
-      reason: 'outdated' | 'unverifiable';
+      reason: AndroidHelperInstallStateRows['missing']['reason'];
+      installedVersionCode?: never;
+      installedSha256?: never;
+    }
+  | {
+      reason:
+        | AndroidHelperInstallStateRows['outdated']['reason']
+        | AndroidHelperInstallStateRows['unverifiable']['reason'];
       installedVersionCode: number;
       installedSha256?: never;
     }
-  | { reason: 'mismatched'; installedVersionCode: number; installedSha256: string }
+  | {
+      reason: AndroidHelperInstallStateRows['mismatched']['reason'];
+      installedVersionCode: number;
+      installedSha256: string;
+    }
   | { reason: 'current'; installedVersionCode: number; installedSha256?: string };
 
 // --- Manifest field validators, shared by every helper's manifest parser ---------------------

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError, normalizeError, type ReasonTable } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import {
   androidAdbResultError,
@@ -13,30 +13,15 @@ import {
 import type { AndroidAdbPackageInstallOptions } from './adb-transfer.ts';
 import { attachAndroidHelperInstallTimeoutHint } from './adb-failure.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
-import type {
-  AndroidHelperInstallDecision,
-  InstalledAndroidHelperState,
+import {
+  ANDROID_HELPER_INSTALL_STATE_REASONS,
+  type AndroidHelperInstallDecision,
+  type InstalledAndroidHelperState,
 } from './helper-artifacts.ts';
 
 // Shared install/version-check/checksum lifecycle for the three Android helper APKs.
 
 export type { AndroidHelperInstallDecision, InstalledAndroidHelperState };
-
-/**
- * Why the helper APK already on the device is not the bundled one. The install that follows the
- * refusal publishes the state as `error.details.reason` when the push fails, and the same values
- * answer the install-success decisions in `InstalledAndroidHelperState`.
- */
-const ANDROID_HELPER_INSTALL_STATE_REASONS = {
-  // The device has no package installed under the helper's name.
-  missing: { reason: 'missing' },
-  // The installed helper's versionCode is below the bundled artifact's.
-  outdated: { reason: 'outdated' },
-  // The installed helper matches the artifact's versionCode but not its APK checksum.
-  mismatched: { reason: 'mismatched' },
-  // The installed helper's APK checksum could not be read, so its currency stays unproven.
-  unverifiable: { reason: 'unverifiable' },
-} as const satisfies ReasonTable<'android helper install'>;
 
 const ANDROID_HELPER_IDENTITY_TIMEOUT_MS = 10_000;
 
