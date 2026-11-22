@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import * as yauzl from 'yauzl';
 import {
+  ARCHIVE_REASONS,
   ArchiveBudget,
   archiveError,
   createExtractedDirectory,
@@ -165,11 +166,17 @@ function toManifestEntry(entry: yauzl.Entry): ArchiveManifestEntry {
 
 function assertZipEntryIsReadable(entry: yauzl.Entry): void {
   if (entry.isEncrypted()) {
-    throw archiveError('ARCHIVE_UNSAFE_ENTRY', 'Encrypted archive entries are not supported');
+    throw archiveError(
+      ARCHIVE_REASONS.unsafeEntry.reason,
+      'Encrypted archive entries are not supported',
+    );
   }
   const type = (entry.externalFileAttributes >>> 16) & 0o170000;
   if (type !== 0 && type !== 0o040000 && type !== 0o100000) {
-    throw archiveError('ARCHIVE_UNSAFE_ENTRY', 'Archive contains a link or special entry');
+    throw archiveError(
+      ARCHIVE_REASONS.unsafeEntry.reason,
+      'Archive contains a link or special entry',
+    );
   }
 }
 
@@ -178,5 +185,8 @@ function isZipDirectory(fileName: string, unixMode: number): boolean {
 }
 
 function mismatch(): never {
-  throw archiveError('ARCHIVE_MANIFEST_MISMATCH', 'Archive contents changed after inspection');
+  throw archiveError(
+    ARCHIVE_REASONS.manifestMismatch.reason,
+    'Archive contents changed after inspection',
+  );
 }

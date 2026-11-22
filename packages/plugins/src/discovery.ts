@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
-import { readPluginManifest, resolvePluginEntry, type PluginManifest } from './manifest.ts';
+import {
+  PLUGIN_REASONS,
+  readPluginManifest,
+  resolvePluginEntry,
+  type PluginManifest,
+} from './manifest.ts';
 
 const PROVIDER_ID = /^[a-z][a-z0-9-]*$/;
 
@@ -54,12 +59,12 @@ export function readPackageJson(directory: string): Record<string, unknown> {
     throw new AppError(
       'INVALID_ARGS',
       `Cannot read plugin manifest: ${directory}`,
-      { reason: 'plugin_load_failed' },
+      { reason: PLUGIN_REASONS.loadFailed.reason },
       error as Error,
     );
   }
   throw new AppError('INVALID_ARGS', `Cannot read plugin manifest: ${directory}`, {
-    reason: 'plugin_load_failed',
+    reason: PLUGIN_REASONS.loadFailed.reason,
   });
 }
 
@@ -176,7 +181,7 @@ function firstResolved(
 
 function unresolvableEntry(directory: string, subpath: string): AppError {
   return new AppError('INVALID_ARGS', `Package exports ${subpath} without an import target`, {
-    reason: 'incompatible_plugin',
+    reason: PLUGIN_REASONS.incompatiblePlugin.reason,
     directory,
     hint: `Ask the plugin author for a release whose ${subpath} export has an import condition.`,
   });
@@ -184,7 +189,7 @@ function unresolvableEntry(directory: string, subpath: string): AppError {
 
 function missingEntry(directory: string, subpath: string): AppError {
   return new AppError('INVALID_ARGS', 'Package does not export a provider plugin', {
-    reason: 'incompatible_plugin',
+    reason: PLUGIN_REASONS.incompatiblePlugin.reason,
     directory,
     hint: `Install a plugin release that exports ${subpath}.`,
   });

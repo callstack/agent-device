@@ -127,6 +127,12 @@ async function prepareRemoteRequestArtifactsWithinBudget(
   return baseResult();
 }
 
+/** Why a remote request's script answer is refused. */
+const REMOTE_SCRIPT_OUTPUT_REASONS = {
+  // `--save-script` was asked for on a command whose script lifecycle the daemon does not remote.
+  lifecycleUnsupported: { reason: 'remote_script_lifecycle_unsupported' },
+} as const satisfies ReasonTable<'remote transfer'>;
+
 /**
  * A remote `open --save-script` names a caller file. The daemon allocates its own output and
  * returns each script version as an artifact, which the client downloads to that file.
@@ -142,7 +148,7 @@ function prepareRemoteScriptOutput(
   if (requested === undefined || requested === false) return flags;
   if (req.command !== 'open') {
     throw new AppError('INVALID_ARGS', 'Remote --save-script is supported only on a fresh open.', {
-      reason: 'remote_script_lifecycle_unsupported',
+      reason: REMOTE_SCRIPT_OUTPUT_REASONS.lifecycleUnsupported.reason,
       hint: 'Use open --save-script. A remote close writes the recording to that path. Remote repaired-script output is not supported.',
     });
   }

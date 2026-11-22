@@ -33,12 +33,6 @@ export type WebDriverDeploymentRuntime = Readonly<{
     options?: ProviderDeviceInstallOptions,
     signal?: AbortSignal,
   ): Promise<ProviderDeviceInstallResult | undefined>;
-  installInstallablePath(
-    device: DeviceInfo,
-    installablePath: string,
-    options?: ProviderDeviceInstallOptions,
-    signal?: AbortSignal,
-  ): Promise<ProviderDeviceInstallResult | undefined>;
   deployApp(
     device: DeviceInfo,
     input: AppDeploymentInput,
@@ -89,8 +83,6 @@ export function createWebDriverDeploymentRuntime(
   return Object.freeze({
     fact: (device) => deploymentFact(options.findSessionForDevice(device)),
     installApp,
-    installInstallablePath: async (device, installablePath, installOptions, signal) =>
-      await installApp(device, '', installablePath, installOptions, signal),
     deployApp: async (device, input, signal) =>
       deploymentResult(
         await installApp(

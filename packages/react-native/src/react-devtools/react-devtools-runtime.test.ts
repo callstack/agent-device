@@ -7,6 +7,20 @@ import {
   encodeOperations,
 } from './react-devtools-runtime.fixtures.ts';
 import type { RawReactProfile } from './react-profile-renders.ts';
+import { runtimeFailure } from './react-devtools-connection.ts';
+import { REACT_DEVTOOLS_RUNTIME_SOURCE } from './react-devtools-runtime.ts';
+
+test('every failure spelling in the injected runtime is published as that details.reason', () => {
+  const spellings = new Set<string>(
+    [...REACT_DEVTOOLS_RUNTIME_SOURCE.matchAll(/reason: '([a-z-]+)'/g)].map((m) => m[1]!),
+  );
+  // `profile start` reports a running recording as a success, so it is no error reason.
+  assert.ok(spellings.delete('already-profiling'));
+  assert.ok(spellings.size > 0);
+  for (const reason of spellings) {
+    assert.equal(runtimeFailure({ ok: false, reason }).details?.reason, reason, reason);
+  }
+});
 
 type Started = {
   ok: boolean;

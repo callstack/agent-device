@@ -21,7 +21,7 @@ import {
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginPackageEntry } from './discovery.ts';
-import { ROUTING_PROVIDER_IDENTITIES, type PluginManifest } from './manifest.ts';
+import { PLUGIN_REASONS, ROUTING_PROVIDER_IDENTITIES, type PluginManifest } from './manifest.ts';
 import type { PluginCandidate } from './registry.ts';
 
 export { legacyStoreManifests };
@@ -273,7 +273,7 @@ function assertUniqueLegacyProviders(
         'INVALID_ARGS',
         `Duplicate provider plugin: ${agentDevicePlugin.provider}`,
         {
-          reason: 'duplicate_provider',
+          reason: PLUGIN_REASONS.duplicateProvider.reason,
         },
       );
     providers.add(agentDevicePlugin.provider);

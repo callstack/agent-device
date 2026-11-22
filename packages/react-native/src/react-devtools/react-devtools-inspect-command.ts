@@ -30,6 +30,7 @@ import {
   type ReactDevtoolsCommandOptions,
   type RuntimeFailure,
 } from './react-devtools-connection.ts';
+import { REACT_DEVTOOLS_REASONS } from './react-devtools-reasons.ts';
 import { printable } from './react-devtools-text.ts';
 
 const INSPECT_COMMANDS = ['tree', 'find', 'inspect', 'errors'] as const;
@@ -76,10 +77,14 @@ async function inspectIds(
 
 function requireInspected(result: InspectedResult | undefined): InspectedComponent {
   if (!result || 'missing' in result) {
-    throw runtimeFailure({ ok: false, reason: 'element-not-found' });
+    throw runtimeFailure({ ok: false, reason: REACT_DEVTOOLS_REASONS.elementNotFound.reason });
   }
   if ('error' in result)
-    throw runtimeFailure({ ok: false, reason: 'inspect-failed', detail: result.error });
+    throw runtimeFailure({
+      ok: false,
+      reason: REACT_DEVTOOLS_REASONS.inspectFailed.reason,
+      detail: result.error,
+    });
   return result;
 }
 

@@ -1,5 +1,5 @@
 import type { ClientRequest, IncomingMessage, RequestOptions } from 'node:http';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import {
   createTransferPhaseWatchdog,
   isTransferPhaseTimeoutError,
@@ -13,7 +13,16 @@ import {
 } from '@agent-device/host-kit/transport';
 
 const PROXY_TRANSFER_AGGREGATE_MS = 600_000;
-const TRANSFER_FORWARDING_DEADLINE_REASON = 'transfer_forwarding_deadline_exceeded';
+
+/** Why the proxy's own transfer hop gives up on the exchange. */
+const TRANSFER_FORWARDING_REASONS = {
+  // The whole exchange outlived the proxy's aggregate forwarding budget.
+  forwardingDeadline: { reason: 'transfer_forwarding_deadline_exceeded' },
+  // The upstream daemon answered with a status that is not an HTTP response this proxy may relay.
+  gatewayStatus: { reason: 'transfer_gateway_status' },
+  // The upstream daemon closed the connection before it answered, or during a write.
+  upstreamClosed: { reason: 'transfer_upstream_closed' },
+} as const satisfies ReasonTable<'proxy'>;
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
 
 /** Forwards one exchange over the runtime's default global Node agent, without redirects or retries. */
@@ -67,7 +76,7 @@ export async function settleUpstreamFetch(
 export function transferWireDetails(error: unknown): Record<string, unknown> {
   if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return {};
   const { reason, transferPhase, timeoutMs } = error.details ?? {};
-  if (reason === TRANSFER_FORWARDING_DEADLINE_REASON) {
+  if (reason === TRANSFER_FORWARDING_REASONS.forwardingDeadline.reason) {
     return transferPhase === 'forwarding' && timeoutMs === PROXY_TRANSFER_AGGREGATE_MS
       ? { reason, transferPhase, timeoutMs }
       : {};
@@ -105,7 +114,7 @@ function openExchange(caller: AbortSignal): TransferExchange {
     () =>
       forwarding.abort(
         new AppError('COMMAND_FAILED', 'Proxy transfer forwarding deadline exceeded', {
-          reason: TRANSFER_FORWARDING_DEADLINE_REASON,
+          reason: TRANSFER_FORWARDING_REASONS.forwardingDeadline.reason,
           transferPhase: 'forwarding',
           timeoutMs: PROXY_TRANSFER_AGGREGATE_MS,
         }),
@@ -187,7 +196,7 @@ async function exchangeOverNodeHttp(
       if (status < 200 || status > 599) {
         fail(
           new AppError('COMMAND_FAILED', 'Upstream daemon returned an unusable HTTP status', {
-            reason: 'transfer_gateway_status',
+            reason: TRANSFER_FORWARDING_REASONS.gatewayStatus.reason,
             status,
           }),
         );
@@ -221,7 +230,7 @@ async function exchangeOverNodeHttp(
         if (!answered)
           fail(
             new AppError('COMMAND_FAILED', 'Upstream daemon closed before responding', {
-              reason: 'transfer_upstream_closed',
+              reason: TRANSFER_FORWARDING_REASONS.upstreamClosed.reason,
             }),
           );
       });
@@ -302,7 +311,7 @@ function waitUntilDrained(req: ClientRequest, signal: AbortSignal): Promise<void
       cleanup();
       reject(
         new AppError('COMMAND_FAILED', 'Upstream daemon closed during a write', {
-          reason: 'transfer_upstream_closed',
+          reason: TRANSFER_FORWARDING_REASONS.upstreamClosed.reason,
         }),
       );
     } else if (!req.writableNeedDrain) drained();

@@ -5,7 +5,8 @@ import {
   isRequestCanceledDetails,
   isRequestCanceledError,
   isRequestDeadlineDetails,
-  REQUEST_DEADLINE_REASON,
+  TIMEOUT_REASONS,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { runtimeSlot } from '../runtime-slots.ts';
@@ -78,6 +79,12 @@ export function resolveRequestTrackingId(
 const COLLECTION_HIGH_WATERMARK = 50_000;
 const COLLECTION_EVICT_COUNT = 10_000;
 
+/** The refusals the request-cancellation registry answers with. */
+const REQUEST_ABORT_REASONS = {
+  // A request arrived with an id another request is still in flight under.
+  duplicateRequestId: { reason: 'duplicate_request_id' },
+} as const satisfies ReasonTable<'request cancellation'>;
+
 function evictOldestSetEntries<V>(set: Set<V>): void {
   if (set.size <= COLLECTION_HIGH_WATERMARK) return;
   let removed = 0;
@@ -97,7 +104,7 @@ export function registerRequestAbort(
   if (requestAbortControllers().has(requestId)) {
     throw new AppError('INVALID_ARGS', `Request ID is already in flight: ${requestId}`, {
       requestId,
-      reason: 'duplicate_request_id',
+      reason: REQUEST_ABORT_REASONS.duplicateRequestId.reason,
     });
   }
   const controller: RequestAbortController = new AbortController();
@@ -272,7 +279,7 @@ function projectDeadlineResponse(result: DaemonResponse, timeoutMs: number): Dae
         ...(typeof priorReason === 'string' && !isRequestDeadlineDetails(result.error.details)
           ? { causeReason: priorReason }
           : {}),
-        reason: REQUEST_DEADLINE_REASON,
+        reason: TIMEOUT_REASONS.daemonDeadline.reason,
         timeoutMs,
       },
     },
