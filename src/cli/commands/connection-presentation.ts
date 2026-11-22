@@ -43,8 +43,7 @@ export function buildLeasePreparationNotice(
     return {
       status: 'deferred',
       nextSteps: buildConnectWorkflow(state, verification, env).nextSteps,
-      message:
-        'Set awsAppArn to the uploaded app ARN in the remote config, then reconnect before opening the app.',
+      message: 'Set awsAppArn to the uploaded app ARN in the remote config before opening the app.',
     };
   }
   const capabilities = connectionProviderCapabilities(state.leaseProvider, env);
@@ -126,13 +125,6 @@ function isConfiguredAwsConnection(
     'status' in verification &&
     verification.status === 'configured'
   );
-}
-
-function reconnectRemoteProfile(state: RemoteConnectionState): string {
-  const config = shellQuoteIfNeeded(state.remoteConfigPath);
-  const daemonUrl = state.daemon?.baseUrl;
-  const daemon = daemonUrl ? ` --daemon-base-url ${shellQuoteIfNeeded(daemonUrl)}` : '';
-  return `agent-device connect --remote-config ${config}${daemon} --force`;
 }
 
 export function renderConnectSuccess(options: {
@@ -273,6 +265,9 @@ function buildConnectWorkflow(
   verification: ConnectVerification | undefined,
   env: NodeJS.ProcessEnv,
 ): Pick<ConnectReadiness, 'nextSteps' | 'notes'> {
+  if (isConfiguredAwsConnection(state, verification) && verification.app?.status === 'missing') {
+    return { nextSteps: ['Repeat your original connect invocation with --force.'] };
+  }
   const workflow = buildUnscopedConnectWorkflow(state, verification, env);
   return { ...workflow, nextSteps: scopeNextSteps(state, workflow.nextSteps) };
 }
@@ -303,9 +298,6 @@ function buildUnscopedConnectWorkflow(
           }
         : {}),
     };
-  }
-  if (isConfiguredAwsConnection(state, verification) && verification.app?.status === 'missing') {
-    return { nextSteps: [reconnectRemoteProfile(state)] };
   }
   if (!verification && leaseKind === 'direct-device-provider') {
     return { nextSteps: defaultDirectProviderLifecycle() };

@@ -77,34 +77,36 @@ test.each([undefined, 'arn:aws:devicefarm:us-west-2:123:upload:demo'])(
     const stateDir = path.join(home, 'state');
     const remoteConfigPath = path.join(home, 'aws remote.json');
     const daemonBaseUrl = 'https://daemon.example.test';
-    fs.writeFileSync(
+    const token = 'adc_live_aws_profile_test_token';
+    const profile = {
+      leaseProvider: 'aws-device-farm',
+      leaseBackend: 'android-instance',
+      platform: 'android',
+      awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
+      awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device:device-a',
+    };
+    fs.writeFileSync(remoteConfigPath, JSON.stringify(profile));
+    const argv = [
+      'connect',
+      '--remote-config',
       remoteConfigPath,
-      JSON.stringify({
-        tenant: 'team',
-        runId: 'run-1',
-        leaseProvider: 'aws-device-farm',
-        leaseBackend: 'android-instance',
-        platform: 'android',
-        awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
-        awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device:device-a',
-      }),
-    );
-    const result = await runCliCapture(
-      [
-        'connect',
-        '--remote-config',
-        remoteConfigPath,
-        '--daemon-base-url',
-        daemonBaseUrl,
-        '--state-dir',
-        stateDir,
-        '--session',
-        'checkout',
-        '--json',
-        ...(awsAppArn ? ['--aws-app-arn', awsAppArn] : []),
-      ],
-      { cwd: home, env },
-    );
+      '--daemon-base-url',
+      daemonBaseUrl,
+      '--daemon-auth-token',
+      token,
+      '--tenant',
+      'override-team',
+      '--run-id',
+      'override-run',
+      '--state-dir',
+      stateDir,
+      '--session',
+      'checkout',
+      '--json',
+      ...(awsAppArn ? ['--aws-app-arn', awsAppArn] : []),
+    ];
+    const result = await runCliCapture(argv, { cwd: home, env });
+    assert.ok(!result.stdout.includes(token));
     assert.equal(result.code, null, result.stdout + result.stderr);
     assert.deepEqual(result.calls, []);
     const { data } = JSON.parse(result.stdout);
@@ -117,9 +119,25 @@ test.each([undefined, 'arn:aws:devicefarm:us-west-2:123:upload:demo'])(
     } else {
       assert.equal(data.app.status, 'missing');
       assert.match(data.leasePreparation.message, /awsAppArn/);
-      assert.deepEqual(data.nextSteps, [
-        `agent-device connect --remote-config '${remoteConfigPath}' --daemon-base-url ${daemonBaseUrl} --force --session checkout`,
+      assert.deepEqual(data.nextSteps, ['Repeat your original connect invocation with --force.']);
+      fs.writeFileSync(
+        remoteConfigPath,
+        JSON.stringify({
+          ...profile,
+          awsAppArn: 'arn:aws:devicefarm:us-west-2:123:upload:demo',
+        }),
+      );
+      const reconnect = await runCliCapture([...argv, '--force'], { cwd: home, env });
+      assert.equal(reconnect.code, null, reconnect.stdout + reconnect.stderr);
+      assert.deepEqual(reconnect.calls, []);
+      assert.ok(!reconnect.stdout.includes(token));
+      assert.deepEqual(JSON.parse(reconnect.stdout).data.nextSteps, [
+        'agent-device open <package-id> --relaunch --session checkout',
       ]);
+      const connection = readRemoteConnectionState({ stateDir, session: 'checkout' });
+      assert.equal(connection?.tenant, 'override-team');
+      assert.equal(connection?.runId, 'override-run');
+      assert.equal(connection?.remoteConfigHash, hashRemoteConfigFile(remoteConfigPath));
     }
   },
 );
