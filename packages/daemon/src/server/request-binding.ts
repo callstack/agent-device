@@ -17,7 +17,7 @@ import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { remoteScriptVersionDelivery } from '../core/session-script-publication-capability.ts';
 import {
@@ -27,6 +27,13 @@ import {
 } from '../sessions/request-admission.ts';
 import { createSessionVisibilityPredicate } from '../sessions/session-routing.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
+
+const SNAPSHOT_OBSERVATION_REASONS = {
+  // Android observe-only snapshots cannot read or update a stored diff baseline.
+  options: { reason: 'android_observe_only_snapshot_options' },
+  // The request cannot observe the session scope that owns the Android helper.
+  ownerMismatch: { reason: 'snapshot_observation_owner_mismatch' },
+} as const satisfies ReasonTable<'snapshot observation'>;
 
 export function admitSnapshotObservation(params: {
   req: DaemonRequest;
@@ -40,7 +47,7 @@ export function admitSnapshotObservation(params: {
   const { req, device } = params;
   if (req.flags?.snapshotDiff) {
     throw new AppError('INVALID_ARGS', 'Android observe-only snapshots cannot use --diff.', {
-      reason: 'android_observe_only_snapshot_options',
+      reason: SNAPSHOT_OBSERVATION_REASONS.options.reason,
     });
   }
   let admittedLease: ReturnType<typeof assertRequestLeaseAdmission>;
@@ -54,7 +61,7 @@ export function admitSnapshotObservation(params: {
         'UNAUTHORIZED',
         'The Android snapshot helper belongs to another session scope.',
         {
-          reason: 'snapshot_observation_owner_mismatch',
+          reason: SNAPSHOT_OBSERVATION_REASONS.ownerMismatch.reason,
         },
       );
     }

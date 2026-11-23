@@ -14,7 +14,7 @@ import {
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type ReasonTable } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   androidAdbForwardsDeviceExitStatus,
@@ -73,6 +73,10 @@ const SESSION_RETRY_FLOOR_MS = 10_000;
 // from re-paying an instant failure; the ceiling keeps a host whose helper is simply broken from
 // being written off for longer than a working session would have lasted.
 const SESSION_RETRY_CEILING_MS = 60_000;
+const SNAPSHOT_HELPER_OWNERSHIP_REASONS = {
+  // The helper changed or ended before a non-owning read could use its admitted identity.
+  identityMismatch: { reason: 'android-snapshot-helper-ownership-mismatch' },
+} as const satisfies ReasonTable<'android snapshot helper ownership'>;
 
 export type AndroidSnapshotHelperSessionHelperIdentity = {
   packageName: string;
@@ -210,7 +214,7 @@ async function resolveAndroidSnapshotHelperSession(params: {
       'COMMAND_FAILED',
       'The active Android helper belongs to another capture identity.',
       {
-        reason: 'android-snapshot-helper-ownership-mismatch',
+        reason: SNAPSHOT_HELPER_OWNERSHIP_REASONS.identityMismatch.reason,
       },
     );
   }

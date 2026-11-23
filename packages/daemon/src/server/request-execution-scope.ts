@@ -89,7 +89,7 @@ import {
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
-  isSessionObservationRequest,
+  isAndroidSessionObservation,
 } from '../core/daemon-command-registry.ts';
 import {
   shouldRecordEventForRequest,
@@ -603,12 +603,9 @@ export async function createRequestExecutionScope(params: {
         let admissionCompleted = false;
         try {
           const existingRef = resolveRequestSessionRef(scopedReq, addressed);
-          if (
-            isSessionObservationRequest(scopedReq) &&
-            existingRef?.session.device.platform === 'android'
-          ) {
-            return await runObservation(existingRef.session.device);
-          }
+          const existingDevice = existingRef?.session.device;
+          if (isAndroidSessionObservation(scopedReq, existingDevice))
+            return await runObservation(existingDevice);
           const session = existingRef?.session;
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')

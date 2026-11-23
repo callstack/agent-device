@@ -54,6 +54,8 @@ import { isHandheldAppleDevice } from '@agent-device/kernel/device';
 const SNAPSHOT_SESSION_REASONS = {
   // The iOS command needs an active app session on the target device; run `open` first.
   iosAppSessionRequired: { reason: 'ios_app_session_required' },
+  // Android observation requires an ADB runtime; a provider-owned runtime cannot serve it.
+  androidObservationRequiresAdb: { reason: 'android_observe_only_adb_required' },
 } as const satisfies ReasonTable<'snapshot capture'>;
 
 export type SnapshotRuntimeRouteParams = {
@@ -210,7 +212,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
             'UNSUPPORTED_OPERATION',
             'Android observation requires an ADB device.',
             {
-              reason: 'android_observe_only_adb_required',
+              reason: SNAPSHOT_SESSION_REASONS.androidObservationRequiresAdb.reason,
             },
           );
         }

@@ -490,6 +490,18 @@ These reasons can come from more than one command.
 | `android_snapshot_helper_session_ready_malformed` | The readiness record the helper sent does not prove this session's protocol, socket, or secret. |
 | `android_snapshot_helper_session_exited_before_ready` | The helper process ended before it reported readiness. |
 
+### Android snapshot helper ownership
+
+| Reason | Meaning |
+| --- | --- |
+| `android-snapshot-helper-ownership-mismatch` | The helper changed or ended before a non-owning read could use its admitted identity. |
+
+### Android snapshot helper read
+
+| Reason | Meaning |
+| --- | --- |
+| `android-snapshot-helper-session-unavailable` | The shared helper cannot answer this read; only its owner can replace it. |
+
 ### Android text channel
 
 | Reason | Meaning |
@@ -1021,6 +1033,7 @@ These reasons can come from more than one command.
 | Reason | Meaning |
 | --- | --- |
 | `ios_app_session_required` | The iOS command needs an active app session on the target device; run `open` first. |
+| `android_observe_only_adb_required` | Android observation requires an ADB runtime; a provider-owned runtime cannot serve it. |
 | `runner-snapshot-bridge-target-unavailable` | The runner could not name the app's foreground process; `details.bridgeFailureCode` says why. |
 | `simulator-target-discovery-pending` | The wait ran out while the discovery of the app's simulator process was still running. |
 | `simulator-target-unavailable` | The app has no running process on the simulator. |
@@ -1028,6 +1041,13 @@ These reasons can come from more than one command.
 | `simulator-target-identity-unavailable` | The app's simulator process was found, but its identity could not be read. |
 | `simulator-runtime-probe-failed` | The simulator could not be asked for its runtime. |
 | `simulator-runtime-unavailable` | The simulator reported no runtime. |
+
+### Snapshot observation
+
+| Reason | Meaning |
+| --- | --- |
+| `android_observe_only_snapshot_options` | Android observe-only snapshots cannot read or update a stored diff baseline. |
+| `snapshot_observation_owner_mismatch` | The request cannot observe the session scope that owns the Android helper. |
 
 ### Timeouts
 

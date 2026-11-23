@@ -3,6 +3,7 @@ import {
   normalizeError,
   toAppErrorCode,
   type NormalizedError,
+  type ReasonTable,
 } from '@agent-device/kernel/errors';
 import path from 'node:path';
 import { isPositiveFiniteRect, unionRects } from '@agent-device/kernel/rect';
@@ -110,6 +111,11 @@ const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
  * a busy screen run a snapshot past the daemon request envelope.
  */
 const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
+const SNAPSHOT_HELPER_READ_REASONS = {
+  // The shared helper cannot answer this read; only its owner can replace it.
+  sessionUnavailable: { reason: 'android-snapshot-helper-session-unavailable' },
+} as const satisfies ReasonTable<'android snapshot helper read'>;
+
 /**
  * The diagnostic phase of a capture through the snapshot helper's persistent session. Its
  * `data.transport` names the session transport, and `data.answered` is false when the session
@@ -502,7 +508,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     if (sessionCapture) return sessionCapture;
     if (params.ownsHelperSession === false) {
       throw new AppError('COMMAND_FAILED', 'The active Android helper cannot serve this read.', {
-        reason: 'android-snapshot-helper-session-unavailable',
+        reason: SNAPSHOT_HELPER_READ_REASONS.sessionUnavailable.reason,
       });
     }
   } catch (error) {
