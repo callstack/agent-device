@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { getRequestDeadlineMs } from '@agent-device/host-kit/request';
+import { getRequestDeadlineMs, getRequestSignal } from '@agent-device/host-kit/request';
 import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
@@ -132,6 +132,12 @@ function buildTargetedRuntimeOptions(
           focusedPackageBefore: readiness.status === 'clear' ? readiness.focusedPackage : undefined,
         },
         params.androidObservation,
+        // The settle rides this request's deadline and abort signal, so a deadline firing during
+        // the wait cancels the step instead of holding it past the request's budget.
+        {
+          signal: getRequestSignal(req.meta?.requestId),
+          deadlineAtMs: getRequestDeadlineMs(req.meta?.requestId),
+        },
       );
     },
     buildPayloads: async (result) => {

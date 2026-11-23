@@ -13,6 +13,18 @@ import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { respondToAndroidSettingsAdbCommand } from './android-world.ts';
 import { assertRpcOk } from './assertions.ts';
 
+// The daemon press-escape guard's settle (`ESCAPE_GUARD_SETTLE_MS`); kept as a step here so the
+// driving loop stays decoupled from any exact value.
+const ESCAPE_GUARD_SETTLE_STEP_MS = 200;
+
+// Captured before any test installs fake timers, so the driving loop can yield real event-loop
+// turns to the in-flight request while the fake clock only moves in deliberate steps.
+const realSetTimeout = globalThis.setTimeout;
+const realYield = (milliseconds: number) =>
+  new Promise<void>((resolve) => {
+    realSetTimeout(resolve, milliseconds);
+  });
+
 type DeadlineAdbState = {
   started: () => void;
   observedFill: () => void;
@@ -28,6 +40,20 @@ function awaitGestureAbort(signal: AbortSignal): Promise<never> {
   return new Promise<never>((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   });
+}
+
+/**
+ * Drives the fake clock until `settled` flips, so the opening press pays its escape-guard settle
+ * before the next step dispatches. Each turn advances one settle step and then yields a real
+ * timer, so the in-flight request keeps crossing its loopback I/O turns. If the budget lapses
+ * first, the assert names the stall.
+ */
+async function driveClockUntilSettled(settled: () => boolean): Promise<void> {
+  for (let turns = 0; !settled() && turns < 100; turns += 1) {
+    await vi.advanceTimersByTimeAsync(ESCAPE_GUARD_SETTLE_STEP_MS);
+    await realYield(4);
+  }
+  assert.ok(settled(), 'the pipeline did not settle within the driven clock budget');
 }
 
 function deadlineAdbInfrastructureResponse(
@@ -86,12 +112,19 @@ test('routed batch install reports its deadline and does not dispatch a later st
   const started = new Promise<void>((resolve) => {
     installStarted = resolve;
   });
+  let startedSettled = false;
+  started.then(() => {
+    startedSettled = true;
+  });
   let installSignal: AbortSignal | undefined;
   const actions: string[] = [];
   const daemon = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
     androidAdbProvider: () => ({
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
       exec: async (args) => {
+        if (args.join(' ').includes('AGENT_DEVICE_NO_HELPER'))
+          return { exitCode: 0, stdout: 'AGENT_DEVICE_NO_HELPER\n', stderr: '' };
         if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'tap') {
           actions.push('press');
           return { exitCode: 0, stdout: '', stderr: '' };
@@ -128,6 +161,7 @@ test('routed batch install reports its deadline and does not dispatch a later st
         { command: 'press', positionals: ['40', '50'] },
       ],
     });
+    await driveClockUntilSettled(() => startedSettled);
     await Promise.race([
       started,
       pending.then((response) => assert.fail(JSON.stringify(response.json))),
@@ -163,6 +197,10 @@ test.each(['batch', 'replay'])(
     let observedFill!: () => void;
     const fillObservation = new Promise<void>((resolve) => {
       observedFill = resolve;
+    });
+    let fillSettled = false;
+    fillObservation.then(() => {
+      fillSettled = true;
     });
     const state: DeadlineAdbState = {
       started,
@@ -213,6 +251,7 @@ test.each(['batch', 'replay'])(
               },
             }),
       });
+      await driveClockUntilSettled(() => fillSettled);
       await fillObservation;
       await vi.advanceTimersByTimeAsync(150);
       await Promise.race([
