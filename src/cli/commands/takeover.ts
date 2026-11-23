@@ -53,7 +53,9 @@ async function holdTakeover(flags: CliFlags, agentDeviceClient: AgentDeviceClien
     ttlMs: flags.ttlMs ?? LEASE_HOLD_TTL_MS,
   };
   const hold = await agentDeviceClient.leases.humanControl.put(holdId, input);
-  await writeCommandOutput(flags, { hold, state: 'active' }, () => renderTakeoverHold(hold));
+  await writeCommandOutput(flags, { hold, state: 'active' }, () =>
+    renderTakeoverHold(hold, flags.session),
+  );
 }
 
 async function runForegroundTakeover(
@@ -137,11 +139,12 @@ export function renderTakeoverStarted(hold: HumanControlHold): string {
   ].join('\n');
 }
 
-export function renderTakeoverHold(hold: HumanControlHold): string {
+export function renderTakeoverHold(hold: HumanControlHold, session?: string): string {
   const target = hold.scope.deviceKey;
+  const sessionFlag = session ? ` --session ${session}` : '';
   return [
     `Human control active for ${target}.`,
-    `Agent interactions are paused. Release with: agent-device takeover release ${hold.id}`,
+    `Agent interactions are paused. Release with: agent-device takeover release ${hold.id}${sessionFlag}`,
     `Hold: ${hold.id}`,
   ].join('\n');
 }

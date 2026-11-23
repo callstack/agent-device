@@ -220,4 +220,8 @@ test('takeover hold output names the release command', () => {
   assert.match(renderTakeoverHold(HUMAN_CONTROL_HOLD), /Human control active for ios:mobile:sim-1/);
   assert.match(renderTakeoverHold(HUMAN_CONTROL_HOLD), /takeover release operator-1/);
   assert.match(renderTakeoverHold(HUMAN_CONTROL_HOLD), /Hold: operator-1/);
+  assert.match(
+    renderTakeoverHold(HUMAN_CONTROL_HOLD, 'remote-session'),
+    /takeover release operator-1 --session remote-session/,
+  );
 });
