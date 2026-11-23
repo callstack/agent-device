@@ -1,5 +1,6 @@
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import Limrun from '@limrun/api';
+import { randomUUID } from 'node:crypto';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type {
   DeviceInventoryProvider,
@@ -44,14 +45,12 @@ import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import {
   deleteLimrunInstance,
-  LIMRUN_CLIENT_ID,
   LIMRUN_ORG_CLIENT_LOGGING,
   limrunUserAgent,
   requireLimrunOrgClient,
 } from './client-options.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
-import type { LimrunAppAsset } from './app-catalog.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 import type {
   CloudArtifactProvider,
@@ -160,6 +159,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
+    recoverRental: async (lease, identity, recordInstance) => {
+      if (lease.leaseProvider !== this.provider) return false;
+      const { recoverLimrunRental } = await import('./lease-release.ts');
+      return await recoverLimrunRental(this.limrun, lease, identity, recordInstance);
+    },
     heartbeat: async (lease, context) => await this.heartbeat(lease, context),
     release: async (lease) => {
       if (lease.leaseProvider !== this.provider) return undefined;
@@ -547,6 +551,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         allocateLimrunAndroidSession,
         allocateLimrunIosSession,
         rejectRefusedLimrunProfileFields,
+        limrunRentalMetadata,
         resolvePreinstalledAppId,
         resolveRequestedLimrunAppAsset,
       } = await import('./session-allocation.ts');
@@ -569,10 +574,21 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       }
       const limrun = this.orgClient('Creating an instance');
       const requestedAsset = await resolveRequestedLimrunAppAsset(limrun, platform, context);
-      const params = this.sessionAllocationParams(limrun, owner.lease, requestedAsset);
+      const rentalKey = context?.rental && randomUUID();
+      const params = {
+        limrun,
+        lease: owner.lease,
+        metadata: limrunRentalMetadata(owner.lease, rentalKey),
+        region: this.options.region,
+        iosModel: this.options.iosModel,
+        app: requestedAsset,
+        dependencies: this.dependencies,
+      };
       const rent = (instanceId: string): void => {
         owner.rentedInstanceId = instanceId;
+        context?.rental?.rented(instanceId);
       };
+      if (rentalKey) context?.rental?.beforeCreate(rentalKey);
       owner.createSubmitted = true;
       const session =
         platform === 'ios'
@@ -754,27 +770,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return (
       ios && (await createLimrunIosSession({ ...target(ios.apiUrl), ...ios }, this.dependencies))
     );
-  }
-
-  private sessionAllocationParams(limrun: Limrun, lease: DeviceLease, app?: LimrunAppAsset) {
-    return {
-      limrun,
-      lease,
-      metadata: {
-        displayName: `agent-device-${lease.tenantId}-${lease.runId}`,
-        labels: {
-          tenantId: lease.tenantId,
-          runId: lease.runId,
-          leaseId: lease.leaseId,
-          provider: lease.leaseProvider ?? LIMRUN_PROVIDER,
-          source: LIMRUN_CLIENT_ID,
-        },
-      },
-      region: this.options.region,
-      iosModel: this.options.iosModel,
-      app,
-      dependencies: this.dependencies,
-    };
   }
 
   private async heartbeat(

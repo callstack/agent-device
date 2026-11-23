@@ -182,6 +182,7 @@ export function createAwsDeviceFarmPrepareSession(
     });
     // The ARN is a billed session from here on; any failure short of RUNNING
     // must stop it before surfacing, or it bills until AWS reaps it.
+    req?.rental?.rented(remoteAccess.arn);
     let running: AwsDeviceFarmRemoteAccessSession;
     let endpoint: string | undefined;
     try {

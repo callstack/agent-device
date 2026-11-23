@@ -136,6 +136,8 @@ The host resolves the `./agent-device` export with import conditions. It falls b
 Provider runtimes must return a typed result from `leaseLifecycle.release`. Return `{ release: 'confirmed' }` when the rental is gone, or `{ release: 'unknown' }` when the provider cannot confirm it. Include optional artifact metadata in `provider`. Plugins built against the previous release hook must update their return value before upgrading the daemon.
 
 
+To support restart recovery, call `context.rental?.beforeCreate(key)` before submitting a billable create and `context.rental?.rented(instanceId)` as soon as the provider identifies the instance. Both identifiers must be non-secret. Implement `leaseLifecycle.recoverRental` to release the exact recorded instance or use the reconciliation key to find it. If lookup supplies the instance ID, call `recordInstance` before deleting it. Return `true` only when the provider confirms release or can rule out a late create. The daemon keeps unresolved rentals fenced across restarts.
+
 If your plugin uses Appium or WebDriver, bundle the engine with your plugin and build the runtime in `setup`. Use `host.diagnostics.emit(event)` to record a diagnostic in the active request log.
 
 If required credentials are absent, return `{ dormant: { reason, message, hint? } }` from `setup`. Use a stable reason code and a message describing the prerequisite. Use the hint to explain how to supply it. Omit the runtime, platform module, and disposer for this outcome. Throw when setup fails.

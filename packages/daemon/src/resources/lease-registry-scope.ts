@@ -1,5 +1,9 @@
 import crypto from 'node:crypto';
-import { providerInstanceUnallocatedError, type DeviceLease } from '@agent-device/contracts/device';
+import {
+  providerInstanceUnallocatedError,
+  type DeviceLease,
+  type LeaseLifecycleContext,
+} from '@agent-device/contracts/device';
 import {
   LEASE_REASONS,
   MIN_LEASE_WINDOW_MS,
@@ -25,6 +29,12 @@ export const DEVICE_LEASE_REASONS = {
 } as const satisfies ReasonTable<'leases'>;
 
 export type LeaseRegistryOptions = {
+  providerRentals?: {
+    assertLeaseIdAvailable: (leaseId: string) => void;
+    reserve: (lease: DeviceLease) => void;
+    context: (lease: DeviceLease) => LeaseLifecycleContext['rental'];
+    confirmReleased: (lease: DeviceLease) => void;
+  };
   maxActiveSimulatorLeases?: number;
   defaultLeaseTtlMs?: number;
   minLeaseTtlMs?: number;

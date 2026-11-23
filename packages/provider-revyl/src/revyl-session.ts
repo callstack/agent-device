@@ -90,6 +90,7 @@ export type RevylStartRequestInput = Readonly<{
   signal?: AbortSignal;
   /** Epoch-ms deadline the caller has for the whole allocation; it outranks the runtime's own. */
   deadline?: number;
+  beforeCreate?: (sessionId: string) => void;
   /** Told the session once `start_device` answered with it, the first moment Revyl holds it. */
   onRented?: (rented: RevylRentedSession) => void;
 }>;
@@ -136,6 +137,7 @@ export async function startRevylSession(
   // Nothing has been sent yet, so nothing is rented: this caller is answered with its own cancellation and
   // the entry closes without asking Revyl for a session it never made.
   if (input.signal?.aborted) return { status: 'failed', error: startCanceled(input) };
+  input.beforeCreate?.(sessionId);
   let started: RevylStartDeviceResponse;
   try {
     started = await submitRevylStart(client, input, sessionId);
@@ -148,8 +150,50 @@ export async function startRevylSession(
       ...(startMayHaveRented(error) ? { rented: { sessionId } } : {}),
     };
   }
+  const accepted = readRevylStartResponse(started, sessionId, input);
+  if (accepted.status === 'failed') return accepted;
+  const { runId } = accepted;
+  // Revyl may have answered a run for a start whose caller has already hung up. The device is rented
+  // either way, so the answer still reports it as what is owed an end.
+  if (input.signal?.aborted) {
+    return {
+      status: 'failed',
+      rented: { runId, sessionId },
+      error: startCanceled(input),
+    };
+  }
+  const deadline = readinessDeadline(input);
+  try {
+    const health = await awaitRevylDeviceReady(client, runId, deadline, { ...input, sessionId });
+    return {
+      status: 'ready',
+      session: {
+        platform: input.platform,
+        runId,
+        sessionId,
+        screen: readRevylScreenSize(health),
+        dragDuration: health.supports_explicit_drag_duration === true,
+        preciseOrientation: health.supports_precise_orientation === true,
+        device: buildRevylDevice(input.platform, lease, runId),
+        client,
+        lease,
+        launchedApp: {},
+      },
+    };
+  } catch (error) {
+    return { status: 'failed', error, rented: { runId, sessionId } };
+  }
+}
+
+function readRevylStartResponse(
+  started: RevylStartDeviceResponse,
+  sessionId: string,
+  input: RevylStartRequestInput,
+): Extract<RevylStart, { status: 'failed' }> | { status: 'accepted'; runId: string } {
   const runId = typeof started.workflow_run_id === 'string' ? started.workflow_run_id : undefined;
-  const echoed = typeof started.session_id === 'string' ? started.session_id : undefined;
+  const echoed =
+    typeof started.session_id === 'string' && started.session_id ? started.session_id : undefined;
+  if (runId || echoed) input.onRented?.({ runId, sessionId: echoed ?? sessionId });
   if (runId && echoed && echoed !== sessionId) {
     // Every later stop addresses the session by the id the runtime issued, and an expired-lease
     // recovery in another process derives that same id from the lease. A backend that kept its own
@@ -187,37 +231,7 @@ export async function startRevylSession(
       ),
     };
   }
-  input.onRented?.({ runId, sessionId });
-  // Revyl may have answered a run for a start whose caller has already hung up. The device is rented
-  // either way, so the answer still reports it as what is owed an end.
-  if (input.signal?.aborted) {
-    return {
-      status: 'failed',
-      rented: { runId, sessionId },
-      error: startCanceled(input),
-    };
-  }
-  const deadline = readinessDeadline(input);
-  try {
-    const health = await awaitRevylDeviceReady(client, runId, deadline, { ...input, sessionId });
-    return {
-      status: 'ready',
-      session: {
-        platform: input.platform,
-        runId,
-        sessionId,
-        screen: readRevylScreenSize(health),
-        dragDuration: health.supports_explicit_drag_duration === true,
-        preciseOrientation: health.supports_precise_orientation === true,
-        device: buildRevylDevice(input.platform, lease, runId),
-        client,
-        lease,
-        launchedApp: {},
-      },
-    };
-  } catch (error) {
-    return { status: 'failed', error, rented: { runId, sessionId } };
-  }
+  return { status: 'accepted', runId };
 }
 
 /**

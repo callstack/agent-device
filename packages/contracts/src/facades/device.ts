@@ -26,6 +26,7 @@ export type {
   DeviceInventoryProvider,
   DeviceLease,
   LeaseLifecycleContext,
+  ProviderRentalIdentity,
   LeaseLifecycleProvider,
   ProviderLeaseRelease,
   ProviderAppCatalog,

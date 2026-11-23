@@ -164,6 +164,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
             ...leaseLifecycleContext(req, args.host),
+            rental: leaseRegistry.providerRentalContext(lease),
             signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });

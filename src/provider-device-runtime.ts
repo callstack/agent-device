@@ -182,6 +182,10 @@ function composeLeaseProvider(
 ): LeaseLifecycleProvider | undefined {
   if (runtimes.length === 0) return undefined;
   return {
+    recoverRental: async (lease, identity, recordInstance) =>
+      (await runtimes
+        .find((runtime) => runtimeMatchesProvider(runtime, lease.leaseProvider))
+        ?.leaseLifecycle.recoverRental?.(lease, identity, recordInstance)) ?? false,
     allocate: async (lease, context) =>
       await firstProviderResult(runtimes, 'allocate', lease, context),
     heartbeat: async (lease, context) =>

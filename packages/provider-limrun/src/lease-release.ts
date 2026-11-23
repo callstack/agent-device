@@ -1,5 +1,5 @@
 import type Limrun from '@limrun/api';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderRentalIdentity } from '@agent-device/contracts/device';
 import { AppError, errorMessage, type ReasonTable } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
 import { CAPTURE_OPEN_BUDGET_MS } from './capture-lifecycle.ts';
@@ -412,6 +412,16 @@ export async function releaseLimrunLease(
   };
 }
 
+export async function recoverLimrunRental(
+  limrun: Limrun | undefined,
+  lease: DeviceLease,
+  identity: ProviderRentalIdentity,
+  recordInstance: (instanceId: string) => void,
+): Promise<boolean> {
+  if (!identity.instanceId && !identity.reconciliationKey) return false;
+  return (await releaseLabeledInstances(limrun, lease, { identity, recordInstance })) !== undefined;
+}
+
 type LabeledRecovery = {
   instanceIds: string[];
   deletes: Map<string, Promise<LimrunDeleteResult>>;
@@ -429,18 +439,27 @@ const labeledRecoveries = new WeakMap<Limrun, Map<string, Promise<LabeledRecover
 async function releaseLabeledInstances(
   limrun: Limrun | undefined,
   lease: DeviceLease,
+  rental?: { identity: ProviderRentalIdentity; recordInstance: (instanceId: string) => void },
 ): Promise<LimrunReleaseRecord | undefined> {
   const platform = platformForLimrunLeaseBackend(lease.backend);
   if (!platform || !limrun) return undefined;
   const byLease = labeledRecoveries.get(limrun) ?? new Map<string, Promise<LabeledRecovery>>();
   labeledRecoveries.set(limrun, byLease);
   const lookup =
-    byLease.get(lease.leaseId) ?? findLabeledInstances(limrun, platform, lease.leaseId);
+    byLease.get(lease.leaseId) ?? findReleaseInstances(limrun, platform, lease, rental?.identity);
   byLease.set(lease.leaseId, lookup);
   const { instanceIds, deletes } = await lookup.catch((error: unknown) => {
     if (byLease.get(lease.leaseId) === lookup) byLease.delete(lease.leaseId);
     throw error;
   });
+  if (rental && !rental.identity.instanceId) {
+    // A one-attempt create cannot account for more than one instance. An empty list can race create.
+    if (instanceIds.length !== 1) {
+      byLease.delete(lease.leaseId);
+      return undefined;
+    }
+    rental.recordInstance(instanceIds[0]!);
+  }
   const confirmed: string[] = [];
   for (const instanceId of instanceIds) {
     const deleted = await awaitLabeledDelete(deletes, limrun, platform, instanceId);
@@ -462,6 +481,19 @@ async function releaseLabeledInstances(
     limrunInstanceIds: instanceIds,
     limrunInstanceCount: instanceIds.length,
   };
+}
+
+function findReleaseInstances(
+  limrun: Limrun,
+  platform: LimrunPlatform,
+  lease: DeviceLease,
+  identity: ProviderRentalIdentity | undefined,
+): Promise<LabeledRecovery> {
+  if (identity?.instanceId) {
+    return Promise.resolve({ instanceIds: [identity.instanceId], deletes: new Map() });
+  }
+  const label = identity ? `rentalKey=${identity.reconciliationKey}` : `leaseId=${lease.leaseId}`;
+  return findLabeledInstances(limrun, platform, label);
 }
 
 async function awaitLabeledDelete(
@@ -490,9 +522,9 @@ async function awaitLabeledDelete(
 async function findLabeledInstances(
   limrun: Limrun,
   platform: LimrunPlatform,
-  leaseId: string,
+  label: string,
 ): Promise<LabeledRecovery> {
-  const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${leaseId}`;
+  const labelSelector = `provider=${LIMRUN_PROVIDER},${label}`;
   const instances = await fromLimrunOrgApi(
     platform === 'ios'
       ? limrun.iosInstances.list({ labelSelector })

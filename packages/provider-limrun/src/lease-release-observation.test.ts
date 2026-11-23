@@ -408,3 +408,35 @@ test('Limrun recovery carries a late labeled delete into the release result', as
     vi.useRealTimers();
   }
 });
+
+test('Limrun rental recovery records a matched instance before deleting it', async () => {
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('rental-inherited');
+  const recover = runtime.leaseLifecycle.recoverRental!;
+  const journaled = vi.fn();
+  try {
+    const identity = { reconciliationKey: 'request-key' };
+    await expect(recover(lease, identity, journaled)).resolves.toBe(false);
+    expect(state.deletes).toHaveLength(0);
+    state.listedInstance = 'exact-instance';
+    const release = recover(lease, identity, journaled);
+    await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
+    expect(journaled).toHaveBeenCalledExactlyOnceWith('exact-instance');
+    expect(state.deletes[0]?.instanceId).toBe('exact-instance');
+    state.deletes[0]?.report();
+    await expect(release).resolves.toBe(true);
+
+    state.deletes.length = 0;
+    state.listedInstance = 'different-instance';
+    const exact = recover(lease, { ...identity, instanceId: 'exact-instance' }, journaled);
+    await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
+    expect(state.deletes[0]?.instanceId).toBe('exact-instance');
+    state.deletes[0]?.report();
+    await expect(exact).resolves.toBe(true);
+  } finally {
+    state.deletes.forEach(({ report }) => report());
+    state.deletes.length = 0;
+    state.listedInstance = undefined;
+    await runtime.shutdown();
+  }
+});

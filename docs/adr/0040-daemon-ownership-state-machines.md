@@ -34,9 +34,11 @@ Each machine has one transition owner. Other modules send events. The coordinato
 | Ending | Retirement and release confirmed | Ended. Permit reuse when the affected resources are safe. |
 | Ending | Cleanup or release uncertain | Ending. Keep the reservation and retry eligible work. |
 | Ended | Cleanup or receipt retention ends | Absent. Keep the old credential unusable for admission. |
-| Startup | Recoverable journal entry | Ending. Restore its reservation before overlapping admission. |
+| Startup | Inherited rental or legacy provider journal entry | Ending. Restore its reservation before overlapping admission. |
 
 At the deadline, check wanted work, holds, and generation before marking `Ending` in the same decision. Schedule the deadline and use the sweep as a backstop. One lease end record covers all sessions, any retained host, and provider release. Keep the `retainOnClose` idle-daemon rule. Once a reservation fences reuse, release the exact provider instance outside execution locks in backend order. An overlapping allocation waits outside locks or returns typed contention. The outermost response reports each lease end once, including on failure. Reserve the lease ID while it can authenticate retained output.
+
+Before a billable create, durably record its contention scope and a fingerprint of the lease ID. When the provider supports reconciliation, record its allocation key before submission. Record the exact instance when the provider identifies it. The rental entry authorizes release after restart and remains until release or absence is confirmed. After registration, reconstruct the reservation in `LeaseRegistry`. Recover by exact identity when known, or use the provider's reconciliation key to find the instance. If the journal has a credential fingerprint, require it to match before making a provider call. A provider can report absence only when it can rule out a late create. An empty lookup alone cannot do so. Keep an unresolved reservation as `release unknown` for the operator.
 
 Register pending holds and admit mutations through one synchronous decision, including on first open. A pending hold fences mutations and becomes active after admitted mutations drain. Cancellation removes only that pending generation. When the last hold ends, restart inactivity timing at release or expiry. Active leases still accept heartbeats. Holds coexist with claims and vanish on restart. Keep host hold and `macos-app` admission rules.
 
@@ -153,13 +155,15 @@ Use generated lifetime IDs for journals. Pass committed output IDs and typed rec
 - A command that lacks an admitted capability cannot use a session port. A stale capability cannot act on a replacement. A stale cleanup cannot release its claim. A finalizer cannot register a response path or infer a producer.
 - An RPC or SDK caller that used to attach a first lease to an open session must close it and open again. Active recording, trace, and profile work cannot span that ownership change. Same-owner reopen, same-owner capture then open, and retained close then fresh open remain available.
 - Remote RPC callers that supplied host destinations must download by output ID. Clients keep local placement, script revision delivery, and recording sidecars. Remote reads of owner-unknown legacy diagnostic logs and recording exports are refused. Keep local recovery and exact-owner recorder cleanup. A committed recording can be served again if the producer proves ownership and the bytes survive. Restore output eligibility after restart only when retention was already durable and the record is verified.
-- Restart begins with an empty live session store. The recoverable provider live and pending journals and host-global device claim records are durable. The runtime-only release retry map is lost on crash. An allocation can crash before a recoverable provider identity exists. If release cannot be proved, keep the affected scope fenced as `release unknown` for operator reconciliation. The durable rental journal is a separate issue. Client saved-connection records ([#4925](https://github.com/callstack/agent-device/pull/4925)) follow separately.
+- Restart begins with an empty live session store. The rental journal covers new provider allocations from reservation through confirmed release. Legacy live and pending journals still recover through the same lease end owner. Restart retains host-global device claim records. Provider runtimes without restart reconciliation leave a fenced rental for the operator. Client saved-connection records ([#4925](https://github.com/callstack/agent-device/pull/4925)) follow separately.
 
 ### Wire compatibility
 
 For the path cutover, cover 0.22.x and the first release series with the new output contract in both client/daemon directions. Within this window, accept the supported legacy request shape without trusting its paths. Keep trace and perf destinations on the client across start and stop. Give new clients a safe mixed-version path to download. Retire peer-echoed paths and the remote placeholder exchange only after those combinations pass and the release notes state the supported window. Under [ADR 0006](0006-daemon-rpc-protocol-version.md), add `compatibleChanges` acknowledgments for compatible declaration changes. If a declaration is removed or a supported pairing cannot communicate safely, apply the protocol increment rule.
 
 ## Rejected alternatives
+
+- Journal only live leases or release retries. A daemon can exit after a billable request and before the provider identifies its instance. The contention reservation must already be durable at that point.
 
 - Add authorization at each store lookup. A late lookup can still choose a different lifetime.
 - Let the request or sweep tear down expiry independently. They can duplicate cleanup or race the next allocation.

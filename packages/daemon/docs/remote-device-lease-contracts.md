@@ -39,19 +39,17 @@ In-flight work and human-control holds still keep a lease from expiring.
 After daemon shutdown begins, no new lease-end teardown starts.
 Shutdown waits for any lease-end teardown that already started before it tears sessions down itself.
 
-A daemon that dies while it holds a provider lease leaves the rented device running on the provider side, and that device stays billed.
-The daemon journals live provider leases in `live-provider-leases.json` in its state directory.
-At startup, allocation and session commands wait until the daemon adopts both journals, checks durable device claims, and gives providers time to recover each rental. Host lease PUT also waits. A recovered scope stays fenced when its provider cannot identify the rental or confirm its release.
-It reads both lease records only after it holds the daemon registration for the state directory, because until then they can belong to a daemon that is still running.
-The lease itself is not restored, and its controller connects again.
-A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried until this daemon shuts down.
-If a journal retry is pending, daemon shutdown makes one final journal write. It does not schedule another journal retry.
-A daemon that has shut down writes lease records only synchronously. It arms no timer for them, because a timer could fire after that daemon released its registration, when the records belong to the next daemon.
-After the daemon shuts its lease releaser down, that releaser refuses every further provider-backed release. It still writes the expired-lease record of a recoverable lease, so the next daemon inherits it. If no record names the lease, the daemon logs the refusal with its lease provider, because no daemon will end that device.
+A provider rental can keep billing after the daemon exits.
+Before provider allocation, the daemon writes the contention scope to `provider-rentals.json` in the daemon state directory.
+The journal keeps a lease fingerprint, any provider reconciliation key, and the exact instance ID when the provider supplies it.
+The daemon reads the rental journal and the legacy live and pending journals after it holds daemon registration.
+Allocation, session commands, and host lease PUT wait for startup recovery to restore the reservations.
+A provider can settle an inherited rental by confirming release or proving absence.
+An empty lookup can race a create and leave the reservation as `releaseStatus: unknown`.
+Use the journal and daemon diagnostics to identify a rental for provider-side reconciliation.
+The live session store starts empty. The controller must connect again.
 A failed or canceled first allocation keeps its reservation while the provider can still be creating or releasing the device.
 If creation succeeds after cancellation, the adapter releases the exact instance.
-If the provider cannot prove release, the reservation remains.
-Rentals without durable evidence require operator reconciliation. [#4972](https://github.com/callstack/agent-device/issues/4972) tracks the durable rental journal.
 
 When a request closes a session, the daemon ends the lease of that session, unless the lease was allocated with `retainOnClose`.
 The reply to that request reports each lease that it ended once, at response level, as `endedLeases: [{ leaseId, outcome: 'released' }]`.

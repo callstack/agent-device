@@ -115,6 +115,7 @@ export class LeaseRegistry {
     reason?: 'PROVIDER_INSTANCE_ENDED' | 'LEASE_RELEASED',
   ) => void;
   private readonly onProviderLeasesChanged?: (leases: readonly DeviceLease[]) => void;
+  private readonly providerRentals: LeaseRegistryOptions['providerRentals'];
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
 
   constructor(options: LeaseRegistryOptions = {}) {
@@ -125,6 +126,7 @@ export class LeaseRegistry {
     this.now = options.now ?? (() => Date.now());
     this.onLeaseExpired = options.onLeaseExpired;
     this.onProviderLeasesChanged = options.onProviderLeasesChanged;
+    this.providerRentals = options.providerRentals;
     this.providerSessionOwnership = new ProviderSessionOwnershipRegistry({
       now: this.now,
       retentionMs: options.providerSessionRetentionMs,
@@ -136,6 +138,7 @@ export class LeaseRegistry {
     const requestedLease = this.refreshRequestedLease(chosenLeaseId, normalized, leaseTtlMs);
     if (requestedLease) return requestedLease;
     this.assertNoEndingLease(chosenLeaseId);
+    if (chosenLeaseId) this.providerRentals?.assertLeaseIdAvailable(chosenLeaseId);
     if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
       throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
         reason: LEASE_REGISTRY_REASONS.idInUse.reason,
@@ -146,7 +149,10 @@ export class LeaseRegistry {
     this.assertNoRunBindingLease(normalized);
     this.enforceCapacity(normalized.backend);
     const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), chosenLeaseId);
-    if (providerAllocating) this.allocating.add(lease.leaseId);
+    if (providerAllocating) {
+      this.providerRentals?.reserve(lease);
+      this.allocating.add(lease.leaseId);
+    }
     this.issueLease(lease);
     return { ...lease };
   }
@@ -337,6 +343,10 @@ export class LeaseRegistry {
       this.reportProviderLeases(active);
     }
     return true;
+  }
+
+  providerRentalContext(lease: DeviceLease) {
+    return this.providerRentals?.context(lease);
   }
 
   finishProviderAllocation(leaseId: string): void {
@@ -883,6 +893,7 @@ export class LeaseRegistry {
     const end = this.ending.get(leaseId);
     if (!end) return true;
     if (part === 'providerReleased') {
+      this.providerRentals?.confirmReleased(end.lease);
       end.providerRelease = 'confirmed';
       this.reportProviderLeases(end.lease);
     } else {
