@@ -15,6 +15,7 @@ import type {
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
+import { successText } from '@agent-device/kernel/success-text';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { runMacOsAlertAction } from './os/macos/helper.ts';
@@ -70,14 +71,59 @@ function runAppleAlert(
     );
 }
 
-/** The alert `read` settles with, or `undefined` when the backend reports a typed absence. */
+/**
+ * The `alert get` answer. Absence is one of its outcomes, not a failure of it: the read is the
+ * "is anything up?" probe, and every tree-based backend (Android, and the shared driver) answers
+ * a quiet screen with the `alertStatus` record whose `status` is `none`. The Apple backends state
+ * absence as typed evidence, so this leg settles it into that same record instead of passing the
+ * runner's `ALERT_NOT_FOUND` through as a failure. The acting legs (`accept`/`dismiss`) keep
+ * reporting absence as their typed refusal — nothing was pressed — through `actOnAppleAlert`.
+ * Every other read failure, including the runner's unreadable `ALERT_UNRESOLVED`, is not absence
+ * and is reported as itself.
+ */
+export async function readAppleAlertStatus(
+  device: DeviceInfo,
+  runnerOptions: RunnerCallOptions,
+  options: AlertInteractorOptions | undefined,
+  env: Readonly<EnvMap>,
+): Promise<Record<string, unknown>> {
+  try {
+    return await readAppleAlert(device, runnerOptions, options, env);
+  } catch (error) {
+    if (!isAlertNotFoundError(error)) throw error;
+    return {
+      kind: 'alertStatus',
+      platform: isMacOs(device) ? 'macos' : 'ios',
+      action: 'get',
+      alert: null,
+      status: 'none',
+      ...successText('No alert visible'),
+    };
+  }
+}
+
+/**
+ * The alert `read` settles with, or `undefined` when the backend reports a typed absence — as a
+ * failure, or as the `alertStatus` `status: none` record the get leg settles absence into.
+ */
 export async function alertIfPresent<T>(read: Promise<T>): Promise<T | undefined> {
   try {
-    return await read;
+    const alert = await read;
+    return isAlertNoneStatus(alert) ? undefined : alert;
   } catch (error) {
     if (isAlertNotFoundError(error)) return undefined;
     throw error;
   }
+}
+
+/** The typed-absence signature of the `alertStatus` record, checked before any probe result. */
+function isAlertNoneStatus(read: unknown): boolean {
+  return (
+    typeof read === 'object' &&
+    read !== null &&
+    (read as Record<string, unknown>)['kind'] === 'alertStatus' &&
+    (read as Record<string, unknown>)['status'] === 'none'
+  );
 }
 
 /**

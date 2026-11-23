@@ -8,7 +8,7 @@ import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts'
 import { iosRunnerOverrides } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
-import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlertStatus } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
 import { shakeIosSimulator } from './navigation/shake.ts';
@@ -265,7 +265,7 @@ export function createAppleInteractor(
       setIosSetting(device, setting, state, appId, options, env, runnerOpts.signal),
     readSetting: (setting) => readIosSetting(device, setting),
     readAlert: (options) =>
-      readAppleAlert(
+      readAppleAlertStatus(
         device,
         runnerOpts,
         { ...options, appBundleId: options?.appBundleId ?? runnerContext.appBundleId },
