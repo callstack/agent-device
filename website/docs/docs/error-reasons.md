@@ -814,6 +814,7 @@ These reasons can come from more than one command.
 | `LEASE_OUTPUT_MISMATCH` | The request does not send the id of the lease that produced the artifact or diagnostics record. |
 | `DEVICE_LEASE_BUSY` | Another lease, or this tenant run, already holds the device; retry after that lease is released or expires. |
 | `session-cleanup-pending` | The lease is ending and its local session cleanup is still pending. |
+| `provider-rental-retirement-pending` | The provider confirmed release. Retry allocation after the daemon records that result. |
 | `LEASE_ID_TOO_SHORT` | A lease id that the caller chose on allocate has fewer than 32 hex digits (128 bits). |
 | `LEASE_ID_IN_USE` | The requested lease id already names a lease that this daemon issued. |
 | `LEASE_CAPACITY_EXCEEDED` | Every iOS simulator lease slot is taken; retry after another lease is released. |

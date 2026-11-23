@@ -26,6 +26,7 @@ export const DEVICE_LEASE_REASONS = {
   busy: { reason: 'DEVICE_LEASE_BUSY' },
   // The lease is ending and its local session cleanup is still pending.
   sessionCleanupPending: { reason: 'session-cleanup-pending' },
+  // The provider confirmed release. Retry allocation after the daemon records that result.
   rentalRetirementPending: { reason: 'provider-rental-retirement-pending' },
 } as const satisfies ReasonTable<'leases'>;
 
