@@ -55,6 +55,7 @@ The retry can proceed while session or claim cleanup is pending.
 The daemon keeps the contention reservation until journal retirement and local cleanup both succeed.
 An empty lookup can race a create and leave the reservation as `releaseStatus: unknown`.
 Use the journal and daemon diagnostics to identify a rental for provider-side reconciliation.
+Before you run a daemon version that predates the rental journal against the same state directory, confirm that all journaled rentals have been released and the journal's `rentals` list is empty.
 The live session store starts empty. The controller must connect again.
 A failed or canceled first allocation keeps its reservation while the provider can still be creating or releasing the device.
 If creation succeeds after cancellation, the adapter releases the exact instance.
