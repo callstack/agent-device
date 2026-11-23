@@ -23,7 +23,7 @@ export async function waitForLeaseSettlement(params: {
   attempt: NeedSettlement;
   req: DaemonRequest;
   leaseRegistry: LeaseRegistry;
-  signal: AbortSignal | undefined;
+  signal: AbortSignal;
   waitDeadline: number;
 }): Promise<() => boolean> {
   const { attempt, req, leaseRegistry, signal, waitDeadline } = params;
