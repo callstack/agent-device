@@ -123,8 +123,14 @@ test.each(['failure', 'cancellation'] as const)(
   'a screenshot stays hidden during binding disposal and is discarded on %s',
   async (outcome) => {
     const requestId = `capture-cleanup-${outcome}`;
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
+    let enterDisposal!: () => void;
+    let finishDisposal!: () => void;
+    const disposalEntered = new Promise<void>((resolve) => {
+      enterDisposal = resolve;
+    });
+    const disposalFinished = new Promise<void>((resolve) => {
+      finishDisposal = resolve;
+    });
     const sessionStore = makeSessionStore('failed-screenshot-session-');
     sessionStore.publish('capture', makeAndroidSession('capture'));
     const runtime = screenshotRuntimeFixture();
@@ -144,8 +150,8 @@ test.each(['failure', 'cancellation'] as const)(
             ...binding,
             [Symbol.asyncDispose]: async () => {
               await binding[Symbol.asyncDispose]();
-              entered.resolve();
-              await release.promise;
+              enterDisposal();
+              await disposalFinished;
               if (outcome === 'failure') throw new Error('screenshot binding disposal failed');
             },
           };
@@ -162,7 +168,7 @@ test.each(['failure', 'cancellation'] as const)(
       });
       try {
         await Promise.race([
-          entered.promise,
+          disposalEntered,
           reply.then(() => {
             throw new Error('Expected deferred cleanup');
           }),
@@ -175,7 +181,7 @@ test.each(['failure', 'cancellation'] as const)(
         expect(await inventory.json()).toMatchObject({ artifacts: [] });
         if (outcome === 'cancellation') markRequestCanceled(requestId);
       } finally {
-        release.resolve();
+        finishDisposal();
         const result = await reply;
         if (outcome === 'cancellation') {
           expect(result.error?.data?.details).toMatchObject({ reason: 'request_canceled' });
