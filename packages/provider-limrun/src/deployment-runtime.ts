@@ -2,7 +2,10 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableFact } from '@agent-device/contracts/platform-runtime';
+import {
+  unavailableFact,
+  PLATFORM_RUNTIME_REASONS,
+} from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -13,11 +16,11 @@ import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 
 const available = Object.freeze({ available: true } as const);
 const deploymentUnavailable = unavailableFact(
-  'owner-capability-missing',
+  PLATFORM_RUNTIME_REASONS.ownerCapabilityMissing.reason,
   'The Limrun provider session is no longer active for this device.',
 );
 const pushUnavailable = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Push notifications are unavailable for Limrun provider-owned devices.',
 );
 export type LimrunAppDeploymentRuntimeOptions = Readonly<{

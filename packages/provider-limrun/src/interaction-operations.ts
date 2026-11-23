@@ -6,6 +6,7 @@ import {
   type RuntimeOperationUnavailability,
   unavailableFact,
   whenAdmitted,
+  PLATFORM_RUNTIME_REASONS,
 } from '@agent-device/contracts/platform-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
@@ -57,17 +58,17 @@ import { type DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
-const unsupported = unavailableFact('unsupported-provider-mode');
+const unsupported = unavailableFact(PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason);
 const settingUnavailableAndroid = unavailableFact(
-  'unsupported-platform-leaf',
+  PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
   'Run `agent-device settings --help` for the settings each target serves.',
 );
 export const LIMRUN_FOLD_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   'Limrun exposes the commanded hinge angle, but fold requires an independently observed angle to verify the pose.',
 );
 export const LIMRUN_TELEPHONY_UNAVAILABLE = unavailableFact(
-  'unsupported-provider-mode',
+  PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
   "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not route it through a Limrun session.",
 );
 
@@ -88,10 +89,16 @@ export function limrunAndroidInteractionFacts(device: DeviceInfo) {
       directionalFling: available,
       viewport: available,
       multiTouch: tv
-        ? unavailableFact('unsupported-platform-leaf', ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT)
+        ? unavailableFact(
+            PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+            ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+          )
         : available,
       targetAuthoredDrag: tv
-        ? unavailableFact('unsupported-platform-leaf', TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT)
+        ? unavailableFact(
+            PLATFORM_RUNTIME_REASONS.unsupportedPlatformLeaf.reason,
+            TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+          )
         : available,
     }),
     ...scrollRuntimeOperationFacts({ scroll: available }),
@@ -101,7 +108,7 @@ export function limrunAndroidInteractionFacts(device: DeviceInfo) {
       tvRemote: tv
         ? available
         : unavailableFact(
-            'unsupported-device-kind',
+            PLATFORM_RUNTIME_REASONS.unsupportedDeviceKind.reason,
             'tv-remote is supported only on Android TV targets.',
           ),
     }),
@@ -209,7 +216,7 @@ export function limrunAppleSettingsFacts(
           subjects: {
             ...setting.subjects,
             'reset-keychain': unavailableFact(
-              'unsupported-provider-mode',
+              PLATFORM_RUNTIME_REASONS.unsupportedProviderMode.reason,
               'Limrun does not expose keychain reset.',
             ),
           },
