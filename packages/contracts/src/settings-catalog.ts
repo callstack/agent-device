@@ -166,7 +166,12 @@ export const SETTINGS = {
       {
         kind: 'permission',
         actions: PERMISSION_ACTIONS,
-        targets: MOBILE_PERMISSION_TARGETS,
+        targets: MOBILE_PERMISSION_TARGETS.filter((target) => target !== 'photos'),
+      },
+      {
+        kind: 'permission',
+        actions: PERMISSION_ACTIONS,
+        targets: ['photos'],
         modes: PERMISSION_MODES,
       },
       { kind: 'permission', actions: ['grant', 'reset'], targets: MACOS_PERMISSION_TARGETS },

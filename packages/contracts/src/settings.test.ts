@@ -48,7 +48,8 @@ describe('settings usage', () => {
       'settings fingerprint <match|nonmatch>',
       'settings clear-app-state [app-id]',
       'settings reset-keychain clear',
-      `settings permission <grant|deny|reset> <${MOBILE_PERMISSION_TARGETS.join('|')}> [full|limited]`,
+      'settings permission <grant|deny|reset> <all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri>',
+      'settings permission <grant|deny|reset> photos [full|limited]',
       'settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>',
     ]);
   });
@@ -119,7 +120,7 @@ describe('parseSettingsMutation', () => {
     });
     expectInvalidArgs(
       () => parseSettingsMutation(['permission', 'grant', 'bluetooth']),
-      'settings permission requires a target:',
+      'settings permission requires a target: all|camera|microphone|contacts|contacts-limited|notifications|calendar|location|location-always|media-library|motion|reminders|siri|photos|accessibility|screen-recording|input-monitoring',
     );
     expectInvalidArgs(
       () => parseSettingsMutation(['permission', 'grant', 'photos', 'some']),
@@ -135,6 +136,48 @@ describe('parseSettingsMutation', () => {
     expectInvalidArgs(
       () => parseSettingsMutation(['permission', 'grant', 'accessibility', 'full']),
       'settings permission accessibility takes no mode.',
+    );
+  });
+
+  test('only photos takes a mode among the mobile targets', () => {
+    expectInvalidArgs(
+      () => parseSettingsMutation(['permission', 'grant', 'camera', 'limited']),
+      'settings permission camera takes no mode.',
+    );
+  });
+
+  test('an app id in the mode slot is refused with a typed reason that names the app', () => {
+    const appPositional = (permission: string, app: string) =>
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({
+          reason: 'setting_permission_app_positional',
+          dispatched: 'no',
+          permission,
+          app,
+          hint: `Pass the app with --app ${app}.`,
+        }),
+      });
+    for (const positionals of [
+      ['permission', 'deny', 'notifications', 'com.example.app'],
+      ['permission', 'grant', 'photos', 'com.example.app'],
+      ['permission', 'grant', 'photos', 'limited', 'com.example.app'],
+    ]) {
+      expect(() => parseSettingsMutation(positionals)).toThrow(
+        appPositional(positionals[2]!, 'com.example.app'),
+      );
+    }
+  });
+
+  test('a macOS target takes no --app, so a dotted value gets no --app spelling', () => {
+    expect(() =>
+      parseSettingsMutation(['permission', 'grant', 'accessibility', 'com.example.app']),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        message: 'settings permission accessibility takes no mode.',
+        details: undefined,
+      }),
     );
   });
 

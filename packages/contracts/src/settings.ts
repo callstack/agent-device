@@ -136,6 +136,8 @@ const SETTINGS_REFUSAL_REASONS = {
    */
   // The asked-for setting applies to the target itself, so the named app consumes nothing.
   appNotConsumed: { reason: 'setting_app_not_consumed' },
+  // A permission's trailing positional reads as a bundle id or package, which belongs in --app.
+  permissionAppPositional: { reason: 'setting_permission_app_positional' },
 } as const satisfies ReasonTable<'settings'>;
 
 /**
@@ -211,7 +213,8 @@ function formUsage(form: SettingForm, readable: boolean): string {
       return 'set <lat> <lon>';
     case 'permission': {
       const modes = form.modes ? ` [${form.modes.join('|')}]` : '';
-      return `<${form.actions.join('|')}> <${form.targets.join('|')}>${modes}`;
+      const targets = form.targets.length === 1 ? form.targets[0] : `<${form.targets.join('|')}>`;
+      return `<${form.actions.join('|')}> ${targets}${modes}`;
     }
     case 'app-id':
       return '[app-id]';
@@ -312,13 +315,15 @@ function parsePermissionPositionals(
   const forms = definition.forms.filter(
     (form): form is Extract<SettingForm, { kind: 'permission' }> => form.kind === 'permission',
   );
-  const targets = forms.flatMap((form) => form.targets);
-  const permission = findVocabularyName(targets, positionals[2]);
+  const permission = findVocabularyName(
+    forms.flatMap((form) => form.targets),
+    positionals[2],
+  );
   const form = forms.find((candidate) => candidate.targets.includes(permission ?? ''));
   if (permission === undefined || form === undefined) {
     throw new AppError(
       'INVALID_ARGS',
-      `settings permission requires a target: ${targets.join('|')}`,
+      `settings permission requires a target: ${forms.flatMap((candidate) => candidate.targets).join('|')}`,
     );
   }
   if (findVocabularyName(form.actions, action) === undefined) {
@@ -329,15 +334,30 @@ function parsePermissionPositionals(
   }
   if (positionals.length === 3) return { permission };
   const mode = findVocabularyName(form.modes ?? [], positionals[3]);
-  if (mode === undefined || positionals.length > 4) {
-    throw new AppError(
-      'INVALID_ARGS',
-      form.modes === undefined
-        ? `settings permission ${permission} takes no mode.`
-        : `settings permission mode must be ${form.modes.join('|')}.`,
-    );
-  }
-  return { permission, mode };
+  if (mode !== undefined && positionals.length === 4) return { permission, mode };
+  const refusal = permissionModeRefusal(permission, form.modes, mode);
+  // A dotted value reads as a bundle id or package, which only an app-scoped target takes.
+  const app = (MOBILE_PERMISSION_TARGETS as readonly string[]).includes(permission)
+    ? positionals.slice(3).find((value) => value.includes('.'))
+    : undefined;
+  if (app === undefined) throw new AppError('INVALID_ARGS', refusal);
+  throw new AppError('INVALID_ARGS', refusal, {
+    reason: SETTINGS_REFUSAL_REASONS.permissionAppPositional.reason,
+    dispatched: 'no',
+    permission,
+    app,
+    hint: `Pass the app with --app ${app}.`,
+  });
+}
+
+function permissionModeRefusal(
+  permission: string,
+  modes: readonly string[] | undefined,
+  mode: string | undefined,
+): string {
+  if (modes === undefined) return `settings permission ${permission} takes no mode.`;
+  if (mode === undefined) return `settings permission mode must be ${modes.join('|')}.`;
+  return `settings permission ${permission} takes one mode.`;
 }
 
 function invalidSettingsArgs(): AppError {
